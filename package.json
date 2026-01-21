@@ -7,7 +7,21 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky",
+    "commit": "cz",
+    "skott:check:only": "skott --cwd=src --showCircularDependencies --displayMode=file-tree",
+    "depcheck": "depcheck",
+    "madge": "madge --circular --extensions ts,tsx src"
+  },
+  "lint-staged": {
+    "**/*.{js,jsx,ts,tsx,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,scss,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "next": "16.1.4",
@@ -15,12 +29,17 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^20.3.1",
     "@eslint/eslintrc": "^3.3.3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "^1.0.0",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "depcheck": "^1.4.7",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
     "eslint-config-prettier": "^10.1.8",
@@ -28,11 +47,20 @@
     "eslint-plugin-jsonc": "^2.21.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-prettier": "^5.5.5",
+    "husky": "^9.1.7",
     "jsonc-eslint-parser": "^2.4.2",
+    "lint-staged": "^16.2.7",
+    "madge": "^8.0.0",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
+    "skott": "^0.35.7",
     "tailwindcss": "^4",
     "typescript": "^5",
     "typescript-eslint": "^8.53.1"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
   }
 }

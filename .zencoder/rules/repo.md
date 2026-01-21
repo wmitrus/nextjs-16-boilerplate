@@ -54,6 +54,7 @@ The project uses the **Cache Components** model (`cacheComponents: true` in `nex
 
 ### 7. Linting & Formatting
 - **ESLint 9**: Uses Flat Config (`eslint.config.mjs`) with `next/core-web-vitals` and `next/typescript`.
+- **JSON Linting**: Fully integrated via `eslint-plugin-jsonc` for red underlines in JSON/JSONC files.
 - **Prettier**: Integrated into ESLint with `prettier-plugin-tailwindcss` for class sorting.
 - **Import Sorting**: Automatically enforced via `eslint-plugin-import`.
 - **Validation**: Use `pnpm typecheck` for types and `pnpm lint` for code quality.

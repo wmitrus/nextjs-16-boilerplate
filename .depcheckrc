@@ -1,0 +1,20 @@
+{
+  "ignore-bin-package": false,
+  "skip-missing": false,
+  "ignore-patterns": [
+    ".next",
+    "dist"
+  ],
+  "ignores": [
+    "@commitlint/cli",
+    "@commitlint/config-conventional",
+    "@eslint/eslintrc",
+    "@tailwindcss/postcss",
+    "@types/node",
+    "@types/react",
+    "@types/react-dom",
+    "eslint-plugin-jsx-a11y",
+    "prettier-plugin-tailwindcss",
+    "tailwindcss"
+  ]
+}

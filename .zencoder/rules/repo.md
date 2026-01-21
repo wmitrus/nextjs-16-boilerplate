@@ -57,7 +57,7 @@ The project uses the **Cache Components** model (`cacheComponents: true` in `nex
 - **Prettier**: Integrated into ESLint with `prettier-plugin-tailwindcss` for class sorting.
 - **Import Sorting**: Automatically enforced via `eslint-plugin-import`.
 - **Validation**: Use `pnpm typecheck` for types and `pnpm lint` for code quality.
-- **VS Code**: Configured in `.vscode/settings.json` to automatically fix and format on save.
+- **VS Code**: Configured in `.vscode/settings.json` to automatically fix and format on save (supports TS, JS, and JSON).
 
 ## Documentation Standards
 - **Feature Docs**: All new features must be documented in `docs/features/`.

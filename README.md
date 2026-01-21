@@ -23,6 +23,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 ## Features
 
 - [Next.js 16 Readiness](./docs/features/01%20-%20Next.js%2016%20Readiness.md) - Comprehensive update for Next.js 16, React Compiler, and Turbopack optimizations.
+- [TypeScript, ESLint & Prettier Setup](./docs/features/02%20-%20TypeScript%20ESLint%20Prettier%20Setup.md) - Strict type safety, Flat Config linting, and Tailwind-aware formatting.
 
 ## Learn More
 

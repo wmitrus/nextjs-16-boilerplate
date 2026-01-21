@@ -51,7 +51,10 @@ Create a detailed implementation plan based on `/home/ozi/projects/nextjs-16-boi
    - Integrate Prettier into ESLint.
 
 4. [x] **Phase 4: Documentation & Finalization**
-   - Create `docs/features/typescript-eslint-prettier-setup.md`.
+   - Create `docs/features/02 - TypeScript ESLint Prettier Setup.md`.
    - Update `README.md` to include references to the new setup and structure.
    - Run `pnpm typecheck` and `pnpm lint` to verify.
+
+5. [x] **Phase 5: VS Code ESLint Fix on Save**
+   - Create `.vscode/settings.json` with `source.fixAll.eslint`.
 

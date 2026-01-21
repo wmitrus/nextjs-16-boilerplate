@@ -6,7 +6,9 @@ This feature implements a robust development environment with strict type safety
 
 - **Strict TypeScript**: Configured with `strict: true` and incremental builds.
 - **ESLint 9 Flat Config**: Uses the latest ESLint standards with Next.js core vitals, TypeScript support, and accessibility checks.
-- **Prettier Integration**: Unified formatting with automatic Tailwind CSS class sorting.
+- **Performance Optimized**: Replaced `eslint-plugin-import` with `eslint-plugin-import-x` and tuned `projectService` for faster linting.
+- **JSON Linting**: Integrated `eslint-plugin-jsonc` for full linting and red underlines in `.json` and `.jsonc` files.
+- **Prettier Integration**: Unified formatting with automatic Tailwind CSS class sorting for code and standard formatting for JSON.
 - **Optimized Directory Structure**:
   - `@/features/*`: Domain-specific logic.
   - `@/shared/*`: Reusable components and hooks.

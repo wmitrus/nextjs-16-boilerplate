@@ -37,9 +37,11 @@ src/
 └── shared/       # Reusable assets
 ```
 
-## Path Aliases
-The following aliases are configured in `tsconfig.json`:
-- `@/*` -> `src/*`
-- `@/features/*` -> `src/features/*`
-- `@/shared/*` -> `src/shared/*`
-- `@/core/*` -> `src/core/*`
+## VS Code Integration
+
+The project includes a `.vscode/settings.json` file that enables **ESLint fix on save**. This ensures that all linting errors and Prettier formatting (including Tailwind class sorting) are automatically applied whenever you save a file.
+
+### Settings included:
+- `editor.codeActionsOnSave`: Automatically runs ESLint fixes.
+- `eslint.validate`: Explicitly defines which file types to validate.
+- `editor.formatOnSave`: Disabled in favor of ESLint fixing to avoid conflicts.

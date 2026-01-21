@@ -1,0 +1,1 @@
+pnpm run typecheck && pnpm run skott:check:only && pnpm run depcheck && pnpm run madge

@@ -15,9 +15,39 @@ This is a modern **Next.js 16** boilerplate project bootstrapped with `create-ne
 
 ## Language & Runtime
 **Language**: TypeScript  
-**Version**: ^5 (TypeScript), Node.js ^20  
-**Build System**: Next.js Build  
+**Version**: ^5 (TypeScript), Node.js ^20 (Minimum 20.9.0)  
+**Build System**: Next.js Build (Turbopack by default)  
 **Package Manager**: pnpm (indicated by `pnpm-lock.yaml`)
+
+## Next.js 16 Development Standards
+
+### 1. Async Dynamic APIs
+Next.js 16 requires dynamic APIs to be accessed asynchronously. Always `await` the following:
+- `params` and `searchParams` in layouts, pages, and metadata.
+- `cookies()`, `headers()`, and `draftMode()`.
+
+### 2. Cache Components & PPR
+The project uses the **Cache Components** model (`cacheComponents: true` in `next.config.ts`).
+- Use the `"use cache"` directive to explicitly opt-in to caching for components, functions, or pages.
+- Partial Prerendering (PPR) is enabled by default with Cache Components; use `<Suspense>` to define dynamic boundaries.
+
+### 3. React Compiler
+**React Compiler** is enabled (`reactCompiler: true`).
+- Manual memoization (`useMemo`, `useCallback`, `memo`) is generally unnecessary and should be avoided unless the compiler cannot optimize a specific pattern.
+- Ensure `babel-plugin-react-compiler` is maintained in `devDependencies`.
+
+### 4. Middleware vs Proxy
+- Use `proxy.ts` (Node.js runtime) for request interception and network boundary logic.
+- `middleware.ts` is deprecated for Node.js use cases and should only be used if the Edge runtime is strictly required.
+
+### 5. Caching APIs
+- **`revalidateTag(tag, 'max')`**: Use for Stale-While-Revalidate (SWR) behavior.
+- **`updateTag(tag)`**: Use in Server Actions for "read-your-writes" semantics (immediate refresh).
+- **`refresh()`**: Use in Server Actions to refresh uncached data only.
+
+### 6. Performance
+- **Turbopack**: Default bundler for dev and build.
+- **Filesystem Caching**: Enabled for dev restarts via `turbopackFileSystemCacheForDev`.
 
 ## Dependencies
 **Main Dependencies**:

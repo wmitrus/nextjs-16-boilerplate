@@ -10,6 +10,9 @@ This is a modern **Next.js 16** boilerplate project bootstrapped with `create-ne
 
 ## Structure
 - **src/app**: Core application logic using the Next.js App Router. Contains routes, layouts, and global styles.
+- **src/features**: Domain-specific components, logic, and hooks.
+- **src/shared**: Reusable UI components, generic hooks, and utilities.
+- **src/core**: Foundational configurations, constants, and global logic.
 - **public**: Static assets like icons and images.
 - **root**: Configuration files for TypeScript, ESLint, PostCSS, and Next.js.
 
@@ -49,6 +52,23 @@ The project uses the **Cache Components** model (`cacheComponents: true` in `nex
 - **Turbopack**: Default bundler for dev and build.
 - **Filesystem Caching**: Enabled for dev restarts via `turbopackFileSystemCacheForDev`.
 
+### 7. Linting & Formatting
+- **ESLint 9**: Uses Flat Config (`eslint.config.mjs`) with `next/core-web-vitals` and `next/typescript`.
+- **Prettier**: Integrated into ESLint with `prettier-plugin-tailwindcss` for class sorting.
+- **Import Sorting**: Automatically enforced via `eslint-plugin-import`.
+- **Validation**: Use `pnpm typecheck` for types and `pnpm lint` for code quality.
+
+## Documentation Standards
+- **Feature Docs**: All new features must be documented in `docs/features/`.
+- **Naming Convention**: Use the format `XX - Feature Name.md` (e.g., `01 - Next.js 16 Readiness.md`).
+
+## TypeScript Configuration
+- **Path Aliases**:
+  - `@/features/*`: Maps to `src/features/*`
+  - `@/shared/*`: Maps to `src/shared/*`
+  - `@/core/*`: Maps to `src/core/*`
+  - `@/*`: Maps to `src/*`
+
 ## Dependencies
 **Main Dependencies**:
 - **next**: 16.1.4
@@ -58,10 +78,8 @@ The project uses the **Cache Components** model (`cacheComponents: true` in `nex
 **Development Dependencies**:
 - **tailwindcss**: ^4
 - **eslint**: ^9
+- **prettier**: ^3
 - **typescript**: ^5
-- **@types/node**: ^20
-- **@types/react**: ^19
-- **@types/react-dom**: ^19
 
 ## Build & Installation
 ```bash
@@ -76,6 +94,9 @@ pnpm build
 
 # Start production server
 pnpm start
+
+# Type checking
+pnpm typecheck
 
 # Linting
 pnpm lint

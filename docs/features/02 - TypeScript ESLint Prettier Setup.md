@@ -45,3 +45,4 @@ The project includes a `.vscode/settings.json` file that enables **ESLint fix on
 - `editor.codeActionsOnSave`: Automatically runs ESLint fixes.
 - `eslint.validate`: Explicitly defines which file types to validate.
 - `editor.formatOnSave`: Disabled in favor of ESLint fixing to avoid conflicts.
+- `[json]`/`[jsonc]`: Specifically enabled Prettier formatting on save for JSON files.

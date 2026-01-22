@@ -14,10 +14,11 @@ describe('userService', () => {
   });
 
   it('fetches users successfully', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
+    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    mockFetch.mockResolvedValue({
       ok: true,
       json: async () => mockUsers,
-    });
+    } as Response);
 
     const users = await getUsers();
 
@@ -26,9 +27,10 @@ describe('userService', () => {
   });
 
   it('throws an error when fetch fails', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
+    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    mockFetch.mockResolvedValue({
       ok: false,
-    });
+    } as Response);
 
     await expect(getUsers()).rejects.toThrow('Failed to fetch users');
   });

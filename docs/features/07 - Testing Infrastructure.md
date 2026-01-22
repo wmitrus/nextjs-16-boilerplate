@@ -12,6 +12,8 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - **Commands**:
   - `pnpm test`: Runs all unit tests.
   - `pnpm test:watch`: Runs tests in watch mode.
+  - Coverage reports are generated in `coverage/unit` (HTML/JSON/text).
+  - Coverage is report-only for now (no enforced thresholds).
 
 ### 2. Integration Testing (Vitest + React Testing Library + MSW)
 
@@ -21,6 +23,8 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - **Mocks**: MSW is used to intercept network requests and provide predictable responses.
 - **Commands**:
   - `pnpm test:integration`: Runs all integration tests.
+  - Coverage reports are generated in `coverage/integration` (HTML/JSON/text).
+  - Coverage is report-only for now (no enforced thresholds).
 
 ### 3. End-to-End (E2E) Testing (Playwright)
 

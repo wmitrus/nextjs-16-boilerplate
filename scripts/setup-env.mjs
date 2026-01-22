@@ -10,27 +10,45 @@ const ENV_FILES = {
   local: '.env.local',
 };
 
-function setupEnv() {
+export function performSetup(fsInterface = fs) {
   const examplePath = path.join(ROOT, ENV_FILES.example);
   const localPath = path.join(ROOT, ENV_FILES.local);
 
-  if (!fs.existsSync(examplePath)) {
-    console.error(`❌ ${ENV_FILES.example} not found.`);
-    process.exit(1);
+  if (!fsInterface.existsSync(examplePath)) {
+    return { success: false, message: `${ENV_FILES.example} not found.` };
   }
 
-  if (fs.existsSync(localPath)) {
-    console.log(`ℹ️ ${ENV_FILES.local} already exists. Skipping.`);
-    return;
+  if (fsInterface.existsSync(localPath)) {
+    return {
+      success: true,
+      message: `${ENV_FILES.local} already exists. Skipping.`,
+    };
   }
 
   try {
-    fs.copyFileSync(examplePath, localPath);
-    console.log(`✅ Created ${ENV_FILES.local} from ${ENV_FILES.example}.`);
+    fsInterface.copyFileSync(examplePath, localPath);
+    return {
+      success: true,
+      message: `Created ${ENV_FILES.local} from ${ENV_FILES.example}.`,
+    };
   } catch (error) {
-    console.error(`❌ Failed to create ${ENV_FILES.local}:`, error.message);
+    return {
+      success: false,
+      message: `Failed to create ${ENV_FILES.local}: ${error.message}`,
+    };
+  }
+}
+
+function setupEnv() {
+  const result = performSetup();
+  if (result.success) {
+    console.log(`✅ ${result.message}`);
+  } else {
+    console.error(`❌ ${result.message}`);
     process.exit(1);
   }
 }
 
-setupEnv();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  setupEnv();
+}

@@ -33,6 +33,14 @@ const eslintConfig = defineConfig([
       'prettier/prettier': 'error',
       semi: ['error', 'always'],
       '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       'importX/order': [
         'error',
         {

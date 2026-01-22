@@ -10,11 +10,17 @@
     "@commitlint/config-conventional",
     "@eslint/eslintrc",
     "@tailwindcss/postcss",
+    "@testing-library/user-event",
     "@types/node",
     "@types/react",
     "@types/react-dom",
     "eslint-plugin-jsx-a11y",
+    "jest-environment-jsdom",
     "prettier-plugin-tailwindcss",
-    "tailwindcss"
+    "tailwindcss",
+    "ts-node",
+    "tsc-files",
+    "tsx",
+    "undici"
   ]
 }

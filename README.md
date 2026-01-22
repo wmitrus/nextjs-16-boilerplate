@@ -24,6 +24,17 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 - [Next.js 16 Readiness](./docs/features/01%20-%20Next.js%2016%20Readiness.md) - Comprehensive update for Next.js 16, React Compiler, and Turbopack optimizations.
 - [TypeScript, ESLint & Prettier Setup](./docs/features/02%20-%20TypeScript%20ESLint%20Prettier%20Setup.md) - Strict type safety, Flat Config linting, and Tailwind-aware formatting.
+- [Testing Infrastructure](./docs/features/07%20-%20Testing%20Infrastructure.md) - Three-tier testing strategy: Unit (Jest), Integration (MSW), and E2E (Playwright).
+
+## Scripts
+
+- `pnpm dev`: Start development server.
+- `pnpm test`: Run unit tests.
+- `pnpm test:integration`: Run integration tests.
+- `pnpm test:all`: Run all Jest tests.
+- `pnpm e2e`: Run Playwright E2E tests.
+- `pnpm lint`: Run ESLint.
+- `pnpm typecheck`: Run full TypeScript typecheck.
 
 ## Learn More
 

@@ -18,6 +18,7 @@
 - **Configuration**: Located in `package.json` under the `"lint-staged"` key.
 - **Patterns and Commands**:
   - `**/*.{js,jsx,ts,tsx,mjs}`: Runs `eslint --fix` and `prettier --write`.
+  - `**/*.{ts,tsx}`: Runs `tsc-files --noEmit` (staged typechecking).
   - `*.{json,css,scss,md,yml,yaml}`: Runs `prettier --write`.
 - **Integration**: Called from `.husky/pre-commit` via `pnpm exec lint-staged`.
 

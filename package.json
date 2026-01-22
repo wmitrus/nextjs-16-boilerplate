@@ -18,7 +18,9 @@
     "commit": "cz",
     "skott:check:only": "skott --cwd=src --showCircularDependencies --displayMode=file-tree",
     "depcheck": "depcheck",
-    "madge": "madge --circular --extensions ts,tsx src"
+    "madge": "madge --circular --extensions ts,tsx src",
+    "env:init": "node scripts/setup-env.mjs",
+    "env:check": "node scripts/check-env-consistency.mjs"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [
@@ -33,11 +35,13 @@
     ]
   },
   "dependencies": {
+    "@t3-oss/env-nextjs": "^0.13.10",
     "clsx": "^2.1.1",
     "next": "16.1.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",

@@ -10,5 +10,51 @@
     "json",
     "jsonc"
   ],
-  "editor.formatOnSave": false
+  "editor.formatOnSave": false,
+  "zencoder.inlineSuggestions.enable": false,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Always use Conventional Commits format: <type>[optional scope]: <description>"
+    },
+    {
+      "text": "Use these types accurately: build, ci, chore, docs, feat, fix, perf, refactor, revert, style, test"
+    },
+    {
+      "text": "Include scope in parentheses after type when changes affect specific modules/components (ex: feat(auth): add login)"
+    },
+    {
+      "text": "For multiple distinct changes, generate separate commit messages - one per logical change"
+    },
+    {
+      "text": "Body text (if needed) starts on new line using imperative mood, separated by blank line from subject"
+    },
+    {
+      "text": "Use bullet points with hyphens (-) for breaking changes or detailed explanations in body"
+    },
+    {
+      "text": "Keep subject line under 72 characters, body lines under 100 characters max"
+    },
+    {
+      "text": "Write in imperative mood (\"add feature\" not \"added feature\")"
+    }
+  ],
+  "githubPullRequests.pushBranch": "always",
+  "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
+    {
+      "text": "Always generate a structured pull request description using the following sections: Summary, Key Changes, Motivation, Testing, and Additional Notes."
+    },
+    {
+      "text": "Always format Key Changes as a bullet list with at least 3-6 specific items."
+    },
+    {
+      "text": "Always write in a professional, concise, engineering-focused tone. Avoid marketing language such as 'robust', 'seamless', 'enhanced', or 'improved'."
+    },
+    {
+      "text": "Always explain why the change was made, not just what changed."
+    },
+    {
+      "text": "Always include testing instructions describing how reviewers can verify the changes."
+    },
+    { "text": "Never collapse the entire description into a single paragraph." }
+  ]
 }

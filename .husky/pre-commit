@@ -1,1 +1,7 @@
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$branch" = "main" ] || [ "$branch" = "develop" ]; then
+	echo "✖ Direct commits to '$branch' are blocked. Create a feature branch instead."
+	exit 1
+fi
+
 pnpm exec lint-staged

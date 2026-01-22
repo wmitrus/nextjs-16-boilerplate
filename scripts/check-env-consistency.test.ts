@@ -1,5 +1,3 @@
-// import { jest } from '@jest/globals';
-
 import { getMissingKeys } from './check-env-consistency.mjs';
 
 describe('check-env-consistency', () => {

@@ -1,5 +1,3 @@
-import { jest } from '@jest/globals';
-
 import { getUsers } from './userService';
 
 describe('userService', () => {
@@ -9,12 +7,11 @@ describe('userService', () => {
   ];
 
   beforeEach(() => {
-    // @ts-expect-error - mocking global fetch
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   it('fetches users successfully', async () => {
-    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    const mockFetch = vi.mocked(global.fetch);
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => mockUsers,
@@ -27,7 +24,7 @@ describe('userService', () => {
   });
 
   it('throws an error when fetch fails', async () => {
-    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    const mockFetch = vi.mocked(global.fetch);
     mockFetch.mockResolvedValue({
       ok: false,
     } as Response);

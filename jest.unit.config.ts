@@ -5,7 +5,7 @@ import baseConfig from './jest.config';
 const config: Config = {
   ...baseConfig,
   displayName: 'unit',
-  testMatch: ['**/src/**/*.test.ts?(x)'],
+  testMatch: ['**/src/**/*.test.ts?(x)', '**/scripts/**/*.test.ts?(x)'],
   testPathIgnorePatterns: [
     '/node_modules/',
     '/.next/',

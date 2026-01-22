@@ -7,7 +7,7 @@ import { server } from '../src/shared/lib/mocks/server';
 // Mock next/image
 jest.mock('next/image', () => {
   return function MockImage({
-    priority,
+    priority: _priority,
     ...props
   }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean }) {
     // eslint-disable-next-line @next/next/no-img-element

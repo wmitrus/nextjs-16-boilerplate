@@ -10,5 +10,24 @@
     "json",
     "jsonc"
   ],
-  "editor.formatOnSave": false
+  "editor.formatOnSave": false,
+  "zencoder.inlineSuggestions.enable": false,
+  "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
+    {
+      "text": "Always generate a structured pull request description using the following sections: Summary, Key Changes, Motivation, Testing, and Additional Notes."
+    },
+    {
+      "text": "Always format Key Changes as a bullet list with at least 3-6 specific items."
+    },
+    {
+      "text": "Always write in a professional, concise, engineering-focused tone. Avoid marketing language such as 'robust', 'seamless', 'enhanced', or 'improved'."
+    },
+    {
+      "text": "Always explain why the change was made, not just what changed."
+    },
+    {
+      "text": "Always include testing instructions describing how reviewers can verify the changes."
+    },
+    { "text": "Never collapse the entire description into a single paragraph." }
+  ]
 }

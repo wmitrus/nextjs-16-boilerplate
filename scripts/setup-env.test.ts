@@ -1,13 +1,11 @@
 import type fs from 'node:fs';
 
-import { jest } from '@jest/globals';
-
 import { performSetup } from './setup-env.mjs';
 
 describe('setup-env', () => {
   it('should fail if example file is missing', () => {
     const mockFs = {
-      existsSync: jest.fn().mockReturnValue(false),
+      existsSync: vi.fn().mockReturnValue(false),
     } as unknown as typeof fs;
 
     const result = performSetup(mockFs);
@@ -17,7 +15,7 @@ describe('setup-env', () => {
 
   it('should skip if local file already exists', () => {
     const mockFs = {
-      existsSync: jest.fn().mockReturnValue(true),
+      existsSync: vi.fn().mockReturnValue(true),
     } as unknown as typeof fs;
 
     const result = performSetup(mockFs);
@@ -27,11 +25,11 @@ describe('setup-env', () => {
 
   it('should copy file if local missing', () => {
     const mockFs = {
-      existsSync: jest
+      existsSync: vi
         .fn()
         .mockReturnValueOnce(true) // example exists
         .mockReturnValueOnce(false), // local missing
-      copyFileSync: jest.fn(),
+      copyFileSync: vi.fn(),
     } as unknown as typeof fs;
 
     const result = performSetup(mockFs);

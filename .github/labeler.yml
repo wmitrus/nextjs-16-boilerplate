@@ -1,0 +1,54 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/app/**/*'
+          - 'src/stories/**/*'
+          - 'public/**/*'
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/core/**/*'
+          - 'src/features/**/*'
+          - 'src/shared/**/*'
+          - 'src/users/**/*'
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'e2e/**/*'
+          - '**/*.test.tsx'
+          - '**/*.test.ts'
+          - 'vitest.config.ts'
+          - 'vitest.unit.config.ts'
+          - 'vitest.integration.config.ts'
+          - 'vitest.shims.d.ts'
+          - 'playwright.config.ts'
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'pnpm-workspace.yaml'
+          - 'tsconfig.json'
+          - 'next.config.ts'
+          - 'tailwind.config.ts'
+          - 'eslint.config.mjs'
+          - 'commitlint.config.mjs'
+          - '.prettierrc.json'
+          - 'postcss.config.mjs'
+          - '.github/**/*'
+          - '.storybook/**/*'
+          - 'plop-templates/**/*'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'docs/**/*'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'pnpm-lock.yaml'

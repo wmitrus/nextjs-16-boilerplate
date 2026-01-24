@@ -17,6 +17,7 @@ export default defineConfig({
       reportsDirectory: './coverage/unit',
       include: ['src/**/*.{ts,tsx}', 'scripts/**/*.{ts,tsx}'],
       exclude: [
+        'src/app/**',
         '**/*.d.ts',
         '**/*.test.{ts,tsx}',
         '**/*.integration.test.{ts,tsx}',

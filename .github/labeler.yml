@@ -1,0 +1,46 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/app/**/*'
+          - 'src/stories/**/*'
+          - 'public/**/*'
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/lib/**/*'
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'e2e/**/*'
+          - '**/*.test.tsx'
+          - '**/*.test.ts'
+          - 'jest.config.ts'
+          - 'jest.setup.ts'
+          - 'playwright.config.ts'
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'tsconfig.json'
+          - 'next.config.js'
+          - 'tailwind.config.ts'
+          - '.eslintrc.json'
+          - '.prettierrc'
+          - '.github/**/*'
+          - '.storybook/**/*'
+          - 'plop-templates/**/*'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'docs/**/*'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'pnpm-lock.yaml'

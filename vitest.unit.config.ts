@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/setup.tsx', './tests/polyfills.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx}'],
-    exclude: ['src/**/*.integration.test.{ts,tsx}'],
+    exclude: ['src/**/*.integration.test.{ts,tsx}', 'src/stories/**'],
     coverage: {
       enabled: true,
       provider: 'v8',
@@ -28,6 +28,7 @@ export default defineConfig({
         'src/**/types.{ts,tsx}',
         'src/**/types/**',
         'src/**/index.{ts,tsx}',
+        'src/stories/**',
       ],
       clean: true,
       cleanOnRerun: true,

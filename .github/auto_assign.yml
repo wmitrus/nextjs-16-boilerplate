@@ -1,6 +1,4 @@
 addReviewers: true
-addAssignees: true
+addAssignees: author
 reviewers:
-  - wmitrus
-assignees:
   - wmitrus

@@ -17,7 +17,7 @@
 
 # Storybook
 storybook-static
-debug-storybook.log
+*storybook.log
 
 # next.js
 /.next/
@@ -46,3 +46,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+

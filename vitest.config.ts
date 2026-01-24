@@ -11,12 +11,19 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
+  optimizeDeps: {
+    include: ['storybook/test', 'clsx', 'tailwind-merge'],
+  },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['.storybook/vitest.setup.ts'],
     coverage: {
+      enabled: true,
+      provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      reportsDirectory: './coverage/storybook',
+      exclude: ['**/*.css', '.storybook/**'],
     },
     projects: [
       {

@@ -12,6 +12,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # Removed unnecessary checkout step
       # - name: Checkout repository
       #   uses: actions/checkout@v4
 

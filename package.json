@@ -27,7 +27,8 @@
     "env:check": "node scripts/check-env-consistency.mjs",
     "chromatic": "chromatic",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "release": "semantic-release"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [
@@ -56,6 +57,13 @@
     "@commitlint/config-conventional": "^20.3.1",
     "@eslint/eslintrc": "^3.3.3",
     "@playwright/test": "^1.58.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.2",
+    "@semantic-release/npm": "^13.1.3",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@storybook/addon-a11y": "^10.2.0",
     "@storybook/addon-docs": "^10.2.0",
     "@storybook/addon-onboarding": "^10.2.0",
@@ -95,6 +103,7 @@
     "playwright": "^1.58.0",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
+    "semantic-release": "^25.0.2",
     "skott": "^0.35.7",
     "storybook": "^10.2.0",
     "tailwindcss": "^4",

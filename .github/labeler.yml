@@ -8,7 +8,10 @@ frontend:
 backend:
   - changed-files:
       - any-glob-to-any-file:
-          - 'src/lib/**/*'
+          - 'src/core/**/*'
+          - 'src/features/**/*'
+          - 'src/shared/**/*'
+          - 'src/users/**/*'
 
 tests:
   - changed-files:
@@ -16,19 +19,24 @@ tests:
           - 'e2e/**/*'
           - '**/*.test.tsx'
           - '**/*.test.ts'
-          - 'jest.config.ts'
-          - 'jest.setup.ts'
+          - 'vitest.config.ts'
+          - 'vitest.unit.config.ts'
+          - 'vitest.integration.config.ts'
+          - 'vitest.shims.d.ts'
           - 'playwright.config.ts'
 
 config:
   - changed-files:
       - any-glob-to-any-file:
           - 'package.json'
+          - 'pnpm-workspace.yaml'
           - 'tsconfig.json'
-          - 'next.config.js'
+          - 'next.config.ts'
           - 'tailwind.config.ts'
-          - '.eslintrc.json'
-          - '.prettierrc'
+          - 'eslint.config.mjs'
+          - 'commitlint.config.mjs'
+          - '.prettierrc.json'
+          - 'postcss.config.mjs'
           - '.github/**/*'
           - '.storybook/**/*'
           - 'plop-templates/**/*'

@@ -45,10 +45,16 @@ Create `vitest.config.ts`:
 - Replace `jest` globals with `vi` globals or imports from `vitest`.
 - Update `package.json` scripts to use `vitest` instead of `jest`.
 
+### 5. Coverage
+
+- Use `@vitest/coverage-v8` for coverage reporting.
+- Configure dedicated reports for unit and integration tests (`coverage/unit`, `coverage/integration`).
+- Enforce 80% thresholds for Lines, Functions, Branches, and Statements.
+
 ## Source Code Structure Changes
 
 - Delete `jest.config.ts`, `jest.unit.config.ts`, `jest.integration.config.ts`.
-- Create `vitest.config.ts`.
+- Create `vitest.config.ts` (base), `vitest.unit.config.ts`, `vitest.integration.config.ts`.
 
 ## Verification Approach
 

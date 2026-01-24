@@ -10,10 +10,12 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - **Location**: Co-located with the source code (e.g., `src/**/*.test.ts(x)`).
 - **Purpose**: Test individual functions, utilities, and components in isolation.
 - **Commands**:
-  - `pnpm test`: Runs all unit tests.
-  - `pnpm test:watch`: Runs tests in watch mode.
-  - Coverage reports are generated in `coverage/unit` (HTML/JSON/text).
-  - Coverage is report-only for now (no enforced thresholds).
+  - `pnpm test`: Runs unit tests with coverage reporting.
+  - `pnpm test:watch`: Runs unit tests in watch mode.
+- **Coverage**:
+  - Reports generated in `coverage/unit`.
+  - **Thresholds**: Enforced at **80%** (Lines, Functions, Branches, Statements).
+  - Scope: Focuses on core logic, utilities, and feature components (excludes `src/app`).
 
 ### 2. Integration Testing (Vitest + React Testing Library + MSW)
 
@@ -22,9 +24,11 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - **Purpose**: Test how components and pages interact with APIs and side effects.
 - **Mocks**: MSW is used to intercept network requests and provide predictable responses.
 - **Commands**:
-  - `pnpm test:integration`: Runs all integration tests.
-  - Coverage reports are generated in `coverage/integration` (HTML/JSON/text).
-  - Coverage is report-only for now (no enforced thresholds).
+  - `pnpm test:integration`: Runs integration tests with coverage reporting.
+- **Coverage**:
+  - Reports generated in `coverage/integration`.
+  - **Thresholds**: Enforced at **80%** (Lines, Functions, Branches, Statements).
+  - Scope: Focuses on `src/app` and `src/features`.
 
 ### 3. End-to-End (E2E) Testing (Playwright)
 

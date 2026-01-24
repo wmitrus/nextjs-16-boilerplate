@@ -1,0 +1,148 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":separateMultipleMajorReleases",
+    "group:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "UTC",
+  "baseBranches": ["main"],
+  "dependencyDashboard": true,
+  "rangeStrategy": "bump",
+  "labels": ["dependencies"],
+  "rebaseWhen": "behind-base-branch",
+  "schedule": ["before 3am on monday"],
+  "prConcurrentLimit": 3,
+  "branchConcurrentLimit": 3,
+  "prHourlyLimit": 1,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 3am on monday"]
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "excludePackagePatterns": [
+        "^storybook$",
+        "^@storybook/",
+        "^@chromatic-com/storybook$",
+        "^chromatic$"
+      ]
+    },
+    {
+      "matchDepTypes": ["dependencies"],
+      "groupName": "prod dependencies",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "automerge": false
+    },
+    {
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "dev dependencies",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^next$",
+        "^react$",
+        "^react-dom$",
+        "^eslint-config-next$"
+      ],
+      "groupName": "nextjs & react core",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^@testing-library/",
+        "^@playwright/test$",
+        "^playwright$",
+        "^msw$",
+        "^jsdom$",
+        "^whatwg-fetch$"
+      ],
+      "groupName": "testing tools",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^vitest$",
+        "^@vitest/",
+        "^@vitest/browser-playwright$"
+      ],
+      "groupName": "vitest toolchain",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^storybook$",
+        "^@storybook/",
+        "^@chromatic-com/storybook$",
+        "^chromatic$"
+      ],
+      "groupName": "storybook & chromatic",
+      "matchUpdateTypes": ["minor", "patch", "major"],
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^eslint$",
+        "^@eslint/",
+        "^eslint-",
+        "^prettier$",
+        "^prettier-",
+        "^@commitlint/",
+        "^commitlint$",
+        "^commitizen$",
+        "^cz-"
+      ],
+      "groupName": "linting & formatting",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^typescript$",
+        "^typescript-eslint$",
+        "^@types/",
+        "^ts-",
+        "^tsx$",
+        "^ts-node$"
+      ],
+      "groupName": "typescript & types",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^tailwindcss$",
+        "^@tailwindcss/",
+        "^tailwind-merge$",
+        "^prettier-plugin-tailwindcss$"
+      ],
+      "groupName": "tailwind ecosystem",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": ["^vite$", "^@vitejs/", "^vite-"],
+      "groupName": "vite toolchain",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": [
+        "^husky$",
+        "^lint-staged$",
+        "^depcheck$",
+        "^madge$",
+        "^skott$"
+      ],
+      "groupName": "repo tooling",
+      "automerge": false
+    }
+  ]
+}

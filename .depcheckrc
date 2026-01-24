@@ -6,9 +6,12 @@
     "dist"
   ],
   "ignores": [
+    "@chromatic-com/storybook",
     "@commitlint/cli",
     "@commitlint/config-conventional",
     "@eslint/eslintrc",
+    "@storybook/addon-docs",
+    "@storybook/addon-onboarding",
     "@tailwindcss/postcss",
     "@testing-library/user-event",
     "@types/node",

@@ -7,7 +7,7 @@ This project uses **Pino** with runtime-specific logger implementations:
 - **Server (Node.js):** `src/core/logger/server.ts`
 - **Edge:** `src/core/logger/edge.ts`
 - **Browser:** `src/core/logger/browser.ts`
-- **Unified entry:** `src/core/logger/index.ts`
+- **Unified entry:** `src/core/logger/index.ts` (runtime-aware selector)
 
 The logger is designed for:
 
@@ -15,6 +15,7 @@ The logger is designed for:
 - environment-based log levels
 - redaction of sensitive fields on server
 - optional Logflare shipping per runtime
+- shared client payload builder for browser/edge
 
 ## Runtime behavior
 
@@ -36,6 +37,21 @@ Edge uses `pino` in browser mode with a custom transmit that forwards logs to th
 
 Browser uses `pino` in browser mode with a custom transmit that forwards logs to the ingest endpoint.
 
+## Usage
+
+Import the unified logger from `@/core/logger`. It automatically selects the correct runtime logger:
+
+- Server/Route handlers and server components: `import { logger } from '@/core/logger'`
+- Client components: `import { logger } from '@/core/logger'`
+
+Internally, the selector uses lazy getters to avoid server env access during client evaluation.
+
+Logger implementations are cached:
+
+- Server: `getServerLogger()`
+- Edge: `getEdgeLogger()`
+- Browser: `getBrowserLogger()`
+
 ## Logflare routing
 
 Logflare shipping is controlled by **environment flags** so each runtime can be enabled independently.
@@ -46,6 +62,7 @@ Server-only:
 
 - `LOGFLARE_API_KEY`
 - `LOGFLARE_SOURCE_TOKEN`
+- `LOGFLARE_SOURCE_NAME`
 - `LOGFLARE_SERVER_ENABLED`
 - `LOGFLARE_EDGE_ENABLED`
 
@@ -61,7 +78,8 @@ Client:
 - **Edge logs → /api/logs → Logflare** when `LOGFLARE_EDGE_ENABLED=true`.
 - **Browser logs → /api/logs → Logflare** when `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED=true`.
 
-The ingest endpoint (`src/app/api/logs/route.ts`) validates payloads and ships to Logflare using server credentials.
+The ingest endpoint (`src/app/api/logs/route.ts`) validates payloads with Zod and ships to Logflare using server credentials.
+It returns 400 for invalid payloads and warns once when credentials are missing while the runtime flag is enabled.
 
 ## Ingest endpoint
 
@@ -69,6 +87,7 @@ The ingest endpoint (`src/app/api/logs/route.ts`) validates payloads and ships t
 
 - `level`: `fatal|error|warn|info|debug|trace`
 - `msg`: string or structured message
+- `message`: string (preferred when available)
 - `context`: object
 - `source`: `browser|edge`
 
@@ -87,3 +106,4 @@ When Sentry is integrated for error management, keep Logflare focused on:
 
 - HTTP request logging is not automatic yet; add a wrapper or middleware if needed.
 - Client logging uses `sendBeacon` with a `fetch` fallback to avoid blocking navigation.
+- Ingest protection (rate limiting/auth) should be added before production deployment.

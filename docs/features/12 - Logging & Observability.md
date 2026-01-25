@@ -8,8 +8,6 @@ This project uses **Pino** with runtime-specific logger implementations:
 - **Edge:** `src/core/logger/edge.ts`
 - **Browser:** `src/core/logger/browser.ts`
 - **Client entry:** `src/core/logger/client.ts`
-- **Server entry:** `src/core/logger/server.ts`
-- **Edge entry:** `src/core/logger/edge.ts`
 
 The logger is designed for:
 
@@ -65,6 +63,7 @@ Server-only:
 - `LOGFLARE_SOURCE_NAME`
 - `LOGFLARE_SERVER_ENABLED`
 - `LOGFLARE_EDGE_ENABLED`
+- `LOG_INGEST_SECRET` (optional shared secret for edge ingest)
 
 Client:
 
@@ -80,6 +79,7 @@ Client:
 
 The ingest endpoint (`src/app/api/logs/route.ts`) validates payloads with Zod and ships to Logflare using server credentials.
 It returns 400 for invalid payloads and warns once when credentials are missing while the runtime flag is enabled.
+If `LOG_INGEST_SECRET` is set, edge logs must include the `x-log-ingest-secret` header.
 
 ## Ingest endpoint
 

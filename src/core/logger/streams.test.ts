@@ -10,7 +10,7 @@ vi.mock('@/core/env', () => ({
     LOG_DIR: 'logs',
     LOG_TO_FILE_DEV: false,
     LOG_TO_FILE_PROD: false,
-    NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED: false,
+    LOGFLARE_SERVER_ENABLED: false,
   },
 }));
 
@@ -60,7 +60,7 @@ describe('getLogStreams', () => {
   it('should include logflare stream if enabled', () => {
     (
       env as unknown as Record<string, string | boolean>
-    ).NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED = true;
+    ).LOGFLARE_SERVER_ENABLED = true;
 
     const streams = getLogStreams();
     expect(

@@ -34,6 +34,8 @@ export function createLogflareBrowserTransport() {
             headers: { 'Content-Type': 'application/json' },
             body,
             keepalive: true,
+          }).catch(() => {
+            // Silently ignore logging failures in the browser
           });
         }
       },

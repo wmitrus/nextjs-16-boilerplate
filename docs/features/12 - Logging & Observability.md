@@ -7,7 +7,7 @@ This project uses **Pino** with runtime-specific logger implementations:
 - **Server (Node.js):** `src/core/logger/server.ts`
 - **Edge:** `src/core/logger/edge.ts`
 - **Browser:** `src/core/logger/browser.ts`
-- **Unified entry:** `src/core/logger/index.ts` (runtime-aware selector)
+- **Client entry:** `src/core/logger/client.ts`
 
 The logger is designed for:
 
@@ -39,14 +39,12 @@ Browser uses `pino` in browser mode with a custom transmit that forwards logs to
 
 ## Usage
 
-Import the unified logger from `@/core/logger`. It automatically selects the correct runtime logger:
+Use explicit entries to avoid bundling server-only modules in the client:
 
-- Server/Route handlers and server components: `import { logger } from '@/core/logger'`
-- Client components: `import { logger } from '@/core/logger'`
+- Server/Route handlers and server components: `import { logger } from '@/core/logger/server'`
+- Client components and browser-only utilities: `import { logger } from '@/core/logger/client'`
 
-Internally, the selector uses lazy getters to avoid server env access during client evaluation.
-
-Logger implementations are cached:
+Each runtime logger is cached:
 
 - Server: `getServerLogger()`
 - Edge: `getEdgeLogger()`
@@ -65,6 +63,7 @@ Server-only:
 - `LOGFLARE_SOURCE_NAME`
 - `LOGFLARE_SERVER_ENABLED`
 - `LOGFLARE_EDGE_ENABLED`
+- `LOG_INGEST_SECRET` (optional shared secret for edge ingest)
 
 Client:
 
@@ -80,6 +79,7 @@ Client:
 
 The ingest endpoint (`src/app/api/logs/route.ts`) validates payloads with Zod and ships to Logflare using server credentials.
 It returns 400 for invalid payloads and warns once when credentials are missing while the runtime flag is enabled.
+If `LOG_INGEST_SECRET` is set, edge logs must include the `x-log-ingest-secret` header.
 
 ## Ingest endpoint
 

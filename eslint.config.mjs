@@ -35,6 +35,18 @@ const eslintConfig = defineConfig([
     rules: {
       'prettier/prettier': 'error',
       semi: ['error', 'always'],
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/core/logger',
+              message:
+                "Import from '@/core/logger/client' or '@/core/logger/server' instead of the runtime selector.",
+            },
+          ],
+        },
+      ],
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -78,6 +90,50 @@ const eslintConfig = defineConfig([
             order: 'asc',
             caseInsensitive: true,
           },
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/app/**/*.{ts,tsx}', 'src/features/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/core/logger',
+              message:
+                "Import from '@/core/logger/client' instead of the runtime selector.",
+            },
+            {
+              name: '@/core/logger/server',
+              message:
+                "Server logger is not allowed in app/feature UI modules. Use '@/core/logger/client' or move code to a server-only module.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/app/api/**/*.{ts,tsx}', 'src/proxy.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/core/logger',
+              message:
+                "Import from '@/core/logger/server' instead of the runtime selector.",
+            },
+            {
+              name: '@/core/logger/client',
+              message:
+                "Client logger is not allowed in server routes. Use '@/core/logger/server'.",
+            },
+          ],
         },
       ],
     },

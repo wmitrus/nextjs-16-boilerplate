@@ -29,6 +29,11 @@ export const env = createEnv({
     LOGFLARE_EDGE_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
+    UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+    UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+    API_RATE_LIMIT_REQUESTS: z.coerce.number().default(10),
+    API_RATE_LIMIT_WINDOW: z.string().default('60 s'),
+    LOG_INGEST_SECRET: z.string().optional(),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -63,6 +68,11 @@ export const env = createEnv({
     LOGFLARE_SOURCE_NAME: process.env.LOGFLARE_SOURCE_NAME,
     LOGFLARE_SERVER_ENABLED: process.env.LOGFLARE_SERVER_ENABLED,
     LOGFLARE_EDGE_ENABLED: process.env.LOGFLARE_EDGE_ENABLED,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    API_RATE_LIMIT_REQUESTS: process.env.API_RATE_LIMIT_REQUESTS,
+    API_RATE_LIMIT_WINDOW: process.env.API_RATE_LIMIT_WINDOW,
+    LOG_INGEST_SECRET: process.env.LOG_INGEST_SECRET,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:

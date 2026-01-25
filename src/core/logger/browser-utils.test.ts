@@ -76,6 +76,7 @@ describe('browser transport', () => {
 
   it('no-ops when sendBeacon and fetch are unavailable', async () => {
     vi.stubGlobal('navigator', {});
+    vi.stubGlobal('fetch', undefined);
 
     vi.doMock('@/core/env', () => ({
       env: {

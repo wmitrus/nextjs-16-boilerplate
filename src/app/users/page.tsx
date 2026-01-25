@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { logger } from '@/core/logger';
+import { logger } from '@/core/logger/client';
 
 import { getUsers } from '@/features/user-management/api/userService';
 import { UserList } from '@/features/user-management/components/UserList';
@@ -24,7 +24,6 @@ export default function UsersPage() {
           logger.warn('Users list is empty');
         }
       } catch (err) {
-        logger.error({ err }, 'Failed to fetch users list from user service');
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
         setLoading(false);

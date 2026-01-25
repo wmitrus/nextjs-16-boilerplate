@@ -25,9 +25,15 @@ export function createLogflareEdgeTransport() {
           defaultMessage: 'edge log',
         });
 
+        const secret = env.LOG_INGEST_SECRET;
+        const headers = secret ? { 'x-log-ingest-secret': secret } : undefined;
+
         void fetch(`${baseUrl}/api/logs`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(headers ?? {}),
+          },
           body: JSON.stringify(payload),
           keepalive: true,
         });

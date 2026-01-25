@@ -48,3 +48,11 @@ export function getServerLogger(): Logger {
 
   return cachedServerLogger;
 }
+
+export function getLogger(): Logger {
+  return getServerLogger();
+}
+
+export const logger = getServerLogger();
+
+export default logger;

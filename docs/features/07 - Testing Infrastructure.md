@@ -38,6 +38,21 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - **Commands**:
   - `pnpm e2e`: Runs E2E tests against the development server.
 
+#### When to add E2E tests
+
+Use E2E tests for behaviors that require a real browser/runtime and cannot be reliably validated by unit or integration tests, such as:
+
+- Browser console logging/output and runtime-only APIs.
+- Environment-dependent client behavior (e.g., public env flags at build/runtime).
+- Full-page navigation and user interactions across routes.
+
+#### Where to place E2E tests
+
+- Keep E2E specs in the root-level `e2e/` folder.
+- Prefer stable UI hooks that already exist in product UI, rather than adding test-only components.
+
+Example: the browser logger flow is validated in [e2e/users.spec.ts](e2e/users.spec.ts) by asserting the existing users page emits a browser log on load.
+
 ## Configuration Details
 
 ### Native ESM Environment
@@ -63,3 +78,4 @@ Common Next.js components like `next/image` are globally mocked in `tests/setup.
 - **Feature-based Integration**: Group integration tests within their respective features.
 - **Clean Mocking**: Use MSW for API mocking to keep tests decoupled from actual backends.
 - **Staged Checks**: Typechecking is enforced on every commit for staged files.
+- **E2E Scope**: Reserve E2E for runtime-only behavior (browser console, navigation, env-driven behavior).

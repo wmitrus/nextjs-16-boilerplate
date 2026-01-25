@@ -1,6 +1,44 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('User Management E2E', () => {
+  test('should emit a browser logger entry on load', async ({ page }) => {
+    await page.route('**/api/users', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: '1', name: 'E2E User 1', email: 'e2e1@example.com' },
+        ]),
+      });
+    });
+
+    const logPromise = page.waitForEvent('console', {
+      predicate: async (message) => {
+        const values = await Promise.all(
+          message.args().map((arg) => arg.jsonValue()),
+        );
+
+        return values.some((value) => {
+          if (typeof value === 'string') {
+            return value.includes('Fetching users list');
+          }
+
+          if (value && typeof value === 'object') {
+            return (
+              (value as Record<string, unknown>).msg === 'Fetching users list'
+            );
+          }
+
+          return false;
+        });
+      },
+    });
+
+    await page.goto('/users');
+
+    await logPromise;
+  });
+
   test('should display the user list', async ({ page }) => {
     // Mock the API response
     await page.route('**/api/users', async (route) => {

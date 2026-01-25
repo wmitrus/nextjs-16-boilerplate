@@ -8,12 +8,12 @@ const loadEnv = async () => {
   return mod.env;
 };
 
-const setEnv = (vars: Record<string, string | undefined>) => {
+const setEnv = (vars: Record<string, string | boolean | undefined>) => {
   for (const [key, value] of Object.entries(vars)) {
     if (value === undefined) {
       delete process.env[key];
     } else {
-      process.env[key] = value;
+      process.env[key] = String(value);
     }
   }
 };
@@ -32,6 +32,89 @@ describe('env', () => {
 
     expect(env.NODE_ENV).toBe('development');
     expect(env.NEXT_PUBLIC_APP_URL).toBeUndefined();
+  });
+
+  it('validates logger env variables', async () => {
+    setEnv({
+      LOG_LEVEL: 'debug',
+      LOG_DIR: 'custom-logs',
+      LOG_TO_FILE_DEV: 'true',
+      NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: 'true',
+      LOGFLARE_SERVER_ENABLED: 'true',
+      LOGFLARE_SOURCE_NAME: 'nextjs-logs',
+    });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.LOG_LEVEL).toBe('debug');
+    expect(env.LOG_DIR).toBe('custom-logs');
+    expect(env.LOG_TO_FILE_DEV).toBe(true);
+    expect(env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED).toBe(true);
+    expect(env.LOGFLARE_SERVER_ENABLED).toBe(true);
+    expect(env.LOGFLARE_SOURCE_NAME).toBe('nextjs-logs');
+  });
+
+  it('uses default logger env variables', async () => {
+    setEnv({
+      LOG_LEVEL: undefined,
+      LOG_DIR: undefined,
+      LOG_TO_FILE_DEV: undefined,
+      NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: undefined,
+      LOGFLARE_SERVER_ENABLED: undefined,
+      LOGFLARE_SOURCE_NAME: undefined,
+    });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.LOG_LEVEL).toBe('info');
+    expect(env.LOG_DIR).toBe('logs');
+    expect(env.LOG_TO_FILE_DEV).toBe(false);
+    expect(env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED).toBe(false);
+    expect(env.LOGFLARE_SERVER_ENABLED).toBe(false);
+    expect(env.LOGFLARE_SOURCE_NAME).toBeUndefined();
+  });
+
+  it('handles boolean strings in logger env variables', async () => {
+    setEnv({
+      LOG_TO_FILE_DEV: 'false',
+      LOG_TO_FILE_PROD: 'true',
+      NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: 'true',
+      LOGFLARE_EDGE_ENABLED: 'true',
+    });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.LOG_TO_FILE_DEV).toBe(false);
+    expect(env.LOG_TO_FILE_PROD).toBe(true);
+    expect(env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED).toBe(true);
+    expect(env.LOGFLARE_EDGE_ENABLED).toBe(true);
+  });
+
+  it('handles boolean values in logger env variables', async () => {
+    setEnv({
+      LOG_TO_FILE_DEV: true,
+      LOG_TO_FILE_PROD: false,
+      NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: true,
+      LOGFLARE_EDGE_ENABLED: false,
+    });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.LOG_TO_FILE_DEV).toBe(true);
+    expect(env.LOG_TO_FILE_PROD).toBe(false);
+    expect(env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED).toBe(true);
+    expect(env.LOGFLARE_EDGE_ENABLED).toBe(false);
+  });
+
+  it('fails validation for invalid LOG_LEVEL', async () => {
+    setEnv({ LOG_LEVEL: 'invalid' });
+    vi.resetModules();
+
+    await expect(loadEnv()).rejects.toThrow();
   });
 
   it('uses explicit NODE_ENV when set', async () => {

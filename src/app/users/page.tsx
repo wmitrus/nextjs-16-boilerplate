@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+
+import { logger } from '@/core/logger';
 
 import { getUsers } from '@/features/user-management/api/userService';
 import { UserList } from '@/features/user-management/components/UserList';
@@ -13,10 +15,16 @@ export default function UsersPage() {
 
   useEffect(() => {
     async function fetchUsers() {
+      logger.info('Fetching users list');
       try {
         const data = await getUsers();
         setUsers(data);
+        logger.debug({ count: data.length }, 'Users loaded');
+        if (data.length === 0) {
+          logger.warn('Users list is empty');
+        }
       } catch (err) {
+        logger.error({ err }, 'Failed to fetch users list from user service');
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
         setLoading(false);

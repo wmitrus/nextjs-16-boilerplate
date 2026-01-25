@@ -1,3 +1,39 @@
+# [1.2.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.1.0...v1.2.0) (2026-01-25)
+
+
+### Bug Fixes
+
+* **logger:** correct logger import path in UsersPage component ([51b77a4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/51b77a4c757f2a9a57f143163a5d716333c9c46c))
+* **logger:** silently ignore logging failures in browser transport ([92e2959](https://github.com/wmitrus/nextjs-16-boilerplate/commit/92e29593caf38f1f2a7d6106bd7486e839c77148))
+* **proxy:** correct logger import path in proxy test file ([130d98f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/130d98f587f031448ed808451ce12bf03ff5fcef))
+* **proxy:** correct logger import path in proxy.ts ([036beb7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/036beb7a480eb73f3f9b38b52e38f4e66b09148d))
+* **route:** correct logger import path in users route ([c54ee6f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c54ee6ffbb6111c80ba93a63041ab3b69d00eb68))
+* **userService:** correct logger import path in userService file ([dea3866](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dea386671998d09eb3b3719d6e98b56badd8d289))
+* **users:** handle rate limit exceeded error in user fetching ([36e904f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/36e904fb335ca6a84a8cea0eca323236a2cd9e95))
+* **users:** remove error logging for failed user fetch ([d72c5cd](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d72c5cdddffcd766e47c7214d4cff086dc26eb3f))
+
+
+### Features
+
+* **docs:** add external tools and integrations documentation ([92558d9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/92558d915ec4cbf4cec7ae9d3bd99ca5e2d8e99a))
+* **docs:** add Product Requirements Document for Upstash rate limiting ([37e37bd](https://github.com/wmitrus/nextjs-16-boilerplate/commit/37e37bdce69c2ebc5e7d5d525b26f0b9c6783150)), closes [hi#level](https://github.com/hi/issues/level)
+* **docs:** update ENV requirements with new optional variables ([362bcff](https://github.com/wmitrus/nextjs-16-boilerplate/commit/362bcffd07e86e75f3762cdae0637a479a2a6716))
+* **env:** add LOG_INGEST_SECRET to environment variables example ([e352c46](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e352c4626bc1b5ba3fba9420525811c7397e2ffd))
+* **env:** add optional LOG_INGEST_SECRET environment variable ([033e76e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/033e76ec5f44a193d343b518753c4e5c4a89c184))
+* **env:** add Upstash configuration for rate limiting ([5774f85](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5774f85e397cf2f6372fcc85009146884c46c2bb))
+* **env:** add Upstash Redis configuration and API rate limiting settings ([f93acae](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f93acae230d2a0a374c9f90c0dc31837f7351335))
+* **eslint:** add rules to restrict logger imports in specific files ([7f05424](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7f05424e8a4788b30d64550b15c921ec47ff01bd))
+* **get-ip:** add function to retrieve client's IP address from headers ([e2585db](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e2585dbc3a7a03b7378faaf1e30d27deefede358))
+* **get-ip:** add unit tests for getIP function ([43cee38](https://github.com/wmitrus/nextjs-16-boilerplate/commit/43cee3872f88136de784061e0b4ed1b98a7c2cec))
+* **logger:** add getLogger function and default logger export ([6ed9e17](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6ed9e17140c7bfced148e6978b3fe724a321f3ca))
+* **logger:** add logger client implementation ([12f4753](https://github.com/wmitrus/nextjs-16-boilerplate/commit/12f4753765e2340c3906f6dd77ef4aecf2f698b1))
+* **logger:** include log ingest secret in headers for log transmission ([f372107](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f37210796c65dc49dd0a6e4a2e5e91b55c8aac74))
+* **proxy:** implement rate limiting for API routes ([f0764d5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f0764d53d74202b75b3700cd43a85199ebfca2ea))
+* **rate-limit:** add unified rate limit helper for different environments ([8112c32](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8112c32f34b24b1d79de0fe80dccdac361fce1cf))
+* **rate-limit:** implement local in-memory rate limiting functionality ([ea3636a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ea3636a6bea4128c904aebb29e350bf72b2c73d8))
+* **rate-limit:** implement Upstash Redis rate limiting functionality ([cb4b10f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cb4b10f1f5ad50389145388563662c9362e7850b))
+* **rate-limiting:** add rate limiting feature documentation ([6613eed](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6613eed667125b10311f0bc3cba7677c2fd43d23)), closes [hi#level](https://github.com/hi/issues/level)
+
 # [1.1.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.0.0...v1.1.0) (2026-01-25)
 
 

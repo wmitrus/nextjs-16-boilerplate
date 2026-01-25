@@ -9,3 +9,4 @@ Detailed documentation for the features and configurations of this boilerplate:
 5. [Staged Linting](./features/05%20-%20Staged%20Linting.md)
 6. [Quality Tools](./features/06%20-%20Quality%20Tools.md)
 7. [Testing Infrastructure](./features/07%20-%20Testing%20Infrastructure.md)
+8. [Logging & Observability](./features/12%20-%20Logging%20%26%20Observability.md)

@@ -1,9 +1,5 @@
 import { type Logger } from 'pino';
 
-import { browserLogger } from './browser';
-import { edgeLogger } from './edge';
-import { serverLogger } from './server';
-
 /**
  * Dynamically selects the appropriate logger based on the execution environment.
  * We use static imports but ensure that each logger implementation is "safe"
@@ -14,13 +10,16 @@ let logger: Logger;
 
 if (typeof window !== 'undefined') {
   // Browser environment
-  logger = browserLogger;
+  const browserModule = await import('./browser');
+  logger = browserModule.browserLogger;
 } else if (process.env.NEXT_RUNTIME === 'edge') {
   // Edge runtime
-  logger = edgeLogger;
+  const edgeModule = await import('./edge');
+  logger = edgeModule.edgeLogger;
 } else {
   // Node.js server environment
-  logger = serverLogger;
+  const serverModule = await import('./server');
+  logger = serverModule.serverLogger;
 }
 
 export { logger };

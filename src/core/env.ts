@@ -22,6 +22,13 @@ export const env = createEnv({
       .default(false),
     LOGFLARE_API_KEY: z.string().optional(),
     LOGFLARE_SOURCE_TOKEN: z.string().optional(),
+    LOGFLARE_SOURCE_NAME: z.string().optional(),
+    LOGFLARE_SERVER_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    LOGFLARE_EDGE_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -34,7 +41,7 @@ export const env = createEnv({
     NEXT_PUBLIC_LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
-    NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED: z
+    NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
     // Add public variables here
@@ -53,10 +60,13 @@ export const env = createEnv({
     LOG_TO_FILE_PROD: process.env.LOG_TO_FILE_PROD,
     LOGFLARE_API_KEY: process.env.LOGFLARE_API_KEY,
     LOGFLARE_SOURCE_TOKEN: process.env.LOGFLARE_SOURCE_TOKEN,
+    LOGFLARE_SOURCE_NAME: process.env.LOGFLARE_SOURCE_NAME,
+    LOGFLARE_SERVER_ENABLED: process.env.LOGFLARE_SERVER_ENABLED,
+    LOGFLARE_EDGE_ENABLED: process.env.LOGFLARE_EDGE_ENABLED,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
-    NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED:
-      process.env.NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED,
+    NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:
+      process.env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED,
   },
 
   /**

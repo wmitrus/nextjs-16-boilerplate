@@ -33,6 +33,7 @@ export const env = createEnv({
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     API_RATE_LIMIT_REQUESTS: z.coerce.number().default(10),
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),
+    LOG_INGEST_SECRET: z.string().optional(),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -71,6 +72,7 @@ export const env = createEnv({
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
     API_RATE_LIMIT_REQUESTS: process.env.API_RATE_LIMIT_REQUESTS,
     API_RATE_LIMIT_WINDOW: process.env.API_RATE_LIMIT_WINDOW,
+    LOG_INGEST_SECRET: process.env.LOG_INGEST_SECRET,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:

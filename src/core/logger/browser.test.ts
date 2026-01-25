@@ -96,4 +96,31 @@ describe('browser logger', () => {
     const options = pinoMock.mock.calls[0]?.[0];
     expect(options?.base?.env).toBe('preview');
   });
+
+  it('reuses cached logger instance', async () => {
+    vi.doMock('@/core/env', () => ({
+      env: {
+        NEXT_PUBLIC_LOG_LEVEL: 'info',
+        NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
+      },
+    }));
+
+    vi.doMock('./browser-utils', () => ({
+      createLogflareBrowserTransport: vi.fn(),
+    }));
+
+    vi.doMock('pino', () => {
+      const pino = vi.fn(() => ({ info: vi.fn() }));
+      return { default: pino };
+    });
+
+    const pinoModule = await import('pino');
+    const { getBrowserLogger } = await import('./browser');
+
+    const first = getBrowserLogger();
+    const second = getBrowserLogger();
+
+    expect(first).toBe(second);
+    expect(vi.mocked(pinoModule.default)).toHaveBeenCalledTimes(1);
+  });
 });

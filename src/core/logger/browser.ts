@@ -2,7 +2,7 @@ import pino, { type Logger, type LoggerOptions } from 'pino';
 
 import { env } from '@/core/env';
 
-import { createLogflareBrowserTransport } from './utils';
+import { createLogflareBrowserTransport } from './browser-utils';
 
 const options: LoggerOptions = {
   level: env.NEXT_PUBLIC_LOG_LEVEL || 'info',

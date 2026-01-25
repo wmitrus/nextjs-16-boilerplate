@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { logger } from '@/core/logger';
+import { logger } from '@/core/logger/client';
 
 import { getUsers } from '@/features/user-management/api/userService';
 import { UserList } from '@/features/user-management/components/UserList';

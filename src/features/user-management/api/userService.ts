@@ -1,4 +1,4 @@
-import { logger } from '@/core/logger';
+import { logger } from '@/core/logger/client';
 
 import type { User } from '../types';
 

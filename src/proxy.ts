@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-import { logger } from '@/core/logger';
+import { logger } from '@/core/logger/server';
 
 import { getIP } from '@/shared/lib/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit-helper';

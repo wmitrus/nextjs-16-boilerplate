@@ -23,7 +23,7 @@ describe('browser logger', () => {
       },
     }));
 
-    vi.doMock('./utils', () => ({
+    vi.doMock('./browser-utils', () => ({
       createLogflareBrowserTransport: vi.fn(() => ({ transmit })),
     }));
 
@@ -50,7 +50,7 @@ describe('browser logger', () => {
       },
     }));
 
-    vi.doMock('./utils', () => ({
+    vi.doMock('./browser-utils', () => ({
       createLogflareBrowserTransport: vi.fn(),
     }));
 
@@ -77,7 +77,7 @@ describe('browser logger', () => {
       },
     }));
 
-    vi.doMock('./utils', () => ({
+    vi.doMock('./browser-utils', () => ({
       createLogflareBrowserTransport: vi.fn(),
     }));
 

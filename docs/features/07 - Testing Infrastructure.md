@@ -49,10 +49,9 @@ Use E2E tests for behaviors that require a real browser/runtime and cannot be re
 #### Where to place E2E tests
 
 - Keep E2E specs in the root-level `e2e/` folder.
-- Add a dedicated, minimal test route under `src/app/e2e/` for browser-only scenarios.
-- Prefer stable, test-only UI hooks (e.g., `data-testid`) to avoid brittle selectors.
+- Prefer stable UI hooks that already exist in product UI, rather than adding test-only components.
 
-Example: the browser logger flow is validated in `e2e/logger-browser.spec.ts` using a dedicated page at `src/app/e2e/logger`.
+Example: the browser logger flow is validated in [e2e/users.spec.ts](e2e/users.spec.ts) by asserting the existing users page emits a browser log on load.
 
 ## Configuration Details
 

@@ -33,7 +33,8 @@ describe('browser logger', () => {
     });
 
     const pinoModule = await import('pino');
-    await import('./browser');
+    const { getBrowserLogger } = await import('./browser');
+    getBrowserLogger();
 
     const pinoMock = vi.mocked(pinoModule.default);
     expect(pinoMock).toHaveBeenCalledTimes(1);
@@ -60,7 +61,8 @@ describe('browser logger', () => {
     });
 
     const pinoModule = await import('pino');
-    await import('./browser');
+    const { getBrowserLogger } = await import('./browser');
+    getBrowserLogger();
 
     const pinoMock = vi.mocked(pinoModule.default);
     const options = pinoMock.mock.calls[0]?.[0];
@@ -87,7 +89,8 @@ describe('browser logger', () => {
     });
 
     const pinoModule = await import('pino');
-    await import('./browser');
+    const { getBrowserLogger } = await import('./browser');
+    getBrowserLogger();
 
     const pinoMock = vi.mocked(pinoModule.default);
     const options = pinoMock.mock.calls[0]?.[0];

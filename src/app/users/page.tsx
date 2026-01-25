@@ -24,7 +24,6 @@ export default function UsersPage() {
           logger.warn('Users list is empty');
         }
       } catch (err) {
-        logger.error({ err }, 'Failed to fetch users list from user service');
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
         setLoading(false);

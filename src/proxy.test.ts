@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { logger } from '@/core/logger';
+import { logger } from '@/core/logger/server';
 
 import * as getIp from '@/shared/lib/get-ip';
 import * as rateLimitHelper from '@/shared/lib/rate-limit-helper';
 
 import { proxy } from './proxy';
 
-vi.mock('@/core/logger', () => ({
+vi.mock('@/core/logger/server', () => ({
   logger: {
     warn: vi.fn(),
   },

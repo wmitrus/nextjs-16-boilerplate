@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { logger } from '@/core/logger';
+import { logger } from '@/core/logger/server';
 
 const sampleUsers = [
   { id: '1', name: 'Ada Lovelace', email: 'ada@sample.dev' },

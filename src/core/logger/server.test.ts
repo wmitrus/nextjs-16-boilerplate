@@ -36,7 +36,8 @@ describe('server logger', () => {
     });
 
     const pinoModule = await import('pino');
-    await import('./server');
+    const { getServerLogger } = await import('./server');
+    getServerLogger();
 
     const options = vi.mocked(pinoModule.default).mock.calls[0]?.[0];
     expect(options?.level).toBe('warn');
@@ -67,7 +68,8 @@ describe('server logger', () => {
     });
 
     const pinoModule = await import('pino');
-    await import('./server');
+    const { getServerLogger } = await import('./server');
+    getServerLogger();
 
     const options = vi.mocked(pinoModule.default).mock.calls[0]?.[0];
     expect(options?.level).toBe('info');
@@ -97,7 +99,8 @@ describe('server logger', () => {
     });
 
     const pinoModule = await import('pino');
-    await import('./server');
+    const { getServerLogger } = await import('./server');
+    getServerLogger();
 
     const options = vi.mocked(pinoModule.default).mock.calls[0]?.[0];
     expect(options?.base?.env).toBe('preview');
@@ -125,7 +128,8 @@ describe('server logger', () => {
     });
 
     const pinoModule = await import('pino');
-    await import('./server');
+    const { getServerLogger } = await import('./server');
+    getServerLogger();
 
     const pinoMock = vi.mocked(pinoModule.default);
     expect(pinoMock).toHaveBeenCalledTimes(1);

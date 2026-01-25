@@ -20,4 +20,38 @@ test.describe('Home Page E2E', () => {
     await expect(deployLink).toBeVisible();
     await expect(deployLink).toHaveAttribute('href', /vercel.com\/new/);
   });
+
+  test('should emit a browser logger entry', async ({ page }) => {
+    const logPromise = page.waitForEvent('console', {
+      predicate: async (message) => {
+        const values = await Promise.all(
+          message.args().map((arg) => arg.jsonValue()),
+        );
+
+        return values.some(
+          (value) =>
+            value &&
+            typeof value === 'object' &&
+            'e2e' in (value as Record<string, unknown>),
+        );
+      },
+    });
+
+    await page.getByTestId('browser-logger-button').click();
+
+    const message = await logPromise;
+    const values = await Promise.all(
+      message.args().map((arg) => arg.jsonValue()),
+    );
+
+    const payload = values.find(
+      (value) =>
+        value &&
+        typeof value === 'object' &&
+        'e2e' in (value as Record<string, unknown>),
+    ) as Record<string, unknown> | undefined;
+
+    expect(payload?.e2e).toBe(true);
+    expect(payload?.count).toBe(1);
+  });
 });

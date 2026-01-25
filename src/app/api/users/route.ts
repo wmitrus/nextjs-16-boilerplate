@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { serverLogger } from '@/core/logger/server';
+import { logger } from '@/core/logger';
 
 const sampleUsers = [
   { id: '1', name: 'Ada Lovelace', email: 'ada@sample.dev' },
@@ -9,6 +9,6 @@ const sampleUsers = [
 ];
 
 export async function GET() {
-  serverLogger.info({ count: sampleUsers.length }, 'Serving sample users');
+  logger.info({ count: sampleUsers.length }, 'Serving sample users');
   return NextResponse.json(sampleUsers, { status: 200 });
 }

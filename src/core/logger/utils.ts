@@ -3,7 +3,7 @@ import path from 'path';
 
 import type { DestinationStream } from 'pino';
 import { destination } from 'pino';
-import { logflarePinoVercel, createWriteStream } from 'pino-logflare';
+import { createWriteStream } from 'pino-logflare';
 import type { PrettyStream } from 'pino-pretty';
 import pretty from 'pino-pretty';
 
@@ -60,15 +60,19 @@ export function createFileStream(
  * Creates a Logflare write stream for external logging.
  */
 export function createLogflareWriteStream(): DestinationStream {
-  if (!env.LOGFLARE_API_KEY || !env.LOGFLARE_SOURCE_TOKEN) {
+  if (
+    !env.LOGFLARE_API_KEY ||
+    (!env.LOGFLARE_SOURCE_TOKEN && !env.LOGFLARE_SOURCE_NAME)
+  ) {
     throw new Error(
-      'LOGFLARE_API_KEY and LOGFLARE_SOURCE_TOKEN must be set to use Logflare write stream',
+      'LOGFLARE_API_KEY and LOGFLARE_SOURCE_TOKEN or LOGFLARE_SOURCE_NAME must be set to use Logflare write stream',
     );
   }
 
   const stream = createWriteStream({
     apiKey: env.LOGFLARE_API_KEY,
     sourceToken: env.LOGFLARE_SOURCE_TOKEN,
+    sourceName: env.LOGFLARE_SOURCE_NAME,
   });
 
   stream.on('error', (err: Error) => {
@@ -76,27 +80,4 @@ export function createLogflareWriteStream(): DestinationStream {
   });
 
   return stream;
-}
-
-/**
- * Creates a Logflare browser transport.
- */
-export function createLogflareBrowserTransport() {
-  if (!env.LOGFLARE_API_KEY || !env.LOGFLARE_SOURCE_TOKEN) {
-    throw new Error(
-      'LOGFLARE_API_KEY and LOGFLARE_SOURCE_TOKEN must be set to use Logflare browser transport',
-    );
-  }
-
-  const { send } = logflarePinoVercel({
-    apiKey: env.LOGFLARE_API_KEY,
-    sourceToken: env.LOGFLARE_SOURCE_TOKEN,
-  });
-
-  return {
-    transmit: {
-      level: env.LOG_LEVEL, // Use global log level for transmit
-      send: send,
-    },
-  };
 }

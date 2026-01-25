@@ -7,7 +7,9 @@ This project uses **Pino** with runtime-specific logger implementations:
 - **Server (Node.js):** `src/core/logger/server.ts`
 - **Edge:** `src/core/logger/edge.ts`
 - **Browser:** `src/core/logger/browser.ts`
-- **Unified entry:** `src/core/logger/index.ts` (runtime-aware selector)
+- **Client entry:** `src/core/logger/client.ts`
+- **Server entry:** `src/core/logger/server.ts`
+- **Edge entry:** `src/core/logger/edge.ts`
 
 The logger is designed for:
 
@@ -39,14 +41,12 @@ Browser uses `pino` in browser mode with a custom transmit that forwards logs to
 
 ## Usage
 
-Import the unified logger from `@/core/logger`. It automatically selects the correct runtime logger:
+Use explicit entries to avoid bundling server-only modules in the client:
 
-- Server/Route handlers and server components: `import { logger } from '@/core/logger'`
-- Client components: `import { logger } from '@/core/logger'`
+- Server/Route handlers and server components: `import { logger } from '@/core/logger/server'`
+- Client components and browser-only utilities: `import { logger } from '@/core/logger/client'`
 
-Internally, the selector uses lazy getters to avoid server env access during client evaluation.
-
-Logger implementations are cached:
+Each runtime logger is cached:
 
 - Server: `getServerLogger()`
 - Edge: `getEdgeLogger()`

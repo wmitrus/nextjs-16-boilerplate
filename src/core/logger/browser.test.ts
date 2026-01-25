@@ -19,7 +19,7 @@ describe('browser logger', () => {
     vi.doMock('@/core/env', () => ({
       env: {
         NEXT_PUBLIC_LOG_LEVEL: 'debug',
-        NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED: true,
+        NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: true,
       },
     }));
 
@@ -46,7 +46,7 @@ describe('browser logger', () => {
     vi.doMock('@/core/env', () => ({
       env: {
         NEXT_PUBLIC_LOG_LEVEL: 'info',
-        NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED: false,
+        NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
       },
     }));
 
@@ -73,7 +73,7 @@ describe('browser logger', () => {
     vi.doMock('@/core/env', () => ({
       env: {
         NEXT_PUBLIC_LOG_LEVEL: 'info',
-        NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED: false,
+        NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
       },
     }));
 

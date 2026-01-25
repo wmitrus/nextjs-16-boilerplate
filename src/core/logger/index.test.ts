@@ -11,10 +11,10 @@ describe('logger entry point', () => {
     expect(typeof logger.info).toBe('function');
   });
 
-  it('should use browserLogger in browser environment', async () => {
+  it('should use browser logger in browser environment', async () => {
     vi.stubGlobal('window', {});
     const { logger } = await import('./index');
-    // In our implementation, browserLogger is exported via index
+    // The dynamic logger should resolve safely in browser context.
     expect(logger).toBeDefined();
     vi.unstubAllGlobals();
   });

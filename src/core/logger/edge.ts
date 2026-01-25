@@ -1,8 +1,22 @@
-import { serverLogger } from './server';
+import pino, { type Logger, type LoggerOptions } from 'pino';
 
-/**
- * Edge logger implementation.
- * Currently uses the server logger configuration.
- * Can be optimized later for specific edge runtime constraints if needed.
- */
-export const edgeLogger = serverLogger;
+import { env } from '@/core/env';
+
+import { createLogflareEdgeTransport } from './edge-utils';
+
+const options: LoggerOptions = {
+  level: env.LOG_LEVEL,
+  browser: {
+    asObject: true,
+    transmit:
+      env.LOGFLARE_EDGE_ENABLED && env.NEXT_PUBLIC_APP_URL
+        ? createLogflareEdgeTransport().transmit
+        : undefined,
+  },
+  base: {
+    env: process.env.VERCEL_ENV || env.NODE_ENV,
+    revision: process.env.VERCEL_GITHUB_COMMIT_SHA,
+  },
+};
+
+export const edgeLogger: Logger = pino(options);

@@ -48,7 +48,7 @@ describe('logger integration', () => {
 
   it('selects browser logger when window is defined', async () => {
     vi.stubGlobal('window', {});
-    vi.stubEnv('NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED', 'false');
 
     const { logger } = await import('./index');
     const { browserLogger } = await import('./browser');
@@ -79,7 +79,7 @@ describe('logger integration', () => {
     vi.stubEnv('NODE_ENV', 'development');
     vi.stubEnv('LOG_DIR', 'logs');
     vi.stubEnv('LOG_TO_FILE_DEV', 'true');
-    vi.stubEnv('NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED', 'true');
+    vi.stubEnv('LOGFLARE_SERVER_ENABLED', 'true');
     vi.stubEnv('LOGFLARE_API_KEY', 'key');
     vi.stubEnv('LOGFLARE_SOURCE_TOKEN', 'token');
 

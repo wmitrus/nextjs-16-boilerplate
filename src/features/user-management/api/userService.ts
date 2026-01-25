@@ -8,7 +8,15 @@ export async function getUsers(): Promise<User[]> {
   try {
     const response = await fetch('/api/users');
     if (!response.ok) {
-      logger.warn(
+      if (response.status === 429) {
+        logger.warn(
+          { status: response.status },
+          'Rate limit exceeded when fetching users',
+        );
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+
+      logger.error(
         { status: response.status },
         'Failed to fetch users from API',
       );
@@ -19,6 +27,10 @@ export async function getUsers(): Promise<User[]> {
     logger.debug({ count: data.length }, 'Fetched users from API');
     return data;
   } catch (err) {
+    if (err instanceof Error && err.message.includes('Rate limit exceeded')) {
+      throw err;
+    }
+
     logger.error({ err }, 'Users API request failed');
     throw err;
   }

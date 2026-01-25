@@ -1,3 +1,48 @@
+# [1.1.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.0.0...v1.1.0) (2026-01-25)
+
+
+### Bug Fixes
+
+* **logger:** correct environment variable for Logflare browser transport ([0951927](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0951927e7eecbd589bb13279c4929ee74da79328))
+* **logger:** correct import path for browser-utils in tests ([06a0855](https://github.com/wmitrus/nextjs-16-boilerplate/commit/06a0855711dd432f77e94656d6e0ca4ee1e7fa6a))
+* **logger:** correct import path for createLogflareBrowserTransport ([2519672](https://github.com/wmitrus/nextjs-16-boilerplate/commit/25196722f25c2f27e634574f74576b3493d30361))
+* **playwright:** update webServer configuration for consistency ([9cfbb17](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9cfbb17871d6faa23ef0a2c5aa93a39acf89176f))
+
+
+### Features
+
+* **dependencies:** add pino and pino-logflare for logging ([7f8f0a7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7f8f0a712d8119ce4c73d7871b8db39a2f315b8a))
+* **env:** add Logflare configuration options ([e8dbe44](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e8dbe449c3bedc5bf9c9b6d2d7cc0c8c6acda0a6))
+* **env:** add logger configuration to .env.example ([db4f118](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db4f1185d1c9f4f082896db3b4fbd59751e049fe))
+* **env:** add logging configuration to environment variables ([97705ae](https://github.com/wmitrus/nextjs-16-boilerplate/commit/97705aee108b83abd931a413a6c378dac231bfd4))
+* **env:** enhance logger environment variable validation ([beafa7a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/beafa7a7f29901e9fd08ad47456cd3f13f7bfd1f))
+* **logger:** add browser logger implementation with Pino ([c24d71a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c24d71aaccf119ff1a0aba7064865cc8fccd28c9))
+* **logger:** add browser-safe transport for logging ([cb219c8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cb219c889aef3a39f1aaac857727c410c8e97247))
+* **logger:** add BrowserLoggerProbe component for logging events ([e87be4d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e87be4d00a2630df0538c41dec74f1816549e35e))
+* **logger:** add client log payload builder for browser and edge ([2edde08](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2edde0877367a6bb9d143a567f87648127cfd1b7))
+* **logger:** add dynamic logger selection based on environment ([7a6b07f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7a6b07f864f6d4c5c68ae77e6ad7ea456e97e690))
+* **logger:** add edge-safe transport for Logflare integration ([6abe4b0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6abe4b0e9631177537c12875e5d02111ec22cafd))
+* **logger:** add initial server log entry ([46ec75e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/46ec75eb43de4c158871b712f41cdcf69a523f2e))
+* **logger:** add integration tests for logger functionality ([dda8a16](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dda8a16175aa67db1aa512d57aa73f5fa013c0fd))
+* **logger:** add logging for home page rendering ([ab870b6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ab870b67ac76d3b7716974aa3f902d1aee8f1f70))
+* **logger:** add tests for browser logger functionality ([4fae231](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4fae231d9bda986aaf4d2be628d824f4d073b3bb))
+* **logger:** add tests for logger entry point and browser environment ([fc03e5e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/fc03e5e6cf5a1a638f8baa46b50e6dc038e37c65))
+* **logger:** add unit tests for getLogStreams function ([af542d8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/af542d856ae4ed69cc4c488c2c09879ac636a715))
+* **logger:** add unit tests for logger utility functions ([719f949](https://github.com/wmitrus/nextjs-16-boilerplate/commit/719f94957d72559c72743586fc9c782d1c07f03b))
+* **logger:** add unit tests for server logger functionality ([345b62a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/345b62acb61687cf847a924733bca5c996e62981))
+* **logger:** implement browser-safe transport for Logflare integration ([e948eec](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e948eec287a7bcb7d3f458568f7887d98898163f))
+* **logger:** implement edge logger using server logger configuration ([3c18170](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3c181700ac6a975573a292c5728846bfb9c17347))
+* **logger:** implement edge logger with Logflare integration ([76cad16](https://github.com/wmitrus/nextjs-16-boilerplate/commit/76cad168f466e5adc755c530f00ca10ca7fd2e72))
+* **logger:** implement getLogStreams function for dynamic logging ([84756dc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/84756dc2d831a118e7c019eb0d979c5edb8a9282))
+* **logger:** implement Logflare logger integration ([0c6d9a6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0c6d9a6edbc375c71512ac32fdec0d538ea3fc07))
+* **logger:** implement logging utility functions ([047de7a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/047de7a28783bee072eed762a6aa5f952f118833))
+* **logger:** implement server logger with Pino configuration ([ba954d3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ba954d3c801dfd32ed417a5c4b0c46d9929da217))
+* **logging:** add Logging & Observability documentation ([7e4c444](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7e4c444c8e7359466da783f4f8cc3231f1760f00))
+* **logging:** add structured logging documentation and implementation plan ([0b14abd](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0b14abd4f56d5d44052f0e78f79334a8d8e29ac0))
+* **page:** add BrowserLoggerProbe component to Home page ([831f5d9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/831f5d92d5cadc5bde9f5893c24af64ce866c9da))
+* **users:** add logging for user fetching process ([14f70ce](https://github.com/wmitrus/nextjs-16-boilerplate/commit/14f70ce3cd705fa65b0f40f0bf13d17fc62a8d6d))
+* **users:** add sample users API endpoint with logging ([2bde126](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2bde126ab6fe4db464331e41f7d91b6bbf9485d3))
+
 # 1.0.0 (2026-01-24)
 
 

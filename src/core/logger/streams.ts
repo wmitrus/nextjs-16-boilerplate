@@ -36,9 +36,7 @@ export function getLogStreams(): DestinationStream[] {
     shouldLogToFile ? createFileStream(logFile, env.LOG_DIR) : undefined,
 
     // 3. External service stream (if enabled)
-    env.NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED
-      ? createLogflareWriteStream()
-      : undefined,
+    env.LOGFLARE_SERVER_ENABLED ? createLogflareWriteStream() : undefined,
   ];
 
   // Filter out any null or undefined streams

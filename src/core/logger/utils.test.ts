@@ -9,7 +9,6 @@ import {
   createConsoleStream,
   createFileStream,
   createLogflareWriteStream,
-  createLogflareBrowserTransport,
 } from './utils';
 
 vi.mock('fs', () => ({
@@ -28,7 +27,6 @@ vi.mock('pino', async () => {
 });
 
 vi.mock('pino-logflare', () => ({
-  logflarePinoVercel: vi.fn(() => ({ send: vi.fn() })),
   createWriteStream: vi.fn(() => ({ on: vi.fn() })),
 }));
 
@@ -167,25 +165,6 @@ describe('logger utils', () => {
         expect.any(Error),
       );
       consoleSpy.mockRestore();
-    });
-  });
-
-  describe('createLogflareBrowserTransport', () => {
-    it('should throw if logflare env vars are missing', () => {
-      const originalApiKey = (
-        env as unknown as Record<string, string | undefined>
-      ).LOGFLARE_API_KEY;
-      (env as unknown as Record<string, string | undefined>).LOGFLARE_API_KEY =
-        undefined;
-      expect(() => createLogflareBrowserTransport()).toThrow();
-      (env as unknown as Record<string, string | undefined>).LOGFLARE_API_KEY =
-        originalApiKey;
-    });
-
-    it('should return a transmit object', () => {
-      const transport = createLogflareBrowserTransport();
-      expect(transport.transmit).toBeDefined();
-      expect(transport.transmit.send).toBeDefined();
     });
   });
 });

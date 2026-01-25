@@ -51,9 +51,9 @@ describe('logger integration', () => {
     vi.stubEnv('NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED', 'false');
 
     const { logger } = await import('./index');
-    const { browserLogger } = await import('./browser');
+    const { getBrowserLogger } = await import('./browser');
 
-    expect(logger).toBe(browserLogger);
+    expect(logger).toBe(getBrowserLogger());
   });
 
   it('selects edge logger when NEXT_RUNTIME is edge', async () => {
@@ -61,17 +61,17 @@ describe('logger integration', () => {
     vi.stubEnv('NEXT_RUNTIME', 'edge');
 
     const { logger } = await import('./index');
-    const { edgeLogger } = await import('./edge');
+    const { getEdgeLogger } = await import('./edge');
 
-    expect(logger).toBe(edgeLogger);
+    expect(logger).toBe(getEdgeLogger());
   });
 
   it('selects server logger by default', async () => {
     vi.stubGlobal('window', undefined);
     const { logger } = await import('./index');
-    const { serverLogger } = await import('./server');
+    const { getServerLogger } = await import('./server');
 
-    expect(logger).toBe(serverLogger);
+    expect(logger).toBe(getServerLogger());
   });
 
   it('builds streams based on env in server context', async () => {

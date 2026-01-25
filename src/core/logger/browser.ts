@@ -8,7 +8,7 @@ const options: LoggerOptions = {
   level: env.NEXT_PUBLIC_LOG_LEVEL || 'info',
   browser: {
     asObject: true,
-    transmit: env.NEXT_PUBLIC_LOGFLARE_INTEGRATION_ENABLED
+    transmit: env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED
       ? createLogflareBrowserTransport().transmit
       : undefined,
   },

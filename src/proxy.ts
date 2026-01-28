@@ -3,8 +3,8 @@ import type { NextRequest } from 'next/server';
 
 import { logger } from '@/core/logger/server';
 
-import { getIP } from '@/shared/lib/get-ip';
-import { checkRateLimit } from '@/shared/lib/rate-limit-helper';
+import { getIP } from '@/shared/lib/network/get-ip';
+import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 /**
  * Proxy to enforce rate limiting on all API routes.

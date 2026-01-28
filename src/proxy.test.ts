@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { logger } from '@/core/logger/server';
 
-import * as getIp from '@/shared/lib/get-ip';
-import * as rateLimitHelper from '@/shared/lib/rate-limit-helper';
+import * as getIp from '@/shared/lib/network/get-ip';
+import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { proxy } from './proxy';
 
@@ -14,11 +14,11 @@ vi.mock('@/core/logger/server', () => ({
   },
 }));
 
-vi.mock('@/shared/lib/rate-limit-helper', () => ({
+vi.mock('@/shared/lib/rate-limit/rate-limit-helper', () => ({
   checkRateLimit: vi.fn(),
 }));
 
-vi.mock('@/shared/lib/get-ip', () => ({
+vi.mock('@/shared/lib/network/get-ip', () => ({
   getIP: vi.fn(),
 }));
 

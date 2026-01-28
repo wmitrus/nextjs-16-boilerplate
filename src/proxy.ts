@@ -11,7 +11,13 @@ import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
  * In Next.js 16, proxy.ts replaces middleware.ts for Node.js runtime use cases.
  */
 export async function proxy(request: NextRequest) {
-  // Only apply to API routes
+  const correlationId =
+    request.headers.get('x-correlation-id') || crypto.randomUUID();
+
+  // Create base response
+  let response = NextResponse.next();
+
+  // Apply to API routes
   if (request.nextUrl.pathname.startsWith('/api')) {
     const ip = await getIP(request.headers);
     const result = await checkRateLimit(ip);
@@ -20,6 +26,7 @@ export async function proxy(request: NextRequest) {
       logger.warn(
         {
           ip,
+          correlationId,
           path: request.nextUrl.pathname,
           limit: result.limit,
           reset: result.reset,
@@ -27,7 +34,7 @@ export async function proxy(request: NextRequest) {
         'Rate limit exceeded',
       );
 
-      return new NextResponse(
+      response = new NextResponse(
         JSON.stringify({
           error: 'Too Many Requests',
           message: 'Rate limit exceeded. Please try again later.',
@@ -45,21 +52,24 @@ export async function proxy(request: NextRequest) {
           },
         },
       );
+    } else {
+      // Add rate limit headers to the successful response
+      response.headers.set('X-RateLimit-Limit', result.limit.toString());
+      response.headers.set(
+        'X-RateLimit-Remaining',
+        result.remaining.toString(),
+      );
+      response.headers.set(
+        'X-RateLimit-Reset',
+        result.reset.getTime().toString(),
+      );
     }
-
-    // Add rate limit headers to the successful response
-    const response = NextResponse.next();
-    response.headers.set('X-RateLimit-Limit', result.limit.toString());
-    response.headers.set('X-RateLimit-Remaining', result.remaining.toString());
-    response.headers.set(
-      'X-RateLimit-Reset',
-      result.reset.getTime().toString(),
-    );
-
-    return response;
   }
 
-  return NextResponse.next();
+  // Set Correlation ID on both request and response
+  response.headers.set('x-correlation-id', correlationId);
+
+  return response;
 }
 
 /**

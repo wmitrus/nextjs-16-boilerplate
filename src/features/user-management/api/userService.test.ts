@@ -1,4 +1,14 @@
+import { vi, describe, it, expect } from 'vitest';
+
+import { apiClient } from '@/shared/lib/api/api-client';
+
 import { getUsers } from './userService';
+
+vi.mock('@/shared/lib/api/api-client', () => ({
+  apiClient: {
+    get: vi.fn(),
+  },
+}));
 
 describe('userService', () => {
   const mockUsers = [
@@ -6,29 +16,18 @@ describe('userService', () => {
     { id: '2', name: 'Jane Doe', email: 'jane@example.com' },
   ];
 
-  beforeEach(() => {
-    global.fetch = vi.fn();
-  });
-
   it('fetches users successfully', async () => {
-    const mockFetch = vi.mocked(global.fetch);
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => mockUsers,
-    } as Response);
+    vi.mocked(apiClient.get).mockResolvedValue(mockUsers);
 
     const users = await getUsers();
 
     expect(users).toEqual(mockUsers);
-    expect(global.fetch).toHaveBeenCalledWith('/api/users');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/users');
   });
 
   it('throws an error when fetch fails', async () => {
-    const mockFetch = vi.mocked(global.fetch);
-    mockFetch.mockResolvedValue({
-      ok: false,
-    } as Response);
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('API error'));
 
-    await expect(getUsers()).rejects.toThrow('Failed to fetch users');
+    await expect(getUsers()).rejects.toThrow('API error');
   });
 });

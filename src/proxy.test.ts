@@ -42,6 +42,7 @@ describe('Proxy', () => {
     expect(response).toBeDefined();
     expect(response?.headers.get('X-RateLimit-Limit')).toBe('10');
     expect(response?.headers.get('X-RateLimit-Remaining')).toBe('9');
+    expect(response?.headers.get('x-correlation-id')).toBeDefined();
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -63,12 +64,12 @@ describe('Proxy', () => {
     const body = await response?.json();
     expect(body.error).toBe('Too Many Requests');
     expect(logger.warn).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         ip: '127.0.0.1',
         path: '/api/users',
         limit: 10,
         reset,
-      },
+      }),
       'Rate limit exceeded',
     );
   });

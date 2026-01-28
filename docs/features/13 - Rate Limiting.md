@@ -17,10 +17,10 @@ The Rate Limiting feature protects the application's APIs from abuse, brute-forc
 ### Core Components
 
 - `src/proxy.ts`: Global proxy applying rate limiting to all `/api` routes (runs in Node.js runtime).
-- `src/shared/lib/rate-limit.ts`: Production-ready distributed limiter using `@upstash/ratelimit`.
-- `src/shared/lib/rate-limit-local.ts`: Lightweight in-memory limiter for local environments.
-- `src/shared/lib/get-ip.ts`: Utility for robust client IP extraction.
-- `src/shared/lib/rate-limit-helper.ts`: Unified helper function for consistent usage.
+- `src/shared/lib/rate-limit/rate-limit.ts`: Production-ready distributed limiter using `@upstash/ratelimit`.
+- `src/shared/lib/rate-limit/rate-limit-local.ts`: Lightweight in-memory limiter for local environments.
+- `src/shared/lib/network/get-ip.ts`: Utility for robust client IP extraction.
+- `src/shared/lib/rate-limit/rate-limit-helper.ts`: Unified helper function for consistent usage.
 
 ### Environment Variables
 
@@ -40,8 +40,8 @@ By default, the boilerplate includes a proxy at `src/proxy.ts` that automaticall
 You can use the `checkRateLimit` helper to enforce limits in your server-side logic:
 
 ```typescript
-import { checkRateLimit } from '@/shared/lib/rate-limit-helper';
-import { getIP } from '@/shared/lib/get-ip';
+import { getIP } from '@/shared/lib/network/get-ip';
+import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 import { headers } from 'next/headers';
 
 export async function POST(req: Request) {

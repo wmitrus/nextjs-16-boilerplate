@@ -1,10 +1,30 @@
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { headers } from 'next/headers';
+import { ZodError } from 'zod';
 
 import { logger } from '@/core/logger/server';
 
 import { AppError } from '@/shared/lib/api/app-error';
 import type { ApiResponse } from '@/shared/types/api-response';
+
+/**
+ * Maps external errors (like Zod or DB errors) to AppError
+ */
+function mapToAppError(error: unknown): unknown {
+  if (error instanceof ZodError) {
+    const errors: Record<string, string[]> = {};
+    error.issues.forEach((err) => {
+      const path = err.path.join('.');
+      if (!errors[path]) {
+        errors[path] = [];
+      }
+      errors[path].push(err.message);
+    });
+    return new AppError('Validation failed', 400, 'VALIDATION_ERROR', errors);
+  }
+
+  return error;
+}
 
 /**
  * Higher-order function to wrap Server Actions with error handling.
@@ -28,13 +48,15 @@ export function withActionHandler<T, Args extends unknown[]>(
         throw rawError;
       }
 
-      if (rawError instanceof AppError) {
-        if (rawError.statusCode >= 500) {
+      const error = mapToAppError(rawError);
+
+      if (error instanceof AppError) {
+        if (error.statusCode >= 500) {
           logger.error(
             {
               correlationId,
-              err: rawError,
-              code: rawError.code,
+              err: error,
+              code: error.code,
             },
             'AppError in Server Action (500+)',
           );
@@ -42,34 +64,34 @@ export function withActionHandler<T, Args extends unknown[]>(
           logger.warn(
             {
               correlationId,
-              err: rawError,
-              code: rawError.code,
+              err: error,
+              code: error.code,
             },
             'AppError in Server Action',
           );
         }
 
-        if (rawError.errors) {
+        if (error.errors) {
           return {
             status: 'form_errors',
-            errors: rawError.errors,
+            errors: error.errors,
           };
         }
 
         return {
           status: 'server_error',
-          error: rawError.message,
-          code: rawError.code,
+          error: error.message,
+          code: error.code,
         };
       }
 
       const errorMessage =
-        rawError instanceof Error ? rawError.message : 'Internal Server Error';
+        error instanceof Error ? error.message : 'Internal Server Error';
 
       logger.error(
         {
           correlationId,
-          err: rawError,
+          err: error,
         },
         'Unhandled Error in Server Action',
       );

@@ -69,6 +69,44 @@ describe('withActionHandler', () => {
     });
   });
 
+  it('should log AppError with 500+ status via error logger', async () => {
+    const appError = new AppError('Server fail', 503, 'SERVER_FAIL');
+    const action = vi.fn().mockRejectedValue(appError);
+    const wrapped = withActionHandler(action);
+
+    const result = await wrapped();
+
+    expect(result).toEqual({
+      status: 'server_error',
+      error: 'Server fail',
+      code: 'SERVER_FAIL',
+    });
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('should return generic error message in production for non-Error rejections', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, 'NODE_ENV', {
+      value: 'production',
+      configurable: true,
+    });
+
+    const action = vi.fn().mockRejectedValue('bad');
+    const wrapped = withActionHandler(action);
+
+    const result = await wrapped();
+
+    expect(result).toEqual({
+      status: 'server_error',
+      error: 'Internal Server Error',
+    });
+
+    Object.defineProperty(process.env, 'NODE_ENV', {
+      value: originalEnv,
+      configurable: true,
+    });
+  });
+
   it('should log correlationId from headers', async () => {
     const correlationId = 'action-id-789';
     vi.mocked(headers).mockResolvedValue(

@@ -54,8 +54,6 @@ describe('ClientErrorBoundary', () => {
 
     expect(screen.getByText('Custom fallback: Boom')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Reset' }));
-
     rerender(
       <ClientErrorBoundary
         fallback={(error, reset) => (
@@ -70,6 +68,8 @@ describe('ClientErrorBoundary', () => {
         <Thrower shouldThrow={false} />
       </ClientErrorBoundary>,
     );
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
 
     expect(screen.getByText('Safe content')).toBeInTheDocument();
   });

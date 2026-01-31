@@ -34,14 +34,17 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'pnpm dev',
+    command: 'pnpm start',
     url: 'http://localhost:3000',
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     stdout: 'ignore',
     stderr: 'ignore',
     timeout: 120000,
     env: {
       PORT: '3000',
+      E2E_ENABLED: 'true',
+      NEXT_DISABLE_DEV_OVERLAY: '1',
+      NEXT_PUBLIC_E2E_ENABLED: 'true',
     },
   },
 });

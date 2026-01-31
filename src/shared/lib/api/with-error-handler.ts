@@ -1,10 +1,10 @@
 import type { NextRequest } from 'next/server';
 import type { NextResponse } from 'next/server';
+import { ZodError } from 'zod';
 
 import { logger } from '@/core/logger/server';
 
-import { AppError } from '@/shared/types/api-response';
-
+import { AppError } from './app-error';
 import {
   createServerErrorResponse,
   createValidationErrorResponse,
@@ -16,9 +16,21 @@ type RouteHandler = (
 ) => Promise<NextResponse> | NextResponse;
 
 /**
- * Maps external errors (like DB errors) to AppError
+ * Maps external errors (like Zod or DB errors) to AppError
  */
 function mapToAppError(error: unknown): unknown {
+  if (error instanceof ZodError) {
+    const errors: Record<string, string[]> = {};
+    error.issues.forEach((err) => {
+      const path = err.path.join('.');
+      if (!errors[path]) {
+        errors[path] = [];
+      }
+      errors[path].push(err.message);
+    });
+    return new AppError('Validation failed', 400, 'VALIDATION_ERROR', errors);
+  }
+
   // Example: Prisma Unique Constraint
   // if (error instanceof Prisma.PrismaClientKnownRequestError) {
   //   if (error.code === 'P2002') {

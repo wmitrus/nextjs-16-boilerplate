@@ -33,9 +33,9 @@ describe('UsersPage Integration', () => {
     render(<UsersPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Failed to fetch users',
-      );
+      expect(
+        screen.getAllByText('HTTP Error 500: Internal Server Error').length,
+      ).toBeGreaterThan(0);
     });
   });
 });

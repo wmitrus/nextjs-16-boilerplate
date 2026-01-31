@@ -16,21 +16,39 @@ type RouteHandler = (
 ) => Promise<NextResponse> | NextResponse;
 
 /**
+ * Maps external errors (like DB errors) to AppError
+ */
+function mapToAppError(error: unknown): unknown {
+  // Example: Prisma Unique Constraint
+  // if (error instanceof Prisma.PrismaClientKnownRequestError) {
+  //   if (error.code === 'P2002') {
+  //     return new AppError('Resource already exists', 409, 'ALREADY_EXISTS');
+  //   }
+  // }
+
+  return error;
+}
+
+/**
  * Higher-order function to wrap API route handlers with error handling
  */
 export function withErrorHandler(handler: RouteHandler): RouteHandler {
   return async (request, context) => {
+    const correlationId = request.headers.get('x-correlation-id') || 'unknown';
+
     try {
       return await handler(request, context);
-    } catch (error) {
+    } catch (rawError) {
+      const error = mapToAppError(rawError);
+
       if (error instanceof AppError) {
-        // Log expected errors as info or warn
         if (error.statusCode >= 500) {
           logger.error(
             {
               path: request.nextUrl.pathname,
+              correlationId,
+              err: error,
               code: error.code,
-              message: error.message,
             },
             'AppError (500+)',
           );
@@ -38,8 +56,9 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
           logger.warn(
             {
               path: request.nextUrl.pathname,
+              correlationId,
+              err: error,
               code: error.code,
-              message: error.message,
             },
             'AppError',
           );
@@ -56,23 +75,18 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
         );
       }
 
-      // Handle Database errors or other external errors
-      // Example: Prisma, Mongo, etc.
-      // We can add specific checks here if we know the libraries used.
-      // For now, we handle them as generic server errors.
-
       const errorMessage =
         error instanceof Error ? error.message : 'Internal Server Error';
 
       logger.error(
         {
           path: request.nextUrl.pathname,
-          error: error instanceof Error ? error.stack : error,
+          correlationId,
+          err: error,
         },
         'Unhandled API Error',
       );
 
-      // In production, we don't leak the exact error message unless it's an AppError
       const publicMessage =
         process.env.NODE_ENV === 'production'
           ? 'Internal Server Error'

@@ -73,6 +73,24 @@ describe('withErrorHandler', () => {
     });
   });
 
+  it('should log AppError with 500+ status via error logger', async () => {
+    const appError = new AppError('Server down', 503, 'SERVER_DOWN');
+    const handler = vi.fn().mockRejectedValue(appError);
+    const wrappedHandler = withErrorHandler(handler);
+
+    const request = new NextRequest(mockUrl);
+    const response = await wrappedHandler(request, mockContext);
+
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toEqual({
+      status: 'server_error',
+      error: 'Server down',
+      code: 'SERVER_DOWN',
+    });
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   it('should handle generic Error and return 500', async () => {
     const genericError = new Error('Database connection failed');
     const handler = vi.fn().mockRejectedValue(genericError);
@@ -87,6 +105,32 @@ describe('withErrorHandler', () => {
     // In test environment it might leak error if NODE_ENV is not production
     // But we can check for status server_error
     expect(body.status).toBe('server_error');
+  });
+
+  it('should hide non-Error messages in production', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, 'NODE_ENV', {
+      value: 'production',
+      configurable: true,
+    });
+
+    const handler = vi.fn().mockRejectedValue('bad');
+    const wrappedHandler = withErrorHandler(handler);
+
+    const request = new NextRequest(mockUrl);
+    const response = await wrappedHandler(request, mockContext);
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({
+      status: 'server_error',
+      error: 'Internal Server Error',
+    });
+
+    Object.defineProperty(process.env, 'NODE_ENV', {
+      value: originalEnv,
+      configurable: true,
+    });
   });
 
   it('should include correlationId from headers in logs', async () => {

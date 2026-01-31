@@ -1,3 +1,4 @@
+import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { headers } from 'next/headers';
 
 import { logger } from '@/core/logger/server';
@@ -23,6 +24,10 @@ export function withActionHandler<T, Args extends unknown[]>(
         data,
       };
     } catch (rawError) {
+      if (isRedirectError(rawError)) {
+        throw rawError;
+      }
+
       if (rawError instanceof AppError) {
         if (rawError.statusCode >= 500) {
           logger.error(

@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import ErrorBoundary from './error';
 
-const mockLogger = {
+const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
-};
+}));
 
 vi.mock('@/core/logger/client', () => ({
   logger: mockLogger,

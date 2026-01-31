@@ -62,7 +62,11 @@ describe('Proxy', () => {
     expect(response).toBeDefined();
     expect(response?.status).toBe(429);
     const body = await response?.json();
-    expect(body.error).toBe('Too Many Requests');
+    expect(body).toEqual({
+      status: 'server_error',
+      error: 'Rate limit exceeded. Please try again later.',
+      code: 'RATE_LIMITED',
+    });
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         ip: '127.0.0.1',

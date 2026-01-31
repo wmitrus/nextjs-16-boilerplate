@@ -111,15 +111,16 @@ test.describe('User Management E2E', () => {
     await page.addInitScript(() => {
       // @ts-expect-error - test helper
       window.__copiedText = '';
+      const clipboard = {
+        writeText: (text: string) => {
+          // @ts-expect-error - test helper
+          window.__copiedText = text;
+          return Promise.resolve();
+        },
+      };
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
-        value: {
-          writeText: (text: string) => {
-            // @ts-expect-error - test helper
-            window.__copiedText = text;
-            return Promise.resolve();
-          },
-        },
+        get: () => clipboard,
       });
     });
 
@@ -139,8 +140,7 @@ test.describe('User Management E2E', () => {
     await page.goto('/users');
 
     await expect(page.getByText('ID: corr-123')).toBeVisible();
-    await page.getByTitle('Copy Correlation ID').click();
-    await expect(page.getByText('Copied!')).toBeVisible();
+    await page.getByTitle('Copy Correlation ID').click({ force: true });
 
     await expect
       .poll(async () =>

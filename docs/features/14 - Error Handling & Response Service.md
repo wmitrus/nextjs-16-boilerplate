@@ -70,7 +70,7 @@ To validate segment boundaries in Playwright, a dedicated test-only segment is i
 - `src/app/e2e-error/page.tsx`
 - `src/app/e2e-error/error.tsx`
 
-This route intentionally throws when `?throw=1` is provided. It is used only for E2E coverage and can be removed if not needed.
+This route intentionally throws when `?throw=1` is provided. It is gated by `NEXT_PUBLIC_E2E_ENABLED` (set in Playwright config) and is only used for E2E coverage. It can be removed if not needed.
 
 ## Tests
 

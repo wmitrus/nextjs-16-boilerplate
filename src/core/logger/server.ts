@@ -15,6 +15,7 @@ export function getServerLogger(): Logger {
 
   const options: LoggerOptions = {
     level: isServer ? env.LOG_LEVEL : 'info',
+    serializers: pino.stdSerializers,
     base: {
       env:
         process.env.VERCEL_ENV ||

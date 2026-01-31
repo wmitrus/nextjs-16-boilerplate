@@ -110,6 +110,15 @@ describe('apiClient', () => {
     expect(apiError.url).toBe('/new-path');
   });
 
+  it('should handle unknown status in ApiClientError', () => {
+    const apiError = new ApiClientError(
+      { status: 'weird_status' } as never,
+      520,
+    );
+
+    expect(apiError.message).toBe('Unknown API error');
+  });
+
   it('should handle 204 No Content', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: true,

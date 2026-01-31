@@ -68,13 +68,32 @@ describe('GlobalErrorHandlers', () => {
     );
   });
 
+  it('creates an Error when error event has no error object', () => {
+    render(<GlobalErrorHandlers />);
+
+    const event = new ErrorEvent('error', {
+      message: 'Missing error object',
+      filename: 'app.tsx',
+      lineno: 1,
+      colno: 2,
+    });
+
+    window.dispatchEvent(event);
+
+    const logged = vi.mocked(mockLogger.error).mock.calls[0][0].err as Error;
+    expect(logged).toBeInstanceOf(Error);
+    expect(logged.message).toBe('Missing error object');
+  });
+
   it('logs unhandled promise rejections', () => {
     render(<GlobalErrorHandlers />);
 
     const reason = new Error('Promise fail');
+    const promise = Promise.reject(reason);
+    promise.catch(() => undefined);
     const event = new PromiseRejectionEvent('unhandledrejection', {
       reason,
-      promise: Promise.reject(reason),
+      promise,
     });
 
     window.dispatchEvent(event);
@@ -90,9 +109,11 @@ describe('GlobalErrorHandlers', () => {
   it('logs non-error promise rejections as error objects', () => {
     render(<GlobalErrorHandlers />);
 
+    const promise = Promise.reject('String error');
+    promise.catch(() => undefined);
     const event = new PromiseRejectionEvent('unhandledrejection', {
       reason: 'String error',
-      promise: Promise.reject('String error'),
+      promise,
     });
 
     window.dispatchEvent(event);

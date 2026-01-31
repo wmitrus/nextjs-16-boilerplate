@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 
+import { logger } from '@/core/logger/server';
+
 import { AppError } from '@/shared/types/api-response';
 
 import { withErrorHandler } from './with-error-handler';
@@ -85,5 +87,22 @@ describe('withErrorHandler', () => {
     // In test environment it might leak error if NODE_ENV is not production
     // But we can check for status server_error
     expect(body.status).toBe('server_error');
+  });
+
+  it('should include correlationId from headers in logs', async () => {
+    const correlationId = 'log-id-456';
+    const genericError = new Error('Log error');
+    const handler = vi.fn().mockRejectedValue(genericError);
+    const wrappedHandler = withErrorHandler(handler);
+
+    const request = new NextRequest(mockUrl, {
+      headers: { 'x-correlation-id': correlationId },
+    });
+    await wrappedHandler(request, mockContext);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId }),
+      expect.any(String),
+    );
   });
 });

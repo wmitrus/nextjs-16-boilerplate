@@ -6,9 +6,10 @@ test.describe('User Management E2E', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([
-          { id: '1', name: 'E2E User 1', email: 'e2e1@example.com' },
-        ]),
+        body: JSON.stringify({
+          status: 'ok',
+          data: [{ id: '1', name: 'E2E User 1', email: 'e2e1@example.com' }],
+        }),
       });
     });
 
@@ -45,10 +46,13 @@ test.describe('User Management E2E', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([
-          { id: '1', name: 'E2E User 1', email: 'e2e1@example.com' },
-          { id: '2', name: 'E2E User 2', email: 'e2e2@example.com' },
-        ]),
+        body: JSON.stringify({
+          status: 'ok',
+          data: [
+            { id: '1', name: 'E2E User 1', email: 'e2e1@example.com' },
+            { id: '2', name: 'E2E User 2', email: 'e2e2@example.com' },
+          ],
+        }),
       });
     });
 
@@ -73,6 +77,79 @@ test.describe('User Management E2E', () => {
 
     await page.goto('/users');
 
-    await expect(page.getByText('Failed to fetch users')).toBeVisible();
+    await expect(
+      page.getByRole('heading', {
+        name: 'HTTP Error 500: Internal Server Error',
+      }),
+    ).toBeVisible();
+  });
+
+  test('shows ErrorAlert for server_error JSON payload', async ({ page }) => {
+    await page.route('**/api/users', async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        headers: { 'x-correlation-id': 'corr-123' },
+        body: JSON.stringify({
+          status: 'server_error',
+          error: 'Backend failed',
+          code: 'E_FAIL',
+        }),
+      });
+    });
+
+    await page.goto('/users');
+
+    await expect(
+      page.getByRole('heading', { name: 'Backend failed' }),
+    ).toBeVisible();
+    await expect(page.getByText('CODE: E_FAIL')).toBeVisible();
+    await expect(page.getByText('ID: corr-123')).toBeVisible();
+  });
+
+  test('copies correlation ID to clipboard', async ({ page }) => {
+    await page.addInitScript(() => {
+      // @ts-expect-error - test helper
+      window.__copiedText = '';
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string) => {
+            // @ts-expect-error - test helper
+            window.__copiedText = text;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+
+    await page.route('**/api/users', async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        headers: { 'x-correlation-id': 'corr-123' },
+        body: JSON.stringify({
+          status: 'server_error',
+          error: 'Backend failed',
+          code: 'E_FAIL',
+        }),
+      });
+    });
+
+    await page.goto('/users');
+
+    await expect(page.getByText('ID: corr-123')).toBeVisible();
+    await page.getByTitle('Copy Correlation ID').click();
+    await expect(page.getByText('Copied!')).toBeVisible();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () =>
+            // @ts-expect-error - test helper
+            window.__copiedText,
+        ),
+      )
+      .toBe('corr-123');
   });
 });

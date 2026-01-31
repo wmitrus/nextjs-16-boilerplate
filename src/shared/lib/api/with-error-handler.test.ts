@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
+import type { core } from 'zod';
+import { ZodError } from 'zod';
 
 import { logger } from '@/core/logger/server';
 
-import { AppError } from '@/shared/types/api-response';
-
+import { AppError } from './app-error';
 import { withErrorHandler } from './with-error-handler';
 
 // Mock logger
@@ -108,11 +109,7 @@ describe('withErrorHandler', () => {
   });
 
   it('should hide non-Error messages in production', async () => {
-    const originalEnv = process.env.NODE_ENV;
-    Object.defineProperty(process.env, 'NODE_ENV', {
-      value: 'production',
-      configurable: true,
-    });
+    vi.stubEnv('NODE_ENV', 'production');
 
     const handler = vi.fn().mockRejectedValue('bad');
     const wrappedHandler = withErrorHandler(handler);
@@ -127,10 +124,7 @@ describe('withErrorHandler', () => {
       error: 'Internal Server Error',
     });
 
-    Object.defineProperty(process.env, 'NODE_ENV', {
-      value: originalEnv,
-      configurable: true,
-    });
+    vi.unstubAllEnvs();
   });
 
   it('should include correlationId from headers in logs', async () => {
@@ -148,5 +142,31 @@ describe('withErrorHandler', () => {
       expect.objectContaining({ correlationId }),
       expect.any(String),
     );
+  });
+
+  it('should map ZodError to validation error response', async () => {
+    const zodError = new ZodError([
+      {
+        code: 'invalid_type',
+        path: ['email'],
+        message: 'Expected string, received number',
+        expected: 'string',
+        received: 'number',
+      } as core.$ZodIssue,
+    ]);
+    const handler = vi.fn().mockRejectedValue(zodError);
+    const wrappedHandler = withErrorHandler(handler);
+
+    const request = new NextRequest(mockUrl);
+    const response = await wrappedHandler(request, mockContext);
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toEqual({
+      status: 'form_errors',
+      errors: {
+        email: ['Expected string, received number'],
+      },
+    });
   });
 });

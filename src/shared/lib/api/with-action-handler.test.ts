@@ -1,5 +1,7 @@
 import { headers } from 'next/headers';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type { core } from 'zod';
+import { ZodError } from 'zod';
 
 import { logger } from '@/core/logger/server';
 
@@ -116,5 +118,28 @@ describe('withActionHandler', () => {
       expect.objectContaining({ correlationId }),
       expect.any(String),
     );
+  });
+
+  it('should map ZodError to form_errors status', async () => {
+    const zodError = new ZodError([
+      {
+        code: 'invalid_type',
+        path: ['username'],
+        message: 'Expected string, received number',
+        expected: 'string',
+        received: 'number',
+      } as core.$ZodIssue,
+    ]);
+    const action = vi.fn().mockRejectedValue(zodError);
+    const wrapped = withActionHandler(action);
+
+    const result = await wrapped();
+
+    expect(result).toEqual({
+      status: 'form_errors',
+      errors: {
+        username: ['Expected string, received number'],
+      },
+    });
   });
 });

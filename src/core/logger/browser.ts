@@ -13,6 +13,7 @@ export function getBrowserLogger(): Logger {
 
   const options: LoggerOptions = {
     level: env.NEXT_PUBLIC_LOG_LEVEL || 'info',
+    serializers: pino.stdSerializers,
     browser: {
       asObject: true,
       transmit: env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED

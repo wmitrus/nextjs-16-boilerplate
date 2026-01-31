@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 
 import { logger } from '@/core/logger/server';
 
+import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
@@ -34,23 +35,23 @@ export async function proxy(request: NextRequest) {
         'Rate limit exceeded',
       );
 
-      response = new NextResponse(
-        JSON.stringify({
-          error: 'Too Many Requests',
-          message: 'Rate limit exceeded. Please try again later.',
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': Math.ceil(
-              (result.reset.getTime() - Date.now()) / 1000,
-            ).toString(),
-            'X-RateLimit-Limit': result.limit.toString(),
-            'X-RateLimit-Remaining': result.remaining.toString(),
-            'X-RateLimit-Reset': result.reset.getTime().toString(),
-          },
-        },
+      response = createServerErrorResponse(
+        'Rate limit exceeded. Please try again later.',
+        429,
+        'RATE_LIMITED',
+      );
+      response.headers.set(
+        'Retry-After',
+        Math.ceil((result.reset.getTime() - Date.now()) / 1000).toString(),
+      );
+      response.headers.set('X-RateLimit-Limit', result.limit.toString());
+      response.headers.set(
+        'X-RateLimit-Remaining',
+        result.remaining.toString(),
+      );
+      response.headers.set(
+        'X-RateLimit-Reset',
+        result.reset.getTime().toString(),
       );
     } else {
       // Add rate limit headers to the successful response

@@ -30,9 +30,10 @@ pnpm env:check
 
 ### Client-side (must be prefixed with `NEXT_PUBLIC_`)
 
-| Variable              | Required | Purpose         | Example               |
-| --------------------- | -------- | --------------- | --------------------- |
-| `NEXT_PUBLIC_APP_URL` | No       | Public base URL | `https://example.com` |
+| Variable                  | Required | Purpose                     | Example               |
+| ------------------------- | -------- | --------------------------- | --------------------- |
+| `NEXT_PUBLIC_APP_URL`     | No       | Public base URL             | `https://example.com` |
+| `NEXT_PUBLIC_E2E_ENABLED` | No       | Enable test-only UI for E2E | `true`                |
 
 ---
 
@@ -57,7 +58,7 @@ pnpm env:check
 | `UPSTASH_REDIS_REST_TOKEN` | No       | Upstash Redis REST token         | `...`   |
 | `API_RATE_LIMIT_REQUESTS`  | No       | Rate limit requests per window   | `10`    |
 | `API_RATE_LIMIT_WINDOW`    | No       | Rate limit window duration       | `60 s`  |
-| `LOG_INGEST_SECRET`        | No       | Shared secret for edge ingest    | `...`   |
+| `E2E_ENABLED`              | No       | Enable test-only routes for E2E  | `true`  |
 
 ### Release Automation (CI only)
 

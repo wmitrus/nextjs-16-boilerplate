@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { logger } from '@/core/logger/server';
 
-import * as getIp from '@/shared/lib/get-ip';
-import * as rateLimitHelper from '@/shared/lib/rate-limit-helper';
+import * as getIp from '@/shared/lib/network/get-ip';
+import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { proxy } from './proxy';
 
@@ -14,11 +14,11 @@ vi.mock('@/core/logger/server', () => ({
   },
 }));
 
-vi.mock('@/shared/lib/rate-limit-helper', () => ({
+vi.mock('@/shared/lib/rate-limit/rate-limit-helper', () => ({
   checkRateLimit: vi.fn(),
 }));
 
-vi.mock('@/shared/lib/get-ip', () => ({
+vi.mock('@/shared/lib/network/get-ip', () => ({
   getIP: vi.fn(),
 }));
 
@@ -42,6 +42,7 @@ describe('Proxy', () => {
     expect(response).toBeDefined();
     expect(response?.headers.get('X-RateLimit-Limit')).toBe('10');
     expect(response?.headers.get('X-RateLimit-Remaining')).toBe('9');
+    expect(response?.headers.get('x-correlation-id')).toBeDefined();
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -61,14 +62,18 @@ describe('Proxy', () => {
     expect(response).toBeDefined();
     expect(response?.status).toBe(429);
     const body = await response?.json();
-    expect(body.error).toBe('Too Many Requests');
+    expect(body).toEqual({
+      status: 'server_error',
+      error: 'Rate limit exceeded. Please try again later.',
+      code: 'RATE_LIMITED',
+    });
     expect(logger.warn).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         ip: '127.0.0.1',
         path: '/api/users',
         limit: 10,
         reset,
-      },
+      }),
       'Rate limit exceeded',
     );
   });

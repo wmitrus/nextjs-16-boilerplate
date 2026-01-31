@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 
 import { logger } from '@/core/logger/client';
 
+import { ClientErrorBoundary } from '@/shared/components/error/client-error-boundary';
+import { ErrorAlert } from '@/shared/components/ErrorAlert';
+import { ApiClientError } from '@/shared/lib/api/api-client';
+
 import { getUsers } from '@/features/user-management/api/userService';
 import { UserList } from '@/features/user-management/components/UserList';
 import type { User } from '@/features/user-management/types';
@@ -11,32 +15,55 @@ import type { User } from '@/features/user-management/types';
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown | null>(null);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    logger.info('Fetching users list');
+    try {
+      const data = await getUsers();
+      setUsers(data);
+      logger.debug({ count: data.length }, 'Users loaded');
+      if (data.length === 0) {
+        logger.warn('Users list is empty');
+      }
+    } catch (err) {
+      setError(err);
+      if (err instanceof ApiClientError) {
+        logger.error(
+          {
+            err,
+            status: err.status,
+            code: err.code,
+            errors: err.errors,
+            correlationId: err.correlationId,
+          },
+          'API Error loading users',
+        );
+      } else {
+        logger.error(err, 'Unexpected error loading users');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchUsers() {
-      logger.info('Fetching users list');
-      try {
-        const data = await getUsers();
-        setUsers(data);
-        logger.debug({ count: data.length }, 'Users loaded');
-        if (data.length === 0) {
-          logger.warn('Users list is empty');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchUsers();
   }, []);
 
   return (
-    <div className="container mx-auto p-8">
-      <h1 className="mb-6 text-3xl font-bold">User Management</h1>
-      <UserList users={users} loading={loading} error={error} />
-    </div>
+    <ClientErrorBoundary>
+      <div className="container mx-auto p-8">
+        <h1 className="mb-6 text-3xl font-bold">User Management</h1>
+        <ErrorAlert error={error} onRetry={fetchUsers} />
+        <UserList
+          users={users}
+          loading={loading}
+          error={error ? (error as Error).message : null}
+        />
+      </div>
+    </ClientErrorBoundary>
   );
 }

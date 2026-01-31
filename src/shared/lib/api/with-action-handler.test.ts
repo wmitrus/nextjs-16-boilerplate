@@ -85,11 +85,7 @@ describe('withActionHandler', () => {
   });
 
   it('should return generic error message in production for non-Error rejections', async () => {
-    const originalEnv = process.env.NODE_ENV;
-    Object.defineProperty(process.env, 'NODE_ENV', {
-      value: 'production',
-      configurable: true,
-    });
+    vi.stubEnv('NODE_ENV', 'production');
 
     const action = vi.fn().mockRejectedValue('bad');
     const wrapped = withActionHandler(action);
@@ -101,10 +97,7 @@ describe('withActionHandler', () => {
       error: 'Internal Server Error',
     });
 
-    Object.defineProperty(process.env, 'NODE_ENV', {
-      value: originalEnv,
-      configurable: true,
-    });
+    vi.unstubAllEnvs();
   });
 
   it('should log correlationId from headers', async () => {

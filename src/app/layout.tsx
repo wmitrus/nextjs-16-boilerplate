@@ -1,7 +1,9 @@
+import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
+import { Header } from '@/shared/components/Header';
 
 import './globals.css';
 
@@ -26,13 +28,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <GlobalErrorHandlers />
-        {children}
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          <Header />
+          <GlobalErrorHandlers />
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

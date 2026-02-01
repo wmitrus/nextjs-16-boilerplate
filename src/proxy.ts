@@ -1,5 +1,5 @@
+import { clerkMiddleware } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
 import { logger } from '@/core/logger/server';
 
@@ -8,10 +8,10 @@ import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 /**
- * Proxy to enforce rate limiting on all API routes.
+ * Proxy to enforce rate limiting on all API routes and Clerk authentication.
  * In Next.js 16, proxy.ts replaces middleware.ts for Node.js runtime use cases.
  */
-export async function proxy(request: NextRequest) {
+export default clerkMiddleware(async (_auth, request) => {
   const correlationId =
     request.headers.get('x-correlation-id') || crypto.randomUUID();
 
@@ -71,11 +71,16 @@ export async function proxy(request: NextRequest) {
   response.headers.set('x-correlation-id', correlationId);
 
   return response;
-}
+});
 
 /**
- * Configure the middleware to match all API routes.
+ * Configure the middleware to match all routes except static files and internals.
  */
 export const config = {
-  matcher: '/api/:path*',
+  matcher: [
+    // Skip Next.js internals and all static files, unless found in search params
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Always run for API routes
+    '/(api|trpc)(.*)',
+  ],
 };

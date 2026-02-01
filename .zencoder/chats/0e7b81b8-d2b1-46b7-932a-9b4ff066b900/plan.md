@@ -44,4 +44,5 @@
 
 - [x] Fix Next.js 16 `new Date()` Server Component error in `Footer.tsx`
 - [x] Implement `CopyrightYear` client component to handle dynamic year hydration
+- [x] Fix `new Date()` SSR error in `CopyrightYear.tsx` using stable fallback
 - [x] Final verification (pnpm lint, pnpm typecheck)

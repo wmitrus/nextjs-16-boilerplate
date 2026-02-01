@@ -16,6 +16,7 @@ You are designing a Security Suite for a Next.js 16.2 application. Produce a det
 
 Your SDD must assume a **real-world production app** with:
 - Authentication (sessions or tokens)
+- I plan to integrate Clerk - you must tell me which approach is beeter do it first 
 - Multi-tenant / subdomain support
 - Third-party scripts (analytics, error tracking, etc.)
 - CI/CD and automated testing

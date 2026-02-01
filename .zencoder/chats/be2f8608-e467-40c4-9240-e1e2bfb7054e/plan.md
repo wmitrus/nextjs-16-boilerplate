@@ -22,7 +22,7 @@
 
 ## Phase 3: E2E Testing & Final Cleanup
 
-- [ ] Create `e2e/auth.spec.ts` for authentication flow
+- [x] Create `e2e/auth.spec.ts` for authentication flow
   - **Verification**: `pnpm e2e` should pass (may need mocking or specific setup).
-- [ ] Run final quality checks: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm e2e`
+- [x] Run final quality checks: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm e2e`
   - **Verification**: All commands pass.

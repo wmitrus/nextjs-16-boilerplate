@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { Footer } from '@/app/components/layout/Footer';
 import { Header } from '@/app/components/layout/Header';
 import { CTA } from '@/app/components/sections/CTA';
-import { Features } from '@/app/components/sections/Features';
+import FeaturesGrouped from '@/app/components/sections/FeaturesGrouped';
 import { Hero } from '@/app/components/sections/Hero';
 import { StoryOne } from '@/app/components/sections/StoryOne';
 import { StoryTwo } from '@/app/components/sections/StoryTwo';
@@ -28,7 +28,7 @@ export default function Home() {
       <main className="flex-grow">
         <Hero />
         <StoryOne />
-        <Features />
+        <FeaturesGrouped />
         <StoryTwo />
         <UseCases />
         <CTA />

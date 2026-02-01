@@ -5,6 +5,8 @@ import * as React from 'react';
 import PolymorphicElement from '@/shared/components/ui/polymorphic-element';
 import { cn } from '@/shared/utils/cn';
 
+import { CopyrightYear } from '@/app/components/layout/CopyrightYear';
+
 const Footer = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
   ({ className, ...props }, ref) => {
     return (
@@ -107,8 +109,8 @@ const Footer = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
           <div className="mt-12 border-t border-zinc-200 pt-8 dark:border-zinc-800">
             <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
               <p className="text-xs text-zinc-500 dark:text-zinc-500">
-                &copy; {new Date().getFullYear()} Next.js Boilerplate. All
-                rights reserved.
+                &copy; <CopyrightYear /> Next.js Boilerplate. All rights
+                reserved.
               </p>
               <div className="flex items-center gap-4">
                 <div

@@ -12,8 +12,9 @@ import proxy from './proxy';
 vi.mock('@clerk/nextjs/server', () => ({
   clerkMiddleware: vi.fn(
     (handler) => (req: NextRequest, evt: NextFetchEvent) =>
-      handler({}, req, evt),
+      handler({ protect: vi.fn() }, req, evt),
   ),
+  createRouteMatcher: vi.fn(() => vi.fn(() => true)),
 }));
 
 vi.mock('@/core/logger/server', () => ({

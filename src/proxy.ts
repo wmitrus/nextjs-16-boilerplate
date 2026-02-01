@@ -1,4 +1,4 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import { logger } from '@/core/logger/server';
@@ -7,11 +7,17 @@ import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
+const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)', '/']);
+
 /**
  * Proxy to enforce rate limiting on all API routes and Clerk authentication.
  * In Next.js 16, proxy.ts replaces middleware.ts for Node.js runtime use cases.
  */
-export default clerkMiddleware(async (_auth, request) => {
+export default clerkMiddleware(async (auth, request) => {
+  if (!isPublicRoute(request)) {
+    await auth.protect();
+  }
+
   const correlationId =
     request.headers.get('x-correlation-id') || crypto.randomUUID();
 

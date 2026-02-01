@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const originalEnv = { ...process.env };
+const originalEnv = {
+  ...process.env,
+  CLERK_SECRET_KEY: 'sk_test_mock',
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test_mock',
+};
 
 const loadEnv = async () => {
   const mod = await import('./env');
@@ -32,6 +36,44 @@ describe('env', () => {
 
     expect(env.NODE_ENV).toBe('development');
     expect(env.NEXT_PUBLIC_APP_URL).toBeUndefined();
+  });
+
+  it('validates Clerk env variables', async () => {
+    setEnv({
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: '/custom-sign-in',
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: '/custom-sign-up',
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: '/after-sign-in',
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: '/after-sign-up',
+    });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_IN_URL).toBe('/custom-sign-in');
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_URL).toBe('/custom-sign-up');
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL).toBe(
+      '/after-sign-in',
+    );
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL).toBe(
+      '/after-sign-up',
+    );
+  });
+
+  it('uses default Clerk env variables', async () => {
+    setEnv({
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: undefined,
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: undefined,
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: undefined,
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: undefined,
+    });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_IN_URL).toBe('/sign-in');
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_URL).toBe('/sign-up');
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL).toBe('/');
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL).toBe('/');
   });
 
   it('validates logger env variables', async () => {

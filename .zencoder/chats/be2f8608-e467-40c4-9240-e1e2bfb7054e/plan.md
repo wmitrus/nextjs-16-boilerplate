@@ -26,3 +26,13 @@
   - **Verification**: `pnpm e2e` should pass (may need mocking or specific setup).
 - [x] Run final quality checks: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm e2e`
   - **Verification**: All commands pass.
+
+## Phase 4: Custom Onboarding Flow
+
+- [x] Update `src/core/env.ts` and `.env.example` with onboarding redirect URLs
+- [x] Create `src/types/globals.d.ts` for `CustomJwtSessionClaims`
+- [x] Update `src/proxy.ts` to handle onboarding redirection
+- [x] Create `src/app/onboarding/layout.tsx`
+- [x] Create `src/app/onboarding/page.tsx` with language lessons form
+- [x] Create `src/app/onboarding/_actions.ts` for user metadata updates
+- [x] Run final quality checks: `pnpm typecheck`, `pnpm lint`

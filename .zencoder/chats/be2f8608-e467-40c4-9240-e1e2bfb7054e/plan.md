@@ -47,3 +47,8 @@
   - **Verification**: Integration works according to Clerk v6 standards.
 - [x] Run final quality checks: `pnpm typecheck`, `pnpm lint`
   - **Verification**: All checks pass.
+
+## Phase 6: Documentation
+
+- [x] Create `docs/features/16 - Clerk Waitlist.md`
+- [x] Update `docs/features/15 - Clerk Authentication.md` with links to Waitlist and Onboarding

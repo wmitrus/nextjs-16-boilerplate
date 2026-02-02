@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import type { NextFetchEvent } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { logger } from '@/core/logger/server';
@@ -6,7 +7,15 @@ import { logger } from '@/core/logger/server';
 import * as getIp from '@/shared/lib/network/get-ip';
 import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
-import { proxy } from './proxy';
+import proxy from './proxy';
+
+vi.mock('@clerk/nextjs/server', () => ({
+  clerkMiddleware: vi.fn(
+    (handler) => (req: NextRequest, evt: NextFetchEvent) =>
+      handler({ protect: vi.fn() }, req, evt),
+  ),
+  createRouteMatcher: vi.fn(() => vi.fn(() => true)),
+}));
 
 vi.mock('@/core/logger/server', () => ({
   logger: {
@@ -37,7 +46,7 @@ describe('Proxy', () => {
       reset: new Date(Date.now() + 60000),
     });
 
-    const response = await proxy(request);
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
 
     expect(response).toBeDefined();
     expect(response?.headers.get('X-RateLimit-Limit')).toBe('10');
@@ -57,7 +66,7 @@ describe('Proxy', () => {
       reset,
     });
 
-    const response = await proxy(request);
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
 
     expect(response).toBeDefined();
     expect(response?.status).toBe(429);
@@ -80,7 +89,7 @@ describe('Proxy', () => {
 
   it('should ignore non-api routes', async () => {
     const request = new NextRequest(new URL('http://localhost/about'));
-    await proxy(request);
+    await proxy(request, {} as unknown as NextFetchEvent);
 
     expect(rateLimitHelper.checkRateLimit).not.toHaveBeenCalled();
   });

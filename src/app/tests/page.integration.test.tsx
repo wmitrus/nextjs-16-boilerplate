@@ -4,25 +4,21 @@ import React from 'react';
 import Home from '../page';
 
 describe('Home Page', () => {
-  it('renders the welcome message', () => {
+  it('renders the hero section with heading', () => {
     render(<Home />);
-    expect(
-      screen.getByText(/To get started, edit the page.tsx file/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Build your next big idea/i)).toBeInTheDocument();
   });
 
-  it('renders the documentation link', () => {
+  it('renders navigation links', () => {
     render(<Home />);
-    const docsLink = screen.getByRole('link', { name: /documentation/i });
-    expect(docsLink).toBeInTheDocument();
-    expect(docsLink).toHaveAttribute(
-      'href',
-      expect.stringContaining('nextjs.org/docs'),
-    );
+    // Check for Features link in the header navigation
+    expect(screen.getAllByText(/Features/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Pricing/i)).toBeInTheDocument();
   });
 
-  it('renders the Vercel logo', () => {
+  it('renders the logo', () => {
     render(<Home />);
-    expect(screen.getByAltText(/Vercel logomark/i)).toBeInTheDocument();
+    // Check for multiple logo images (e.g., in header and footer)
+    expect(screen.getAllByAltText(/Logo/i).length).toBeGreaterThan(0);
   });
 });

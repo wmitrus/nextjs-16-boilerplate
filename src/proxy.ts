@@ -11,7 +11,12 @@ import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
-const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)', '/']);
+const isPublicRoute = createRouteMatcher([
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+  '/waitlist(.*)',
+  '/',
+]);
 const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)']);
 const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)']);
 

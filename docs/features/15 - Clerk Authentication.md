@@ -87,3 +87,4 @@ Development-only warnings (like "single session enabled") are suppressed in the 
 ## 8. Related Features
 
 - **Onboarding**: For details on the custom onboarding flow, see [02 - Clerk Onboarding.md](@/features/02%20-%20Clerk%20Onboarding.md).
+- **Waitlist**: For early access management, see [16 - Clerk Waitlist.md](@/features/16%20-%20Clerk%20Waitlist.md).

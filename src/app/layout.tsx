@@ -39,6 +39,7 @@ export default function RootLayout({
           <ClerkProvider
             signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
             signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
+            waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
             signInFallbackRedirectUrl={
               env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
             }

@@ -4,14 +4,30 @@ on:
   push:
     branches:
       - main
-  pull_request: # Run on all pull requests to main
+    paths:
+      - 'src/**'
+      - '.storybook/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  pull_request:
     branches:
       - main
-  workflow_dispatch: # Allows manual triggering from GitHub UI
+    paths:
+      - 'src/**'
+      - '.storybook/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   chromatic-deployment:
+    name: Visual Regression Testing
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,5 +53,6 @@ jobs:
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          onlyChanged: true # Optimization: only run snapshots for changed components
           exitOnceUploaded: true # finishes CI job quickly; results are reported to PR
           autoAcceptChanges: ${{ github.ref == 'refs/heads/main' }} # auto-accept on main branch

@@ -92,4 +92,4 @@ When Waitlist mode is enabled in the Clerk Dashboard:
 ## 6. Related Features
 
 - **Authentication**: For general auth setup, see [15 - Clerk Authentication.md](@/features/15%20-%20Clerk%20Authentication.md).
-- **Onboarding**: For post-registration flow, see [02 - Clerk Onboarding.md](@/features/02%20-%20Clerk%20Onboarding.md).
+- **Onboarding**: For post-registration flow, see [17 - Clerk Onboarding.md](@/features/17%20-%20Clerk%20Onboarding.md).

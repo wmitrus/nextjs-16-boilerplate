@@ -13,6 +13,8 @@
 # logs
 logs
 
+/bin
+
 # testing
 /coverage
 /playwright-report/

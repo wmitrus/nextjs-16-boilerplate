@@ -36,3 +36,14 @@
 - [x] Create `src/app/onboarding/page.tsx` with language lessons form
 - [x] Create `src/app/onboarding/_actions.ts` for user metadata updates
 - [x] Run final quality checks: `pnpm typecheck`, `pnpm lint`
+
+## Phase 5: Waitlist Integration
+
+- [x] Create `src/app/waitlist/page.tsx` with `<Waitlist />` component
+  - **Verification**: `pnpm typecheck` should pass.
+- [x] Update `src/proxy.ts` to include `/waitlist` in public routes
+  - **Verification**: Unauthorized users can access `/waitlist`.
+- [x] Update `src/app/layout.tsx` to configure `waitlistUrl` in `<ClerkProvider>`
+  - **Verification**: Integration works according to Clerk v6 standards.
+- [x] Run final quality checks: `pnpm typecheck`, `pnpm lint`
+  - **Verification**: All checks pass.

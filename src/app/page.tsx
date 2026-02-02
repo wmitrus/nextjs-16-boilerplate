@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 
 import { Footer } from '@/app/components/layout/Footer';
-import { Header } from '@/app/components/layout/Header';
 import { CTA } from '@/app/components/sections/CTA';
 import FeaturesGrouped from '@/app/components/sections/FeaturesGrouped';
 import { Hero } from '@/app/components/sections/Hero';
@@ -24,7 +23,6 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-black">
-      <Header />
       <main className="flex-grow">
         <Hero />
         <StoryOne />

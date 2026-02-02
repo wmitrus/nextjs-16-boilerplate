@@ -58,6 +58,7 @@ export const env = createEnv({
     NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: z
       .string()
       .default('/onboarding'),
+    NEXT_PUBLIC_CLERK_WAITLIST_URL: z.string().default('/waitlist'),
     // Add public variables here
   },
 
@@ -97,6 +98,7 @@ export const env = createEnv({
       process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL,
     NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL:
       process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL,
+    NEXT_PUBLIC_CLERK_WAITLIST_URL: process.env.NEXT_PUBLIC_CLERK_WAITLIST_URL,
   },
 
   /**

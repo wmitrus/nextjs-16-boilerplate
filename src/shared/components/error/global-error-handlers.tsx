@@ -25,12 +25,17 @@ export function GlobalErrorHandlers() {
     };
 
     const handleRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message = reason instanceof Error ? reason.message : String(reason);
+
+      // Ignore Clerk no-op warnings that are thrown as errors/rejections
+      if (message.includes('cannot_render_single_session_enabled')) {
+        return;
+      }
+
       logger.error(
         {
-          err:
-            event.reason instanceof Error
-              ? event.reason
-              : new Error(String(event.reason)),
+          err: reason instanceof Error ? reason : new Error(String(reason)),
         },
         'Unhandled Promise Rejection',
       );

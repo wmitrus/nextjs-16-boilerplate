@@ -1,7 +1,12 @@
+import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { Suspense } from 'react';
+
+import { env } from '@/core/env';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
+import { Header } from '@/shared/components/Header';
 
 import './globals.css';
 
@@ -30,8 +35,23 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <GlobalErrorHandlers />
-        {children}
+        <Suspense fallback={null}>
+          <ClerkProvider
+            signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
+            signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
+            waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
+            signInFallbackRedirectUrl={
+              env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+            }
+            signUpFallbackRedirectUrl={
+              env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+            }
+          >
+            <Header />
+            <GlobalErrorHandlers />
+            <Suspense fallback={null}>{children}</Suspense>
+          </ClerkProvider>
+        </Suspense>
       </body>
     </html>
   );

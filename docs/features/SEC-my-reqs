@@ -1,0 +1,214 @@
+You are designing a Security Suite for a Next.js 16.2 application. Produce a detailed Software Design Document (SDD) and implementation plan for an **Edge-compatible security layer** with CSRF, CSP, sanitization, and cache-aware protections across the entire stack.
+
+## 1. Context and scope
+
+- Framework: **Next.js 16.2**, App Router, React 19.x.
+- Runtime: Mix of **Edge** and **Node.js** (API routes, server actions, middleware, route handlers).
+- Architecture: Multi-page app with:
+  - Server Components and Client Components
+  - API routes / route handlers
+  - Middleware
+  - Proxies / upstream services
+  - Forms, inputs, file uploads
+- Existing baseline: Requirements are mostly inherited from a **Next.js 15** project, with additional mitigations. You must:
+  - Re-evaluate and **update all designs specifically for Next.js 16.2**.
+  - Call out any breaking changes, deprecated APIs, or new capabilities in 16.2 that affect security.
+
+Your SDD must assume a **real-world production app** with:
+- Authentication (sessions or tokens)
+- I plan to integrate Clerk - you must tell me which approach is beeter do it first 
+- Multi-tenant / subdomain support
+- Third-party scripts (analytics, error tracking, etc.)
+- CI/CD and automated testing
+
+## 2. High-level goals
+
+Design a **comprehensive Security Suite** that:
+
+1. **Mitigates common web vulnerabilities**
+   - CSRF, XSS, clickjacking, injection, origin spoofing, open redirects.
+2. **Controls resources via CSP**
+   - Strict Content Security Policy with nonce-based script/style loading.
+3. **Ensures data integrity**
+   - Robust sanitization of all user-controlled data (body, query, headers, cookies, file metadata).
+4. **Validates origin and intent**
+   - Strong origin checks, same-site policies, and anti-CSRF mechanisms.
+5. **Is Edge-compatible and cache-aware**
+   - Works correctly with Edge runtime, CDNs, and Next.js 16.2 caching model.
+
+## 3. Required security components
+
+Use my notes as **baseline requirements** and extend them where needed.
+
+### 3.1 Middleware orchestration
+
+- Design a **global security middleware pipeline** that runs before application logic:
+  - Applied via `middleware.ts` and/or route-specific middleware.
+  - Must work in **Edge runtime** where possible.
+- Responsibilities:
+  - Attach CSP headers and nonces.
+  - Enforce CSRF protection.
+  - Perform origin checks.
+  - Apply basic request normalization and early rejection for obviously malicious traffic.
+
+### 3.2 CSP (Content Security Policy)
+
+- Implement **nonce-based CSP**:
+  - Generate a cryptographically secure nonce per request.
+  - Allow only scripts/styles with the correct nonce.
+  - Block all other inline scripts by default.
+- Design a `buildCSP`-style function (e.g. `src/lib/security/csp.ts`) that:
+  - Builds the `Content-Security-Policy` header string.
+  - Supports environment-based configuration (dev vs prod).
+  - Allows whitelisting of:
+    - Analytics (e.g. Google Analytics)
+    - Error tracking (e.g. Sentry)
+    - Fonts, CDNs, images, media
+- Include guidance for:
+  - Handling `script-src`, `style-src`, `frame-ancestors`, `connect-src`, `img-src`, `font-src`.
+  - Clickjacking protection via `frame-ancestors` (and optionally `X-Frame-Options`).
+  - Nonce propagation into Server Components and Client Components in Next.js 16.2:
+    - How to retrieve nonce from `headers()` or similar APIs.
+    - How to pass nonce to `<script>` tags and any `dangerouslySetInnerHTML` usage.
+
+### 3.3 CSRF protection (Edge-compatible)
+
+- Use a **stateless, Edge-compatible CSRF mechanism**, such as double-submit cookie:
+  - Compatible with multiple subdomains and tenants.
+  - Works with both API routes and Server Actions.
+- Design a CSRF module (e.g. `src/lib/security/csrf/`) that:
+  - Issues CSRF tokens via cookies and/or headers.
+  - Validates tokens on all state-changing requests (POST, PUT, PATCH, DELETE).
+  - Integrates with:
+    - Server Actions
+    - Route handlers
+    - Traditional form submissions
+- Include:
+  - Rules for which routes must enforce CSRF.
+  - How to **exclude** specific routes (e.g. public webhooks) safely.
+  - Interaction with SameSite cookies and cross-origin scenarios.
+
+### 3.4 Sanitization and XSS prevention
+
+- Use a sanitization utility (e.g. `xss`) in `src/lib/security/sanitize.ts`:
+  - Sanitize all user-controlled input before:
+    - Persisting to the database.
+    - Rendering in the UI (especially with `dangerouslySetInnerHTML`).
+- Define:
+  - Default sanitization policy (which tags/attributes are allowed).
+  - Configurable “levels” of sanitization for different contexts (e.g. rich text vs plain text).
+- Cover:
+  - Input from forms, query params, JSON bodies, file metadata, and headers.
+  - Output encoding strategies for React components.
+  - Special handling for user-generated HTML content.
+
+### 3.5 Origin validation and request hardening
+
+- Implement `isSameOrigin`-style checks:
+  - Validate `Origin` and `Referer` headers where applicable.
+  - Enforce strict rules for sensitive endpoints (auth, payments, account changes).
+- Define:
+  - Rules for allowed origins (first-party domains, subdomains, trusted partners).
+  - Behavior when headers are missing or suspicious.
+- Include:
+  - Protection against open redirects.
+  - Validation of redirect targets and callback URLs.
+
+## 4. Next.js 16.2–specific considerations
+
+Design everything **explicitly for Next.js 16.2**:
+
+- Identify:
+  - Any new APIs or changes in middleware, routing, or caching that affect security.
+  - Differences from Next.js 15 that require code or configuration changes.
+- Cover:
+  - App Router specifics (layouts, nested routes, route groups).
+  - Server Actions and how CSRF and sanitization integrate with them.
+  - Edge vs Node runtimes and what security logic can safely run where.
+
+## 5. Next.js caching and CDN behavior
+
+Provide a dedicated section on **Next.js 16.2 caching** and security:
+
+- Explain:
+  - How Next.js 16.2 caching works (full-page, segment, data cache, route handlers).
+  - How headers like `Cache-Control`, `Vary`, and `ETag` interact with security.
+- Design rules to ensure:
+  - **No sensitive data is ever cached** at the CDN or browser level:
+    - Authenticated responses
+    - CSRF tokens
+    - Per-user personalization
+  - Correct use of:
+    - `no-store`, `private`, and short-lived caching where appropriate.
+- Address:
+  - How to avoid caching CSRF-protected forms with stale tokens.
+  - How to handle revalidation and ISR in a secure way.
+  - Cache partitioning by user/session where needed.
+- Include recommendations for:
+  - Using `headers()` and `cookies()` safely in cached vs non-cached routes.
+  - Preventing cache poisoning attacks.
+
+## 6. Coverage across all layers
+
+Ensure the SDD **explicitly covers** protections for:
+
+- **App/UI layer**
+  - React components (Server and Client)
+  - Forms, inputs, file uploads, search fields, comments, rich text editors
+  - Client-side navigation and query parameters
+- **API and server layer**
+  - Route handlers and API routes
+  - Server Actions
+  - Authentication endpoints
+  - Webhooks and public endpoints
+- **Proxy and integration layer**
+  - Reverse proxies / edge networks / CDNs
+  - Upstream APIs and microservices
+  - Timeouts, retries, and error handling that avoid leaking sensitive data
+- **Browser and transport**
+  - Secure cookies (HttpOnly, Secure, SameSite)
+  - HSTS, HTTPS-only assumptions
+  - Referrer Policy, X-Content-Type-Options, X-Download-Options, etc.
+
+For each layer, specify:
+- Threats addressed.
+- Concrete mitigations.
+- Where in the codebase they should live (e.g. `middleware.ts`, `src/lib/security/*`, route handlers, components).
+
+## 7. Additional recommendations and gaps
+
+Based on best practices, **analyze the above requirements and add anything important that is missing**, such as:
+
+- Rate limiting and abuse detection (and how it interacts with this Security Suite).
+- Standardized error responses that avoid leaking internals.
+- Logging and audit trails for security-relevant events.
+- Secrets management and configuration handling.
+- Secure handling of file uploads (size limits, type checks, virus scanning hooks).
+- CSRF and CSP considerations for:
+  - iFrames
+  - OAuth / SSO flows
+  - Payment providers
+- Testing strategy:
+  - Unit tests for security utilities.
+  - Integration tests for middleware and headers.
+  - Suggested automated checks in CI/CD (linting, security scanners, CSP report-only mode, etc.).
+
+## 8. Deliverables
+
+Produce:
+
+1. A structured **Security Suite SDD** for Next.js 16.2, including:
+   - Architecture diagrams (described in text).
+   - Module breakdown (files, functions, responsibilities).
+   - Data flows for CSRF, CSP, and sanitization.
+2. A concrete **implementation plan**:
+   - Step-by-step tasks.
+   - Suggested file structure (e.g. `src/lib/security/csrf/`, `src/lib/security/csp.ts`, `src/lib/security/sanitize.ts`, `middleware.ts`).
+   - Migration notes from Next.js 15 to 16.2.
+3. A **checklist** for verifying correct deployment:
+   - Headers present and correct.
+   - CSRF behavior validated.
+   - XSS and cache-related tests.
+   - Edge vs Node behavior confirmed.
+
+Be explicit, opinionated, and practical. Assume the reader is a senior engineer familiar with Next.js but wants a **clear, production-ready security design** tailored to **Next.js 16.2** and modern Edge/CDN environments.

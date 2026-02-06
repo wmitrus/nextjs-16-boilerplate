@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+OLD="$1"
+NEW="$2"
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Ignore detached HEAD
+if [ "$CURRENT_BRANCH" = "HEAD" ]; then
+  exit 0
+fi
+
+# Get previous branch reliably
+PREVIOUS_BRANCH=$(git rev-parse --abbrev-ref @{-1} 2>/dev/null || echo "")
+
+# Ignore if previous branch is empty or same as current
+if [ -z "$PREVIOUS_BRANCH" ] || [ "$PREVIOUS_BRANCH" = "$CURRENT_BRANCH" ]; then
+  exit 0
+fi
+
+mkdir -p .git/branch-origins
+
+SAFE_BRANCH=$(echo "$CURRENT_BRANCH" | sed 's/\//__/g')
+ORIGIN_FILE=".git/branch-origins/$SAFE_BRANCH"
+
+# Don't overwrite existing metadata
+if [ -f "$ORIGIN_FILE" ]; then
+  exit 0
+fi
+
+echo "$PREVIOUS_BRANCH" > "$ORIGIN_FILE"

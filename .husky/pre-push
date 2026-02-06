@@ -1,1 +1,14 @@
-pnpm run typecheck && pnpm run skott:check:only && pnpm run depcheck && pnpm run madge && pnpm run env:check
+#!/bin/sh
+
+# Quality gates
+pnpm run typecheck &&
+pnpm run skott:check:only &&
+pnpm run depcheck &&
+pnpm run madge &&
+pnpm run env:check
+
+# Push parent-branch notes
+if git show-ref --quiet refs/notes/commits; then
+  echo "Pushing parent-branch notes..."
+  git push origin refs/notes/commits || echo "Warning: Could not push notes"
+fi

@@ -29,3 +29,7 @@ export function getEdgeLogger(): Logger {
   cachedEdgeLogger = pino(options);
   return cachedEdgeLogger;
 }
+
+export const logger = getEdgeLogger();
+
+export default logger;

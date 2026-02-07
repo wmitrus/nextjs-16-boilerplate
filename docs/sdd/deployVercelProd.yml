@@ -1,0 +1,101 @@
+name: Vercel Production Deployment
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+on:
+  push:
+    branches:
+      - main
+jobs:
+  # Production deployment (all tests already passed in PR checks)
+  Deploy-Production:
+    # No need for 'needs' since PR checks ensure code quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm depcheck madge  @sentry/cli
+
+      - name: Install dependencies with proper resolution
+        run: |
+          pnpm install --frozen-lockfile
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Verify environment (production)
+        run: node scripts/verify-vercel-env.mjs
+        env:
+          APP_ENV: production
+          # Secrets are already available in the job env from Vercel pull and repository secrets
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          CSRF_SECURE_COOKIES: 'true'
+          NEXT_PUBLIC_APP_ENV: production
+
+      - name: Build Project Artifact
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          # Environment configuration
+          APP_ENV: production
+          APP_VERSION: ${{ github.sha }}
+
+          # Feature flags
+          FEATURE_FLAGS_ENABLED: 'true'
+          FEATURE_FLAGS_PROVIDER: 'local'
+
+          # Multi-tenant
+          MULTI_TENANT_ENABLED: 'true'
+          DEFAULT_TENANT_ID: 'default'
+
+          # API configuration
+          API_RATE_LIMIT_ENABLED: 'true'
+          API_RATE_LIMIT_REQUESTS: '100'
+
+          # Public variables
+          NEXT_PUBLIC_APP_ENV: production
+          NEXT_PUBLIC_APP_VERSION: ${{ github.sha }}
+          NEXT_PUBLIC_FEATURE_FLAGS_ENABLED: 'true'
+          NEXT_PUBLIC_MULTI_TENANT_ENABLED: 'true'
+          NEXT_PUBLIC_ANALYTICS_ENABLED: 'true'
+
+          # Feature-specific flags (production - stable features only)
+          FEATURE_NEW_DASHBOARD: 'false'
+          FEATURE_ADVANCED_REPORTING: 'false'
+          FEATURE_BETA_FEATURES: 'false'
+
+          # Sentry
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ozi
+          SENTRY_PROJECT: nextjs-15-boilerplate
+
+      - name: Upload Source Maps to Sentry
+        run: sentry-cli sourcemaps upload .next --url-prefix '~/' --rewrite
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ozi
+          SENTRY_PROJECT: nextjs-15-boilerplate
+          SENTRY_ENVIRONMENT: production
+          SENTRY_RELEASE: ${{ github.sha }}
+
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          # Environment configuration
+          APP_ENV: production
+          APP_VERSION: ${{ github.sha }}
+
+          # Sentry
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ozi
+          SENTRY_PROJECT: nextjs-15-boilerplate

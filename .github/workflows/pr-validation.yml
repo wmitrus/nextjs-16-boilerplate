@@ -1,0 +1,64 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check-source-branch:
+    name: Prevent PR from main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        if: github.head_ref == 'main'
+        run: |
+          echo "Error: Pull requests from the 'main' branch are not allowed."
+          exit 1
+
+  validate:
+    name: Quality Checks
+    needs: check-source-branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit Tests
+        run: pnpm test
+
+      - name: Environment Consistency
+        run: pnpm env:check
+
+      - name: Circular Dependency Check (Skott)
+        run: pnpm skott:check:only
+
+      - name: Circular Dependency Check (Madge)
+        run: pnpm madge
+
+      - name: Unused Dependency Check
+        run: pnpm depcheck

@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CMD=${1:-}
+shift || true
+
+usage() {
+  cat <<EOF
+Usage:
+  git branch-origin show <branch>
+  git branch-origin set <branch> <parent>
+  git branch-origin init <branch> <parent>
+  git branch-origin chain <branch>     # show full parent chain
+EOF
+}
+
+ensure_git() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    echo "Not inside a git repo" >&2
+    exit 1
+  }
+}
+
+origin_file() {
+  local branch="$1"
+  local safe_branch="${branch//\//__}"
+  echo ".git/branch-origins/$safe_branch"
+}
+
+note_ref() {
+  local branch="$1"
+  local safe_branch="${branch//\//__}"
+  echo "refs/notes/branch-origins/$safe_branch"
+}
+
+branch_exists() {
+  local branch="$1"
+  git show-ref --verify --quiet "refs/heads/$branch"
+}
+
+prune_orphan_entries() {
+  local dir=".git/branch-origins"
+
+  [[ -d "$dir" ]] || return 0
+
+  for file in "$dir"/*; do
+    [[ -f "$file" ]] || continue
+
+    local safe_branch
+    safe_branch=$(basename "$file")
+    local branch
+    branch=$(printf '%s' "$safe_branch" | sed 's/__/\//g')
+
+    if ! branch_exists "$branch"; then
+      rm -f "$file"
+    fi
+  done
+}
+
+
+get_local_parent() {
+  local branch="$1"
+  local file
+  file=$(origin_file "$branch")
+  if [[ -f "$file" ]]; then
+    cat "$file"
+  else
+    echo ""
+  fi
+}
+
+get_note_parent() {
+  local branch="$1"
+  
+  # Optimization: If local metadata exists and is valid, we might skip the expensive rev-list
+  # but for the most accurate note retrieval we still need the first commit.
+  # Using --max-parents=0 with rev-list --first-parent is faster for finding the root of the branch.
+  local first_commit
+  first_commit=$(git rev-list --first-parent --max-parents=0 "$branch" 2>/dev/null | head -1)
+
+  if [[ -z "$first_commit" ]]; then
+    # Fallback to slower method if branch has no history or is complex
+    first_commit=$(git rev-list --first-parent "$branch" 2>/dev/null | tail -1)
+  fi
+
+  if [[ -z "$first_commit" ]]; then
+    echo ""
+    return
+  fi
+
+  local note
+  note=$(git notes --ref "$(note_ref "$branch")" show "$first_commit" 2>/dev/null || true)
+
+  if [[ -z "$note" ]]; then
+    echo ""
+    return
+  fi
+
+  echo "$note" | sed -n 's/^parent-branch:[[:space:]]*//p'
+}
+
+show_origin() {
+  local branch="$1"
+  ensure_git
+
+  prune_orphan_entries
+
+  if ! branch_exists "$branch"; then
+    echo "local: <none>"
+    echo "note:  <none>"
+    return
+  fi
+
+  echo "local: $(get_local_parent "$branch" || echo "<none>")"
+  echo "note:  $(get_note_parent "$branch" || echo "<none>")"
+}
+
+set_origin() {
+  local branch="$1"
+  local parent="$2"
+  ensure_git
+  mkdir -p .git/branch-origins
+  echo "$parent" > "$(origin_file "$branch")"
+}
+
+init_origin() {
+  local branch="$1"
+  local parent="$2"
+  ensure_git
+
+  # 1) local metadata
+  set_origin "$branch" "$parent"
+
+  # 2) git note on first commit
+  local first_commit
+  first_commit=$(git rev-list --first-parent "$branch" | tail -1)
+  if [[ -n "$first_commit" ]]; then
+    git notes --ref "$(note_ref "$branch")" add -f -m "parent-branch: $parent" "$first_commit"
+  fi
+}
+
+chain_origin() {
+  local branch="$1"
+  ensure_git
+
+  prune_orphan_entries
+
+  if ! branch_exists "$branch"; then
+    echo "$branch"
+    return
+  fi
+
+  local current="$branch"
+  local chain="$current"
+
+  while true; do
+    local parent
+    parent=$(get_local_parent "$current")
+
+    if [[ -z "$parent" ]]; then
+      parent=$(get_note_parent "$current")
+    fi
+
+    if [[ -z "$parent" ]]; then
+      break
+    fi
+
+    chain="$chain → $parent"
+    current="$parent"
+  done
+
+  echo "$chain"
+}
+
+case "$CMD" in
+  show)
+    [[ $# -eq 1 ]] || { usage; exit 1; }
+    show_origin "$1"
+    ;;
+  set)
+    [[ $# -eq 2 ]] || { usage; exit 1; }
+    set_origin "$1" "$2"
+    ;;
+  init)
+    [[ $# -eq 2 ]] || { usage; exit 1; }
+    init_origin "$1" "$2"
+    ;;
+  chain)
+    [[ $# -eq 1 ]] || { usage; exit 1; }
+    chain_origin "$1"
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

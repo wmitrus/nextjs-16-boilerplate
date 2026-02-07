@@ -1,0 +1,8 @@
+[alias]
+  new-branch = "!f() { \
+    if [ $# -ne 1 ]; then echo 'Usage: git new-branch <name>' >&2; exit 1; fi; \
+    parent=$(git rev-parse --abbrev-ref HEAD); \
+    name=\"$1\"; \
+    git checkout -b \"$name\"; \
+    git branch-origin init \"$name\" \"$parent\"; \
+  }; f"

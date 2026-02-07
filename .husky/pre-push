@@ -8,7 +8,7 @@ pnpm run madge &&
 pnpm run env:check
 
 # Push parent-branch notes
-if git show-ref --quiet refs/notes/commits; then
+if git show-ref --quiet | grep -q "refs/notes/branch-origins/"; then
   echo "Pushing parent-branch notes..."
-  git push origin refs/notes/commits || echo "Warning: Could not push notes"
+  git push origin 'refs/notes/branch-origins/*:refs/notes/branch-origins/*' || echo "Warning: Could not push notes"
 fi

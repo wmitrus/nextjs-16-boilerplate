@@ -5,7 +5,7 @@ import {
 } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-import { logger } from '@/core/logger/server';
+import { logger } from '@/core/logger/edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';

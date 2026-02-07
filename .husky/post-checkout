@@ -1,32 +1,53 @@
 #!/bin/sh
 set -eu
 
-OLD="$1"
-NEW="$2"
+# Husky passes the same 3 args as Git:
+# OLD_SHA="$1"
+# NEW_SHA="$2"
+# BRANCH_SWITCH="$3"
+# We ignore them because they are commits, not branch names.
 
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-# Ignore detached HEAD
-if [ "$CURRENT_BRANCH" = "HEAD" ]; then
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [ -z "$CURRENT_BRANCH" ] || [ "$CURRENT_BRANCH" = "HEAD" ]; then
   exit 0
 fi
 
-# Get previous branch reliably
 PREVIOUS_BRANCH=$(git rev-parse --abbrev-ref @{-1} 2>/dev/null || echo "")
-
-# Ignore if previous branch is empty or same as current
 if [ -z "$PREVIOUS_BRANCH" ] || [ "$PREVIOUS_BRANCH" = "$CURRENT_BRANCH" ]; then
   exit 0
 fi
 
 mkdir -p .git/branch-origins
 
+prune_orphan_entries() {
+  [ -d .git/branch-origins ] || return 0
+
+  for file in .git/branch-origins/*; do
+    [ -f "$file" ] || continue
+    safe_branch=$(basename "$file")
+    branch=$(printf '%s' "$safe_branch" | sed 's/__/\//g')
+
+    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+      rm -f "$file"
+    fi
+  done
+}
+
+prune_orphan_entries
+
 SAFE_BRANCH=$(echo "$CURRENT_BRANCH" | sed 's/\//__/g')
 ORIGIN_FILE=".git/branch-origins/$SAFE_BRANCH"
 
-# Don't overwrite existing metadata
 if [ -f "$ORIGIN_FILE" ]; then
   exit 0
 fi
 
-echo "$PREVIOUS_BRANCH" > "$ORIGIN_FILE"
+RELOG_MSG=$(git reflog show -n 1 --format=%gs "refs/heads/$CURRENT_BRANCH" 2>/dev/null || echo "")
+case "$RELOG_MSG" in
+  "branch: Created from "*|"branch: Created"*)
+    git branch-origin init "$CURRENT_BRANCH" "$PREVIOUS_BRANCH"
+    ;;
+  *)
+    exit 0
+    ;;
+esac

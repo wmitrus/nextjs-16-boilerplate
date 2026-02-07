@@ -1,0 +1,144 @@
+name: Vercel Preview Deployment
+
+on:
+  push:
+    branches:
+      - develop
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # Quick smoke test before deployment (tests already run in feature-branch-checks)
+  pre-deploy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get code
+        uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - name: Quick build check
+        run: pnpm build
+
+  Deploy-Preview:
+    needs: pre-deploy-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm and tools
+        run: npm install -g pnpm depcheck madge @lhci/cli @sentry/cli
+
+      - name: Install dependencies with proper resolution
+        run: |
+          pnpm install --frozen-lockfile
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Verify environment (preview)
+        run: node scripts/verify-vercel-env.mjs
+        env:
+          APP_ENV: preview
+          # Secrets are already available in the job env from Vercel pull and repository secrets
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          CSRF_SECURE_COOKIES: 'true'
+          NEXT_PUBLIC_APP_ENV: preview
+
+      - name: Build Project Artifacts
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          # Environment configuration
+          APP_ENV: preview
+          APP_VERSION: ${{ github.sha }}
+
+          # Feature flags
+          FEATURE_FLAGS_ENABLED: 'true'
+          FEATURE_FLAGS_PROVIDER: 'local'
+
+          # Multi-tenant
+          MULTI_TENANT_ENABLED: 'true'
+          DEFAULT_TENANT_ID: 'preview-tenant'
+
+          # API configuration
+          API_RATE_LIMIT_ENABLED: 'true'
+          API_RATE_LIMIT_REQUESTS: '500'
+
+          # Public variables
+          NEXT_PUBLIC_APP_ENV: preview
+          NEXT_PUBLIC_APP_VERSION: ${{ github.sha }}
+          NEXT_PUBLIC_FEATURE_FLAGS_ENABLED: 'true'
+          NEXT_PUBLIC_MULTI_TENANT_ENABLED: 'true'
+          NEXT_PUBLIC_ANALYTICS_ENABLED: 'true'
+
+          # Feature-specific flags
+          FEATURE_NEW_DASHBOARD: 'true'
+          FEATURE_ADVANCED_REPORTING: 'true'
+          FEATURE_BETA_FEATURES: 'true'
+
+          # Sentry
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ozi
+          SENTRY_PROJECT: nextjs-15-boilerplate
+
+      - name: Upload Source Maps to Sentry
+        run: sentry-cli sourcemaps upload .next --url-prefix '~/' --rewrite
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ozi
+          SENTRY_PROJECT: nextjs-15-boilerplate
+          SENTRY_ENVIRONMENT: preview
+          SENTRY_RELEASE: ${{ github.sha }}
+
+      - name: Deploy Project Artifacts to Vercel
+        id: vercel_deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --no-clipboard)
+          echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+        env:
+          # Environment configuration
+          APP_ENV: preview
+          APP_VERSION: ${{ github.sha }}
+
+          # Sentry
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ozi
+          SENTRY_PROJECT: nextjs-15-boilerplate
+
+      - name: Set deployment URL for Lighthouse
+        id: waitForVercel
+        run: |
+          DEPLOY_URL=${{ steps.vercel_deploy.outputs.preview_url }}
+          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          echo "Using deployment URL for Lighthouse: $DEPLOY_URL"
+
+      - name: Run Lighthouse Audit with bypass
+        run: |
+          echo "Running Lighthouse audit on URL: ${{ steps.waitForVercel.outputs.url }}"
+
+          # Add a longer timeout for Lighthouse and include bypass headers
+          lhci autorun --collect.url=${{ steps.waitForVercel.outputs.url }} --collect.settings.maxWaitForLoad=120000 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'", "x-vercel-set-bypass-cookie": "samesitenone"}'
+        env:
+          LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}

@@ -26,6 +26,13 @@ Before starting, ensure you have accounts and projects ready on:
 1. Create a Redis database.
 2. Copy the `REST URL` and `REST Token`.
 
+### Security Keys
+
+1. Generate unique keys for your production environment:
+   ```bash
+   pnpm generate:secret # Run this twice, once for INTERNAL_API_KEY and once for LOG_INGEST_SECRET
+   ```
+
 ## 3. GitHub Configuration
 
 1. Create a new repository and push the code.

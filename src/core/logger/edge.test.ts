@@ -16,9 +16,12 @@ describe('edge logger', () => {
   it('sets transmit when logflare integration is enabled', async () => {
     const transmit = { send: vi.fn() };
 
+    vi.stubGlobal('window', undefined);
+
     vi.doMock('@/core/env', () => ({
       env: {
         LOG_LEVEL: 'debug',
+        NEXT_PUBLIC_LOG_LEVEL: 'info',
         LOGFLARE_EDGE_ENABLED: true,
         NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
         NODE_ENV: 'production',
@@ -46,9 +49,11 @@ describe('edge logger', () => {
   });
 
   it('reuses cached logger instance', async () => {
+    vi.stubGlobal('window', undefined);
     vi.doMock('@/core/env', () => ({
       env: {
         LOG_LEVEL: 'info',
+        NEXT_PUBLIC_LOG_LEVEL: 'info',
         LOGFLARE_EDGE_ENABLED: false,
         NEXT_PUBLIC_APP_URL: undefined,
         NODE_ENV: 'production',

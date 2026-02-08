@@ -10,3 +10,4 @@ Detailed documentation for the features and configurations of this boilerplate:
 6. [Quality Tools](./features/06%20-%20Quality%20Tools.md)
 7. [Testing Infrastructure](./features/07%20-%20Testing%20Infrastructure.md)
 8. [Logging & Observability](./features/12%20-%20Logging%20%26%20Observability.md)
+9. [CI/CD & Lighthouse CI](./features/19%20-%20CI-CD%20%26%20Lighthouse%20CI.md)

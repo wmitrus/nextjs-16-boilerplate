@@ -53,6 +53,29 @@ Configure these in your GitHub repository settings:
 
 GitHub provides `GITHUB_TOKEN` automatically.
 
+## Pnpm 10 Compliance & Vercel Build
+
+To ensure smooth builds on Vercel with pnpm 10, the project includes:
+
+- **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
+- **.vercelignore**: Optimized to exclude `node_modules`, `coverage`, `docs`, and `tests` from the upload payload to prevent transient API errors.
+
+## Vercel Deployment Strategy (GitHub Actions as Source of Truth)
+
+To ensure that GitHub Actions remains the **Single Source of Truth** for deployments and to prevent redundant builds on Vercel's infrastructure:
+
+1.  **Disable Vercel Automatic Builds**:
+    - Go to **Vercel Project Settings** > **Git**.
+    - Find the **"Ignored Build Step"** section.
+    - Select **"Custom"**.
+    - Enter `exit 0` as the command.
+    - This tells Vercel to skip its own internal build process whenever a commit is pushed, as the GitHub Action will handle the build and deployment via the CLI.
+
+2.  **Why this is necessary**:
+    - **Quality Gates**: GitHub Actions run environment validation (`pnpm env:check`) and testing before deploying.
+    - **Performance**: Prevents paying for double build minutes on both platforms.
+    - **Lighthouse CI**: GitHub Actions automatically trigger Lighthouse audits against the newly created preview URLs.
+
 Add this repository variable for LHCI:
 
 ```bash

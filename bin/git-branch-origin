@@ -10,6 +10,7 @@ Usage:
   git branch-origin show <branch>
   git branch-origin set <branch> <parent>
   git branch-origin init <branch> <parent>
+  git branch-origin init-missing <parent>
   git branch-origin chain <branch>     # show full parent chain
 EOF
 }
@@ -38,6 +39,22 @@ branch_exists() {
   git show-ref --verify --quiet "refs/heads/$branch"
 }
 
+has_metadata() {
+  local branch="$1"
+  local file
+  file=$(origin_file "$branch")
+
+  if [[ -f "$file" ]]; then
+    return 0
+  fi
+
+  if [[ -n "$(get_note_parent "$branch")" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 prune_orphan_entries() {
   local dir=".git/branch-origins"
 
@@ -63,7 +80,13 @@ get_local_parent() {
   local file
   file=$(origin_file "$branch")
   if [[ -f "$file" ]]; then
-    cat "$file"
+    local parent
+    parent=$(cat "$file")
+    if [[ -n "$parent" ]] && branch_exists "$parent"; then
+      echo "$parent"
+    else
+      echo ""
+    fi
   else
     echo ""
   fi
@@ -172,6 +195,20 @@ chain_origin() {
   echo "$chain"
 }
 
+init_missing() {
+  local parent="$1"
+  ensure_git
+
+  prune_orphan_entries
+
+  local branch
+  while IFS= read -r branch; do
+    if [[ -n "$branch" ]] && ! has_metadata "$branch"; then
+      init_origin "$branch" "$parent"
+    fi
+  done < <(git for-each-ref --format='%(refname:short)' refs/heads)
+}
+
 case "$CMD" in
   show)
     [[ $# -eq 1 ]] || { usage; exit 1; }
@@ -184,6 +221,10 @@ case "$CMD" in
   init)
     [[ $# -eq 2 ]] || { usage; exit 1; }
     init_origin "$1" "$2"
+    ;;
+  init-missing)
+    [[ $# -eq 1 ]] || { usage; exit 1; }
+    init_missing "$1"
     ;;
   chain)
     [[ $# -eq 1 ]] || { usage; exit 1; }

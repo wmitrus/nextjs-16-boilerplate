@@ -42,6 +42,7 @@ This project implements a robust three-tier testing strategy to ensure code qual
 #### E2E configuration notes
 
 - The Playwright web server uses `pnpm start` and sets `E2E_ENABLED=true` and `NEXT_PUBLIC_E2E_ENABLED=true`.
+- **Environment Flags**: These flags are injected specifically for E2E runs and are intentionally omitted from `src/core/env.ts` to keep them isolated from standard build/runtime validation.
 - A test-only route (`/e2e-error`) is gated by `NEXT_PUBLIC_E2E_ENABLED` and is only intended for E2E boundary validation.
 - Dev overlay is disabled for E2E runs via `NEXT_DISABLE_DEV_OVERLAY=1` to avoid click interception.
 

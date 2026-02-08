@@ -79,6 +79,7 @@ $ git branch-origin
 git branch-origin show <branch>
 git branch-origin set <branch> <parent>
 git branch-origin init <branch> <parent>
+git branch-origin init-missing <parent>
 git branch-origin chain <branch>
 ```
 
@@ -119,6 +120,57 @@ Enable Git Notes sharing:
 
 ```bash
 git config --add remote.origin.fetch refs/notes/branch-origins/*:refs/notes/branch-origins/*
+```
+
+## 4.3 Bash Completion (Optional)
+
+Enable TAB completion for `git branch-origin` commands and branch names:
+
+```bash
+cat <<'EOF' >> ~/.bash_completion
+if ! type __git_complete >/dev/null 2>&1; then
+  if [ -f /usr/share/bash-completion/completions/git ]; then
+    . /usr/share/bash-completion/completions/git
+  fi
+fi
+
+_git_branch_origin() {
+  case "$cur" in
+    -* )
+      return
+      ;;
+  esac
+
+  case "$prev" in
+    show|set|init|chain|init-missing)
+      __git_complete_refs
+      ;;
+  esac
+
+  __gitcomp "show set init init-missing chain"
+}
+
+complete -r git-branch-origin 2>/dev/null || true
+__git_complete git-branch-origin _git_branch_origin
+EOF
+
+if [ -f ~/.bash_completion ]; then
+  . ~/.bash_completion
+fi
+```
+
+Open a new terminal or run:
+
+```bash
+source ~/.bashrc
+```
+
+## 4.3 Initialize Missing Metadata (Optional)
+
+If you already have branches without parent metadata, seed them from a known base:
+
+```bash
+git branch-origin init-missing main
 ```
 
 ---

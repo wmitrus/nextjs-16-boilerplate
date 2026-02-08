@@ -17,6 +17,7 @@ const isPublicRoute = createRouteMatcher([
   '/waitlist(.*)',
   '/',
 ]);
+const isE2eRoute = createRouteMatcher(['/e2e-error(.*)', '/users(.*)']);
 const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)']);
 const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)']);
 
@@ -68,7 +69,9 @@ export default clerkMiddleware(async (auth, request) => {
     }
   }
 
-  if (!isPublicRoute(request)) {
+  const e2eEnabled = process.env.E2E_ENABLED === 'true';
+
+  if (!isPublicRoute(request) && !(e2eEnabled && isE2eRoute(request))) {
     await auth.protect();
   }
 

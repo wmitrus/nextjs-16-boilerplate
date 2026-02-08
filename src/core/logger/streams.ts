@@ -22,7 +22,8 @@ export function getLogStreams(): DestinationStream[] {
   const isDev = env.NODE_ENV === 'development';
   const isTest = env.NODE_ENV === 'test';
 
-  const logFile = path.join(process.cwd(), env.LOG_DIR, 'server.log');
+  const logDir = env.LOG_DIR || 'logs';
+  const logFile = path.join(process.cwd(), logDir, 'server.log');
 
   const shouldLogToFile =
     (isDev && env.LOG_TO_FILE_DEV) ||
@@ -33,7 +34,7 @@ export function getLogStreams(): DestinationStream[] {
     isDev || isTest ? createConsoleStream() : undefined,
 
     // 2. File stream (if enabled)
-    shouldLogToFile ? createFileStream(logFile, env.LOG_DIR) : undefined,
+    shouldLogToFile ? createFileStream(logFile, logDir) : undefined,
 
     // 3. External service stream (if enabled)
     env.LOGFLARE_SERVER_ENABLED ? createLogflareWriteStream() : undefined,

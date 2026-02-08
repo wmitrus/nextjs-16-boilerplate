@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import type { NextFetchEvent } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { logger } from '@/core/logger/server';
+import { logger } from '@/core/logger/edge';
 
 import * as getIp from '@/shared/lib/network/get-ip';
 import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
@@ -11,13 +11,24 @@ import proxy from './proxy';
 
 vi.mock('@clerk/nextjs/server', () => ({
   clerkMiddleware: vi.fn(
-    (handler) => (req: NextRequest, evt: NextFetchEvent) =>
-      handler({ protect: vi.fn() }, req, evt),
+    (handler) => (req: NextRequest, evt: NextFetchEvent) => {
+      const auth = Object.assign(
+        async () => ({
+          userId: null,
+          sessionClaims: null,
+        }),
+        {
+          protect: vi.fn(),
+        },
+      );
+
+      return handler(auth, req, evt);
+    },
   ),
   createRouteMatcher: vi.fn(() => vi.fn(() => true)),
 }));
 
-vi.mock('@/core/logger/server', () => ({
+vi.mock('@/core/logger/edge', () => ({
   logger: {
     warn: vi.fn(),
   },

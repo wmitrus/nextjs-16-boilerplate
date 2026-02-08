@@ -39,6 +39,7 @@ Before starting, ensure you have accounts and projects ready on:
    - `CHROMATIC_PROJECT_TOKEN`: From your Chromatic project settings.
    - `CLERK_SECRET_KEY`: From Clerk dashboard.
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`: From Clerk dashboard.
+   - `INTERNAL_API_KEY`: A random secure string for internal API protection.
    - `SEMANTIC_RELEASE_GITHUB_APP_ID`: From your GitHub App for releases.
    - `SEMANTIC_RELEASE_GITHUB_APP_PRIVATE_KEY`: Private key for that GitHub App.
 

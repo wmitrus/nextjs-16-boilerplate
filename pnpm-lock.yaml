@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@isaacs/brace-expansion': 5.0.1
+  '@isaacs/brace-expansion': ^5.0.1
 
 importers:
 

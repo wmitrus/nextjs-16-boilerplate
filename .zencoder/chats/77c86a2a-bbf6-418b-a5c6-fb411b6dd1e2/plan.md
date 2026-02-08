@@ -44,4 +44,14 @@
   - [x] `ExternalFetch`: Demonstrates SSRF Protection.
   - [x] `InternalApiTest`: Demonstrates Internal API Guard.
 - [x] Add `/security-showcase` route to the application.
+- [x] Add link to Security Showcase in the `Header` navigation.
 - [x] Verify all examples pass typecheck and lint.
+
+## Phase 7: Dynamic Security Configuration
+
+- [x] Add CSP allowlist variables to `src/core/env.ts`.
+- [x] Update `with-headers.ts` to use environment variables for CSP.
+- [x] Update `secure-fetch.ts` to use environment variable for outbound host allowlist.
+- [x] Update `.env.example` and `docs/features/ENV-requirements.md` with new security variables.
+- [x] Implement environment-aware CSP and SSRF policies (Prod vs Preview/Dev).
+- [x] Fix Internal API Guard authentication bypass (Allowing internal keys without Clerk session).

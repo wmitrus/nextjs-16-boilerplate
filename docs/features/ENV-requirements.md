@@ -20,122 +20,97 @@ pnpm env:check
 
 ---
 
-## Required Variables
+## Local Environment (.env.local)
 
-### Server-side
+These are used by `pnpm env:init` and validated by `pnpm env:check`.
 
-| Variable   | Required | Purpose      | Example       |
-| ---------- | -------- | ------------ | ------------- |
-| `NODE_ENV` | Yes      | Runtime mode | `development` |
+### Required (Local + Vercel)
 
-### Client-side (must be prefixed with `NEXT_PUBLIC_`)
+| Variable                            | Required | Purpose           | Example       |
+| ----------------------------------- | -------- | ----------------- | ------------- |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Yes      | Clerk public key  | `pk_test_...` |
+| `CLERK_SECRET_KEY`                  | Yes      | Clerk private key | `sk_test_...` |
 
-| Variable                  | Required | Purpose                     | Example               |
-| ------------------------- | -------- | --------------------------- | --------------------- |
-| `NEXT_PUBLIC_APP_URL`     | No       | Public base URL             | `https://example.com` |
-| `NEXT_PUBLIC_E2E_ENABLED` | No       | Enable test-only UI for E2E | `true`                |
+### Optional (Local + Vercel)
 
----
-
-## Optional Variables
-
-### Server-side
-
-| Variable                   | Required | Purpose                          | Example |
-| -------------------------- | -------- | -------------------------------- | ------- |
-| `CHROMATIC_PROJECT_TOKEN`  | No       | Chromatic uploads in CI          | `...`   |
-| `LOG_LEVEL`                | No       | Pino log level                   | `info`  |
-| `LOG_DIR`                  | No       | Log directory (server)           | `logs`  |
-| `LOG_TO_FILE_DEV`          | No       | Enable file logging in dev       | `false` |
-| `LOG_TO_FILE_PROD`         | No       | Enable file logging in prod      | `false` |
-| `LOGFLARE_API_KEY`         | No       | Logflare API key                 | `...`   |
-| `LOGFLARE_SOURCE_TOKEN`    | No       | Logflare source token            | `...`   |
-| `LOGFLARE_SOURCE_NAME`     | No       | Logflare source name (optional)  | `...`   |
-| `LOGFLARE_SERVER_ENABLED`  | No       | Enable server Logflare transport | `false` |
-| `LOGFLARE_EDGE_ENABLED`    | No       | Enable edge Logflare forwarding  | `false` |
-| `LOG_INGEST_SECRET`        | No       | Shared secret for edge ingest    | `...`   |
-| `UPSTASH_REDIS_REST_URL`   | No       | Upstash Redis REST URL           | `...`   |
-| `UPSTASH_REDIS_REST_TOKEN` | No       | Upstash Redis REST token         | `...`   |
-| `API_RATE_LIMIT_REQUESTS`  | No       | Rate limit requests per window   | `10`    |
-| `API_RATE_LIMIT_WINDOW`    | No       | Rate limit window duration       | `60 s`  |
-| `E2E_ENABLED`              | No       | Enable test-only routes for E2E  | `true`  |
-
-### Release Automation (CI only)
-
-| Variable                                  | Required | Purpose                              | Example                              |
-| ----------------------------------------- | -------- | ------------------------------------ | ------------------------------------ |
-| `SEMANTIC_RELEASE_GITHUB_APP_ID`          | Yes (CI) | GitHub App ID for release automation | `123456`                             |
-| `SEMANTIC_RELEASE_GITHUB_APP_PRIVATE_KEY` | Yes (CI) | GitHub App private key (PEM)         | `-----BEGIN RSA PRIVATE KEY-----...` |
+| Variable                                          | Default       | Purpose                                |
+| ------------------------------------------------- | ------------- | -------------------------------------- |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL`                   | `/sign-in`    | URL for sign-in page                   |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_URL`                   | `/sign-up`    | URL for sign-up page                   |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/`           | Where to go after sign-in              |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/`           | Where to go after sign-up              |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL`    | `/onboarding` | Forced redirect after sign-up          |
+| `NEXT_PUBLIC_CLERK_WAITLIST_URL`                  | `/waitlist`   | URL for the waitlist page              |
+| `NEXT_PUBLIC_APP_URL`                             | -             | Public base URL                        |
+| `NEXT_PUBLIC_E2E_ENABLED`                         | -             | Enable test-only UI for E2E            |
+| `UPSTASH_REDIS_REST_URL`                          | -             | Upstash Redis REST URL                 |
+| `UPSTASH_REDIS_REST_TOKEN`                        | -             | Upstash Redis REST token               |
+| `API_RATE_LIMIT_REQUESTS`                         | `10`          | API rate limit requests                |
+| `API_RATE_LIMIT_WINDOW`                           | `60 s`        | API rate limit window                  |
+| `LOGFLARE_API_KEY`                                | -             | Logflare API key                       |
+| `LOGFLARE_SOURCE_TOKEN`                           | -             | Logflare source token                  |
+| `LOGFLARE_SOURCE_NAME`                            | -             | Logflare source name                   |
+| `LOG_LEVEL`                                       | `info`        | Pino log level                         |
+| `LOG_INGEST_SECRET`                               | -             | Shared secret for edge ingest          |
+| `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED`            | `false`       | Browser log forwarding via `/api/logs` |
+| `CHROMATIC_PROJECT_TOKEN`                         | -             | Chromatic uploads in CI                |
+| `NODE_ENV`                                        | `development` | Runtime mode                           |
 
 ---
 
-## Where to Set Variables
+## Vercel Environment Variables
 
-- **Local development**: `.env.local`
-- **Example file**: `.env.example` (must include all keys in schema)
-- **CI/CD**: GitHub Actions Secrets
+Set these in **Vercel Project Settings > Environment Variables** for Preview and Production as needed.
+
+Use the same variables as **Local Environment** plus any production values (real Clerk keys, Upstash, Logflare). The following are the minimum required for the app to boot:
+
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+
+---
+
+## GitHub Actions: Secrets
+
+Set these in **GitHub Settings > Secrets and variables > Actions**.
+
+### Required for Vercel Deployments
+
+| Secret                            | Purpose                                 |
+| --------------------------------- | --------------------------------------- |
+| `VERCEL_TOKEN`                    | Vercel Access Token                     |
+| `VERCEL_ORG_ID`                   | Vercel Organization ID                  |
+| `VERCEL_PROJECT_ID`               | Vercel Project ID                       |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | Bypass Vercel Protection for Lighthouse |
+| `LHCI_TOKEN`                      | Lighthouse CI build token               |
+
+**LHCI note:** Configure your LHCI server URL via `LHCI_SERVER_BASE_URL`. See [CI/CD & Lighthouse CI](./19%20-%20CI-CD%20%26%20Lighthouse%20CI.md) for full setup.
+
+### Required for Automated Releases
+
+| Secret                                    | Purpose                              |
+| ----------------------------------------- | ------------------------------------ |
+| `SEMANTIC_RELEASE_GITHUB_APP_ID`          | GitHub App ID for automated releases |
+| `SEMANTIC_RELEASE_GITHUB_APP_PRIVATE_KEY` | Private key for automated releases   |
+
+### Optional
+
+| Secret                    | Purpose                             |
+| ------------------------- | ----------------------------------- |
+| `CHROMATIC_PROJECT_TOKEN` | Storybook visual regression testing |
+
+---
+
+## GitHub Actions: Variables
+
+Set these in **GitHub Settings > Secrets and variables > Actions**.
+
+| Variable               | Purpose                                 |
+| ---------------------- | --------------------------------------- |
+| `LHCI_SERVER_BASE_URL` | LHCI server URL used by `lighthouserc`  |
+| `PRODUCTION_URL`       | Production URL for scheduled Lighthouse |
 
 ---
 
 ## Source of Truth
 
 All variables are defined and validated in `src/core/env.ts` using **@t3-oss/env-nextjs**.
-
-When you add a new variable:
-
-1. Add it to `src/core/env.ts` schema.
-2. Add it to `.env.example`.
-3. Add a real value in `.env.local` or CI Secrets.
-
----
-
-## Vercel Preview & Production Requirements
-
-### Preview Deployments
-
-Required for stable preview builds:
-
-- `NEXT_PUBLIC_APP_URL` (set to the preview URL if you rely on edge forwarding)
-
-Optional but recommended:
-
-- `LOGFLARE_SERVER_ENABLED`
-- `LOGFLARE_EDGE_ENABLED`
-- `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED`
-- `LOGFLARE_API_KEY` + `LOGFLARE_SOURCE_TOKEN` or `LOGFLARE_SOURCE_NAME`
-- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (if rate limiting is enabled)
-- `LOG_INGEST_SECRET` (if edge ingest protection is enabled)
-
-### Production Deployments
-
-Required for production if features are enabled:
-
-- `NEXT_PUBLIC_APP_URL`
-- `LOGFLARE_API_KEY` + `LOGFLARE_SOURCE_TOKEN` or `LOGFLARE_SOURCE_NAME` (if Logflare is enabled)
-- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (if global rate limiting is enabled)
-- `LOG_INGEST_SECRET` (recommended for edge ingest protection)
-
-Recommended defaults:
-
-- `LOG_LEVEL=info`
-- `LOGFLARE_SERVER_ENABLED=true`
-- `LOGFLARE_EDGE_ENABLED=true`
-- `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED=false` (enable only if you accept public browser ingest)
-
----
-
-## Generating `LOG_INGEST_SECRET`
-
-Generate a secure secret locally:
-
-```bash
-openssl rand -hex 32
-```
-
-Set it in `.env.local` or in Vercel Environment Variables as `LOG_INGEST_SECRET`.
-
-Edge ingest requests must include:
-
-```
-x-log-ingest-secret: <your-secret>
-```

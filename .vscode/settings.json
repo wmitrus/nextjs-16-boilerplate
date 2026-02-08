@@ -39,6 +39,7 @@
     }
   ],
   "githubPullRequests.pushBranch": "always",
+  "playwright.testConfigPath": "playwright.vscode.config.ts",
   "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
     {
       "text": "Always generate a structured pull request description using the following sections: Summary, Key Changes, Motivation, Testing, and Additional Notes."

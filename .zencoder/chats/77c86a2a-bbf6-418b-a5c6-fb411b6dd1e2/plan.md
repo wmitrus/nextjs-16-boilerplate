@@ -55,3 +55,4 @@
 - [x] Update `.env.example` and `docs/features/ENV-requirements.md` with new security variables.
 - [x] Implement environment-aware CSP and SSRF policies (Prod vs Preview/Dev).
 - [x] Fix Internal API Guard authentication bypass (Allowing internal keys without Clerk session).
+- [x] Harden `/api/logs` ingest with public route classification and existing secret verification.

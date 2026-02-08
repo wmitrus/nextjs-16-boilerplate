@@ -133,6 +133,9 @@
     },
     "onlyBuiltDependencies": [
       "@clerk/shared",
+      "@parcel/watcher",
+      "esbuild",
+      "msw",
       "sharp",
       "unrs-resolver"
     ]

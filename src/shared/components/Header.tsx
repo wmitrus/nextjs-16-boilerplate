@@ -68,6 +68,12 @@ const Header = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
               >
                 Pricing
               </Link>
+              <Link
+                href="/security-showcase"
+                className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
+              >
+                Security Showcase
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4">

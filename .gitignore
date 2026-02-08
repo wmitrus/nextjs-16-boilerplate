@@ -13,7 +13,8 @@
 # logs
 logs
 
-/bin
+/bin/*
+!/bin/git-branch-origin
 
 # testing
 /coverage
@@ -55,3 +56,6 @@ next-env.d.ts
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# Lighthouse CI
+.lighthouseci/

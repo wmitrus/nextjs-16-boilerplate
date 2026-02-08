@@ -1,0 +1,14 @@
+{
+  "name": "parent-branch-status",
+  "displayName": "Parent Branch Status",
+  "version": "1.2.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "main": "./parent-branch-status.js",
+  "activationEvents": [
+    "*"
+  ],
+  "contributes": {}
+}

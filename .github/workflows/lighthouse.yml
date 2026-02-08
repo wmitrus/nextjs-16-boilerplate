@@ -1,0 +1,25 @@
+name: Lighthouse Performance
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Weekly on Mondays
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  performance-audit:
+    name: Production Lighthouse Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Lighthouse Audit
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            ${{ vars.PRODUCTION_URL }}
+          uploadArtifacts: true
+        env:
+          LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}
+          LHCI_SERVER_BASE_URL: ${{ vars.LHCI_SERVER_BASE_URL }}

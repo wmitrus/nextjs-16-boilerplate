@@ -56,7 +56,7 @@ jobs:
       - name: Deploy to Vercel
         id: vercel_deploy
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --no-clipboard)
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
       - name: Run Lighthouse Audit

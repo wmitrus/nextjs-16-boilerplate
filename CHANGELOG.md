@@ -1,3 +1,22 @@
+# [1.5.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.4.0...v1.5.0) (2026-02-08)
+
+
+### Bug Fixes
+
+* **auth:** update sign-up page heading visibility check ([9948393](https://github.com/wmitrus/nextjs-16-boilerplate/commit/994839360b2d8600d232623b9756caae1fc64c58))
+
+
+### Features
+
+* **dependencies:** add @vercel/speed-insights package ([0df8d2c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0df8d2cc9af501372330e991c495653b89d18c32))
+* **docs:** add bash completion for git-branch-origin commands ([fadd411](https://github.com/wmitrus/nextjs-16-boilerplate/commit/fadd4115e21b621e5a5cec32a6bb4f95ce5633fe))
+* **docs:** add PRD + spec for Vercel Speed Insights integration ([9adbc3e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9adbc3ee1254340e20099438a7c3c2169984035a))
+* **git-branch-origin:** add init-missing command for branch initialization ([db5adb7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db5adb72da2f801a8e723ca9d24b939e589e1468))
+* **layout:** add SpeedInsights component for performance monitoring ([388f41b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/388f41b352e1d7a86cc496e73574dfa9776b87fb))
+* **playwright:** add Playwright configuration for E2E testing ([083e4db](https://github.com/wmitrus/nextjs-16-boilerplate/commit/083e4dbd1e16f71d9023d023c2d0add89ebc1c8e))
+* **proxy:** add E2E route matcher and condition for auth protection ([bc8cc78](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bc8cc78c111dec10dfd3f9817d21ef1bb2a53558))
+* **vscode:** add Playwright test configuration path ([a931ae7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a931ae79a2c16f5dd20fc61437ff4923c558ef97))
+
 # [1.4.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.3.0...v1.4.0) (2026-02-08)
 
 

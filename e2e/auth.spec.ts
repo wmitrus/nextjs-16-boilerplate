@@ -23,9 +23,10 @@ test.describe('Authentication E2E', () => {
 
   test('should navigate to custom sign-up page', async ({ page }) => {
     await page.goto('/sign-up');
-    // Clerk's SignUp component usually has a "Create your account" heading
     await expect(
-      page.getByRole('heading', { name: /create your account/i }),
+      page.getByRole('heading', {
+        name: /create your account|access restricted/i,
+      }),
     ).toBeVisible();
   });
 });

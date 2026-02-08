@@ -53,6 +53,13 @@ Configure these in your GitHub repository settings:
 
 GitHub provides `GITHUB_TOKEN` automatically.
 
+## Pnpm 10 Compliance & Vercel Build
+
+To ensure smooth builds on Vercel with pnpm 10, the project includes:
+
+- **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
+- **.vercelignore**: Optimized to exclude `node_modules`, `coverage`, `docs`, and `tests` from the upload payload to prevent transient API errors.
+
 Add this repository variable for LHCI:
 
 ```bash

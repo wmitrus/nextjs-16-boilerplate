@@ -52,9 +52,22 @@ These are used by `pnpm env:init` and validated by `pnpm env:check`.
 | `LOGFLARE_SOURCE_NAME`                            | -             | Logflare source name                   |
 | `LOG_LEVEL`                                       | `info`        | Pino log level                         |
 | `LOG_INGEST_SECRET`                               | -             | Shared secret for edge ingest          |
+| `INTERNAL_API_KEY`                                | -             | Secret for /api/internal access        |
+| `SECURITY_AUDIT_LOG_ENABLED`                      | `true`        | Toggle mutation audit logging          |
+| `SECURITY_ALLOWED_OUTBOUND_HOSTS`                 | -             | Comma-separated list of allowed hosts  |
 | `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED`            | `false`       | Browser log forwarding via `/api/logs` |
+| `NEXT_PUBLIC_CSP_SCRIPT_EXTRA`                    | -             | Extra origins for CSP script-src       |
+| `NEXT_PUBLIC_CSP_CONNECT_EXTRA`                   | -             | Extra origins for CSP connect-src      |
+| `NEXT_PUBLIC_CSP_FRAME_EXTRA`                     | -             | Extra origins for CSP frame-src        |
+| `NEXT_PUBLIC_CSP_IMG_EXTRA`                       | -             | Extra origins for CSP img-src          |
+| `NEXT_PUBLIC_CSP_FONT_EXTRA`                      | -             | Extra origins for CSP font-src         |
+| `NEXT_PUBLIC_CSP_STYLE_EXTRA`                     | -             | Extra origins for CSP style-src        |
 | `CHROMATIC_PROJECT_TOKEN`                         | -             | Chromatic uploads in CI                |
 | `NODE_ENV`                                        | `development` | Runtime mode                           |
+| `VERCEL_ENV`                                      | -             | Vercel environment (prod/preview/dev)  |
+| `SECURITY_ALLOWED_OUTBOUND_HOSTS`                 | See env.ts    | Allowed hosts for secureFetch          |
+| `SECURITY_AUDIT_LOG_ENABLED`                      | `true`        | Enable security audit logging          |
+| `INTERNAL_API_KEY`                                | -             | Key for internal API routes            |
 
 ---
 

@@ -171,6 +171,20 @@ Usage:
 lhci-collect --url=https://your-deployed-app.example
 ```
 
+### Run LHCI Collect with Vercel Bypass
+
+If your preview is protected by Vercel, pass the bypass headers:
+
+```bash
+export VERCEL_AUTOMATION_BYPASS_SECRET=your-secret
+
+lhci collect \
+   --url=https://your-deployed-app.example \
+   --collect.numberOfRuns=3 \
+   --collect.settings.chromeFlags="--headless=new --no-sandbox --disable-dev-shm-usage" \
+   --collect.settings.extraHeaders='{"x-vercel-protection-bypass":"'"$VERCEL_AUTOMATION_BYPASS_SECRET"'","x-vercel-set-bypass-cookie":"samesitenone"}'
+```
+
 ### Upload to LHCI Server
 
 ```bash

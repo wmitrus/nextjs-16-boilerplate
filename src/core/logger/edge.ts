@@ -11,17 +11,21 @@ export function getEdgeLogger(): Logger {
     return cachedEdgeLogger;
   }
 
+  const isServer = typeof window === 'undefined';
+
   const options: LoggerOptions = {
-    level: env.LOG_LEVEL,
+    level: isServer ? env.LOG_LEVEL : env.NEXT_PUBLIC_LOG_LEVEL || 'info',
     browser: {
       asObject: true,
       transmit:
-        env.LOGFLARE_EDGE_ENABLED && env.NEXT_PUBLIC_APP_URL
+        isServer && env.LOGFLARE_EDGE_ENABLED && env.NEXT_PUBLIC_APP_URL
           ? createLogflareEdgeTransport().transmit
           : undefined,
     },
     base: {
-      env: process.env.VERCEL_ENV || env.NODE_ENV,
+      env:
+        process.env.VERCEL_ENV ||
+        (isServer ? env.NODE_ENV : process.env.NODE_ENV),
       revision: process.env.VERCEL_GITHUB_COMMIT_SHA,
     },
   };

@@ -24,6 +24,7 @@
     "skott:check:only": "skott --cwd=src --showCircularDependencies --displayMode=file-tree",
     "depcheck": "depcheck",
     "madge": "madge --circular --extensions ts,tsx src",
+    "generate:secret": "node scripts/generate-secret.mjs",
     "env:init": "node scripts/setup-env.mjs",
     "env:check": "node scripts/check-env-consistency.mjs",
     "chromatic": "chromatic",
@@ -129,7 +130,12 @@
     "overrides": {
       "@playwright/test": "^1.58.0",
       "playwright": "^1.58.0"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "sharp",
+      "unrs-resolver"
+    ]
   },
   "config": {
     "commitizen": {

@@ -28,9 +28,25 @@ vi.mock('@clerk/nextjs/server', () => ({
   createRouteMatcher: vi.fn(() => vi.fn(() => true)),
 }));
 
+vi.mock('@/core/env', () => ({
+  env: {
+    NODE_ENV: 'test',
+    VERCEL_ENV: 'test',
+    INTERNAL_API_KEY: 'test-key',
+    SECURITY_ALLOWED_OUTBOUND_HOSTS: '',
+    NEXT_PUBLIC_CSP_SCRIPT_EXTRA: '',
+    NEXT_PUBLIC_CSP_CONNECT_EXTRA: '',
+    NEXT_PUBLIC_CSP_FRAME_EXTRA: '',
+    NEXT_PUBLIC_CSP_IMG_EXTRA: '',
+    NEXT_PUBLIC_CSP_STYLE_EXTRA: '',
+    NEXT_PUBLIC_CSP_FONT_EXTRA: '',
+  },
+}));
+
 vi.mock('@/core/logger/edge', () => ({
   logger: {
     warn: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 

@@ -6,6 +6,10 @@ import { getLogStreams } from './streams';
 
 let cachedServerLogger: Logger | null = null;
 
+export function resetServerLogger(): void {
+  cachedServerLogger = null;
+}
+
 export function getServerLogger(): Logger {
   if (cachedServerLogger) {
     return cachedServerLogger;
@@ -54,6 +58,18 @@ export function getLogger(): Logger {
   return getServerLogger();
 }
 
-export const logger = getServerLogger();
+// Export a proxy for the logger to allow resetServerLogger to work correctly in tests
+export const logger = new Proxy({} as Logger, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getServerLogger(), prop, receiver);
+  },
+  apply(_target, thisArg, argArray) {
+    const targetLogger = getServerLogger();
+    if (typeof targetLogger === 'function') {
+      return Reflect.apply(targetLogger, thisArg, argArray);
+    }
+    return undefined;
+  },
+});
 
 export default logger;

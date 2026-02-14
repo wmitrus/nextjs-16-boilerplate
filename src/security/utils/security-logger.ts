@@ -1,6 +1,6 @@
 import { logger } from '@/core/logger/server';
 
-import type { SecurityContext } from '../core/security-context';
+import type { SecurityContext } from '@/security/core/security-context';
 
 export interface SecurityEventOptions {
   event:

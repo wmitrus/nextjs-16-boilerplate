@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
-import { authorize, AuthorizationError } from '../core/authorization';
-import type { SecurityContext, UserRole } from '../core/security-context';
-import { getSecurityContext } from '../core/security-context';
-
-import { logActionAudit } from './action-audit';
-import { validateReplayToken } from './action-replay';
+import { logActionAudit } from '@/security/actions/action-audit';
+import { validateReplayToken } from '@/security/actions/action-replay';
+import { authorize, AuthorizationError } from '@/security/core/authorization';
+import type {
+  SecurityContext,
+  UserRole,
+} from '@/security/core/security-context';
+import { getSecurityContext } from '@/security/core/security-context';
 
 export interface ActionOptions<TSchema extends z.ZodType, TResult> {
   schema: TSchema;

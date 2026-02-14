@@ -2,7 +2,7 @@ import { clerkClient, type ClerkMiddlewareAuth } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import type { RouteContext } from './route-classification';
+import type { RouteContext } from '@/security/middleware/route-classification';
 
 /**
  * Handles Authentication and Onboarding redirects.

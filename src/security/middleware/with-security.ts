@@ -3,11 +3,11 @@ import { NextResponse } from 'next/server';
 
 import { logger } from '@/core/logger/edge';
 
-import { classifyRequest } from './route-classification';
-import { withAuth } from './with-auth';
-import { withHeaders } from './with-headers';
-import { withInternalApiGuard } from './with-internal-api-guard';
-import { withRateLimit } from './with-rate-limit';
+import { classifyRequest } from '@/security/middleware/route-classification';
+import { withAuth } from '@/security/middleware/with-auth';
+import { withHeaders } from '@/security/middleware/with-headers';
+import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
+import { withRateLimit } from '@/security/middleware/with-rate-limit';
 
 /**
  * Main security middleware pipeline entry point.

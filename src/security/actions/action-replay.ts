@@ -1,4 +1,4 @@
-import type { SecurityContext } from '../core/security-context';
+import type { SecurityContext } from '@/security/core/security-context';
 
 /**
  * Replay protection logic for Server Actions.

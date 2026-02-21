@@ -47,7 +47,9 @@ describe('Secure Action Wrapper', () => {
     const result = await action({ name: 'test' });
 
     expect(result.status).toBe('success');
-    expect(result.data).toEqual({ id: 1 });
+    if (result.status === 'success') {
+      expect(result.data).toEqual({ id: 1 });
+    }
     expect(handler).toHaveBeenCalledWith({
       input: { name: 'test' },
       context: mockCtx,
@@ -81,7 +83,9 @@ describe('Secure Action Wrapper', () => {
     const result = await action({ name: 'test' });
 
     expect(result.status).toBe('unauthorized');
-    expect(result.error).toBe('Denied');
+    if (result.status === 'unauthorized') {
+      expect(result.error).toBe('Denied');
+    }
   });
 
   it('should validate replay token if provided', async () => {
@@ -91,5 +95,17 @@ describe('Secure Action Wrapper', () => {
     await action({ name: 'test', _replayToken: 'token123' });
 
     expect(validateReplayToken).toHaveBeenCalledWith('token123', mockCtx);
+  });
+
+  it('should return error status on generic failure', async () => {
+    const handler = vi.fn().mockRejectedValue(new Error('Internal Boom'));
+    const action = createSecureAction({ schema, handler });
+
+    const result = await action({ name: 'test' });
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.error).toBe('Internal Boom');
+    }
   });
 });

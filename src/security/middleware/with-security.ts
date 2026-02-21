@@ -1,13 +1,20 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-import { logger } from '@/core/logger/edge';
+import { env } from '@/core/env';
+import { logger as baseLogger } from '@/core/logger/edge';
 
 import { classifyRequest } from '@/security/middleware/route-classification';
 import { withAuth } from '@/security/middleware/with-auth';
 import { withHeaders } from '@/security/middleware/with-headers';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
+
+const logger = baseLogger.child({
+  type: 'Security',
+  category: 'middleware',
+  module: 'with-security',
+});
 
 /**
  * Main security middleware pipeline entry point.
@@ -48,7 +55,6 @@ export function withSecurity() {
     if (rateLimitRes) return rateLimitRes;
 
     // 4. Protection check for non-public routes (Terminal protection)
-    const e2eEnabled = process.env.E2E_ENABLED === 'true';
     const isE2eRoute =
       request.nextUrl.pathname.startsWith('/e2e-error') ||
       request.nextUrl.pathname.startsWith('/users');
@@ -56,7 +62,7 @@ export function withSecurity() {
     if (
       !ctx.isPublicRoute &&
       !ctx.isInternalApi &&
-      !(e2eEnabled && isE2eRoute)
+      !(env.E2E_ENABLED && isE2eRoute)
     ) {
       await auth.protect();
     }

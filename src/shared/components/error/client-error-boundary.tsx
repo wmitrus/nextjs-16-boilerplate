@@ -3,7 +3,13 @@
 import type { ReactNode } from 'react';
 import React from 'react';
 
-import { logger } from '@/core/logger/client';
+import { logger as baseLogger } from '@/core/logger/client';
+
+const logger = baseLogger.child({
+  type: 'UI',
+  category: 'error-boundary',
+  module: 'client-error-boundary',
+});
 
 type FallbackRender = (error: Error, reset: () => void) => ReactNode;
 

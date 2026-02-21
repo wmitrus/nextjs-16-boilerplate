@@ -45,6 +45,9 @@ export const env = createEnv({
       .default(
         'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
       ),
+    E2E_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -106,6 +109,7 @@ export const env = createEnv({
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
+    E2E_ENABLED: process.env.E2E_ENABLED,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:

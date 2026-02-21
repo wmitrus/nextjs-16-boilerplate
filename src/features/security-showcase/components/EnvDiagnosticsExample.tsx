@@ -36,6 +36,17 @@ export function EnvDiagnosticsExample() {
         </ul>
       )}
 
+      {diagnostics.conditionalIssues.length > 0 && (
+        <ul className="mb-3 list-disc pl-5 text-sm text-gray-700">
+          {diagnostics.conditionalIssues.map((issue) => (
+            <li key={`${issue.condition}:${issue.missing.join('|')}`}>
+              {issue.condition}: {issue.issue} Missing:{' '}
+              {issue.missing.join(', ')}
+            </li>
+          ))}
+        </ul>
+      )}
+
       <p className="text-xs text-gray-500">
         Environment: {diagnostics.environment}
       </p>

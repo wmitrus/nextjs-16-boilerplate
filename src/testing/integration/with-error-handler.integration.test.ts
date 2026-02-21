@@ -1,9 +1,8 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 
+import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import { AppError } from '@/shared/types/api-response';
-
-import { withErrorHandler } from './with-error-handler';
 
 vi.mock('@/core/logger/server', () => ({
   logger: {

@@ -1,6 +1,12 @@
-import { logger } from '@/core/logger/server';
+import { logger as baseLogger } from '@/core/logger/server';
 
 import type { SecurityContext } from '@/security/core/security-context';
+
+const logger = baseLogger.child({
+  type: 'Security',
+  category: 'events',
+  module: 'security-logger',
+});
 
 export interface SecurityEventOptions {
   event:

@@ -29,6 +29,12 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
   const isPreview = env.VERCEL_ENV === 'preview';
   const isDev = env.NODE_ENV === 'development';
 
+  // Detect if using development/test Clerk keys
+  const isClerkDevKey =
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith('pk_test_') === true ||
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith('pk_development_') ===
+      true;
+
   // Helper to parse extra allowlists from env
   const parseExtra = (val: string) => (val ? val.split(',').join(' ') : '');
 
@@ -38,7 +44,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     'https://*.clerk.services',
   ];
 
-  if (isPreview || isDev) {
+  if (isPreview || isDev || isClerkDevKey) {
     clerkDomains.push('https://*.clerk.accounts.dev');
   }
 
@@ -90,6 +96,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     `font-src 'self' https://fonts.gstatic.com ${parseExtra(env.NEXT_PUBLIC_CSP_FONT_EXTRA)}`,
     `connect-src ${connectSrc}`,
     `frame-src ${frameSrc}`,
+    "worker-src 'self' blob:",
     'upgrade-insecure-requests',
   ].join('; ');
 

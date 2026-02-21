@@ -1,9 +1,15 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { logger } from '@/core/logger/server';
+import { logger as baseLogger } from '@/core/logger/server';
 
 import { secureFetch } from '@/security/outbound/secure-fetch';
+
+const logger = baseLogger.child({
+  type: 'API',
+  category: 'security-test',
+  module: 'ssrf-route',
+});
 
 /**
  * Test endpoint for SSRF demonstration.
@@ -19,7 +25,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    logger.info({ url }, 'Testing SSRF Outbound Fetch');
+    logger.debug({ url }, 'Testing SSRF Outbound Fetch');
     const response = await secureFetch(url);
     // We don't return the full body for safety in a demo
     return NextResponse.json({

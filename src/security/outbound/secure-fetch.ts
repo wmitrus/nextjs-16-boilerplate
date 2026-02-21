@@ -1,5 +1,11 @@
 import { env } from '@/core/env';
-import { logger } from '@/core/logger/server';
+import { logger as baseLogger } from '@/core/logger/server';
+
+const logger = baseLogger.child({
+  type: 'Security',
+  category: 'ssrf',
+  module: 'secure-fetch',
+});
 
 /**
  * Secure fetch wrapper that prevents SSRF attacks.

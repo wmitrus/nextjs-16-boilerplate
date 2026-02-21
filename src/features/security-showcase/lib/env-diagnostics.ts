@@ -11,11 +11,18 @@ export interface EnvPairIssue {
   issue: string;
 }
 
+export interface EnvConditionalIssue {
+  condition: string;
+  missing: string[];
+  issue: string;
+}
+
 export interface EnvDiagnostics {
   ok: boolean;
   environment: string;
   required: EnvDiagnosticsEntry[];
   pairIssues: EnvPairIssue[];
+  conditionalIssues: EnvConditionalIssue[];
   suggestions: string[];
   timestamp: string;
 }
@@ -87,14 +94,54 @@ export function getEnvDiagnostics(): EnvDiagnostics {
     })
     .filter((issue): issue is EnvPairIssue => issue !== null);
 
+  const logflareServerEnabled = getEnv('LOGFLARE_SERVER_ENABLED') === 'true';
+  const logflareEdgeEnabled = getEnv('LOGFLARE_EDGE_ENABLED') === 'true';
+
+  const conditionalIssues: EnvConditionalIssue[] = [];
+
+  if (logflareServerEnabled) {
+    const missing: string[] = [];
+
+    if (!getEnv('LOGFLARE_API_KEY')) {
+      missing.push('LOGFLARE_API_KEY');
+    }
+
+    if (!getEnv('LOGFLARE_SOURCE_TOKEN') && !getEnv('LOGFLARE_SOURCE_NAME')) {
+      missing.push('LOGFLARE_SOURCE_TOKEN or LOGFLARE_SOURCE_NAME');
+    }
+
+    if (missing.length > 0) {
+      conditionalIssues.push({
+        condition: 'LOGFLARE_SERVER_ENABLED=true',
+        missing,
+        issue:
+          'Server Logflare transport is enabled but required credentials are missing.',
+      });
+    }
+  }
+
+  if (logflareEdgeEnabled && !getEnv('NEXT_PUBLIC_APP_URL')) {
+    conditionalIssues.push({
+      condition: 'LOGFLARE_EDGE_ENABLED=true',
+      missing: ['NEXT_PUBLIC_APP_URL'],
+      issue: 'Edge log shipping is enabled but NEXT_PUBLIC_APP_URL is missing.',
+    });
+  }
+
   return {
-    ok: missingRequired.length === 0 && pairIssues.length === 0,
+    ok:
+      missingRequired.length === 0 &&
+      pairIssues.length === 0 &&
+      conditionalIssues.length === 0,
     environment: process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown',
     required: requiredSummary,
     pairIssues,
+    conditionalIssues,
     suggestions: [
       'Set all required keys for this deployment target.',
       'If using Upstash, set both URL and TOKEN or unset both.',
+      'If LOGFLARE_SERVER_ENABLED=true, set LOGFLARE_API_KEY and SOURCE_TOKEN or SOURCE_NAME.',
+      'If LOGFLARE_EDGE_ENABLED=true, set NEXT_PUBLIC_APP_URL to your deployment URL.',
       'Keep INTERNAL_API_KEY aligned with any internal clients/tests.',
     ],
     timestamp: new Date().toISOString(),

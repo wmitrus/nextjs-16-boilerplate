@@ -26,7 +26,17 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
   role = 'user',
   handler,
 }: ActionOptions<TSchema, TResult>) {
-  return async (input: z.infer<TSchema> & { _replayToken?: string }) => {
+  return async (
+    input: z.infer<TSchema> & { _replayToken?: string },
+  ): Promise<
+    | { status: 'success'; data: TResult }
+    | {
+        status: 'validation_error';
+        errors: z.inferFlattenedErrors<TSchema>['fieldErrors'];
+      }
+    | { status: 'unauthorized'; error: string }
+    | { status: 'error'; error: string }
+  > => {
     const context = await getSecurityContext();
     const actionName = handler.name || 'anonymous_action';
 

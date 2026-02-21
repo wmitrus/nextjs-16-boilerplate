@@ -2,13 +2,12 @@ import '@/testing/infrastructure/logger';
 
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { logger } from '@/core/logger/server';
-
 import { logActionAudit } from './action-audit';
 
 import {
   createMockSecurityContext,
   resetAllInfrastructureMocks,
+  mockChildLogger,
 } from '@/testing';
 
 describe('Action Audit', () => {
@@ -23,7 +22,7 @@ describe('Action Audit', () => {
     resetAllInfrastructureMocks();
   });
 
-  it('should log success as info', async () => {
+  it('should log success as debug', async () => {
     await logActionAudit({
       actionName: 'testAction',
       input: { data: 'test' },
@@ -31,9 +30,8 @@ describe('Action Audit', () => {
       context: mockCtx,
     });
 
-    expect(logger.info).toHaveBeenCalledWith(
+    expect(mockChildLogger.debug).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'SECURITY_AUDIT',
         actionName: 'testAction',
         result: 'success',
       }),
@@ -50,9 +48,8 @@ describe('Action Audit', () => {
       context: mockCtx,
     });
 
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'SECURITY_AUDIT',
         result: 'failure',
         input: { data: 'test' },
       }),

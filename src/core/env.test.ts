@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.unmock('@/core/env');
+
 const originalEnv = {
   ...process.env,
   CLERK_SECRET_KEY: 'sk_test_mock',
@@ -184,5 +186,22 @@ describe('env', () => {
     const env = await loadEnv();
 
     expect(env.NEXT_PUBLIC_APP_URL).toBeUndefined();
+  });
+
+  it('handles SECURITY_AUDIT_LOG_ENABLED string and boolean', async () => {
+    setEnv({ SECURITY_AUDIT_LOG_ENABLED: 'true' });
+    vi.resetModules();
+    let env = await loadEnv();
+    expect(env.SECURITY_AUDIT_LOG_ENABLED).toBe(true);
+
+    setEnv({ SECURITY_AUDIT_LOG_ENABLED: 'false' });
+    vi.resetModules();
+    env = await loadEnv();
+    expect(env.SECURITY_AUDIT_LOG_ENABLED).toBe(false);
+
+    setEnv({ SECURITY_AUDIT_LOG_ENABLED: true });
+    vi.resetModules();
+    env = await loadEnv();
+    expect(env.SECURITY_AUDIT_LOG_ENABLED).toBe(true);
   });
 });

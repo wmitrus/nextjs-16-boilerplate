@@ -2,13 +2,19 @@ import type { NextRequest } from 'next/server';
 import type { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
-import { logger } from '@/core/logger/server';
+import { logger as baseLogger } from '@/core/logger/server';
 
 import { AppError } from './app-error';
 import {
   createServerErrorResponse,
   createValidationErrorResponse,
 } from './response-service';
+
+const logger = baseLogger.child({
+  type: 'API',
+  category: 'error-handling',
+  module: 'with-error-handler',
+});
 
 type RouteHandler = (
   request: NextRequest,

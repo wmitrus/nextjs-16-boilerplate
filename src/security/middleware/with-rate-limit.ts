@@ -1,6 +1,6 @@
 import type { NextRequest, NextResponse } from 'next/server';
 
-import { logger } from '@/core/logger/edge';
+import { logger as baseLogger } from '@/core/logger/edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
@@ -9,6 +9,11 @@ import type { RateLimitResult } from '@/shared/lib/rate-limit/rate-limit-local';
 
 import type { RouteContext } from './route-classification';
 
+const logger = baseLogger.child({
+  type: 'Security',
+  category: 'rate-limit',
+  module: 'with-rate-limit',
+});
 /**
  * Enforces rate limiting on API routes.
  * Ports logic from the original proxy.ts.
@@ -27,13 +32,15 @@ export async function withRateLimit(
   if (!result.success) {
     logger.warn(
       {
+        type: 'SECURITY_AUDIT',
+        category: 'rate-limit',
         ip,
         correlationId,
         path: req.nextUrl.pathname,
         limit: result.limit,
         reset: result.reset,
       },
-      'Rate limit exceeded',
+      'Rate Limit Exceeded',
     );
 
     const errorResponse = createServerErrorResponse(

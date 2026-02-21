@@ -2,7 +2,13 @@
 
 import { useEffect } from 'react';
 
-import { logger } from '@/core/logger/client';
+import { logger as baseLogger } from '@/core/logger/client';
+
+const logger = baseLogger.child({
+  type: 'UI',
+  category: 'error-boundary',
+  module: 'e2e-error',
+});
 
 export default function E2eErrorBoundary({
   error,

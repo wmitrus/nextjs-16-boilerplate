@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { AdminOnlyExample } from '@/features/security-showcase/components/AdminOnlyExample';
+import { EnvDiagnosticsExample } from '@/features/security-showcase/components/EnvDiagnosticsExample';
 import { ExternalFetchExample } from '@/features/security-showcase/components/ExternalFetchExample';
 import { InternalApiTestExample } from '@/features/security-showcase/components/InternalApiTestExample';
 import { ProfileExample } from '@/features/security-showcase/components/ProfileExample';
@@ -96,6 +97,7 @@ export default async function SecurityShowcasePage() {
             Internal API Guard
           </h2>
           <InternalApiTestExample />
+          <EnvDiagnosticsExample />
         </section>
 
         <footer className="mt-12 border-t pt-8 text-center text-sm text-gray-500">

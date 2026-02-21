@@ -10,7 +10,23 @@ import { SettingsFormExample } from '@/features/security-showcase/components/Set
 import { getSecurityContext } from '@/security/core/security-context';
 
 export default async function SecurityShowcasePage() {
-  const context = await getSecurityContext();
+  let context: Awaited<ReturnType<typeof getSecurityContext>>;
+  let contextError: string | null = null;
+
+  try {
+    context = await getSecurityContext();
+  } catch (error) {
+    contextError = error instanceof Error ? error.message : 'Unknown error';
+    context = {
+      user: undefined,
+      ip: 'unknown',
+      userAgent: undefined,
+      correlationId: crypto.randomUUID(),
+      runtime: 'node',
+      environment: 'development',
+      requestId: crypto.randomUUID(),
+    };
+  }
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12">
@@ -38,6 +54,11 @@ export default async function SecurityShowcasePage() {
               Metadata retrieved via <code>getSecurityContext()</code> on the
               server.
             </p>
+            {contextError && (
+              <p className="mb-3 rounded border border-yellow-300 bg-yellow-50 p-2 text-xs text-yellow-800">
+                Security context degraded mode: {contextError}
+              </p>
+            )}
             <pre className="overflow-auto rounded border bg-white p-3 font-mono text-xs">
               {JSON.stringify(context, null, 2)}
             </pre>

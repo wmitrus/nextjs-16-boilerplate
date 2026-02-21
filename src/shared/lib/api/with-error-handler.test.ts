@@ -6,7 +6,7 @@ import { ZodError } from 'zod';
 import { AppError } from './app-error';
 import { withErrorHandler } from './with-error-handler';
 
-import { resetAllInfrastructureMocks, mockLogger } from '@/testing';
+import { resetAllInfrastructureMocks, mockChildLogger } from '@/testing';
 
 // Initialize infrastructure mocks
 import '@/testing/infrastructure/logger';
@@ -87,7 +87,7 @@ describe('withErrorHandler', () => {
       error: 'Server down',
       code: 'SERVER_DOWN',
     });
-    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockChildLogger.error).toHaveBeenCalled();
   });
 
   it('should handle generic Error and return 500', async () => {
@@ -136,7 +136,7 @@ describe('withErrorHandler', () => {
     });
     await wrappedHandler(request, mockContext);
 
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ correlationId }),
       expect.any(String),
     );

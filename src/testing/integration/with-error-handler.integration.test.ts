@@ -4,13 +4,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import { AppError } from '@/shared/types/api-response';
 
-vi.mock('@/core/logger/server', () => ({
-  logger: {
+vi.mock('@/core/logger/server', () => {
+  const mockChildLogger = {
     error: vi.fn(),
     warn: vi.fn(),
-    info: vi.fn(),
-  },
-}));
+    debug: vi.fn(),
+  };
+
+  return {
+    logger: {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      child: vi.fn(() => mockChildLogger),
+    },
+  };
+});
 
 describe('withErrorHandler integration', () => {
   const mockContext = { params: Promise.resolve({}) };

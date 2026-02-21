@@ -142,7 +142,10 @@
       "msw",
       "sharp",
       "unrs-resolver"
-    ]
+    ],
+    "patchedDependencies": {
+      "depcheck@1.4.7": "patches/depcheck@1.4.7.patch"
+    }
   },
   "config": {
     "commitizen": {

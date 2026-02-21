@@ -2,13 +2,12 @@ import '@/testing/infrastructure/logger';
 
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { logger } from '@/core/logger/server';
-
 import { logSecurityEvent } from './security-logger';
 
 import {
   createMockSecurityContext,
   resetAllInfrastructureMocks,
+  mockChildLogger,
 } from '@/testing';
 
 describe('Security Logger', () => {
@@ -31,7 +30,7 @@ describe('Security Logger', () => {
       metadata: { reason: 'invalid token' },
     });
 
-    expect(logger.fatal).toHaveBeenCalledWith(
+    expect(mockChildLogger.fatal).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'SECURITY_EVENT',
         event: 'auth_failure',

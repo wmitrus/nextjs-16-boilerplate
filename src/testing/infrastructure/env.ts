@@ -1,5 +1,3 @@
-import { vi } from 'vitest';
-
 import type { env as realEnv } from '@/core/env';
 
 /**
@@ -22,8 +20,8 @@ const defaultEnv: MutableEnv = {
   NEXT_PUBLIC_CSP_IMG_EXTRA: '',
   NEXT_PUBLIC_CSP_STYLE_EXTRA: '',
   NEXT_PUBLIC_CSP_FONT_EXTRA: '',
-  UPSTASH_REDIS_REST_URL: 'http://localhost',
-  UPSTASH_REDIS_REST_TOKEN: 'test-token',
+  UPSTASH_REDIS_REST_URL: undefined,
+  UPSTASH_REDIS_REST_TOKEN: undefined,
   API_RATE_LIMIT_REQUESTS: 100,
   API_RATE_LIMIT_WINDOW: '60 s',
   SECURITY_AUDIT_LOG_ENABLED: true,
@@ -48,6 +46,7 @@ const defaultEnv: MutableEnv = {
   NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: '/',
   NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: '/onboarding',
   NEXT_PUBLIC_CLERK_WAITLIST_URL: '/waitlist',
+  E2E_ENABLED: false,
 };
 
 /**
@@ -55,10 +54,6 @@ const defaultEnv: MutableEnv = {
  * Centralized singleton mocks for 10x scalability.
  */
 export const mockEnv = { ...defaultEnv } as unknown as MutableEnv;
-
-vi.mock('@/core/env', () => ({
-  env: mockEnv,
-}));
 
 export function resetEnvMocks() {
   Object.assign(mockEnv, defaultEnv);

@@ -40,7 +40,6 @@ vi.mock('@/core/env', () => ({
     NEXT_PUBLIC_CSP_FONT_EXTRA: '',
   },
 }));
-
 vi.mock('@/core/logger/edge', () => ({
   logger: {
     warn: vi.fn(),

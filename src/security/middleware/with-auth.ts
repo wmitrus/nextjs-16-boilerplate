@@ -2,6 +2,8 @@ import { clerkClient, type ClerkMiddlewareAuth } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+import { env } from '@/core/env';
+
 import type { RouteContext } from '@/security/middleware/route-classification';
 
 /**
@@ -47,12 +49,11 @@ export async function withAuth(
   }
 
   // 3. Protect private routes
-  const e2eEnabled = process.env.E2E_ENABLED === 'true';
   const isE2eRoute =
     req.nextUrl.pathname.startsWith('/e2e-error') ||
     req.nextUrl.pathname.startsWith('/users');
 
-  if (!userId && !ctx.isPublicRoute && !(e2eEnabled && isE2eRoute)) {
+  if (!userId && !ctx.isPublicRoute && !(env.E2E_ENABLED && isE2eRoute)) {
     // Clerk's protect() throws a redirect or 401, but we can't easily call it inside our composable flow
     // without it being the terminal middleware. Instead, we let Clerk handle the protection
     // via auth.protect() if we return null here, or we can manually redirect.

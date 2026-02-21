@@ -53,4 +53,42 @@ describe('Headers Middleware', () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self'");
   });
+
+  it('should not set HSTS in development', () => {
+    mockEnv.NODE_ENV = 'development';
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+    expect(res.headers.get('Strict-Transport-Security')).toBeNull();
+  });
+
+  it('should include preview-specific CSP rules', () => {
+    mockEnv.NODE_ENV = 'production';
+    mockEnv.VERCEL_ENV = 'preview';
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toContain('https://vercel.live');
+    expect(csp).toContain('https://*.clerk.accounts.dev');
+  });
+
+  it('should include development-specific CSP rules', () => {
+    mockEnv.NODE_ENV = 'development';
+    mockEnv.VERCEL_ENV = 'development';
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toContain('https://*.clerk.accounts.dev');
+  });
+
+  it('should include extra domains from environment', () => {
+    mockEnv.NEXT_PUBLIC_CSP_SCRIPT_EXTRA = 'https://extra.com';
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toContain('https://extra.com');
+  });
 });

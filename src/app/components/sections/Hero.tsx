@@ -29,7 +29,7 @@ const Hero = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
               <Link
-                href="/signup"
+                href="/sign-up"
                 className="rounded-full bg-black px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black dark:bg-white dark:text-black dark:hover:bg-zinc-200"
               >
                 Get Started

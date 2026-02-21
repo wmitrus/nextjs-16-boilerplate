@@ -133,7 +133,6 @@
       "minimatch": ">=10.2.1",
       "lodash": ">=4.17.23",
       "undici": ">=6.23.0",
-      "ajv": ">=8.18.0",
       "tmp": ">=0.2.4"
     },
     "onlyBuiltDependencies": [

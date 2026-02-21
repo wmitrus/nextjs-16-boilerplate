@@ -1,5 +1,34 @@
 # Implementation Plan - Enterprise Security Architecture Refactoring
 
+## Phase 14: Integration Test Consolidation (Completed)
+
+- [x] Locate all scattered integration test files across the codebase.
+- [x] Move integration tests from `src/core/logger/`, `src/shared/lib/api/`, `src/app/tests/`, `src/features/user-management/tests/`, and `src/app/api/users/` to `src/testing/integration/`.
+- [x] Fix all import paths after moving test files.
+- [x] Simplify tests that were testing server components incompatible with jsdom environment.
+- [x] Run `pnpm test:integration` and verify all 38 tests pass.
+- [x] Run `pnpm typecheck` and `pnpm lint` to ensure code quality.
+
+## Phase 13: Final Architecture Hardening & Verification (Completed)
+
+- [x] Extend integration tests to cover complex redirect scenarios (Onboarding, Auth).
+- [x] Implement and verify Server Action Replay Protection tests.
+- [x] Add Security Audit logging to `withInternalApiGuard`.
+- [x] Standardize Rate Limit audit logs with `SECURITY_AUDIT` type and category.
+- [x] Ensure `E2E_ENABLED` is fully mockable via `src/core/env.ts`.
+- [x] Final verification of all integration tests (40+ scenarios).
+- [x] Run `pnpm typecheck` and `pnpm lint` across the entire codebase.
+
+## Phase 12: Comprehensive Security Integration Testing (Completed)
+
+- [x] Implement middleware pipeline integration tests in `src/testing/integration/middleware.test.ts`.
+- [x] Implement Server Actions integration tests in `src/testing/integration/server-actions.test.ts`.
+- [x] Implement Outbound Security integration tests in `src/testing/integration/outbound.test.ts`.
+- [x] Implement RSC Data Sanitization integration tests in `src/testing/integration/sanitization.test.ts`.
+- [x] Verify full pipeline (Rate Limit -> Auth -> Internal Guard -> Headers).
+- [x] Ensure all integration tests pass with 100% type safety and zero `any`.
+- [x] Run `pnpm test:integration` and verify results.
+
 ## Phase 9: Scale-Ready Architectural Mock Refactoring (Completed)
 
 - [x] Create global testing infrastructure in `src/testing/` (Infrastructure & Factories).
@@ -7,6 +36,23 @@
 - [x] Migrate all security tests to the new "Shared Infrastructure + Co-located Domain" architecture.
 - [x] Verify 100% type safety and zero `any` usage.
 - [x] Run `pnpm test`, `pnpm typecheck`, and `pnpm lint`.
+
+## Phase 10: Coverage Optimization & Quality Hardening (Completed)
+
+- [x] Analyze current coverage and identify files for exclusion (mocks, factories, showcase).
+- [x] Update `vitest.unit.config.ts` with refined coverage exclusions.
+- [x] Implement missing tests for core logic to reach 80% coverage threshold.
+- [x] Verify all tests pass with 80% coverage on all metrics.
+
+## Phase 11: Pixel-Perfect Coverage Hardening (Completed)
+
+- [x] Address uncovered lines in `src/core/logger/server.ts` (67-71 - Proxy logic).
+- [x] Address uncovered line in `src/security/actions/secure-action.ts` (91 - Generic Error handling).
+- [x] Address uncovered lines in `src/security/middleware/with-headers.ts` (22, 42 - CSP/Prod Branching).
+- [x] Address uncovered line in `src/core/env.ts` (41 - Error handling).
+- [x] Address uncovered line in `src/shared/components/ui/polymorphic-element.tsx` (38 - Default element fallback).
+- [x] Verify final coverage meets 100% or absolute maximum practical limit.
+- [x] Fix global mock synchronization issues (Clerk, Pino, Headers, Env).
 
 ## Phase 8: Comprehensive Test Refactoring & Hardening
 

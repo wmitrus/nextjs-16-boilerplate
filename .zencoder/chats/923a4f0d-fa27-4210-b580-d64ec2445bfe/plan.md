@@ -127,6 +127,22 @@ Final checks across the entire project
 
 ---
 
+## Phase 8: Environment Variables ([x] Complete)
+
+Add missing E2E_ENABLED environment variable to `.env.example`
+
+1. ✅ Added `E2E_ENABLED=false` to `.env.example` in new "E2E Testing" section
+2. ✅ Verified with `pnpm env:check` - All environment variables synchronized
+3. ✅ Confirmed `pnpm typecheck` and `pnpm lint` pass
+
+**Summary:**
+
+- Added missing E2E_ENABLED variable documented in src/core/env.ts
+- Default value: false (boolean)
+- Placed in dedicated "E2E Testing" section for clarity
+
+---
+
 ## Logger Pattern Reference
 
 ```typescript

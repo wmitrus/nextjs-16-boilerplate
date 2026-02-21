@@ -5,11 +5,14 @@ import {
 } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
+import { env } from '@/core/env';
 import { logger } from '@/core/logger/edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
+
+import { withHeaders } from '@/security/middleware/with-headers';
 
 const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
@@ -26,56 +29,112 @@ const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)']);
  * In Next.js 16, proxy.ts replaces middleware.ts for Node.js runtime use cases.
  */
 export default clerkMiddleware(async (auth, request) => {
-  const { userId, sessionClaims } = await auth();
-
-  if (userId && isAuthRoute(request)) {
-    let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-
-    if (!onboardingComplete) {
-      const client = await clerkClient();
-      const user = await client.users.getUser(userId);
-      onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
-    }
-
-    const redirectUrl = onboardingComplete
-      ? new URL('/', request.url)
-      : new URL('/onboarding', request.url);
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  if (userId && isOnboardingRoute(request)) {
-    return NextResponse.next();
-  }
-
-  if (userId && !isOnboardingRoute(request)) {
-    let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-
-    if (!onboardingComplete) {
-      const client = await clerkClient();
-      const user = await client.users.getUser(userId);
-      onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
-    }
-
-    if (!onboardingComplete) {
-      const onboardingUrl = new URL('/onboarding', request.url);
-      return NextResponse.redirect(onboardingUrl);
-    }
-  }
-
-  const e2eEnabled = process.env.E2E_ENABLED === 'true';
-
-  if (!isPublicRoute(request) && !(e2eEnabled && isE2eRoute(request))) {
-    await auth.protect();
-  }
-
+  const isInternalApi = request.nextUrl.pathname.startsWith('/api/internal');
   const correlationId =
     request.headers.get('x-correlation-id') || crypto.randomUUID();
+
+  const finalize = (response: NextResponse) => {
+    const secured = withHeaders(request, response);
+    secured.headers.set('x-correlation-id', correlationId);
+    return secured;
+  };
+
+  if (isInternalApi) {
+    const internalKey = request.headers.get('x-internal-key');
+    logger.debug(
+      {
+        path: request.nextUrl.pathname,
+        hasInternalKey: Boolean(internalKey),
+        keyMatched: internalKey === env.INTERNAL_API_KEY,
+      },
+      'Internal API key validation',
+    );
+
+    if (!env.INTERNAL_API_KEY || internalKey !== env.INTERNAL_API_KEY) {
+      logger.error(
+        {
+          path: request.nextUrl.pathname,
+          ip: request.headers.get('x-forwarded-for') || 'unknown',
+        },
+        'Unauthorized Internal API Access Attempt',
+      );
+
+      return finalize(
+        createServerErrorResponse(
+          'Forbidden: Internal Access Only',
+          403,
+          'FORBIDDEN',
+        ),
+      );
+    }
+  }
+
+  if (!isInternalApi) {
+    const { userId, sessionClaims } = await auth();
+
+    if (userId && isAuthRoute(request)) {
+      let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
+
+      if (!onboardingComplete) {
+        const client = await clerkClient();
+        const user = await client.users.getUser(userId);
+        onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
+      }
+
+      const redirectUrl = onboardingComplete
+        ? new URL('/', request.url)
+        : new URL('/onboarding', request.url);
+      return finalize(NextResponse.redirect(redirectUrl));
+    }
+
+    if (userId && isOnboardingRoute(request)) {
+      return finalize(NextResponse.next());
+    }
+
+    if (userId && !isOnboardingRoute(request)) {
+      let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
+
+      if (!onboardingComplete) {
+        const client = await clerkClient();
+        const user = await client.users.getUser(userId);
+        onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
+      }
+
+      if (!onboardingComplete) {
+        const onboardingUrl = new URL('/onboarding', request.url);
+        return finalize(NextResponse.redirect(onboardingUrl));
+      }
+    }
+
+    const e2eEnabled = process.env.E2E_ENABLED === 'true';
+
+    if (!isPublicRoute(request) && !(e2eEnabled && isE2eRoute(request))) {
+      await auth.protect();
+    }
+  }
 
   let response = NextResponse.next();
 
   if (request.nextUrl.pathname.startsWith('/api')) {
     const ip = await getIP(request.headers);
+    const startedAt = Date.now();
+    logger.debug(
+      {
+        path: request.nextUrl.pathname,
+        ip,
+      },
+      'Rate limit check started',
+    );
     const result = await checkRateLimit(ip);
+    logger.debug(
+      {
+        path: request.nextUrl.pathname,
+        ip,
+        success: result.success,
+        durationMs: Date.now() - startedAt,
+      },
+      'Rate limit check completed',
+    );
 
     if (!result.success) {
       logger.warn(
@@ -120,9 +179,7 @@ export default clerkMiddleware(async (auth, request) => {
     }
   }
 
-  response.headers.set('x-correlation-id', correlationId);
-
-  return response;
+  return finalize(response);
 });
 
 /**

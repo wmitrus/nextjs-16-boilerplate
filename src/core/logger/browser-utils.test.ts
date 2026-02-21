@@ -125,4 +125,17 @@ describe('browser transport', () => {
 
     expect(navigator).toBeUndefined();
   });
+
+  it('uses default info level when NEXT_PUBLIC_LOG_LEVEL is missing', async () => {
+    vi.doMock('@/core/env', () => ({
+      env: {
+        NEXT_PUBLIC_LOG_LEVEL: undefined,
+      },
+    }));
+
+    const { createLogflareBrowserTransport } = await import('./browser-utils');
+    const transport = createLogflareBrowserTransport();
+
+    expect(transport.transmit.level).toBe('info');
+  });
 });

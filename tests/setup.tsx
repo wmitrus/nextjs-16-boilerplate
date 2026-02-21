@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 
 // Force early initialization of critical infrastructure mocks
 import { server } from '../src/shared/lib/mocks/server';
+import { mockEnv } from '../src/testing/infrastructure/env';
 import {
   mockPino,
   mockGetLogStreams,
@@ -21,6 +22,10 @@ process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_test_mock';
 vi.mock('next/headers', () => ({
   headers: mockNextHeaders,
   cookies: mockCookies,
+}));
+
+vi.mock('@/core/env', () => ({
+  env: mockEnv,
 }));
 
 // Global mocks for core services to prevent un-mocked side effects

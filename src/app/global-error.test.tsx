@@ -6,6 +6,9 @@ import GlobalError from './global-error';
 
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
+  child: vi.fn(() => ({
+    error: vi.fn(),
+  })),
 }));
 
 vi.mock('@/core/logger/client', () => ({
@@ -26,6 +29,6 @@ describe('Global error UI', () => {
     );
 
     expect(reset).toHaveBeenCalled();
-    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockLogger.child).toHaveBeenCalled();
   });
 });

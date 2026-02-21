@@ -6,6 +6,9 @@ import ErrorBoundary from './error';
 
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
+  child: vi.fn(() => ({
+    error: vi.fn(),
+  })),
 }));
 
 vi.mock('@/core/logger/client', () => ({
@@ -24,6 +27,6 @@ describe('Root error boundary UI', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(reset).toHaveBeenCalled();
-    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockLogger.child).toHaveBeenCalled();
   });
 });

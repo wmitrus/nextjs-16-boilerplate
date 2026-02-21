@@ -1,6 +1,12 @@
-import { logger } from '@/core/logger/server';
+import { logger as baseLogger } from '@/core/logger/server';
 
 import type { SecurityContext } from '@/security/core/security-context';
+
+const logger = baseLogger.child({
+  type: 'Security',
+  category: 'audit',
+  module: 'action-audit',
+});
 
 export interface AuditLogOptions {
   actionName: string;
@@ -23,7 +29,6 @@ export async function logActionAudit({
   // In a real production app, you might send this to a dedicated audit database
   // or a specialized security monitoring tool.
   const logPayload = {
-    type: 'SECURITY_AUDIT',
     event: 'server_action_mutation',
     actionName,
     userId: context.user?.id,
@@ -35,14 +40,12 @@ export async function logActionAudit({
     requestId: context.requestId,
     result,
     error,
-    // We hash the input to avoid logging PII but still allow tracking change signatures
-    // For this boilerplate, we'll log it directly but rely on Pino's redaction
-    input: result === 'failure' ? input : undefined, // Log input on failure for debugging
+    input: result === 'failure' ? input : undefined,
   };
 
   if (result === 'failure') {
-    logger.error(logPayload, `Security Audit: Action ${actionName} failed`);
+    logger.error(logPayload, `Action ${actionName} failed`);
   } else {
-    logger.info(logPayload, `Security Audit: Action ${actionName} successful`);
+    logger.debug(logPayload, `Action ${actionName} successful`);
   }
 }

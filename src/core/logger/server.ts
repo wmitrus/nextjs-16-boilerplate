@@ -63,13 +63,6 @@ export const logger = new Proxy({} as Logger, {
   get(_target, prop, receiver) {
     return Reflect.get(getServerLogger(), prop, receiver);
   },
-  apply(_target, thisArg, argArray) {
-    const targetLogger = getServerLogger();
-    if (typeof targetLogger === 'function') {
-      return Reflect.apply(targetLogger, thisArg, argArray);
-    }
-    return undefined;
-  },
 });
 
 export default logger;

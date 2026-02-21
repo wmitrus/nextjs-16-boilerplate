@@ -24,7 +24,6 @@ export interface EnvDiagnostics {
   pairIssues: EnvPairIssue[];
   conditionalIssues: EnvConditionalIssue[];
   suggestions: string[];
-  timestamp: string;
 }
 
 function getEnv(name: string): EnvValue {
@@ -144,6 +143,5 @@ export function getEnvDiagnostics(): EnvDiagnostics {
       'If LOGFLARE_EDGE_ENABLED=true, set NEXT_PUBLIC_APP_URL to your deployment URL.',
       'Keep INTERNAL_API_KEY aligned with any internal clients/tests.',
     ],
-    timestamp: new Date().toISOString(),
   };
 }

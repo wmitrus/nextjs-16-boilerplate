@@ -8,7 +8,7 @@ import { withActionHandler } from './with-action-handler';
 
 import {
   resetAllInfrastructureMocks,
-  mockLogger,
+  mockChildLogger,
   mockHeaders,
 } from '@/testing';
 
@@ -46,7 +46,7 @@ describe('withActionHandler', () => {
       error: 'Custom error',
       code: 'CUSTOM_CODE',
     });
-    expect(mockLogger.warn).toHaveBeenCalled();
+    expect(mockChildLogger.warn).toHaveBeenCalled();
   });
 
   it('should handle validation errors from AppError', async () => {
@@ -76,7 +76,7 @@ describe('withActionHandler', () => {
       error: 'Server fail',
       code: 'SERVER_FAIL',
     });
-    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockChildLogger.error).toHaveBeenCalled();
   });
 
   it('should return generic error message in production for non-Error rejections', async () => {
@@ -104,7 +104,7 @@ describe('withActionHandler', () => {
 
     await wrapped();
 
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ correlationId }),
       expect.any(String),
     );

@@ -6,7 +6,11 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { secureFetch } from './secure-fetch';
 
-import { mockEnv, mockLogger, resetAllInfrastructureMocks } from '@/testing';
+import {
+  mockEnv,
+  mockChildLogger,
+  resetAllInfrastructureMocks,
+} from '@/testing';
 
 describe('Secure Fetch (SSRF Protection)', () => {
   const originalFetch = global.fetch;
@@ -60,7 +64,7 @@ describe('Secure Fetch (SSRF Protection)', () => {
       .mocked(global.fetch)
       .mock.calls.filter((call) => !String(call[0]).includes('logflare'));
     expect(calls.length).toBe(0);
-    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockChildLogger.error).toHaveBeenCalled();
   });
 
   it('should block requests to private IPs', async () => {

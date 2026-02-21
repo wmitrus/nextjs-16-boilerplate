@@ -36,7 +36,17 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
       true;
 
   // Helper to parse extra allowlists from env
-  const parseExtra = (val: string) => (val ? val.split(',').join(' ') : '');
+  const parseExtra = (val: string) => {
+    if (!val) {
+      return '';
+    }
+
+    return val
+      .split(/[\s,]+/)
+      .map((token) => token.trim().replace(/^['"]+|['"]+$/g, ''))
+      .filter(Boolean)
+      .join(' ');
+  };
 
   const clerkDomains = [
     'https://clerk.com',
@@ -48,11 +58,15 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     clerkDomains.push('https://*.clerk.accounts.dev');
   }
 
+  const vercelInsightsScriptDomains = ['https://va.vercel-scripts.com'];
+  const vercelInsightsConnectDomains = ['https://vitals.vercel-insights.com'];
+
   const scriptSrc = [
     "'self'",
     "'unsafe-inline'",
     "'unsafe-eval'",
     ...clerkDomains,
+    ...(isPreview || isDev ? vercelInsightsScriptDomains : []),
     isPreview ? 'https://vercel.live' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_SCRIPT_EXTRA),
   ]
@@ -62,6 +76,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
   const connectSrc = [
     "'self'",
     ...clerkDomains,
+    ...(isPreview || isDev ? vercelInsightsConnectDomains : []),
     'https://clerk-telemetry.com',
     isPreview ? 'https://vercel.live wss://vercel.live' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_CONNECT_EXTRA),
@@ -88,12 +103,30 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     .filter(Boolean)
     .join(' ');
 
+  const styleSrc = [
+    "'self'",
+    "'unsafe-inline'",
+    'https://fonts.googleapis.com',
+    parseExtra(env.NEXT_PUBLIC_CSP_STYLE_EXTRA),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const fontSrc = [
+    "'self'",
+    'https://fonts.gstatic.com',
+    parseExtra(env.NEXT_PUBLIC_CSP_FONT_EXTRA),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   const csp = [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
-    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com ${parseExtra(env.NEXT_PUBLIC_CSP_STYLE_EXTRA)}`,
+    `script-src-elem ${scriptSrc}`,
+    `style-src ${styleSrc}`,
     `img-src ${imgSrc}`,
-    `font-src 'self' https://fonts.gstatic.com ${parseExtra(env.NEXT_PUBLIC_CSP_FONT_EXTRA)}`,
+    `font-src ${fontSrc}`,
     `connect-src ${connectSrc}`,
     `frame-src ${frameSrc}`,
     "worker-src 'self' blob:",

@@ -1,5 +1,11 @@
 import type { NextRequest } from 'next/server';
 
+import {
+  AUTH_ROUTE_PREFIXES,
+  PUBLIC_ROUTE_PREFIXES,
+  matchesAnyRoutePrefix,
+} from './route-policy';
+
 export interface RouteContext {
   isApi: boolean;
   isWebhook: boolean;
@@ -9,16 +15,6 @@ export interface RouteContext {
   isPublicRoute: boolean;
   isStaticFile: boolean;
 }
-
-const PUBLIC_ROUTES = [
-  '/',
-  '/waitlist',
-  '/security-showcase',
-  '/api/security-test/ssrf',
-  '/api/logs',
-];
-
-const AUTH_ROUTES = ['/sign-in', '/sign-up'];
 
 /**
  * Classifies the incoming request based on its path.
@@ -35,13 +31,11 @@ export function classifyRequest(req: NextRequest): RouteContext {
   const isWebhook = path.startsWith('/api/webhooks');
   const isInternalApi = path.startsWith('/api/internal');
 
-  const isAuthRoute = AUTH_ROUTES.some((route) => path.startsWith(route));
+  const isAuthRoute = matchesAnyRoutePrefix(path, AUTH_ROUTE_PREFIXES);
   const isOnboardingRoute = path.startsWith('/onboarding');
 
   const isPublicRoute =
-    PUBLIC_ROUTES.some(
-      (route) => path === route || path.startsWith(`${route}/`),
-    ) || isAuthRoute;
+    matchesAnyRoutePrefix(path, PUBLIC_ROUTE_PREFIXES) || isAuthRoute;
 
   return {
     isApi,

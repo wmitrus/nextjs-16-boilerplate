@@ -23,7 +23,21 @@ vi.mock('@clerk/nextjs/server', () => ({
       return handler(auth, req, evt);
     },
   ),
-  createRouteMatcher: vi.fn(() => vi.fn(() => true)),
+  createRouteMatcher: vi.fn((patterns: string[]) => {
+    return vi.fn((req: NextRequest) => {
+      const pathname = req.nextUrl.pathname;
+
+      return patterns.some((pattern) => {
+        const base = pattern.replace('(.*)', '');
+
+        if (base === '/') {
+          return pathname === '/';
+        }
+
+        return pathname === base || pathname.startsWith(base);
+      });
+    });
+  }),
 }));
 
 vi.mock('@/core/env', () => ({
@@ -112,5 +126,45 @@ describe('Proxy', () => {
     await proxy(request, {} as unknown as NextFetchEvent);
 
     expect(rateLimitHelper.checkRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('should return 403 for internal API without key', async () => {
+    const request = new NextRequest(
+      new URL('http://localhost/api/internal/health'),
+    );
+
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
+
+    expect(response).toBeDefined();
+    expect(response?.status).toBe(403);
+    const body = await response?.json();
+    expect(body).toEqual({
+      status: 'server_error',
+      error: 'Forbidden: Internal Access Only',
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('should allow internal API with valid key', async () => {
+    const request = new NextRequest(
+      new URL('http://localhost/api/internal/health'),
+      {
+        headers: {
+          'x-internal-key': 'test-key',
+        },
+      },
+    );
+    vi.mocked(getIp.getIP).mockResolvedValue('127.0.0.1');
+    vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: new Date(Date.now() + 60000),
+    });
+
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
+
+    expect(response).toBeDefined();
+    expect(response?.status).toBe(200);
   });
 });

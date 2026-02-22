@@ -95,7 +95,7 @@ export default clerkMiddleware(async (auth, request) => {
       return finalize(NextResponse.next());
     }
 
-    if (userId && !isOnboardingRoute(request)) {
+    if (userId && !isOnboardingRoute(request) && !isPublicRoute(request)) {
       let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
 
       if (!onboardingComplete) {

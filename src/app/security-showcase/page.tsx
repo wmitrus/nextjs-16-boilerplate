@@ -73,7 +73,7 @@ export default async function SecurityShowcasePage() {
             </span>
             Role-Based Access Control
           </h2>
-          <AdminOnlyExample />
+          <AdminOnlyExample context={context} />
         </section>
 
         {/* 3. Sanitization */}
@@ -84,7 +84,7 @@ export default async function SecurityShowcasePage() {
             </span>
             Data Leakage Prevention
           </h2>
-          <ProfileExample />
+          <ProfileExample context={context} />
         </section>
 
         {/* 4. Secure Actions */}

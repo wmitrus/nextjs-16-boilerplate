@@ -59,15 +59,27 @@ export function createFileStream(
 /**
  * Creates a Logflare write stream for external logging.
  * Returns null if credentials are missing or stream creation fails.
- * Ensures all errors are handled gracefully to prevent connection errors from crashing.
+ * Disables Logflare in preview/production to avoid connection issues.
  */
 export function createLogflareWriteStream(): DestinationStream | null {
+  const isPreview = process.env.VERCEL_ENV === 'preview';
+  const isProduction = process.env.VERCEL_ENV === 'production';
+
   if (
     !env.LOGFLARE_API_KEY ||
     (!env.LOGFLARE_SOURCE_TOKEN && !env.LOGFLARE_SOURCE_NAME)
   ) {
     console.warn(
       'Logflare stream disabled: LOGFLARE_API_KEY and LOGFLARE_SOURCE_TOKEN or LOGFLARE_SOURCE_NAME are required',
+    );
+    return null;
+  }
+
+  if (isPreview || isProduction) {
+    console.info(
+      'Logflare stream disabled in',
+      isPreview ? 'preview' : 'production',
+      'environment',
     );
     return null;
   }

@@ -12,19 +12,20 @@ import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
+import {
+  AUTH_ROUTE_PREFIXES,
+  PUBLIC_ROUTE_PREFIXES,
+  toRouteMatcherPatterns,
+} from '@/security/middleware/route-policy';
 import { withHeaders } from '@/security/middleware/with-headers';
 
-const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/waitlist(.*)',
-  '/security-showcase(.*)',
-  '/sentry-example-page(.*)',
-  '/monitoring(.*)',
-  '/',
-]);
+const isPublicRoute = createRouteMatcher(
+  toRouteMatcherPatterns([...AUTH_ROUTE_PREFIXES, ...PUBLIC_ROUTE_PREFIXES]),
+);
 const isE2eRoute = createRouteMatcher(['/e2e-error(.*)', '/users(.*)']);
-const isAuthRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)']);
+const isAuthRoute = createRouteMatcher(
+  toRouteMatcherPatterns(AUTH_ROUTE_PREFIXES),
+);
 const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)']);
 
 /**

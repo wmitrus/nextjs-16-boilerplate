@@ -20,7 +20,7 @@ test.describe('Home Page E2E', () => {
   test('should have the "Get Started" link', async ({ page }) => {
     const getStartedLinks = page.getByRole('link', { name: /get started/i });
     await expect(getStartedLinks).toHaveCount(2);
-    await expect(getStartedLinks.first()).toHaveAttribute('href', '/signup');
-    await expect(getStartedLinks.nth(1)).toHaveAttribute('href', '/signup');
+    await expect(getStartedLinks.first()).toHaveAttribute('href', '/sign-up');
+    await expect(getStartedLinks.nth(1)).toHaveAttribute('href', '/sign-up');
   });
 });

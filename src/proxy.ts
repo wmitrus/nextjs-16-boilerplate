@@ -19,6 +19,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-up(.*)',
   '/waitlist(.*)',
   '/sentry-example-page(.*)',
+  '/monitoring(.*)',
   '/',
 ]);
 const isE2eRoute = createRouteMatcher(['/e2e-error(.*)', '/users(.*)']);

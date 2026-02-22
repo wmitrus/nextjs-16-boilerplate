@@ -124,23 +124,29 @@ describe('logger utils', () => {
   });
 
   describe('createLogflareWriteStream', () => {
-    it('should throw if logflare env vars are missing', () => {
+    it('should return null if logflare env vars are missing', () => {
       const originalApiKey = (
         env as unknown as Record<string, string | undefined>
       ).LOGFLARE_API_KEY;
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       (env as unknown as Record<string, string | undefined>).LOGFLARE_API_KEY =
         undefined;
-      expect(() => createLogflareWriteStream()).toThrow();
+      const stream = createLogflareWriteStream();
+      expect(stream).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Logflare stream disabled'),
+      );
+      consoleSpy.mockRestore();
       (env as unknown as Record<string, string | undefined>).LOGFLARE_API_KEY =
         originalApiKey;
     });
 
-    it('should return a write stream', () => {
+    it('should return a write stream when env vars are set', () => {
       const stream = createLogflareWriteStream();
       expect(stream).toBeDefined();
     });
 
-    it('should handle stream error', () => {
+    it('should handle stream error gracefully', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -161,7 +167,7 @@ describe('logger utils', () => {
       if (errorHandler) errorHandler(new Error('test error'));
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Logflare stream error:',
+        'Logflare stream error (non-fatal):',
         expect.any(Error),
       );
       consoleSpy.mockRestore();

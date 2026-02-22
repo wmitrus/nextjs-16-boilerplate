@@ -61,11 +61,18 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
   const vercelInsightsScriptDomains = ['https://va.vercel-scripts.com'];
   const vercelInsightsConnectDomains = ['https://vitals.vercel-insights.com'];
 
+  const sentryScriptDomains = [
+    'https://sentry.io',
+    'https://*.sentry.io',
+    'https://de.sentry.io',
+  ];
+
   const scriptSrc = [
     "'self'",
     "'unsafe-inline'",
     "'unsafe-eval'",
     ...clerkDomains,
+    ...sentryScriptDomains,
     ...(isPreview || isDev ? vercelInsightsScriptDomains : []),
     isPreview ? 'https://vercel.live' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_SCRIPT_EXTRA),
@@ -73,11 +80,20 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     .filter(Boolean)
     .join(' ');
 
+  const sentryDomains = [
+    'https://sentry.io',
+    'https://*.sentry.io',
+    'https://de.sentry.io',
+    'https://*.ingest.sentry.io',
+    'https://*.ingest.de.sentry.io',
+  ];
+
   const connectSrc = [
     "'self'",
     ...clerkDomains,
     ...(isPreview || isDev ? vercelInsightsConnectDomains : []),
     'https://clerk-telemetry.com',
+    ...sentryDomains,
     isPreview ? 'https://vercel.live wss://vercel.live wss://*.pusher.com' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_CONNECT_EXTRA),
   ]

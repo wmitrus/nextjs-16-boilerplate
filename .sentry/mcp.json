@@ -1,0 +1,56 @@
+{
+  "version": "1.0.0",
+  "name": "nextjs-16-boilerplate",
+  "description": "Sentry MCP configuration for Sentry error tracking integration",
+  "mcpServers": {
+    "sentry": {
+      "command": "npx",
+      "args": ["@sentry/mcp"],
+      "env": {
+        "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}",
+        "SENTRY_ORG": "ozi",
+        "SENTRY_PROJECT": "nextjs-16-boilerplate"
+      }
+    }
+  },
+  "capabilities": {
+    "issues": {
+      "list": true,
+      "get": true,
+      "resolve": true,
+      "ignore": true,
+      "assign": true
+    },
+    "events": {
+      "list": true,
+      "get": true,
+      "sourceMaps": true
+    },
+    "releases": {
+      "list": true,
+      "get": true,
+      "create": true
+    },
+    "deployments": {
+      "list": true,
+      "create": true
+    },
+    "performance": {
+      "metrics": true,
+      "traces": true,
+      "profiling": true
+    }
+  },
+  "settings": {
+    "autoResolveTimeout": 720,
+    "digestEmailsMinimumDelay": 300,
+    "environment": "production",
+    "errorRate": {
+      "enabled": true,
+      "threshold": "0.5%"
+    },
+    "session": {
+      "enabled": true
+    }
+  }
+}

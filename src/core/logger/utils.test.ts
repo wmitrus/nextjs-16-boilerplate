@@ -124,6 +124,12 @@ describe('logger utils', () => {
   });
 
   describe('createLogflareWriteStream', () => {
+    const originalEnv = { ...process.env };
+
+    afterEach(() => {
+      process.env = { ...originalEnv };
+    });
+
     it('should return null if logflare env vars are missing', () => {
       const originalApiKey = (
         env as unknown as Record<string, string | undefined>
@@ -141,12 +147,40 @@ describe('logger utils', () => {
         originalApiKey;
     });
 
-    it('should return a write stream when env vars are set', () => {
+    it('should return null in preview environment', () => {
+      process.env.VERCEL_ENV = 'preview';
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const stream = createLogflareWriteStream();
+      expect(stream).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Logflare stream disabled in',
+        'preview',
+        'environment',
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should return null in production environment', () => {
+      process.env.VERCEL_ENV = 'production';
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const stream = createLogflareWriteStream();
+      expect(stream).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Logflare stream disabled in',
+        'production',
+        'environment',
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should return a write stream when env vars are set and in development', () => {
+      process.env.VERCEL_ENV = 'development';
       const stream = createLogflareWriteStream();
       expect(stream).toBeDefined();
     });
 
     it('should handle stream error gracefully', () => {
+      process.env.VERCEL_ENV = 'development';
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});

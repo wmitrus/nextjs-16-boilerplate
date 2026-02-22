@@ -1,12 +1,11 @@
 import React from 'react';
 
-import { getSecurityContext } from '@/security/core/security-context';
+import type { SecurityContext } from '@/security/core/security-context';
 
 /**
  * Example of RBAC in RSC.
  */
-export async function AdminOnlyExample() {
-  const context = await getSecurityContext();
+export function AdminOnlyExample({ context }: { context: SecurityContext }) {
   const isAdmin = context.user?.role === 'admin';
 
   if (!isAdmin) {

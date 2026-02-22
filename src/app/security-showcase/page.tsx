@@ -1,4 +1,4 @@
-import React from 'react';
+import { connection } from 'next/server';
 
 import { AdminOnlyExample } from '@/features/security-showcase/components/AdminOnlyExample';
 import { EnvDiagnosticsExample } from '@/features/security-showcase/components/EnvDiagnosticsExample';
@@ -10,6 +10,7 @@ import { SettingsFormExample } from '@/features/security-showcase/components/Set
 import { getSecurityContext } from '@/security/core/security-context';
 
 export default async function SecurityShowcasePage() {
+  await connection();
   let context: Awaited<ReturnType<typeof getSecurityContext>>;
   let contextError: string | null = null;
 

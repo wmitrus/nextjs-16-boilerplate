@@ -18,6 +18,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/waitlist(.*)',
+  '/security-showcase(.*)',
   '/sentry-example-page(.*)',
   '/monitoring(.*)',
   '/',

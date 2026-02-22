@@ -34,6 +34,9 @@ const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)']);
  */
 export default clerkMiddleware(async (auth, request) => {
   const isInternalApi = request.nextUrl.pathname.startsWith('/api/internal');
+  const isPublic = isPublicRoute(request);
+  const isAuth = isAuthRoute(request);
+  const isOnboarding = isOnboardingRoute(request);
   const correlationId =
     request.headers.get('x-correlation-id') || crypto.randomUUID();
 
@@ -74,46 +77,52 @@ export default clerkMiddleware(async (auth, request) => {
   }
 
   if (!isInternalApi) {
-    const { userId, sessionClaims } = await auth();
+    const requiresAuthEvaluation = isAuth || isOnboarding || !isPublic;
 
-    if (userId && isAuthRoute(request)) {
-      let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
+    if (requiresAuthEvaluation) {
+      const { userId, sessionClaims } = await auth();
 
-      if (!onboardingComplete) {
-        const client = await clerkClient();
-        const user = await client.users.getUser(userId);
-        onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
+      if (userId && isAuth) {
+        let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
+
+        if (!onboardingComplete) {
+          const client = await clerkClient();
+          const user = await client.users.getUser(userId);
+          onboardingComplete = user.publicMetadata
+            ?.onboardingComplete as boolean;
+        }
+
+        const redirectUrl = onboardingComplete
+          ? new URL('/', request.url)
+          : new URL('/onboarding', request.url);
+        return finalize(NextResponse.redirect(redirectUrl));
       }
 
-      const redirectUrl = onboardingComplete
-        ? new URL('/', request.url)
-        : new URL('/onboarding', request.url);
-      return finalize(NextResponse.redirect(redirectUrl));
-    }
-
-    if (userId && isOnboardingRoute(request)) {
-      return finalize(NextResponse.next());
-    }
-
-    if (userId && !isOnboardingRoute(request) && !isPublicRoute(request)) {
-      let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-
-      if (!onboardingComplete) {
-        const client = await clerkClient();
-        const user = await client.users.getUser(userId);
-        onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
+      if (userId && isOnboarding) {
+        return finalize(NextResponse.next());
       }
 
-      if (!onboardingComplete) {
-        const onboardingUrl = new URL('/onboarding', request.url);
-        return finalize(NextResponse.redirect(onboardingUrl));
+      if (userId && !isOnboarding && !isPublic) {
+        let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
+
+        if (!onboardingComplete) {
+          const client = await clerkClient();
+          const user = await client.users.getUser(userId);
+          onboardingComplete = user.publicMetadata
+            ?.onboardingComplete as boolean;
+        }
+
+        if (!onboardingComplete) {
+          const onboardingUrl = new URL('/onboarding', request.url);
+          return finalize(NextResponse.redirect(onboardingUrl));
+        }
       }
-    }
 
-    const e2eEnabled = process.env.E2E_ENABLED === 'true';
+      const e2eEnabled = process.env.E2E_ENABLED === 'true';
 
-    if (!isPublicRoute(request) && !(e2eEnabled && isE2eRoute(request))) {
-      await auth.protect();
+      if (!isPublic && !(e2eEnabled && isE2eRoute(request))) {
+        await auth.protect();
+      }
     }
   }
 

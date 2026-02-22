@@ -11,21 +11,33 @@ export function getBrowserLogger(): Logger {
     return cachedBrowserLogger;
   }
 
-  const options: LoggerOptions = {
-    level: env.NEXT_PUBLIC_LOG_LEVEL || 'info',
-    serializers: pino.stdSerializers,
-    browser: {
-      asObject: true,
-      transmit: env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED
-        ? createLogflareBrowserTransport().transmit
-        : undefined,
-    },
-    base: {
-      env: process.env.VERCEL_ENV || process.env.NODE_ENV,
-      revision: process.env.VERCEL_GITHUB_COMMIT_SHA,
-    },
-  };
+  try {
+    const options: LoggerOptions = {
+      level: env.NEXT_PUBLIC_LOG_LEVEL || 'info',
+      serializers: pino.stdSerializers,
+      browser: {
+        asObject: true,
+        transmit: env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED
+          ? createLogflareBrowserTransport().transmit
+          : undefined,
+      } as Parameters<typeof pino>[0]['browser'],
+      base: {
+        env: process.env.VERCEL_ENV || process.env.NODE_ENV,
+        revision: process.env.VERCEL_GITHUB_COMMIT_SHA,
+      },
+    };
 
-  cachedBrowserLogger = pino(options);
+    cachedBrowserLogger = pino(options);
+  } catch (err) {
+    console.error(
+      'Failed to initialize browser logger:',
+      err instanceof Error ? err.message : 'Unknown error',
+    );
+    cachedBrowserLogger = pino({
+      level: env.NEXT_PUBLIC_LOG_LEVEL || 'info',
+      serializers: pino.stdSerializers,
+    });
+  }
+
   return cachedBrowserLogger;
 }

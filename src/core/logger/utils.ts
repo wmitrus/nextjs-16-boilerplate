@@ -59,6 +59,7 @@ export function createFileStream(
 /**
  * Creates a Logflare write stream for external logging.
  * Returns null if credentials are missing or stream creation fails.
+ * Ensures all errors are handled gracefully to prevent connection errors from crashing.
  */
 export function createLogflareWriteStream(): DestinationStream | null {
   if (
@@ -79,7 +80,11 @@ export function createLogflareWriteStream(): DestinationStream | null {
     });
 
     stream.on('error', (err: Error) => {
-      console.error('Logflare stream error (non-fatal):', err);
+      console.error('Logflare stream error (non-fatal):', err?.message || err);
+    });
+
+    stream.on('close', () => {
+      console.debug('Logflare stream closed');
     });
 
     return stream;

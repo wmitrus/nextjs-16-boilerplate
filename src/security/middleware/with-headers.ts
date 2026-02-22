@@ -78,7 +78,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     ...clerkDomains,
     ...(isPreview || isDev ? vercelInsightsConnectDomains : []),
     'https://clerk-telemetry.com',
-    isPreview ? 'https://vercel.live wss://vercel.live' : '',
+    isPreview ? 'https://vercel.live wss://vercel.live wss://*.pusher.com' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_CONNECT_EXTRA),
   ]
     .filter(Boolean)

@@ -87,7 +87,7 @@ describe('GlobalErrorHandlers', () => {
     expect(mockLogger.error).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores Connection closed errors', () => {
+  it('captures Connection closed errors', () => {
     render(<GlobalErrorHandlers />);
 
     const event = new ErrorEvent('error', {
@@ -95,7 +95,8 @@ describe('GlobalErrorHandlers', () => {
     });
     window.dispatchEvent(event);
 
-    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockSentry.captureException).toHaveBeenCalled();
   });
 
   it('ignores Network error pattern', () => {
@@ -131,6 +132,30 @@ describe('GlobalErrorHandlers', () => {
     window.dispatchEvent(event);
 
     expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
+  it('captures Connection closed rejections', () => {
+    render(<GlobalErrorHandlers />);
+
+    const error = new Error('Connection closed.');
+    const event = new PromiseRejectionEvent('unhandledrejection', {
+      promise: Promise.resolve(),
+      reason: error,
+    });
+    window.dispatchEvent(event);
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: error,
+      }),
+      'Unhandled Promise Rejection',
+    );
+    expect(mockSentry.captureException).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({
+        contexts: expect.any(Object),
+      }),
+    );
   });
 
   it('sends errors to Sentry', () => {

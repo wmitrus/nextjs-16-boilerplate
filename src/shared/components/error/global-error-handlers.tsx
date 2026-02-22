@@ -50,7 +50,6 @@ export function GlobalErrorHandlers() {
 
       // Ignore non-critical errors that would create log loops
       const ignoredPatterns = [
-        'Connection closed', // Logflare connection error
         'Network error', // Generic network errors
         'Failed to fetch', // Fetch failures
         'ResizeObserver loop limit exceeded',
@@ -119,7 +118,6 @@ export function GlobalErrorHandlers() {
       // Ignore non-critical errors that would create log loops
       const ignoredPatterns = [
         'cannot_render_single_session_enabled', // Clerk no-op
-        'Connection closed', // Logflare connection error
         'Network error', // Generic network errors
         'Failed to fetch', // Fetch failures
       ];

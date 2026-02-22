@@ -13,32 +13,62 @@ export function GlobalErrorHandlers() {
     const logger = getBrowserLogger();
 
     const handleError = (event: ErrorEvent) => {
-      logger.error(
-        {
-          err: event.error || new Error(event.message),
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-        },
-        'Unhandled Client Error',
-      );
+      const message = event.message || '';
+
+      // Ignore non-critical errors that would create log loops
+      const ignoredPatterns = [
+        'Connection closed', // Logflare connection error
+        'Network error', // Generic network errors
+        'Failed to fetch', // Fetch failures
+      ];
+
+      if (ignoredPatterns.some((pattern) => message.includes(pattern))) {
+        console.debug('Ignored unhandled error:', message);
+        return;
+      }
+
+      try {
+        logger.error(
+          {
+            err: event.error || new Error(event.message),
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+          },
+          'Unhandled Client Error',
+        );
+      } catch (err) {
+        console.error('Failed to log unhandled error:', err);
+      }
     };
 
     const handleRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
       const message = reason instanceof Error ? reason.message : String(reason);
 
-      // Ignore Clerk no-op warnings that are thrown as errors/rejections
-      if (message.includes('cannot_render_single_session_enabled')) {
+      // Ignore non-critical errors that would create log loops
+      const ignoredPatterns = [
+        'cannot_render_single_session_enabled', // Clerk no-op
+        'Connection closed', // Logflare connection error
+        'Network error', // Generic network errors
+        'Failed to fetch', // Fetch failures
+      ];
+
+      if (ignoredPatterns.some((pattern) => message.includes(pattern))) {
+        console.debug('Ignored unhandled rejection:', message);
         return;
       }
 
-      logger.error(
-        {
-          err: reason instanceof Error ? reason : new Error(String(reason)),
-        },
-        'Unhandled Promise Rejection',
-      );
+      try {
+        logger.error(
+          {
+            err: reason instanceof Error ? reason : new Error(String(reason)),
+          },
+          'Unhandled Promise Rejection',
+        );
+      } catch (err) {
+        console.error('Failed to log unhandled rejection:', err);
+      }
     };
 
     window.addEventListener('error', handleError);

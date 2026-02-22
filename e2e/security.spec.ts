@@ -1,4 +1,25 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { test, expect } from '@playwright/test';
+
+function resolveInternalApiKey(): string {
+  const fromProcess = process.env.INTERNAL_API_KEY?.trim();
+  if (fromProcess) {
+    return fromProcess;
+  }
+
+  const envLocalPath = path.resolve(process.cwd(), '.env.local');
+  if (fs.existsSync(envLocalPath)) {
+    const content = fs.readFileSync(envLocalPath, 'utf8');
+    const match = content.match(/^INTERNAL_API_KEY\s*=\s*(.+)$/m);
+    if (match?.[1]) {
+      return match[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+  }
+
+  return 'demo-internal-key';
+}
 
 test.describe('Security Architecture E2E', () => {
   test('should have security headers on home page', async ({ page }) => {
@@ -23,23 +44,39 @@ test.describe('Security Architecture E2E', () => {
   });
 
   test('should block internal API access without key', async ({ request }) => {
-    const response = await request.get('/api/internal/test');
+    const response = await request.get('/api/internal/health');
     expect(response.status()).toBe(403);
     const body = await response.json();
     expect(body.error).toContain('Internal Access Only');
   });
 
-  test('should allow internal API access with correct key', async ({
+  test('should block internal API access with invalid key', async ({
     request,
   }) => {
-    // We use the default key from .env.example
-    const response = await request.get('/api/internal/test', {
+    const response = await request.get('/api/internal/health', {
       headers: {
-        'x-internal-key': 'demo-internal-key',
+        'x-internal-key': 'invalid-key',
       },
     });
 
-    // It should NOT be 403.
-    expect(response.status()).not.toBe(403);
+    expect(response.status()).toBe(403);
+    const body = await response.json();
+    expect(body.code).toBe('FORBIDDEN');
+  });
+
+  test('should allow internal API access with correct key', async ({
+    request,
+  }) => {
+    const internalApiKey = resolveInternalApiKey();
+    const response = await request.get('/api/internal/health', {
+      headers: {
+        'x-internal-key': internalApiKey,
+      },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe('ok');
+    expect(body.scope).toBe('internal');
   });
 });

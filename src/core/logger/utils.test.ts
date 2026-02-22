@@ -168,7 +168,7 @@ describe('logger utils', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'Logflare stream error (non-fatal):',
-        expect.any(Error),
+        'test error',
       );
       consoleSpy.mockRestore();
     });

@@ -135,11 +135,13 @@ export function createErrorContext(
   error: Error,
   count: number = 1,
 ): ErrorContext {
+  const timestamp = Date.now();
+
   return {
-    timestamp: Date.now(),
+    timestamp,
     fingerprint: getErrorFingerprint(error),
     count,
-    lastOccurred: Date.now(),
+    lastOccurred: timestamp,
     message: error.message,
     stack: error.stack,
   };

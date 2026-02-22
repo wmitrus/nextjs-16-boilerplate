@@ -1,15 +1,13 @@
 import React from 'react';
 
-import { getSecurityContext } from '@/security/core/security-context';
+import type { SecurityContext } from '@/security/core/security-context';
 import { sanitizeData } from '@/security/rsc/data-sanitizer';
 
 /**
  * Example of RSC Data Sanitization.
  * Demonstrates: how to clean sensitive data before rendering.
  */
-export async function ProfileExample() {
-  const context = await getSecurityContext();
-
+export function ProfileExample({ context }: { context: SecurityContext }) {
   // Simulated raw data from a database that might contain sensitive fields
   const rawUserData = {
     id: context.user?.id,

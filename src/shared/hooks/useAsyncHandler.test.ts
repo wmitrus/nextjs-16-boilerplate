@@ -22,11 +22,10 @@ vi.mock('@sentry/nextjs', () => ({
 describe('useAsyncHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
+    vi.useRealTimers();
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
     vi.useRealTimers();
   });
 
@@ -94,8 +93,7 @@ describe('useAsyncHandler', () => {
     const { result } = renderHook(() => useAsyncHandler(callback));
 
     await act(async () => {
-      result.current.handler();
-      await waitFor(() => expect(result.current.error).not.toBeNull());
+      await result.current.handler();
     });
 
     expect(result.current.error).toBe(testError);
@@ -116,8 +114,7 @@ describe('useAsyncHandler', () => {
     const { result } = renderHook(() => useAsyncHandler(callback));
 
     await act(async () => {
-      result.current.handler();
-      await waitFor(() => expect(result.current.error).not.toBeNull());
+      await result.current.handler();
     });
 
     expect(mockSentry.captureException).toHaveBeenCalledWith(testError);
@@ -132,22 +129,22 @@ describe('useAsyncHandler', () => {
     const { result } = renderHook(() => useAsyncHandler(callback, { onError }));
 
     await act(async () => {
-      result.current.handler();
-      await waitFor(() => expect(result.current.error).not.toBeNull());
+      await result.current.handler();
     });
 
     expect(onError).toHaveBeenCalledWith(testError);
   });
 
   it('clears error after 5 seconds', async () => {
+    vi.useFakeTimers();
+
     const callback = vi.fn(async () => {
       throw new Error('Test error');
     });
     const { result } = renderHook(() => useAsyncHandler(callback));
 
     await act(async () => {
-      result.current.handler();
-      await waitFor(() => expect(result.current.error).not.toBeNull());
+      await result.current.handler();
     });
 
     expect(result.current.error).not.toBeNull();
@@ -165,13 +162,10 @@ describe('useAsyncHandler', () => {
     );
     const { result } = renderHook(() => useAsyncHandler(callback));
 
-    act(() => {
-      result.current.handler();
-      result.current.handler();
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+    await act(async () => {
+      const first = result.current.handler() as unknown as Promise<void>;
+      const second = result.current.handler() as unknown as Promise<void>;
+      await Promise.all([first, second]);
     });
 
     expect(callback).toHaveBeenCalledTimes(1);
@@ -184,9 +178,9 @@ describe('useAsyncHandler', () => {
     );
 
     await act(async () => {
-      result.current.handler();
-      result.current.handler();
-      await waitFor(() => expect(callback).toHaveBeenCalledTimes(2));
+      const first = result.current.handler() as unknown as Promise<void>;
+      const second = result.current.handler() as unknown as Promise<void>;
+      await Promise.all([first, second]);
     });
 
     expect(callback).toHaveBeenCalledTimes(2);
@@ -199,8 +193,7 @@ describe('useAsyncHandler', () => {
     const { result } = renderHook(() => useAsyncHandler(callback));
 
     await act(async () => {
-      result.current.handler();
-      await waitFor(() => expect(result.current.error).not.toBeNull());
+      await result.current.handler();
     });
 
     expect(result.current.error).toBeInstanceOf(Error);

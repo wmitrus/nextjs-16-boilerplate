@@ -1,9 +1,16 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import type { ReactNode } from 'react';
 import React from 'react';
 
-import { logger } from '@/core/logger/client';
+import { logger as baseLogger } from '@/core/logger/client';
+
+const logger = baseLogger.child({
+  type: 'UI',
+  category: 'error-boundary',
+  module: 'client-error-boundary',
+});
 
 type FallbackRender = (error: Error, reset: () => void) => ReactNode;
 
@@ -30,6 +37,7 @@ export class ClientErrorBoundary extends React.Component<
   componentDidCatch(error: Error) {
     this.props.onError?.(error);
     logger.error(error, 'Client error boundary caught an error');
+    Sentry.captureException(error);
   }
 
   private reset = () => {

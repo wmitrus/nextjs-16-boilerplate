@@ -58,26 +58,53 @@ export function createFileStream(
 
 /**
  * Creates a Logflare write stream for external logging.
+ * Returns null if credentials are missing or stream creation fails.
+ * Disables Logflare in preview/production to avoid connection issues.
  */
-export function createLogflareWriteStream(): DestinationStream {
+export function createLogflareWriteStream(): DestinationStream | null {
+  const isPreview = process.env.VERCEL_ENV === 'preview';
+  const isProduction = process.env.VERCEL_ENV === 'production';
+
   if (
     !env.LOGFLARE_API_KEY ||
     (!env.LOGFLARE_SOURCE_TOKEN && !env.LOGFLARE_SOURCE_NAME)
   ) {
-    throw new Error(
-      'LOGFLARE_API_KEY and LOGFLARE_SOURCE_TOKEN or LOGFLARE_SOURCE_NAME must be set to use Logflare write stream',
+    console.warn(
+      'Logflare stream disabled: LOGFLARE_API_KEY and LOGFLARE_SOURCE_TOKEN or LOGFLARE_SOURCE_NAME are required',
     );
+    return null;
   }
 
-  const stream = createWriteStream({
-    apiKey: env.LOGFLARE_API_KEY,
-    sourceToken: env.LOGFLARE_SOURCE_TOKEN,
-    sourceName: env.LOGFLARE_SOURCE_NAME,
-  });
+  if (isPreview || isProduction) {
+    console.info(
+      'Logflare stream disabled in',
+      isPreview ? 'preview' : 'production',
+      'environment',
+    );
+    return null;
+  }
 
-  stream.on('error', (err: Error) => {
-    console.error('Logflare stream error:', err);
-  });
+  try {
+    const stream = createWriteStream({
+      apiKey: env.LOGFLARE_API_KEY,
+      sourceToken: env.LOGFLARE_SOURCE_TOKEN,
+      sourceName: env.LOGFLARE_SOURCE_NAME,
+    });
 
-  return stream;
+    stream.on('error', (err: Error) => {
+      console.error('Logflare stream error (non-fatal):', err?.message || err);
+    });
+
+    stream.on('close', () => {
+      console.debug('Logflare stream closed');
+    });
+
+    return stream;
+  } catch (err) {
+    console.error(
+      'Failed to initialize Logflare stream:',
+      err instanceof Error ? err.message : 'Unknown error',
+    );
+    return null;
+  }
 }

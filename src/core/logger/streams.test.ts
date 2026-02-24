@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Unmock streams to test actual implementation
+vi.unmock('./streams');
 
 import { env } from '@/core/env';
 

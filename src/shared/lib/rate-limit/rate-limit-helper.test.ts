@@ -50,6 +50,42 @@ describe('rate-limit-helper', () => {
       expect(mockCheckUpstashRateLimit).toHaveBeenCalledWith('upstash-ip');
       expect(result).toEqual(mockResult);
     });
+
+    it('should fallback to localRateLimit when Upstash check throws', async () => {
+      vi.doMock('./rate-limit', () => ({
+        apiRateLimit: {}, // truthy
+        checkUpstashRateLimit: vi
+          .fn()
+          .mockRejectedValue(new Error('Upstash unavailable')),
+      }));
+
+      const { checkRateLimit } = await import('./rate-limit-helper');
+      const result = await checkRateLimit('fallback-ip');
+
+      expect(result.success).toBe(true);
+      expect(result.limit).toBe(10);
+    });
+
+    it('should fallback to localRateLimit when Upstash check times out', async () => {
+      vi.useFakeTimers();
+
+      vi.doMock('./rate-limit', () => ({
+        apiRateLimit: {}, // truthy
+        checkUpstashRateLimit: vi.fn(() => new Promise(() => {})),
+      }));
+
+      const { checkRateLimit, UPSTASH_RATE_LIMIT_TIMEOUT_MS } =
+        await import('./rate-limit-helper');
+      const pending = checkRateLimit('timeout-ip');
+
+      await vi.advanceTimersByTimeAsync(UPSTASH_RATE_LIMIT_TIMEOUT_MS + 1);
+      const result = await pending;
+
+      expect(result.success).toBe(true);
+      expect(result.limit).toBe(10);
+
+      vi.useRealTimers();
+    });
   });
 
   it('should handle different window formats via local fallback', async () => {

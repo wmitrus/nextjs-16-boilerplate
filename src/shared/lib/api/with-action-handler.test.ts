@@ -1,31 +1,24 @@
-import { headers } from 'next/headers';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { core } from 'zod';
 import { ZodError } from 'zod';
-
-import { logger } from '@/core/logger/server';
 
 import { AppError } from '@/shared/lib/api/app-error';
 
 import { withActionHandler } from './with-action-handler';
 
-vi.mock('next/headers', () => ({
-  headers: vi.fn(),
-}));
+import {
+  resetAllInfrastructureMocks,
+  mockChildLogger,
+  mockHeaders,
+} from '@/testing';
 
-vi.mock('@/core/logger/server', () => ({
-  logger: {
-    error: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+// Initialize infrastructure mocks
+import '@/testing/infrastructure/next-headers';
+import '@/testing/infrastructure/logger';
 
 describe('withActionHandler', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(headers).mockResolvedValue(
-      new Headers() as unknown as Awaited<ReturnType<typeof headers>>,
-    );
+    resetAllInfrastructureMocks();
   });
 
   it('should return ok status and data on success', async () => {
@@ -53,7 +46,7 @@ describe('withActionHandler', () => {
       error: 'Custom error',
       code: 'CUSTOM_CODE',
     });
-    expect(logger.warn).toHaveBeenCalled();
+    expect(mockChildLogger.warn).toHaveBeenCalled();
   });
 
   it('should handle validation errors from AppError', async () => {
@@ -83,7 +76,7 @@ describe('withActionHandler', () => {
       error: 'Server fail',
       code: 'SERVER_FAIL',
     });
-    expect(logger.error).toHaveBeenCalled();
+    expect(mockChildLogger.error).toHaveBeenCalled();
   });
 
   it('should return generic error message in production for non-Error rejections', async () => {
@@ -104,17 +97,14 @@ describe('withActionHandler', () => {
 
   it('should log correlationId from headers', async () => {
     const correlationId = 'action-id-789';
-    vi.mocked(headers).mockResolvedValue(
-      new Headers({ 'x-correlation-id': correlationId }) as unknown as Awaited<
-        ReturnType<typeof headers>
-      >,
-    );
+    mockHeaders.set('x-correlation-id', correlationId);
+
     const action = vi.fn().mockRejectedValue(new Error('Boom'));
     const wrapped = withActionHandler(action);
 
     await wrapped();
 
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ correlationId }),
       expect.any(String),
     );

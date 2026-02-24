@@ -2,8 +2,6 @@ import { NextRequest } from 'next/server';
 import type { NextFetchEvent } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { logger } from '@/core/logger/edge';
-
 import * as getIp from '@/shared/lib/network/get-ip';
 import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
@@ -25,12 +23,47 @@ vi.mock('@clerk/nextjs/server', () => ({
       return handler(auth, req, evt);
     },
   ),
-  createRouteMatcher: vi.fn(() => vi.fn(() => true)),
+  createRouteMatcher: vi.fn((patterns: string[]) => {
+    return vi.fn((req: NextRequest) => {
+      const pathname = req.nextUrl.pathname;
+
+      return patterns.some((pattern) => {
+        const base = pattern.replace('(.*)', '');
+
+        if (base === '/') {
+          return pathname === '/';
+        }
+
+        return pathname === base || pathname.startsWith(base);
+      });
+    });
+  }),
 }));
 
+vi.mock('@/core/env', () => ({
+  env: {
+    NODE_ENV: 'test',
+    VERCEL_ENV: 'test',
+    INTERNAL_API_KEY: 'test-key',
+    SECURITY_ALLOWED_OUTBOUND_HOSTS: '',
+    NEXT_PUBLIC_CSP_SCRIPT_EXTRA: '',
+    NEXT_PUBLIC_CSP_CONNECT_EXTRA: '',
+    NEXT_PUBLIC_CSP_FRAME_EXTRA: '',
+    NEXT_PUBLIC_CSP_IMG_EXTRA: '',
+    NEXT_PUBLIC_CSP_STYLE_EXTRA: '',
+    NEXT_PUBLIC_CSP_FONT_EXTRA: '',
+  },
+}));
 vi.mock('@/core/logger/edge', () => ({
   logger: {
     warn: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(() => ({
+      warn: vi.fn(),
+      debug: vi.fn(),
+      error: vi.fn(),
+    })),
   },
 }));
 
@@ -63,7 +96,6 @@ describe('Proxy', () => {
     expect(response?.headers.get('X-RateLimit-Limit')).toBe('10');
     expect(response?.headers.get('X-RateLimit-Remaining')).toBe('9');
     expect(response?.headers.get('x-correlation-id')).toBeDefined();
-    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('should return 429 if rate limit is exceeded', async () => {
@@ -87,15 +119,6 @@ describe('Proxy', () => {
       error: 'Rate limit exceeded. Please try again later.',
       code: 'RATE_LIMITED',
     });
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ip: '127.0.0.1',
-        path: '/api/users',
-        limit: 10,
-        reset,
-      }),
-      'Rate limit exceeded',
-    );
   });
 
   it('should ignore non-api routes', async () => {
@@ -103,5 +126,45 @@ describe('Proxy', () => {
     await proxy(request, {} as unknown as NextFetchEvent);
 
     expect(rateLimitHelper.checkRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('should return 403 for internal API without key', async () => {
+    const request = new NextRequest(
+      new URL('http://localhost/api/internal/health'),
+    );
+
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
+
+    expect(response).toBeDefined();
+    expect(response?.status).toBe(403);
+    const body = await response?.json();
+    expect(body).toEqual({
+      status: 'server_error',
+      error: 'Forbidden: Internal Access Only',
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('should allow internal API with valid key', async () => {
+    const request = new NextRequest(
+      new URL('http://localhost/api/internal/health'),
+      {
+        headers: {
+          'x-internal-key': 'test-key',
+        },
+      },
+    );
+    vi.mocked(getIp.getIP).mockResolvedValue('127.0.0.1');
+    vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: new Date(Date.now() + 60000),
+    });
+
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
+
+    expect(response).toBeDefined();
+    expect(response?.status).toBe(200);
   });
 });

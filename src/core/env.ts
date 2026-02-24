@@ -35,6 +35,19 @@ export const env = createEnv({
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),
     LOG_INGEST_SECRET: z.string().optional(),
     CLERK_SECRET_KEY: z.string().min(1),
+    VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
+    INTERNAL_API_KEY: z.string().min(1).default('demo-internal-key'),
+    SECURITY_AUDIT_LOG_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(true),
+    SECURITY_ALLOWED_OUTBOUND_HOSTS: z
+      .string()
+      .default(
+        'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
+      ),
+    E2E_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -50,6 +63,7 @@ export const env = createEnv({
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
+    NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
     NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/sign-up'),
@@ -59,6 +73,13 @@ export const env = createEnv({
       .string()
       .default('/onboarding'),
     NEXT_PUBLIC_CLERK_WAITLIST_URL: z.string().default('/waitlist'),
+    // CSP Configuration
+    NEXT_PUBLIC_CSP_SCRIPT_EXTRA: z.string().default(''),
+    NEXT_PUBLIC_CSP_CONNECT_EXTRA: z.string().default(''),
+    NEXT_PUBLIC_CSP_FRAME_EXTRA: z.string().default(''),
+    NEXT_PUBLIC_CSP_IMG_EXTRA: z.string().default(''),
+    NEXT_PUBLIC_CSP_FONT_EXTRA: z.string().default(''),
+    NEXT_PUBLIC_CSP_STYLE_EXTRA: z.string().default(''),
     // Add public variables here
   },
 
@@ -84,10 +105,17 @@ export const env = createEnv({
     API_RATE_LIMIT_WINDOW: process.env.API_RATE_LIMIT_WINDOW,
     LOG_INGEST_SECRET: process.env.LOG_INGEST_SECRET,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
+    SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
+    SECURITY_ALLOWED_OUTBOUND_HOSTS:
+      process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
+    E2E_ENABLED: process.env.E2E_ENABLED,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:
       process.env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED,
+    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL,
@@ -99,6 +127,12 @@ export const env = createEnv({
     NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL:
       process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL,
     NEXT_PUBLIC_CLERK_WAITLIST_URL: process.env.NEXT_PUBLIC_CLERK_WAITLIST_URL,
+    NEXT_PUBLIC_CSP_SCRIPT_EXTRA: process.env.NEXT_PUBLIC_CSP_SCRIPT_EXTRA,
+    NEXT_PUBLIC_CSP_CONNECT_EXTRA: process.env.NEXT_PUBLIC_CSP_CONNECT_EXTRA,
+    NEXT_PUBLIC_CSP_FRAME_EXTRA: process.env.NEXT_PUBLIC_CSP_FRAME_EXTRA,
+    NEXT_PUBLIC_CSP_IMG_EXTRA: process.env.NEXT_PUBLIC_CSP_IMG_EXTRA,
+    NEXT_PUBLIC_CSP_FONT_EXTRA: process.env.NEXT_PUBLIC_CSP_FONT_EXTRA,
+    NEXT_PUBLIC_CSP_STYLE_EXTRA: process.env.NEXT_PUBLIC_CSP_STYLE_EXTRA,
   },
 
   /**

@@ -29,7 +29,7 @@ const CTA = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
               <Link
-                href="/signup"
+                href="/sign-up"
                 className="rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-black shadow-sm hover:bg-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white dark:bg-black dark:text-white dark:hover:bg-zinc-800"
               >
                 Get Started

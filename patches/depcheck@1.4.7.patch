@@ -1,0 +1,21 @@
+diff --git a/dist/check.js b/dist/check.js
+index 2d506595069bb495af834ce2e9985330ef44ecae..c8dc02efe614894c823eb60f0d78373898aea484 100644
+--- a/dist/check.js
++++ b/dist/check.js
+@@ -10,6 +10,7 @@ var _isCoreModule = _interopRequireDefault(require("is-core-module"));
+ var _lodash = _interopRequireDefault(require("lodash"));
+ var _readdirp = _interopRequireDefault(require("readdirp"));
+ var _minimatch = _interopRequireDefault(require("minimatch"));
++const minimatch = (_minimatch.default && _minimatch.default.minimatch) || _minimatch.default || _minimatch.minimatch || _minimatch;
+ var _requirePackageName = _interopRequireDefault(require("require-package-name"));
+ var _utils = require("./utils");
+ var _parser = _interopRequireDefault(require("./utils/parser"));
+@@ -143,7 +144,7 @@ function checkFile({
+   parsers
+ }) {
+   (0, _debug.default)('depcheck:checkFile')(filename);
+-  const targets = (0, _lodash.default)(parsers).keys().filter(glob => (0, _minimatch.default)(filename, glob, {
++  const targets = (0, _lodash.default)(parsers).keys().filter(glob => minimatch(filename, glob, {
+     dot: true
+   })).map(key => parsers[key]).flatten().value();
+   return targets.map(parser => getDependencies({

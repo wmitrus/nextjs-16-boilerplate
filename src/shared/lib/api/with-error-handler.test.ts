@@ -1,25 +1,23 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { core } from 'zod';
 import { ZodError } from 'zod';
-
-import { logger } from '@/core/logger/server';
 
 import { AppError } from './app-error';
 import { withErrorHandler } from './with-error-handler';
 
-// Mock logger
-vi.mock('@/core/logger/server', () => ({
-  logger: {
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-  },
-}));
+import { resetAllInfrastructureMocks, mockChildLogger } from '@/testing';
+
+// Initialize infrastructure mocks
+import '@/testing/infrastructure/logger';
 
 describe('withErrorHandler', () => {
   const mockContext = { params: Promise.resolve({}) };
   const mockUrl = 'http://localhost/api/test';
+
+  beforeEach(() => {
+    resetAllInfrastructureMocks();
+  });
 
   it('should return the response from the handler if no error occurs', async () => {
     const expectedResponse = new Response(JSON.stringify({ data: 'success' }), {
@@ -89,7 +87,7 @@ describe('withErrorHandler', () => {
       error: 'Server down',
       code: 'SERVER_DOWN',
     });
-    expect(logger.error).toHaveBeenCalled();
+    expect(mockChildLogger.error).toHaveBeenCalled();
   });
 
   it('should handle generic Error and return 500', async () => {
@@ -138,7 +136,7 @@ describe('withErrorHandler', () => {
     });
     await wrappedHandler(request, mockContext);
 
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ correlationId }),
       expect.any(String),
     );

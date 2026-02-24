@@ -8,7 +8,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.tsx', './tests/polyfills.ts'],
-    include: ['src/**/*.integration.test.{ts,tsx}'],
+    include: [
+      'src/**/*.integration.test.{ts,tsx}',
+      'src/testing/integration/**/*.test.{ts,tsx}',
+    ],
     coverage: {
       enabled: true,
       provider: 'v8',

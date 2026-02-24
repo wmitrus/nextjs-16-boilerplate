@@ -15,6 +15,7 @@ export default defineConfig({
     env: {
       PORT: '3000',
       E2E_ENABLED: 'true',
+      INTERNAL_API_KEY: 'demo-internal-key',
       NEXT_PUBLIC_E2E_ENABLED: 'true',
       NEXT_DISABLE_DEV_OVERLAY: '1',
     },

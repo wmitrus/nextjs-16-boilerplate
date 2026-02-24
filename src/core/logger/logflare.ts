@@ -33,7 +33,7 @@ export function getLogflareLogger(): Logger {
   };
 
   const stream = createLogflareWriteStream();
-  logflareLogger = pino(options, stream);
+  logflareLogger = stream ? pino(options, stream) : pino(options);
 
   return logflareLogger;
 }

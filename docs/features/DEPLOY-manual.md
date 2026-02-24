@@ -26,6 +26,13 @@ Before starting, ensure you have accounts and projects ready on:
 1. Create a Redis database.
 2. Copy the `REST URL` and `REST Token`.
 
+### Security Keys
+
+1. Generate unique keys for your production environment:
+   ```bash
+   pnpm generate:secret # Run this twice, once for INTERNAL_API_KEY and once for LOG_INGEST_SECRET
+   ```
+
 ## 3. GitHub Configuration
 
 1. Create a new repository and push the code.
@@ -39,6 +46,7 @@ Before starting, ensure you have accounts and projects ready on:
    - `CHROMATIC_PROJECT_TOKEN`: From your Chromatic project settings.
    - `CLERK_SECRET_KEY`: From Clerk dashboard.
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`: From Clerk dashboard.
+   - `INTERNAL_API_KEY`: A random secure string for internal API protection.
    - `SEMANTIC_RELEASE_GITHUB_APP_ID`: From your GitHub App for releases.
    - `SEMANTIC_RELEASE_GITHUB_APP_PRIVATE_KEY`: Private key for that GitHub App.
 

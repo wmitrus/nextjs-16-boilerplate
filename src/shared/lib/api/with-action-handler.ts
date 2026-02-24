@@ -2,10 +2,16 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { headers } from 'next/headers';
 import { ZodError } from 'zod';
 
-import { logger } from '@/core/logger/server';
+import { logger as baseLogger } from '@/core/logger/server';
 
 import { AppError } from '@/shared/lib/api/app-error';
 import type { ApiResponse } from '@/shared/types/api-response';
+
+const logger = baseLogger.child({
+  type: 'API',
+  category: 'action-handler',
+  module: 'with-action-handler',
+});
 
 /**
  * Maps external errors (like Zod or DB errors) to AppError

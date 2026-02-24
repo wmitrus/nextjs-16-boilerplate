@@ -1,7 +1,6 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
-import Head from 'next/head';
 import { useEffect, useState } from 'react';
 
 import { useAsyncHandler } from '@/shared/hooks/useAsyncHandler';
@@ -17,12 +16,10 @@ class SentryExampleFrontendError extends Error {
 export default function Page() {
   const [hasSentError, setHasSentError] = useState(false);
 
-  // Use hydration-safe state for isDev to prevent mismatches
   const [isDev] = useHydrationSafeState(false, async () => {
     return process.env.NODE_ENV === 'development';
   });
 
-  // Use hydration-safe state for connectivity check
   const [isConnected] = useHydrationSafeState(true, async () => {
     if (isDev) {
       return true;
@@ -56,6 +53,7 @@ export default function Page() {
           }
         },
       );
+
       throw new SentryExampleFrontendError(
         'This error is raised on the frontend of the example page.',
       );
@@ -68,15 +66,12 @@ export default function Page() {
   );
 
   return (
-    <div>
-      <Head>
-        <title>sentry-example-page</title>
-        <meta name="description" content="Test Sentry for your Next.js app!" />
-      </Head>
+    <div className="min-h-screen px-4 py-6">
+      <main className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-2xl flex-col items-center justify-center gap-4 text-center">
+        <div className="flex-1" />
 
-      <main>
-        <div className="flex-spacer" />
         <svg
+          className="text-current"
           height="40"
           width="40"
           fill="none"
@@ -89,11 +84,15 @@ export default function Page() {
             fill="currentcolor"
           />
         </svg>
-        <h1>sentry-example-page</h1>
 
-        <p className="description">
+        <h1 className="rounded bg-black/5 px-1 font-mono text-xl leading-tight">
+          sentry-example-page
+        </h1>
+
+        <p className="max-w-[500px] text-base leading-relaxed text-gray-600 dark:text-gray-400">
           Click the button below, and view the sample error on the Sentry{' '}
           <a
+            className="underline"
             target="_blank"
             rel="noopener"
             href="https://ozi.sentry.io/issues/?project=4510929543168080"
@@ -102,6 +101,7 @@ export default function Page() {
           </a>
           . For more details about setting up Sentry,{' '}
           <a
+            className="underline"
             target="_blank"
             rel="noopener"
             href="https://docs.sentry.io/platforms/javascript/guides/nextjs/"
@@ -111,14 +111,21 @@ export default function Page() {
           .
         </p>
 
-        <button type="button" onClick={throwError} disabled={!isConnected}>
-          <span>Throw Sample Error</span>
+        <button
+          className="rounded bg-violet-700 px-4 py-3 font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
+          type="button"
+          onClick={throwError}
+          disabled={!isConnected}
+        >
+          Throw Sample Error
         </button>
 
         {hasSentError ? (
-          <p className="success">Error sent to Sentry.</p>
+          <p className="rounded border border-green-600 bg-green-400 px-4 py-3 text-sm font-medium text-gray-950">
+            Error sent to Sentry.
+          </p>
         ) : !isConnected ? (
-          <div className="connectivity-error">
+          <div className="w-full max-w-[500px] rounded border border-red-700 bg-red-600 px-4 py-3 text-sm text-white">
             <p>
               It looks like network requests to Sentry are being blocked, which
               will prevent errors from being captured. Try disabling your
@@ -126,134 +133,11 @@ export default function Page() {
             </p>
           </div>
         ) : (
-          <div className="success_placeholder" />
+          <div className="h-[46px]" />
         )}
 
-        <div className="flex-spacer" />
+        <div className="flex-1" />
       </main>
-
-      <style>{`
-        main {
-          display: flex;
-          min-height: 100vh;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          gap: 16px;
-          padding: 16px;
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-        }
-
-        h1 {
-          padding: 0px 4px;
-          border-radius: 4px;
-          background-color: rgba(24, 20, 35, 0.03);
-          font-family: monospace;
-          font-size: 20px;
-          line-height: 1.2;
-        }
-
-        p {
-          margin: 0;
-          font-size: 20px;
-        }
-
-        a {
-          color: #6341F0;
-          text-decoration: underline;
-          cursor: pointer;
-
-          @media (prefers-color-scheme: dark) {
-            color: #B3A1FF;
-          }
-        }
-
-        button {
-          border-radius: 8px;
-          color: white;
-          cursor: pointer;
-          background-color: #553DB8;
-          border: none;
-          padding: 0;
-          margin-top: 4px;
-
-          & > span {
-            display: inline-block;
-            padding: 12px 16px;
-            border-radius: inherit;
-            font-size: 20px;
-            font-weight: bold;
-            line-height: 1;
-            background-color: #7553FF;
-            border: 1px solid #553DB8;
-            transform: translateY(-4px);
-          }
-
-          &:hover > span {
-            transform: translateY(-8px);
-          }
-
-          &:active > span {
-            transform: translateY(0);
-          }
-
-          &:disabled {
-	            cursor: not-allowed;
-	            opacity: 0.6;
-
-	            & > span {
-	              transform: translateY(0);
-	              border: none;
-	            }
-	          }
-        }
-
-        .description {
-          text-align: center;
-          color: #6E6C75;
-          max-width: 500px;
-          line-height: 1.5;
-          font-size: 20px;
-
-          @media (prefers-color-scheme: dark) {
-            color: #A49FB5;
-          }
-        }
-
-        .flex-spacer {
-          flex: 1;
-        }
-
-        .success {
-          padding: 12px 16px;
-          border-radius: 8px;
-          font-size: 20px;
-          line-height: 1;
-          background-color: #00F261;
-          border: 1px solid #00BF4D;
-          color: #181423;
-        }
-
-        .success_placeholder {
-          height: 46px;
-        }
-
-        .connectivity-error {
-          padding: 12px 16px;
-          background-color: #E50045;
-          border-radius: 8px;
-          width: 500px;
-          color: #FFFFFF;
-          border: 1px solid #A80033;
-          text-align: center;
-          margin: 0;
-        }
-
-        .connectivity-error a {
-          color: #FFFFFF;
-          text-decoration: underline;
-        }
-      `}</style>
     </div>
   );
 }

@@ -44,49 +44,49 @@ If the feature is trivial and doesn't warrant full specification, update this wo
 
 Save to `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/59252027-3845-47b2-94d4-1913c9dc175e/plan.md`.
 
-### [ ] Step: Implementation
+### [x] Step: Implementation
 
 #### Phase 1: Foundation (Core & Contracts)
 
-- [ ] **1.1 Identity Contracts**: Create `src/core/contracts/identity.ts` (`Identity`, `IdentityProvider`)
-  - _Verification_: `pnpm typecheck`
-- [ ] **1.2 Tenancy Contracts**: Create `src/core/contracts/tenancy.ts` (`TenantContext`, `TenantResolver`)
-  - _Verification_: `pnpm typecheck`
-- [ ] **1.3 Authorization Contracts**: Create `src/core/contracts/authorization.ts` (`SubjectContext`, `ResourceContext`, `AuthorizationContext`, `AuthorizationService`)
-  - _Verification_: `pnpm typecheck`
-- [ ] **1.4 Repository Contracts**: Create `src/core/contracts/repositories.ts` (`RoleRepository`, `PermissionRepository`, `MembershipRepository`, `PolicyRepository`)
-  - _Verification_: `pnpm typecheck`
-- [ ] **1.5 DI Container**: Create `src/core/container/index.ts` with base `Container` class and `registerModule` support
+- [x] **1.1 Identity Contracts**: Create `src/core/contracts/identity.ts` (`Identity`, `IdentityProvider`)
+  - _Verification_: `pnpm typecheck`, `pnpm lint`
+- [x] **1.2 Tenancy Contracts**: Create `src/core/contracts/tenancy.ts` (`TenantContext`, `TenantResolver`)
+  - _Verification_: `pnpm typecheck`, `pnpm lint`
+- [x] **1.3 Authorization Contracts**: Create `src/core/contracts/authorization.ts` (`SubjectContext`, `ResourceContext`, `AuthorizationContext`, `AuthorizationService`)
+  - _Verification_: `pnpm typecheck`, `pnpm lint`
+- [x] **1.4 Repository Contracts**: Create `src/core/contracts/repositories.ts` (`RoleRepository`, `PermissionRepository`, `MembershipRepository`, `PolicyRepository`)
+  - _Verification_: `pnpm typecheck`, `pnpm lint`
+- [x] **1.5 DI Container**: Create `src/core/container/index.ts` with base `Container` class and `registerModule` support
   - _Verification_: Unit test for container registration
 
 #### Phase 2: Auth Infrastructure (Clerk)
 
-- [ ] **2.1 Clerk Identity**: Implement `ClerkIdentityProvider` in `src/modules/auth/infrastructure/ClerkIdentityProvider.ts`
-  - _Verification_: `pnpm typecheck`
-- [ ] **2.2 Clerk Tenancy**: Implement `ClerkTenantResolver` in `src/modules/auth/infrastructure/ClerkTenantResolver.ts`
-  - _Verification_: `pnpm typecheck`
-- [ ] **2.3 Auth Module Registration**: Create `src/modules/auth/index.ts` with `registerModule` function
+- [x] **2.1 Clerk Identity**: Implement `ClerkIdentityProvider` in `src/modules/auth/infrastructure/ClerkIdentityProvider.ts`
+  - _Verification_: `pnpm typecheck`, `pnpm lint`
+- [x] **2.2 Clerk Tenancy**: Implement `ClerkTenantResolver` in `src/modules/auth/infrastructure/ClerkTenantResolver.ts`
+  - _Verification_: `pnpm typecheck`, `pnpm lint`
+- [x] **2.3 Auth Module Registration**: Create `src/modules/auth/index.ts` with `registerModule` function
   - _Verification_: Verify it registers to container without leakage
-- [ ] **2.4 Infrastructure Tests**: Unit tests for Clerk infrastructure adapters (mocking Clerk SDK)
+- [x] **2.4 Infrastructure Tests**: Unit tests for Clerk infrastructure adapters (mocking Clerk SDK)
 
 #### Phase 3: Authorization Domain & Policy Engine
 
-- [ ] **3.1 Policy Engine**: Implement `PolicyEngine` in `src/modules/authorization/domain/policy/PolicyEngine.ts` (deny-overrides, ABAC support)
+- [x] **3.1 Policy Engine**: Implement `PolicyEngine` in `src/modules/authorization/domain/policy/PolicyEngine.ts` (deny-overrides, ABAC support)
   - _Verification_: Unit tests for various policy scenarios (allow, deny, conditions)
-- [ ] **3.2 Authorization Service**: Implement `DefaultAuthorizationService` in `src/modules/authorization/domain/AuthorizationService.ts`
-  - _Verification_: `pnpm typecheck`
-- [ ] **3.3 Authz Module Registration**: Create `src/modules/authorization/index.ts` with `registerModule` function
-- [ ] **3.4 Domain Tests**: Unit tests for Policy Engine (mocking repositories)
+- [x] **3.2 Authorization Service**: Implement `DefaultAuthorizationService` in `src/modules/authorization/domain/AuthorizationService.ts`
+  - _Verification_: `pnpm typecheck`, `pnpm lint`
+- [x] **3.3 Authz Module Registration**: Create `src/modules/authorization/index.ts` with `registerModule` function
+- [x] **3.4 Domain Tests**: Unit tests for Policy Engine (mocking repositories)
 
 #### Phase 4: Repositories & Wiring
 
-- [ ] **4.1 Mock Repositories**: Implement `MockRoleRepository` and `MockPolicyRepository` in `src/modules/authorization/infrastructure/`
-- [ ] **4.2 Global Wiring**: Wire all modules in `src/core/container/index.ts` (bootstrap process)
+- [x] **4.1 Mock Repositories**: Implement `MockRoleRepository` and `MockPolicyRepository` in `src/modules/authorization/infrastructure/`
+- [x] **4.2 Global Wiring**: Wire all modules in `src/core/container/index.ts` (bootstrap process)
   - _Verification_: Integration test ensuring container resolves services correctly
 
 #### Phase 5: Framework Refactoring
 
-- [ ] **5.1 Security Context**: Refactor `src/security/core/security-context.ts` to use `IdentityProvider` and `TenantResolver` from Container
+- [/] **5.1 Security Context**: Refactor `src/security/core/security-context.ts` to use `IdentityProvider` and `TenantResolver` from Container
 - [ ] **5.2 Proxy Refactoring**: Refactor `src/proxy.ts` to replace direct Clerk usage with Container-managed services
 - [ ] **5.3 Secure Action Refactoring**: Refactor `src/security/actions/secure-action.ts` to use `AuthorizationService`
 - [ ] **5.4 Onboarding Migration**: Refactor `src/actions/onboarding.ts` into `src/modules/user/application/CompleteOnboardingUseCase.ts`

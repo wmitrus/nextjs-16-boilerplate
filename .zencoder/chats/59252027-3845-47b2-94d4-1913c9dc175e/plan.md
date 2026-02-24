@@ -86,14 +86,14 @@ Save to `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/59252027-3845-
 
 #### Phase 5: Framework Refactoring
 
-- [/] **5.1 Security Context**: Refactor `src/security/core/security-context.ts` to use `IdentityProvider` and `TenantResolver` from Container
-- [ ] **5.2 Proxy Refactoring**: Refactor `src/proxy.ts` to replace direct Clerk usage with Container-managed services
-- [ ] **5.3 Secure Action Refactoring**: Refactor `src/security/actions/secure-action.ts` to use `AuthorizationService`
-- [ ] **5.4 Onboarding Migration**: Refactor `src/actions/onboarding.ts` into `src/modules/user/application/CompleteOnboardingUseCase.ts`
+- [x] **5.1 Security Context**: Refactor `src/security/core/security-context.ts` to use `IdentityProvider` and `TenantResolver` from Container
+- [x] **5.2 Proxy Refactoring**: Refactor `src/proxy.ts` to replace direct Clerk usage with Container-managed services
+- [x] **5.3 Secure Action Refactoring**: Refactor `src/security/actions/secure-action.ts` to use `AuthorizationService`
+- [x] **5.4 Onboarding Migration**: Refactor `src/actions/onboarding.ts` into `src/modules/auth/ui/onboarding-actions.ts` (using `UserRepository`)
 
 #### Phase 6: Final Verification
 
-- [ ] **6.1 Quality Suite**: `pnpm lint` and `pnpm typecheck`
-- [ ] **6.2 Test Suite**: `pnpm test` (all unit and integration tests)
-- [ ] **6.3 Dependency Audit**: `pnpm skott:check:only` for module isolation audit
-- [ ] **6.4 Clerk Audit**: `grep` audit for forbidden `@clerk/nextjs` imports in Domain/Authorization layers
+- [x] **6.1 Quality Suite**: `pnpm lint` and `pnpm typecheck`
+- [x] **6.2 Test Suite**: `pnpm test` (all unit and integration tests)
+- [x] **6.3 Dependency Audit**: `pnpm skott:check:only` for module isolation audit
+- [x] **6.4 Clerk Audit**: `grep` audit for forbidden `@clerk/nextjs` imports in Domain/Authorization layers

@@ -11,7 +11,7 @@ if (sentryDsn) {
     dsn: sentryDsn,
 
     // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-    tracesSampleRate: 1,
+    tracesSampleRate: process.env.NODE_ENV === 'development' ? 1 : 0.1,
     // Enable logs to be sent to Sentry
     enableLogs: true,
 

@@ -92,6 +92,7 @@ const eslintConfig = defineConfig([
           },
         },
       ],
+      '@typescript-eslint/no-deprecated': 'error',
     },
   },
   {

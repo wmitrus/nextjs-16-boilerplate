@@ -1,7 +1,11 @@
 'use server';
 
-import { auth, clerkClient } from '@clerk/nextjs/server';
-
+import { container } from '@/core/container';
+import { AUTH } from '@/core/contracts';
+import type {
+  IdentityProvider,
+  UserRepository,
+} from '@/core/contracts/identity';
 import { logger as baseLogger } from '@/core/logger/server';
 
 const logger = baseLogger.child({
@@ -11,10 +15,13 @@ const logger = baseLogger.child({
 });
 
 export const completeOnboarding = async (formData: FormData) => {
-  const { userId } = await auth();
+  const identityProvider = container.resolve<IdentityProvider>(
+    AUTH.IDENTITY_PROVIDER,
+  );
+  const identity = await identityProvider.getCurrentIdentity();
 
-  if (!userId) {
-    logger.warn('Onboarding attempt without userId');
+  if (!identity) {
+    logger.warn('Onboarding attempt without identity');
     return { error: 'No logged in user' };
   }
 
@@ -23,34 +30,37 @@ export const completeOnboarding = async (formData: FormData) => {
   const learningGoal = formData.get('learningGoal');
 
   logger.debug(
-    { userId, targetLanguage, proficiencyLevel, learningGoal },
+    { userId: identity.id, targetLanguage, proficiencyLevel, learningGoal },
     'Onboarding form submission',
   );
 
   if (!targetLanguage || !proficiencyLevel || !learningGoal) {
-    logger.warn({ userId }, 'Missing required fields in onboarding');
+    logger.warn(
+      { userId: identity.id },
+      'Missing required fields in onboarding',
+    );
     return { error: 'Missing required fields' };
   }
 
-  const client = await clerkClient();
+  const userRepository = container.resolve<UserRepository>(
+    AUTH.USER_REPOSITORY,
+  );
 
   try {
-    await client.users.updateUser(userId, {
-      publicMetadata: {
-        onboardingComplete: true,
-        targetLanguage,
-        proficiencyLevel,
-        learningGoal,
-      },
+    await userRepository.updateAttributes(identity.id, {
+      onboardingComplete: true,
+      targetLanguage,
+      proficiencyLevel,
+      learningGoal,
     });
     logger.debug(
-      { userId },
+      { userId: identity.id },
       'User metadata updated successfully for onboarding',
     );
     return { message: 'Onboarding completed' };
   } catch (err) {
     logger.error(
-      { err, userId },
+      { err, userId: identity.id },
       'Error updating user metadata during onboarding',
     );
     return { error: 'There was an error updating your profile.' };

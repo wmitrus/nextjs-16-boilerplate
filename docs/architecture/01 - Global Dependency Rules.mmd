@@ -1,0 +1,22 @@
+flowchart TD
+
+UI["UI Layer (Next.js App Router)"]
+APP["Application Layer"]
+DOMAIN["Domain Layer"]
+INFRA["Infrastructure Layer"]
+CONTRACTS["Core Contracts"]
+CONTAINER["Container"]
+CONFIG["Runtime Config"]
+
+UI --> APP
+APP --> DOMAIN
+APP --> CONTRACTS
+INFRA --> CONTRACTS
+INFRA --> DOMAIN
+CONTAINER --> INFRA
+CONTAINER --> APP
+CONFIG --> CONTAINER
+
+DOMAIN -. NO DEPENDENCIES .-> UI
+DOMAIN -. NO DEPENDENCIES .-> INFRA
+DOMAIN -. NO DEPENDENCIES .-> CONFIG

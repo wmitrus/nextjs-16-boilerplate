@@ -1,0 +1,14 @@
+flowchart LR
+
+CLERK["Clerk SDK"]
+AUTH_INFRA["ClerkIdentityProvider"]
+IDENTITY_CONTRACT["IdentityProvider (Contract)"]
+AUTHZ["Authorization Module"]
+DOMAIN["Domain"]
+
+CLERK --> AUTH_INFRA
+AUTH_INFRA --> IDENTITY_CONTRACT
+AUTHZ --> IDENTITY_CONTRACT
+
+AUTHZ -. NO DIRECT IMPORT .-> CLERK
+DOMAIN -. NO DIRECT IMPORT .-> CLERK

@@ -1,0 +1,11 @@
+flowchart TD
+
+A["Only auth/infrastructure imports Clerk?"]
+B["IdentityProvider used everywhere?"]
+C["TenantContext always explicit?"]
+D["No role checks in UI?"]
+E["PolicyEngine in domain?"]
+F["Modules isolated?"]
+G["Replace Clerk without touching domain?"]
+
+A --> B --> C --> D --> E --> F --> G

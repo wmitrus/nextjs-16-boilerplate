@@ -1,0 +1,52 @@
+flowchart TB
+
+subgraph APP_ROUTER["Next.js App Router"]
+    ROUTES["Routes / Server Actions"]
+end
+
+subgraph CORE
+    CONTRACTS["core/contracts"]
+    CONTAINER["core/container"]
+    CONFIG["core/config"]
+end
+
+subgraph AUTH_MODULE["modules/auth"]
+    AUTH_UI["ui"]
+    AUTH_APP["application"]
+    AUTH_DOMAIN["domain"]
+    AUTH_INFRA["infrastructure (Clerk Adapter)"]
+end
+
+subgraph AUTHZ_MODULE["modules/authorization"]
+    AUTHZ_UI["ui"]
+    AUTHZ_APP["application"]
+    AUTHZ_DOMAIN["domain (Policy Engine)"]
+    AUTHZ_INFRA["infrastructure (Policy Storage)"]
+end
+
+subgraph ORG_MODULE["modules/organization"]
+    ORG_UI["ui"]
+    ORG_APP["application"]
+    ORG_DOMAIN["domain"]
+    ORG_INFRA["infrastructure"]
+end
+
+ROUTES --> AUTH_APP
+ROUTES --> AUTHZ_APP
+ROUTES --> ORG_APP
+
+AUTH_APP --> AUTH_DOMAIN
+AUTHZ_APP --> AUTHZ_DOMAIN
+ORG_APP --> ORG_DOMAIN
+
+AUTH_INFRA --> CONTRACTS
+AUTHZ_INFRA --> CONTRACTS
+ORG_INFRA --> CONTRACTS
+
+AUTHZ_DOMAIN --> CONTRACTS
+AUTH_APP --> CONTRACTS
+ORG_APP --> CONTRACTS
+
+CONTAINER --> AUTH_INFRA
+CONTAINER --> AUTHZ_INFRA
+CONTAINER --> ORG_INFRA

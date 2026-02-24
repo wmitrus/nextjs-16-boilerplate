@@ -1,0 +1,13 @@
+flowchart LR
+
+IDENTITY["Identity"]
+TENANT_RESOLVER["TenantResolver (Contract)"]
+TENANT_CTX["TenantContext"]
+CLERK_ORG["Clerk Organization"]
+
+IDENTITY --> TENANT_RESOLVER
+TENANT_RESOLVER --> TENANT_CTX
+
+CLERK_ORG --> TENANT_RESOLVER
+
+TENANT_CTX --> AUTHZ["AuthorizationService"]

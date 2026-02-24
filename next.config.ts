@@ -17,6 +17,9 @@ export default withSentryConfig(nextConfig, {
 
   project: 'nextjs-16-boilerplate',
 
+  // Pass the auth token for source map upload
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 

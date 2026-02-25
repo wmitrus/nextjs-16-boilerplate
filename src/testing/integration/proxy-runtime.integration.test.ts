@@ -13,6 +13,11 @@ const mockAuthResult = {
   userId: null as string | null,
   sessionClaims: null as Record<string, unknown> | null,
 };
+const mockGlobalAuth = vi.fn(async () => {
+  throw new Error(
+    "Clerk: auth() was called but Clerk can't detect usage of clerkMiddleware().",
+  );
+});
 
 vi.mock('@clerk/nextjs/server', () => ({
   clerkMiddleware: vi.fn(
@@ -24,6 +29,7 @@ vi.mock('@clerk/nextjs/server', () => ({
       return handler(auth, req, evt);
     },
   ),
+  auth: () => mockGlobalAuth(),
   createRouteMatcher: vi.fn((patterns: string[]) => {
     return vi.fn((req: NextRequest) => {
       const pathname = req.nextUrl.pathname;
@@ -75,6 +81,16 @@ vi.mock('@/core/logger/edge', () => ({
       error: vi.fn(),
     })),
   },
+  getEdgeLogger: vi.fn(() => ({
+    warn: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(() => ({
+      warn: vi.fn(),
+      debug: vi.fn(),
+      error: vi.fn(),
+    })),
+  })),
 }));
 
 vi.mock('@/shared/lib/rate-limit/rate-limit-helper', () => ({
@@ -89,6 +105,7 @@ describe('Proxy Runtime Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProtect.mockReset();
+    mockGlobalAuth.mockClear();
     mockAuthResult.userId = null;
     mockAuthResult.sessionClaims = null;
 
@@ -153,11 +170,24 @@ describe('Proxy Runtime Integration', () => {
     expect(mockProtect).not.toHaveBeenCalled();
   });
 
-  it('protects non-public non-internal routes', async () => {
+  it('redirects unauthenticated users on non-public non-internal routes', async () => {
     const request = new NextRequest(new URL('http://localhost/dashboard'));
 
-    await proxy(request, {} as unknown as NextFetchEvent);
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
 
-    expect(mockProtect).toHaveBeenCalledTimes(1);
+    expect(response).toBeDefined();
+    expect(response!.status).toBe(307);
+    expect(response!.headers.get('location')).toContain('/sign-in');
+    expect(mockProtect).not.toHaveBeenCalled();
+  });
+
+  it('does not call global Clerk auth() in middleware path', async () => {
+    const request = new NextRequest(new URL('http://localhost/'));
+
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
+
+    expect(response).toBeDefined();
+    expect(response!.status).toBe(200);
+    expect(mockGlobalAuth).not.toHaveBeenCalled();
   });
 });

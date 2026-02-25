@@ -1,6 +1,7 @@
 export const AUTH = {
   IDENTITY_PROVIDER: Symbol('IdentityProvider'),
   TENANT_RESOLVER: Symbol('TenantResolver'),
+  USER_REPOSITORY: Symbol('UserRepository'),
 };
 
 export const AUTHORIZATION = {
@@ -9,4 +10,9 @@ export const AUTHORIZATION = {
   PERMISSION_REPOSITORY: Symbol('PermissionRepository'),
   MEMBERSHIP_REPOSITORY: Symbol('MembershipRepository'),
   POLICY_REPOSITORY: Symbol('PolicyRepository'),
+};
+
+export const LOGGER = {
+  SERVER: Symbol('ServerLogger'),
+  EDGE: Symbol('EdgeLogger'),
 };

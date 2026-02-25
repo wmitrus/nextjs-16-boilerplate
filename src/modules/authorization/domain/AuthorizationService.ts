@@ -6,6 +6,11 @@ import type { PolicyRepository } from '@/core/contracts/repositories';
 
 import type { PolicyEngine } from './policy/PolicyEngine';
 
+/**
+ * DefaultAuthorizationService connects the repository of policies
+ * with the policy evaluation engine.
+ * Single responsibility: fetch policies + evaluate access.
+ */
 export class DefaultAuthorizationService implements AuthorizationService {
   constructor(
     private policyRepository: PolicyRepository,

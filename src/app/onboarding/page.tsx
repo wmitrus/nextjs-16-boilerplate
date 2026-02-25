@@ -4,7 +4,7 @@ import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
-import { completeOnboarding } from '@/actions/onboarding';
+import { completeOnboarding } from '@/modules/auth/ui/onboarding-actions';
 
 export default function OnboardingPage() {
   const [error, setError] = React.useState('');

@@ -1,32 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { auth } from '@clerk/nextjs/server';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ClerkTenantResolver } from './ClerkTenantResolver';
 
+vi.mock('@clerk/nextjs/server', () => ({
+  auth: vi.fn(),
+}));
+
 describe('ClerkTenantResolver', () => {
-  it('should resolve tenant from metadata tenantId', async () => {
+  it('should resolve tenant from orgId', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      orgId: 'org_123',
+    } as Awaited<ReturnType<typeof auth>>);
+
     const resolver = new ClerkTenantResolver();
     const identity = {
       id: 'user_123',
-      attributes: {
-        tenantId: 'tenant_abc',
-      },
-    };
-
-    const context = await resolver.resolve(identity);
-
-    expect(context).toEqual({
-      tenantId: 'tenant_abc',
-      userId: 'user_123',
-    });
-  });
-
-  it('should resolve tenant from orgId if tenantId is missing', async () => {
-    const resolver = new ClerkTenantResolver();
-    const identity = {
-      id: 'user_123',
-      attributes: {
-        orgId: 'org_123',
-      },
     };
 
     const context = await resolver.resolve(identity);
@@ -37,11 +26,14 @@ describe('ClerkTenantResolver', () => {
     });
   });
 
-  it('should return default tenant if no ID is found', async () => {
+  it('should return default tenant if no orgId is found', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      orgId: null,
+    } as Awaited<ReturnType<typeof auth>>);
+
     const resolver = new ClerkTenantResolver();
     const identity = {
       id: 'user_123',
-      attributes: {},
     };
 
     const context = await resolver.resolve(identity);

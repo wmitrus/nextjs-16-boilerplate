@@ -1,0 +1,38 @@
+flowchart TD
+    subgraph Identity & Auth
+        A[ClerkIdentityProvider / Custom IdentityProvider]
+        B[Identity { id, email, attributes }]
+    end
+
+    subgraph Tenant
+        C[TenantResolver]
+        D[TenantContext { tenantId, userId }]
+    end
+
+    subgraph Role & Permission
+        E[RoleRepository]
+        F[PolicyRepository]
+        G[Roles & Policies]
+    end
+
+    subgraph Authorization Engine
+        H[PolicyEngine]
+        I[DefaultAuthorizationService]
+    end
+
+    subgraph Next.js Middleware
+        J[withAuth / proxy.ts]
+        K[RouteContext / RequestContext]
+    end
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> G
+    D --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    K --> J

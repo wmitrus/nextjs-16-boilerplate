@@ -29,7 +29,7 @@ export const env = createEnv({
     LOGFLARE_EDGE_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+    UPSTASH_REDIS_REST_URL: z.url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     API_RATE_LIMIT_REQUESTS: z.coerce.number().default(10),
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),

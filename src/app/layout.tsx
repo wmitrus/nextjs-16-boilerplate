@@ -7,7 +7,8 @@ import { Suspense } from 'react';
 import { env } from '@/core/env';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
-import { Header } from '@/shared/components/Header';
+
+import { HeaderWithAuth } from '@/modules/auth/ui/HeaderWithAuth';
 
 import './globals.css';
 
@@ -48,7 +49,7 @@ export default function RootLayout({
               env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
             }
           >
-            <Header />
+            <HeaderWithAuth />
             <GlobalErrorHandlers />
             <SpeedInsights />
             <Suspense fallback={null}>{children}</Suspense>

@@ -10,12 +10,20 @@ export interface Module {
 export class Container {
   private services = new Map<RegistryKey, unknown>();
 
+  constructor(private onResolveMissing?: (container: Container) => void) {}
+
   register<T>(key: RegistryKey, implementation: T): void {
     this.services.set(key, implementation);
   }
 
   resolve<T>(key: RegistryKey): T {
-    const service = this.services.get(key);
+    let service = this.services.get(key);
+
+    if (!service && this.onResolveMissing) {
+      this.onResolveMissing(this);
+      service = this.services.get(key);
+    }
+
     if (!service) {
       throw new Error(`Service not found for key: ${String(key)}`);
     }
@@ -27,9 +35,20 @@ export class Container {
   }
 }
 
-export const container = new Container();
+let isBootstrapped = false;
+
+function registerCoreModules(target: Container): void {
+  if (isBootstrapped) {
+    return;
+  }
+
+  target.registerModule(authModule);
+  target.registerModule(authorizationModule);
+  isBootstrapped = true;
+}
+
+export const container = new Container(registerCoreModules);
 
 export function bootstrap() {
-  container.registerModule(authModule);
-  container.registerModule(authorizationModule);
+  registerCoreModules(container);
 }

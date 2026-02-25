@@ -2,13 +2,11 @@
 
 import { container } from '@/core/container';
 import { AUTH } from '@/core/contracts';
-import type {
-  IdentityProvider,
-  UserRepository,
-} from '@/core/contracts/identity';
-import { logger as baseLogger } from '@/core/logger/server';
+import type { IdentityProvider } from '@/core/contracts/identity';
+import type { UserRepository } from '@/core/contracts/user';
+import { resolveServerLogger } from '@/core/logger/di';
 
-const logger = baseLogger.child({
+const logger = resolveServerLogger().child({
   type: 'API',
   category: 'onboarding',
   module: 'onboarding-actions',
@@ -47,15 +45,15 @@ export const completeOnboarding = async (formData: FormData) => {
   );
 
   try {
-    await userRepository.updateAttributes(identity.id, {
-      onboardingComplete: true,
-      targetLanguage,
-      proficiencyLevel,
-      learningGoal,
+    await userRepository.updateProfile(identity.id, {
+      targetLanguage: targetLanguage as string,
+      proficiencyLevel: proficiencyLevel as string,
+      learningGoal: learningGoal as string,
     });
+    await userRepository.updateOnboardingStatus(identity.id, true);
     logger.debug(
       { userId: identity.id },
-      'User metadata updated successfully for onboarding',
+      'User profile and onboarding status updated successfully',
     );
     return { message: 'Onboarding completed' };
   } catch (err) {

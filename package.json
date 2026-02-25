@@ -16,6 +16,9 @@
     "test:storybook:watch": "vitest --project storybook",
     "test:storybook:ui": "vitest --project storybook --ui",
     "e2e": "E2E_ENABLED=true NEXT_PUBLIC_E2E_ENABLED=true playwright test",
+    "e2e:smoke": "E2E_ENABLED=true NEXT_PUBLIC_E2E_ENABLED=true playwright test e2e/home.spec.ts e2e/security.spec.ts e2e/auth.spec.ts --project=chromium",
+    "e2e:auth": "node scripts/check-e2e-auth-env.mjs && E2E_ENABLED=true NEXT_PUBLIC_E2E_ENABLED=true playwright test e2e/users.spec.ts e2e/error-boundary.spec.ts --project=chromium",
+    "e2e:full": "node scripts/check-e2e-auth-env.mjs && E2E_ENABLED=true NEXT_PUBLIC_E2E_ENABLED=true playwright test --project=chromium",
     "e2e:ui": "E2E_ENABLED=true NEXT_PUBLIC_E2E_ENABLED=true playwright test --ui",
     "e2e:ci": "E2E_ENABLED=true NEXT_PUBLIC_E2E_ENABLED=true pnpm build && playwright test --reporter=dot",
     "prepare": "husky",
@@ -61,6 +64,7 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.0.0",
+    "@clerk/testing": "^1.14.1",
     "@commitlint/cli": "^20.3.1",
     "@commitlint/config-conventional": "^20.3.1",
     "@eslint/eslintrc": "^3.3.3",

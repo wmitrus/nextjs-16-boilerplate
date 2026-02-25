@@ -20,12 +20,12 @@ export class MockPolicyRepository implements PolicyRepository {
     const policies: Policy[] = [
       {
         effect: 'allow',
-        actions: ['read'],
+        actions: ['document:read'],
         resource: 'document',
       },
       {
         effect: 'allow',
-        actions: ['manage'],
+        actions: ['system:manage'],
         resource: 'all',
         condition: (ctx) => ctx.subject.id.includes('admin'),
       },
@@ -34,7 +34,7 @@ export class MockPolicyRepository implements PolicyRepository {
     // Filter policies based on action and resource type
     return policies.filter(
       (p) =>
-        (p.actions.includes(context.action) || p.actions.includes('manage')) &&
+        p.actions.includes(context.action) &&
         (p.resource === context.resource.type || p.resource === 'all'),
     );
   }

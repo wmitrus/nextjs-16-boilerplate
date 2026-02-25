@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+import { container } from '@/core/container';
+import { AUTHORIZATION } from '@/core/contracts';
+import type {
+  AuthorizationService,
+  ResourceContext,
+} from '@/core/contracts/authorization';
+
+import {
+  createAction,
+  type Action,
+} from '@/modules/authorization/domain/permission';
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
 import { authorize, AuthorizationError } from '@/security/core/authorization';
@@ -12,6 +23,8 @@ import { getSecurityContext } from '@/security/core/security-context';
 export interface ActionOptions<TSchema extends z.ZodType, TResult> {
   schema: TSchema;
   role?: UserRole;
+  resource?: ResourceContext;
+  action?: Action;
   handler: (args: {
     input: z.infer<TSchema>;
     context: SecurityContext;
@@ -21,9 +34,16 @@ export interface ActionOptions<TSchema extends z.ZodType, TResult> {
 /**
  * Creates a secure server action with validation, authorization, and auditing.
  */
+export interface TreeifiedError {
+  errors: string[];
+  properties: Record<string, { errors: string[] }>;
+}
+
 export function createSecureAction<TSchema extends z.ZodType, TResult>({
   schema,
   role = 'user',
+  resource,
+  action,
   handler,
 }: ActionOptions<TSchema, TResult>) {
   return async (
@@ -32,34 +52,60 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
     | { status: 'success'; data: TResult }
     | {
         status: 'validation_error';
-        errors: z.inferFlattenedErrors<TSchema>['fieldErrors'];
+        errors: TreeifiedError;
       }
     | { status: 'unauthorized'; error: string }
     | { status: 'error'; error: string }
   > => {
     const context = await getSecurityContext();
-    const actionName = handler.name || 'anonymous_action';
+    const actionName =
+      action ||
+      createAction(resource?.type ?? 'system', handler.name || 'execute');
 
     try {
-      // 1. Authenticate & Authorize
+      // 1. Basic RBAC check
       authorize(context, role);
 
-      // 2. Replay Protection
+      // 2. Advanced ABAC/RBAC check via AuthorizationService if resource is provided
+      if (resource && context.user) {
+        const authService = container.resolve<AuthorizationService>(
+          AUTHORIZATION.SERVICE,
+        );
+        const hasPermission = await authService.can({
+          tenant: {
+            tenantId: context.user.tenantId,
+            userId: context.user.id,
+          },
+          subject: {
+            id: context.user.id,
+          },
+          resource,
+          action: actionName,
+        });
+
+        if (!hasPermission) {
+          throw new AuthorizationError(
+            `Permission denied for action: ${actionName}`,
+          );
+        }
+      }
+
+      // 3. Replay Protection
       if (input._replayToken) {
         await validateReplayToken(input._replayToken, context);
       }
 
-      // 3. Validate Input
+      // 4. Validate Input
       const { _replayToken, ...pureInput } = input;
       const validatedInput = schema.parse(pureInput);
 
-      // 4. Execute Handler
+      // 5. Execute Handler
       const result = await handler({
         input: validatedInput,
         context,
       });
 
-      // 5. Audit Log (Success)
+      // 6. Audit Log (Success)
       await logActionAudit({
         actionName,
         input: pureInput,
@@ -75,7 +121,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       const errorMessage =
         error instanceof Error ? error.message : 'Internal Server Error';
 
-      // 6. Audit Log (Failure)
+      // 7. Audit Log (Failure)
       await logActionAudit({
         actionName,
         input,
@@ -87,7 +133,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       if (error instanceof z.ZodError) {
         return {
           status: 'validation_error' as const,
-          errors: error.flatten().fieldErrors,
+          errors: z.treeifyError(error) as TreeifiedError,
         };
       }
 

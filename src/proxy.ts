@@ -1,208 +1,87 @@
-import {
-  clerkClient,
-  clerkMiddleware,
-  createRouteMatcher,
-} from '@clerk/nextjs/server';
+import { clerkMiddleware } from '@clerk/nextjs/server';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { env } from '@/core/env';
-import { logger } from '@/core/logger/edge';
+import { bootstrap } from '@/core/container';
 
-import { createServerErrorResponse } from '@/shared/lib/api/response-service';
-import { getIP } from '@/shared/lib/network/get-ip';
-import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
+import type { RouteContext } from '@/security/middleware/route-classification';
+import { withAuth } from '@/security/middleware/with-auth';
+import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
+import { withRateLimit } from '@/security/middleware/with-rate-limit';
+import { withSecurity } from '@/security/middleware/with-security';
 
-import {
-  AUTH_ROUTE_PREFIXES,
-  PUBLIC_ROUTE_PREFIXES,
-  toRouteMatcherPatterns,
-} from '@/security/middleware/route-policy';
-import { withHeaders } from '@/security/middleware/with-headers';
+// Initialize DI Container
+bootstrap();
 
-const isPublicRoute = createRouteMatcher(
-  toRouteMatcherPatterns([...AUTH_ROUTE_PREFIXES, ...PUBLIC_ROUTE_PREFIXES]),
-);
-const isE2eRoute = createRouteMatcher(['/e2e-error(.*)', '/users(.*)']);
-const isAuthRoute = createRouteMatcher(
-  toRouteMatcherPatterns(AUTH_ROUTE_PREFIXES),
-);
-const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)']);
+type ProxyHandler = (
+  req: NextRequest,
+  ctx: RouteContext,
+) => Promise<NextResponse>;
+
+type ProxyMiddleware = (next: ProxyHandler) => ProxyHandler;
+
+const terminalHandler: ProxyHandler = async () => NextResponse.next();
+
+function composeMiddlewares(
+  middlewares: ProxyMiddleware[],
+  handler: ProxyHandler,
+): ProxyHandler {
+  return [...middlewares].reverse().reduce((next, middleware) => {
+    return middleware(next);
+  }, handler);
+}
 
 /**
- * Proxy to enforce rate limiting on all API routes and Clerk authentication.
- * In Next.js 16, proxy.ts replaces middleware.ts for Node.js runtime use cases.
+ * Proxy composition layer.
+ * Security pipeline stays provider-agnostic, while Clerk integration remains
+ * at the framework boundary so auth() can be detected by Clerk runtime.
  */
-export default clerkMiddleware(async (auth, request) => {
-  const isInternalApi = request.nextUrl.pathname.startsWith('/api/internal');
-  const isPublic = isPublicRoute(request);
-  const isAuth = isAuthRoute(request);
-  const isOnboarding = isOnboardingRoute(request);
-  const correlationId =
-    request.headers.get('x-correlation-id') || crypto.randomUUID();
 
-  const finalize = (response: NextResponse) => {
-    const secured = withHeaders(request, response);
-    secured.headers.set('x-correlation-id', correlationId);
-    return secured;
+export default clerkMiddleware(async (auth, request) => {
+  const resolveIdentity = async () => {
+    const { userId, sessionClaims } = await auth();
+
+    if (!userId) {
+      return null;
+    }
+
+    return {
+      id: userId,
+      email:
+        typeof sessionClaims?.email === 'string'
+          ? sessionClaims.email
+          : undefined,
+    };
   };
 
-  if (isInternalApi) {
-    const internalKey = request.headers.get('x-internal-key');
-    logger.debug(
+  const appSecurityPipeline = composeMiddlewares(
+    [
+      withInternalApiGuard,
+      withRateLimit,
+      (next: ProxyHandler) => withAuth(next, { resolveIdentity }),
+    ],
+    terminalHandler,
+  );
+  const securityPipeline = withSecurity(appSecurityPipeline);
+
+  try {
+    return await securityPipeline(request);
+  } catch (error) {
+    console.error('[Proxy Error]', error);
+    return NextResponse.json(
       {
-        path: request.nextUrl.pathname,
-        hasInternalKey: Boolean(internalKey),
-        keyMatched: internalKey === env.INTERNAL_API_KEY,
+        status: 'server_error',
+        error: 'Internal Server Error',
+        code: 'SERVER_ERROR',
       },
-      'Internal API key validation',
+      { status: 500 },
     );
-
-    if (!env.INTERNAL_API_KEY || internalKey !== env.INTERNAL_API_KEY) {
-      logger.error(
-        {
-          path: request.nextUrl.pathname,
-          ip: request.headers.get('x-forwarded-for') || 'unknown',
-        },
-        'Unauthorized Internal API Access Attempt',
-      );
-
-      return finalize(
-        createServerErrorResponse(
-          'Forbidden: Internal Access Only',
-          403,
-          'FORBIDDEN',
-        ),
-      );
-    }
   }
-
-  if (!isInternalApi) {
-    const requiresAuthEvaluation = isAuth || isOnboarding || !isPublic;
-
-    if (requiresAuthEvaluation) {
-      const { userId, sessionClaims } = await auth();
-
-      if (userId && isAuth) {
-        let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-
-        if (!onboardingComplete) {
-          const client = await clerkClient();
-          const user = await client.users.getUser(userId);
-          onboardingComplete = user.publicMetadata
-            ?.onboardingComplete as boolean;
-        }
-
-        const redirectUrl = onboardingComplete
-          ? new URL('/', request.url)
-          : new URL('/onboarding', request.url);
-        return finalize(NextResponse.redirect(redirectUrl));
-      }
-
-      if (userId && isOnboarding) {
-        return finalize(NextResponse.next());
-      }
-
-      if (userId && !isOnboarding && !isPublic) {
-        let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-
-        if (!onboardingComplete) {
-          const client = await clerkClient();
-          const user = await client.users.getUser(userId);
-          onboardingComplete = user.publicMetadata
-            ?.onboardingComplete as boolean;
-        }
-
-        if (!onboardingComplete) {
-          const onboardingUrl = new URL('/onboarding', request.url);
-          return finalize(NextResponse.redirect(onboardingUrl));
-        }
-      }
-
-      const e2eEnabled = process.env.E2E_ENABLED === 'true';
-
-      if (!isPublic && !(e2eEnabled && isE2eRoute(request))) {
-        await auth.protect();
-      }
-    }
-  }
-
-  let response = NextResponse.next();
-
-  if (request.nextUrl.pathname.startsWith('/api')) {
-    const ip = await getIP(request.headers);
-    const startedAt = Date.now();
-    logger.debug(
-      {
-        path: request.nextUrl.pathname,
-        ip,
-      },
-      'Rate limit check started',
-    );
-    const result = await checkRateLimit(ip);
-    logger.debug(
-      {
-        path: request.nextUrl.pathname,
-        ip,
-        success: result.success,
-        durationMs: Date.now() - startedAt,
-      },
-      'Rate limit check completed',
-    );
-
-    if (!result.success) {
-      logger.warn(
-        {
-          ip,
-          correlationId,
-          path: request.nextUrl.pathname,
-          limit: result.limit,
-          reset: result.reset,
-        },
-        'Rate limit exceeded',
-      );
-
-      response = createServerErrorResponse(
-        'Rate limit exceeded. Please try again later.',
-        429,
-        'RATE_LIMITED',
-      );
-      response.headers.set(
-        'Retry-After',
-        Math.ceil((result.reset.getTime() - Date.now()) / 1000).toString(),
-      );
-      response.headers.set('X-RateLimit-Limit', result.limit.toString());
-      response.headers.set(
-        'X-RateLimit-Remaining',
-        result.remaining.toString(),
-      );
-      response.headers.set(
-        'X-RateLimit-Reset',
-        result.reset.getTime().toString(),
-      );
-    } else {
-      response.headers.set('X-RateLimit-Limit', result.limit.toString());
-      response.headers.set(
-        'X-RateLimit-Remaining',
-        result.remaining.toString(),
-      );
-      response.headers.set(
-        'X-RateLimit-Reset',
-        result.reset.getTime().toString(),
-      );
-    }
-  }
-
-  return finalize(response);
 });
 
-/**
- * Configure the middleware to match all routes except static files and internals.
- */
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
     '/(api|trpc)(.*)',
   ],
 };

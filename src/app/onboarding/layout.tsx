@@ -1,25 +1,29 @@
-import { auth, clerkClient } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+
+import { container } from '@/core/container';
+import { AUTH } from '@/core/contracts';
+import type { IdentityProvider } from '@/core/contracts/identity';
+import type { UserRepository } from '@/core/contracts/user';
 
 export default async function OnboardingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { userId, sessionClaims } = await auth();
+  const identityProvider = container.resolve<IdentityProvider>(
+    AUTH.IDENTITY_PROVIDER,
+  );
+  const identity = await identityProvider.getCurrentIdentity();
 
-  if (!userId) {
+  if (!identity) {
     redirect('/sign-in');
   }
 
-  let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-
-  // If JWT says incomplete, check backend to avoid "read your writes" staleness after form submission
-  if (!onboardingComplete) {
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
-  }
+  const userRepository = container.resolve<UserRepository>(
+    AUTH.USER_REPOSITORY,
+  );
+  const user = await userRepository.findById(identity.id);
+  const onboardingComplete = user?.onboardingComplete;
 
   if (onboardingComplete === true) {
     redirect('/');

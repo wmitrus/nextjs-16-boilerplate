@@ -15,6 +15,7 @@ class SentryExampleFrontendError extends Error {
 
 export default function Page() {
   const [hasSentError, setHasSentError] = useState(false);
+  const hasPublicSentryDsn = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
 
   const [isDev] = useHydrationSafeState(false, async () => {
     return process.env.NODE_ENV === 'development';
@@ -115,14 +116,22 @@ export default function Page() {
           className="rounded bg-violet-700 px-4 py-3 font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
           type="button"
           onClick={throwError}
-          disabled={!isConnected}
+          disabled={!isConnected || !hasPublicSentryDsn}
         >
           Throw Sample Error
         </button>
 
-        {hasSentError ? (
+        {!hasPublicSentryDsn ? (
+          <div className="w-full max-w-[500px] rounded border border-amber-700 bg-amber-600 px-4 py-3 text-sm text-white">
+            <p>
+              Sentry DSN is not configured. Set `NEXT_PUBLIC_SENTRY_DSN` (and
+              preferably `SENTRY_DSN` for server runtime), then restart the dev
+              server.
+            </p>
+          </div>
+        ) : hasSentError ? (
           <p className="rounded border border-green-600 bg-green-400 px-4 py-3 text-sm font-medium text-gray-950">
-            Error sent to Sentry.
+            Sample errors triggered. Check your Sentry Issues page.
           </p>
         ) : !isConnected ? (
           <div className="w-full max-w-[500px] rounded border border-red-700 bg-red-600 px-4 py-3 text-sm text-white">

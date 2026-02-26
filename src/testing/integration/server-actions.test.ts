@@ -2,9 +2,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import { container } from '@/core/container';
+import { AUTH } from '@/core/contracts';
+import type { IdentityProvider } from '@/core/contracts/identity';
+
 import { createSecureAction } from '@/security/actions/secure-action';
 import type { SecurityContext } from '@/security/core/security-context';
-import { mockAuth, resetClerkMocks } from '@/testing/infrastructure/clerk';
+import { resetClerkMocks } from '@/testing/infrastructure/clerk';
 import { resetEnvMocks } from '@/testing/infrastructure/env';
 import {
   mockChildLogger,
@@ -15,13 +19,9 @@ import {
   resetNextHeadersMocks,
 } from '@/testing/infrastructure/next-headers';
 
-// Explicitly mock clerk to ensure it's picked up
-vi.mock('@clerk/nextjs/server', () => ({
-  auth: () => mockAuth(),
-  clerkClient: vi.fn(),
-}));
-
 describe('Server Actions Integration', () => {
+  let identityProvider: IdentityProvider;
+
   const schema = z.object({
     name: z.string().min(3),
   });
@@ -37,6 +37,9 @@ describe('Server Actions Integration', () => {
   };
 
   beforeEach(() => {
+    identityProvider = container.resolve<IdentityProvider>(
+      AUTH.IDENTITY_PROVIDER,
+    );
     resetClerkMocks();
     resetNextHeadersMocks();
     resetLoggerMocks();
@@ -49,11 +52,9 @@ describe('Server Actions Integration', () => {
   });
 
   it('should execute successfully for authorized user', async () => {
-    mockAuth.mockResolvedValue({
-      userId: 'user_123',
-      sessionClaims: {
-        metadata: { role: 'user', onboardingComplete: true },
-      },
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
     });
 
     const action = createSecureAction({
@@ -73,7 +74,7 @@ describe('Server Actions Integration', () => {
     // Verify audit log
     expect(mockChildLogger.debug).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionName: 'testHandler',
+        actionName: 'system:testHandler',
         userId: 'user_123',
         result: 'success',
       }),
@@ -82,11 +83,9 @@ describe('Server Actions Integration', () => {
   });
 
   it('should fail with unauthorized for insufficient role', async () => {
-    mockAuth.mockResolvedValue({
-      userId: 'user_123',
-      sessionClaims: {
-        metadata: { role: 'user', onboardingComplete: true },
-      },
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
     });
 
     const action = createSecureAction({
@@ -110,10 +109,7 @@ describe('Server Actions Integration', () => {
   });
 
   it('should fail with unauthorized for unauthenticated user', async () => {
-    mockAuth.mockResolvedValue({
-      userId: null,
-      sessionClaims: null,
-    });
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue(null);
 
     const action = createSecureAction({
       schema,
@@ -126,9 +122,9 @@ describe('Server Actions Integration', () => {
   });
 
   it('should return validation errors for invalid input', async () => {
-    mockAuth.mockResolvedValue({
-      userId: 'user_123',
-      sessionClaims: { metadata: { role: 'user' } },
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
     });
 
     const action = createSecureAction({
@@ -140,14 +136,14 @@ describe('Server Actions Integration', () => {
 
     expect(result.status).toBe('validation_error');
     if (result.status === 'validation_error') {
-      expect(result.errors.name).toBeDefined();
+      expect(result.errors.properties.name).toBeDefined();
     }
   });
 
   it('should fail with error for expired replay token', async () => {
-    mockAuth.mockResolvedValue({
-      userId: 'user_123',
-      sessionClaims: { metadata: { role: 'user' } },
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
     });
 
     const action = createSecureAction({
@@ -169,9 +165,9 @@ describe('Server Actions Integration', () => {
   });
 
   it('should execute successfully with valid replay token', async () => {
-    mockAuth.mockResolvedValue({
-      userId: 'user_123',
-      sessionClaims: { metadata: { role: 'user' } },
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
     });
 
     const action = createSecureAction({

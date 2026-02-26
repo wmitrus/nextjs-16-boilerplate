@@ -3,11 +3,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { container } from '@/core/container';
-import { AUTH } from '@/core/contracts';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import type { RoleRepository } from '@/core/contracts/repositories';
+import type { TenantResolver } from '@/core/contracts/tenancy';
 
 import { createSecureAction } from '@/security/actions/secure-action';
-import type { SecurityContext } from '@/security/core/security-context';
+import {
+  getSecurityContext,
+  type SecurityContextDependencies,
+  type SecurityContext,
+} from '@/security/core/security-context';
 import { resetClerkMocks } from '@/testing/infrastructure/clerk';
 import { resetEnvMocks } from '@/testing/infrastructure/env';
 import {
@@ -51,6 +58,22 @@ describe('Server Actions Integration', () => {
     mockHeaders.set('user-agent', 'test-agent');
   });
 
+  const getSecurityContextDependencies = (): SecurityContextDependencies => ({
+    identityProvider,
+    tenantResolver: container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
+    roleRepository: container.resolve<RoleRepository>(
+      AUTHORIZATION.ROLE_REPOSITORY,
+    ),
+  });
+
+  const getSecureActionDependencies = () => ({
+    getSecurityContext: () =>
+      getSecurityContext(getSecurityContextDependencies()),
+    authorizationService: container.resolve<AuthorizationService>(
+      AUTHORIZATION.SERVICE,
+    ),
+  });
+
   it('should execute successfully for authorized user', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_123',
@@ -60,6 +83,7 @@ describe('Server Actions Integration', () => {
     const action = createSecureAction({
       schema,
       role: 'user',
+      dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
 
@@ -91,6 +115,7 @@ describe('Server Actions Integration', () => {
     const action = createSecureAction({
       schema,
       role: 'admin', // Requires admin
+      dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
 
@@ -113,6 +138,7 @@ describe('Server Actions Integration', () => {
 
     const action = createSecureAction({
       schema,
+      dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
 
@@ -129,6 +155,7 @@ describe('Server Actions Integration', () => {
 
     const action = createSecureAction({
       schema,
+      dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
 
@@ -148,6 +175,7 @@ describe('Server Actions Integration', () => {
 
     const action = createSecureAction({
       schema,
+      dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
 
@@ -172,6 +200,7 @@ describe('Server Actions Integration', () => {
 
     const action = createSecureAction({
       schema,
+      dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
 

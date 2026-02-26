@@ -10,15 +10,15 @@ The current implementation is heavily coupled with Clerk, violating several arch
 
 ### 1.1 Coupling Audit
 
-| File                                    | Type of Coupling | Severity     | Description                                                                                |
-| :-------------------------------------- | :--------------- | :----------- | :----------------------------------------------------------------------------------------- |
-| `src/security/core/security-context.ts` | Data/Logic       | **Critical** | Direct `auth()` call; extracts `role` and `tenantId` from Clerk metadata.                  |
-| `src/proxy.ts`                          | Structural       | **Critical** | Uses `clerkMiddleware`; logic depends on Clerk-specific metadata for onboarding redirects. |
-| `src/actions/onboarding.ts`             | Domain/Infra     | **Critical** | Updates Clerk metadata directly; uses `clerkClient` and `auth()`.                          |
-| `src/security/middleware/with-auth.ts`  | Logic            | **Critical** | Middleware helper tightly coupled with Clerk's `sessionClaims` and `clerkClient`.          |
-| `src/security/core/authorization.ts`    | Logic            | Medium       | Depends on `SecurityContext` which is currently Clerk-dependent.                           |
-| `src/app/layout.tsx`                    | UI               | Low          | Root `ClerkProvider` integration.                                                          |
-| `src/shared/components/Header.tsx`      | UI               | Low          | Uses Clerk-specific control components.                                                    |
+| File                                        | Type of Coupling | Severity     | Description                                                                                        |
+| :------------------------------------------ | :--------------- | :----------- | :------------------------------------------------------------------------------------------------- |
+| `src/security/core/security-context.ts`     | Data/Logic       | **Critical** | Direct `auth()` call; extracts `role` and `tenantId` from Clerk metadata.                          |
+| `src/proxy.ts`                              | Structural       | **Critical** | Uses `clerkMiddleware`; logic depends on Clerk-specific metadata for onboarding redirects.         |
+| `src/actions/onboarding.ts`                 | Domain/Infra     | **Critical** | Updates Clerk metadata directly; uses `clerkClient` and `auth()`.                                  |
+| `src/security/middleware/with-auth.ts`      | Logic            | **Critical** | Middleware helper tightly coupled with Clerk's `sessionClaims` and `clerkClient`.                  |
+| `src/security/core/authorization-facade.ts` | Logic            | Medium       | Centralized authorization bridge for middleware/actions; depends on domain `AuthorizationService`. |
+| `src/app/layout.tsx`                        | UI               | Low          | Root `ClerkProvider` integration.                                                                  |
+| `src/shared/components/Header.tsx`          | UI               | Low          | Uses Clerk-specific control components.                                                            |
 
 ---
 

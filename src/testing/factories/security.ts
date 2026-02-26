@@ -1,8 +1,9 @@
 import {
-  mockAuthorize,
-  mockEnforceTenant,
-  resetAuthorizationMocks,
-} from '@/security/core/authorization.mock';
+  mockAuthorizationAuthorize,
+  mockAuthorizationCan,
+  mockAuthorizationEnsureRequiredRole,
+  resetAuthorizationFacadeMocks,
+} from '@/security/core/authorization-facade.mock';
 import {
   createMockSecurityContext,
   createMockUser,
@@ -12,7 +13,7 @@ import {
 
 // Ensure side-effects (vi.mock) are triggered
 import '@/security/core/security-context.mock';
-import '@/security/core/authorization.mock';
+import '@/security/core/authorization-facade.mock';
 
 /**
  * Global Security Infrastructure Mocks & Factories.
@@ -25,9 +26,14 @@ export {
   resetSecurityContextMocks,
 };
 
-export { mockAuthorize, mockEnforceTenant, resetAuthorizationMocks };
+export {
+  mockAuthorizationAuthorize,
+  mockAuthorizationCan,
+  mockAuthorizationEnsureRequiredRole,
+  resetAuthorizationFacadeMocks,
+};
 
 export function resetSecurityMocks() {
   resetSecurityContextMocks();
-  resetAuthorizationMocks();
+  resetAuthorizationFacadeMocks();
 }

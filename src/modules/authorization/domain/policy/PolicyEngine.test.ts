@@ -12,7 +12,7 @@ describe('PolicyEngine', () => {
     tenant: { tenantId: 't1', userId: 'u1' },
     subject: { id: 'u1' },
     resource: { type: 'document', id: 'd1' },
-    action: 'read',
+    action: 'document:read',
   };
 
   const engine = new PolicyEngine();
@@ -26,7 +26,7 @@ describe('PolicyEngine', () => {
     const policies: Policy[] = [
       {
         effect: 'allow',
-        actions: ['read'],
+        actions: ['document:read'],
         resource: 'document',
       },
     ];
@@ -38,12 +38,12 @@ describe('PolicyEngine', () => {
     const policies: Policy[] = [
       {
         effect: 'allow',
-        actions: ['read'],
+        actions: ['document:read'],
         resource: 'document',
       },
       {
         effect: 'deny',
-        actions: ['read'],
+        actions: ['document:read'],
         resource: 'document',
       },
     ];
@@ -55,7 +55,7 @@ describe('PolicyEngine', () => {
     const policies: Policy[] = [
       {
         effect: 'allow',
-        actions: ['read'],
+        actions: ['document:read'],
         resource: 'document',
         condition: (ctx) => ctx.subject.id === 'u1',
       },
@@ -75,7 +75,7 @@ describe('PolicyEngine', () => {
     const policies: Policy[] = [
       {
         effect: 'allow',
-        actions: ['read'],
+        actions: ['document:read'],
         resource: 'document',
         condition: async (ctx) => {
           return new Promise((resolve) => {

@@ -2,7 +2,13 @@ import type { NextRequest } from 'next/server';
 import type { NextResponse } from 'next/server';
 import { vi } from 'vitest';
 
+import type { Identity } from '@/core/contracts/identity';
+import type { TenantContext } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
+
 import type { RouteContext } from './route-classification';
+
+import type { SecurityDependencies } from '@/security/core/security-dependencies';
 
 export const mockWithAuth = vi.fn<
   (req: NextRequest, ctx: RouteContext) => Promise<NextResponse | null>
@@ -14,5 +20,16 @@ export function resetWithAuthMocks() {
 }
 
 vi.mock('./with-auth', () => ({
-  withAuth: (req: NextRequest, ctx: RouteContext) => mockWithAuth(req, ctx),
+  withAuth:
+    (
+      _handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
+      _options: {
+        dependencies: SecurityDependencies;
+        userRepository: UserRepository;
+        resolveIdentity?: () => Promise<Identity | null>;
+        resolveTenant?: (identity: Identity) => Promise<TenantContext>;
+      },
+    ) =>
+    (req: NextRequest, ctx: RouteContext) =>
+      mockWithAuth(req, ctx),
 }));

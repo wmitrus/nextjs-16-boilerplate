@@ -20,6 +20,12 @@ describe('Security Context', () => {
   let tenantResolver: TenantResolver;
   let roleRepository: RoleRepository;
 
+  const getDependencies = () => ({
+    identityProvider,
+    tenantResolver,
+    roleRepository,
+  });
+
   beforeEach(() => {
     identityProvider = container.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
@@ -37,7 +43,7 @@ describe('Security Context', () => {
     mockNextHeaders.mockReturnValue(new Headers());
     mockGetIP.mockResolvedValue('127.0.0.1');
 
-    const context = await getSecurityContext();
+    const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
     expect(context.ip).toBe('127.0.0.1');
@@ -64,7 +70,7 @@ describe('Security Context', () => {
     );
     mockGetIP.mockResolvedValue('1.1.1.1');
 
-    const context = await getSecurityContext();
+    const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toEqual({
       id: 'user_123',
@@ -89,7 +95,7 @@ describe('Security Context', () => {
     mockNextHeaders.mockReturnValue(new Headers());
     mockGetIP.mockResolvedValue('127.0.0.1');
 
-    const context = await getSecurityContext();
+    const context = await getSecurityContext(getDependencies());
 
     expect(context.user?.role).toBe('admin');
   });
@@ -103,7 +109,7 @@ describe('Security Context', () => {
     );
     mockGetIP.mockResolvedValue('127.0.0.1');
 
-    const context = await getSecurityContext();
+    const context = await getSecurityContext(getDependencies());
 
     expect(context.requestId).toBe('req_123');
   });

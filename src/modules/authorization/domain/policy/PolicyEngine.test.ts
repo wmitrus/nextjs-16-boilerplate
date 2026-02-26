@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type {
   AuthorizationContext,
@@ -87,5 +87,37 @@ describe('PolicyEngine', () => {
 
     const result = await engine.evaluate(mockContext, policies);
     expect(result).toBe(true);
+  });
+
+  it('should ignore policies with non-matching action', async () => {
+    const condition = vi.fn(() => true);
+    const policies: Policy[] = [
+      {
+        effect: 'allow',
+        actions: ['document:update'],
+        resource: 'document',
+        condition,
+      },
+    ];
+
+    const result = await engine.evaluate(mockContext, policies);
+    expect(result).toBe(false);
+    expect(condition).not.toHaveBeenCalled();
+  });
+
+  it('should ignore policies with non-matching resource', async () => {
+    const condition = vi.fn(() => true);
+    const policies: Policy[] = [
+      {
+        effect: 'allow',
+        actions: ['document:read'],
+        resource: 'invoice',
+        condition,
+      },
+    ];
+
+    const result = await engine.evaluate(mockContext, policies);
+    expect(result).toBe(false);
+    expect(condition).not.toHaveBeenCalled();
   });
 });

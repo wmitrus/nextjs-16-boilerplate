@@ -51,7 +51,8 @@ export default function RootLayout({
           >
             <HeaderWithAuth />
             <GlobalErrorHandlers />
-            <SpeedInsights />
+            {(env.VERCEL_ENV === 'production' ||
+              env.VERCEL_ENV === 'preview') && <SpeedInsights />}
             <Suspense fallback={null}>{children}</Suspense>
           </ClerkProvider>
         </Suspense>

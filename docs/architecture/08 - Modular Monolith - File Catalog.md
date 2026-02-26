@@ -56,9 +56,9 @@ Dependencies should flow inward toward stable abstractions:
 - `app` → `features/modules/security/shared/core`
 - `features` → `modules/security/shared/core`
 - `modules` → `core/shared` (and own subfolders)
-- `security` → `core/shared/modules/authorization` (via contracts/services)
+- `security` → `core/shared` (and security-owned files only; module access via contracts)
 - `shared` → `core` (utilities/contracts only), never module/domain policy code
-- `core` → should not depend on `features` or `app`
+- `core` → should not depend on `modules`, `security`, `features`, or `app`
 
 ### 2.2 Important constraints
 
@@ -86,7 +86,7 @@ This gives:
 
 - explicit interfaces,
 - swappable implementations,
-- controlled composition at bootstrap time,
+- controlled composition in a composition root,
 - and easier unit testing with mocks.
 
 ### 3.2 Contracts and tokens
@@ -101,11 +101,11 @@ Tokens in `src/core/contracts/index.ts` are the stable lookup keys used by the c
 
 ### 3.3 Registration
 
-Each module exports registration logic (`modules/auth`, `modules/authorization`) to bind concrete adapters/services to contracts.
+Each module exports registration logic (`modules/auth`, `modules/authorization`, `modules/user`) to bind concrete adapters/services to contracts.
 
 ### 3.4 Runtime usage pattern
 
-- Prefer resolving services from DI-facing abstractions.
+- Resolve dependencies in composition/root entry points, then pass explicit dependencies inward.
 - Keep concrete provider logic inside module infrastructure.
 - For cross-cutting logger concerns, use DI-aware logger access where applicable.
 
@@ -133,6 +133,7 @@ This is the foundation modules build on.
 
 - `modules/auth` isolates authentication provider integration.
 - `modules/authorization` isolates permissions/policy domain logic.
+- `modules/user` isolates user-domain data and access contracts.
 
 Modules are the primary place to add new domain capabilities.
 
@@ -168,7 +169,7 @@ Contains factories and infrastructure mocks used across suites to keep test setu
 ### 5.1 HTTP/API request
 
 1. Request enters through `app` route or proxy.
-2. Security middleware pipeline classifies route and applies guards/rate-limit/headers.
+2. Security middleware pipeline classifies route and applies guards/rate-limit/headers with request-scoped dependencies.
 3. Route delegates to feature/module services.
 4. Cross-cutting concerns (logging/errors) are handled through shared/core infrastructure.
 5. Response is returned via standardized API response helpers.
@@ -237,7 +238,7 @@ This section documents each implemented runtime/support file (excluding test fil
 
 ## 8.1 Entry points, proxy, observability
 
-- `src/proxy.ts` — global proxy/middleware entry point; composes security layers and route classification.
+- `src/proxy.ts` — global proxy/middleware entry point; assembles request-scoped security dependencies and composes route classification.
 - `src/instrumentation.ts` — server-side telemetry/observability setup (Next.js instrumentation hook).
 - `src/instrumentation-client.ts` — client-side telemetry/observability setup.
 
@@ -334,10 +335,14 @@ This section documents each implemented runtime/support file (excluding test fil
 ### `modules/authorization`
 
 - `src/modules/authorization/index.ts` — registers the authorization module in DI.
-- `src/modules/authorization/domain/permission.ts` — permission model and operations.
+- `src/modules/authorization/domain/permission.ts` — compatibility re-export for permission primitives from core contracts.
 - `src/modules/authorization/domain/AuthorizationService.ts` — authorization domain service.
 - `src/modules/authorization/domain/policy/PolicyEngine.ts` — policy evaluation engine.
 - `src/modules/authorization/infrastructure/MockRepositories.ts` — mock repositories for local/test mode.
+
+### `modules/user`
+
+- `src/modules/user/index.ts` — registers user module dependencies in DI.
 
 ## 8.5 Security layer
 
@@ -345,8 +350,10 @@ This section documents each implemented runtime/support file (excluding test fil
 
 - `src/security/core/security-context.ts` — builds/reads security context.
 - `src/security/core/security-context.mock.ts` — security context mock.
-- `src/security/core/authorization.ts` — bridge adapter between security and authorization domain.
-- `src/security/core/authorization.mock.ts` — authorization adapter mock.
+- `src/security/core/authorization-facade.ts` — centralized authorization facade for security layer decisions.
+- `src/security/core/authorization-facade.mock.ts` — authorization facade mock.
+- `src/security/core/request-scoped-context.ts` — request-scoped context model for authz attributes.
+- `src/security/core/security-dependencies.ts` — request-scoped assembly contract/factory for security middleware and actions.
 
 ### Middleware composition
 
@@ -464,25 +471,57 @@ This section documents each implemented runtime/support file (excluding test fil
 
 ---
 
-## 9) Alignment with architecture diagrams
+## 9) Diagram-to-code traceability matrix
 
-This architecture guide aligns with:
+The following mapping is the audit source of truth for architecture diagrams.
 
-1. `01 - Global Dependency Rules.mmd`
-2. `02 - Full Module Structure.mmd`
-3. `03 - Authorization Flow.mmd`
-4. `04 - Auth Provider Isolation.mmd`
-5. `05 - Tenant Resolution Abstraction.mmd`
-6. `06 - Ideal FInal Dependency Graph (strict).mmd`
-7. `07 - Enterprise Grade Check Graph.mmd`
+### 9.1 `01 - Global Dependency Rules.mmd`
 
-Interpretation:
+- Layer anchors: `src/app/*`, `src/features/*`, `src/modules/*`, `src/security/*`, `src/shared/*`, `src/core/*`
+- Runtime enforcement anchor: `src/proxy.ts`
+- Composition anchor: `src/core/container/index.ts`
 
-- `core/*` defines contracts and cross-cutting concerns.
-- `modules/*` implements domain modules and adapters.
-- `security/*` contains policy enforcement and protection mechanisms.
-- `shared/*` provides neutral reusable building blocks.
-- `app/*` is the delivery layer (routing/UI/API edges).
+### 9.2 `02 - Full Module Structure.mmd`
+
+- Delivery anchors: `src/app/*`, `src/actions/*`, `src/proxy.ts`
+- Feature anchor: `src/features/security-showcase/*`
+- Module anchors: `src/modules/auth/*`, `src/modules/authorization/*`, `src/modules/user/*`
+- Cross-cutting anchors: `src/security/*`, `src/shared/*`
+- Core anchors: `src/core/contracts/*`, `src/core/container/*`, `src/core/env.ts`, `src/core/logger/*`, `src/core/error/*`
+
+### 9.3 `03 - Authorization Flow.mmd`
+
+- Request entry: `src/proxy.ts`
+- Middleware flow: `src/security/middleware/with-security.ts`, `src/security/middleware/with-auth.ts`
+- Security context assembly: `src/security/core/security-context.ts`, `src/security/core/security-dependencies.ts`
+- Decision facade: `src/security/core/authorization-facade.ts`
+- Provider/repository contracts: `src/core/contracts/identity.ts`, `src/core/contracts/user.ts`, `src/core/contracts/authorization.ts`
+
+### 9.4 `04 - Auth Provider Isolation.mmd`
+
+- Provider adapter boundary: `src/modules/auth/infrastructure/ClerkIdentityProvider.ts`
+- Module registration boundary: `src/modules/auth/index.ts`
+- Contract boundary: `src/core/contracts/identity.ts`
+- Contract consumers: `src/security/core/security-context.ts`, `src/security/middleware/with-auth.ts`
+
+### 9.5 `05 - Tenant Resolution Abstraction.mmd`
+
+- Tenant contract: `src/core/contracts/tenancy.ts`
+- Provider adapter: `src/modules/auth/infrastructure/ClerkTenantResolver.ts`
+- Runtime tenant usage: `src/security/core/security-context.ts`, `src/security/middleware/with-auth.ts`
+- Authorization handoff: `src/security/core/authorization-facade.ts`
+
+### 9.6 `06 - Ideal FInal Dependency Graph (strict).mmd`
+
+- Layer anchors: `src/app/*`, `src/features/*`, `src/modules/*`, `src/security/*`, `src/shared/*`, `src/core/*`
+- Composition/root anchors: `src/proxy.ts`, `src/core/container/index.ts`
+
+### 9.7 `07 - Enterprise Grade Check Graph.mmd`
+
+- Provider isolation checks: `src/modules/auth/infrastructure/*`, `src/core/contracts/identity.ts`
+- Security runtime checks: `src/security/middleware/with-auth.ts`, `src/security/core/security-context.ts`
+- Authorization boundary checks: `src/security/core/authorization-facade.ts`, `src/core/contracts/authorization.ts`
+- Dependency direction checks: `src/core/contracts/*` vs `src/modules/*`
 
 ---
 

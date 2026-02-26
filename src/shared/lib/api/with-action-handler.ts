@@ -2,12 +2,12 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { headers } from 'next/headers';
 import { ZodError } from 'zod';
 
-import { logger as baseLogger } from '@/core/logger/server';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import { AppError } from '@/shared/lib/api/app-error';
 import type { ApiResponse } from '@/shared/types/api-response';
 
-const logger = baseLogger.child({
+const logger = resolveServerLogger().child({
   type: 'API',
   category: 'action-handler',
   module: 'with-action-handler',

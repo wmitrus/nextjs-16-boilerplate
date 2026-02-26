@@ -15,35 +15,35 @@ describe('Authorization Engine', () => {
   describe('authorize', () => {
     it('should allow admin for admin requirement', () => {
       const ctx = createMockSecurityContext({
-        user: { id: 'user_1', role: 'admin' },
+        user: { id: 'user_1', role: 'admin', tenantId: 'tenant_1' },
       });
       expect(() => authorize(ctx, 'admin')).not.toThrow();
     });
 
     it('should allow admin for user requirement', () => {
       const ctx = createMockSecurityContext({
-        user: { id: 'user_1', role: 'admin' },
+        user: { id: 'user_1', role: 'admin', tenantId: 'tenant_1' },
       });
       expect(() => authorize(ctx, 'user')).not.toThrow();
     });
 
     it('should deny user for admin requirement', () => {
       const ctx = createMockSecurityContext({
-        user: { id: 'user_1', role: 'user' },
+        user: { id: 'user_1', role: 'user', tenantId: 'tenant_1' },
       });
       expect(() => authorize(ctx, 'admin')).toThrow(AuthorizationError);
     });
 
     it('should allow user for user requirement', () => {
       const ctx = createMockSecurityContext({
-        user: { id: 'user_1', role: 'user' },
+        user: { id: 'user_1', role: 'user', tenantId: 'tenant_1' },
       });
       expect(() => authorize(ctx, 'user')).not.toThrow();
     });
 
     it('should deny guest for user requirement', () => {
       const ctx = createMockSecurityContext({
-        user: { id: 'user_1', role: 'guest' },
+        user: { id: 'user_1', role: 'guest', tenantId: 'tenant_1' },
       });
       expect(() => authorize(ctx, 'user')).toThrow(AuthorizationError);
     });
@@ -55,7 +55,7 @@ describe('Authorization Engine', () => {
 
     it('should allow guest for guest requirement', () => {
       const ctx = createMockSecurityContext({
-        user: { id: 'user_1', role: 'guest' },
+        user: { id: 'user_1', role: 'guest', tenantId: 'tenant_1' },
       });
       expect(() => authorize(ctx, 'guest')).not.toThrow();
     });

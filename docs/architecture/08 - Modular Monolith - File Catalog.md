@@ -1,23 +1,247 @@
-# 08 - Modular Monolith - File Catalog
+# 08 - Modular Monolith Architecture & File Catalog
 
-## Document purpose
+## Purpose
 
-This document is a complete map of the files implementing the Modular Monolith in this repository.
-It describes the role of **every implemented runtime/support file** (excluding test files), grouped by architectural layer.
+This document is the **implementation guide** for the project architecture.
+It explains:
 
-> Location: `docs/architecture`, next to the architecture diagrams.
+- why the codebase is split into specific directories,
+- how the Modular Monolith and DI model work in practice,
+- how dependencies are allowed to flow,
+- how to add new modules/features safely,
+- and what every runtime/support file is responsible for.
+
+This is intended to be a production-ready onboarding document for engineers extending the app.
 
 ---
 
-## 1) Entry points, proxy, observability
+## 1) Architecture in one page
+
+### 1.1 System style
+
+This codebase uses a **Modular Monolith**:
+
+- One deployable application.
+- Multiple isolated domain modules.
+- Shared infrastructure and cross-cutting concerns.
+- Strict dependency flow rules to prevent architecture erosion.
+
+### 1.2 Why this split exists
+
+The split is intentional to optimize:
+
+- **Change safety**: isolated modules reduce blast radius.
+- **Testability**: DI contracts make behavior mockable.
+- **Replaceability**: provider-specific adapters (for example auth provider) are isolated.
+- **Scalability of team work**: module ownership is clearer.
+- **Operational reliability**: security and logging are centralized cross-cutting concerns.
+
+### 1.3 High-level layering
+
+- `app/*` = delivery layer (routing/UI/API edges).
+- `features/*` = product-facing use-case slices.
+- `modules/*` = domain modules + adapters.
+- `security/*` = policy enforcement and security pipeline.
+- `core/*` = contracts, DI container, env, and cross-cutting infrastructure.
+- `shared/*` = neutral reusable building blocks (no domain policy logic).
+
+---
+
+## 2) Dependency rules (must-follow)
+
+### 2.1 Allowed direction
+
+Dependencies should flow inward toward stable abstractions:
+
+- `app` → `features/modules/security/shared/core`
+- `features` → `modules/security/shared/core`
+- `modules` → `core/shared` (and own subfolders)
+- `security` → `core/shared/modules/authorization` (via contracts/services)
+- `shared` → `core` (utilities/contracts only), never module/domain policy code
+- `core` → should not depend on `features` or `app`
+
+### 2.2 Important constraints
+
+- `shared/*` must remain **domain-neutral**.
+- Provider-specific code (Clerk, etc.) lives in **module adapters**, not shared UI primitives.
+- Business policy logic belongs in modules/security, not app routes.
+- New external integrations should enter through adapters, not scattered imports.
+
+### 2.3 Anti-patterns to avoid
+
+- Putting RBAC/policy/tenant logic inside `shared/*`.
+- Importing provider SDK directly in generic components.
+- Bypassing contracts by reaching into module internals from unrelated layers.
+- Adding global mutable state instead of container-managed services.
+
+---
+
+## 3) DI model and lifecycle
+
+### 3.1 Core idea
+
+The DI container in `src/core/container/index.ts` wires modules through tokens/contracts from `src/core/contracts/*`.
+
+This gives:
+
+- explicit interfaces,
+- swappable implementations,
+- controlled composition at bootstrap time,
+- and easier unit testing with mocks.
+
+### 3.2 Contracts and tokens
+
+Contracts are in `src/core/contracts/*` and define app-level capabilities, for example:
+
+- identity and tenancy,
+- authorization service and repositories,
+- logger abstraction.
+
+Tokens in `src/core/contracts/index.ts` are the stable lookup keys used by the container.
+
+### 3.3 Registration
+
+Each module exports registration logic (`modules/auth`, `modules/authorization`) to bind concrete adapters/services to contracts.
+
+### 3.4 Runtime usage pattern
+
+- Prefer resolving services from DI-facing abstractions.
+- Keep concrete provider logic inside module infrastructure.
+- For cross-cutting logger concerns, use DI-aware logger access where applicable.
+
+---
+
+## 4) Directory purpose (why each top-level area exists)
+
+## `src/app`
+
+**Purpose**: framework delivery layer.
+
+Contains Next.js routes/pages/layouts and API route edges.
+It should orchestrate request/response and delegate domain/policy behavior to lower layers.
+
+## `src/core`
+
+**Purpose**: stable foundation.
+
+Contains contracts, container, env schema, logger infrastructure, and other cross-cutting primitives.
+This is the foundation modules build on.
+
+## `src/modules`
+
+**Purpose**: isolated business modules with explicit boundaries.
+
+- `modules/auth` isolates authentication provider integration.
+- `modules/authorization` isolates permissions/policy domain logic.
+
+Modules are the primary place to add new domain capabilities.
+
+## `src/security`
+
+**Purpose**: centralized policy enforcement and hardening.
+
+Contains middleware pipeline, secure actions, outbound protection, and sanitization.
+Security rules are enforced consistently in one place rather than duplicated.
+
+## `src/features`
+
+**Purpose**: user-facing vertical capabilities.
+
+Features compose reusable pieces from modules/security/shared to deliver concrete product behavior.
+
+## `src/shared`
+
+**Purpose**: neutral reusable assets.
+
+Contains generic components, hooks, helpers, and types with no domain policy ownership.
+
+## `src/testing`
+
+**Purpose**: non-test runtime support for tests.
+
+Contains factories and infrastructure mocks used across suites to keep test setup consistent.
+
+---
+
+## 5) Request flow and responsibility map
+
+### 5.1 HTTP/API request
+
+1. Request enters through `app` route or proxy.
+2. Security middleware pipeline classifies route and applies guards/rate-limit/headers.
+3. Route delegates to feature/module services.
+4. Cross-cutting concerns (logging/errors) are handled through shared/core infrastructure.
+5. Response is returned via standardized API response helpers.
+
+### 5.2 UI interaction flow
+
+1. UI in `app`/`features` triggers actions.
+2. Action wrappers apply security/audit/replay protections.
+3. Domain decisions come from module services (auth/authorization).
+4. Shared components render neutral UI primitives.
+
+---
+
+## 6) How to add new functionality correctly
+
+### 6.1 Add a new feature (recommended sequence)
+
+1. Define feature scope in `features/<feature-name>`.
+2. Reuse existing module contracts/services where possible.
+3. If new domain capability is needed, add or extend a module in `modules/*`.
+4. Keep provider SDK usage in module infrastructure adapters.
+5. Expose only necessary interfaces upward.
+6. Add tests at unit/integration boundaries.
+
+### 6.2 Add a new module
+
+1. Create `src/modules/<module>/index.ts` with `register(container)`.
+2. Define/extend required contracts under `src/core/contracts/*`.
+3. Implement domain + infrastructure subfolders.
+4. Register module in bootstrap container.
+5. Add mocks/adapters for tests in `src/testing/infrastructure` if needed.
+6. Validate dependency direction and lint/type/test gates.
+
+### 6.3 Add new env variables
+
+1. Add to `src/core/env.ts` schema (server/client + runtimeEnv).
+2. Update `.env.example`.
+3. Run env consistency checks.
+4. Keep secrets server-only unless explicitly public.
+
+### 6.4 Add new security behavior
+
+1. Prefer extending `security/middleware` composition or `security/actions` wrappers.
+2. Keep rules centralized and reusable.
+3. Avoid route-local ad hoc security logic unless absolutely necessary.
+
+---
+
+## 7) Production readiness checklist for architecture changes
+
+Before merging architectural changes:
+
+- [ ] Dependency direction still follows this document.
+- [ ] No domain logic leaked into `shared/*`.
+- [ ] New provider-specific code is isolated in adapters.
+- [ ] DI contracts/tokens are explicit and testable.
+- [ ] Env schema and `.env.example` are in sync.
+- [ ] Unit/integration/e2e pathways are still valid.
+- [ ] Logging/error handling paths remain consistent.
+
+---
+
+## 8) Runtime/support file catalog
+
+This section documents each implemented runtime/support file (excluding test files).
+
+## 8.1 Entry points, proxy, observability
 
 - `src/proxy.ts` — global proxy/middleware entry point; composes security layers and route classification.
 - `src/instrumentation.ts` — server-side telemetry/observability setup (Next.js instrumentation hook).
 - `src/instrumentation-client.ts` — client-side telemetry/observability setup.
 
----
-
-## 2) App layer (Next.js App Router)
+## 8.2 App layer (Next.js App Router)
 
 ### API routes
 
@@ -61,9 +285,7 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/app/components/sections/CTA.tsx` — call-to-action section.
 - `src/app/components/vercel-speed-insights.tsx` — Vercel Speed Insights UI integration.
 
----
-
-## 3) Core layer (contracts, container, env, cross-cutting)
+## 8.3 Core layer (contracts, container, env, cross-cutting)
 
 ### Container and contracts
 
@@ -97,9 +319,7 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/core/logger/browser-utils.ts` — browser logger utilities.
 - `src/core/logger/edge-utils.ts` — edge logger utilities.
 
----
-
-## 4) Modules layer
+## 8.4 Modules layer
 
 ### `modules/auth`
 
@@ -119,9 +339,7 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/modules/authorization/domain/policy/PolicyEngine.ts` — policy evaluation engine.
 - `src/modules/authorization/infrastructure/MockRepositories.ts` — mock repositories for local/test mode.
 
----
-
-## 5) Security layer
+## 8.5 Security layer
 
 ### Core and context
 
@@ -158,9 +376,7 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/security/rsc/data-sanitizer.mock.ts` — sanitizer mock.
 - `src/security/utils/security-logger.ts` — dedicated security event logging.
 
----
-
-## 6) Features layer
+## 8.6 Features layer
 
 ### `features/user-management`
 
@@ -179,9 +395,7 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/features/security-showcase/components/ExternalFetchExample.tsx` — secure outbound fetch example.
 - `src/features/security-showcase/components/EnvDiagnosticsExample.tsx` — environment diagnostics rendering example.
 
----
-
-## 7) Shared layer (neutral shared building blocks)
+## 8.7 Shared layer (neutral shared building blocks)
 
 ### Components
 
@@ -221,9 +435,7 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/shared/types/api-response.ts` — shared API response types.
 - `src/shared/utils/cn.ts` — CSS/Tailwind class merge helper.
 
----
-
-## 8) Testing support infrastructure (non-test runtime files)
+## 8.8 Testing support infrastructure (non-test runtime files)
 
 - `src/testing/index.ts` — central export for test helpers.
 - `src/testing/factories/request.ts` — request object factories for tests.
@@ -237,9 +449,7 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/testing/infrastructure/security-domain.ts` — security/authorization domain mocks.
 - `src/testing/infrastructure/security-middleware.ts` — security middleware test helpers.
 
----
-
-## 9) Storybook/demo support
+## 8.9 Storybook/demo support
 
 - `src/stories/Button.tsx` — demo Button component.
 - `src/stories/Header.tsx` — demo Header component (storybook).
@@ -248,17 +458,15 @@ It describes the role of **every implemented runtime/support file** (excluding t
 - `src/stories/Header.stories.ts` — Storybook scenarios for Header.
 - `src/stories/Page.stories.ts` — Storybook scenarios for Page.
 
----
-
-## 10) Global types
+## 8.10 Global types
 
 - `src/types/globals.d.ts` — global TypeScript declarations.
 
 ---
 
-## Alignment with architecture diagrams
+## 9) Alignment with architecture diagrams
 
-This file catalog aligns with the architecture diagrams:
+This architecture guide aligns with:
 
 1. `01 - Global Dependency Rules.mmd`
 2. `02 - Full Module Structure.mmd`
@@ -268,10 +476,39 @@ This file catalog aligns with the architecture diagrams:
 6. `06 - Ideal FInal Dependency Graph (strict).mmd`
 7. `07 - Enterprise Grade Check Graph.mmd`
 
-In practice:
+Interpretation:
 
 - `core/*` defines contracts and cross-cutting concerns.
 - `modules/*` implements domain modules and adapters.
 - `security/*` contains policy enforcement and protection mechanisms.
 - `shared/*` provides neutral reusable building blocks.
 - `app/*` is the delivery layer (routing/UI/API edges).
+
+---
+
+## 10) Quick onboarding path for new engineers
+
+If you are new to this codebase, follow this order:
+
+1. Read architecture diagrams 01 → 07.
+2. Read sections 1–4 in this document.
+3. Inspect `core/contracts`, then `core/container`.
+4. Review `modules/auth` and `modules/authorization` to understand domain boundaries.
+5. Review `security/middleware/with-security.ts` for runtime enforcement flow.
+6. Build your first change in a feature folder using existing contracts.
+7. Validate with lint/typecheck/tests before opening PR.
+
+This sequence minimizes accidental boundary violations and helps keep the monolith modular over time.
+
+---
+
+## 11) Definition of done for architectural changes
+
+A change is architecture-complete only when:
+
+- dependency direction remains valid,
+- DI contracts/tokens are updated where required,
+- env/schema/docs are synchronized,
+- security and logging paths are still consistent,
+- tests cover new behavior at appropriate layer boundaries,
+- and this document is updated if folder responsibilities changed.

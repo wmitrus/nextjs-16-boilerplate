@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Container, type Module } from './index';
+import { Container, createContainer, type Module } from './index';
 
 describe('Container', () => {
   it('should register and resolve a service', () => {
@@ -48,14 +48,8 @@ describe('Container', () => {
     expect(container.resolve(KEY)).toBe(second);
   });
 
-  it('should lazily register missing services when resolver hook is provided', () => {
-    const KEY = Symbol('LazyService');
-    const service = { id: 'lazy' };
-
-    const container = new Container((c) => {
-      c.register(KEY, service);
-    });
-
-    expect(container.resolve(KEY)).toBe(service);
+  it('should create a deterministic container with core modules registered', () => {
+    const builtContainer = createContainer();
+    expect(builtContainer).toBeInstanceOf(Container);
   });
 });

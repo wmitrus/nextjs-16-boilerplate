@@ -35,7 +35,7 @@ describe('Outbound Security Integration (SSRF)', () => {
     expect(mockChildLogger.error).not.toHaveBeenCalled();
   });
 
-  it('should allow requests to core allowed hosts (Clerk)', async () => {
+  it('should allow requests to core allowed hosts', async () => {
     server.use(
       http.get('https://api.clerk.com/v1/clients', () => {
         return HttpResponse.json({ status: 'ok' });

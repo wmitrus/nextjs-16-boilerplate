@@ -48,6 +48,11 @@ export function withAuth(
       return handler(req, ctx);
     }
 
+    // Fast path: non-auth public routes do not require identity resolution.
+    if (ctx.isPublicRoute && !ctx.isAuthRoute) {
+      return handler(req, ctx);
+    }
+
     const identity = options.resolveIdentity
       ? await options.resolveIdentity()
       : await identityProvider.getCurrentIdentity();

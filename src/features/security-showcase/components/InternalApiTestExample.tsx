@@ -55,6 +55,7 @@ export function InternalApiTestExample() {
 
       <div className="flex gap-4">
         <button
+          type="button"
           onClick={() => testInternalApi(false)}
           disabled={loading}
           className="flex-1 rounded border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
@@ -62,6 +63,7 @@ export function InternalApiTestExample() {
           Test without Key (403)
         </button>
         <button
+          type="button"
           onClick={() => testInternalApi(true)}
           disabled={loading}
           className="flex-1 rounded bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"

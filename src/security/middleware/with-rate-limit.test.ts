@@ -5,7 +5,7 @@ import '@/shared/lib/network/get-ip.mock';
 import '@/shared/lib/rate-limit/rate-limit-helper.mock';
 
 import { NextResponse } from 'next/server';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { createMockRouteContext } from './route-classification.mock';
 import { withRateLimit } from './with-rate-limit';
@@ -18,22 +18,33 @@ import {
 } from '@/testing';
 
 describe('Rate Limit Middleware', () => {
+  const mockHandler = vi
+    .fn()
+    .mockImplementation(async () => NextResponse.next());
+
   beforeEach(() => {
     resetAllInfrastructureMocks();
+    mockHandler.mockClear();
   });
 
-  it('should return null if not an api route', async () => {
+  it('should call next handler if not an api route', async () => {
     const req = createMockRequest({ path: '/' });
     const ctx = createMockRouteContext({ isApi: false });
-    const res = await withRateLimit(req, NextResponse.next(), ctx, 'corr_1');
-    expect(res).toBeNull();
+
+    const middleware = withRateLimit(mockHandler);
+    await middleware(req, ctx);
+
+    expect(mockHandler).toHaveBeenCalled();
   });
 
-  it('should return null if it is a webhook', async () => {
+  it('should call next handler if it is a webhook', async () => {
     const req = createMockRequest({ path: '/api/webhooks' });
     const ctx = createMockRouteContext({ isApi: true, isWebhook: true });
-    const res = await withRateLimit(req, NextResponse.next(), ctx, 'corr_1');
-    expect(res).toBeNull();
+
+    const middleware = withRateLimit(mockHandler);
+    await middleware(req, ctx);
+
+    expect(mockHandler).toHaveBeenCalled();
   });
 
   it('should allow request if within rate limit', async () => {
@@ -47,12 +58,14 @@ describe('Rate Limit Middleware', () => {
 
     const req = createMockRequest({ path: '/api/data' });
     const ctx = createMockRouteContext({ isApi: true });
-    const response = NextResponse.next();
-    const res = await withRateLimit(req, response, ctx, 'corr_1');
 
-    expect(res).toBeNull();
-    expect(response.headers.get('X-RateLimit-Limit')).toBe('100');
-    expect(response.headers.get('X-RateLimit-Remaining')).toBe('99');
+    const middleware = withRateLimit(mockHandler);
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('100');
+    expect(res.headers.get('X-RateLimit-Remaining')).toBe('99');
+    expect(mockHandler).toHaveBeenCalled();
   });
 
   it('should block request if rate limit exceeded', async () => {
@@ -66,9 +79,12 @@ describe('Rate Limit Middleware', () => {
 
     const req = createMockRequest({ path: '/api/data' });
     const ctx = createMockRouteContext({ isApi: true });
-    const res = await withRateLimit(req, NextResponse.next(), ctx, 'corr_1');
 
-    expect(res?.status).toBe(429);
-    expect(res?.headers.get('Retry-After')).toBe('60');
+    const middleware = withRateLimit(mockHandler);
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('60');
+    expect(mockHandler).not.toHaveBeenCalled();
   });
 });

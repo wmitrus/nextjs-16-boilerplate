@@ -1,0 +1,34 @@
+flowchart TD
+%% Traceability: src/app/**, src/features/**, src/modules/**, src/security/**, src/shared/**, src/core/**
+%% Runtime anchors: src/proxy.ts, src/core/container/index.ts, src/security/middleware/with-security.ts
+
+APP["app/* (delivery)"]
+FEATURES["features/*"]
+MODULES["modules/*"]
+SECURITY["security/*"]
+SHARED["shared/*"]
+CORE["core/* (contracts, container, env, logger)"]
+
+APP --> FEATURES
+APP --> MODULES
+APP --> SECURITY
+APP --> SHARED
+APP --> CORE
+
+FEATURES --> MODULES
+FEATURES --> SECURITY
+FEATURES --> SHARED
+FEATURES --> CORE
+
+MODULES --> CORE
+MODULES --> SHARED
+
+SECURITY --> CORE
+SECURITY --> SHARED
+
+SHARED --> CORE
+
+CORE -. FORBIDDEN .-> MODULES
+CORE -. FORBIDDEN .-> SECURITY
+CORE -. FORBIDDEN .-> FEATURES
+CORE -. FORBIDDEN .-> APP

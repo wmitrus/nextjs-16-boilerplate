@@ -121,7 +121,7 @@ describe('GlobalErrorHandlers', () => {
     expect(mockLogger.error).not.toHaveBeenCalled();
   });
 
-  it('ignores Clerk no-op rejections', () => {
+  it('ignores known no-op rejections', () => {
     render(<GlobalErrorHandlers />);
 
     const error = new Error('cannot_render_single_session_enabled');

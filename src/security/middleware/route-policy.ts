@@ -3,6 +3,7 @@ export const AUTH_ROUTE_PREFIXES = ['/sign-in', '/sign-up'] as const;
 export const PUBLIC_ROUTE_PREFIXES = [
   '/',
   '/waitlist',
+  '/env-summary',
   '/security-showcase',
   '/sentry-example-page',
   '/monitoring',

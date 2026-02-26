@@ -146,7 +146,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     `connect-src ${connectSrc}`,
     `frame-src ${frameSrc}`,
     "worker-src 'self' blob:",
-    'upgrade-insecure-requests',
+    env.VERCEL_ENV === 'production' ? 'upgrade-insecure-requests' : '',
   ].join('; ');
 
   res.headers.set('Content-Security-Policy', csp);

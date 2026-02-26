@@ -2,109 +2,200 @@ import '@/testing/infrastructure/clerk';
 import '@/testing/infrastructure/next-headers';
 import '@/testing/infrastructure/logger';
 
-import type { ClerkMiddlewareAuth } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
+import type { Mocked } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import type { AuthorizationService } from '@/core/contracts/authorization';
+import type { IdentityProvider } from '@/core/contracts/identity';
+import type { RoleRepository } from '@/core/contracts/repositories';
+import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
 
 import { withAuth } from './with-auth';
 
+import type { SecurityDependencies } from '@/security/core/security-dependencies';
 import {
   createMockRequest,
   createMockRouteContext,
-  mockClerkClient,
   resetAllInfrastructureMocks,
 } from '@/testing';
 
 describe('Auth Middleware', () => {
+  const mockIdentityProvider = {
+    getCurrentIdentity: vi.fn(),
+  } as unknown as Mocked<IdentityProvider>;
+
+  const mockUserRepository = {
+    findById: vi.fn(),
+    updateOnboardingStatus: vi.fn(),
+  } as unknown as Mocked<UserRepository>;
+
+  const mockTenantResolver = {
+    resolve: vi.fn(),
+  } as unknown as Mocked<TenantResolver>;
+
+  const mockAuthorizationService = {
+    can: vi.fn(),
+  } as unknown as Mocked<AuthorizationService>;
+
+  const mockRoleRepository = {
+    getRoles: vi.fn(),
+  } as unknown as Mocked<RoleRepository>;
+
+  const securityDependencies: SecurityDependencies = {
+    identityProvider: mockIdentityProvider,
+    tenantResolver: mockTenantResolver,
+    roleRepository: mockRoleRepository,
+    authorizationService: mockAuthorizationService,
+  };
+
+  const mockHandler = vi
+    .fn()
+    .mockImplementation(async () => NextResponse.next());
+
   beforeEach(() => {
     resetAllInfrastructureMocks();
+    mockIdentityProvider.getCurrentIdentity.mockReset();
+    mockUserRepository.findById.mockReset();
+    mockTenantResolver.resolve.mockReset();
+    mockRoleRepository.getRoles.mockReset();
+    mockAuthorizationService.can.mockReset();
+    mockTenantResolver.resolve.mockResolvedValue({
+      tenantId: 't1',
+      userId: 'user_1',
+    });
+    mockRoleRepository.getRoles.mockResolvedValue(['user']);
+    mockAuthorizationService.can.mockResolvedValue(true);
+    mockHandler.mockClear();
   });
 
   it('should redirect authenticated users from auth routes to home if onboarding is complete', async () => {
-    const auth = vi.fn().mockResolvedValue({
-      userId: 'user_1',
-      sessionClaims: { metadata: { onboardingComplete: true } },
-    }) as unknown as ClerkMiddlewareAuth;
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+
     const req = createMockRequest({ path: '/sign-in' });
     const ctx = createMockRouteContext({
       isAuthRoute: true,
       isPublicRoute: true,
     });
 
-    const res = await withAuth(auth, req, ctx);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
 
-    expect(res?.status).toBe(307);
-    expect(res?.headers.get('location')).toBe('http://localhost/');
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(mockHandler).not.toHaveBeenCalled();
   });
 
   it('should redirect authenticated users from auth routes to onboarding if incomplete', async () => {
-    mockClerkClient.mockResolvedValue({
-      users: {
-        getUser: vi
-          .fn()
-          .mockResolvedValue({ publicMetadata: { onboardingComplete: false } }),
-      },
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: false,
     });
 
-    const auth = vi.fn().mockResolvedValue({
-      userId: 'user_1',
-      sessionClaims: { metadata: {} }, // Missing onboardingComplete triggers fallback to clerkClient
-    }) as unknown as ClerkMiddlewareAuth;
     const req = createMockRequest({ path: '/sign-in' });
     const ctx = createMockRouteContext({
       isAuthRoute: true,
       isPublicRoute: true,
     });
 
-    const res = await withAuth(auth, req, ctx);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
 
-    expect(res?.status).toBe(307);
-    expect(res?.headers.get('location')).toBe('http://localhost/onboarding');
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/onboarding');
+    expect(mockHandler).not.toHaveBeenCalled();
   });
 
   it('should redirect to onboarding for private routes if onboarding is incomplete', async () => {
-    mockClerkClient.mockResolvedValue({
-      users: {
-        getUser: vi
-          .fn()
-          .mockResolvedValue({ publicMetadata: { onboardingComplete: false } }),
-      },
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: false,
     });
 
-    const auth = vi.fn().mockResolvedValue({
-      userId: 'user_1',
-      sessionClaims: { metadata: {} },
-    }) as unknown as ClerkMiddlewareAuth;
     const req = createMockRequest({ path: '/dashboard' });
     const ctx = createMockRouteContext({ isPublicRoute: false });
 
-    const res = await withAuth(auth, req, ctx);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
 
-    expect(res?.status).toBe(307);
-    expect(res?.headers.get('location')).toBe('http://localhost/onboarding');
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/onboarding');
+    expect(mockHandler).not.toHaveBeenCalled();
   });
 
-  it('should return null for public routes', async () => {
-    const auth = vi
-      .fn()
-      .mockResolvedValue({ userId: null }) as unknown as ClerkMiddlewareAuth;
+  it('should call next handler for public routes when unauthenticated', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue(null);
+
     const req = createMockRequest({ path: '/' });
     const ctx = createMockRouteContext({ isPublicRoute: true });
 
-    const res = await withAuth(auth, req, ctx);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    await middleware(req, ctx);
 
-    expect(res).toBeNull();
+    expect(mockHandler).toHaveBeenCalled();
+    expect(mockIdentityProvider.getCurrentIdentity).not.toHaveBeenCalled();
   });
 
-  it('should return null for authenticated users on private routes if onboarding is complete', async () => {
-    const auth = vi.fn().mockResolvedValue({
-      userId: 'user_1',
-      sessionClaims: { metadata: { onboardingComplete: true } },
-    }) as unknown as ClerkMiddlewareAuth;
+  it('should call next handler for authenticated users on private routes if onboarding is complete', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+
     const req = createMockRequest({ path: '/dashboard' });
     const ctx = createMockRouteContext({ isPublicRoute: false });
 
-    const res = await withAuth(auth, req, ctx);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    await middleware(req, ctx);
 
-    expect(res).toBeNull();
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
+  it('should redirect unauthenticated users from private routes to sign-in', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue(null);
+
+    const req = createMockRequest({ path: '/dashboard' });
+    const ctx = createMockRouteContext({ isPublicRoute: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/sign-in');
+    expect(mockHandler).not.toHaveBeenCalled();
   });
 });

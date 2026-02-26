@@ -1,0 +1,21 @@
+flowchart LR
+%% Traceability: src/modules/auth/infrastructure/ClerkIdentityProvider.ts, src/modules/auth/index.ts
+%% Contracts and usage: src/core/contracts/identity.ts, src/security/core/security-context.ts, src/security/middleware/with-auth.ts
+
+CLERK["Clerk SDK"]
+AUTH_INFRA["modules/auth/infrastructure/*"]
+IDENTITY_CONTRACT["core/contracts: IdentityProvider"]
+SECURITY["security/*"]
+FEATURES["features/*"]
+MODULES["modules/*"]
+
+CLERK --> AUTH_INFRA
+AUTH_INFRA --> IDENTITY_CONTRACT
+
+SECURITY --> IDENTITY_CONTRACT
+FEATURES --> IDENTITY_CONTRACT
+MODULES --> IDENTITY_CONTRACT
+
+SECURITY -. NO DIRECT IMPORT .-> CLERK
+FEATURES -. NO DIRECT IMPORT .-> CLERK
+MODULES -. NO DIRECT IMPORT .-> CLERK

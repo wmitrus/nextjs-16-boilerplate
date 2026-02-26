@@ -1,7 +1,10 @@
 import { SignIn } from '@clerk/nextjs';
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 
-export default function Page() {
+export default async function Page() {
+  await connection();
+
   return (
     <div className="flex min-h-screen items-center justify-center">
       <Suspense

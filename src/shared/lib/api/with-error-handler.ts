@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import type { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
-import { logger as baseLogger } from '@/core/logger/server';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import { AppError } from './app-error';
 import {
@@ -10,7 +10,7 @@ import {
   createValidationErrorResponse,
 } from './response-service';
 
-const logger = baseLogger.child({
+const logger = resolveServerLogger().child({
   type: 'API',
   category: 'error-handling',
   module: 'with-error-handler',

@@ -1,11 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { logger as baseLogger } from '@/core/logger/server';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import { secureFetch } from '@/security/outbound/secure-fetch';
 
-const logger = baseLogger.child({
+const logger = resolveServerLogger().child({
   type: 'API',
   category: 'security-test',
   module: 'ssrf-route',

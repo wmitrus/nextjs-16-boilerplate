@@ -45,7 +45,7 @@ describe('Secure Fetch (SSRF Protection)', () => {
     expect(calls.length).toBeGreaterThan(0);
   });
 
-  it('should allow requests to core allowed hosts (clerk)', async () => {
+  it('should allow requests to core allowed hosts', async () => {
     await expect(
       secureFetch('https://api.clerk.com/v1'),
     ).resolves.toBeDefined();

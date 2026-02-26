@@ -1,8 +1,8 @@
-import { logger as baseLogger } from '@/core/logger/server';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import type { SecurityContext } from '@/security/core/security-context';
 
-const logger = baseLogger.child({
+const logger = resolveServerLogger().child({
   type: 'Security',
   category: 'events',
   module: 'security-logger',

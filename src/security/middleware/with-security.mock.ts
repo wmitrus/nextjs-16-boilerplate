@@ -1,15 +1,18 @@
-import type { ClerkMiddlewareAuth } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { vi } from 'vitest';
 
-export const mockWithSecurityMiddleware = vi.fn(
-  (_auth: ClerkMiddlewareAuth, _req: NextRequest) => {
-    return Promise.resolve(NextResponse.next());
+export const mockWithSecurityMiddleware = vi.fn(async (_req: NextRequest) => {
+  return NextResponse.next();
+});
+
+export const mockWithSecurity = vi.fn(
+  (_handler?: (req: NextRequest) => Promise<NextResponse>) => {
+    return async (req: NextRequest) => {
+      return mockWithSecurityMiddleware(req);
+    };
   },
 );
-
-export const mockWithSecurity = vi.fn(() => mockWithSecurityMiddleware);
 
 export function resetWithSecurityMocks() {
   mockWithSecurity.mockClear();
@@ -18,5 +21,6 @@ export function resetWithSecurityMocks() {
 }
 
 vi.mock('./with-security', () => ({
-  withSecurity: () => mockWithSecurity(),
+  withSecurity: (handler?: (req: NextRequest) => Promise<NextResponse>) =>
+    mockWithSecurity(handler),
 }));

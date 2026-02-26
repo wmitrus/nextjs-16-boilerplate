@@ -1,11 +1,12 @@
 import { env } from '@/core/env';
-import { logger } from '@/core/logger/edge';
+import { resolveEdgeLogger } from '@/core/logger/di';
 
 import { apiRateLimit, checkUpstashRateLimit } from './rate-limit';
 import { localRateLimit } from './rate-limit-local';
 import type { RateLimitResult } from './rate-limit-local';
 
 export const UPSTASH_RATE_LIMIT_TIMEOUT_MS = 1500;
+const logger = resolveEdgeLogger();
 
 async function withTimeout<T>(
   operation: Promise<T>,

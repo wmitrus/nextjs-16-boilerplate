@@ -12,14 +12,19 @@ export function ExternalFetchExample() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleFetch = async () => {
+  const handleFetch = async (nextUrl?: string) => {
+    const targetUrl = nextUrl ?? url;
+    if (nextUrl) {
+      setUrl(nextUrl);
+    }
+
     setLoading(true);
     setResult(null);
     setError(null);
 
     try {
       const response = await fetch(
-        '/api/security-test/ssrf?url=' + encodeURIComponent(url),
+        '/api/security-test/ssrf?url=' + encodeURIComponent(targetUrl),
       );
 
       const contentType = response.headers.get('content-type');
@@ -69,7 +74,8 @@ export function ExternalFetchExample() {
           placeholder="https://..."
         />
         <button
-          onClick={handleFetch}
+          type="button"
+          onClick={() => handleFetch()}
           disabled={loading}
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
@@ -79,25 +85,31 @@ export function ExternalFetchExample() {
 
       <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
         <button
-          onClick={() => setUrl('https://api.github.com/zen')}
+          type="button"
+          onClick={() => handleFetch('https://api.github.com/zen')}
           className="p-1 text-left text-blue-600 hover:underline"
         >
           • Allowed: api.github.com
         </button>
         <button
-          onClick={() => setUrl('https://api.clerk.com/v1/health')}
+          type="button"
+          onClick={() => handleFetch('https://api.clerk.com/v1/health')}
           className="p-1 text-left text-blue-600 hover:underline"
         >
           • Allowed: api.clerk.com
         </button>
         <button
-          onClick={() => setUrl('https://google.com')}
+          type="button"
+          onClick={() => handleFetch('https://google.com')}
           className="p-1 text-left text-red-600 hover:underline"
         >
           • Blocked: google.com
         </button>
         <button
-          onClick={() => setUrl('http://169.254.169.254/latest/meta-data/')}
+          type="button"
+          onClick={() =>
+            handleFetch('http://169.254.169.254/latest/meta-data/')
+          }
           className="p-1 text-left text-red-600 hover:underline"
         >
           • Blocked: AWS Metadata (Private IP)

@@ -1,9 +1,9 @@
-import { logger as baseLogger } from '@/core/logger/server';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import { createSuccessResponse } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
-const logger = baseLogger.child({
+const logger = resolveServerLogger().child({
   type: 'API',
   category: 'users',
   module: 'users-route',

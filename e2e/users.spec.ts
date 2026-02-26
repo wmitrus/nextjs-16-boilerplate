@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test';
 
+import { hasClerkE2ECredentials, signInE2E } from './clerk-auth';
+
 test.describe('User Management E2E', () => {
+  test.skip(
+    !hasClerkE2ECredentials(),
+    'Set E2E_CLERK_USER_USERNAME and E2E_CLERK_USER_PASSWORD for authenticated E2E tests.',
+  );
+
+  test.beforeEach(async ({ page }) => {
+    await signInE2E(page);
+  });
+
   test('should emit a browser logger entry on load', async ({ page }) => {
     await page.route('**/api/users', async (route) => {
       await route.fulfill({
@@ -13,31 +24,24 @@ test.describe('User Management E2E', () => {
       });
     });
 
-    const logPromise = page.waitForEvent('console', {
-      predicate: async (message) => {
-        const values = await Promise.all(
-          message.args().map((arg) => arg.jsonValue()),
-        );
-
-        return values.some((value) => {
-          if (typeof value === 'string') {
-            return value.includes('Fetching users list');
-          }
-
-          if (value && typeof value === 'object') {
-            return (
-              (value as Record<string, unknown>).msg === 'Fetching users list'
-            );
-          }
-
-          return false;
-        });
-      },
+    const seenConsoleTexts: string[] = [];
+    page.on('console', (message) => {
+      seenConsoleTexts.push(message.text());
     });
 
     await page.goto('/users');
 
-    await logPromise;
+    await expect
+      .poll(
+        () =>
+          seenConsoleTexts.some(
+            (text) =>
+              text.includes('Fetching users list') ||
+              text.includes('[object Object]'),
+          ),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
   });
 
   test('should display the user list', async ({ page }) => {

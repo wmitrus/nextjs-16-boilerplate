@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
-import { logger } from '@/core/logger/server';
+import { resolveServerLogger } from '@/core/logger/di';
+
+const logger = resolveServerLogger();
 
 /**
  * Example internal-only health check.

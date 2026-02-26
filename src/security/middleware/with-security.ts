@@ -1,16 +1,14 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 
-import { env } from '@/core/env';
-import { logger as baseLogger } from '@/core/logger/edge';
+import { resolveEdgeLogger } from '@/core/logger/di';
 
-import { classifyRequest } from '@/security/middleware/route-classification';
-import { withAuth } from '@/security/middleware/with-auth';
+import {
+  classifyRequest,
+  type RouteContext,
+} from '@/security/middleware/route-classification';
 import { withHeaders } from '@/security/middleware/with-headers';
-import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
-import { withRateLimit } from '@/security/middleware/with-rate-limit';
 
-const logger = baseLogger.child({
+const logger = resolveEdgeLogger().child({
   type: 'Security',
   category: 'middleware',
   module: 'with-security',
@@ -18,10 +16,18 @@ const logger = baseLogger.child({
 
 /**
  * Main security middleware pipeline entry point.
- * Wraps clerkMiddleware and executes security guards in sequence.
+ * Executes security guards in sequence via composition.
+ *
+ * This function is provider-agnostic and does not wrap framework-specific auth middleware.
+ * Framework adapters (e.g. Clerk) should be applied at the proxy boundary.
  */
-export function withSecurity() {
-  return clerkMiddleware(async (auth, request) => {
+export function withSecurity(
+  handler: (
+    req: NextRequest,
+    ctx: RouteContext,
+  ) => Promise<NextResponse> = async () => NextResponse.next(),
+) {
+  return async (request: NextRequest): Promise<NextResponse> => {
     const ctx = classifyRequest(request);
     logger.debug(
       { path: request.nextUrl.pathname },
@@ -35,44 +41,14 @@ export function withSecurity() {
 
     const correlationId =
       request.headers.get('x-correlation-id') || crypto.randomUUID();
-    let response = NextResponse.next();
 
-    // 1. Internal API Guard (Short-circuit if fails)
-    const internalGuardRes = withInternalApiGuard(request, response, ctx);
-    if (internalGuardRes) return internalGuardRes;
+    // Execute the composed middleware pipeline
+    let response = await handler(request, ctx);
 
-    // 2. Auth & Redirects (Short-circuit if fails)
-    const authRes = await withAuth(auth, request, ctx);
-    if (authRes) return authRes;
-
-    // 3. Rate Limiting (Short-circuit if fails)
-    const rateLimitRes = await withRateLimit(
-      request,
-      response,
-      ctx,
-      correlationId,
-    );
-    if (rateLimitRes) return rateLimitRes;
-
-    // 4. Protection check for non-public routes (Terminal protection)
-    const isE2eRoute =
-      request.nextUrl.pathname.startsWith('/e2e-error') ||
-      request.nextUrl.pathname.startsWith('/users');
-
-    if (
-      !ctx.isPublicRoute &&
-      !ctx.isInternalApi &&
-      !(env.E2E_ENABLED && isE2eRoute)
-    ) {
-      await auth.protect();
-    }
-
-    // 5. Apply Security Headers
+    // Apply Security Headers & Metadata
     response = withHeaders(request, response);
-
-    // 6. Set Metadata Headers
     response.headers.set('x-correlation-id', correlationId);
 
     return response;
-  });
+  };
 }

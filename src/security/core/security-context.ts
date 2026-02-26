@@ -1,9 +1,11 @@
-import { auth } from '@clerk/nextjs/server';
 import { headers } from 'next/headers';
 
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
+
+import type { SecurityContextDependencies } from './security-dependencies';
+export type { SecurityContextDependencies } from './security-dependencies';
 
 export type UserRole = 'admin' | 'user' | 'guest';
 
@@ -11,7 +13,7 @@ export interface SecurityContext {
   user?: {
     id: string;
     role: UserRole;
-    tenantId?: string;
+    tenantId: string;
   };
   ip: string;
   userAgent?: string;
@@ -24,9 +26,14 @@ export interface SecurityContext {
 /**
  * Builds the security context from the current request and session.
  * Designed to be used in Server Components, Server Actions, and Route Handlers.
+ * Decoupled from direct Auth providers via the DI Container.
  */
-export async function getSecurityContext(): Promise<SecurityContext> {
-  const { userId, sessionClaims } = await auth();
+export async function createSecurityContext(
+  dependencies: SecurityContextDependencies,
+): Promise<SecurityContext> {
+  const { identityProvider, tenantResolver, roleRepository } = dependencies;
+
+  const identity = await identityProvider.getCurrentIdentity();
   const headerList = await headers();
 
   const ip = await getIP(headerList);
@@ -35,25 +42,29 @@ export async function getSecurityContext(): Promise<SecurityContext> {
     headerList.get('x-correlation-id') ?? crypto.randomUUID();
   const requestId = headerList.get('x-request-id') ?? crypto.randomUUID();
 
-  // Extract role from Clerk metadata (mapping to our UserRole)
-  const rawRole = (sessionClaims?.metadata as { role?: string })?.role;
-  let role: UserRole = 'guest';
+  let userContext: SecurityContext['user'];
 
-  if (userId) {
-    if (rawRole === 'admin') role = 'admin';
-    else role = 'user';
+  if (identity) {
+    const tenantContext = await tenantResolver.resolve(identity);
+    const roles = await roleRepository.getRoles(
+      identity.id,
+      tenantContext.tenantId,
+    );
+
+    let role: UserRole = 'user';
+    if (roles.includes('admin')) {
+      role = 'admin';
+    }
+
+    userContext = {
+      id: identity.id,
+      role,
+      tenantId: tenantContext.tenantId,
+    };
   }
 
-  const tenantId = (sessionClaims?.metadata as { tenantId?: string })?.tenantId;
-
   return {
-    user: userId
-      ? {
-          id: userId,
-          role,
-          tenantId,
-        }
-      : undefined,
+    user: userContext,
     ip,
     userAgent,
     correlationId,
@@ -65,3 +76,5 @@ export async function getSecurityContext(): Promise<SecurityContext> {
     environment: env.NODE_ENV as 'development' | 'test' | 'production',
   };
 }
+
+export const getSecurityContext = createSecurityContext;

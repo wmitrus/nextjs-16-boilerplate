@@ -3,6 +3,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 
+import { IGNORED_REJECTION_PATTERNS } from '@/core/error/ignored-rejection-patterns';
 import { getBrowserLogger } from '@/core/logger/browser';
 
 import {
@@ -115,14 +116,9 @@ export function GlobalErrorHandlers() {
       const reason = event.reason;
       const message = reason instanceof Error ? reason.message : String(reason);
 
-      // Ignore non-critical errors that would create log loops
-      const ignoredPatterns = [
-        'cannot_render_single_session_enabled', // Clerk no-op
-        'Network error', // Generic network errors
-        'Failed to fetch', // Fetch failures
-      ];
-
-      if (ignoredPatterns.some((pattern) => message.includes(pattern))) {
+      if (
+        IGNORED_REJECTION_PATTERNS.some((pattern) => message.includes(pattern))
+      ) {
         console.debug('Ignored unhandled rejection:', message);
         return;
       }

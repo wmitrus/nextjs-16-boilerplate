@@ -1,17 +1,39 @@
 import { z } from 'zod';
 
+import {
+  createAction,
+  type Action,
+  type AuthorizationService,
+  type ResourceContext,
+} from '@/core/contracts/authorization';
+
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
-import { authorize, AuthorizationError } from '@/security/core/authorization';
+import {
+  AuthorizationFacade,
+  AuthorizationError,
+} from '@/security/core/authorization-facade';
+import { createRequestScopedContextFromSecurityContext } from '@/security/core/request-scoped-context';
 import type {
   SecurityContext,
   UserRole,
 } from '@/security/core/security-context';
-import { getSecurityContext } from '@/security/core/security-context';
+
+export interface SecureActionDependencies {
+  getSecurityContext: () => Promise<SecurityContext>;
+  authorizationService: AuthorizationService;
+}
+
+type SecureActionDependenciesResolver =
+  | SecureActionDependencies
+  | (() => SecureActionDependencies | Promise<SecureActionDependencies>);
 
 export interface ActionOptions<TSchema extends z.ZodType, TResult> {
   schema: TSchema;
   role?: UserRole;
+  resource?: ResourceContext;
+  action?: Action;
+  dependencies: SecureActionDependenciesResolver;
   handler: (args: {
     input: z.infer<TSchema>;
     context: SecurityContext;
@@ -21,9 +43,17 @@ export interface ActionOptions<TSchema extends z.ZodType, TResult> {
 /**
  * Creates a secure server action with validation, authorization, and auditing.
  */
+export interface TreeifiedError {
+  errors: string[];
+  properties: Record<string, { errors: string[] }>;
+}
+
 export function createSecureAction<TSchema extends z.ZodType, TResult>({
   schema,
   role = 'user',
+  resource,
+  action,
+  dependencies,
   handler,
 }: ActionOptions<TSchema, TResult>) {
   return async (
@@ -32,17 +62,63 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
     | { status: 'success'; data: TResult }
     | {
         status: 'validation_error';
-        errors: z.inferFlattenedErrors<TSchema>['fieldErrors'];
+        errors: TreeifiedError;
       }
     | { status: 'unauthorized'; error: string }
     | { status: 'error'; error: string }
   > => {
-    const context = await getSecurityContext();
-    const actionName = handler.name || 'anonymous_action';
+    const resolvedDependencies =
+      typeof dependencies === 'function' ? await dependencies() : dependencies;
+    const context = await resolvedDependencies.getSecurityContext();
+    const authorization: AuthorizationFacade = new AuthorizationFacade(
+      resolvedDependencies.authorizationService,
+    );
+    const effectiveResource: ResourceContext =
+      resource ??
+      ({
+        type: 'system',
+        id: handler.name || 'anonymous-action',
+      } satisfies ResourceContext);
+
+    const actionName =
+      action ||
+      createAction(resource?.type ?? 'system', handler.name || 'execute');
 
     try {
-      // 1. Authenticate & Authorize
-      authorize(context, role);
+      // 1. Unified authorization check via central facade
+      if (!context.user) {
+        throw new AuthorizationError('Authentication required');
+      }
+
+      const requestScope = createRequestScopedContextFromSecurityContext(
+        context,
+        {
+          actionName,
+          requiredRole: role,
+        },
+      );
+
+      authorization.ensureRequiredRole(context.user.role, role);
+      await authorization.authorize(
+        {
+          tenant: {
+            tenantId: context.user.tenantId,
+            userId: context.user.id,
+          },
+          subject: {
+            id: context.user.id,
+            attributes: {
+              role: context.user.role,
+            },
+          },
+          resource: effectiveResource,
+          action: actionName,
+          attributes: {
+            requestScope,
+          },
+        },
+        `Permission denied for action: ${actionName}`,
+      );
 
       // 2. Replay Protection
       if (input._replayToken) {
@@ -87,7 +163,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       if (error instanceof z.ZodError) {
         return {
           status: 'validation_error' as const,
-          errors: error.flatten().fieldErrors,
+          errors: z.treeifyError(error) as TreeifiedError,
         };
       }
 

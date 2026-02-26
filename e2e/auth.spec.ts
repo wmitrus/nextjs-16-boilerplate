@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+import { withClerkTestingToken } from './clerk-auth';
+
 test.describe('Authentication E2E', () => {
   test.beforeEach(async ({ page }) => {
+    await withClerkTestingToken(page);
     await page.goto('/');
   });
 

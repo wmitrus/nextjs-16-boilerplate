@@ -1,20 +1,19 @@
 import '@/testing/infrastructure/clerk';
 import '@/testing/infrastructure/next-headers';
 import '@/testing/infrastructure/logger';
-import '@/security/core/security-context.mock';
-import '@/security/core/authorization.mock';
 
+import { vi } from 'vitest';
 import { z } from 'zod';
+
+import type { AuthorizationService } from '@/core/contracts/authorization';
 
 import { logActionAudit } from './action-audit';
 import { validateReplayToken } from './action-replay';
 import { createSecureAction } from './secure-action';
 
-import { AuthorizationError } from '@/security/core/authorization';
+import { AuthorizationError } from '@/security/core/authorization-facade';
 import {
   createMockSecurityContext,
-  mockAuthorize,
-  mockGetSecurityContext,
   resetAllInfrastructureMocks,
 } from '@/testing';
 
@@ -33,16 +32,30 @@ describe('Secure Action Wrapper', () => {
   });
   const schema = z.object({ name: z.string() });
 
+  const mockGetSecurityContext = vi.fn();
+  const mockAuthorizationService = {
+    can: vi.fn(),
+  } as unknown as AuthorizationService;
+
+  const getDependencies = () => ({
+    getSecurityContext: mockGetSecurityContext,
+    authorizationService: mockAuthorizationService,
+  });
+
   beforeEach(() => {
     resetAllInfrastructureMocks();
     vi.clearAllMocks();
     mockGetSecurityContext.mockResolvedValue(mockCtx);
-    mockAuthorize.mockImplementation(() => {});
+    vi.mocked(mockAuthorizationService.can).mockResolvedValue(true);
   });
 
   it('should execute handler and return success', async () => {
     const handler = vi.fn().mockResolvedValue({ id: 1 });
-    const action = createSecureAction({ schema, handler });
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
 
     const result = await action({ name: 'test' });
 
@@ -61,7 +74,11 @@ describe('Secure Action Wrapper', () => {
 
   it('should return validation_error on invalid input', async () => {
     const handler = vi.fn();
-    const action = createSecureAction({ schema, handler });
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
 
     // @ts-expect-error - testing invalid input
     const result = await action({ name: 123 });
@@ -74,11 +91,15 @@ describe('Secure Action Wrapper', () => {
   });
 
   it('should return unauthorized on authorization failure', async () => {
-    mockAuthorize.mockImplementation(() => {
-      throw new AuthorizationError('Denied');
-    });
+    vi.mocked(mockAuthorizationService.can).mockRejectedValue(
+      new AuthorizationError('Denied'),
+    );
     const handler = vi.fn();
-    const action = createSecureAction({ schema, handler });
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
 
     const result = await action({ name: 'test' });
 
@@ -90,7 +111,11 @@ describe('Secure Action Wrapper', () => {
 
   it('should validate replay token if provided', async () => {
     const handler = vi.fn().mockResolvedValue({});
-    const action = createSecureAction({ schema, handler });
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
 
     await action({ name: 'test', _replayToken: 'token123' });
 
@@ -99,7 +124,11 @@ describe('Secure Action Wrapper', () => {
 
   it('should return error status on generic failure', async () => {
     const handler = vi.fn().mockRejectedValue(new Error('Internal Boom'));
-    const action = createSecureAction({ schema, handler });
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
 
     const result = await action({ name: 'test' });
 

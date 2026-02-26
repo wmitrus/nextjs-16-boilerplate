@@ -27,10 +27,11 @@ We will replace the single-function `src/proxy.ts` with a composable pipeline in
 
 ### 2.3 Authorization Engine
 
-A core service in `src/security/core/authorization.ts` will provide:
+A core service in `src/security/core/authorization-facade.ts` provides a unified adapter over domain authorization:
 
-- `Role` type: `admin` | `user` | `guest`.
-- `authorize(context, requiredRole)` function.
+- `AuthorizationFacade` with `can(...)` and `authorize(...)` methods.
+- Role floor enforcement via `ensureRequiredRole(...)`.
+- `AuthorizationError` for consistent middleware/action error handling.
 
 ### 2.4 Secure Server Actions
 
@@ -53,7 +54,8 @@ src/
 ├── security/
 │   ├── core/
 │   │   ├── security-context.ts
-│   │   └── authorization.ts
+│   │   ├── authorization-facade.ts
+│   │   └── request-scoped-context.ts
 │   ├── middleware/
 │   │   ├── with-security.ts
 │   │   ├── with-auth.ts
@@ -76,7 +78,7 @@ src/
 
 ### Phase 1: Foundation & Context
 
-- Implementation of `SecurityContext` and `authorization.ts`.
+- Implementation of `SecurityContext`, `authorization-facade.ts`, and `request-scoped-context.ts`.
 - Definition of roles (`admin`, `user`, `guest`).
 
 ### Phase 2: Middleware Pipeline

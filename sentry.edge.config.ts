@@ -5,7 +5,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 
-const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+const sentryDsn = process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 if (sentryDsn) {
   Sentry.init({
@@ -21,4 +21,8 @@ if (sentryDsn) {
     // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
     sendDefaultPii: true,
   });
+} else {
+  console.warn(
+    '[Sentry] Edge SDK not initialized: set SENTRY_DSN (preferred) or NEXT_PUBLIC_SENTRY_DSN.',
+  );
 }

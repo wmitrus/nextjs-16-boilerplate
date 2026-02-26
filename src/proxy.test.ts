@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as getIp from '@/shared/lib/network/get-ip';
 import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
+vi.unmock('@/security/middleware/with-security');
+
 import proxy from './proxy';
 
 vi.mock('@clerk/nextjs/server', () => ({
@@ -65,6 +67,16 @@ vi.mock('@/core/logger/edge', () => ({
       error: vi.fn(),
     })),
   },
+  getEdgeLogger: vi.fn(() => ({
+    warn: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(() => ({
+      warn: vi.fn(),
+      debug: vi.fn(),
+      error: vi.fn(),
+    })),
+  })),
 }));
 
 vi.mock('@/shared/lib/rate-limit/rate-limit-helper', () => ({

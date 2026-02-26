@@ -2,8 +2,8 @@ import type {
   AuthorizationContext,
   AuthorizationService,
 } from '@/core/contracts/authorization';
-
-import type { UserRole } from '@/security/core/security-context';
+import { ROLE_HIERARCHY } from '@/core/contracts/roles';
+import type { UserRole } from '@/core/contracts/roles';
 
 export class AuthorizationError extends Error {
   constructor(message: string = 'Unauthorized') {
@@ -23,7 +23,10 @@ export class AuthorizationFacade {
       throw new AuthorizationError('Authentication required');
     }
 
-    if (requiredRole === 'admin' && currentRole !== 'admin') {
+    const currentLevel = ROLE_HIERARCHY[currentRole] ?? 0;
+    const requiredLevel = ROLE_HIERARCHY[requiredRole] ?? 0;
+
+    if (currentLevel < requiredLevel) {
       throw new AuthorizationError(`Required role: ${requiredRole}`);
     }
   }

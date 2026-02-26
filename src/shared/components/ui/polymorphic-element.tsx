@@ -22,7 +22,7 @@ type PolymorphicComponent = {
   displayName?: string;
 };
 
-// We use any for the internal forwardRef implementation to avoid complex generic issues
+// Internal implementation uses unknown for the ref to avoid complex generic issues
 // but the exported PolymorphicElement is strictly typed via PolymorphicComponent
 const PolymorphicElement = forwardRef(
   (
@@ -32,13 +32,16 @@ const PolymorphicElement = forwardRef(
       className,
       ...rest
     }: PropsWithChildren<PolymorphicElementProps<ElementType>>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ref: any,
+    ref: unknown,
   ): ReactElement => {
     const Component = as || 'div';
 
     return (
-      <Component ref={ref} className={cn(className)} {...rest}>
+      <Component
+        ref={ref as React.Ref<never>}
+        className={cn(className)}
+        {...rest}
+      >
         {children}
       </Component>
     );

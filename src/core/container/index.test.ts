@@ -47,4 +47,15 @@ describe('Container', () => {
 
     expect(container.resolve(KEY)).toBe(second);
   });
+
+  it('should lazily register missing services when resolver hook is provided', () => {
+    const KEY = Symbol('LazyService');
+    const service = { id: 'lazy' };
+
+    const container = new Container((c) => {
+      c.register(KEY, service);
+    });
+
+    expect(container.resolve(KEY)).toBe(service);
+  });
 });

@@ -5,11 +5,15 @@ import type { AuthorizationContext } from '@/core/contracts/authorization';
 
 import { DefaultAuthorizationService } from '@/modules/authorization/domain/AuthorizationService';
 import { PolicyEngine } from '@/modules/authorization/domain/policy/PolicyEngine';
-import { MockPolicyRepository } from '@/modules/authorization/infrastructure/MockRepositories';
+import {
+  MockMembershipRepository,
+  MockPolicyRepository,
+} from '@/modules/authorization/infrastructure/MockRepositories';
 
 describe('Authorization Integration', () => {
   const authzService = new DefaultAuthorizationService(
     new MockPolicyRepository(),
+    new MockMembershipRepository(),
     new PolicyEngine(),
   );
 

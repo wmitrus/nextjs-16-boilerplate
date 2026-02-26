@@ -2,6 +2,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { Suspense } from 'react';
 
 import { env } from '@/core/env';
 
@@ -36,23 +37,25 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ClerkProvider
-          signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
-          signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
-          waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
-          signInFallbackRedirectUrl={
-            env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
-          }
-          signUpFallbackRedirectUrl={
-            env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
-          }
-        >
-          <HeaderWithAuth />
-          <GlobalErrorHandlers />
-          {(env.VERCEL_ENV === 'production' ||
-            env.VERCEL_ENV === 'preview') && <SpeedInsights />}
-          {children}
-        </ClerkProvider>
+        <Suspense fallback={null}>
+          <ClerkProvider
+            signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
+            signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
+            waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
+            signInFallbackRedirectUrl={
+              env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+            }
+            signUpFallbackRedirectUrl={
+              env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+            }
+          >
+            <HeaderWithAuth />
+            <GlobalErrorHandlers />
+            {(env.VERCEL_ENV === 'production' ||
+              env.VERCEL_ENV === 'preview') && <SpeedInsights />}
+            {children}
+          </ClerkProvider>
+        </Suspense>
       </body>
     </html>
   );

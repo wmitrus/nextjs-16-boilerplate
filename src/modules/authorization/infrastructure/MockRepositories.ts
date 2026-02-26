@@ -5,14 +5,15 @@ import type {
   PolicyRepository,
   RoleRepository,
 } from '@/core/contracts/repositories';
+import { ROLES } from '@/core/contracts/roles';
 
 export class MockRoleRepository implements RoleRepository {
   async getRoles(subjectId: string, _tenantId: string): Promise<string[]> {
     // In a real app, this would query a database
     if (subjectId.startsWith('user_admin')) {
-      return ['admin'];
+      return [ROLES.ADMIN];
     }
-    return ['user'];
+    return [ROLES.USER];
   }
 }
 

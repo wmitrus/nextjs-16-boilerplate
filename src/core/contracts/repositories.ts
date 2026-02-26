@@ -1,10 +1,5 @@
-import type { AuthorizationContext } from './authorization';
+import type { Action, AuthorizationContext, Permission } from './authorization';
 import type { RoleId, SubjectId, TenantId } from './primitives';
-
-import type {
-  Action,
-  Permission,
-} from '@/modules/authorization/domain/permission';
 
 /**
  * Re-export for convenience.

@@ -11,14 +11,17 @@ vi.mock('@/core/logger/server', () => {
     debug: vi.fn(),
   };
 
+  const mockServerLogger = {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn(() => mockChildLogger),
+  };
+
   return {
-    logger: {
-      error: vi.fn(),
-      warn: vi.fn(),
-      info: vi.fn(),
-      debug: vi.fn(),
-      child: vi.fn(() => mockChildLogger),
-    },
+    logger: mockServerLogger,
+    getServerLogger: vi.fn(() => mockServerLogger),
   };
 });
 

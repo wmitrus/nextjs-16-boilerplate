@@ -2,13 +2,14 @@ import '@testing-library/jest-dom';
 import React from 'react';
 import { vi } from 'vitest';
 
+import { bootstrap } from '../src/core/container';
+import { AUTH, AUTHORIZATION } from '../src/core/contracts';
 // Force early initialization of critical infrastructure mocks
 import { server } from '../src/shared/lib/mocks/server';
 import { mockEnv } from '../src/testing/infrastructure/env';
 import {
   mockPino,
   mockGetLogStreams,
-  mockLogger,
 } from '../src/testing/infrastructure/logger';
 import {
   mockNextHeaders,
@@ -28,6 +29,46 @@ vi.mock('@/core/env', () => ({
   env: mockEnv,
 }));
 
+// Mock modules to avoid real Clerk infrastructure in unit tests
+vi.mock('../src/modules/auth', () => ({
+  authModule: {
+    register: (c: {
+      register: (key: string | symbol, value: unknown) => void;
+    }) => {
+      c.register(AUTH.IDENTITY_PROVIDER, {
+        getCurrentIdentity: vi.fn().mockResolvedValue(null),
+      });
+      c.register(AUTH.TENANT_RESOLVER, {
+        resolve: vi.fn().mockResolvedValue({
+          tenantId: 'test-tenant',
+          userId: 'test-user',
+        }),
+      });
+      c.register(AUTH.USER_REPOSITORY, {
+        updateAttributes: vi.fn(),
+      });
+    },
+  },
+}));
+
+vi.mock('../src/modules/authorization', () => ({
+  authorizationModule: {
+    register: (c: {
+      register: (key: string | symbol, value: unknown) => void;
+    }) => {
+      c.register(AUTHORIZATION.SERVICE, {
+        can: vi.fn().mockResolvedValue(true),
+      });
+      c.register(AUTHORIZATION.ROLE_REPOSITORY, {
+        getRoles: vi.fn().mockResolvedValue(['user']),
+      });
+      c.register(AUTHORIZATION.PERMISSION_REPOSITORY, {});
+      c.register(AUTHORIZATION.MEMBERSHIP_REPOSITORY, {});
+      c.register(AUTHORIZATION.POLICY_REPOSITORY, {});
+    },
+  },
+}));
+
 // Global mocks for core services to prevent un-mocked side effects
 vi.mock('pino', () => ({
   default: mockPino,
@@ -36,14 +77,6 @@ vi.mock('pino', () => ({
 
 vi.mock('../src/core/logger/streams', () => ({
   getLogStreams: mockGetLogStreams,
-}));
-
-vi.mock('../src/core/logger/server', () => ({
-  logger: mockLogger,
-  getLogger: () => mockLogger,
-  getServerLogger: () => mockLogger,
-  resetServerLogger: vi.fn(),
-  default: mockLogger,
 }));
 
 // Mock next/image
@@ -59,6 +92,12 @@ vi.mock('next/image', () => {
   };
 });
 
-beforeAll(() => server.listen());
-afterEach(() => server.resetHandlers());
+beforeAll(() => {
+  server.listen();
+  bootstrap();
+});
+afterEach(() => {
+  server.resetHandlers();
+  // Reset container mocks if needed or re-bootstrap
+});
 afterAll(() => server.close());

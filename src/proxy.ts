@@ -7,6 +7,7 @@ import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RoleRepository } from '@/core/contracts/repositories';
+import type { TenantContext } from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
@@ -61,8 +62,17 @@ export default clerkMiddleware(async (auth, request) => {
     AUTH.USER_REPOSITORY,
   );
 
+  let cachedAuthResult: Promise<Awaited<ReturnType<typeof auth>>> | undefined;
+  const getAuthResult = () => {
+    if (!cachedAuthResult) {
+      cachedAuthResult = auth();
+    }
+
+    return cachedAuthResult;
+  };
+
   const resolveIdentity = async () => {
-    const { userId, sessionClaims } = await auth();
+    const { userId, sessionClaims } = await getAuthResult();
 
     if (!userId) {
       return null;
@@ -77,6 +87,17 @@ export default clerkMiddleware(async (auth, request) => {
     };
   };
 
+  const resolveTenant = async (identity: {
+    id: string;
+  }): Promise<TenantContext> => {
+    const { orgId } = await getAuthResult();
+
+    return {
+      tenantId: orgId ?? 'default',
+      userId: identity.id,
+    };
+  };
+
   const appSecurityPipeline = composeMiddlewares(
     [
       withInternalApiGuard,
@@ -84,6 +105,7 @@ export default clerkMiddleware(async (auth, request) => {
       (next: ProxyHandler) =>
         withAuth(next, {
           resolveIdentity,
+          resolveTenant,
           dependencies: securityDependencies,
           userRepository,
         }),

@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+/** @vitest-environment node */
 import { describe, expect, it, vi } from 'vitest';
 
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
@@ -26,13 +26,14 @@ describe('System Integration (Wiring)', () => {
     expect(authzService).toBeDefined();
 
     // Verify a full mock flow
-    vi.mocked(auth).mockResolvedValue({
-      userId: 'user_admin_123',
-      sessionClaims: {
-        email: 'admin@test.com',
-        metadata: {},
-      },
-    } as unknown as Awaited<ReturnType<typeof auth>>);
+    const mockIdentity = {
+      id: 'user_admin_123',
+      email: 'admin@test.com',
+      attributes: {},
+    };
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue(
+      mockIdentity,
+    );
 
     const identity = await identityProvider.getCurrentIdentity();
     expect(identity?.id).toBe('user_admin_123');
@@ -41,7 +42,7 @@ describe('System Integration (Wiring)', () => {
       tenant: { tenantId: 't1', userId: 'user_admin_123' },
       subject: { id: 'user_admin_123' },
       resource: { type: 'document' },
-      action: 'manage',
+      action: 'system:manage',
     });
 
     expect(canManage).toBe(true);

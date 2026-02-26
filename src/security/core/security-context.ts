@@ -1,13 +1,14 @@
 import { headers } from 'next/headers';
 
+import { ROLES, ROLE_HIERARCHY } from '@/core/contracts/roles';
+import type { UserRole } from '@/core/contracts/roles';
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
 
 import type { SecurityContextDependencies } from './security-dependencies';
 export type { SecurityContextDependencies } from './security-dependencies';
-
-export type UserRole = 'admin' | 'user' | 'guest';
+export type { UserRole } from '@/core/contracts/roles';
 
 export interface SecurityContext {
   user?: {
@@ -51,10 +52,12 @@ export async function createSecurityContext(
       tenantContext.tenantId,
     );
 
-    let role: UserRole = 'user';
-    if (roles.includes('admin')) {
-      role = 'admin';
-    }
+    let role: UserRole = ROLES.USER;
+    const highestRole = roles.reduce<UserRole>((current, r) => {
+      const roleLevel = ROLE_HIERARCHY[r as UserRole] ?? -1;
+      return roleLevel > ROLE_HIERARCHY[current] ? (r as UserRole) : current;
+    }, ROLES.USER);
+    role = highestRole;
 
     userContext = {
       id: identity.id,

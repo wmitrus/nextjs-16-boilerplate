@@ -1,29 +1,18 @@
 'use client';
 
-import {
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from '@clerk/nextjs';
 import Image from 'next/image';
 import Link from 'next/link';
 import * as React from 'react';
 
-import { env } from '@/core/env';
-
 import PolymorphicElement from '@/shared/components/ui/polymorphic-element';
 import { cn } from '@/shared/utils/cn';
 
-const Header = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
-  ({ className, ...props }, ref) => {
-    const [isMounted, setIsMounted] = React.useState(false);
+interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
+  rightContent?: React.ReactNode;
+}
 
-    React.useEffect(() => {
-      setIsMounted(true);
-    }, []);
-
+const Header = React.forwardRef<HTMLElement, HeaderProps>(
+  ({ className, rightContent, ...props }, ref) => {
     return (
       <PolymorphicElement
         as="header"
@@ -82,55 +71,7 @@ const Header = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
               </Link>
             </nav>
           </div>
-          <div className="flex items-center gap-4">
-            <React.Suspense
-              fallback={
-                <div className="h-9 w-20 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-800" />
-              }
-            >
-              {isMounted && (
-                <>
-                  <SignedOut>
-                    <SignInButton
-                      mode="modal"
-                      fallbackRedirectUrl={
-                        env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
-                      }
-                      signUpFallbackRedirectUrl={
-                        env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL
-                      }
-                      signUpForceRedirectUrl={
-                        env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL
-                      }
-                    >
-                      <button className="text-sm font-medium text-zinc-600 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white">
-                        Sign In
-                      </button>
-                    </SignInButton>
-                    <SignUpButton
-                      mode="modal"
-                      forceRedirectUrl={
-                        env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL
-                      }
-                      signInFallbackRedirectUrl={
-                        env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
-                      }
-                      signInForceRedirectUrl={
-                        env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
-                      }
-                    >
-                      <button className="inline-flex h-9 items-center justify-center rounded-full bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">
-                        Sign Up
-                      </button>
-                    </SignUpButton>
-                  </SignedOut>
-                  <SignedIn>
-                    <UserButton />
-                  </SignedIn>
-                </>
-              )}
-            </React.Suspense>
-          </div>
+          <div className="flex items-center gap-4">{rightContent}</div>
         </div>
       </PolymorphicElement>
     );

@@ -158,6 +158,7 @@ describe('Auth Middleware', () => {
     await middleware(req, ctx);
 
     expect(mockHandler).toHaveBeenCalled();
+    expect(mockIdentityProvider.getCurrentIdentity).not.toHaveBeenCalled();
   });
 
   it('should call next handler for authenticated users on private routes if onboarding is complete', async () => {

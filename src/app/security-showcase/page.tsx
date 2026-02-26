@@ -1,4 +1,4 @@
-import { connection } from 'next/server';
+import { headers } from 'next/headers';
 
 import { createContainer } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
@@ -19,7 +19,12 @@ import {
 } from '@/security/core/security-context';
 
 export default async function SecurityShowcasePage() {
-  await connection();
+  const headerList = await headers();
+  const cookieHeader = headerList.get('cookie') ?? '';
+  const hasClerkSessionCookie =
+    cookieHeader.includes('__session=') ||
+    cookieHeader.includes('__client_uat=');
+
   const requestContainer = createContainer();
   const securityContextDependencies: SecurityContextDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
@@ -36,10 +41,7 @@ export default async function SecurityShowcasePage() {
   let context: Awaited<ReturnType<typeof createSecurityContext>>;
   let contextError: string | null = null;
 
-  try {
-    context = await createSecurityContext(securityContextDependencies);
-  } catch (error) {
-    contextError = error instanceof Error ? error.message : 'Unknown error';
+  if (!hasClerkSessionCookie) {
     context = {
       user: undefined,
       ip: 'unknown',
@@ -49,6 +51,29 @@ export default async function SecurityShowcasePage() {
       environment: 'development',
       requestId: crypto.randomUUID(),
     };
+    contextError = 'No active Clerk session; using guest context.';
+  } else {
+    try {
+      context = await Promise.race([
+        createSecurityContext(securityContextDependencies),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Security context resolution timeout (350ms)'));
+          }, 350);
+        }),
+      ]);
+    } catch (error) {
+      contextError = error instanceof Error ? error.message : 'Unknown error';
+      context = {
+        user: undefined,
+        ip: 'unknown',
+        userAgent: undefined,
+        correlationId: crypto.randomUUID(),
+        runtime: 'node',
+        environment: 'development',
+        requestId: crypto.randomUUID(),
+      };
+    }
   }
 
   return (

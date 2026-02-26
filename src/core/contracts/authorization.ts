@@ -1,7 +1,32 @@
 import type { SubjectId } from './primitives';
 import type { TenantContext } from './tenancy';
 
-import type { Action } from '@/modules/authorization/domain/permission';
+export type Permission = `${string}:${string}`;
+
+export type Action = Permission;
+
+export function createAction(resource: string, verb: string): Action {
+  const normalizedResource = resource.trim() || 'system';
+  const normalizedVerb = verb.trim() || 'execute';
+
+  return `${normalizedResource}:${normalizedVerb}`;
+}
+
+export function isAction(value: string): value is Action {
+  return /^[^:\s]+:[^:\s]+$/.test(value);
+}
+
+export function parseAction(action: Action): {
+  resource: string;
+  verb: string;
+} {
+  const [resource, verb] = action.split(':', 2);
+
+  return {
+    resource,
+    verb,
+  };
+}
 
 /**
  * Context describing the acting subject.

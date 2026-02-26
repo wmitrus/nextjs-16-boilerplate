@@ -40,7 +40,7 @@ describe('env', () => {
     expect(env.NEXT_PUBLIC_APP_URL).toBeUndefined();
   });
 
-  it('validates Clerk env variables', async () => {
+  it('validates auth redirect env variables', async () => {
     setEnv({
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: '/custom-sign-in',
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: '/custom-sign-up',
@@ -61,7 +61,7 @@ describe('env', () => {
     );
   });
 
-  it('uses default Clerk env variables', async () => {
+  it('uses default auth redirect env variables', async () => {
     setEnv({
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: undefined,
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: undefined,

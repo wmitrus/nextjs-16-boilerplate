@@ -6,13 +6,15 @@ import { NextResponse } from 'next/server';
 import type { Mocked } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { container } from '@/core/container';
-import { AUTH } from '@/core/contracts';
+import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import type { RoleRepository } from '@/core/contracts/repositories';
+import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
 import { withAuth } from './with-auth';
 
+import type { SecurityDependencies } from '@/security/core/security-dependencies';
 import {
   createMockRequest,
   createMockRouteContext,
@@ -29,16 +31,42 @@ describe('Auth Middleware', () => {
     updateOnboardingStatus: vi.fn(),
   } as unknown as Mocked<UserRepository>;
 
+  const mockTenantResolver = {
+    resolve: vi.fn(),
+  } as unknown as Mocked<TenantResolver>;
+
+  const mockAuthorizationService = {
+    can: vi.fn(),
+  } as unknown as Mocked<AuthorizationService>;
+
+  const mockRoleRepository = {
+    getRoles: vi.fn(),
+  } as unknown as Mocked<RoleRepository>;
+
+  const securityDependencies: SecurityDependencies = {
+    identityProvider: mockIdentityProvider,
+    tenantResolver: mockTenantResolver,
+    roleRepository: mockRoleRepository,
+    authorizationService: mockAuthorizationService,
+  };
+
   const mockHandler = vi
     .fn()
     .mockImplementation(async () => NextResponse.next());
 
   beforeEach(() => {
     resetAllInfrastructureMocks();
-    container.register(AUTH.IDENTITY_PROVIDER, mockIdentityProvider);
-    container.register(AUTH.USER_REPOSITORY, mockUserRepository);
     mockIdentityProvider.getCurrentIdentity.mockReset();
     mockUserRepository.findById.mockReset();
+    mockTenantResolver.resolve.mockReset();
+    mockRoleRepository.getRoles.mockReset();
+    mockAuthorizationService.can.mockReset();
+    mockTenantResolver.resolve.mockResolvedValue({
+      tenantId: 't1',
+      userId: 'user_1',
+    });
+    mockRoleRepository.getRoles.mockResolvedValue(['user']);
+    mockAuthorizationService.can.mockResolvedValue(true);
     mockHandler.mockClear();
   });
 
@@ -57,7 +85,10 @@ describe('Auth Middleware', () => {
       isPublicRoute: true,
     });
 
-    const middleware = withAuth(mockHandler);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
@@ -80,7 +111,10 @@ describe('Auth Middleware', () => {
       isPublicRoute: true,
     });
 
-    const middleware = withAuth(mockHandler);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
@@ -100,7 +134,10 @@ describe('Auth Middleware', () => {
     const req = createMockRequest({ path: '/dashboard' });
     const ctx = createMockRouteContext({ isPublicRoute: false });
 
-    const middleware = withAuth(mockHandler);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
@@ -114,7 +151,10 @@ describe('Auth Middleware', () => {
     const req = createMockRequest({ path: '/' });
     const ctx = createMockRouteContext({ isPublicRoute: true });
 
-    const middleware = withAuth(mockHandler);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
     await middleware(req, ctx);
 
     expect(mockHandler).toHaveBeenCalled();
@@ -132,7 +172,10 @@ describe('Auth Middleware', () => {
     const req = createMockRequest({ path: '/dashboard' });
     const ctx = createMockRouteContext({ isPublicRoute: false });
 
-    const middleware = withAuth(mockHandler);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
     await middleware(req, ctx);
 
     expect(mockHandler).toHaveBeenCalled();
@@ -144,7 +187,10 @@ describe('Auth Middleware', () => {
     const req = createMockRequest({ path: '/dashboard' });
     const ctx = createMockRouteContext({ isPublicRoute: false });
 
-    const middleware = withAuth(mockHandler);
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);

@@ -1,13 +1,18 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { container } from '@/core/container';
-import { AUTH } from '@/core/contracts';
+import { createAction } from '@/core/contracts/authorization';
 import type { Identity } from '@/core/contracts/identity';
-import type { IdentityProvider } from '@/core/contracts/identity';
+import type { TenantContext } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import { env } from '@/core/env';
 
+import {
+  AuthorizationFacade,
+  AuthorizationError,
+} from '@/security/core/authorization-facade';
+import { createRequestScopedContext } from '@/security/core/request-scoped-context';
+import type { SecurityDependencies } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 
 /**
@@ -24,20 +29,26 @@ import type { RouteContext } from '@/security/middleware/route-classification';
  */
 export function withAuth(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
-  options?: {
+  options: {
+    dependencies: SecurityDependencies;
+    userRepository: UserRepository;
     resolveIdentity?: () => Promise<Identity | null>;
+    resolveTenant?: (identity: Identity) => Promise<TenantContext>;
   },
 ) {
   return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
+    const {
+      dependencies: { authorizationService, identityProvider, tenantResolver },
+      userRepository,
+    } = options;
+    const authorization = new AuthorizationFacade(authorizationService);
+
     // Internal API routes are handled by withInternalApiGuard
     if (ctx.isInternalApi) {
       return handler(req, ctx);
     }
 
-    const identityProvider = container.resolve<IdentityProvider>(
-      AUTH.IDENTITY_PROVIDER,
-    );
-    const identity = options?.resolveIdentity
+    const identity = options.resolveIdentity
       ? await options.resolveIdentity()
       : await identityProvider.getCurrentIdentity();
     const userId = identity?.id;
@@ -45,9 +56,6 @@ export function withAuth(
     let onboardingComplete = false;
 
     if (userId) {
-      const userRepository = container.resolve<UserRepository>(
-        AUTH.USER_REPOSITORY,
-      );
       const user = await userRepository.findById(userId);
       onboardingComplete = Boolean(user?.onboardingComplete);
     }
@@ -95,11 +103,65 @@ export function withAuth(
       return NextResponse.redirect(signInUrl);
     }
 
-    // Optional: Authorization check
-    // const authService = container.resolve<AuthorizationService>(AUTH.AUTHORIZATION_SERVICE);
-    // const context: AuthorizationContext = { ... };
-    // const allowed = await authService.can(context);
-    // if (!allowed) return NextResponse.redirect(new URL('/unauthorized', req.url));
+    if (userId && !ctx.isPublicRoute) {
+      try {
+        const tenant = options.resolveTenant
+          ? await options.resolveTenant(identity!)
+          : await tenantResolver.resolve(identity!);
+
+        const correlationId =
+          req.headers.get('x-correlation-id') ?? crypto.randomUUID();
+        const requestId =
+          req.headers.get('x-request-id') ?? crypto.randomUUID();
+        const requestScope = createRequestScopedContext({
+          identityId: userId,
+          tenantId: tenant.tenantId,
+          correlationId,
+          requestId,
+          runtime: 'edge',
+          environment: env.NODE_ENV,
+          metadata: {
+            path: req.nextUrl.pathname,
+            method: req.method,
+          },
+        });
+
+        await authorization.authorize(
+          {
+            tenant,
+            subject: {
+              id: userId,
+            },
+            resource: {
+              type: 'route',
+              id: req.nextUrl.pathname,
+            },
+            action: createAction('route', 'access'),
+            attributes: {
+              requestScope,
+            },
+          },
+          'Route access denied',
+        );
+      } catch (error) {
+        if (error instanceof AuthorizationError) {
+          if (ctx.isApi) {
+            return NextResponse.json(
+              {
+                status: 'server_error',
+                error: 'Forbidden',
+                code: 'FORBIDDEN',
+              },
+              { status: 403 },
+            );
+          }
+
+          return NextResponse.redirect(new URL('/', req.url));
+        }
+
+        throw error;
+      }
+    }
 
     return handler(req, ctx);
   };

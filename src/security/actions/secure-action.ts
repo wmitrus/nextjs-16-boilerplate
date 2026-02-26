@@ -1,30 +1,39 @@
 import { z } from 'zod';
 
-import { container } from '@/core/container';
-import { AUTHORIZATION } from '@/core/contracts';
-import type {
-  AuthorizationService,
-  ResourceContext,
-} from '@/core/contracts/authorization';
-
 import {
   createAction,
   type Action,
-} from '@/modules/authorization/domain/permission';
+  type AuthorizationService,
+  type ResourceContext,
+} from '@/core/contracts/authorization';
+
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
-import { authorize, AuthorizationError } from '@/security/core/authorization';
+import {
+  AuthorizationFacade,
+  AuthorizationError,
+} from '@/security/core/authorization-facade';
+import { createRequestScopedContextFromSecurityContext } from '@/security/core/request-scoped-context';
 import type {
   SecurityContext,
   UserRole,
 } from '@/security/core/security-context';
-import { getSecurityContext } from '@/security/core/security-context';
+
+export interface SecureActionDependencies {
+  getSecurityContext: () => Promise<SecurityContext>;
+  authorizationService: AuthorizationService;
+}
+
+type SecureActionDependenciesResolver =
+  | SecureActionDependencies
+  | (() => SecureActionDependencies | Promise<SecureActionDependencies>);
 
 export interface ActionOptions<TSchema extends z.ZodType, TResult> {
   schema: TSchema;
   role?: UserRole;
   resource?: ResourceContext;
   action?: Action;
+  dependencies: SecureActionDependenciesResolver;
   handler: (args: {
     input: z.infer<TSchema>;
     context: SecurityContext;
@@ -44,6 +53,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
   role = 'user',
   resource,
   action,
+  dependencies,
   handler,
 }: ActionOptions<TSchema, TResult>) {
   return async (
@@ -57,55 +67,75 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
     | { status: 'unauthorized'; error: string }
     | { status: 'error'; error: string }
   > => {
-    const context = await getSecurityContext();
+    const resolvedDependencies =
+      typeof dependencies === 'function' ? await dependencies() : dependencies;
+    const context = await resolvedDependencies.getSecurityContext();
+    const authorization: AuthorizationFacade = new AuthorizationFacade(
+      resolvedDependencies.authorizationService,
+    );
+    const effectiveResource: ResourceContext =
+      resource ??
+      ({
+        type: 'system',
+        id: handler.name || 'anonymous-action',
+      } satisfies ResourceContext);
+
     const actionName =
       action ||
       createAction(resource?.type ?? 'system', handler.name || 'execute');
 
     try {
-      // 1. Basic RBAC check
-      authorize(context, role);
+      // 1. Unified authorization check via central facade
+      if (!context.user) {
+        throw new AuthorizationError('Authentication required');
+      }
 
-      // 2. Advanced ABAC/RBAC check via AuthorizationService if resource is provided
-      if (resource && context.user) {
-        const authService = container.resolve<AuthorizationService>(
-          AUTHORIZATION.SERVICE,
-        );
-        const hasPermission = await authService.can({
+      const requestScope = createRequestScopedContextFromSecurityContext(
+        context,
+        {
+          actionName,
+          requiredRole: role,
+        },
+      );
+
+      authorization.ensureRequiredRole(context.user.role, role);
+      await authorization.authorize(
+        {
           tenant: {
             tenantId: context.user.tenantId,
             userId: context.user.id,
           },
           subject: {
             id: context.user.id,
+            attributes: {
+              role: context.user.role,
+            },
           },
-          resource,
+          resource: effectiveResource,
           action: actionName,
-        });
+          attributes: {
+            requestScope,
+          },
+        },
+        `Permission denied for action: ${actionName}`,
+      );
 
-        if (!hasPermission) {
-          throw new AuthorizationError(
-            `Permission denied for action: ${actionName}`,
-          );
-        }
-      }
-
-      // 3. Replay Protection
+      // 2. Replay Protection
       if (input._replayToken) {
         await validateReplayToken(input._replayToken, context);
       }
 
-      // 4. Validate Input
+      // 3. Validate Input
       const { _replayToken, ...pureInput } = input;
       const validatedInput = schema.parse(pureInput);
 
-      // 5. Execute Handler
+      // 4. Execute Handler
       const result = await handler({
         input: validatedInput,
         context,
       });
 
-      // 6. Audit Log (Success)
+      // 5. Audit Log (Success)
       await logActionAudit({
         actionName,
         input: pureInput,
@@ -121,7 +151,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       const errorMessage =
         error instanceof Error ? error.message : 'Internal Server Error';
 
-      // 7. Audit Log (Failure)
+      // 6. Audit Log (Failure)
       await logActionAudit({
         actionName,
         input,

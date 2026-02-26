@@ -1,5 +1,6 @@
 import type {
   AuthorizationContext,
+  MembershipRepository,
   Policy,
   PolicyRepository,
   RoleRepository,
@@ -16,12 +17,24 @@ export class MockRoleRepository implements RoleRepository {
 }
 
 export class MockPolicyRepository implements PolicyRepository {
-  async getPolicies(context: AuthorizationContext): Promise<Policy[]> {
+  async getPolicies(_context: AuthorizationContext): Promise<Policy[]> {
     const policies: Policy[] = [
+      {
+        effect: 'allow',
+        actions: ['route:access'],
+        resource: 'route',
+        condition: (ctx) => Boolean(ctx.subject.id),
+      },
       {
         effect: 'allow',
         actions: ['document:read'],
         resource: 'document',
+      },
+      {
+        effect: 'allow',
+        actions: ['system:execute'],
+        resource: 'system',
+        condition: (ctx) => Boolean(ctx.subject.id),
       },
       {
         effect: 'allow',
@@ -31,11 +44,16 @@ export class MockPolicyRepository implements PolicyRepository {
       },
     ];
 
-    // Filter policies based on action and resource type
-    return policies.filter(
-      (p) =>
-        p.actions.includes(context.action) &&
-        (p.resource === context.resource.type || p.resource === 'all'),
-    );
+    return policies;
+  }
+}
+
+export class MockMembershipRepository implements MembershipRepository {
+  async getTenantMemberships(subjectId: string): Promise<string[]> {
+    if (subjectId.startsWith('user_')) {
+      return ['t1', 'tenant_123', 'test-tenant'];
+    }
+
+    return ['t1'];
   }
 }

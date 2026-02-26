@@ -52,6 +52,17 @@ describe('Headers Middleware', () => {
     const csp = res.headers.get('Content-Security-Policy');
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain('upgrade-insecure-requests');
+  });
+
+  it('should not include upgrade-insecure-requests outside Vercel production', () => {
+    mockEnv.NODE_ENV = 'production';
+    mockEnv.VERCEL_ENV = undefined;
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).not.toContain('upgrade-insecure-requests');
   });
 
   it('should not set HSTS in development', () => {

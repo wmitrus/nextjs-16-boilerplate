@@ -181,7 +181,7 @@ describe('Proxy Runtime Integration', () => {
     expect(mockProtect).not.toHaveBeenCalled();
   });
 
-  it('does not call global Clerk auth() in middleware path', async () => {
+  it('does not call global auth() in middleware path', async () => {
     const request = new NextRequest(new URL('http://localhost/'));
 
     const response = await proxy(request, {} as unknown as NextFetchEvent);

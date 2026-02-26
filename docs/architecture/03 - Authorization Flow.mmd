@@ -1,38 +1,23 @@
 flowchart TD
-    subgraph Identity & Auth
-        A[ClerkIdentityProvider / Custom IdentityProvider]
-        B[Identity { id, email, attributes }]
-    end
+    %% Traceability: src/proxy.ts, src/security/middleware/with-auth.ts, src/security/core/security-context.ts,
+    %% src/security/core/security-dependencies.ts, src/security/core/authorization-facade.ts,
+    %% src/modules/auth/infrastructure/ClerkIdentityProvider.ts, src/modules/auth/infrastructure/ClerkUserRepository.ts,
+    %% src/modules/authorization/domain/AuthorizationService.ts
+    REQ[Incoming request] --> PROXY[proxy.ts]
+    PROXY --> ROOT[createContainer()]
+    ROOT --> DEPS[buildSecurityDependencies(container)]
+    DEPS --> AUTH[withAuth / withSecurity]
 
-    subgraph Tenant
-        C[TenantResolver]
-        D[TenantContext { tenantId, userId }]
-    end
+    AUTH --> IDP[IdentityProvider]
+    AUTH --> USERREPO[UserRepository]
+    AUTH --> AUTHZ[AuthorizationService]
 
-    subgraph Role & Permission
-        E[RoleRepository]
-        F[PolicyRepository]
-        G[Roles & Policies]
-    end
+    IDP --> IDENTITY[Identity]
+    IDENTITY --> CTX[createSecurityContext]
+    USERREPO --> CTX
+    AUTHZ --> FACADE[new AuthorizationFacade]
+    CTX --> FACADE
 
-    subgraph Authorization Engine
-        H[PolicyEngine]
-        I[DefaultAuthorizationService]
-    end
-
-    subgraph Next.js Middleware
-        J[withAuth / proxy.ts]
-        K[RouteContext / RequestContext]
-    end
-
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> G
-    D --> F
-    F --> G
-    G --> H
-    H --> I
-    I --> J
-    K --> J
+    FACADE --> DECISION{Allow?}
+    DECISION -->|Yes| NEXT[NextResponse.next()]
+    DECISION -->|No| DENY[Unauthorized / Redirect]

@@ -1,11 +1,14 @@
 flowchart TD
+%% Traceability checks map to: src/proxy.ts, src/security/middleware/with-auth.ts, src/security/core/security-context.ts
+%% and contracts/adapters: src/core/contracts/*, src/modules/auth/infrastructure/*, src/modules/{authorization,user}/*
 
-A["Only auth/infrastructure imports Clerk?"]
-B["IdentityProvider used everywhere?"]
-C["TenantContext always explicit?"]
-D["No role checks in UI?"]
-E["PolicyEngine in domain?"]
-F["Modules isolated?"]
-G["Replace Clerk without touching domain?"]
+A["Provider SDK isolated to module adapters?"]
+B["Security runtime avoids global container access?"]
+C["Authorization via contracts + facade?"]
+D["Request-scoped deps assembled in proxy/composition root?"]
+E["No domain policy logic in shared/*?"]
+F["modules/auth|authorization|user remain isolated?"]
+G["Core contracts have no reverse dependency to modules?"]
+H["Can swap auth provider with adapter-only change?"]
 
-A --> B --> C --> D --> E --> F --> G
+A --> B --> C --> D --> E --> F --> G --> H

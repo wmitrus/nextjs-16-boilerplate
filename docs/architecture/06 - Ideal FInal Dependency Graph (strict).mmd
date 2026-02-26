@@ -1,24 +1,36 @@
 flowchart TD
+%% Traceability: src/app/**, src/features/**, src/modules/**, src/security/**, src/shared/**, src/core/**
+%% Runtime anchors: src/proxy.ts, src/core/container/index.ts, src/security/middleware/with-security.ts
 
-subgraph OUTER
-    UI
-    INFRA
+subgraph DELIVERY["Delivery"]
+    APP[app/*]
+    FEAT[features/*]
+    PROXY[proxy.ts]
 end
 
-subgraph INNER
-    APPLICATION
-    DOMAIN
+subgraph BUSINESS["Business & Cross-cutting"]
+    MODS[modules/*]
+    SEC[security/*]
+    SHARED[shared/*]
 end
 
-CONTRACTS
+subgraph CORE["Core"]
+    CONTRACTS[core/contracts/*]
+    CONTAINER[core/container/*]
+    ENV[core/env/*]
+    LOGGER[core/logger/*]
+end
 
-UI --> APPLICATION
-APPLICATION --> DOMAIN
-APPLICATION --> CONTRACTS
-INFRA --> CONTRACTS
-INFRA --> DOMAIN
-CONTAINER --> INFRA
+APP --> FEAT
+APP --> SEC
+FEAT --> MODS
+FEAT --> SEC
+SEC --> CONTRACTS
+MODS --> CONTRACTS
+SHARED --> CONTRACTS
+PROXY --> CONTAINER
+PROXY --> SEC
 
-DOMAIN -.-> UI
-DOMAIN -.-> INFRA
-UI -.-> DOMAIN
+CONTRACTS -. FORBIDDEN .-> MODS
+CORE -. FORBIDDEN .-> FEAT
+CORE -. FORBIDDEN .-> APP

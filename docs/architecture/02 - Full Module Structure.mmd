@@ -1,52 +1,53 @@
-flowchart TB
+flowchart TD
+%% Traceability: src/actions/**, src/app/**, src/features/security-showcase/**, src/modules/{auth,authorization,user}/**, src/security/**, src/shared/**, src/core/**
+%% Runtime anchors: src/proxy.ts, src/core/container/index.ts
 
-subgraph APP_ROUTER["Next.js App Router"]
-    ROUTES["Routes / Server Actions"]
+subgraph DELIVERY["Delivery"]
+  APP["app/"]
+  ACTIONS["actions/"]
+  PROXY["proxy.ts"]
 end
 
-subgraph CORE
-    CONTRACTS["core/contracts"]
-    CONTAINER["core/container"]
-    CONFIG["core/config"]
+subgraph FEATURES["Features"]
+  FSEC["features/security-showcase/"]
 end
 
-subgraph AUTH_MODULE["modules/auth"]
-    AUTH_UI["ui"]
-    AUTH_APP["application"]
-    AUTH_DOMAIN["domain"]
-    AUTH_INFRA["infrastructure (Clerk Adapter)"]
+subgraph MODULES["Modules"]
+  MAUTH["modules/auth/"]
+  MAUTHZ["modules/authorization/"]
+  MUSER["modules/user/"]
 end
 
-subgraph AUTHZ_MODULE["modules/authorization"]
-    AUTHZ_UI["ui"]
-    AUTHZ_APP["application"]
-    AUTHZ_DOMAIN["domain (Policy Engine)"]
-    AUTHZ_INFRA["infrastructure (Policy Storage)"]
+subgraph CROSS["Cross-cutting"]
+  SECURITY["security/"]
+  SHARED["shared/"]
 end
 
-subgraph ORG_MODULE["modules/organization"]
-    ORG_UI["ui"]
-    ORG_APP["application"]
-    ORG_DOMAIN["domain"]
-    ORG_INFRA["infrastructure"]
+subgraph CORE["Core"]
+  CCONTRACTS["core/contracts/"]
+  CCONTAINER["core/container/"]
+  CENV["core/env/"]
+  CLOGGER["core/logger/"]
+  CERROR["core/error/"]
 end
 
-ROUTES --> AUTH_APP
-ROUTES --> AUTHZ_APP
-ROUTES --> ORG_APP
+APP --> FSEC
+APP --> SECURITY
+ACTIONS --> SECURITY
+PROXY --> CCONTAINER
+PROXY --> SECURITY
 
-AUTH_APP --> AUTH_DOMAIN
-AUTHZ_APP --> AUTHZ_DOMAIN
-ORG_APP --> ORG_DOMAIN
+FSEC --> SECURITY
+FSEC --> CCONTRACTS
 
-AUTH_INFRA --> CONTRACTS
-AUTHZ_INFRA --> CONTRACTS
-ORG_INFRA --> CONTRACTS
+SECURITY --> CCONTRACTS
+SECURITY --> SHARED
 
-AUTHZ_DOMAIN --> CONTRACTS
-AUTH_APP --> CONTRACTS
-ORG_APP --> CONTRACTS
+MAUTH --> CCONTRACTS
+MAUTHZ --> CCONTRACTS
+MUSER --> CCONTRACTS
+SHARED --> CCONTRACTS
 
-CONTAINER --> AUTH_INFRA
-CONTAINER --> AUTHZ_INFRA
-CONTAINER --> ORG_INFRA
+CCONTAINER --> MAUTH
+CCONTAINER --> MAUTHZ
+CCONTAINER --> MUSER

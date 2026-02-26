@@ -14,6 +14,7 @@
 - [ ] `pnpm depcheck` (pass)
 - [ ] `pnpm env:check` (pass)
 - [ ] `pnpm test` (pass)
+- [ ] For route performance/navigation issues: followed the playbook in `docs/features/21 - Next.js 16 Cache Components, PPR & Devtools MCP.md` and included before/after timing evidence.
 
 ## Modular Monolith Compliance
 

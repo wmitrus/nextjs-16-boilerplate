@@ -2,16 +2,20 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { bootstrap } from '@/core/container';
+import { createContainer } from '@/core/container';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { AuthorizationService } from '@/core/contracts/authorization';
+import type { IdentityProvider } from '@/core/contracts/identity';
+import type { RoleRepository } from '@/core/contracts/repositories';
+import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
 
+import type { SecurityDependencies } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 import { withAuth } from '@/security/middleware/with-auth';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
 import { withSecurity } from '@/security/middleware/with-security';
-
-// Initialize DI Container
-bootstrap();
 
 type ProxyHandler = (
   req: NextRequest,
@@ -38,6 +42,25 @@ function composeMiddlewares(
  */
 
 export default clerkMiddleware(async (auth, request) => {
+  const requestContainer = createContainer();
+  const securityDependencies: SecurityDependencies = {
+    identityProvider: requestContainer.resolve<IdentityProvider>(
+      AUTH.IDENTITY_PROVIDER,
+    ),
+    tenantResolver: requestContainer.resolve<TenantResolver>(
+      AUTH.TENANT_RESOLVER,
+    ),
+    roleRepository: requestContainer.resolve<RoleRepository>(
+      AUTHORIZATION.ROLE_REPOSITORY,
+    ),
+    authorizationService: requestContainer.resolve<AuthorizationService>(
+      AUTHORIZATION.SERVICE,
+    ),
+  };
+  const userRepository = requestContainer.resolve<UserRepository>(
+    AUTH.USER_REPOSITORY,
+  );
+
   const resolveIdentity = async () => {
     const { userId, sessionClaims } = await auth();
 
@@ -58,7 +81,12 @@ export default clerkMiddleware(async (auth, request) => {
     [
       withInternalApiGuard,
       withRateLimit,
-      (next: ProxyHandler) => withAuth(next, { resolveIdentity }),
+      (next: ProxyHandler) =>
+        withAuth(next, {
+          resolveIdentity,
+          dependencies: securityDependencies,
+          userRepository,
+        }),
     ],
     terminalHandler,
   );

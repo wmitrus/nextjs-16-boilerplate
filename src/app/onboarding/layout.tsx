@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
 import { container } from '@/core/container';
 import { AUTH } from '@/core/contracts';
@@ -10,6 +11,14 @@ export default async function OnboardingLayout({
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingGuard>{children}</OnboardingGuard>
+    </Suspense>
+  );
+}
+
+async function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const identityProvider = container.resolve<IdentityProvider>(
     AUTH.IDENTITY_PROVIDER,
   );

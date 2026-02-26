@@ -1,5 +1,10 @@
 {
   "servers": {
+    "next-devtools": {
+      "command": "npx",
+      "args": ["-y", "next-devtools-mcp@latest"],
+      "type": "stdio"
+    },
     "Sentry": {
       "url": "https://mcp.sentry.dev/mcp/ozi/nextjs-16-boilerplate",
       "type": "http"

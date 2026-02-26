@@ -1,64 +1,106 @@
-import { clerkClient, type ClerkMiddlewareAuth } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+import { container } from '@/core/container';
+import { AUTH } from '@/core/contracts';
+import type { Identity } from '@/core/contracts/identity';
+import type { IdentityProvider } from '@/core/contracts/identity';
+import type { UserRepository } from '@/core/contracts/user';
 import { env } from '@/core/env';
 
 import type { RouteContext } from '@/security/middleware/route-classification';
 
 /**
- * Handles Authentication and Onboarding redirects.
- * Ports logic from the original proxy.ts.
+ * Middleware to enforce authentication, onboarding, and authorization.
+ * - Uses IdentityProvider to get current user
+ * - Uses UserRepository for onboarding status
+ * - Optionally integrates with AuthorizationService (can be added)
+ *
+ * Rules:
+ * 1️⃣ Auth routes: redirect signed-in users
+ * 2️⃣ Private routes: enforce onboarding
+ * 3️⃣ API routes: return JSON error on unauthorized
+ * 4️⃣ E2E routes bypass auth if env.E2E_ENABLED
  */
-export async function withAuth(
-  auth: ClerkMiddlewareAuth,
-  req: NextRequest,
-  ctx: RouteContext,
-): Promise<NextResponse | null> {
-  const { userId, sessionClaims } = await auth();
-
-  // 1. Redirect authenticated users away from auth routes (sign-in/sign-up)
-  if (userId && ctx.isAuthRoute) {
-    let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-
-    if (!onboardingComplete) {
-      const client = await clerkClient();
-      const user = await client.users.getUser(userId);
-      onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
+export function withAuth(
+  handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
+  options?: {
+    resolveIdentity?: () => Promise<Identity | null>;
+  },
+) {
+  return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
+    // Internal API routes are handled by withInternalApiGuard
+    if (ctx.isInternalApi) {
+      return handler(req, ctx);
     }
 
-    const redirectUrl = onboardingComplete
-      ? new URL('/', req.url)
-      : new URL('/onboarding', req.url);
-    return NextResponse.redirect(redirectUrl);
-  }
+    const identityProvider = container.resolve<IdentityProvider>(
+      AUTH.IDENTITY_PROVIDER,
+    );
+    const identity = options?.resolveIdentity
+      ? await options.resolveIdentity()
+      : await identityProvider.getCurrentIdentity();
+    const userId = identity?.id;
 
-  // 2. Enforce onboarding for private routes
-  if (userId && !ctx.isOnboardingRoute && !ctx.isPublicRoute && !ctx.isApi) {
-    let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
+    let onboardingComplete = false;
 
-    if (!onboardingComplete) {
-      const client = await clerkClient();
-      const user = await client.users.getUser(userId);
-      onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
+    if (userId) {
+      const userRepository = container.resolve<UserRepository>(
+        AUTH.USER_REPOSITORY,
+      );
+      const user = await userRepository.findById(userId);
+      onboardingComplete = Boolean(user?.onboardingComplete);
     }
 
-    if (!onboardingComplete) {
-      return NextResponse.redirect(new URL('/onboarding', req.url));
+    // 1. Redirect authenticated users away from auth routes (sign-in/sign-up)
+    if (userId && ctx.isAuthRoute) {
+      const redirectUrl = onboardingComplete
+        ? new URL('/', req.url)
+        : new URL('/onboarding', req.url);
+      return NextResponse.redirect(redirectUrl);
     }
-  }
 
-  // 3. Protect private routes
-  const isE2eRoute =
-    req.nextUrl.pathname.startsWith('/e2e-error') ||
-    req.nextUrl.pathname.startsWith('/users');
+    // 2. Enforce onboarding for private routes
+    if (userId && !ctx.isOnboardingRoute && !ctx.isPublicRoute && !ctx.isApi) {
+      if (!onboardingComplete) {
+        return NextResponse.redirect(new URL('/onboarding', req.url));
+      }
+    }
 
-  if (!userId && !ctx.isPublicRoute && !(env.E2E_ENABLED && isE2eRoute)) {
-    // Clerk's protect() throws a redirect or 401, but we can't easily call it inside our composable flow
-    // without it being the terminal middleware. Instead, we let Clerk handle the protection
-    // via auth.protect() if we return null here, or we can manually redirect.
-    // However, to keep it clean, we return null and let the terminal stage handle it.
-  }
+    // 3. Protect private routes
+    const isE2eRoute =
+      req.nextUrl.pathname.startsWith('/e2e-error') ||
+      req.nextUrl.pathname.startsWith('/users');
 
-  return null;
+    if (!userId && !ctx.isPublicRoute && !(env.E2E_ENABLED && isE2eRoute)) {
+      if (ctx.isApi) {
+        /* Think and decide wheter to return
+          return NextResponse.json(
+            { status: 'error', code: 'UNAUTHORIZED', message: 'Unauthorized' },
+            { status: 401 },
+          );
+        */
+        return NextResponse.json(
+          {
+            status: 'server_error',
+            error: 'Unauthorized',
+            code: 'UNAUTHORIZED',
+          },
+          { status: 401 },
+        );
+      }
+
+      const signInUrl = new URL('/sign-in', req.url);
+      signInUrl.searchParams.set('redirect_url', req.url);
+      return NextResponse.redirect(signInUrl);
+    }
+
+    // Optional: Authorization check
+    // const authService = container.resolve<AuthorizationService>(AUTH.AUTHORIZATION_SERVICE);
+    // const context: AuthorizationContext = { ... };
+    // const allowed = await authService.can(context);
+    // if (!allowed) return NextResponse.redirect(new URL('/unauthorized', req.url));
+
+    return handler(req, ctx);
+  };
 }

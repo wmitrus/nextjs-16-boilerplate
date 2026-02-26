@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 
+import { IGNORED_SENTRY_PATTERNS } from '@/core/error/ignored-rejection-patterns';
+
 /**
  * Create a fingerprint for error deduplication.
  * Generates a unique identifier based on error message and stack trace.
@@ -66,14 +68,7 @@ export function shouldReportToSentry(error: Error): boolean {
   const message = error.message || '';
   const stack = error.stack || '';
 
-  const ignoredPatterns = [
-    'ResizeObserver loop limit exceeded',
-    'Non-Error promise rejection captured',
-    'Network request failed',
-    'cannot_render_single_session_enabled',
-  ];
-
-  const isIgnored = ignoredPatterns.some(
+  const isIgnored = IGNORED_SENTRY_PATTERNS.some(
     (pattern) => message.includes(pattern) || stack.includes(pattern),
   );
 

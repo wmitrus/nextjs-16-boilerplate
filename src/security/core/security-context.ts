@@ -1,13 +1,11 @@
 import { headers } from 'next/headers';
 
-import { container } from '@/core/container';
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
-import type { IdentityProvider } from '@/core/contracts/identity';
-import type { RoleRepository } from '@/core/contracts/repositories';
-import type { TenantResolver } from '@/core/contracts/tenancy';
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
+
+import type { SecurityContextDependencies } from './security-dependencies';
+export type { SecurityContextDependencies } from './security-dependencies';
 
 export type UserRole = 'admin' | 'user' | 'guest';
 
@@ -30,16 +28,10 @@ export interface SecurityContext {
  * Designed to be used in Server Components, Server Actions, and Route Handlers.
  * Decoupled from direct Auth providers via the DI Container.
  */
-export async function getSecurityContext(): Promise<SecurityContext> {
-  const identityProvider = container.resolve<IdentityProvider>(
-    AUTH.IDENTITY_PROVIDER,
-  );
-  const tenantResolver = container.resolve<TenantResolver>(
-    AUTH.TENANT_RESOLVER,
-  );
-  const roleRepository = container.resolve<RoleRepository>(
-    AUTHORIZATION.ROLE_REPOSITORY,
-  );
+export async function createSecurityContext(
+  dependencies: SecurityContextDependencies,
+): Promise<SecurityContext> {
+  const { identityProvider, tenantResolver, roleRepository } = dependencies;
 
   const identity = await identityProvider.getCurrentIdentity();
   const headerList = await headers();
@@ -84,3 +76,5 @@ export async function getSecurityContext(): Promise<SecurityContext> {
     environment: env.NODE_ENV as 'development' | 'test' | 'production',
   };
 }
+
+export const getSecurityContext = createSecurityContext;

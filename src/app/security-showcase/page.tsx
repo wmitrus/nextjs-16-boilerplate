@@ -1,5 +1,11 @@
 import { connection } from 'next/server';
 
+import { createContainer } from '@/core/container';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { IdentityProvider } from '@/core/contracts/identity';
+import type { RoleRepository } from '@/core/contracts/repositories';
+import type { TenantResolver } from '@/core/contracts/tenancy';
+
 import { AdminOnlyExample } from '@/features/security-showcase/components/AdminOnlyExample';
 import { EnvDiagnosticsExample } from '@/features/security-showcase/components/EnvDiagnosticsExample';
 import { ExternalFetchExample } from '@/features/security-showcase/components/ExternalFetchExample';
@@ -7,15 +13,31 @@ import { InternalApiTestExample } from '@/features/security-showcase/components/
 import { ProfileExample } from '@/features/security-showcase/components/ProfileExample';
 import { SettingsFormExample } from '@/features/security-showcase/components/SettingsFormExample';
 
-import { getSecurityContext } from '@/security/core/security-context';
+import {
+  createSecurityContext,
+  type SecurityContextDependencies,
+} from '@/security/core/security-context';
 
 export default async function SecurityShowcasePage() {
   await connection();
-  let context: Awaited<ReturnType<typeof getSecurityContext>>;
+  const requestContainer = createContainer();
+  const securityContextDependencies: SecurityContextDependencies = {
+    identityProvider: requestContainer.resolve<IdentityProvider>(
+      AUTH.IDENTITY_PROVIDER,
+    ),
+    tenantResolver: requestContainer.resolve<TenantResolver>(
+      AUTH.TENANT_RESOLVER,
+    ),
+    roleRepository: requestContainer.resolve<RoleRepository>(
+      AUTHORIZATION.ROLE_REPOSITORY,
+    ),
+  };
+
+  let context: Awaited<ReturnType<typeof createSecurityContext>>;
   let contextError: string | null = null;
 
   try {
-    context = await getSecurityContext();
+    context = await createSecurityContext(securityContextDependencies);
   } catch (error) {
     contextError = error instanceof Error ? error.message : 'Unknown error';
     context = {

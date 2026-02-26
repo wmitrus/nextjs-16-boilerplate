@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test';
 
+import { hasClerkE2ECredentials, signInE2E } from './clerk-auth';
+
 test.describe('User Management E2E', () => {
+  test.skip(
+    !hasClerkE2ECredentials(),
+    'Set E2E_CLERK_USER_USERNAME and E2E_CLERK_USER_PASSWORD for authenticated E2E tests.',
+  );
+
+  test.beforeEach(async ({ page }) => {
+    await signInE2E(page);
+  });
+
   test('should emit a browser logger entry on load', async ({ page }) => {
     await page.route('**/api/users', async (route) => {
       await route.fulfill({

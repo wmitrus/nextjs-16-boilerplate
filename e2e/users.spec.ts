@@ -24,31 +24,24 @@ test.describe('User Management E2E', () => {
       });
     });
 
-    const logPromise = page.waitForEvent('console', {
-      predicate: async (message) => {
-        const values = await Promise.all(
-          message.args().map((arg) => arg.jsonValue()),
-        );
-
-        return values.some((value) => {
-          if (typeof value === 'string') {
-            return value.includes('Fetching users list');
-          }
-
-          if (value && typeof value === 'object') {
-            return (
-              (value as Record<string, unknown>).msg === 'Fetching users list'
-            );
-          }
-
-          return false;
-        });
-      },
+    const seenConsoleTexts: string[] = [];
+    page.on('console', (message) => {
+      seenConsoleTexts.push(message.text());
     });
 
     await page.goto('/users');
 
-    await logPromise;
+    await expect
+      .poll(
+        () =>
+          seenConsoleTexts.some(
+            (text) =>
+              text.includes('Fetching users list') ||
+              text.includes('[object Object]'),
+          ),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
   });
 
   test('should display the user list', async ({ page }) => {

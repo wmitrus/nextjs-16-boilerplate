@@ -5,10 +5,14 @@ import type { Mocked } from 'vitest';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 import { container } from '@/core/container';
-import { AUTH } from '@/core/contracts';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import type { RoleRepository } from '@/core/contracts/repositories';
+import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
+import type { SecurityDependencies } from '@/security/core/security-dependencies';
 import { withAuth } from '@/security/middleware/with-auth';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
@@ -56,15 +60,32 @@ describe('Middleware Integration', () => {
   });
 
   const createPipeline = () => {
+    const securityDependencies: SecurityDependencies = {
+      identityProvider: mockIdentityProvider,
+      tenantResolver: container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
+      roleRepository: container.resolve<RoleRepository>(
+        AUTHORIZATION.ROLE_REPOSITORY,
+      ),
+      authorizationService: container.resolve<AuthorizationService>(
+        AUTHORIZATION.SERVICE,
+      ),
+    };
+
     return withSecurity(
       withInternalApiGuard(
         withRateLimit(
-          withAuth(async () => {
-            return new Response(null, {
-              status: 200,
-            }) as unknown as NextResponse;
-            return NextResponse.next();
-          }),
+          withAuth(
+            async () => {
+              return new Response(null, {
+                status: 200,
+              }) as unknown as NextResponse;
+              return NextResponse.next();
+            },
+            {
+              dependencies: securityDependencies,
+              userRepository: mockUserRepository,
+            },
+          ),
         ),
       ),
     ) as unknown as (req: NextRequest) => Promise<NextResponse>;

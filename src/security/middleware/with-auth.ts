@@ -17,15 +17,13 @@ import type { RouteContext } from '@/security/middleware/route-classification';
 
 /**
  * Middleware to enforce authentication, onboarding, and authorization.
- * - Uses IdentityProvider to get current user
- * - Uses UserRepository for onboarding status
- * - Optionally integrates with AuthorizationService (can be added)
  *
  * Rules:
  * 1️⃣ Auth routes: redirect signed-in users
  * 2️⃣ Private routes: enforce onboarding
  * 3️⃣ API routes: return JSON error on unauthorized
  * 4️⃣ E2E routes bypass auth if env.E2E_ENABLED
+ * 5️⃣ Route access: authorized via PolicyEngine with ABAC environment context
  */
 export function withAuth(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
@@ -43,12 +41,12 @@ export function withAuth(
     } = options;
     const authorization = new AuthorizationFacade(authorizationService);
 
-    // Internal API routes are handled by withInternalApiGuard
+    // Internal API routes are handled by withInternalApiGuard and do not require session auth
     if (ctx.isInternalApi) {
       return handler(req, ctx);
     }
 
-    // Fast path: non-auth public routes do not require identity resolution.
+    // Fast path: non-auth public routes do not require identity resolution
     if (ctx.isPublicRoute && !ctx.isAuthRoute) {
       return handler(req, ctx);
     }
@@ -70,6 +68,7 @@ export function withAuth(
       const redirectUrl = onboardingComplete
         ? new URL('/', req.url)
         : new URL('/onboarding', req.url);
+
       return NextResponse.redirect(redirectUrl);
     }
 
@@ -87,12 +86,6 @@ export function withAuth(
 
     if (!userId && !ctx.isPublicRoute && !(env.E2E_ENABLED && isE2eRoute)) {
       if (ctx.isApi) {
-        /* Think and decide wheter to return
-          return NextResponse.json(
-            { status: 'error', code: 'UNAUTHORIZED', message: 'Unauthorized' },
-            { status: 401 },
-          );
-        */
         return NextResponse.json(
           {
             status: 'server_error',
@@ -108,6 +101,7 @@ export function withAuth(
       return NextResponse.redirect(signInUrl);
     }
 
+    // 4. Authorization check for authenticated non-public routes
     if (userId && !ctx.isPublicRoute) {
       try {
         const tenant = options.resolveTenant
@@ -118,6 +112,7 @@ export function withAuth(
           req.headers.get('x-correlation-id') ?? crypto.randomUUID();
         const requestId =
           req.headers.get('x-request-id') ?? crypto.randomUUID();
+
         const requestScope = createRequestScopedContext({
           identityId: userId,
           tenantId: tenant.tenantId,
@@ -142,6 +137,15 @@ export function withAuth(
               id: req.nextUrl.pathname,
             },
             action: createAction('route', 'access'),
+            environment: {
+              ip:
+                req.headers.get('x-forwarded-for') ??
+                req.headers.get('x-real-ip') ??
+                undefined,
+              time: new Date(),
+              path: req.nextUrl.pathname,
+              method: req.method,
+            },
             attributes: {
               requestScope,
             },

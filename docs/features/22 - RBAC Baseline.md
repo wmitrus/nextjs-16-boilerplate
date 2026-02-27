@@ -90,12 +90,12 @@ Floor-check rule: a principal at level N satisfies any requirement at level ≤ 
 
 ### 3.3 Authorization Module (`src/modules/authorization/`)
 
-| File                                 | Purpose                                                                                                   |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `domain/AuthorizationService.ts`     | `DefaultAuthorizationService` — checks tenant membership, fetches policies, evaluates via `PolicyEngine`. |
-| `domain/policy/PolicyEngine.ts`      | Stateless policy evaluator. Checks actions against allow/deny policies and conditions.                    |
-| `infrastructure/MockRepositories.ts` | In-memory `RoleRepository`, `PolicyRepository`, `MembershipRepository` for tests. Uses `ROLES` constants. |
-| `index.ts`                           | Module registration — binds `SERVICE`, `ROLE_REPOSITORY`, `POLICY_REPOSITORY`, `MEMBERSHIP_REPOSITORY`.   |
+| File                                 | Purpose                                                                                                                                                    |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `domain/AuthorizationService.ts`     | `DefaultAuthorizationService` — checks tenant membership, hydrates `TenantAttributes`, fetches policies, evaluates via `PolicyEngine`. 4 constructor deps. |
+| `domain/policy/PolicyEngine.ts`      | Stateless policy evaluator. Checks actions against allow/deny policies and conditions.                                                                     |
+| `infrastructure/MockRepositories.ts` | In-memory `RoleRepository`, `PolicyRepository`, `MembershipRepository`, `TenantAttributesRepository` for tests. Uses `ROLES` constants.                    |
+| `index.ts`                           | Module registration — binds `SERVICE`, `ROLE_REPOSITORY`, `POLICY_REPOSITORY`, `MEMBERSHIP_REPOSITORY`, `TENANT_ATTRIBUTES_REPOSITORY`.                    |
 
 ### 3.4 Security Layer (`src/security/`)
 
@@ -106,7 +106,7 @@ Floor-check rule: a principal at level N satisfies any requirement at level ≤ 
 | `core/security-context.mock.ts` | Test helper — `createMockSecurityContext()`, `createMockUser()`. Uses `ROLES` constants.                                                |
 | `actions/secure-action.ts`      | `createSecureAction()` — composes Zod validation + role check + policy check + replay protection + audit log.                           |
 | `actions/secure-action.mock.ts` | Test double for `createSecureAction`. Uses `ROLES` constants.                                                                           |
-| `middleware/with-auth.ts`       | Route-level auth middleware handler. Reads `SecurityContext`, calls `authorization.authorize()`.                                        |
+| `middleware/with-auth.ts`       | Route-level auth middleware. Accepts `(handler, options)` — dependencies injected by `proxy.ts`, not the global container.              |
 
 ---
 
@@ -238,11 +238,29 @@ export function AdminPanel({ context }: { context: SecurityContext }) {
 
 ### 5.4 Middleware route protection
 
-The `withAuth` middleware handler in `src/security/middleware/with-auth.ts` is called by `src/proxy.ts` on every private route. It:
+`src/proxy.ts` wraps the entire pipeline in `clerkMiddleware()` and creates a **per-request DI container** inside the callback. It passes explicit dependencies to `withAuth` via the options pattern:
 
-1. Resolves the `SecurityContext` via DI.
-2. Calls `authorization.authorize()` with the full `AuthorizationContext`.
-3. Returns 401 for unauthenticated, 403/redirect for unauthorized.
+```typescript
+// proxy.ts (simplified)
+export default clerkMiddleware(async (auth, request) => {
+  const requestContainer = createContainer();
+  const securityDependencies: SecurityDependencies = { ... };
+
+  withAuth(next, {
+    resolveIdentity,   // closure over auth() — no global auth() call
+    resolveTenant,     // closure over auth() — reads orgId
+    dependencies: securityDependencies,
+    userRepository,
+  });
+});
+```
+
+`withAuth` itself:
+
+1. Has a fast path for public non-auth routes (skips identity resolution entirely).
+2. Calls `resolveIdentity()` or falls back to `identityProvider.getCurrentIdentity()`.
+3. Calls `authorization.authorize()` with the full `AuthorizationContext` including `environment`.
+4. Returns 401 for unauthenticated, 403/redirect for unauthorized.
 
 No custom role logic is required in route files — middleware handles it centrally.
 

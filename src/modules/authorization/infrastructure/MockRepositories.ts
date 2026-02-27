@@ -4,12 +4,20 @@ import type {
   Policy,
   PolicyRepository,
   RoleRepository,
+  TenantAttributes,
+  TenantAttributesRepository,
 } from '@/core/contracts/repositories';
 import { ROLES } from '@/core/contracts/roles';
 
+import {
+  hasAttribute,
+  isFromAllowedIp,
+  isNotFromBlockedIp,
+  isOwner,
+} from '../domain/policy/ConditionEvaluator';
+
 export class MockRoleRepository implements RoleRepository {
   async getRoles(subjectId: string, _tenantId: string): Promise<string[]> {
-    // In a real app, this would query a database
     if (subjectId.startsWith('user_admin')) {
       return [ROLES.ADMIN];
     }
@@ -33,6 +41,12 @@ export class MockPolicyRepository implements PolicyRepository {
       },
       {
         effect: 'allow',
+        actions: ['document:read'],
+        resource: 'document',
+        condition: (ctx) => isNotFromBlockedIp(ctx, ['10.0.0.1']),
+      },
+      {
+        effect: 'allow',
         actions: ['system:execute'],
         resource: 'system',
         condition: (ctx) => Boolean(ctx.subject.id),
@@ -42,6 +56,24 @@ export class MockPolicyRepository implements PolicyRepository {
         actions: ['system:manage'],
         resource: 'all',
         condition: (ctx) => ctx.subject.id.includes('admin'),
+      },
+      {
+        effect: 'allow',
+        actions: ['document:own'],
+        resource: 'document',
+        condition: (ctx) => isOwner(ctx),
+      },
+      {
+        effect: 'allow',
+        actions: ['pro:feature'],
+        resource: 'pro',
+        condition: (ctx) => hasAttribute(ctx, 'plan', 'pro'),
+      },
+      {
+        effect: 'allow',
+        actions: ['internal:access'],
+        resource: 'internal',
+        condition: (ctx) => isFromAllowedIp(ctx, ['127.0.0.1', '::1']),
       },
     ];
 
@@ -56,5 +88,16 @@ export class MockMembershipRepository implements MembershipRepository {
     }
 
     return ['t1'];
+  }
+}
+
+export class MockTenantAttributesRepository implements TenantAttributesRepository {
+  async getTenantAttributes(_tenantId: string): Promise<TenantAttributes> {
+    return {
+      plan: 'free',
+      subscriptionStatus: 'active',
+      features: [],
+      contractType: 'standard',
+    };
   }
 }

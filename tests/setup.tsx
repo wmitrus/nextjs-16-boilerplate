@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 
 import { bootstrap } from '../src/core/container';
 import { AUTH, AUTHORIZATION } from '../src/core/contracts';
+import { ROLES } from '../src/core/contracts/roles';
 // Force early initialization of critical infrastructure mocks
 import { server } from '../src/shared/lib/mocks/server';
 import { mockEnv } from '../src/testing/infrastructure/env';
@@ -60,7 +61,7 @@ vi.mock('../src/modules/authorization', () => ({
         can: vi.fn().mockResolvedValue(true),
       });
       c.register(AUTHORIZATION.ROLE_REPOSITORY, {
-        getRoles: vi.fn().mockResolvedValue(['user']),
+        getRoles: vi.fn().mockResolvedValue([ROLES.USER]),
       });
       c.register(AUTHORIZATION.PERMISSION_REPOSITORY, {});
       c.register(AUTHORIZATION.MEMBERSHIP_REPOSITORY, {});

@@ -134,7 +134,7 @@
   "pnpm": {
     "overrides": {
       "@isaacs/brace-expansion": "^5.0.1",
-      "minimatch": ">=10.2.1",
+      "minimatch": ">=10.2.3",
       "lodash": ">=4.17.23",
       "rollup": "^4.59.0",
       "undici": ">=6.23.0",

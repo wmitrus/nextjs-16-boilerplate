@@ -15,6 +15,7 @@ export interface SecurityContext {
     id: string;
     role: UserRole;
     tenantId: string;
+    attributes?: Record<string, unknown>;
   };
   ip: string;
   userAgent?: string;

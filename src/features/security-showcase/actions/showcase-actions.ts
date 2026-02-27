@@ -7,6 +7,7 @@ import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RoleRepository } from '@/core/contracts/repositories';
+import { ROLES } from '@/core/contracts/roles';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 
 import { createSecureAction } from '@/security/actions/secure-action';
@@ -50,7 +51,7 @@ function createSecurityDependencies() {
  */
 export const updateSecuritySettings = createSecureAction({
   schema: updateSettingsSchema,
-  role: 'user', // Available to any authenticated user
+  role: ROLES.USER,
   dependencies: createSecurityDependencies,
   handler: async ({ context }) => {
     // In a real app, you would save to the database here

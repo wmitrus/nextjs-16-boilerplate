@@ -1,14 +1,13 @@
 /** @vitest-environment node */
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import type { NextResponse } from 'next/server';
 import type { Mocked } from 'vitest';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-import { container } from '@/core/container';
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RoleRepository } from '@/core/contracts/repositories';
+import { ROLES } from '@/core/contracts/roles';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
@@ -33,6 +32,25 @@ describe('Middleware Integration', () => {
     updateOnboardingStatus: vi.fn(),
   } as unknown as Mocked<UserRepository>;
 
+  const mockTenantResolver = {
+    resolve: vi.fn(),
+  } as unknown as Mocked<TenantResolver>;
+
+  const mockAuthorizationService = {
+    can: vi.fn(),
+  } as unknown as Mocked<AuthorizationService>;
+
+  const mockRoleRepository = {
+    getRoles: vi.fn(),
+  } as unknown as Mocked<RoleRepository>;
+
+  const securityDependencies: SecurityDependencies = {
+    identityProvider: mockIdentityProvider,
+    tenantResolver: mockTenantResolver,
+    roleRepository: mockRoleRepository,
+    authorizationService: mockAuthorizationService,
+  };
+
   beforeEach(() => {
     resetClerkMocks();
     resetLoggerMocks();
@@ -40,10 +58,11 @@ describe('Middleware Integration', () => {
     resetNextHeadersMocks();
     vi.clearAllMocks();
 
-    container.register(AUTH.IDENTITY_PROVIDER, mockIdentityProvider);
-    container.register(AUTH.USER_REPOSITORY, mockUserRepository);
     mockIdentityProvider.getCurrentIdentity.mockReset();
     mockUserRepository.findById.mockReset();
+    mockTenantResolver.resolve.mockReset();
+    mockRoleRepository.getRoles.mockReset();
+    mockAuthorizationService.can.mockReset();
 
     // Setup base environment for security
     mockEnv.INTERNAL_API_KEY = 'test_secret';
@@ -51,26 +70,21 @@ describe('Middleware Integration', () => {
     mockEnv.API_RATE_LIMIT_WINDOW = '60 s';
     mockEnv.NODE_ENV = 'production';
 
-    // Default: Authenticated, Onboarding complete
+    // Default: Authenticated, Onboarding complete, Authorization allowed
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
     mockUserRepository.findById.mockResolvedValue({
       id: 'user_1',
       onboardingComplete: true,
     });
+    mockTenantResolver.resolve.mockResolvedValue({
+      tenantId: 't1',
+      userId: 'user_1',
+    });
+    mockRoleRepository.getRoles.mockResolvedValue([ROLES.USER]);
+    mockAuthorizationService.can.mockResolvedValue(true);
   });
 
   const createPipeline = () => {
-    const securityDependencies: SecurityDependencies = {
-      identityProvider: mockIdentityProvider,
-      tenantResolver: container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
-      roleRepository: container.resolve<RoleRepository>(
-        AUTHORIZATION.ROLE_REPOSITORY,
-      ),
-      authorizationService: container.resolve<AuthorizationService>(
-        AUTHORIZATION.SERVICE,
-      ),
-    };
-
     return withSecurity(
       withInternalApiGuard(
         withRateLimit(
@@ -79,7 +93,6 @@ describe('Middleware Integration', () => {
               return new Response(null, {
                 status: 200,
               }) as unknown as NextResponse;
-              return NextResponse.next();
             },
             {
               dependencies: securityDependencies,

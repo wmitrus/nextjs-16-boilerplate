@@ -90,6 +90,12 @@ vi.mock('@/shared/lib/network/get-ip', () => ({
 describe('Proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: new Date(Date.now() + 60000),
+    });
   });
 
   it('should allow request if rate limit is not exceeded', async () => {

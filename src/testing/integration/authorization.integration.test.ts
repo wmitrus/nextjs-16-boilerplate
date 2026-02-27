@@ -76,4 +76,64 @@ describe('Authorization Integration', () => {
     const result = await authzService.can(context);
     expect(result).toBe(true);
   });
+
+  it('should deny access when subject is not a member of the requested tenant', async () => {
+    const context: AuthorizationContext = {
+      tenant: { tenantId: 'other-tenant', userId: 'user_1' },
+      subject: { id: 'user_1' },
+      resource: { type: 'document', id: 'doc_1' },
+      action: 'document:read',
+    };
+
+    const result = await authzService.can(context);
+    expect(result).toBe(false);
+  });
+
+  it('should allow access when subject has membership in the requested tenant', async () => {
+    const context: AuthorizationContext = {
+      tenant: { tenantId: 'tenant_123', userId: 'user_1' },
+      subject: { id: 'user_1' },
+      resource: { type: 'document', id: 'doc_1' },
+      action: 'document:read',
+    };
+
+    const result = await authzService.can(context);
+    expect(result).toBe(true);
+  });
+
+  it('should deny access for non-user subject ID accessing tenant beyond t1', async () => {
+    const context: AuthorizationContext = {
+      tenant: { tenantId: 'tenant_123', userId: 'service_account' },
+      subject: { id: 'service_account' },
+      resource: { type: 'document', id: 'doc_1' },
+      action: 'document:read',
+    };
+
+    const result = await authzService.can(context);
+    expect(result).toBe(false);
+  });
+
+  it('should deny route access for empty subject ID', async () => {
+    const context: AuthorizationContext = {
+      tenant: { tenantId: 't1', userId: '' },
+      subject: { id: '' },
+      resource: { type: 'route', id: '/dashboard' },
+      action: 'route:access',
+    };
+
+    const result = await authzService.can(context);
+    expect(result).toBe(false);
+  });
+
+  it('should deny when no policies match the action', async () => {
+    const context: AuthorizationContext = {
+      tenant: { tenantId: 't1', userId: 'user_1' },
+      subject: { id: 'user_1' },
+      resource: { type: 'billing', id: 'inv_1' },
+      action: 'billing:delete',
+    };
+
+    const result = await authzService.can(context);
+    expect(result).toBe(false);
+  });
 });

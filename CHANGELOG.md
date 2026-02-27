@@ -1,3 +1,29 @@
+# [1.8.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.7.0...v1.8.0) (2026-02-27)
+
+
+### Features
+
+* **authorization:** add additional access control tests ([77ee800](https://github.com/wmitrus/nextjs-16-boilerplate/commit/77ee80046beb16d897e8782af433213a85a9e499))
+* **authorization:** refactor role checks to use ROLE_HIERARCHY ([cfd08a9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cfd08a9d6d891773acf05b6492a6b31f312647ad))
+* **authorization:** update getRoles to use role constants ([94debd2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/94debd2a63693b1306b69012391da74de8041f2c))
+* **docs:** add RBAC baseline documentation ([ea2d1c4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ea2d1c4935a00b5e6c1cc3cb72edee5d0242779e))
+* **plan:** complete RBAC typing and documentation tasks ([c79884e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c79884effb0e59804fdb6c601aebcd8773735f1e))
+* **rbac:** implement RBAC baseline hardening with role hierarchy ([0dc815f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0dc815f21bc6ce41054f91fe85581d64792a8444))
+* **rbac:** update MockRoleRepository to use role constants ([7478a8f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7478a8f213f436464ce48cdc6049e00875df3c4a))
+* **roles:** add RBAC role definitions and hierarchy ([6ce7544](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6ce75449dd6d9dff286992b20d11a15cbe25edd7))
+* **security:** refactor role assignment to use ROLE_HIERARCHY ([a554edf](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a554edfa0f5bebda617bed8446f36640fc2b6cbb))
+* **security:** update AdminOnlyExample to use ROLE constants ([008973a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/008973a0a4aa5ac750e6d6757f490893e7fb9d37))
+* **security:** update createSecureAction to use role constants ([1152106](https://github.com/wmitrus/nextjs-16-boilerplate/commit/11521062df47cdcd1406ad6ef0a622e92452b2af))
+* **security:** update mock user role to use ROLE constants ([a60b133](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a60b133dbc8ca9a05804e4f02ed2efde2325f04e))
+* **security:** update mockCreateSecureAction to use role constants ([794244f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/794244f6d19049f687c53ff867ac2d3ffc2771ee))
+* **security:** update role assignment to use ROLE constant ([87ad3aa](https://github.com/wmitrus/nextjs-16-boilerplate/commit/87ad3aa2b4051d4d48da7332623961dd1e6d8008))
+* **security:** update role handling to use ROLE constant in tests ([41fdcf8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/41fdcf88ff0fb9605aad70ef25b3ecbeddff87a0))
+* **security:** update role handling to use ROLE constants in tests ([4e1bf15](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4e1bf157ac00987db719e6f5e8525f5d48dea685))
+* **security:** update role handling to use ROLES constants ([e21d4c0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e21d4c0954551f5dba46d847f15d2a0cd29da17f))
+* **security:** update user role in action audit tests to use ROLE constant ([95110f0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/95110f083d3d774a31dbf747c8cb24e0616113eb))
+* **security:** update user role in tests to use ROLE constant ([27e51c0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/27e51c0ed303c01048a3616ec3d09a93128f11c5))
+* **security:** update user role to use ROLE constant ([9fcacc1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9fcacc1e0c07e5a42368c90af9b27df1fe1a720f))
+
 # [1.7.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.6.0...v1.7.0) (2026-02-26)
 
 

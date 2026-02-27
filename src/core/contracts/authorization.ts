@@ -49,6 +49,18 @@ export interface ResourceContext {
 }
 
 /**
+ * Request-level environment data for ABAC evaluation.
+ *
+ * Populated by enforcement layer (secure-action, middleware).
+ * Contains contextual facts — NOT decisions.
+ */
+export interface EnvironmentContext {
+  readonly ip?: string;
+  readonly time?: Date;
+  readonly [key: string]: unknown;
+}
+
+/**
  * Complete authorization decision input.
  *
  * Immutable context passed to AuthorizationService.
@@ -60,6 +72,7 @@ export interface AuthorizationContext {
   readonly subject: SubjectContext;
   readonly resource: ResourceContext;
   readonly action: Action;
+  readonly environment?: EnvironmentContext;
   readonly attributes?: Record<string, unknown>;
 }
 

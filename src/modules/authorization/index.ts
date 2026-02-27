@@ -7,14 +7,15 @@ import {
   MockMembershipRepository,
   MockPolicyRepository,
   MockRoleRepository,
+  MockTenantAttributesRepository,
 } from './infrastructure/MockRepositories';
 
 export const authorizationModule: Module = {
   register(container: Container) {
-    // In Phase 4, we use Mock implementations for infrastructure
     const policyRepository = new MockPolicyRepository();
     const roleRepository = new MockRoleRepository();
     const membershipRepository = new MockMembershipRepository();
+    const tenantAttributesRepository = new MockTenantAttributesRepository();
 
     const engine = new PolicyEngine();
 
@@ -27,12 +28,17 @@ export const authorizationModule: Module = {
     container.register(AUTHORIZATION.PERMISSION_REPOSITORY, {
       getPermissions: async () => [],
     });
+    container.register(
+      AUTHORIZATION.TENANT_ATTRIBUTES_REPOSITORY,
+      tenantAttributesRepository,
+    );
 
     container.register(
       AUTHORIZATION.SERVICE,
       new DefaultAuthorizationService(
         policyRepository,
         membershipRepository,
+        tenantAttributesRepository,
         engine,
       ),
     );

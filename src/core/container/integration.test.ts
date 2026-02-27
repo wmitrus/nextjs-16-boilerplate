@@ -39,7 +39,7 @@ describe('System Integration (Wiring)', () => {
     expect(identity?.id).toBe('user_admin_123');
 
     const canManage = await authzService.can({
-      tenant: { tenantId: 't1', userId: 'user_admin_123' },
+      tenant: { tenantId: 't1' },
       subject: { id: 'user_admin_123' },
       resource: { type: 'document' },
       action: 'system:manage',

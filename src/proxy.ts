@@ -38,12 +38,23 @@ function composeMiddlewares(
 
 /**
  * Proxy composition layer.
- * Security pipeline stays provider-agnostic, while Clerk integration remains
- * at the framework boundary so auth() can be detected by Clerk runtime.
+ *
+ * clerkMiddleware() must be the outermost wrapper so that Clerk's runtime
+ * context is established before any code calls auth().
+ * Identity and tenant resolution use the `auth` callback directly —
+ * avoiding the need to call global auth() anywhere in the pipeline.
+ *
+ * Execution order:
+ * 1. clerkMiddleware (Clerk context setup, auth callback provided)
+ * 2. withSecurity (Classification, Correlation, Security Headers)
+ * 3. withInternalApiGuard (Internal API Key Validation)
+ * 4. withRateLimit (API Throttling)
+ * 5. withAuth (Identity, Onboarding, Authorization)
+ * 6. terminalHandler (NextResponse.next())
  */
-
 export default clerkMiddleware(async (auth, request) => {
   const requestContainer = createContainer();
+
   const securityDependencies: SecurityDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
@@ -58,6 +69,7 @@ export default clerkMiddleware(async (auth, request) => {
       AUTHORIZATION.SERVICE,
     ),
   };
+
   const userRepository = requestContainer.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );

@@ -10,6 +10,7 @@ export const AUTHORIZATION = {
   PERMISSION_REPOSITORY: Symbol('PermissionRepository'),
   MEMBERSHIP_REPOSITORY: Symbol('MembershipRepository'),
   POLICY_REPOSITORY: Symbol('PolicyRepository'),
+  TENANT_ATTRIBUTES_REPOSITORY: Symbol('TenantAttributesRepository'),
 };
 
 export const LOGGER = {

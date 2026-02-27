@@ -102,16 +102,20 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         {
           tenant: {
             tenantId: context.user.tenantId,
-            userId: context.user.id,
           },
           subject: {
             id: context.user.id,
             attributes: {
               role: context.user.role,
+              ...context.user.attributes,
             },
           },
           resource: effectiveResource,
           action: actionName,
+          environment: {
+            ip: context.ip,
+            time: new Date(),
+          },
           attributes: {
             requestScope,
           },

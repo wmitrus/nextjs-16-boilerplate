@@ -62,6 +62,7 @@ describe('Auth Middleware', () => {
     mockTenantResolver.resolve.mockReset();
     mockRoleRepository.getRoles.mockReset();
     mockAuthorizationService.can.mockReset();
+
     mockTenantResolver.resolve.mockResolvedValue({
       tenantId: 't1',
       userId: 'user_1',

@@ -1,5 +1,4 @@
-import type { SubjectId } from './primitives';
-import type { TenantContext } from './tenancy';
+import type { SubjectId, TenantId } from './primitives';
 
 export type Permission = `${string}:${string}`;
 
@@ -29,11 +28,34 @@ export function parseAction(action: Action): {
 }
 
 /**
+ * Tenant attributes loaded from the database by the authorization layer.
+ *
+ * Written by billing/admin modules, read by PolicyEngine conditions.
+ * SecurityContext must NEVER access or know about this — it is populated
+ * by DefaultAuthorizationService before policy evaluation.
+ *
+ * Feature flags, plan limits, and contract types live here.
+ * They are ABAC conditions on policies, NOT middleware checks.
+ */
+export interface TenantAttributes {
+  readonly plan?: 'free' | 'pro' | 'enterprise';
+  readonly subscriptionStatus?: 'active' | 'trial' | 'past_due' | 'canceled';
+  readonly features?: readonly string[];
+  readonly contractType?: 'standard' | 'enterprise';
+  readonly userLimit?: number;
+  readonly [key: string]: unknown;
+}
+
+/**
  * Context describing the acting subject.
  * Represents user, service account, or system identity.
+ *
+ * - `roles` carries raw role IDs from the database (tenant-scoped).
+ * - `attributes` carries user metadata for ABAC conditions (plan, onboardingComplete, …).
  */
 export interface SubjectContext {
   id: SubjectId;
+  roles?: readonly string[];
   attributes?: Record<string, unknown>;
 }
 
@@ -56,6 +78,7 @@ export interface ResourceContext {
  */
 export interface EnvironmentContext {
   readonly ip?: string;
+  readonly userAgent?: string;
   readonly time?: Date;
   readonly [key: string]: unknown;
 }
@@ -65,10 +88,15 @@ export interface EnvironmentContext {
  *
  * Immutable context passed to AuthorizationService.
  *
+ * - `tenant.tenantId` identifies the organizational boundary.
+ * - `tenantAttributes` is injected by DefaultAuthorizationService after
+ *   fetching from TenantAttributesRepository — NOT set by the enforcement layer.
+ *
  * Must remain framework-agnostic.
  */
 export interface AuthorizationContext {
-  readonly tenant: TenantContext;
+  readonly tenant: { readonly tenantId: TenantId };
+  readonly tenantAttributes?: TenantAttributes;
   readonly subject: SubjectContext;
   readonly resource: ResourceContext;
   readonly action: Action;

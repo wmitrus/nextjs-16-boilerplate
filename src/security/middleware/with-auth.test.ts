@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RoleRepository } from '@/core/contracts/repositories';
+import { ROLES } from '@/core/contracts/roles';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
@@ -65,7 +66,7 @@ describe('Auth Middleware', () => {
       tenantId: 't1',
       userId: 'user_1',
     });
-    mockRoleRepository.getRoles.mockResolvedValue(['user']);
+    mockRoleRepository.getRoles.mockResolvedValue([ROLES.USER]);
     mockAuthorizationService.can.mockResolvedValue(true);
     mockHandler.mockClear();
   });
@@ -196,6 +197,100 @@ describe('Auth Middleware', () => {
 
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/sign-in');
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should return 403 JSON when authorization denies an authenticated user on API route', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+    mockAuthorizationService.can.mockResolvedValue(false);
+
+    const req = createMockRequest({ path: '/api/protected' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: true });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe('FORBIDDEN');
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should redirect to home when authorization denies an authenticated user on page route', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+    mockAuthorizationService.can.mockResolvedValue(false);
+
+    const req = createMockRequest({ path: '/admin' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should call authorization with correct tenant and subject structure', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+    mockTenantResolver.resolve.mockResolvedValue({
+      tenantId: 'org_abc',
+      userId: 'user_1',
+    });
+    mockAuthorizationService.can.mockResolvedValue(true);
+
+    const req = createMockRequest({ path: '/dashboard' });
+    const ctx = createMockRouteContext({ isPublicRoute: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    await middleware(req, ctx);
+
+    expect(mockAuthorizationService.can).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant: expect.objectContaining({ tenantId: 'org_abc' }),
+        subject: expect.objectContaining({ id: 'user_1' }),
+        resource: expect.objectContaining({ type: 'route' }),
+        action: 'route:access',
+      }),
+    );
+  });
+
+  it('should return 401 JSON for unauthenticated user on API route', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue(null);
+
+    const req = createMockRequest({ path: '/api/data' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: true });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.code).toBe('UNAUTHORIZED');
     expect(mockHandler).not.toHaveBeenCalled();
   });
 });

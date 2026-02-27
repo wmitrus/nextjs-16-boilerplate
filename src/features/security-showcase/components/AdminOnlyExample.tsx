@@ -1,12 +1,14 @@
 import React from 'react';
 
+import { ROLES } from '@/core/contracts/roles';
+
 import type { SecurityContext } from '@/security/core/security-context';
 
 /**
  * Example of RBAC in RSC.
  */
 export function AdminOnlyExample({ context }: { context: SecurityContext }) {
-  const isAdmin = context.user?.role === 'admin';
+  const isAdmin = context.user?.role === ROLES.ADMIN;
 
   if (!isAdmin) {
     return (
@@ -14,7 +16,7 @@ export function AdminOnlyExample({ context }: { context: SecurityContext }) {
         <h3 className="text-lg font-semibold text-red-800">Restricted Area</h3>
         <p className="text-sm text-red-700">
           This section is only visible to <strong>admins</strong>. Your current
-          role is: <code>{context.user?.role ?? 'guest'}</code>.
+          role is: <code>{context.user?.role ?? ROLES.GUEST}</code>.
         </p>
       </div>
     );

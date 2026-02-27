@@ -1,4 +1,9 @@
-import type { Action, AuthorizationContext, Permission } from './authorization';
+import type {
+  Action,
+  AuthorizationContext,
+  Permission,
+  TenantAttributes,
+} from './authorization';
 import type { RoleId, SubjectId, TenantId } from './primitives';
 
 /**
@@ -96,3 +101,18 @@ export interface Policy {
 export interface PolicyRepository {
   getPolicies(context: AuthorizationContext): Promise<Policy[]>;
 }
+
+/**
+ * Resolves tenant-specific attributes (plan, features, contract type, …).
+ *
+ * Populated by the billing module writing to the database.
+ * Authorization reads from the database — never calls Stripe directly.
+ *
+ * Used by DefaultAuthorizationService to enrich AuthorizationContext
+ * before PolicyEngine evaluation.
+ */
+export interface TenantAttributesRepository {
+  getTenantAttributes(tenantId: TenantId): Promise<TenantAttributes>;
+}
+
+export type { TenantAttributes };

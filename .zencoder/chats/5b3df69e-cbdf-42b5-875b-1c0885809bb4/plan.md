@@ -122,7 +122,7 @@ Create a detailed implementation plan based on `/home/ozi/projects/nextjs-16-boi
 
 ---
 
-### [ ] Task 7: Strong RBAC typing — centralize UserRole, ROLES, ROLE_HIERARCHY in core/contracts
+### [x] Task 7: Strong RBAC typing — centralize UserRole, ROLES, ROLE_HIERARCHY in core/contracts
 
 **Objective**: Make role types/constants defined once in `src/core/contracts/roles.ts`, importable everywhere without raw strings.
 
@@ -135,7 +135,7 @@ Create a detailed implementation plan based on `/home/ozi/projects/nextjs-16-boi
 
 ---
 
-### [ ] Task 8: RBAC documentation in docs/features/
+### [x] Task 8: RBAC documentation in docs/features/
 
 **File**: `docs/features/01 - RBAC Baseline.md`  
 **Content**: Implementation details, file catalog with purpose, Modular Monolith compliance proof, usage manual with examples.

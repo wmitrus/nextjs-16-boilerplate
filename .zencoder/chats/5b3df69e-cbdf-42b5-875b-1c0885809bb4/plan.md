@@ -204,3 +204,176 @@ The RBAC baseline is hardened:
 - Auth ↔ Authorization handoff is contract-driven and verified
 - Role enforcement is deterministic across middleware and secure actions
 - Tenant + membership edge cases are covered
+
+---
+
+## Prompt 01 — ABAC Foundation
+
+### Architecture understanding statement
+
+Current state: `PolicyEngine` already supports `condition?` on `Policy`, `subject.attributes?` and `resource.attributes?` already exist in `AuthorizationContext`. **ABAC conditions already work at the domain level.**
+
+What's missing:
+
+1. `AuthorizationContext` lacks an explicit `environment?` field (ip, time, request-level data).
+2. `secure-action.ts` and `with-auth.ts` don't pass `environment` data into `AuthorizationContext`.
+3. `SecurityContext.user` has no `attributes?` for user metadata (plan, onboardingComplete, etc.).
+4. No reusable ABAC condition helper library in `modules/authorization/domain/policy/`.
+5. No ABAC tests demonstrating environment conditions.
+
+Non-changes: `PolicyEngine`, `Policy.condition?`, DI container, role hierarchy, `roles.ts` location.
+
+---
+
+### [x] Task A1: Add `environment?` to `AuthorizationContext`
+
+**File**: `src/core/contracts/authorization.ts`
+**Change**: Add `readonly environment?: { readonly ip?: string; readonly time?: Date; readonly [key: string]: unknown }` field.
+**Impact**: Additive only — all existing `AuthorizationContext` usages remain valid (field is optional).
+
+---
+
+### [x] Task A2: Add `attributes?` to `SecurityContext.user`
+
+**File**: `src/security/core/security-context.ts`
+**Change**: Add `attributes?: Record<string, unknown>` to `SecurityContext.user`. Leave it empty in `createSecurityContext` for now — to be populated from Drizzle UserRepository in future prompt.
+**No new DI dependencies added.**
+
+---
+
+### [x] Task A3: Pass `environment` data in `secure-action.ts`
+
+**File**: `src/security/actions/secure-action.ts`
+**Change**: Add `environment: { ip: context.ip, time: new Date() }` to the `AuthorizationContext` passed to `authorization.authorize()`.
+**Note**: Data assembly only — no ABAC logic here. Logic stays in `modules/authorization/domain`.
+
+---
+
+### [x] Task A4: Pass `environment` data in `with-auth.ts`
+
+**File**: `src/security/middleware/with-auth.ts`
+**Change**: Add `environment: { ip, time: new Date(), path, method }` to the `AuthorizationContext`.
+**Note**: Data assembly only.
+
+---
+
+### [x] Task A5: Create `ConditionEvaluator.ts` in domain
+
+**File**: `src/modules/authorization/domain/policy/ConditionEvaluator.ts`
+**Layer**: `modules/authorization/domain` only — pure functions, no framework imports.
+**Content**: Reusable ABAC condition builders: `isOwner`, `hasAttribute`, `isBeforeTime`, `isAfterTime`, `isFromIp`.
+
+---
+
+### [x] Task A6: Update `MockRepositories.ts` with ABAC policies
+
+**File**: `src/modules/authorization/infrastructure/MockRepositories.ts`
+**Change**: Add example ABAC policies that use `environment` and `subject.attributes` conditions.
+
+---
+
+### [x] Task A7: ABAC integration tests
+
+**File**: `src/testing/integration/authorization.integration.test.ts`
+**New test cases**:
+
+- Environment IP condition: deny from blocked IP.
+- Time-based condition: deny outside allowed window.
+- Ownership condition: allow only resource owner.
+- Attribute condition: allow only if subject has `plan: 'pro'`.
+
+---
+
+### [x] Task A8: Gate verification (Prompt 01)
+
+Run and report: `pnpm typecheck`, `pnpm skott:check:only`, `pnpm madge`, `pnpm depcheck`, `pnpm env:check`, `pnpm test`, `pnpm test:integration`, forbidden import scans.
+
+---
+
+### [x] Task A9: ABAC documentation in docs/features/
+
+**File**: `docs/features/23 - ABAC Foundation.md`
+**Content**: Implementation details, file catalog with purpose, Modular Monolith compliance proof, usage manual with examples.
+
+---
+
+## Enterprise Readiness Refactor — Billing / Multi-Tenant / Feature Flags Foundation
+
+### [x] Task RF1: Add `TenantAttributes` + extend `AuthorizationContext`
+
+**File**: `src/core/contracts/authorization.ts`
+**Changes**:
+
+- Added `TenantAttributes` interface (plan, subscriptionStatus, features, contractType, userLimit)
+- Added `roles?: readonly string[]` to `SubjectContext` (tenant-scoped raw roles from DB)
+- Added `userAgent?` to `EnvironmentContext`
+- Changed `AuthorizationContext.tenant` from `TenantContext` to `{ readonly tenantId: TenantId }` (removes redundant userId; subject.id already carries it)
+- Added `tenantAttributes?: TenantAttributes` to `AuthorizationContext` (populated by service, NOT enforcement layer)
+
+### [x] Task RF2: Add `TenantAttributesRepository` to `core/contracts/repositories.ts`
+
+**File**: `src/core/contracts/repositories.ts`
+**Changes**: Added `TenantAttributesRepository` interface + re-export `TenantAttributes`.
+
+### [x] Task RF3: Add `TENANT_ATTRIBUTES_REPOSITORY` DI token
+
+**File**: `src/core/contracts/index.ts`
+**Changes**: Added `TENANT_ATTRIBUTES_REPOSITORY: Symbol(...)` to `AUTHORIZATION` token map.
+
+### [x] Task RF4: Update `DefaultAuthorizationService`
+
+**File**: `src/modules/authorization/domain/AuthorizationService.ts`
+**Changes**: Added `tenantAttributesRepository` constructor arg. After membership check: fetches tenant attributes, builds `enrichedContext`, delegates to PolicyEngine with enriched context. Billing writes to DB → authorization reads DB, never calls Stripe.
+
+### [x] Task RF5: Add `MockTenantAttributesRepository`
+
+**File**: `src/modules/authorization/infrastructure/MockRepositories.ts`
+**Changes**: Added `MockTenantAttributesRepository` returning free-tier defaults.
+
+### [x] Task RF6: Register new repo in DI module
+
+**File**: `src/modules/authorization/index.ts`
+**Changes**: Instantiated and registered `MockTenantAttributesRepository`; wired into `DefaultAuthorizationService`.
+
+### [x] Task RF7: Remove `userId` from `AuthorizationContext.tenant` object literals
+
+**Files**: `secure-action.ts`, `authorization.integration.test.ts`, `PolicyEngine.test.ts`, `ConditionEvaluator.test.ts`, `integration.test.ts`, `proxy.test.ts`, `proxy-runtime.integration.test.ts`, `with-auth.test.ts`
+**Changes**: Removed excess `userId` from all `tenant: { ... }` object literals. Structural subtyping handles `TenantContext` variable assignments in `with-auth.ts`.
+
+### [x] Task RF8: Gate verification
+
+| Gate                    | Result                                                                  |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `pnpm typecheck`        | ✅ PASS                                                                 |
+| `pnpm skott:check:only` | ✅ PASS                                                                 |
+| `pnpm madge`            | ✅ PASS — No circular dependency found                                  |
+| `pnpm depcheck`         | ✅ PASS — No depcheck issue                                             |
+| `pnpm env:check`        | ✅ PASS — .env.example in sync                                          |
+| `pnpm test`             | ✅ PASS — 360 passed (64 files)                                         |
+| Forbidden import scans  | ✅ CLEAN — only composition-root exception in `core/container/index.ts` |
+
+## Clerk Runtime Fix — proxy.ts + with-auth.ts Restored to Remote Main Pattern
+
+### [x] Task RF9: Restore options-based `withAuth` + per-request container in `proxy.ts`
+
+**Root cause**: `withAuth` was refactored to use the global DI container directly (1-arg). `ClerkIdentityProvider.getCurrentIdentity()` → `auth()` requires the Clerk middleware context. When `withAuth` resolved `identityProvider` from the container and called `getCurrentIdentity()`, it worked only if `clerkMiddleware()` was the outermost wrapper. The real issue was that `proxy.ts` had lost the per-request container pattern and the `resolveIdentity`/`resolveTenant` closures that use `auth` from the middleware callback.
+
+**Fix**: Restored remote main's proven pattern:
+
+- `with-auth.ts`: Accepts `(handler, options)` with `{ dependencies, userRepository, resolveIdentity?, resolveTenant? }`. Added fast path for public non-auth routes. Kept ABAC `environment` enrichment.
+- `proxy.ts`: Per-request `createContainer()` inside `clerkMiddleware` callback. Closure-based `resolveIdentity` and `resolveTenant` using `auth` from middleware (never global `auth()`). `composeMiddlewares` helper.
+- `with-auth.test.ts`: Updated to options-based pattern (no container registration). Added `securityDependencies` object passed explicitly.
+- `middleware.test.ts`: Updated to options-based `withAuth` call with explicit dependencies.
+
+**Gate results (post-fix)**:
+
+| Gate                    | Result                          |
+| ----------------------- | ------------------------------- |
+| `pnpm typecheck`        | ✅ PASS                         |
+| `pnpm lint`             | ✅ PASS — 0 errors              |
+| `pnpm skott:check:only` | ✅ PASS                         |
+| `pnpm madge`            | ✅ PASS — No circular deps      |
+| `pnpm depcheck`         | ✅ PASS                         |
+| `pnpm env:check`        | ✅ PASS                         |
+| `pnpm test`             | ✅ PASS — 360 passed (64 files) |
+| Forbidden import scans  | ✅ CLEAN                        |

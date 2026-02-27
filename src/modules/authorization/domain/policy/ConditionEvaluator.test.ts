@@ -12,7 +12,7 @@ import {
 } from './ConditionEvaluator';
 
 const baseContext: AuthorizationContext = {
-  tenant: { tenantId: 't1', userId: 'user_1' },
+  tenant: { tenantId: 't1' },
   subject: { id: 'user_1' },
   resource: { type: 'document', id: 'user_1' },
   action: 'document:read',

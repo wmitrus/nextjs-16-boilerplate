@@ -1,4 +1,3 @@
-/** @vitest-environment node */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -6,8 +5,6 @@ import { container } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import type { RoleRepository } from '@/core/contracts/repositories';
-import { ROLES } from '@/core/contracts/roles';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 
 import { createSecureAction } from '@/security/actions/secure-action';
@@ -29,7 +26,6 @@ import {
 
 describe('Server Actions Integration', () => {
   let identityProvider: IdentityProvider;
-  let roleRepository: RoleRepository;
   let authorizationService: AuthorizationService;
 
   const schema = z.object({
@@ -50,9 +46,6 @@ describe('Server Actions Integration', () => {
     identityProvider = container.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
     );
-    roleRepository = container.resolve<RoleRepository>(
-      AUTHORIZATION.ROLE_REPOSITORY,
-    );
     authorizationService = container.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
@@ -70,9 +63,6 @@ describe('Server Actions Integration', () => {
   const getSecurityContextDependencies = (): SecurityContextDependencies => ({
     identityProvider,
     tenantResolver: container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
-    roleRepository: container.resolve<RoleRepository>(
-      AUTHORIZATION.ROLE_REPOSITORY,
-    ),
   });
 
   const getSecureActionDependencies = () => ({
@@ -88,10 +78,10 @@ describe('Server Actions Integration', () => {
       id: 'user_123',
       email: 'test@example.com',
     });
+    vi.mocked(authorizationService.can).mockResolvedValue(true);
 
     const action = createSecureAction({
       schema,
-      role: ROLES.USER,
       dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
@@ -115,15 +105,15 @@ describe('Server Actions Integration', () => {
     );
   });
 
-  it('should fail with unauthorized for insufficient role', async () => {
+  it('should fail with unauthorized when authorization service denies access', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_123',
       email: 'test@example.com',
     });
+    vi.mocked(authorizationService.can).mockResolvedValue(false);
 
     const action = createSecureAction({
       schema,
-      role: ROLES.ADMIN,
       dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });
@@ -131,15 +121,6 @@ describe('Server Actions Integration', () => {
     const result = await action({ name: 'Zencoder' });
 
     expect(result.status).toBe('unauthorized');
-
-    // Verify failure audit log
-    expect(mockChildLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({
-        result: 'failure',
-        error: expect.stringContaining('Required role: admin'),
-      }),
-      expect.stringContaining('failed'),
-    );
   });
 
   it('should fail with unauthorized for unauthenticated user', async () => {
@@ -161,6 +142,7 @@ describe('Server Actions Integration', () => {
       id: 'user_123',
       email: 'test@example.com',
     });
+    vi.mocked(authorizationService.can).mockResolvedValue(true);
 
     const action = createSecureAction({
       schema,
@@ -181,6 +163,7 @@ describe('Server Actions Integration', () => {
       id: 'user_123',
       email: 'test@example.com',
     });
+    vi.mocked(authorizationService.can).mockResolvedValue(true);
 
     const action = createSecureAction({
       schema,
@@ -206,6 +189,7 @@ describe('Server Actions Integration', () => {
       id: 'user_123',
       email: 'test@example.com',
     });
+    vi.mocked(authorizationService.can).mockResolvedValue(true);
 
     const action = createSecureAction({
       schema,
@@ -223,76 +207,15 @@ describe('Server Actions Integration', () => {
     expect(result.status).toBe('success');
   });
 
-  it('should allow admin role to perform admin-required action (role hierarchy)', async () => {
-    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
-      id: 'admin_user',
-      email: 'admin@example.com',
-    });
-    vi.mocked(roleRepository.getRoles).mockResolvedValue([ROLES.ADMIN]);
-
-    const action = createSecureAction({
-      schema,
-      role: ROLES.ADMIN,
-      dependencies: getSecureActionDependencies(),
-      handler: testHandler,
-    });
-
-    const result = await action({ name: 'Zencoder' });
-
-    expect(result.status).toBe('success');
-    if (result.status === 'success') {
-      expect(result.data.userId).toBe('admin_user');
-    }
-  });
-
-  it('should allow user role to perform guest-required action (role hierarchy: user > guest)', async () => {
-    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
-      id: 'user_123',
-      email: 'user@example.com',
-    });
-    vi.mocked(roleRepository.getRoles).mockResolvedValue([ROLES.USER]);
-
-    const action = createSecureAction({
-      schema,
-      role: ROLES.GUEST,
-      dependencies: getSecureActionDependencies(),
-      handler: testHandler,
-    });
-
-    const result = await action({ name: 'Zencoder' });
-
-    expect(result.status).toBe('success');
-  });
-
-  it('should allow admin role to perform user-required action (role hierarchy: admin > user)', async () => {
-    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
-      id: 'admin_user',
-    });
-    vi.mocked(roleRepository.getRoles).mockResolvedValue([ROLES.ADMIN]);
-
-    const action = createSecureAction({
-      schema,
-      role: ROLES.USER,
-      dependencies: getSecureActionDependencies(),
-      handler: testHandler,
-    });
-
-    const result = await action({ name: 'Zencoder' });
-
-    expect(result.status).toBe('success');
-  });
-
   it('should return unauthorized when authorization policy denies access (policy-level denial)', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_123',
       email: 'user@example.com',
     });
-    vi.mocked(roleRepository.getRoles).mockResolvedValue([ROLES.USER]);
     vi.mocked(authorizationService.can).mockResolvedValue(false);
 
     const action = createSecureAction({
       schema,
-      role: ROLES.USER,
       dependencies: getSecureActionDependencies(),
       handler: testHandler,
     });

@@ -558,7 +558,7 @@ Verify: `pnpm typecheck && pnpm lint`
 
 ### PHASE 7 — Final Cleanup & Verification
 
-#### [ ] Task 7.1 — Update .env.example
+#### [x] Task 7.1 — Update .env.example
 
 Ensure `.env.example` contains all new variables:
 
@@ -573,7 +573,7 @@ AUTH_PROVIDER=clerk
 
 Verify: `pnpm env:check`
 
-#### [ ] Task 7.2 — Update depcheck config
+#### [x] Task 7.2 — Update depcheck config
 
 Check `.depcheckrc` — add any new packages that might be flagged as unused:
 
@@ -582,7 +582,7 @@ Check `.depcheckrc` — add any new packages that might be flagged as unused:
 
 Verify: `pnpm depcheck`
 
-#### [ ] Task 7.3 — Full verification suite
+#### [x] Task 7.3 — Full verification suite
 
 Run all quality gates in order:
 
@@ -597,19 +597,19 @@ pnpm skott:check:only
 
 All must pass with 0 errors. Record results in this plan.
 
-#### [ ] Task 7.4 — Guardrails audit
+#### [x] Task 7.4 — Guardrails audit
 
 Manually verify guardrails checklist from spec §15:
 
-- [ ] No domain file imports `drizzle-orm`
-- [ ] No domain file imports `@clerk/nextjs`
-- [ ] No domain file imports `@/core/env`
-- [ ] Repositories return only domain types (no Drizzle row types exported)
-- [ ] `InMemoryRepositories.ts` is deleted
-- [ ] `MockRepositories.ts` is preserved
-- [ ] `BillingService` has no import from `AuthorizationService`
-- [ ] `AuthorizationService` has no import from billing module
-- [ ] Circular dependencies: `pnpm madge` passes clean
+- [x] No domain file imports `drizzle-orm`
+- [x] No domain file imports `@clerk/nextjs`
+- [x] No domain file imports `@/core/env`
+- [x] Repositories return only domain types (no Drizzle row types exported)
+- [x] `InMemoryRepositories.ts` is deleted
+- [x] `MockRepositories.ts` is preserved
+- [x] `BillingService` has no import from `AuthorizationService`
+- [x] `AuthorizationService` has no import from billing module
+- [x] Circular dependencies: `pnpm madge` passes clean
 
 **⬇ PHASE 7 complete — feature implementation done**
 
@@ -617,11 +617,11 @@ Manually verify guardrails checklist from spec §15:
 
 ## Verification Results (filled in during implementation)
 
-| Gate                    | Result  | Notes |
-| ----------------------- | ------- | ----- |
-| `pnpm typecheck`        | pending |       |
-| `pnpm lint`             | pending |       |
-| `pnpm test`             | pending |       |
-| `pnpm env:check`        | pending |       |
-| `pnpm madge`            | pending |       |
-| `pnpm skott:check:only` | pending |       |
+| Gate                    | Result  | Notes                    |
+| ----------------------- | ------- | ------------------------ |
+| `pnpm typecheck`        | ✅ pass |                          |
+| `pnpm lint`             | ✅ pass |                          |
+| `pnpm test`             | ✅ pass | 74 files, 386 tests      |
+| `pnpm env:check`        | ✅ pass |                          |
+| `pnpm madge`            | ✅ pass | No circular dependencies |
+| `pnpm skott:check:only` | ✅ pass | No circular dependencies |

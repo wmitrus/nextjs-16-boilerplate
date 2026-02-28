@@ -35,7 +35,10 @@
     "chromatic": "chromatic",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [

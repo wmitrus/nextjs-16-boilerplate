@@ -63,7 +63,6 @@ vi.mock('../src/modules/authorization', () => ({
       c.register(AUTHORIZATION.ROLE_REPOSITORY, {
         getRoles: vi.fn().mockResolvedValue([ROLES.USER]),
       });
-      c.register(AUTHORIZATION.PERMISSION_REPOSITORY, {});
       c.register(AUTHORIZATION.MEMBERSHIP_REPOSITORY, {});
       c.register(AUTHORIZATION.POLICY_REPOSITORY, {});
     },

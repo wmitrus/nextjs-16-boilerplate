@@ -270,7 +270,7 @@ Verify: Migration file exists at `src/migrations/`. `pnpm typecheck`.
 
 ### PHASE 3 — Drizzle Repository Implementations
 
-#### [ ] Task 3.1 — DrizzleMembershipRepository
+#### [x] Task 3.1 — DrizzleMembershipRepository
 
 Create `src/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository.ts`:
 
@@ -292,7 +292,7 @@ Create co-located test `DrizzleMembershipRepository.test.ts`:
 
 Verify: `pnpm typecheck && pnpm lint`
 
-#### [ ] Task 3.2 — DrizzleRoleRepository
+#### [x] Task 3.2 — DrizzleRoleRepository
 
 Create `src/modules/authorization/infrastructure/drizzle/DrizzleRoleRepository.ts`:
 
@@ -314,7 +314,7 @@ Create co-located test `DrizzleRoleRepository.test.ts`:
 
 Verify: `pnpm typecheck && pnpm lint`
 
-#### [ ] Task 3.3 — DrizzleTenantAttributesRepository
+#### [x] Task 3.3 — DrizzleTenantAttributesRepository
 
 Create `src/modules/authorization/infrastructure/drizzle/DrizzleTenantAttributesRepository.ts`:
 
@@ -337,7 +337,7 @@ Create co-located test `DrizzleTenantAttributesRepository.test.ts`:
 
 Verify: `pnpm typecheck && pnpm lint`
 
-#### [ ] Task 3.4 — Condition deserializer helper
+#### [x] Task 3.4 — Condition deserializer helper
 
 Create `src/modules/authorization/infrastructure/drizzle/deserializeCondition.ts`:
 
@@ -358,7 +358,7 @@ Create co-located test `deserializeCondition.test.ts`:
 
 Verify: `pnpm typecheck && pnpm lint`
 
-#### [ ] Task 3.5 — DrizzlePolicyRepository
+#### [x] Task 3.5 — DrizzlePolicyRepository
 
 Create `src/modules/authorization/infrastructure/drizzle/DrizzlePolicyRepository.ts`:
 

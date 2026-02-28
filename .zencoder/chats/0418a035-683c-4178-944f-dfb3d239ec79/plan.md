@@ -499,7 +499,7 @@ Verify: `pnpm typecheck && pnpm lint`
 
 ### PHASE 6 — Billing Module
 
-#### [ ] Task 6.1 — Create billing domain types
+#### [x] Task 6.1 — Create billing domain types
 
 Create `src/modules/billing/domain/SubscriptionStatus.ts`:
 
@@ -533,7 +533,7 @@ Rules:
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 6.2 — Create Stripe placeholder
+#### [x] Task 6.2 — Create Stripe placeholder
 
 Create `src/modules/billing/infrastructure/stripe/StripeBillingService.ts`:
 
@@ -543,7 +543,7 @@ Create `src/modules/billing/infrastructure/stripe/StripeBillingService.ts`:
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 6.3 — Create billing module index
+#### [x] Task 6.3 — Create billing module index
 
 Create `src/modules/billing/index.ts`:
 

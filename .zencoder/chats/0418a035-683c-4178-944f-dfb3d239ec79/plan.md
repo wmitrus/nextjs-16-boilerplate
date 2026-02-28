@@ -190,19 +190,22 @@ DB_PROVIDER=drizzle
 
 Verify: `pnpm env:check && pnpm typecheck`
 
-#### [ ] Task 2.2 — Create Drizzle DB client
+#### [ ] Task 2.2 — Create Drizzle DB client (dual-driver)
 
 Create `src/core/db/client.ts`:
 
-- Imports `drizzle` from `drizzle-orm/postgres-js`
-- Imports `postgres` from `postgres`
-- Imports `env` from `@/core/env`
-- Creates `postgres(env.DATABASE_URL!)` connection (non-null assertion — only used when wired)
-- Exports `db = drizzle(sql)`
+- Exports `DrizzleDb` type alias: `PgDatabase<any, any>` from `drizzle-orm/pg-core`
+- Exports `getDb(): DrizzleDb` lazy factory:
+  - If `process.env.DATABASE_URL` is set → `drizzle-orm/postgres-js` + `postgres` driver
+  - Otherwise → `drizzle-orm/pglite` + `@electric-sql/pglite` (local offline dev)
+  - Singleton: initialized once, cached in module-level variable
+- Exports `db: DrizzleDb` (calls `getDb()` immediately for server modules)
 
 Create `src/core/db/index.ts`:
 
-- Re-exports `db` from `./client`
+- Re-exports `db` and `DrizzleDb` from `./client`
+
+Note: PGlite stores data in `.pglite/` directory (gitignored, persistent across dev restarts).
 
 Verify: `pnpm typecheck`
 

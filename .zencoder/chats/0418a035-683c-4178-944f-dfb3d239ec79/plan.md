@@ -392,7 +392,7 @@ Verify: `pnpm typecheck && pnpm lint`
 
 ### PHASE 4 — Container Wiring & InMemory Removal
 
-#### [ ] Task 4.1 — Update authorization/index.ts with DB_PROVIDER switch
+#### [x] Task 4.1 — Update authorization/index.ts with DB_PROVIDER switch
 
 Modify `src/modules/authorization/index.ts`:
 
@@ -410,7 +410,7 @@ Modify `src/modules/authorization/index.ts`:
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 4.2 — Remove InMemoryRepositories
+#### [x] Task 4.2 — Remove InMemoryRepositories
 
 Delete `src/modules/authorization/infrastructure/memory/InMemoryRepositories.ts`.
 
@@ -418,7 +418,7 @@ Confirm no remaining imports of `InMemoryRepositories` anywhere in codebase.
 
 Verify: `pnpm typecheck && pnpm test`
 
-#### [ ] Task 4.3 — Update container tests
+#### [x] Task 4.3 — Update container tests
 
 Update `src/core/container/index.test.ts` if it references env vars or InMemory repos:
 

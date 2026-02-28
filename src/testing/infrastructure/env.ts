@@ -48,6 +48,8 @@ const defaultEnv: MutableEnv = {
   NEXT_PUBLIC_CLERK_WAITLIST_URL: '/waitlist',
   E2E_ENABLED: false,
   AUTH_PROVIDER: 'clerk' as const,
+  DATABASE_URL: undefined,
+  DB_PROVIDER: 'drizzle' as const,
 };
 
 /**

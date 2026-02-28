@@ -15,18 +15,19 @@ ABAC is layered **on top of** the existing RBAC flow. No existing layers were re
 ```
 Enforcement layer (secure-action / with-auth)
         │  assembles AuthorizationContext:
-        │    subject   { id, attributes: { role, plan, ... } }
+        │    subject   { id, roles (from DefaultAuthorizationService), attributes? }
         │    resource  { type, id, attributes: { ownerId, ... } }
         │    environment { ip, time, path, method }
         ▼
 AuthorizationFacade  (security/core)
-        │  1. ensureRequiredRole()  — RBAC floor-check
-        │  2. authorize()          — delegates to service
+        │  authorize()  — delegates to service (no role floor-check)
         ▼
 DefaultAuthorizationService  (modules/authorization/domain)
-        │  1. membership guard (tenant isolation)
-        │  2. fetch policies from PolicyRepository
-        │  3. evaluate via PolicyEngine
+        │  1. membership guard (isMember)
+        │  2. role resolution (RoleRepository.getRoles → merged into subject.roles)
+        │  3. tenant attributes hydration (TenantAttributesRepository → tenantAttributes)
+        │  4. fetch policies from PolicyRepository
+        │  5. evaluate via PolicyEngine
         ▼
 PolicyEngine  (modules/authorization/domain/policy)
         │  for each policy:
@@ -66,8 +67,8 @@ Populated by the enforcement layer and passed into `AuthorizationContext`. Conta
 ```typescript
 export interface AuthorizationContext {
   readonly tenant: { readonly tenantId: TenantId }; // ← no userId (removed in Enterprise Refactor)
-  readonly tenantAttributes?: TenantAttributes; // ← added in Enterprise Refactor (hydrated by service)
-  readonly subject: SubjectContext; // id + roles (tenant-scoped) + attributes
+  readonly tenantAttributes?: TenantAttributes; // ← hydrated by DefaultAuthorizationService
+  readonly subject: SubjectContext; // id + roles (tenant-scoped, resolved by service) + attributes
   readonly resource: ResourceContext; // type + id + attributes (ownerId, ...)
   readonly action: Action;
   readonly environment?: EnvironmentContext;
@@ -78,6 +79,8 @@ export interface AuthorizationContext {
 **`tenant.userId` was removed**: `subject.id` already carries the user identity. Keeping it on `tenant` was redundant and confused the multi-tenant boundary.
 
 **`tenantAttributes` is populated by `DefaultAuthorizationService`** — never by the enforcement layer. It arrives from the database (billing module writes it; authorization module reads it).
+
+**`subject.roles` is populated by `DefaultAuthorizationService`** — `RoleRepository.getRoles()` is called inside `can()` and merged into the enriched `AuthorizationContext` before `PolicyEngine` evaluation. The enforcement layer passes `subject: { id }` only.
 
 ### 2.3 `TenantAttributes` — added in Enterprise Refactor
 
@@ -109,13 +112,12 @@ Feature flags are ABAC conditions on `tenantAttributes.features` — not ENV var
 
 SecurityContext.user: {
   id: string;
-  role: UserRole;
   tenantId: string;
-  attributes?: Record<string, unknown>;  // ← NEW — user metadata (plan, onboardingComplete, ...)
+  attributes?: Record<string, unknown>;  // ← user metadata (custom per-user data)
 }
 ```
 
-The `attributes` field holds user metadata as **data only** — no policy logic. It is currently unpopulated and will be filled from the Drizzle `UserRepository` in a future prompt.
+The `attributes` field holds user metadata as **data only** — no policy logic. It is currently unpopulated and will be filled from the `UserRepository` in a future implementation. Note: `role` was removed from `SecurityContext.user` in Phase 2 — roles are resolved by `DefaultAuthorizationService`, not the security context.
 
 ### 2.5 ABAC policy shape (unchanged)
 
@@ -154,18 +156,24 @@ No changes were needed to `Policy` or `PolicyEngine` — ABAC conditions were al
 | `src/modules/authorization/infrastructure/MockRepositories.ts` | modules/infra    | Added ABAC example policies: ownership, plan-attribute, IP allow-list.                        |
 | `src/testing/integration/authorization.integration.test.ts`    | integration test | Added 6 ABAC tests: isOwner, hasAttribute, isFromAllowedIp, no-IP denial.                     |
 
-### 3.3 Modified files (Enterprise Readiness Refactor)
+### 3.3 Modified files (Enterprise Refactor — Phases 1–5)
 
-| File                                                           | Layer          | Change                                                                                                                                                                                                                |
-| -------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/core/contracts/authorization.ts`                          | contracts      | Added `TenantAttributes` interface; `SubjectContext.roles?`; `EnvironmentContext.userAgent?`; `AuthorizationContext.tenant` narrowed to `{ tenantId }` (no `userId`); `AuthorizationContext.tenantAttributes?` added. |
-| `src/core/contracts/repositories.ts`                           | contracts      | Added `TenantAttributesRepository` port interface + re-export `TenantAttributes`.                                                                                                                                     |
-| `src/core/contracts/index.ts`                                  | contracts      | Added `AUTHORIZATION.TENANT_ATTRIBUTES_REPOSITORY` DI token.                                                                                                                                                          |
-| `src/modules/authorization/domain/AuthorizationService.ts`     | modules/domain | Added `TenantAttributesRepository` as 3rd constructor dependency. Service now hydrates `tenantAttributes` before PolicyEngine evaluation.                                                                             |
-| `src/modules/authorization/infrastructure/MockRepositories.ts` | modules/infra  | Added `MockTenantAttributesRepository` (returns free-tier defaults).                                                                                                                                                  |
-| `src/modules/authorization/index.ts`                           | modules        | Registered `MockTenantAttributesRepository` and wired into `DefaultAuthorizationService`.                                                                                                                             |
-| `src/security/middleware/with-auth.ts`                         | security       | Refactored to `(handler, options)` 2-arg pattern. Dependencies injected by `proxy.ts`, not resolved from global container. Fast path for public non-auth routes.                                                      |
-| `src/proxy.ts`                                                 | delivery       | Per-request `createContainer()` inside `clerkMiddleware` callback. Closure-based `resolveIdentity`/`resolveTenant` use `auth` from middleware — never global `auth()`.                                                |
+| File                                                                      | Phase | Change                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/core/contracts/authorization.ts`                                     | 1–3   | Added `TenantAttributes`; `SubjectContext.roles?`; `EnvironmentContext.userAgent?`; `tenant` narrowed to `{ tenantId }` (no `userId`); `tenantAttributes?` added.                                                              |
+| `src/core/contracts/repositories.ts`                                      | 3–5   | Added `TenantAttributesRepository` port; `RoleRepository` kept; `MembershipRepository` changed to `isMember(subjectId, tenantId)`; `PermissionRepository` removed.                                                             |
+| `src/core/contracts/index.ts`                                             | 3, 5  | Added `AUTHORIZATION.TENANT_ATTRIBUTES_REPOSITORY`; removed `AUTHORIZATION.PERMISSION_REPOSITORY`.                                                                                                                             |
+| `src/modules/authorization/domain/AuthorizationService.ts`                | 3     | Added `RoleRepository` as 3rd constructor dep (now 5 total). Resolves roles + tenant attributes in parallel inside `can()`. Merges into enriched `AuthorizationContext`.                                                       |
+| `src/modules/authorization/infrastructure/MockRepositories.ts`            | 3–5   | Added `MockRoleRepository`, `MockTenantAttributesRepository`; `MockMembershipRepository` updated to `isMember()`.                                                                                                              |
+| `src/modules/authorization/infrastructure/memory/InMemoryRepositories.ts` | 4     | **New file.** `InMemoryRoleRepository` (→ `[]`), `InMemoryPolicyRepository` (allow-all), `InMemoryMembershipRepository` (`isMember → true`), `InMemoryTenantAttributesRepository` (free-tier). Used in `development` env only. |
+| `src/modules/authorization/index.ts`                                      | 4–5   | Env-conditional `buildRepositories()`: `test` → Mock, `development` → InMemory, `production` → **throws**. Injects all 5 deps into `DefaultAuthorizationService`.                                                              |
+| `src/security/core/security-context.ts`                                   | 2     | Removed `role: UserRole` from `SecurityContext.user`. No role computation. Technical request facts only.                                                                                                                       |
+| `src/security/core/security-dependencies.ts`                              | 2     | Removed `roleRepository` from `SecurityDependencies` and `SecurityContextDependencies`.                                                                                                                                        |
+| `src/security/core/authorization-facade.ts`                               | 2     | Removed `ensureRequiredRole()`. All authorization via `authorize()` → `can()`.                                                                                                                                                 |
+| `src/security/actions/secure-action.ts`                                   | 2     | Removed `role` option. Removed `ensureRequiredRole()` call. All access via `authorizationService.can()`.                                                                                                                       |
+| `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts`          | 5     | Fallback changed from `orgId ?? 'default'` to `orgId ?? identity.id` (personal workspace pattern).                                                                                                                             |
+| `src/proxy.ts`                                                            | 1     | Per-request `RequestIdentitySource` built from `auth` callback. Cached via `getAuthResult`. Container registrations overridden per-request.                                                                                    |
+| `tests/setup.tsx`                                                         | 5     | Removed `PERMISSION_REPOSITORY` registration from global mock.                                                                                                                                                                 |
 
 ### 3.4 ConditionEvaluator API
 
@@ -176,7 +184,7 @@ isOwner(ctx);
 // Returns true if subject.id === resource.id. Use for ownership-gated mutations.
 
 hasAttribute(ctx, key, value);
-// Returns true if subject.attributes[key] === value. Use for plan/tier/flag checks.
+// Returns true if subject.attributes[key] === value. Use for per-user metadata checks.
 
 isBeforeHour(ctx, hour);
 // Returns true if environment.time UTC hour < hour. Use for time-window restrictions.
@@ -197,14 +205,14 @@ isNotFromBlockedIp(ctx, blockList);
 
 ### 4.1 Dependency direction — no new violations
 
-| From                                                        | Imports from                                                                    | Allowed?                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
-| `modules/authorization/domain/policy/ConditionEvaluator.ts` | `core/contracts/repositories`                                                   | ✅                               |
-| `modules/authorization/infrastructure/MockRepositories.ts`  | `modules/authorization/domain/policy/ConditionEvaluator`                        | ✅ (same module, infra → domain) |
-| `modules/authorization/domain/AuthorizationService.ts`      | `core/contracts/repositories` (incl. `TenantAttributesRepository`)              | ✅                               |
-| `security/actions/secure-action.ts`                         | `core/contracts/authorization`                                                  | ✅                               |
-| `security/middleware/with-auth.ts`                          | `core/contracts/authorization`, `core/contracts/tenancy`, `core/contracts/user` | ✅                               |
-| `proxy.ts`                                                  | `core/container`, `core/contracts`, `security/middleware/*`                     | ✅ (delivery layer)              |
+| From                                                        | Imports from                                                                         | Allowed?                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------- |
+| `modules/authorization/domain/policy/ConditionEvaluator.ts` | `core/contracts/repositories`                                                        | ✅                               |
+| `modules/authorization/infrastructure/MockRepositories.ts`  | `modules/authorization/domain/policy/ConditionEvaluator`                             | ✅ (same module, infra → domain) |
+| `modules/authorization/domain/AuthorizationService.ts`      | `core/contracts/repositories` (incl. `TenantAttributesRepository`, `RoleRepository`) | ✅                               |
+| `security/actions/secure-action.ts`                         | `core/contracts/authorization`                                                       | ✅                               |
+| `security/middleware/with-auth.ts`                          | `core/contracts/authorization`, `core/contracts/tenancy`, `core/contracts/user`      | ✅                               |
+| `proxy.ts`                                                  | `core/container`, `core/contracts`, `security/middleware/*`                          | ✅ (delivery layer)              |
 
 ### 4.2 ABAC logic boundary — confirmed
 
@@ -224,9 +232,9 @@ grep -RInE "from ['\"]@/(app|features|modules)/" src/security          # → 0 m
 grep -RInE "from ['\"]@/(modules|security|features|app)/" src/core     # → 0 matches
 ```
 
-### 4.4 DI — not touched
+### 4.4 DI — no new tokens (other than `TENANT_ATTRIBUTES_REPOSITORY`)
 
-No new DI tokens. No new container registrations. The `ConditionEvaluator` is used as pure functions inside policy definitions — no injection needed.
+`ConditionEvaluator` functions are used as pure functions inside policy definitions — no injection needed. The only new DI token added across all ABAC work is `AUTHORIZATION.TENANT_ATTRIBUTES_REPOSITORY`.
 
 ---
 
@@ -260,35 +268,38 @@ await authorization.authorize({
 });
 ```
 
-### 5.2 Plan/tier attribute check (hasAttribute)
+### 5.2 Tenant feature flag condition (tenantAttributes)
 
-Allow a feature only for users on the `'pro'` plan:
+Allow an action only if the tenant has a specific feature enabled. Feature flags are stored in `TenantAttributes.features` and populated by the billing module — never by middleware or ENV:
+
+```typescript
+const exportFeaturePolicy: Policy = {
+  effect: 'allow',
+  actions: ['invoice:export'],
+  resource: 'invoice',
+  condition: (ctx) =>
+    ctx.tenantAttributes?.features?.includes('invoice_export') ?? false,
+};
+```
+
+`tenantAttributes` is automatically hydrated by `DefaultAuthorizationService` before policy evaluation. The enforcement layer does **not** fetch it.
+
+### 5.3 Plan/tier attribute check (hasAttribute on subject)
+
+`hasAttribute` checks `subject.attributes` — per-user metadata. For plan checks that are tenant-scoped, prefer `tenantAttributes` (see 5.2). Use `hasAttribute` for user-specific overrides:
 
 ```typescript
 import { hasAttribute } from '@/modules/authorization/domain/policy/ConditionEvaluator';
 
-const proFeaturePolicy: Policy = {
+const betaUserPolicy: Policy = {
   effect: 'allow',
-  actions: ['export:csv'],
-  resource: 'export',
-  condition: (ctx) => hasAttribute(ctx, 'plan', 'pro'),
+  actions: ['beta:access'],
+  resource: 'beta',
+  condition: (ctx) => hasAttribute(ctx, 'betaEnrolled', true),
 };
 ```
 
-The enforcement layer must pass `plan` through `subject.attributes`:
-
-```typescript
-// In secure-action.ts, user.attributes is already spread into subject.attributes.
-// Populate SecurityContext.user.attributes from the user record:
-userContext = {
-  id: identity.id,
-  role,
-  tenantId: tenantContext.tenantId,
-  attributes: { plan: userRecord.plan }, // set in createSecurityContext (future)
-};
-```
-
-### 5.3 Time-window restriction (isBeforeHour / isAfterHour)
+### 5.4 Time-window restriction (isBeforeHour / isAfterHour)
 
 Allow maintenance actions only between 02:00–04:00 UTC:
 
@@ -306,9 +317,9 @@ const maintenanceWindowPolicy: Policy = {
 };
 ```
 
-`environment.time` is set automatically by the enforcement layer (`new Date()` at request time).
+`environment.time` is set by the enforcement layer (`new Date()` at request time).
 
-### 5.4 IP-based restriction (isFromAllowedIp)
+### 5.5 IP-based restriction (isFromAllowedIp)
 
 Restrict an admin endpoint to internal infrastructure IPs only:
 
@@ -325,7 +336,7 @@ const internalOnlyPolicy: Policy = {
 };
 ```
 
-### 5.5 Deny policy (deny-overrides)
+### 5.6 Deny policy (deny-overrides)
 
 Block a specific IP regardless of other allow policies:
 
@@ -342,7 +353,7 @@ const blocklistPolicy: Policy = {
 
 Deny policies short-circuit immediately — any matching deny returns `false` regardless of allow policies.
 
-### 5.6 Combining RBAC + ABAC in a single policy set
+### 5.7 Combining RBAC + ABAC in a single policy set
 
 A realistic production policy set:
 
@@ -362,12 +373,12 @@ const policies: Policy[] = [
     resource: 'document',
     condition: (ctx) => isOwner(ctx),
   },
-  // ABAC: pro plan users can export
+  // ABAC: tenant with pro plan can export (tenantAttributes — not subject.attributes)
   {
     effect: 'allow',
     actions: ['document:export'],
     resource: 'document',
-    condition: (ctx) => hasAttribute(ctx, 'plan', 'pro'),
+    condition: (ctx) => ctx.tenantAttributes?.plan === 'pro',
   },
   // ABAC: hard deny from known bad IPs (deny-overrides everything above)
   {
@@ -378,22 +389,6 @@ const policies: Policy[] = [
   },
 ];
 ```
-
-### 5.7 Tenant feature flag condition (TenantAttributes)
-
-Allow an action only if the tenant has a specific feature enabled. Feature flags are stored in `TenantAttributes.features` and populated by the billing module — never by middleware or ENV:
-
-```typescript
-const exportFeaturePolicy: Policy = {
-  effect: 'allow',
-  actions: ['invoice:export'],
-  resource: 'invoice',
-  condition: (ctx) =>
-    ctx.tenantAttributes?.features?.includes('invoice_export') ?? false,
-};
-```
-
-`tenantAttributes` is automatically hydrated by `DefaultAuthorizationService` before policy evaluation. The enforcement layer (secure-action, middleware) does **not** need to fetch it.
 
 ### 5.8 Adding a new condition evaluator
 
@@ -415,15 +410,18 @@ condition: (ctx) => isVerifiedEmail(ctx);
 
 No DI changes. No infrastructure changes. No contract changes.
 
-### 5.8 Testing ABAC policies
+### 5.9 Testing ABAC policies
 
-Test ABAC conditions directly against `DefaultAuthorizationService` + real policy implementations:
+Test ABAC conditions directly against `DefaultAuthorizationService` + real policy implementations.
+
+`DefaultAuthorizationService` takes **5 constructor parameters** (Policy, Membership, Role, TenantAttributes repos + Engine):
 
 ```typescript
 import { DefaultAuthorizationService } from '@/modules/authorization/domain/AuthorizationService';
 import { PolicyEngine } from '@/modules/authorization/domain/policy/PolicyEngine';
 import {
   MockMembershipRepository,
+  MockRoleRepository,
   MockTenantAttributesRepository,
 } from '@/modules/authorization/infrastructure/MockRepositories';
 import type { AuthorizationContext } from '@/core/contracts/authorization';
@@ -440,10 +438,10 @@ const testPolicyRepo: PolicyRepository = {
   ],
 };
 
-// DefaultAuthorizationService now takes 4 args (PolicyRepo, MembershipRepo, TenantAttributesRepo, Engine)
 const service = new DefaultAuthorizationService(
   testPolicyRepo,
   new MockMembershipRepository(),
+  new MockRoleRepository(),
   new MockTenantAttributesRepository(),
   new PolicyEngine(),
 );
@@ -471,7 +469,7 @@ it('allows owner to delete', async () => {
 
 ---
 
-## 7. Gate Results (current — post Enterprise Refactor + Clerk fix)
+## 7. Gate Results (post Enterprise Refactor — Phases 1–5)
 
 | Gate                    | Result                                                                  |
 | ----------------------- | ----------------------------------------------------------------------- |
@@ -481,7 +479,8 @@ it('allows owner to delete', async () => {
 | `pnpm madge`            | ✅ PASS — no circular dependencies                                      |
 | `pnpm depcheck`         | ✅ PASS — no unused packages                                            |
 | `pnpm env:check`        | ✅ PASS — `.env.example` in sync                                        |
-| `pnpm test`             | ✅ PASS — **360 passed (64 files)**                                     |
+| `pnpm test` (unit)      | ✅ PASS — 360 passed (65 files)                                         |
+| `pnpm test:integration` | ✅ PASS — 60 passed (12 files)                                          |
 | Forbidden import scans  | ✅ CLEAN — only composition-root exception in `core/container/index.ts` |
 
-**Compliance verdict: PASS. Ready for Prompt 02 (DrizzleRepositories + PGlite).**
+**Compliance verdict: PASS. Ready for Prisma repository implementation.**

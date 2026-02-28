@@ -12,3 +12,8 @@ Detailed documentation for the features and configurations of this boilerplate:
 8. [Logging & Observability](./features/12%20-%20Logging%20%26%20Observability.md)
 9. [CI/CD & Lighthouse CI](./features/19%20-%20CI-CD%20%26%20Lighthouse%20CI.md)
 10. [Next.js 16 Cache Components, PPR & Devtools MCP](./features/21%20-%20Next.js%2016%20Cache%20Components,%20PPR%20%26%20Devtools%20MCP.md)
+
+## Usage & Operations
+
+- [Logger Usage Standards](./usage/01%20-%20Logger%20Usage%20Standards.md)
+- [Dependency Upgrade Safety Policy](./usage/02%20-%20Dependency%20Upgrade%20Safety%20Policy.md)

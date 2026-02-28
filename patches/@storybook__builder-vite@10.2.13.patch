@@ -1,0 +1,15 @@
+diff --git a/dist/index.js b/dist/index.js
+index 755a165d712fe1e189147518caa75369e9aa0790..463d66944efa6d2884cab105caa2f411d694d998 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1247,8 +1247,8 @@ async function generateModernIframeScriptCode(options, projectRoot) {
+ }
+ async function generateModernIframeScriptCodeFromPreviews(options) {
+   let { projectRoot, frameworkName } = options, previewAnnotationURLs = options.previewAnnotations.filter((path) => path !== void 0).map((path) => processPreviewAnnotation(path, projectRoot)), variables = [], imports = [];
+-  for (let previewAnnotation of previewAnnotationURLs) {
+-    let variable = genSafeVariableName(filename(previewAnnotation)).replace(/_(45|46|47)/g, "_") + "_" + hash(previewAnnotation);
++  for (let [index, previewAnnotation] of previewAnnotationURLs.entries()) {
++    let variable = genSafeVariableName(filename(previewAnnotation)).replace(/_(45|46|47)/g, "_") + "_" + index + "_" + hash(previewAnnotation);
+     variables.push(variable), imports.push(genImport(previewAnnotation, { name: "*", as: variable }));
+   }
+   let previewFileURL = previewAnnotationURLs[previewAnnotationURLs.length - 1], previewFileVariable = variables[variables.length - 1], previewFileImport = imports[imports.length - 1], getPreviewAnnotationsFunction = options.isCsf4 ? dedent2`

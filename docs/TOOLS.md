@@ -2,6 +2,12 @@
 
 This document lists integrations that require external registration, tokens, or configuration.
 
+## Related operational policy
+
+For safe package update workflow and rollback strategy, see:
+
+- [Dependency Upgrade Safety Policy](./usage/02%20-%20Dependency%20Upgrade%20Safety%20Policy.md)
+
 ## Logflare
 
 **Website:** https://logflare.app

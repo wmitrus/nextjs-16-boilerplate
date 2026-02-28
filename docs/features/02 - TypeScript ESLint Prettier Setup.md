@@ -18,19 +18,25 @@ This feature implements a robust development environment with strict type safety
 ## Usage
 
 ### Type Checking
+
 Run TypeScript validation:
+
 ```bash
 pnpm typecheck
 ```
 
 ### Linting & Formatting
+
 Run ESLint (includes Prettier checks):
+
 ```bash
 pnpm lint
 ```
 
 ## Directory Structure
+
 The project follows a scalable architecture:
+
 ```text
 src/
 ├── app/          # App Router
@@ -44,7 +50,14 @@ src/
 The project includes a `.vscode/settings.json` file that enables **ESLint fix on save**. This ensures that all linting errors and Prettier formatting (including Tailwind class sorting) are automatically applied whenever you save a file.
 
 ### Settings included:
+
 - `editor.codeActionsOnSave`: Automatically runs ESLint fixes.
 - `eslint.validate`: Explicitly defines which file types to validate.
 - `editor.formatOnSave`: Disabled in favor of ESLint fixing to avoid conflicts.
 - `[json]`/`[jsonc]`: Specifically enabled Prettier formatting on save for JSON files.
+
+## Upgrade policy
+
+For safe dependency and lint-stack upgrades, follow:
+
+- [Dependency Upgrade Safety Policy](../usage/02%20-%20Dependency%20Upgrade%20Safety%20Policy.md)

@@ -17,11 +17,13 @@ const testGlobal = globalThis as typeof globalThis & {
 };
 
 testGlobal.TextEncoder = TextEncoder;
+// @ts-expect-error polyfilling TextDecoder in node environment
 testGlobal.TextDecoder = TextDecoder;
 // @ts-expect-error polyfilling TransformStream in node environment
 testGlobal.TransformStream = TransformStream;
 // @ts-expect-error polyfilling ReadableStream in node environment
 testGlobal.ReadableStream = ReadableStream;
+// @ts-expect-error polyfilling WritableStream in node environment
 testGlobal.WritableStream = WritableStream;
 // @ts-expect-error polyfilling BroadcastChannel in node environment
 testGlobal.BroadcastChannel = BroadcastChannel;

@@ -63,3 +63,6 @@ next-env.d.ts
 .lighthouseci/
 # Sentry Config File
 .env.sentry-build-plugin
+
+# PGlite local development database
+.pglite/

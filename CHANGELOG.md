@@ -1,3 +1,13 @@
+## [1.9.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.9.0...v1.9.1) (2026-02-28)
+
+
+### Bug Fixes
+
+* **dependencies:** downgrade @types/node to version 24.11.0 ([7e37fae](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7e37faeb5b40e27c22bc1d8e272d0b462e84823e))
+* **patch:** add patch for @storybook/builder-vite dependency ([4dcbed7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4dcbed7365aacbaebdb794c02dad410c37780728))
+* **patch:** update preview annotation handling in iframe script generation ([bf7b391](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bf7b391b99319451cf1a8386c8234cc8bf0a3396))
+* **tests:** update polyfills for TextDecoder and WritableStream ([cace48c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cace48ca737faf6dc5eedac7f7bb0d2ffa13e24c))
+
 # [1.9.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.8.0...v1.9.0) (2026-02-28)
 
 

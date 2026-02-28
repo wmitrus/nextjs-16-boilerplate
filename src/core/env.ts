@@ -49,6 +49,7 @@ export const env = createEnv({
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
+    AUTH_PROVIDER: z.enum(['clerk', 'authjs', 'supabase']).default('clerk'),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -113,6 +114,7 @@ export const env = createEnv({
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
     E2E_ENABLED: process.env.E2E_ENABLED,
+    AUTH_PROVIDER: process.env.AUTH_PROVIDER,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:

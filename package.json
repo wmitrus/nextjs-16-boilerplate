@@ -151,7 +151,8 @@
       "unrs-resolver"
     ],
     "patchedDependencies": {
-      "depcheck@1.4.7": "patches/depcheck@1.4.7.patch"
+      "depcheck@1.4.7": "patches/depcheck@1.4.7.patch",
+      "@storybook/builder-vite@10.2.13": "patches/@storybook__builder-vite@10.2.13.patch"
     }
   },
   "config": {

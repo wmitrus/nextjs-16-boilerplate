@@ -47,7 +47,7 @@
     ]
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.37.1",
+    "@clerk/nextjs": "^6.39.0",
     "@sentry/nextjs": "^10.40.0",
     "@t3-oss/env-nextjs": "^0.13.10",
     "@upstash/ratelimit": "^2.0.8",
@@ -64,7 +64,7 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.0.1",
-    "@clerk/testing": "^1.14.1",
+    "@clerk/testing": "^1.14.3",
     "@commitlint/cli": "^20.4.2",
     "@commitlint/config-conventional": "^20.4.2",
     "@eslint/eslintrc": "^3.3.4",

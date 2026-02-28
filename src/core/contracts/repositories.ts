@@ -1,7 +1,6 @@
 import type {
   Action,
   AuthorizationContext,
-  Permission,
   TenantAttributes,
 } from './authorization';
 import type { RoleId, SubjectId, TenantId } from './primitives';
@@ -56,23 +55,14 @@ export interface RoleRepository {
 }
 
 /**
- * Resolves permissions associated with a role.
- *
- * Must NOT:
- * - evaluate policies
- * - check contextual conditions
- */
-export interface PermissionRepository {
-  getPermissions(roleId: RoleId): Promise<Permission[]>;
-}
-
-/**
- * Resolves tenant memberships for a subject.
+ * Resolves tenant membership for a subject.
  *
  * Used for multi-tenant boundary validation.
+ * Asking directly whether a subject is a member of a specific tenant is
+ * more efficient and natural than fetching the full membership list.
  */
 export interface MembershipRepository {
-  getTenantMemberships(subjectId: SubjectId): Promise<TenantId[]>;
+  isMember(subjectId: SubjectId, tenantId: TenantId): Promise<boolean>;
 }
 
 /**

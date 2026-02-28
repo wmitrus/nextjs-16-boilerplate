@@ -6,8 +6,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import type { RoleRepository } from '@/core/contracts/repositories';
-import { ROLES } from '@/core/contracts/roles';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
@@ -40,14 +38,9 @@ describe('Middleware Integration', () => {
     can: vi.fn(),
   } as unknown as Mocked<AuthorizationService>;
 
-  const mockRoleRepository = {
-    getRoles: vi.fn(),
-  } as unknown as Mocked<RoleRepository>;
-
   const securityDependencies: SecurityDependencies = {
     identityProvider: mockIdentityProvider,
     tenantResolver: mockTenantResolver,
-    roleRepository: mockRoleRepository,
     authorizationService: mockAuthorizationService,
   };
 
@@ -61,7 +54,6 @@ describe('Middleware Integration', () => {
     mockIdentityProvider.getCurrentIdentity.mockReset();
     mockUserRepository.findById.mockReset();
     mockTenantResolver.resolve.mockReset();
-    mockRoleRepository.getRoles.mockReset();
     mockAuthorizationService.can.mockReset();
 
     // Setup base environment for security
@@ -80,7 +72,6 @@ describe('Middleware Integration', () => {
       tenantId: 't1',
       userId: 'user_1',
     });
-    mockRoleRepository.getRoles.mockResolvedValue([ROLES.USER]);
     mockAuthorizationService.can.mockResolvedValue(true);
   });
 

@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.37.1",
-    "@sentry/nextjs": "^10.39.0",
+    "@sentry/nextjs": "^10.40.0",
     "@t3-oss/env-nextjs": "^0.13.10",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.3",
@@ -141,10 +141,7 @@
       "tmp": ">=0.2.4"
     },
     "onlyBuiltDependencies": [
-      "@clerk/shared",
-      "@parcel/watcher",
-      "esbuild",
-      "msw",
+      "@sentry/cli",
       "sharp",
       "unrs-resolver"
     ],

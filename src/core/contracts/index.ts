@@ -13,6 +13,10 @@ export const AUTHORIZATION = {
   TENANT_ATTRIBUTES_REPOSITORY: Symbol('TenantAttributesRepository'),
 };
 
+export const FEATURE_FLAGS = {
+  SERVICE: Symbol('FeatureFlagService'),
+};
+
 export const LOGGER = {
   SERVER: Symbol('ServerLogger'),
   EDGE: Symbol('EdgeLogger'),

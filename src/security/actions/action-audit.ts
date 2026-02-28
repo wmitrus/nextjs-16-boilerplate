@@ -32,7 +32,6 @@ export async function logActionAudit({
     event: 'server_action_mutation',
     actionName,
     userId: context.user?.id,
-    role: context.user?.role,
     tenantId: context.user?.tenantId,
     ip: context.ip,
     userAgent: context.userAgent,

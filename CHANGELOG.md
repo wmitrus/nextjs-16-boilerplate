@@ -1,3 +1,45 @@
+# [1.9.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.8.0...v1.9.0) (2026-02-28)
+
+
+### Bug Fixes
+
+* **ConditionEvaluator.test:** remove userId from tenant context ([940cea3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/940cea383c24848236f2cefd908d2f2c3d575aaf))
+* **integration.test:** remove userId from tenant in authorization check ([dc13031](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dc1303111eae56a9f65412c668dc1659dc278167))
+* **PolicyEngine.test:** remove userId from tenant context ([2a564db](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2a564db8768faf3aea50e3dc4e22ad9a17d44fa2))
+
+
+### Features
+
+* **auth:** add IDENTITY_SOURCE and remove PERMISSION_REPOSITORY ([802ec49](https://github.com/wmitrus/nextjs-16-boilerplate/commit/802ec4995660ed4b82ccbe743cc294faeed30dec))
+* **auth:** add tests for ClerkRequestIdentitySource functionality ([a70c4f3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a70c4f37fd7b53e5842139fbdbfde4a82d8e67fe))
+* **auth:** add tests for RequestScopedIdentityProvider functionality ([9ae7067](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9ae70678a0e1f64d02a802c0bb8c1fcd7f013f3e))
+* **auth:** add tests for RequestScopedTenantResolver functionality ([8860016](https://github.com/wmitrus/nextjs-16-boilerplate/commit/88600161ab6650305ded8bec188f83a8c942b40c))
+* **auth:** implement ClerkRequestIdentitySource for identity management ([3c6a1fb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3c6a1fb78c9b897ab4f617b4bb80807c5df7a9e1))
+* **auth:** implement RequestScopedIdentityProvider for identity management ([0e89021](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0e89021bdb4065f6e9b041d1780af96f5b8259c4))
+* **auth:** implement RequestScopedTenantResolver for tenant resolution ([84629b8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/84629b824640d7c461a033582b893cd84f0fb51c))
+* **authorization:** add ABAC condition builders for policy evaluation ([d491b6b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d491b6b3072ebda5e08f6200620eac4ac54c3c69))
+* **authorization:** add ABAC foundation documentation ([39e1508](https://github.com/wmitrus/nextjs-16-boilerplate/commit/39e15089e4c806fd826427f382c7750d03cd5910))
+* **authorization:** add EnvironmentContext for ABAC evaluation ([26095ab](https://github.com/wmitrus/nextjs-16-boilerplate/commit/26095ab8c828bdff2da4b84e1d4197fe0af12f88))
+* **authorization:** add in-memory repositories for development ([57bf9d2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/57bf9d2a169880d1fefa23319fa4fd3bf1284e4e))
+* **authorization:** add MockTenantAttributesRepository to container ([ca54963](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ca549632a8375cf0400e8caf5c4a1d9573b5318a))
+* **authorization:** add TENANT_ATTRIBUTES_REPOSITORY to AUTHORIZATION ([0ead6d3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0ead6d35eee4c2e2f7ecebe815c267504751c230))
+* **authorization:** add TenantAttributesRepository for tenant-specific data ([e7bff92](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e7bff9243a2824ef6fd8fca85039072901b33efb))
+* **authorization:** add tests for ConditionEvaluator functions ([c940dad](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c940dad9dca0c821457a4cdffb8dae39328eaa48))
+* **authorization:** enhance createSecureAction with user attributes and environment data ([aa4781d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/aa4781d4550c22604ee1543416cc33216d1943cb))
+* **authorization:** enhance DefaultAuthorizationService for policy evaluation ([f18c25d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f18c25d4385f6708abae5d69fde21b6a0295ca18))
+* **authorization:** enhance documentation for Authorization Module ([8e3e1a1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8e3e1a18fa6813dd2beb8469a03244d5f02dc621))
+* **authorization:** enhance integration tests with ABAC conditions ([cfbb747](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cfbb747bd13298ab03b9f9b2d4be0895ed183d5b))
+* **authorization:** enhance MockPolicyRepository with new conditions ([ee15e88](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ee15e887a00ed7a6d95670d7faf2ec27e2e9d21b))
+* **authorization:** enhance TenantAttributes and update contexts ([dcc4ca5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dcc4ca52a758e7ace5368bacef13fc17763b45e2))
+* **authorization:** implement ABAC foundation and enhancements ([062f5ca](https://github.com/wmitrus/nextjs-16-boilerplate/commit/062f5caa4a7f8a1f6d657d85635a153624eba08d))
+* **authorization:** refactor repository initialization logic ([966f5c5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/966f5c58a990ba79be42ff8eb9d3e91f6915dd01))
+* **authorization:** update role resolution and membership check logic ([bf71303](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bf71303ab6dafa0403a62584ea29c16ce6378c62))
+* **docs:** add full SDD workflow documentation ([67cd4a5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/67cd4a5eed76a03dc761be7ba4739159f218d50e))
+* **identity:** add RequestIdentitySource and RequestIdentitySourceData interfaces ([bf73c6d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bf73c6d159d596ca01ebff624e3b504b7a632b5e))
+* **proxy:** enhance proxy composition layer documentation ([2f35ee4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2f35ee428b46a17fad39bef0a81c05ce67ebbc57))
+* **proxy:** enhance request identity and tenant resolution ([70a58ad](https://github.com/wmitrus/nextjs-16-boilerplate/commit/70a58ad7f92ef4668cce46c98dd585c45bd4ef8b))
+* **security:** add optional attributes to user in SecurityContext ([2be1f24](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2be1f24d03ce9be08f8a40b0d9fd9c3f0038f41c))
+
 # [1.8.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.7.0...v1.8.0) (2026-02-27)
 
 

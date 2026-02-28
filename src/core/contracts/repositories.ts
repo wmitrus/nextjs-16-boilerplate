@@ -1,4 +1,8 @@
-import type { Action, AuthorizationContext, Permission } from './authorization';
+import type {
+  Action,
+  AuthorizationContext,
+  TenantAttributes,
+} from './authorization';
 import type { RoleId, SubjectId, TenantId } from './primitives';
 
 /**
@@ -51,23 +55,14 @@ export interface RoleRepository {
 }
 
 /**
- * Resolves permissions associated with a role.
- *
- * Must NOT:
- * - evaluate policies
- * - check contextual conditions
- */
-export interface PermissionRepository {
-  getPermissions(roleId: RoleId): Promise<Permission[]>;
-}
-
-/**
- * Resolves tenant memberships for a subject.
+ * Resolves tenant membership for a subject.
  *
  * Used for multi-tenant boundary validation.
+ * Asking directly whether a subject is a member of a specific tenant is
+ * more efficient and natural than fetching the full membership list.
  */
 export interface MembershipRepository {
-  getTenantMemberships(subjectId: SubjectId): Promise<TenantId[]>;
+  isMember(subjectId: SubjectId, tenantId: TenantId): Promise<boolean>;
 }
 
 /**
@@ -96,3 +91,18 @@ export interface Policy {
 export interface PolicyRepository {
   getPolicies(context: AuthorizationContext): Promise<Policy[]>;
 }
+
+/**
+ * Resolves tenant-specific attributes (plan, features, contract type, …).
+ *
+ * Populated by the billing module writing to the database.
+ * Authorization reads from the database — never calls Stripe directly.
+ *
+ * Used by DefaultAuthorizationService to enrich AuthorizationContext
+ * before PolicyEngine evaluation.
+ */
+export interface TenantAttributesRepository {
+  getTenantAttributes(tenantId: TenantId): Promise<TenantAttributes>;
+}
+
+export type { TenantAttributes };

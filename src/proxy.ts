@@ -5,12 +5,15 @@ import { NextResponse } from 'next/server';
 import { createContainer } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
-import type { IdentityProvider } from '@/core/contracts/identity';
-import type { RoleRepository } from '@/core/contracts/repositories';
-import type { TenantContext } from '@/core/contracts/tenancy';
+import type {
+  IdentityProvider,
+  RequestIdentitySource,
+} from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
+import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
+import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
 import type { SecurityDependencies } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 import { withAuth } from '@/security/middleware/with-auth';
@@ -38,12 +41,58 @@ function composeMiddlewares(
 
 /**
  * Proxy composition layer.
- * Security pipeline stays provider-agnostic, while Clerk integration remains
- * at the framework boundary so auth() can be detected by Clerk runtime.
+ *
+ * clerkMiddleware() is the outermost wrapper so that Clerk's runtime context
+ * is established before any downstream code runs.
+ *
+ * A request-scoped RequestIdentitySource is built from the `auth` callback
+ * and injected into the container — replacing the module-default ClerkRequestIdentitySource.
+ * This ensures auth() is called at most once per request (via getAuthResult cache)
+ * and that domain classes never call auth() directly.
+ *
+ * Execution order:
+ * 1. clerkMiddleware (Clerk context setup, auth callback provided)
+ * 2. withSecurity (Classification, Correlation, Security Headers)
+ * 3. withInternalApiGuard (Internal API Key Validation)
+ * 4. withRateLimit (API Throttling)
+ * 5. withAuth (Identity, Onboarding, Authorization)
+ * 6. terminalHandler (NextResponse.next())
  */
-
 export default clerkMiddleware(async (auth, request) => {
+  let cachedAuthResult: Promise<Awaited<ReturnType<typeof auth>>> | undefined;
+  const getAuthResult = () => {
+    if (!cachedAuthResult) {
+      cachedAuthResult = auth();
+    }
+    return cachedAuthResult;
+  };
+
+  const requestIdentitySource: RequestIdentitySource = {
+    get: async () => {
+      const { userId, orgId, sessionClaims } = await getAuthResult();
+      return {
+        userId: userId ?? undefined,
+        orgId: orgId ?? undefined,
+        email:
+          typeof sessionClaims?.email === 'string'
+            ? sessionClaims.email
+            : undefined,
+      };
+    },
+  };
+
   const requestContainer = createContainer();
+
+  requestContainer.register(AUTH.IDENTITY_SOURCE, requestIdentitySource);
+  requestContainer.register(
+    AUTH.IDENTITY_PROVIDER,
+    new RequestScopedIdentityProvider(requestIdentitySource),
+  );
+  requestContainer.register(
+    AUTH.TENANT_RESOLVER,
+    new RequestScopedTenantResolver(requestIdentitySource),
+  );
+
   const securityDependencies: SecurityDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
@@ -51,52 +100,14 @@ export default clerkMiddleware(async (auth, request) => {
     tenantResolver: requestContainer.resolve<TenantResolver>(
       AUTH.TENANT_RESOLVER,
     ),
-    roleRepository: requestContainer.resolve<RoleRepository>(
-      AUTHORIZATION.ROLE_REPOSITORY,
-    ),
     authorizationService: requestContainer.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     ),
   };
+
   const userRepository = requestContainer.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
-
-  let cachedAuthResult: Promise<Awaited<ReturnType<typeof auth>>> | undefined;
-  const getAuthResult = () => {
-    if (!cachedAuthResult) {
-      cachedAuthResult = auth();
-    }
-
-    return cachedAuthResult;
-  };
-
-  const resolveIdentity = async () => {
-    const { userId, sessionClaims } = await getAuthResult();
-
-    if (!userId) {
-      return null;
-    }
-
-    return {
-      id: userId,
-      email:
-        typeof sessionClaims?.email === 'string'
-          ? sessionClaims.email
-          : undefined,
-    };
-  };
-
-  const resolveTenant = async (identity: {
-    id: string;
-  }): Promise<TenantContext> => {
-    const { orgId } = await getAuthResult();
-
-    return {
-      tenantId: orgId ?? 'default',
-      userId: identity.id,
-    };
-  };
 
   const appSecurityPipeline = composeMiddlewares(
     [
@@ -104,8 +115,6 @@ export default clerkMiddleware(async (auth, request) => {
       withRateLimit,
       (next: ProxyHandler) =>
         withAuth(next, {
-          resolveIdentity,
-          resolveTenant,
           dependencies: securityDependencies,
           userRepository,
         }),

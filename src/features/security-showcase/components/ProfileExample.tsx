@@ -12,7 +12,7 @@ export function ProfileExample({ context }: { context: SecurityContext }) {
   const rawUserData = {
     id: context.user?.id,
     email: 'user@example.com',
-    role: context.user?.role,
+    tenantId: context.user?.tenantId,
     internalApiKey: 'example-internal-key', // This SHOULD NOT be leaked to the client
     passwordHash: '$2b$12$L8...', // This SHOULD NOT be leaked to the client
     lastLogin: new Date().toISOString(),

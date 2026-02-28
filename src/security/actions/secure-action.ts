@@ -6,8 +6,6 @@ import {
   type AuthorizationService,
   type ResourceContext,
 } from '@/core/contracts/authorization';
-import { ROLES } from '@/core/contracts/roles';
-import type { UserRole } from '@/core/contracts/roles';
 
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
@@ -29,7 +27,6 @@ type SecureActionDependenciesResolver =
 
 export interface ActionOptions<TSchema extends z.ZodType, TResult> {
   schema: TSchema;
-  role?: UserRole;
   resource?: ResourceContext;
   action?: Action;
   dependencies: SecureActionDependenciesResolver;
@@ -49,7 +46,6 @@ export interface TreeifiedError {
 
 export function createSecureAction<TSchema extends z.ZodType, TResult>({
   schema,
-  role = ROLES.USER,
   resource,
   action,
   dependencies,
@@ -91,27 +87,24 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
 
       const requestScope = createRequestScopedContextFromSecurityContext(
         context,
-        {
-          actionName,
-          requiredRole: role,
-        },
+        { actionName },
       );
 
-      authorization.ensureRequiredRole(context.user.role, role);
       await authorization.authorize(
         {
           tenant: {
             tenantId: context.user.tenantId,
-            userId: context.user.id,
           },
           subject: {
             id: context.user.id,
-            attributes: {
-              role: context.user.role,
-            },
+            attributes: context.user.attributes,
           },
           resource: effectiveResource,
           action: actionName,
+          environment: {
+            ip: context.ip,
+            time: new Date(),
+          },
           attributes: {
             requestScope,
           },

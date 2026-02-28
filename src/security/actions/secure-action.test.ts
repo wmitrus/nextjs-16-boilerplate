@@ -6,7 +6,6 @@ import { vi } from 'vitest';
 import { z } from 'zod';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
-import { ROLES } from '@/core/contracts/roles';
 
 import { logActionAudit } from './action-audit';
 import { validateReplayToken } from './action-replay';
@@ -29,7 +28,7 @@ vi.mock('./action-replay', () => ({
 
 describe('Secure Action Wrapper', () => {
   const mockCtx = createMockSecurityContext({
-    user: { id: 'user_123', role: ROLES.USER, tenantId: 'tenant_123' },
+    user: { id: 'user_123', tenantId: 'tenant_123' },
   });
   const schema = z.object({ name: z.string() });
 

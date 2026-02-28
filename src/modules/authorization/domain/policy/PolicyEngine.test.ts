@@ -9,7 +9,7 @@ import { PolicyEngine } from './PolicyEngine';
 
 describe('PolicyEngine', () => {
   const mockContext: AuthorizationContext = {
-    tenant: { tenantId: 't1', userId: 'u1' },
+    tenant: { tenantId: 't1' },
     subject: { id: 'u1' },
     resource: { type: 'document', id: 'd1' },
     action: 'document:read',

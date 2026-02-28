@@ -1,7 +1,5 @@
 import { vi } from 'vitest';
 
-import { ROLES } from '@/core/contracts/roles';
-
 import type * as securityContext from './security-context';
 import type { SecurityContext } from './security-context';
 
@@ -13,7 +11,6 @@ export function createMockUser(
 ) {
   return {
     id: 'user_123',
-    role: ROLES.USER,
     tenantId: 'tenant_123',
     ...overrides,
   };

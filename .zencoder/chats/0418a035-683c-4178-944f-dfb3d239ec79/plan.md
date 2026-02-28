@@ -149,6 +149,22 @@ Verify: `pnpm test && pnpm typecheck && pnpm lint`
 
 ### PHASE 2 — DB Setup & Drizzle Schema
 
+> **PGlite addition**: Tasks updated to support dual-driver setup:
+>
+> - `DATABASE_URL` set → `postgres` driver (Supabase / any real PostgreSQL)
+> - `DATABASE_URL` NOT set → `@electric-sql/pglite` (local offline dev, in-process PostgreSQL)
+>   Both drivers are used via Drizzle ORM. Repositories are unaware of which driver is active.
+
+#### [ ] Task 2.0 — Install PGlite
+
+```bash
+pnpm add @electric-sql/pglite
+```
+
+Add `.pglite/` to `.gitignore` (local PGlite data directory).
+
+Verify: `pnpm typecheck`
+
 #### [ ] Task 2.1 — Add DATABASE_URL and DB_PROVIDER to env
 
 In `src/core/env.ts` (server section), add:

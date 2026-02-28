@@ -155,7 +155,7 @@ Verify: `pnpm test && pnpm typecheck && pnpm lint`
 > - `DATABASE_URL` NOT set → `@electric-sql/pglite` (local offline dev, in-process PostgreSQL)
 >   Both drivers are used via Drizzle ORM. Repositories are unaware of which driver is active.
 
-#### [ ] Task 2.0 — Install PGlite
+#### [x] Task 2.0 — Install PGlite
 
 ```bash
 pnpm add @electric-sql/pglite
@@ -165,7 +165,7 @@ Add `.pglite/` to `.gitignore` (local PGlite data directory).
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 2.1 — Add DATABASE_URL and DB_PROVIDER to env
+#### [x] Task 2.1 — Add DATABASE_URL and DB_PROVIDER to env
 
 In `src/core/env.ts` (server section), add:
 
@@ -190,7 +190,7 @@ DB_PROVIDER=drizzle
 
 Verify: `pnpm env:check && pnpm typecheck`
 
-#### [ ] Task 2.2 — Create Drizzle DB client (dual-driver)
+#### [x] Task 2.2 — Create Drizzle DB client (dual-driver)
 
 Create `src/core/db/client.ts`:
 
@@ -209,7 +209,7 @@ Note: PGlite stores data in `.pglite/` directory (gitignored, persistent across 
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 2.3 — Create drizzle.config.ts
+#### [x] Task 2.3 — Create drizzle.config.ts
 
 Create `drizzle.config.ts` at project root:
 
@@ -233,7 +233,7 @@ Add scripts to `package.json`:
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 2.4 — Create Drizzle schema
+#### [x] Task 2.4 — Create Drizzle schema
 
 Create `src/modules/authorization/infrastructure/drizzle/schema.ts` with all table definitions per spec §5.1:
 
@@ -250,7 +250,7 @@ Rules:
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 2.5 — Generate initial migration
+#### [x] Task 2.5 — Generate initial migration
 
 Run:
 

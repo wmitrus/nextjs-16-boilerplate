@@ -4,29 +4,46 @@
 
 This document describes the **Role-Based Access Control (RBAC) baseline** implementation: its architecture, every file's responsibility, proof that the Modular Monolith boundaries are preserved, and a usage manual with examples for all parts of the application.
 
+> **Note — Enterprise Refactor (Phases 1–5)**: This document reflects the current post-refactor state. Significant changes were applied across five refactor phases. See Section 8 for a changelog summary.
+
 ---
 
 ## 1. Architecture Overview
 
-The RBAC system is layered across four architectural zones:
+The authorization system is layered across four architectural zones:
 
 ```
 Auth Provider (Clerk)
-        │  externalId / session claims
+        │  session claims (userId, orgId, email)
         ▼
-Identity Adapter (modules/auth)
-        │  Identity { id, email? }
+RequestIdentitySource  (modules/auth/infrastructure)
+        │  { userId?, orgId?, email? }  — raw, provider-specific data
+        ▼
+IdentityProvider + TenantResolver  (modules/auth/infrastructure)
+        │  Identity { id, email? }  +  TenantContext { tenantId, userId }
         ▼
 Security Context (security/core)
-        │  resolves tenant + roles → SecurityContext { user.role }
+        │  technical request facts only:
+        │  { user: { id, tenantId, attributes? }, ip, userAgent, correlationId, ... }
         ▼
 Authorization Facade (security/core)
-        │  ensureRequiredRole()  ·  can()  ·  authorize()
+        │  authorize()  ·  can()
+        ▼
+DefaultAuthorizationService  (modules/authorization/domain)
+        │  1. membership guard (isMember)
+        │  2. role resolution  (RoleRepository.getRoles → subject.roles)
+        │  3. tenant attribute hydration (TenantAttributesRepository)
+        │  4. PolicyEngine evaluation
         ▼
 Enforcement (security/middleware + security/actions)
 ```
 
-**Key invariant**: the auth provider only contributes a `userId`. All role/tenant resolution and authorization decisions are owned by _this_ codebase and enforced server-side.
+**Key invariants**:
+
+- `auth()` from Clerk is called **only** in `ClerkRequestIdentitySource` (infrastructure) and `proxy.ts` (delivery). Never in domain or security layers.
+- `SecurityContext` holds **technical request facts only** — no role, no permissions, no precomputed authorization.
+- Role resolution is an **authorization concern** owned by `DefaultAuthorizationService`, not the security context.
+- All authorization flows through `authorizationService.can()` — no role-floor-check shortcuts.
 
 ---
 
@@ -34,7 +51,7 @@ Enforcement (security/middleware + security/actions)
 
 ### Single Source of Truth: `src/core/contracts/roles.ts`
 
-All role values, the typed union, and the numeric hierarchy live in one file. Adding a new role requires editing **only this file**.
+All role values and the typed union live here. Adding a new role requires editing **only this file**.
 
 ```typescript
 // src/core/contracts/roles.ts
@@ -46,25 +63,19 @@ export const ROLES = {
   USER: 'user',
   ADMIN: 'admin',
 } as const satisfies Record<string, UserRole>;
-
-export const ROLE_HIERARCHY: Record<UserRole, number> = {
-  guest: 0,
-  user: 1,
-  admin: 2,
-};
 ```
 
-All other files import from here — **no raw string literals allowed**.
+> **Note**: `ROLE_HIERARCHY` has been removed from the security layer. Role hierarchy is a policy concern — it lives in `PolicyRepository` / `PolicyEngine`, not in `SecurityContext`. Custom per-tenant roles cannot be expressed by a global numeric hierarchy.
 
 ### Role semantics
 
-| Role    | Level | Meaning                                              |
-| ------- | ----- | ---------------------------------------------------- |
-| `guest` | 0     | Unauthenticated principal (user context is absent)   |
-| `user`  | 1     | Authenticated, standard access                       |
-| `admin` | 2     | Elevated access, all permissions floor-checked first |
+| Role    | Meaning                                            |
+| ------- | -------------------------------------------------- |
+| `guest` | Unauthenticated principal (user context is absent) |
+| `user`  | Authenticated, standard access                     |
+| `admin` | Elevated access — expressed through ABAC policies  |
 
-Floor-check rule: a principal at level N satisfies any requirement at level ≤ N (admin can do what user can do).
+Access decisions are made by **policies**, not by comparing role numeric levels.
 
 ---
 
@@ -72,41 +83,46 @@ Floor-check rule: a principal at level N satisfies any requirement at level ≤ 
 
 ### 3.1 Contracts (`src/core/contracts/`)
 
-| File               | Purpose                                                                                                           |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `roles.ts`         | **Single source of truth** for `UserRole`, `ROLES`, `ROLE_HIERARCHY`. Import this everywhere instead of literals. |
-| `authorization.ts` | `AuthorizationService` interface, `AuthorizationContext`, `Action`, `ResourceContext`, `SubjectContext`.          |
-| `repositories.ts`  | `RoleRepository`, `PolicyRepository`, `MembershipRepository` interfaces used by the DI container.                 |
-| `identity.ts`      | `IdentityProvider` interface — normalized `Identity` object returned by auth adapters.                            |
-| `tenancy.ts`       | `TenantResolver` interface and `TenantContext` shape.                                                             |
+| File               | Purpose                                                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `roles.ts`         | **Single source of truth** for `UserRole` and `ROLES`. No hierarchy constant — hierarchy lives in policies.                   |
+| `authorization.ts` | `AuthorizationService`, `AuthorizationContext`, `Action`, `ResourceContext`, `SubjectContext`, `TenantAttributes`.            |
+| `repositories.ts`  | `RoleRepository`, `PolicyRepository`, `MembershipRepository`, `TenantAttributesRepository` ports. No `PermissionRepository`.  |
+| `identity.ts`      | `IdentityProvider`, `Identity`, `RequestIdentitySource`, `RequestIdentitySourceData` — framework-agnostic identity contracts. |
+| `tenancy.ts`       | `TenantResolver` and `TenantContext`.                                                                                         |
+| `index.ts`         | DI token symbols — `AUTH.*`, `AUTHORIZATION.*`. No `PERMISSION_REPOSITORY` token (removed — unused).                          |
 
 ### 3.2 Auth Module (`src/modules/auth/`)
 
-| File                                      | Purpose                                                                                       |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `infrastructure/ClerkIdentityProvider.ts` | Clerk adapter. Calls `auth()`, maps result to `Identity { id, email? }`. Provider-isolated.   |
-| `infrastructure/ClerkTenantResolver.ts`   | Resolves `TenantContext` (tenantId, userId) from `Identity` using Clerk session claims.       |
-| `index.ts`                                | Module registration — binds `IDENTITY_PROVIDER` and `TENANT_RESOLVER` tokens in DI container. |
+| File                                              | Purpose                                                                                                                    |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `infrastructure/ClerkRequestIdentitySource.ts`    | **Only file that imports `@clerk/nextjs/server`** (besides `proxy.ts`). Calls `auth()`, maps result to raw source data.    |
+| `infrastructure/RequestScopedIdentityProvider.ts` | Implements `IdentityProvider`. Reads from `RequestIdentitySource` — no Clerk dependency.                                   |
+| `infrastructure/RequestScopedTenantResolver.ts`   | Implements `TenantResolver`. Reads `orgId` from `RequestIdentitySource`. Falls back to `identity.id` (personal workspace). |
+| `index.ts`                                        | Module registration — binds `IDENTITY_SOURCE`, `IDENTITY_PROVIDER`, `TENANT_RESOLVER`, `USER_REPOSITORY`.                  |
+
+> **Deleted** (replaced by the above): `ClerkIdentityProvider.ts`, `ClerkTenantResolver.ts`.
 
 ### 3.3 Authorization Module (`src/modules/authorization/`)
 
-| File                                 | Purpose                                                                                                                                                    |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `domain/AuthorizationService.ts`     | `DefaultAuthorizationService` — checks tenant membership, hydrates `TenantAttributes`, fetches policies, evaluates via `PolicyEngine`. 4 constructor deps. |
-| `domain/policy/PolicyEngine.ts`      | Stateless policy evaluator. Checks actions against allow/deny policies and conditions.                                                                     |
-| `infrastructure/MockRepositories.ts` | In-memory `RoleRepository`, `PolicyRepository`, `MembershipRepository`, `TenantAttributesRepository` for tests. Uses `ROLES` constants.                    |
-| `index.ts`                           | Module registration — binds `SERVICE`, `ROLE_REPOSITORY`, `POLICY_REPOSITORY`, `MEMBERSHIP_REPOSITORY`, `TENANT_ATTRIBUTES_REPOSITORY`.                    |
+| File                                            | Purpose                                                                                                                             |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `domain/AuthorizationService.ts`                | `DefaultAuthorizationService` — membership guard → role resolution → tenant attributes → policy evaluation. 5 constructor deps.     |
+| `domain/policy/PolicyEngine.ts`                 | Stateless deny-overrides evaluator.                                                                                                 |
+| `infrastructure/MockRepositories.ts`            | Controlled test fixtures for all 4 repositories. Used only when `NODE_ENV === 'test'`.                                              |
+| `infrastructure/memory/InMemoryRepositories.ts` | Permissive dev-only implementations. Used when `NODE_ENV === 'development'`. **Never deployed to production.**                      |
+| `index.ts`                                      | Env-conditional registration: `test` → Mock, `development` → InMemory, `production` → **throws** (requires Prisma implementations). |
 
 ### 3.4 Security Layer (`src/security/`)
 
-| File                            | Purpose                                                                                                                                 |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `core/security-context.ts`      | Builds `SecurityContext` from `IdentityProvider` + `TenantResolver` + `RoleRepository`. Maps roles → `UserRole` using `ROLE_HIERARCHY`. |
-| `core/authorization-facade.ts`  | `AuthorizationFacade` — `ensureRequiredRole()` (floor-check), `can()`, `authorize()`. Wraps `AuthorizationService` contract.            |
-| `core/security-context.mock.ts` | Test helper — `createMockSecurityContext()`, `createMockUser()`. Uses `ROLES` constants.                                                |
-| `actions/secure-action.ts`      | `createSecureAction()` — composes Zod validation + role check + policy check + replay protection + audit log.                           |
-| `actions/secure-action.mock.ts` | Test double for `createSecureAction`. Uses `ROLES` constants.                                                                           |
-| `middleware/with-auth.ts`       | Route-level auth middleware. Accepts `(handler, options)` — dependencies injected by `proxy.ts`, not the global container.              |
+| File                            | Purpose                                                                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `core/security-context.ts`      | Builds `SecurityContext` from `IdentityProvider` + `TenantResolver`. **No role computation**. Technical request facts only.      |
+| `core/security-dependencies.ts` | `SecurityDependencies` and `SecurityContextDependencies`. **No `roleRepository`** — role resolution is `AuthorizationService`'s. |
+| `core/authorization-facade.ts`  | `AuthorizationFacade` — `can()`, `authorize()`. **No `ensureRequiredRole()`** — all authorization through ABAC.                  |
+| `core/security-context.mock.ts` | Test helper — `createMockSecurityContext()`, `createMockUser()`. User shape: `{ id, tenantId, attributes? }`.                    |
+| `actions/secure-action.ts`      | `createSecureAction()` — validation + `authorization.authorize()` + replay protection + audit log. **No `role` option.**         |
+| `middleware/with-auth.ts`       | Route-level middleware. Dependencies injected by `proxy.ts`.                                                                     |
 
 ---
 
@@ -123,7 +139,17 @@ Floor-check rule: a principal at level N satisfies any requirement at level ≤ 
 | `features/*`            | `core/contracts/*`, `security/actions`, `security/core` | ✅                                    |
 | `core/container`        | `modules/*` (composition root)                          | ✅ (intentional exception documented) |
 
-### 4.2 Forbidden imports — confirmed clean
+### 4.2 Clerk isolation — confirmed
+
+| File                                 | Imports `@clerk/nextjs/server`? | Expected   |
+| ------------------------------------ | ------------------------------- | ---------- |
+| `ClerkRequestIdentitySource.ts`      | ✅ yes — infrastructure adapter | ✅ correct |
+| `RequestScopedIdentityProvider.ts`   | ❌ no                           | ✅ correct |
+| `RequestScopedTenantResolver.ts`     | ❌ no                           | ✅ correct |
+| `proxy.ts`                           | ✅ yes — delivery layer only    | ✅ correct |
+| Any domain / security / feature file | ❌ none                         | ✅ correct |
+
+### 4.3 Forbidden imports — confirmed clean
 
 ```bash
 grep -RInE "from ['\"]@/(modules|security|features|app)/" src/shared  # → 0 matches
@@ -132,33 +158,27 @@ grep -RInE "from ['\"]@/(app|features|modules)/" src/security          # → 0 m
 grep -RInE "from ['\"]@/(modules|security|features|app)/" src/core     # → 0 matches (container is composition root)
 ```
 
-### 4.3 DI coupling map
+### 4.4 DI coupling map (current)
 
 ```
-auth ↔ authorization coupling path (runtime):
-
-ClerkIdentityProvider  ──[Identity]──▶  createSecurityContext
-                                              │
-ClerkTenantResolver   ──[TenantContext]──▶   │
-                                              │
-MockRoleRepository    ──[string[]]──────▶    │
-                                              ▼
-                                     SecurityContext.user.role
-                                              │
-                           AuthorizationFacade.ensureRequiredRole()
-                                              │
-                           DefaultAuthorizationService.can()
-                                              │
-                           MockPolicyRepository.getPolicies()
-                                              │
-                           PolicyEngine.evaluate()
+ClerkRequestIdentitySource ──[RequestIdentitySourceData]──▶ RequestScopedIdentityProvider
+                                                                       │
+ClerkRequestIdentitySource ──[RequestIdentitySourceData]──▶ RequestScopedTenantResolver
+                                                                       │
+                                                           createSecurityContext()
+                                                                       │
+                                                          SecurityContext { user: { id, tenantId } }
+                                                                       │
+                                                          AuthorizationFacade.authorize()
+                                                                       │
+                                                          DefaultAuthorizationService.can()
+                                                           ├── MembershipRepository.isMember()
+                                                           ├── RoleRepository.getRoles() → subject.roles
+                                                           ├── TenantAttributesRepository → tenantAttributes
+                                                           └── PolicyRepository + PolicyEngine
 ```
 
 Every arrow is a **contract interface** from `core/contracts/*`. No module directly imports another module.
-
-### 4.4 No policy logic in `shared/`
-
-All RBAC/tenant policy logic lives in `modules/authorization/domain/` and `security/core/`. The `shared/` layer contains zero domain logic.
 
 ---
 
@@ -183,28 +203,26 @@ const requiredRole = 'admin';
 'use server';
 
 import { z } from 'zod';
-import { ROLES } from '@/core/contracts/roles';
 import { createSecureAction } from '@/security/actions/secure-action';
-import { createSecurityContext } from '@/security/core/security-context';
+import { getSecurityContext } from '@/security/core/security-context';
 import { createContainer } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
-import type { RoleRepository } from '@/core/contracts/repositories';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { SecurityContextDependencies } from '@/security/core/security-context';
 
 const schema = z.object({ title: z.string().min(1) });
 
-function createSecurityDependencies() {
+function createSecureDependencies() {
   const c = createContainer();
-  const deps: SecurityContextDependencies = {
+  const contextDeps: SecurityContextDependencies = {
     identityProvider: c.resolve<IdentityProvider>(AUTH.IDENTITY_PROVIDER),
     tenantResolver: c.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
-    roleRepository: c.resolve<RoleRepository>(AUTHORIZATION.ROLE_REPOSITORY),
+    // Note: no roleRepository — role resolution is DefaultAuthorizationService's responsibility
   };
   return {
-    getSecurityContext: () => createSecurityContext(deps),
+    getSecurityContext: () => getSecurityContext(contextDeps),
     authorizationService: c.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     ),
@@ -213,77 +231,94 @@ function createSecurityDependencies() {
 
 export const createPost = createSecureAction({
   schema,
-  role: ROLES.USER, // minimum required role
-  dependencies: createSecurityDependencies,
+  // Note: no `role` option — access is controlled by policies, not role floor-checks
+  dependencies: createSecureDependencies,
   handler: async ({ input, context }) => {
-    // context.user.id, context.user.role, context.user.tenantId are all typed
+    // context.user.id and context.user.tenantId are available
     return { id: 'new-post', title: input.title, authorId: context.user?.id };
   },
 });
 ```
 
-### 5.3 Role check in a React Server Component
+### 5.3 Authorization check in a React Server Component
+
+Role is no longer stored on `SecurityContext`. Use `authorizationService.can()` with a policy:
 
 ```typescript
-import { ROLES } from '@/core/contracts/roles';
-import type { SecurityContext } from '@/security/core/security-context';
+// In a policy:
+const adminOnlyPolicy: Policy = {
+  effect: 'allow',
+  actions: ['admin:access'],
+  resource: 'admin',
+  condition: (ctx) => ctx.subject.roles?.includes(ROLES.ADMIN) ?? false,
+};
 
-export function AdminPanel({ context }: { context: SecurityContext }) {
-  if (context.user?.role !== ROLES.ADMIN) {
-    return <p>Access denied.</p>;
-  }
-  return <div>Admin-only content</div>;
-}
+// In a Server Component:
+const canAccess = await authorizationService.can({
+  tenant: { tenantId: context.user.tenantId },
+  subject: { id: context.user.id },
+  resource: { type: 'admin' },
+  action: 'admin:access',
+});
+
+if (!canAccess) return <p>Access denied.</p>;
+return <div>Admin-only content</div>;
 ```
 
 ### 5.4 Middleware route protection
 
-`src/proxy.ts` wraps the entire pipeline in `clerkMiddleware()` and creates a **per-request DI container** inside the callback. It passes explicit dependencies to `withAuth` via the options pattern:
+`proxy.ts` wraps the pipeline in `clerkMiddleware()`, builds a **request-scoped `RequestIdentitySource`** from the `auth` callback (cached via `getAuthResult`), and overrides container registrations per-request:
 
 ```typescript
 // proxy.ts (simplified)
 export default clerkMiddleware(async (auth, request) => {
-  const requestContainer = createContainer();
-  const securityDependencies: SecurityDependencies = { ... };
+  const getAuthResult = () => auth(); // cached per-request
 
-  withAuth(next, {
-    resolveIdentity,   // closure over auth() — no global auth() call
-    resolveTenant,     // closure over auth() — reads orgId
-    dependencies: securityDependencies,
-    userRepository,
-  });
+  const requestIdentitySource: RequestIdentitySource = {
+    get: async () => {
+      const { userId, orgId, sessionClaims } = await getAuthResult();
+      return { userId, orgId, email: sessionClaims?.email };
+    },
+  };
+
+  const requestContainer = createContainer();
+  requestContainer.register(AUTH.IDENTITY_SOURCE, requestIdentitySource);
+  requestContainer.register(
+    AUTH.IDENTITY_PROVIDER,
+    new RequestScopedIdentityProvider(requestIdentitySource),
+  );
+  requestContainer.register(
+    AUTH.TENANT_RESOLVER,
+    new RequestScopedTenantResolver(requestIdentitySource),
+  );
+
+  // ... compose and run pipeline
 });
 ```
 
-`withAuth` itself:
+`auth()` is called **at most once per request**, via the `getAuthResult` cache. Domain classes never call `auth()` directly.
 
-1. Has a fast path for public non-auth routes (skips identity resolution entirely).
-2. Calls `resolveIdentity()` or falls back to `identityProvider.getCurrentIdentity()`.
-3. Calls `authorization.authorize()` with the full `AuthorizationContext` including `environment`.
-4. Returns 401 for unauthenticated, 403/redirect for unauthorized.
+### 5.5 Tenant resolution — personal workspace
 
-No custom role logic is required in route files — middleware handles it centrally.
+When a user has no Clerk organization (`orgId` is absent), `RequestScopedTenantResolver` uses `identity.id` as the `tenantId`:
 
-### 5.5 Adding a new role
+```typescript
+// RequestScopedTenantResolver
+tenantId: orgId ?? identity.id; // personal workspace — unique per user, multi-tenant safe
+```
+
+This ensures every user has an isolated tenant boundary even without an org. Avoids the `'default'` shared-tenant anti-pattern.
+
+### 5.6 Adding a new role
 
 1. Open `src/core/contracts/roles.ts`.
-2. Add the new role to `UserRole`, `ROLES`, and `ROLE_HIERARCHY`.
-3. Update `MockRoleRepository` if the mock needs to return the new role in tests.
-4. All type-checked usages of `UserRole` and `ROLES` will surface any gaps at compile time.
+2. Add the new role to `UserRole` and `ROLES`.
+3. Add a policy in `PolicyRepository` that grants access based on `ctx.subject.roles?.includes('new-role')`.
+4. Update `MockRoleRepository` for tests.
 
 ```typescript
 // Before
 export type UserRole = 'guest' | 'user' | 'admin';
-export const ROLES = {
-  GUEST: 'guest',
-  USER: 'user',
-  ADMIN: 'admin',
-} as const satisfies Record<string, UserRole>;
-export const ROLE_HIERARCHY: Record<UserRole, number> = {
-  guest: 0,
-  user: 1,
-  admin: 2,
-};
 
 // After (adding 'moderator')
 export type UserRole = 'guest' | 'user' | 'moderator' | 'admin';
@@ -293,61 +328,71 @@ export const ROLES = {
   MODERATOR: 'moderator',
   ADMIN: 'admin',
 } as const satisfies Record<string, UserRole>;
-export const ROLE_HIERARCHY: Record<UserRole, number> = {
-  guest: 0,
-  user: 1,
-  moderator: 2,
-  admin: 3,
-};
 ```
 
-TypeScript will immediately surface every `ROLE_HIERARCHY` usage that needs updating.
+TypeScript will surface every `ROLES.*` usage that needs updating.
 
-### 5.6 Testing with RBAC
-
-Use `createMockSecurityContext` and `ROLES` constants in all tests — never raw strings:
+### 5.7 Testing with RBAC
 
 ```typescript
-import { ROLES } from '@/core/contracts/roles';
 import { createMockSecurityContext } from '@/security/core/security-context.mock';
 
+// SecurityContext no longer carries role — only id and tenantId
 const adminCtx = createMockSecurityContext({
-  user: { id: 'admin_1', role: ROLES.ADMIN, tenantId: 'tenant_1' },
+  user: { id: 'user_admin_1', tenantId: 'tenant_1' },
 });
 
 const userCtx = createMockSecurityContext({
-  user: { id: 'user_1', role: ROLES.USER, tenantId: 'tenant_1' },
+  user: { id: 'user_1', tenantId: 'tenant_1' },
 });
 
-const guestCtx = createMockSecurityContext({ user: undefined });
+// Mock authorizationService.can() to control access in tests:
+vi.mocked(authorizationService.can).mockResolvedValue(true); // grant
+vi.mocked(authorizationService.can).mockResolvedValue(false); // deny
 ```
 
 ---
 
 ## 6. Test Coverage
 
-| Test file                                               | What it proves                                                          |
-| ------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `security/core/security-context.test.ts`                | Role mapping: multi-role admin wins, empty roles → user, unknown → user |
-| `security/core/authorization-facade.test.ts`            | Floor-check: admin≥admin ✅, user<admin ❌, guest<user ❌               |
-| `security/middleware/with-auth.test.ts`                 | Middleware: 401 unauthenticated, 403 unauthorized, redirect for pages   |
-| `security/actions/secure-action.test.ts`                | Action wrapper: role check, policy check, validation, replay protection |
-| `testing/integration/authorization.integration.test.ts` | Real `DefaultAuthorizationService`: tenant isolation, policy matching   |
-| `testing/integration/server-actions.test.ts`            | End-to-end: role hierarchy (admin>user>guest), policy-level denial      |
+| Test file                                                           | What it proves                                                        |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `modules/auth/infrastructure/ClerkRequestIdentitySource.test.ts`    | Clerk adapter maps auth() result to raw source data correctly         |
+| `modules/auth/infrastructure/RequestScopedIdentityProvider.test.ts` | IdentityProvider reads from source, returns null when no userId       |
+| `modules/auth/infrastructure/RequestScopedTenantResolver.test.ts`   | TenantResolver uses orgId; falls back to identity.id (personal ws)    |
+| `security/core/security-context.test.ts`                            | No role computation: SecurityContext holds id + tenantId only         |
+| `security/middleware/with-auth.test.ts`                             | Middleware: 401 unauthenticated, 403 unauthorized, redirect for pages |
+| `security/actions/secure-action.test.ts`                            | Action wrapper: authorization check, validation, replay protection    |
+| `testing/integration/authorization.integration.test.ts`             | Real `DefaultAuthorizationService`: tenant isolation, policy matching |
+| `testing/integration/server-actions.test.ts`                        | End-to-end: authorization granted/denied, policy-level denial         |
+| `testing/integration/middleware.test.ts`                            | Full middleware pipeline integration                                  |
 
 ---
 
-## 7. Gate Results (Prompt 00 final)
+## 7. Gate Results (post Phase 5 — Enterprise Refactor)
 
 | Gate                    | Result                                                                  |
 | ----------------------- | ----------------------------------------------------------------------- |
 | `pnpm typecheck`        | ✅ PASS                                                                 |
+| `pnpm lint`             | ✅ PASS — 0 errors                                                      |
 | `pnpm skott:check:only` | ✅ PASS                                                                 |
 | `pnpm madge`            | ✅ PASS — no circular dependencies                                      |
 | `pnpm depcheck`         | ✅ PASS — no unused packages                                            |
 | `pnpm env:check`        | ✅ PASS — `.env.example` in sync                                        |
-| `pnpm test` (unit)      | ✅ PASS — 343 passed                                                    |
-| `pnpm test:integration` | ✅ PASS — 56 passed                                                     |
+| `pnpm test` (unit)      | ✅ PASS — 360 passed (65 files)                                         |
+| `pnpm test:integration` | ✅ PASS — 60 passed (12 files)                                          |
 | Forbidden import scans  | ✅ CLEAN — only composition-root exception in `core/container/index.ts` |
 
-**Compliance verdict: PASS. Ready for Prompt 01 ABAC.**
+**Compliance verdict: PASS. Ready for Prisma repository implementation.**
+
+---
+
+## 8. Refactor Changelog (Phases 1–5)
+
+| Phase | What changed                                                                                                                                                                                                     |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Deleted `ClerkIdentityProvider`, `ClerkTenantResolver`. Created `ClerkRequestIdentitySource`, `RequestScopedIdentityProvider`, `RequestScopedTenantResolver`. `proxy.ts` builds request-scoped identity source.  |
+| 2     | Removed `role: UserRole` from `SecurityContext.user`. Removed `roleRepository` from `SecurityContextDependencies`. Removed `ensureRequiredRole()` and `role` option from `createSecureAction`.                   |
+| 3     | `DefaultAuthorizationService` now accepts `RoleRepository` as constructor dep. Calls `getRoles()` inside `can()` and merges into `subject.roles` on enriched context.                                            |
+| 4     | Created `InMemoryRepositories` (dev-only, permissive). `authorizationModule` registration is env-conditional. `MembershipRepository` interface changed to `isMember(subjectId, tenantId)`.                       |
+| 5     | Production guard added (throws if `NODE_ENV === 'production'`). `TenantResolver` fallback changed from `'default'` to `identity.id`. `PERMISSION_REPOSITORY` token and `PermissionRepository` interface removed. |

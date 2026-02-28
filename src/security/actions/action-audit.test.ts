@@ -2,8 +2,6 @@ import '@/testing/infrastructure/logger';
 
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { ROLES } from '@/core/contracts/roles';
-
 import { logActionAudit } from './action-audit';
 
 import {
@@ -14,7 +12,7 @@ import {
 
 describe('Action Audit', () => {
   const mockCtx = createMockSecurityContext({
-    user: { id: 'user_1', role: ROLES.USER, tenantId: 'tenant_1' },
+    user: { id: 'user_1', tenantId: 'tenant_1' },
     ip: '1.2.3.4',
     correlationId: 'c1',
     requestId: 'r1',

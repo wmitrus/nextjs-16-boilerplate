@@ -1,19 +1,15 @@
 import { headers } from 'next/headers';
 
-import { ROLES, ROLE_HIERARCHY } from '@/core/contracts/roles';
-import type { UserRole } from '@/core/contracts/roles';
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
 
 import type { SecurityContextDependencies } from './security-dependencies';
 export type { SecurityContextDependencies } from './security-dependencies';
-export type { UserRole } from '@/core/contracts/roles';
 
 export interface SecurityContext {
   user?: {
     id: string;
-    role: UserRole;
     tenantId: string;
     attributes?: Record<string, unknown>;
   };
@@ -29,11 +25,18 @@ export interface SecurityContext {
  * Builds the security context from the current request and session.
  * Designed to be used in Server Components, Server Actions, and Route Handlers.
  * Decoupled from direct Auth providers via the DI Container.
+ *
+ * SecurityContext captures technical request facts only:
+ * - who is asking (identity id, tenant id)
+ * - from where (ip, userAgent, correlationId, requestId)
+ * - runtime metadata
+ *
+ * Role resolution and authorization precomputation belong in AuthorizationService.
  */
 export async function createSecurityContext(
   dependencies: SecurityContextDependencies,
 ): Promise<SecurityContext> {
-  const { identityProvider, tenantResolver, roleRepository } = dependencies;
+  const { identityProvider, tenantResolver } = dependencies;
 
   const identity = await identityProvider.getCurrentIdentity();
   const headerList = await headers();
@@ -48,21 +51,9 @@ export async function createSecurityContext(
 
   if (identity) {
     const tenantContext = await tenantResolver.resolve(identity);
-    const roles = await roleRepository.getRoles(
-      identity.id,
-      tenantContext.tenantId,
-    );
-
-    let role: UserRole = ROLES.USER;
-    const highestRole = roles.reduce<UserRole>((current, r) => {
-      const roleLevel = ROLE_HIERARCHY[r as UserRole] ?? -1;
-      return roleLevel > ROLE_HIERARCHY[current] ? (r as UserRole) : current;
-    }, ROLES.USER);
-    role = highestRole;
 
     userContext = {
       id: identity.id,
-      role,
       tenantId: tenantContext.tenantId,
     };
   }

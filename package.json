@@ -137,6 +137,7 @@
       "minimatch": ">=10.2.3",
       "lodash": ">=4.17.23",
       "rollup": "^4.59.0",
+      "serialize-javascript": ">=7.0.3",
       "undici": ">=6.23.0",
       "tmp": ">=0.2.4"
     },

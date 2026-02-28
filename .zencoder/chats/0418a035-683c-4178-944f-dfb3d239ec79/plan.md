@@ -49,7 +49,7 @@ Create a detailed implementation plan based on `/home/ozi/projects/nextjs-16-boi
 
 ### PHASE 1 — Identity Axis Finalization
 
-#### [ ] Task 1.1 — Install Drizzle dependencies
+#### [x] Task 1.1 — Install Drizzle dependencies
 
 Install `drizzle-orm`, `postgres` (production), `drizzle-kit` (dev):
 
@@ -60,7 +60,7 @@ pnpm add -D drizzle-kit
 
 Verify: `pnpm typecheck` still passes.
 
-#### [ ] Task 1.2 — Add AUTH_PROVIDER to env
+#### [x] Task 1.2 — Add AUTH_PROVIDER to env
 
 In `src/core/env.ts` (server section), add:
 
@@ -82,7 +82,7 @@ AUTH_PROVIDER=clerk
 
 Verify: `pnpm env:check && pnpm typecheck`
 
-#### [ ] Task 1.3 — Create SystemIdentitySource
+#### [x] Task 1.3 — Create SystemIdentitySource
 
 Create `src/modules/auth/infrastructure/system/SystemIdentitySource.ts`:
 
@@ -96,7 +96,7 @@ Create co-located test `SystemIdentitySource.test.ts`:
 
 Verify: `pnpm test && pnpm typecheck`
 
-#### [ ] Task 1.4 — Create AuthJS + Supabase placeholder adapters
+#### [x] Task 1.4 — Create AuthJS + Supabase placeholder adapters
 
 Create `src/modules/auth/infrastructure/authjs/AuthJsRequestIdentitySource.ts`:
 
@@ -111,7 +111,7 @@ No tests required (placeholder — throws on call).
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 1.5 — Relocate ClerkRequestIdentitySource
+#### [x] Task 1.5 — Relocate ClerkRequestIdentitySource
 
 Move `src/modules/auth/infrastructure/ClerkRequestIdentitySource.ts`
 → `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts`
@@ -126,7 +126,7 @@ Update all imports in:
 
 Verify: `pnpm test && pnpm typecheck`
 
-#### [ ] Task 1.6 — Update auth/index.ts with AUTH_PROVIDER switch
+#### [x] Task 1.6 — Update auth/index.ts with AUTH_PROVIDER switch
 
 Modify `src/modules/auth/index.ts`:
 

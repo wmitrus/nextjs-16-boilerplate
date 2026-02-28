@@ -47,6 +47,7 @@ const defaultEnv: MutableEnv = {
   NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: '/onboarding',
   NEXT_PUBLIC_CLERK_WAITLIST_URL: '/waitlist',
   E2E_ENABLED: false,
+  AUTH_PROVIDER: 'clerk' as const,
 };
 
 /**

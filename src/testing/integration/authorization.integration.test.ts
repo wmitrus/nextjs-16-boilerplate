@@ -8,6 +8,7 @@ import { PolicyEngine } from '@/modules/authorization/domain/policy/PolicyEngine
 import {
   MockMembershipRepository,
   MockPolicyRepository,
+  MockRoleRepository,
   MockTenantAttributesRepository,
 } from '@/modules/authorization/infrastructure/MockRepositories';
 
@@ -15,6 +16,7 @@ describe('Authorization Integration', () => {
   const authzService = new DefaultAuthorizationService(
     new MockPolicyRepository(),
     new MockMembershipRepository(),
+    new MockRoleRepository(),
     new MockTenantAttributesRepository(),
     new PolicyEngine(),
   );

@@ -44,3 +44,27 @@ export interface IdentityProvider {
    */
   getCurrentIdentity(): Promise<Identity | null>;
 }
+
+/**
+ * Raw data returned by an identity source.
+ *
+ * This is the primitive auth-provider data before it is mapped to domain types.
+ * Must remain framework-agnostic — populated by infrastructure adapters (e.g. Clerk).
+ */
+export interface RequestIdentitySourceData {
+  readonly userId?: string;
+  readonly orgId?: string;
+  readonly email?: string;
+}
+
+/**
+ * Source of raw identity data for the current request.
+ *
+ * Implementations are infrastructure adapters (e.g. ClerkRequestIdentitySource).
+ * The domain never calls auth() directly — it reads from this source.
+ *
+ * Designed to be request-scoped and injected into IdentityProvider and TenantResolver.
+ */
+export interface RequestIdentitySource {
+  get(): Promise<RequestIdentitySourceData>;
+}

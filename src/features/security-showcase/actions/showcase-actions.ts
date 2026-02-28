@@ -6,8 +6,6 @@ import { createContainer } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import type { RoleRepository } from '@/core/contracts/repositories';
-import { ROLES } from '@/core/contracts/roles';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 
 import { createSecureAction } from '@/security/actions/secure-action';
@@ -31,9 +29,6 @@ function createSecurityDependencies() {
     tenantResolver: requestContainer.resolve<TenantResolver>(
       AUTH.TENANT_RESOLVER,
     ),
-    roleRepository: requestContainer.resolve<RoleRepository>(
-      AUTHORIZATION.ROLE_REPOSITORY,
-    ),
   };
 
   return {
@@ -51,12 +46,8 @@ function createSecurityDependencies() {
  */
 export const updateSecuritySettings = createSecureAction({
   schema: updateSettingsSchema,
-  role: ROLES.USER,
   dependencies: createSecurityDependencies,
   handler: async ({ context }) => {
-    // In a real app, you would save to the database here
-    // e.g., await db.user.update({ where: { id: context.user.id }, data: input });
-
     return {
       message: 'Settings updated successfully',
       updatedAt: new Date().toISOString(),

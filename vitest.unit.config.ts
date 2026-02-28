@@ -32,6 +32,8 @@ export default defineConfig({
         'src/**/types/**',
         'src/**/index.{ts,tsx}',
         'src/stories/**',
+        'src/core/db/**',
+        'src/modules/authorization/infrastructure/drizzle/schema.ts',
       ],
       clean: true,
       cleanOnRerun: true,

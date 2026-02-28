@@ -1,8 +1,6 @@
 import { vi } from 'vitest';
 import type { z } from 'zod';
 
-import { ROLES } from '@/core/contracts/roles';
-
 import type { ActionOptions } from './secure-action';
 
 export const mockCreateSecureAction = vi.fn(
@@ -15,7 +13,7 @@ export const mockCreateSecureAction = vi.fn(
         data: await options.handler({
           input,
           context: {
-            user: { id: 'test', role: ROLES.USER, tenantId: 'test' },
+            user: { id: 'test', tenantId: 'test' },
             ip: '127.0.0.1',
             userAgent: 'test',
             correlationId: 'test',

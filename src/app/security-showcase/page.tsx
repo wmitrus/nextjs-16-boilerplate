@@ -1,9 +1,8 @@
 import { headers } from 'next/headers';
 
 import { createContainer } from '@/core/container';
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import type { RoleRepository } from '@/core/contracts/repositories';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 
 import { AdminOnlyExample } from '@/features/security-showcase/components/AdminOnlyExample';
@@ -32,9 +31,6 @@ export default async function SecurityShowcasePage() {
     ),
     tenantResolver: requestContainer.resolve<TenantResolver>(
       AUTH.TENANT_RESOLVER,
-    ),
-    roleRepository: requestContainer.resolve<RoleRepository>(
-      AUTHORIZATION.ROLE_REPOSITORY,
     ),
   };
 

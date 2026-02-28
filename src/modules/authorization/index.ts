@@ -1,15 +1,14 @@
 import type { Container, Module } from '@/core/container';
 import { AUTHORIZATION } from '@/core/contracts';
+import { db } from '@/core/db';
 import { env } from '@/core/env';
 
 import { DefaultAuthorizationService } from './domain/AuthorizationService';
 import { PolicyEngine } from './domain/policy/PolicyEngine';
-import {
-  InMemoryMembershipRepository,
-  InMemoryPolicyRepository,
-  InMemoryRoleRepository,
-  InMemoryTenantAttributesRepository,
-} from './infrastructure/memory/InMemoryRepositories';
+import { DrizzleMembershipRepository } from './infrastructure/drizzle/DrizzleMembershipRepository';
+import { DrizzlePolicyRepository } from './infrastructure/drizzle/DrizzlePolicyRepository';
+import { DrizzleRoleRepository } from './infrastructure/drizzle/DrizzleRoleRepository';
+import { DrizzleTenantAttributesRepository } from './infrastructure/drizzle/DrizzleTenantAttributesRepository';
 import {
   MockMembershipRepository,
   MockPolicyRepository,
@@ -17,15 +16,7 @@ import {
   MockTenantAttributesRepository,
 } from './infrastructure/MockRepositories';
 
-function buildRepositories(nodeEnv: string) {
-  if (nodeEnv === 'production') {
-    throw new Error(
-      '[authorizationModule] Production requires database-backed repository implementations. ' +
-        'Register Prisma repositories before deploying. ' +
-        'InMemory repositories are permissive and must never run in production.',
-    );
-  }
-
+function buildRepositories(nodeEnv: string, dbProvider: string) {
   if (nodeEnv === 'test') {
     return {
       policyRepository: new MockPolicyRepository(),
@@ -35,12 +26,20 @@ function buildRepositories(nodeEnv: string) {
     };
   }
 
-  return {
-    policyRepository: new InMemoryPolicyRepository(),
-    roleRepository: new InMemoryRoleRepository(),
-    membershipRepository: new InMemoryMembershipRepository(),
-    tenantAttributesRepository: new InMemoryTenantAttributesRepository(),
-  };
+  switch (dbProvider) {
+    case 'drizzle':
+      return {
+        policyRepository: new DrizzlePolicyRepository(db),
+        roleRepository: new DrizzleRoleRepository(db),
+        membershipRepository: new DrizzleMembershipRepository(db),
+        tenantAttributesRepository: new DrizzleTenantAttributesRepository(db),
+      };
+    default:
+      throw new Error(
+        `[authorizationModule] Unknown DB_PROVIDER: "${dbProvider}". ` +
+          `Supported values: "drizzle".`,
+      );
+  }
 }
 
 export const authorizationModule: Module = {
@@ -50,7 +49,7 @@ export const authorizationModule: Module = {
       roleRepository,
       membershipRepository,
       tenantAttributesRepository,
-    } = buildRepositories(env.NODE_ENV);
+    } = buildRepositories(env.NODE_ENV, env.DB_PROVIDER);
 
     const engine = new PolicyEngine();
 

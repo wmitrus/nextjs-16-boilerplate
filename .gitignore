@@ -64,6 +64,9 @@ next-env.d.ts
 # Sentry Config File
 .env.sentry-build-plugin
 
+# PGlite local development database
+.pglite/
+
 
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md

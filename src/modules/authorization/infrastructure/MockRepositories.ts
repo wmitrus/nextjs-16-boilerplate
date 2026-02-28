@@ -82,12 +82,12 @@ export class MockPolicyRepository implements PolicyRepository {
 }
 
 export class MockMembershipRepository implements MembershipRepository {
-  async getTenantMemberships(subjectId: string): Promise<string[]> {
-    if (subjectId.startsWith('user_')) {
-      return ['t1', 'tenant_123', 'test-tenant'];
-    }
+  async isMember(subjectId: string, tenantId: string): Promise<boolean> {
+    const memberTenants = subjectId.startsWith('user_')
+      ? ['t1', 'tenant_123', 'test-tenant']
+      : ['t1'];
 
-    return ['t1'];
+    return memberTenants.includes(tenantId);
   }
 }
 

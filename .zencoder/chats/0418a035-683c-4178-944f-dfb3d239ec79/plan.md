@@ -433,7 +433,7 @@ Verify: `pnpm test && pnpm typecheck && pnpm lint`
 
 ### PHASE 5 — Feature Flag Module
 
-#### [ ] Task 5.1 — Create FeatureFlagService contract
+#### [x] Task 5.1 — Create FeatureFlagService contract
 
 Create `src/core/contracts/feature-flags.ts`:
 
@@ -456,7 +456,7 @@ Update `src/core/contracts/index.ts`:
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 5.2 — Create InMemoryFeatureFlagService
+#### [x] Task 5.2 — Create InMemoryFeatureFlagService
 
 Create `src/modules/feature-flags/infrastructure/memory/InMemoryFeatureFlagService.ts`:
 
@@ -473,7 +473,7 @@ Create co-located test `InMemoryFeatureFlagService.test.ts`:
 
 Verify: `pnpm test && pnpm typecheck`
 
-#### [ ] Task 5.3 — Create OpenFeature placeholder adapter
+#### [x] Task 5.3 — Create OpenFeature placeholder adapter
 
 Create `src/modules/feature-flags/infrastructure/openfeature/OpenFeatureFeatureFlagService.ts`:
 
@@ -484,7 +484,7 @@ No tests (throws immediately).
 
 Verify: `pnpm typecheck`
 
-#### [ ] Task 5.4 — Create feature-flags module index
+#### [x] Task 5.4 — Create feature-flags module index
 
 Create `src/modules/feature-flags/index.ts`:
 

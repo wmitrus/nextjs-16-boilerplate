@@ -8,8 +8,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import type { RoleRepository } from '@/core/contracts/repositories';
-import { ROLES } from '@/core/contracts/roles';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
@@ -40,14 +38,9 @@ describe('Auth Middleware', () => {
     can: vi.fn(),
   } as unknown as Mocked<AuthorizationService>;
 
-  const mockRoleRepository = {
-    getRoles: vi.fn(),
-  } as unknown as Mocked<RoleRepository>;
-
   const securityDependencies: SecurityDependencies = {
     identityProvider: mockIdentityProvider,
     tenantResolver: mockTenantResolver,
-    roleRepository: mockRoleRepository,
     authorizationService: mockAuthorizationService,
   };
 
@@ -60,14 +53,12 @@ describe('Auth Middleware', () => {
     mockIdentityProvider.getCurrentIdentity.mockReset();
     mockUserRepository.findById.mockReset();
     mockTenantResolver.resolve.mockReset();
-    mockRoleRepository.getRoles.mockReset();
     mockAuthorizationService.can.mockReset();
 
     mockTenantResolver.resolve.mockResolvedValue({
       tenantId: 't1',
       userId: 'user_1',
     });
-    mockRoleRepository.getRoles.mockResolvedValue([ROLES.USER]);
     mockAuthorizationService.can.mockResolvedValue(true);
     mockHandler.mockClear();
   });

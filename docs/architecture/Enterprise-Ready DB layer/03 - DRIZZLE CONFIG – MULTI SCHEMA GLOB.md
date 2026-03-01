@@ -9,7 +9,7 @@ export default {
 };
 ```
 
-## Prd
+## PROD
 
 ```ts
 // core/db/migrations/config/drizzle.prod.ts
@@ -20,5 +20,5 @@ export default {
 };
 ```
 
-The schema is always the same.
-Only DATABASE_URL changes.
+Schema glob remains the same across environments.
+Only runtime database target changes.

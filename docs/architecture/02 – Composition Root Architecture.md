@@ -3,35 +3,34 @@
 ```mermaid
 flowchart TD
 
-ENV["Environment (env.ts)"]
+Env["Env"]
 
-BOOTSTRAP["core/runtime/bootstrap.ts"]
-INFRA["getInfrastructure(config.db)\nprocess scope"]
-NODE["createRequestContainer(config)\nnode request scope"]
-APP["getAppContainer()"]
+Boot["Bootstrap (Node)"]
+Infra["Process Infrastructure"]
+NodeC["Node Request Container"]
+AppC["Default App Container"]
 
-EDGEBOOT["core/runtime/edge.ts"]
-EDGE["createEdgeRequestContainer(config)\nedge request scope"]
+EdgeBoot["Bootstrap (Edge)"]
+EdgeC["Edge Request Container"]
 
-DB["createDb(config)"]
-AUTHMOD["createAuthModule(config.auth)"]
-AUTHZMOD["createAuthorizationModule({ db })"]
-EDGEAUTH["createEdgeAuthModule(config.auth)"]
+Db["DB Runtime"]
+AuthMod["Auth Module"]
+AuthzMod["Authorization Module"]
+EdgeAuth["Edge Auth Module"]
 
-ENV --> BOOTSTRAP
-ENV --> EDGEBOOT
+Env --> Boot
+Env --> EdgeBoot
 
-BOOTSTRAP --> INFRA
-BOOTSTRAP --> NODE
-BOOTSTRAP --> APP
+Boot --> Infra --> Db
+Boot --> NodeC
+Boot --> AppC
 
-EDGEBOOT --> EDGE
+EdgeBoot --> EdgeC
 
-INFRA --> DB
-NODE --> AUTHMOD
-NODE --> AUTHZMOD
+NodeC --> AuthMod
+NodeC --> AuthzMod
 
-EDGE --> EDGEAUTH
+EdgeC --> EdgeAuth
 
-APP --> NODE
+AppC --> NodeC
 ```

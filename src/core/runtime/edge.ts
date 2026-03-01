@@ -1,16 +1,16 @@
 import { Container } from '@/core/container';
 import { env } from '@/core/env';
 
-import { createAuthModule } from '@/modules/auth';
-import type { AuthModuleConfig } from '@/modules/auth';
+import type { EdgeAuthModuleConfig } from '@/modules/auth/edge';
+import { createEdgeAuthModule } from '@/modules/auth/edge';
 
 export interface EdgeAppConfig {
-  auth: AuthModuleConfig;
+  auth: EdgeAuthModuleConfig;
 }
 
 export function createEdgeRequestContainer(config: EdgeAppConfig): Container {
   const container = new Container();
-  container.registerModule(createAuthModule(config.auth));
+  container.registerModule(createEdgeAuthModule(config.auth));
 
   return container;
 }

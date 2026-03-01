@@ -30,6 +30,92 @@ type ProxyMiddleware = (next: ProxyHandler) => ProxyHandler;
 
 const terminalHandler: ProxyHandler = async () => NextResponse.next();
 
+function createAuthResultGetter<TAuthResult>(auth: () => Promise<TAuthResult>) {
+  let cachedAuthResult: Promise<TAuthResult> | undefined;
+
+  return () => {
+    if (!cachedAuthResult) {
+      cachedAuthResult = auth();
+    }
+    return cachedAuthResult;
+  };
+}
+
+function createRequestIdentitySource(
+  getAuthResult: () => Promise<{
+    userId?: string | null;
+    orgId?: string | null;
+    sessionClaims?: Record<string, unknown> | null;
+  }>,
+): RequestIdentitySource {
+  return {
+    get: async () => {
+      const { userId, orgId, sessionClaims } = await getAuthResult();
+
+      return {
+        userId: userId ?? undefined,
+        orgId: orgId ?? undefined,
+        email:
+          typeof sessionClaims?.email === 'string'
+            ? sessionClaims.email
+            : undefined,
+      };
+    },
+  };
+}
+
+function createRequestContainer(identitySource: RequestIdentitySource) {
+  const requestContainer = getAppContainer().createChild();
+
+  requestContainer.register(AUTH.IDENTITY_SOURCE, identitySource);
+  requestContainer.register(
+    AUTH.IDENTITY_PROVIDER,
+    new RequestScopedIdentityProvider(identitySource),
+  );
+  requestContainer.register(
+    AUTH.TENANT_RESOLVER,
+    new RequestScopedTenantResolver(identitySource),
+  );
+
+  return requestContainer;
+}
+
+function resolveSecurityDependencies(
+  requestContainer: ReturnType<typeof createRequestContainer>,
+): SecurityDependencies {
+  return {
+    identityProvider: requestContainer.resolve<IdentityProvider>(
+      AUTH.IDENTITY_PROVIDER,
+    ),
+    tenantResolver: requestContainer.resolve<TenantResolver>(
+      AUTH.TENANT_RESOLVER,
+    ),
+    authorizationService: requestContainer.resolve<AuthorizationService>(
+      AUTHORIZATION.SERVICE,
+    ),
+  };
+}
+
+function createSecurityPipeline(
+  securityDependencies: SecurityDependencies,
+  userRepository: UserRepository,
+) {
+  const appSecurityPipeline = composeMiddlewares(
+    [
+      withInternalApiGuard,
+      withRateLimit,
+      (next: ProxyHandler) =>
+        withAuth(next, {
+          dependencies: securityDependencies,
+          userRepository,
+        }),
+    ],
+    terminalHandler,
+  );
+
+  return withSecurity(appSecurityPipeline);
+}
+
 function composeMiddlewares(
   middlewares: ProxyMiddleware[],
   handler: ProxyHandler,
@@ -59,69 +145,18 @@ function composeMiddlewares(
  * 6. terminalHandler (NextResponse.next())
  */
 export default clerkMiddleware(async (auth, request) => {
-  let cachedAuthResult: Promise<Awaited<ReturnType<typeof auth>>> | undefined;
-  const getAuthResult = () => {
-    if (!cachedAuthResult) {
-      cachedAuthResult = auth();
-    }
-    return cachedAuthResult;
-  };
-
-  const requestIdentitySource: RequestIdentitySource = {
-    get: async () => {
-      const { userId, orgId, sessionClaims } = await getAuthResult();
-      return {
-        userId: userId ?? undefined,
-        orgId: orgId ?? undefined,
-        email:
-          typeof sessionClaims?.email === 'string'
-            ? sessionClaims.email
-            : undefined,
-      };
-    },
-  };
-
-  const requestContainer = getAppContainer().createChild();
-
-  requestContainer.register(AUTH.IDENTITY_SOURCE, requestIdentitySource);
-  requestContainer.register(
-    AUTH.IDENTITY_PROVIDER,
-    new RequestScopedIdentityProvider(requestIdentitySource),
-  );
-  requestContainer.register(
-    AUTH.TENANT_RESOLVER,
-    new RequestScopedTenantResolver(requestIdentitySource),
-  );
-
-  const securityDependencies: SecurityDependencies = {
-    identityProvider: requestContainer.resolve<IdentityProvider>(
-      AUTH.IDENTITY_PROVIDER,
-    ),
-    tenantResolver: requestContainer.resolve<TenantResolver>(
-      AUTH.TENANT_RESOLVER,
-    ),
-    authorizationService: requestContainer.resolve<AuthorizationService>(
-      AUTHORIZATION.SERVICE,
-    ),
-  };
+  const getAuthResult = createAuthResultGetter(auth);
+  const requestIdentitySource = createRequestIdentitySource(getAuthResult);
+  const requestContainer = createRequestContainer(requestIdentitySource);
+  const securityDependencies = resolveSecurityDependencies(requestContainer);
 
   const userRepository = requestContainer.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
-
-  const appSecurityPipeline = composeMiddlewares(
-    [
-      withInternalApiGuard,
-      withRateLimit,
-      (next: ProxyHandler) =>
-        withAuth(next, {
-          dependencies: securityDependencies,
-          userRepository,
-        }),
-    ],
-    terminalHandler,
+  const securityPipeline = createSecurityPipeline(
+    securityDependencies,
+    userRepository,
   );
-  const securityPipeline = withSecurity(appSecurityPipeline);
 
   try {
     return await securityPipeline(request);

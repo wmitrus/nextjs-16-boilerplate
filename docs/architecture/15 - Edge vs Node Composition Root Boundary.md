@@ -101,6 +101,33 @@ When integrating external auth providers (Clerk/AuthJS/Supabase), keep mapping p
 - map `provider + external_user_id -> internal user UUID`
 - map `provider + external_tenant_id -> internal tenant UUID`
 
+Mapping runtime rule:
+
+- resolve/create identity mappings in Node runtime only
+- middleware/Edge should consume already-resolved request context and must not perform DB-backed mapping
+
+## External identity mapping flow
+
+```mermaid
+flowchart LR
+  A[External auth provider\nClerk/AuthJS/Supabase] --> B[RequestScopedIdentityProvider]
+  A --> C[RequestScopedTenantResolver]
+  B --> D[ExternalIdentityMapper\nprovider + external_user_id]
+  C --> E[ExternalIdentityMapper\nprovider + external_tenant_id]
+  D --> F[(auth_user_identities)]
+  E --> G[(auth_tenant_identities)]
+  F --> H[Internal user UUID]
+  G --> I[Internal tenant UUID]
+  H --> J[AuthorizationService / policies]
+  I --> J
+
+  classDef edge fill:#f3f4f6,stroke:#9ca3af,color:#111827;
+  classDef node fill:#ecfeff,stroke:#0891b2,color:#0c4a6e;
+
+  class A edge;
+  class B,C,D,E,F,G,H,I,J node;
+```
+
 Adapter contract rule (important):
 
 - `RequestScopedIdentityProvider` depends only on user mapping method.

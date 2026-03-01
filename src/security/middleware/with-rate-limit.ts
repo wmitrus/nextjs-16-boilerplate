@@ -9,11 +9,19 @@ import type { RateLimitResult } from '@/shared/lib/rate-limit/rate-limit-local';
 
 import type { RouteContext } from './route-classification';
 
-const logger = resolveEdgeLogger().child({
-  type: 'Security',
-  category: 'rate-limit',
-  module: 'with-rate-limit',
-});
+let _logger:
+  | ReturnType<ReturnType<typeof resolveEdgeLogger>['child']>
+  | undefined;
+
+function getLogger() {
+  if (_logger) return _logger;
+  _logger = resolveEdgeLogger().child({
+    type: 'Security',
+    category: 'rate-limit',
+    module: 'with-rate-limit',
+  });
+  return _logger;
+}
 /**
  * Enforces rate limiting on API routes.
  */
@@ -29,15 +37,12 @@ export function withRateLimit(
     const result: RateLimitResult = await checkRateLimit(ip);
 
     if (!result.success) {
-      const correlationId =
-        req.headers.get('x-correlation-id') || crypto.randomUUID();
-
-      logger.warn(
+      getLogger().warn(
         {
           type: 'SECURITY_AUDIT',
           category: 'rate-limit',
           ip,
-          correlationId,
+          correlationId: ctx.correlationId,
           path: req.nextUrl.pathname,
           limit: result.limit,
           reset: result.reset,

@@ -40,6 +40,8 @@ type WithAuthEdgeOptions = WithAuthBaseOptions & {
 
 type WithAuthOptions = WithAuthNodeOptions | WithAuthEdgeOptions;
 
+const TENANT_CONTEXT_REQUIRED_REDIRECT = '/onboarding';
+
 function resolveAuthorizationFacade(
   options: WithAuthOptions,
 ): AuthorizationFacade | null {
@@ -72,6 +74,17 @@ async function resolveOnboardingComplete(
 
   const user = await userRepository.findById(userId);
   return Boolean(user?.onboardingComplete);
+}
+
+function isEdgeAuthorizationMode(options: WithAuthOptions): boolean {
+  return options.enforceResourceAuthorization === false;
+}
+
+function redirectForMissingTenantContext(req: NextRequest): NextResponse {
+  const redirectUrl = new URL(TENANT_CONTEXT_REQUIRED_REDIRECT, req.url);
+  redirectUrl.searchParams.set('reason', 'tenant-context-required');
+
+  return NextResponse.redirect(redirectUrl);
 }
 
 function redirectAuthenticatedFromAuthRoute(
@@ -231,10 +244,9 @@ export function withAuth(
 
     const identity = await resolveIdentity(options);
     const userId = identity?.id;
-    const onboardingComplete = await resolveOnboardingComplete(
-      options.userRepository,
-      userId,
-    );
+    const onboardingComplete = isEdgeAuthorizationMode(options)
+      ? true
+      : await resolveOnboardingComplete(options.userRepository, userId);
 
     // 1. Redirect authenticated users away from auth routes (sign-in/sign-up)
     const authRouteRedirect = redirectAuthenticatedFromAuthRoute(
@@ -280,10 +292,22 @@ export function withAuth(
           authorization,
         );
       } catch (error) {
-        if (
-          error instanceof AuthorizationError ||
-          error instanceof MissingTenantContextError
-        ) {
+        if (error instanceof MissingTenantContextError) {
+          if (ctx.isApi) {
+            return NextResponse.json(
+              {
+                status: 'server_error',
+                error: 'Tenant context required',
+                code: 'TENANT_CONTEXT_REQUIRED',
+              },
+              { status: 409 },
+            );
+          }
+
+          return redirectForMissingTenantContext(req);
+        }
+
+        if (error instanceof AuthorizationError) {
           if (ctx.isApi) {
             return NextResponse.json(
               {

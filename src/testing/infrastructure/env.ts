@@ -49,7 +49,7 @@ const defaultEnv: MutableEnv = {
   E2E_ENABLED: false,
   AUTH_PROVIDER: 'clerk' as const,
   DATABASE_URL: undefined,
-  DB_PROVIDER: 'drizzle' as const,
+  DB_DRIVER: undefined,
 };
 
 /**

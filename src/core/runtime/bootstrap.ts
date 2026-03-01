@@ -8,7 +8,7 @@ import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
 import { createAuthorizationModule } from '@/modules/authorization';
 
-export { createEdgeRequestContainer, getEdgeContainer } from './edge';
+export { createEdgeRequestContainer } from './edge';
 
 export interface AppConfig {
   db: DbConfig;
@@ -45,6 +45,10 @@ function resolveDbDriver(): DbConfig['driver'] {
 }
 
 export function createRequestContainer(config: AppConfig): Container {
+  // Request scope contract:
+  // - returns a fresh container per invocation (no shared mutable service graph)
+  // - reuses process-scope infrastructure (DB runtime) via getInfrastructure(config)
+  // This keeps request isolation while avoiding per-request DB re-initialization.
   const container = new Container();
 
   const { dbRuntime } = getInfrastructure(config);
@@ -71,5 +75,7 @@ function buildConfig(): AppConfig {
 }
 
 export function getAppContainer(): Container {
+  // Convenience helper for default env-driven config.
+  // Prefer createRequestContainer(config) in tests or multi-profile runtime setups.
   return createRequestContainer(buildConfig());
 }

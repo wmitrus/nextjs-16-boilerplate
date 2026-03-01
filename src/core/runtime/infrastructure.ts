@@ -1,4 +1,5 @@
 import { createDb } from '@/core/db/create-db';
+import { clearPgliteRuntimeCache } from '@/core/db/drivers/create-pglite';
 import type { DbConfig, DbRuntime } from '@/core/db/types';
 
 interface ProcessInfrastructure {
@@ -10,10 +11,45 @@ interface InfrastructureConfig {
 }
 
 let cachedInfrastructure: ProcessInfrastructure | null = null;
+let shutdownHooksRegistered = false;
+
+async function shutdownInfrastructure(): Promise<void> {
+  await closeInfrastructure();
+}
+
+function registerShutdownHooks(): void {
+  if (shutdownHooksRegistered) {
+    return;
+  }
+
+  shutdownHooksRegistered = true;
+
+  if (typeof process === 'undefined') {
+    return;
+  }
+
+  process.once('beforeExit', () => {
+    void shutdownInfrastructure();
+  });
+
+  process.once('SIGINT', () => {
+    void shutdownInfrastructure().finally(() => {
+      process.exit(0);
+    });
+  });
+
+  process.once('SIGTERM', () => {
+    void shutdownInfrastructure().finally(() => {
+      process.exit(0);
+    });
+  });
+}
 
 export function getInfrastructure(
   config: InfrastructureConfig,
 ): ProcessInfrastructure {
+  registerShutdownHooks();
+
   if (cachedInfrastructure) {
     return cachedInfrastructure;
   }
@@ -28,10 +64,9 @@ export function getInfrastructure(
 }
 
 export async function closeInfrastructure(): Promise<void> {
-  if (!cachedInfrastructure) {
-    return;
-  }
-
-  await cachedInfrastructure.dbRuntime.close?.();
+  const activeInfrastructure = cachedInfrastructure;
   cachedInfrastructure = null;
+
+  await activeInfrastructure?.dbRuntime.close?.();
+  clearPgliteRuntimeCache();
 }

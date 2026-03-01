@@ -8,6 +8,8 @@ import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
 import { createAuthorizationModule } from '@/modules/authorization';
 
+export { createEdgeRequestContainer, getEdgeContainer } from './edge';
+
 export interface AppConfig {
   db: DbConfig;
   auth: AuthModuleConfig;

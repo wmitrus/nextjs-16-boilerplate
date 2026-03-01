@@ -3,54 +3,54 @@
 ```mermaid
 flowchart TD
 
-subgraph DELIVERY
-APP
-FEATURES
-PROXY
+subgraph Delivery
+	App
+	Features
+	Proxy
 end
 
-subgraph APPLICATION
-SECURITY
+subgraph Application
+	Security
 end
 
-subgraph DOMAIN
-MODULES
+subgraph Domain
+	Modules
 end
 
-subgraph INFRASTRUCTURE
-DB
-AUTH_ADAPTERS
+subgraph Infrastructure
+	Db
+	AuthAdapters
 end
 
-subgraph CORE
-CONTAINER
-CONTRACTS
-RUNTIME
+subgraph Core
+	Container
+	Contracts
+	Runtime
 end
 
-subgraph SHARED
-SHAREDLIB
+subgraph Shared
+	SharedLib
 end
 
-APP --> FEATURES
-APP --> PROXY
-APP --> SECURITY
-APP --> SHAREDLIB
-FEATURES --> MODULES
-FEATURES --> SECURITY
+App --> Features
+App --> Proxy
+App --> Security
+App --> SharedLib
+Features --> Modules
+Features --> Security
 
-PROXY --> SECURITY
-SECURITY --> CONTRACTS
-SECURITY --> SHAREDLIB
+Proxy --> Security
+Security --> Contracts
+Security --> SharedLib
 
-MODULES --> CONTRACTS
-MODULES --> SHAREDLIB
-MODULES --> DB
+Modules --> Contracts
+Modules --> SharedLib
+Modules --> Db
 
-RUNTIME --> CONTAINER
-CONTAINER --> MODULES
-CONTAINER --> DB
-AUTH_ADAPTERS --> MODULES
+Runtime --> Container
+Container --> Modules
+Container --> Db
+AuthAdapters --> Modules
 
-CONTRACTS -. forbid .-> MODULES
+Contracts -. forbidden .-> Modules
 ```

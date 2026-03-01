@@ -5,14 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as getIp from '@/shared/lib/network/get-ip';
 import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
-const getEdgeContainerMock = vi.hoisted(() => vi.fn());
+const createEdgeRequestContainerMock = vi.hoisted(() => vi.fn());
 const getAppContainerMock = vi.hoisted(() => vi.fn());
 const registerMock = vi.fn();
 
 vi.unmock('@/core/runtime/edge');
 
 vi.mock('@/core/runtime/edge', () => ({
-  getEdgeContainer: getEdgeContainerMock,
+  createEdgeRequestContainer: createEdgeRequestContainerMock,
 }));
 
 vi.mock('@/core/runtime/bootstrap', () => ({
@@ -55,6 +55,7 @@ vi.mock('@clerk/nextjs/server', () => ({
 
 vi.mock('@/core/env', () => ({
   env: {
+    AUTH_PROVIDER: 'clerk',
     NODE_ENV: 'test',
     VERCEL_ENV: 'test',
     INTERNAL_API_KEY: 'test-key',
@@ -118,7 +119,7 @@ describe('Proxy edge composition root', () => {
       updateProfile: vi.fn(),
     };
 
-    getEdgeContainerMock.mockReturnValue({
+    createEdgeRequestContainerMock.mockReturnValue({
       register: registerMock,
       resolve: vi.fn((key: unknown) => {
         const symbolString = String(key);
@@ -143,7 +144,7 @@ describe('Proxy edge composition root', () => {
 
     await proxy(request, {} as unknown as NextFetchEvent);
 
-    expect(getEdgeContainerMock).toHaveBeenCalled();
+    expect(createEdgeRequestContainerMock).toHaveBeenCalled();
     expect(getAppContainerMock).not.toHaveBeenCalled();
     expect(registerMock).toHaveBeenCalledTimes(3);
     for (const call of registerMock.mock.calls) {

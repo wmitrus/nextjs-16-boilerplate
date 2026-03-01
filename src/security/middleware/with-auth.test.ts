@@ -307,7 +307,6 @@ describe('Auth Middleware', () => {
 
     const middleware = withAuth(mockHandler, {
       dependencies: edgeSecurityDependencies,
-      userRepository: mockUserRepository,
       enforceResourceAuthorization: false,
     });
 

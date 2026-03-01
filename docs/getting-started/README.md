@@ -16,6 +16,10 @@ Start here if you are new to the repository and want a deterministic setup path.
 - Feature internals stay in `docs/features/*`.
 - If a runbook depends on another doc, it links directly to it.
 
+## Recommended companion reading
+
+- [Edge vs Node Composition Root Boundary - External identity mapping flow](../architecture/15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md#external-identity-mapping-flow)
+
 ## Planned Next Runbooks
 
 - Multi-tenant local setup

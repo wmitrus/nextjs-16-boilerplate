@@ -1,7 +1,6 @@
 import type { Container, Module } from '@/core/container';
 import { AUTH } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
-import { env } from '@/core/env';
 
 import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
@@ -10,6 +9,10 @@ import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIde
 import { RequestScopedTenantResolver } from './infrastructure/RequestScopedTenantResolver';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
 import { SystemIdentitySource } from './infrastructure/system/SystemIdentitySource';
+
+export interface AuthModuleConfig {
+  authProvider: 'clerk' | 'authjs' | 'supabase';
+}
 
 function buildIdentitySource(authProvider: string): RequestIdentitySource {
   switch (authProvider) {
@@ -24,21 +27,23 @@ function buildIdentitySource(authProvider: string): RequestIdentitySource {
   }
 }
 
-export const authModule: Module = {
-  register(container: Container) {
-    const identitySource = buildIdentitySource(env.AUTH_PROVIDER);
+export function createAuthModule(config: AuthModuleConfig): Module {
+  return {
+    register(container: Container) {
+      const identitySource = buildIdentitySource(config.authProvider);
 
-    container.register(AUTH.IDENTITY_SOURCE, identitySource);
-    container.register(
-      AUTH.IDENTITY_PROVIDER,
-      new RequestScopedIdentityProvider(identitySource),
-    );
-    container.register(
-      AUTH.TENANT_RESOLVER,
-      new RequestScopedTenantResolver(identitySource),
-    );
-    container.register(AUTH.USER_REPOSITORY, new ClerkUserRepository());
-  },
-};
+      container.register(AUTH.IDENTITY_SOURCE, identitySource);
+      container.register(
+        AUTH.IDENTITY_PROVIDER,
+        new RequestScopedIdentityProvider(identitySource),
+      );
+      container.register(
+        AUTH.TENANT_RESOLVER,
+        new RequestScopedTenantResolver(identitySource),
+      );
+      container.register(AUTH.USER_REPOSITORY, new ClerkUserRepository());
+    },
+  };
+}
 
 export { SystemIdentitySource };

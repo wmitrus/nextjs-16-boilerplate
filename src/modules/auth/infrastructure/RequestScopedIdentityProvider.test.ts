@@ -43,4 +43,32 @@ describe('RequestScopedIdentityProvider', () => {
 
     expect(identity).toEqual({ id: 'user_456', email: undefined });
   });
+
+  it('should map external user id to internal user id when mapper is configured', async () => {
+    const mapper = {
+      resolveOrCreateInternalUserId: vi
+        .fn()
+        .mockResolvedValue('00000000-0000-0000-0000-000000000123'),
+    };
+
+    const provider = new RequestScopedIdentityProvider(
+      makeSource({ userId: 'user_123', email: 'test@example.com' }),
+      {
+        mapper,
+        provider: 'clerk',
+      },
+    );
+
+    const identity = await provider.getCurrentIdentity();
+
+    expect(mapper.resolveOrCreateInternalUserId).toHaveBeenCalledWith({
+      provider: 'clerk',
+      externalUserId: 'user_123',
+      email: 'test@example.com',
+    });
+    expect(identity).toEqual({
+      id: '00000000-0000-0000-0000-000000000123',
+      email: 'test@example.com',
+    });
+  });
 });

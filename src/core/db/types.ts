@@ -5,6 +5,11 @@ export type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, never>>;
 export type DbProvider = 'drizzle' | 'prisma';
 export type DbDriver = 'pglite' | 'postgres';
 
+export interface DbRuntime {
+  db: DrizzleDb;
+  close?: () => Promise<void>;
+}
+
 export interface DbConfig {
   provider: DbProvider;
   driver: DbDriver;

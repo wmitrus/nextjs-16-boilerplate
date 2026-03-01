@@ -1,3 +1,7 @@
+export const INFRASTRUCTURE = {
+  DB: Symbol('Database'),
+};
+
 export const AUTH = {
   IDENTITY_SOURCE: Symbol('IdentitySource'),
   IDENTITY_PROVIDER: Symbol('IdentityProvider'),

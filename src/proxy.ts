@@ -10,7 +10,7 @@ import type {
 } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
-import { appContainer } from '@/core/runtime/bootstrap';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
@@ -81,7 +81,7 @@ export default clerkMiddleware(async (auth, request) => {
     },
   };
 
-  const requestContainer = appContainer.createChild();
+  const requestContainer = getAppContainer().createChild();
 
   requestContainer.register(AUTH.IDENTITY_SOURCE, requestIdentitySource);
   requestContainer.register(

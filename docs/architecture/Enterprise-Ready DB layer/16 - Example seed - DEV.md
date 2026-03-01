@@ -30,3 +30,5 @@ export async function seedDev(db: DrizzleDb) {
   });
 }
 ```
+
+Note: fixed IDs are acceptable for deterministic local DEV seeds. For isolated tests, prefer generated IDs per test case.

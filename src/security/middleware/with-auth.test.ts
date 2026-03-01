@@ -13,7 +13,7 @@ import type { UserRepository } from '@/core/contracts/user';
 
 import { withAuth } from './with-auth';
 
-import type { SecurityDependencies } from '@/security/core/security-dependencies';
+import type { NodeSecurityDependencies } from '@/security/core/security-dependencies';
 import {
   createMockRequest,
   createMockRouteContext,
@@ -38,7 +38,7 @@ describe('Auth Middleware', () => {
     can: vi.fn(),
   } as unknown as Mocked<AuthorizationService>;
 
-  const securityDependencies: SecurityDependencies = {
+  const securityDependencies: NodeSecurityDependencies = {
     identityProvider: mockIdentityProvider,
     tenantResolver: mockTenantResolver,
     authorizationService: mockAuthorizationService,

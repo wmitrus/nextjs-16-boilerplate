@@ -1,10 +1,10 @@
-# 10 - Executive Sign-Off: Modular Monolith (One-Pager)
+# 12 - Executive Sign-Off: Modular Monolith (One-Pager)
 
 ## Decision
 
 **Status: APPROVED FOR TEAM BASELINE**
 
-The architecture implementation on branch `feat/modular-monolith` is compliant with the defined Modular Monolith rules and is approved as the baseline for further implementation.
+The architecture implementation on branch `feat/drizzle` is compliant with the defined Modular Monolith rules and is approved as the baseline for further implementation.
 
 ---
 
@@ -62,17 +62,19 @@ Result: **No active implementation is breaking the Modular Monolith pattern.**
 Architecture intent is traceable to concrete runtime code via:
 
 - Diagram traceability annotations:
-  - `docs/architecture/01 - Global Dependency Rules.mmd`
-  - `docs/architecture/02 - Full Module Structure.mmd`
-  - `docs/architecture/03 - Authorization Flow.mmd`
-  - `docs/architecture/04 - Auth Provider Isolation.mmd`
-  - `docs/architecture/05 - Tenant Resolution Abstraction.mmd`
-  - `docs/architecture/06 - Ideal FInal Dependency Graph (strict).mmd`
-  - `docs/architecture/07 - Enterprise Grade Check Graph.mmd`
+  - `docs/architecture/01 - Global Dependency Rules.md`
+  - `docs/architecture/02 – Composition Root Architecture.md`
+  - `docs/architecture/03 – Request Lifecycle.md`
+  - `docs/architecture/04 – DB Ownership.md`
+  - `docs/architecture/05 – Authorization Flow.md`
+  - `docs/architecture/06 – Multi-Tenant SaaS Expansion Map.md`
+  - `docs/architecture/07 – Enterprise Clean Dependency Graph.md`
+  - `docs/architecture/08 – Infrastructure Layer Separation.md`
+  - `docs/architecture/09 – Final Enterprise Flow (FULL PICTURE).md`
 - Central matrix:
-  - `docs/architecture/08 - Modular Monolith - File Catalog.md` (section 9)
+  - `docs/architecture/10 - Modular Monolith - File Catalog.md` (section 9)
 - Full audit proof:
-  - `docs/architecture/09 - Final Modular Monolith Compliance Report.md`
+  - `docs/architecture/11 - Final Modular Monolith Compliance Report.md`
 
 ---
 

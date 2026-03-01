@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { auth } from '@clerk/nextjs/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClerkRequestIdentitySource } from './ClerkRequestIdentitySource';
 
@@ -10,6 +10,10 @@ vi.mock('@clerk/nextjs/server', () => ({
 }));
 
 describe('ClerkRequestIdentitySource', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('should return userId, orgId, and email from auth()', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: 'user_123',
@@ -54,5 +58,21 @@ describe('ClerkRequestIdentitySource', () => {
 
     expect(data.userId).toBe('user_123');
     expect(data.email).toBeUndefined();
+  });
+
+  it('memoizes auth() result per source instance', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      userId: 'user_123',
+      orgId: 'org_456',
+      sessionClaims: { email: 'test@example.com' },
+    } as unknown as Awaited<ReturnType<typeof auth>>);
+
+    const source = new ClerkRequestIdentitySource();
+
+    const first = await source.get();
+    const second = await source.get();
+
+    expect(first).toEqual(second);
+    expect(auth).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { resolveEdgeLogger } from '@/core/logger/di';
+import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import {
   classifyRequest,
@@ -44,7 +44,10 @@ export function withSecurity(
 
     // Skip security logic for static files to optimize performance
     if (ctx.isStaticFile) {
-      return NextResponse.next();
+      const response = NextResponse.next();
+      response.headers.set('x-correlation-id', ctx.correlationId);
+      response.headers.set('x-request-id', ctx.requestId);
+      return response;
     }
 
     // Execute the composed middleware pipeline

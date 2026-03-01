@@ -2,19 +2,18 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
-import type { AuthorizationService } from '@/core/contracts/authorization';
+import { AUTH } from '@/core/contracts';
 import type {
   IdentityProvider,
   RequestIdentitySource,
 } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
-import { getAppContainer } from '@/core/runtime/bootstrap';
+import { getEdgeContainer } from '@/core/runtime/bootstrap';
 
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
-import type { SecurityDependencies } from '@/security/core/security-dependencies';
+import type { EdgeSecurityDependencies } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 import { withAuth } from '@/security/middleware/with-auth';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
@@ -65,7 +64,7 @@ function createRequestIdentitySource(
 }
 
 function createRequestContainer(identitySource: RequestIdentitySource) {
-  const requestContainer = getAppContainer().createChild();
+  const requestContainer = getEdgeContainer();
 
   requestContainer.register(AUTH.IDENTITY_SOURCE, identitySource);
   requestContainer.register(
@@ -82,7 +81,7 @@ function createRequestContainer(identitySource: RequestIdentitySource) {
 
 function resolveSecurityDependencies(
   requestContainer: ReturnType<typeof createRequestContainer>,
-): SecurityDependencies {
+): EdgeSecurityDependencies {
   return {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
@@ -90,14 +89,11 @@ function resolveSecurityDependencies(
     tenantResolver: requestContainer.resolve<TenantResolver>(
       AUTH.TENANT_RESOLVER,
     ),
-    authorizationService: requestContainer.resolve<AuthorizationService>(
-      AUTHORIZATION.SERVICE,
-    ),
   };
 }
 
 function createSecurityPipeline(
-  securityDependencies: SecurityDependencies,
+  securityDependencies: EdgeSecurityDependencies,
   userRepository: UserRepository,
 ) {
   const appSecurityPipeline = composeMiddlewares(
@@ -108,6 +104,7 @@ function createSecurityPipeline(
         withAuth(next, {
           dependencies: securityDependencies,
           userRepository,
+          enforceResourceAuthorization: false,
         }),
     ],
     terminalHandler,

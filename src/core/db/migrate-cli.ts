@@ -43,8 +43,13 @@ async function main(): Promise<void> {
     );
   }
 
-  const db = createDb({ provider, driver, url });
-  await runMigrations(db, driver);
+  const dbRuntime = createDb({ provider, driver, url });
+
+  try {
+    await runMigrations(dbRuntime.db, driver);
+  } finally {
+    await dbRuntime.close?.();
+  }
 
   console.log(
     `[migrate-cli] Migrations applied using provider: ${provider}, driver: ${driver}`,

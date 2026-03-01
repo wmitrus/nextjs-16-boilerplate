@@ -66,6 +66,17 @@ If you need to choose one and are unsure, choose Node context with explicit `cre
 - Route authorization helper telemetry must pass runtime explicitly (`'edge' | 'node'`) into request-scoped context.
 - Current middleware path passes `'edge'`; if helper reuse is introduced in Node enforcement, pass `'node'` explicitly.
 
+## External auth provider mapping (implementation note)
+
+For provider integrations (Clerk/AuthJS/Supabase):
+
+- map external IDs to internal UUIDs in Node runtime (`provider + external id -> internal id`)
+- keep adapter contracts segregated:
+  - identity provider adapter consumes only user mapping method
+  - tenant resolver adapter consumes only tenant mapping method
+
+Do not couple adapters to a full mapper surface if they only use one capability.
+
 ## Minimal implementation examples
 
 ### Add middleware gate (Edge-safe)

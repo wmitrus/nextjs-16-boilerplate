@@ -1,11 +1,11 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import type { DbRuntime, DrizzleDb } from '../types';
+import type { DbRuntime } from '../types';
 
 export function createPostgres(url: string): DbRuntime {
   const client = postgres(url);
-  const db = drizzle(client) as unknown as DrizzleDb;
+  const db = drizzle(client);
 
   return {
     db,

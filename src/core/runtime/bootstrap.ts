@@ -20,7 +20,7 @@ export function createApp(config: AppConfig): Container {
   container.register(INFRASTRUCTURE.DB, db);
 
   container.registerModule(createAuthModule(config.auth));
-  container.registerModule(createAuthorizationModule());
+  container.registerModule(createAuthorizationModule({ db }));
 
   return container;
 }
@@ -39,4 +39,6 @@ function buildConfig(): AppConfig {
   };
 }
 
-export const appContainer: Container = createApp(buildConfig());
+export function getAppContainer(): Container {
+  return createApp(buildConfig());
+}

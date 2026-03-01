@@ -8,7 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { tenantsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
+import { tenantsReferenceTable } from '@/core/db/schema/references';
 
 export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'incomplete',
@@ -25,7 +25,7 @@ export const subscriptionsTable = pgTable(
     id: uuid('id').primaryKey(),
     tenantId: uuid('tenant_id')
       .notNull()
-      .references(() => tenantsTable.id, { onDelete: 'cascade' }),
+      .references(() => tenantsReferenceTable.id, { onDelete: 'cascade' }),
     provider: text('provider').notNull(),
     providerSubscriptionId: text('provider_subscription_id').notNull(),
     status: subscriptionStatusEnum('status').notNull(),

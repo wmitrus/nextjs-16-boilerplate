@@ -36,39 +36,69 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - `pnpm lint`: Run ESLint.
 - `pnpm typecheck`: Run full TypeScript typecheck.
 
+## Quick Start Testing
+
+- Unit tests: `pnpm test`
+- Integration tests: `pnpm test:integration`
+- DB tests (fast, in-memory PGLite): `pnpm test:db`
+- DB tests (local Postgres, Podman-first):
+
+  ```bash
+  pnpm db:local:up
+  pnpm db:migrate:local
+  pnpm test:db:local
+  pnpm db:local:down
+  ```
+
+- E2E tests: `pnpm e2e`
+
+CI equivalents:
+
+- DB tests in CI (Testcontainers): `pnpm test:db:ci`
+- E2E in CI: `pnpm e2e:ci`
+
+For the full testing matrix, config mapping, CI flow, and troubleshooting, see:
+
+- [docs/usage/03 - Testing Usage & DB Workflows.md](./docs/usage/03%20-%20Testing%20Usage%20%26%20DB%20Workflows.md)
+
 ## Database Migrations
 
-This project uses one universal migration command:
-
-```bash
-pnpm db:migrate
-```
-
-Target database is selected by environment variables:
-
-- **DEV (PGlite)**
-
-  ```bash
-  NODE_ENV=development pnpm db:migrate
-  ```
-
-- **TEST (PGlite)**
-
-  ```bash
-  NODE_ENV=test DATABASE_URL=file:./data/pglite-test pnpm db:migrate
-  ```
-
-- **PROD (Postgres / Supabase)**
-
-  ```bash
-  NODE_ENV=production DATABASE_URL=postgresql://... pnpm db:migrate
-  ```
+- `pnpm db:generate` → generate migration files (dev config)
+- `pnpm db:migrate:dev` → apply migrations to local PGLite
+- `pnpm db:migrate:prod` → apply migrations to Postgres using `DATABASE_URL`
 
 Rules:
 
-- Never run `db:generate` in production runtime.
-- Commit migrations to the repository.
+- Never run migrations automatically in production runtime.
+- Commit migration files to the repository.
 - Keep `DATABASE_URL` server-side only.
+
+## Local DB CI Test Mode (Podman-first)
+
+This repo defaults local compose operations to Podman.
+
+```bash
+pnpm db:local:up
+pnpm db:migrate:local
+pnpm test:db:local
+pnpm db:local:down
+```
+
+DB URL used by local DB tests:
+
+- `postgres://postgres:postgres@127.0.0.1:5433/app_test`
+
+Docker users can opt in with one env var:
+
+```bash
+DB_COMPOSE_ENGINE=docker pnpm db:local:up
+```
+
+Compose file selection is automatic (`compose.yml`, `podman-compose.yml`, `docker-compose.yml`) and can be overridden with:
+
+```bash
+DB_COMPOSE_FILE=podman-compose.yml pnpm db:local:up
+```
 
 ## Architecture PR Gate (Modular Monolith)
 

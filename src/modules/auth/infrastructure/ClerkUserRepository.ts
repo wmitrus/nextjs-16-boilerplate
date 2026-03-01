@@ -51,8 +51,11 @@ export class ClerkUserRepository implements UserRepository {
     complete: boolean,
   ): Promise<void> {
     const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+
     await client.users.updateUser(userId, {
       publicMetadata: {
+        ...toRecord(user.publicMetadata),
         onboardingComplete: complete,
       },
     });

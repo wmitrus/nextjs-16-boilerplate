@@ -41,6 +41,7 @@
     "db:generate": "drizzle-kit generate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:migrate:dev": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:migrate:prod": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
+    "db:migrate:cli": "tsx src/core/db/migrate-cli.ts",
     "db:migrate:local": "DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/app_test drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
     "db:local:up": "node scripts/compose-db-local.mjs up -d test-db",
     "db:local:down": "node scripts/compose-db-local.mjs down",

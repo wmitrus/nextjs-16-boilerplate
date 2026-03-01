@@ -43,8 +43,8 @@ console.log(`- Target: ${targetDisplay}`);
 export default defineConfig({
   dialect: 'postgresql',
   ...(!isProduction ? { driver: 'pglite' as const } : {}),
-  schema: './src/modules/authorization/infrastructure/drizzle/schema.ts',
-  out: './src/migrations',
+  schema: './src/modules/**/infrastructure/drizzle/schema.ts',
+  out: './src/core/db/migrations/generated',
   dbCredentials: {
     url: resolvedDatabaseUrl,
   },

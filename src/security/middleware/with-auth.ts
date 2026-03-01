@@ -43,6 +43,10 @@ type WithAuthOptions = WithAuthNodeOptions | WithAuthEdgeOptions;
 
 const TENANT_CONTEXT_REQUIRED_REDIRECT = '/onboarding';
 
+function isNodeMode(options: WithAuthOptions): options is WithAuthNodeOptions {
+  return 'userRepository' in options;
+}
+
 function resolveAuthorizationFacade(
   options: WithAuthOptions,
 ): AuthorizationFacade | null {
@@ -75,20 +79,6 @@ async function resolveOnboardingComplete(
 
   const user = await userRepository.findById(userId);
   return Boolean(user?.onboardingComplete);
-}
-
-async function resolveOnboardingCompleteForMode(
-  options: WithAuthOptions,
-  userId?: string,
-): Promise<boolean> {
-  if (options.enforceResourceAuthorization === false) {
-    return true;
-  }
-
-  return resolveOnboardingComplete(
-    (options as WithAuthNodeOptions).userRepository,
-    userId,
-  );
 }
 
 function redirectForMissingTenantContext(req: NextRequest): NextResponse {
@@ -170,6 +160,7 @@ async function authorizeRouteAccess(
     | ((identity: Identity) => Promise<TenantContext>)
     | undefined,
   authorization: AuthorizationFacade,
+  runtime: 'edge' | 'node',
 ): Promise<NextResponse | null> {
   if (ctx.isPublicRoute) {
     return null;
@@ -184,7 +175,7 @@ async function authorizeRouteAccess(
     tenantId: tenant.tenantId,
     correlationId: ctx.correlationId,
     requestId: ctx.requestId,
-    runtime: 'edge',
+    runtime,
     environment: env.NODE_ENV,
     metadata: {
       path: req.nextUrl.pathname,
@@ -251,10 +242,9 @@ export function withAuth(
 
     const identity = await resolveIdentity(options);
     const userId = identity?.id;
-    const onboardingComplete = await resolveOnboardingCompleteForMode(
-      options,
-      userId,
-    );
+    const onboardingComplete = isNodeMode(options)
+      ? await resolveOnboardingComplete(options.userRepository, userId)
+      : true;
 
     // 1. Redirect authenticated users away from auth routes (sign-in/sign-up)
     const authRouteRedirect = redirectAuthenticatedFromAuthRoute(
@@ -298,6 +288,7 @@ export function withAuth(
           options.dependencies,
           options.resolveTenant,
           authorization,
+          'edge',
         );
       } catch (error) {
         if (error instanceof MissingTenantContextError) {

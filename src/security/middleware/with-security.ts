@@ -8,11 +8,19 @@ import {
 } from '@/security/middleware/route-classification';
 import { withHeaders } from '@/security/middleware/with-headers';
 
-const logger = resolveEdgeLogger().child({
-  type: 'Security',
-  category: 'middleware',
-  module: 'with-security',
-});
+let _logger:
+  | ReturnType<ReturnType<typeof resolveEdgeLogger>['child']>
+  | undefined;
+
+function getLogger() {
+  if (_logger) return _logger;
+  _logger = resolveEdgeLogger().child({
+    type: 'Security',
+    category: 'middleware',
+    module: 'with-security',
+  });
+  return _logger;
+}
 
 /**
  * Main security middleware pipeline entry point.
@@ -29,8 +37,8 @@ export function withSecurity(
 ) {
   return async (request: NextRequest): Promise<NextResponse> => {
     const ctx = classifyRequest(request);
-    logger.debug(
-      { path: request.nextUrl.pathname },
+    getLogger().debug(
+      { path: request.nextUrl.pathname, correlationId: ctx.correlationId },
       'Security Middleware Processing',
     );
 
@@ -39,15 +47,13 @@ export function withSecurity(
       return NextResponse.next();
     }
 
-    const correlationId =
-      request.headers.get('x-correlation-id') || crypto.randomUUID();
-
     // Execute the composed middleware pipeline
     let response = await handler(request, ctx);
 
     // Apply Security Headers & Metadata
     response = withHeaders(request, response);
-    response.headers.set('x-correlation-id', correlationId);
+    response.headers.set('x-correlation-id', ctx.correlationId);
+    response.headers.set('x-request-id', ctx.requestId);
 
     return response;
   };

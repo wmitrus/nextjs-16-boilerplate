@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import { MissingTenantContextError } from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -134,5 +135,23 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user?.tenantId).toBe('org_abc');
+  });
+
+  it('should degrade to guest-like context when tenant is missing', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_without_org',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new MissingTenantContextError(),
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.correlationId).toBeDefined();
+    expect(context.requestId).toBeDefined();
   });
 });

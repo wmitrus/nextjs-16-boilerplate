@@ -1,4 +1,4 @@
-# 08 - Modular Monolith Architecture & File Catalog
+# 10 - Modular Monolith Architecture & File Catalog
 
 ## Purpose
 
@@ -309,6 +309,7 @@ This section documents each implemented runtime/support file (excluding test fil
 
 - `src/core/logger/index.ts` — logger public entry point.
 - `src/core/logger/di.ts` — logger resolver through DI (server/edge).
+- `src/core/logger/di-edge.ts` — edge-only logger resolver path.
 - `src/core/logger/server.ts` — server logger implementation.
 - `src/core/logger/edge.ts` — edge-runtime logger implementation.
 - `src/core/logger/browser.ts` — browser logger implementation.
@@ -325,8 +326,11 @@ This section documents each implemented runtime/support file (excluding test fil
 ### `modules/auth`
 
 - `src/modules/auth/index.ts` — registers the auth module in the DI container.
-- `src/modules/auth/infrastructure/ClerkIdentityProvider.ts` — Clerk-based identity provider adapter.
-- `src/modules/auth/infrastructure/ClerkTenantResolver.ts` — Clerk-based tenant mapping adapter.
+- `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts` — Clerk request identity source adapter.
+- `src/modules/auth/infrastructure/RequestScopedIdentityProvider.ts` — request-scoped identity provider adapter.
+- `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts` — request-scoped tenant resolver adapter.
+- `src/modules/auth/infrastructure/ExternalIdentityMapper.ts` — provider-agnostic external-to-internal ID mapping contract.
+- `src/modules/auth/infrastructure/drizzle/DrizzleExternalIdentityMapper.ts` — Drizzle-based external identity mapper implementation.
 - `src/modules/auth/infrastructure/ClerkUserRepository.ts` — Clerk-based user repository adapter.
 - `src/modules/auth/ui/HeaderAuthControls.tsx` — auth controls (sign-in/sign-up/user) for the header.
 - `src/modules/auth/ui/HeaderWithAuth.tsx` — composes neutral header with auth controls.
@@ -475,51 +479,48 @@ This section documents each implemented runtime/support file (excluding test fil
 
 The following mapping is the audit source of truth for architecture diagrams.
 
-### 9.1 `01 - Global Dependency Rules.mmd`
+### 9.1 `01 - Global Dependency Rules.md`
 
 - Layer anchors: `src/app/*`, `src/features/*`, `src/modules/*`, `src/security/*`, `src/shared/*`, `src/core/*`
-- Runtime enforcement anchor: `src/proxy.ts`
-- Composition anchor: `src/core/container/index.ts`
+- Direction gates: `src/core/contracts/*`, `src/core/container/index.ts`, `src/security/*` import constraints
+- Runtime policy boundary reference: `src/proxy.ts`, `src/core/runtime/edge.ts`, `src/core/runtime/bootstrap.ts`
 
-### 9.2 `02 - Full Module Structure.mmd`
+### 9.2 `02 – Composition Root Architecture.md`
 
-- Delivery anchors: `src/app/*`, `src/actions/*`, `src/proxy.ts`
-- Feature anchor: `src/features/security-showcase/*`
-- Module anchors: `src/modules/auth/*`, `src/modules/authorization/*`, `src/modules/user/*`
-- Cross-cutting anchors: `src/security/*`, `src/shared/*`
-- Core anchors: `src/core/contracts/*`, `src/core/container/*`, `src/core/env.ts`, `src/core/logger/*`, `src/core/error/*`
+- Node composition anchors: `src/core/runtime/bootstrap.ts`, `src/core/runtime/infrastructure.ts`
+- Edge composition anchors: `src/core/runtime/edge.ts`, `src/proxy.ts`
+- Module registration anchors: `src/modules/auth/index.ts`, `src/modules/authorization/index.ts`, `src/modules/auth/edge.ts`
+- Environment anchors: `src/core/env.ts`
 
-### 9.3 `03 - Authorization Flow.mmd`
+### 9.3 `03 – Request Lifecycle.md`
 
-- Request entry: `src/proxy.ts`
-- Middleware flow: `src/security/middleware/with-security.ts`, `src/security/middleware/with-auth.ts`
-- Security context assembly: `src/security/core/security-context.ts`, `src/security/core/security-dependencies.ts`
-- Decision facade: `src/security/core/authorization-facade.ts`
-- Provider/repository contracts: `src/core/contracts/identity.ts`, `src/core/contracts/user.ts`, `src/core/contracts/authorization.ts`
+- Edge request path: `src/proxy.ts`, `src/security/middleware/with-security.ts`, `src/security/middleware/with-auth.ts`
+- Node request path: `src/security/actions/secure-action.ts`, `src/security/core/security-context.ts`
+- Authorization path: `src/security/core/authorization-facade.ts`, `src/modules/authorization/domain/AuthorizationService.ts`
 
-### 9.4 `04 - Auth Provider Isolation.mmd`
+### 9.4 `04 – DB Ownership.md`
 
-- Provider adapter boundary: `src/modules/auth/infrastructure/ClerkIdentityProvider.ts`
-- Module registration boundary: `src/modules/auth/index.ts`
-- Contract boundary: `src/core/contracts/identity.ts`
-- Contract consumers: `src/security/core/security-context.ts`, `src/security/middleware/with-auth.ts`
+- DB runtime owner: `src/core/runtime/infrastructure.ts`, `src/core/db/create-db.ts`
+- Driver boundaries: `src/core/db/drivers/create-pglite.ts`, `src/core/db/drivers/create-postgres.ts`
+- Module schema anchors: `src/modules/auth/infrastructure/drizzle/schema.ts`, `src/modules/authorization/infrastructure/drizzle/schema.ts`, `src/modules/user/infrastructure/drizzle/schema.ts`, `src/modules/billing/infrastructure/drizzle/schema.ts`
 
-### 9.5 `05 - Tenant Resolution Abstraction.mmd`
+### 9.5 `05 – Authorization Flow.md`
 
 - Tenant contract: `src/core/contracts/tenancy.ts`
-- Provider adapter: `src/modules/auth/infrastructure/ClerkTenantResolver.ts`
-- Runtime tenant usage: `src/security/core/security-context.ts`, `src/security/middleware/with-auth.ts`
-- Authorization handoff: `src/security/core/authorization-facade.ts`
+- Edge auth gate: `src/security/middleware/with-auth.ts` (`enforceResourceAuthorization: false` in `src/proxy.ts`)
+- Runtime tenant usage: `src/security/core/security-context.ts`, `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts`
+- Node authorization handoff: `src/security/core/authorization-facade.ts`, `src/security/actions/secure-action.ts`
 
-### 9.6 `06 - Ideal FInal Dependency Graph (strict).mmd`
+### 9.6 `06 – Multi-Tenant SaaS Expansion Map.md`
 
-- Layer anchors: `src/app/*`, `src/features/*`, `src/modules/*`, `src/security/*`, `src/shared/*`, `src/core/*`
-- Composition/root anchors: `src/proxy.ts`, `src/core/container/index.ts`
+- External identity mapping anchors: `src/modules/auth/infrastructure/ExternalIdentityMapper.ts`, `src/modules/auth/infrastructure/drizzle/DrizzleExternalIdentityMapper.ts`
+- Mapping tables: `src/modules/auth/infrastructure/drizzle/schema.ts`
+- Tenant/member/policy anchors: `src/modules/authorization/infrastructure/drizzle/schema.ts`, `src/modules/authorization/domain/AuthorizationService.ts`
 
-### 9.7 `07 - Enterprise Grade Check Graph.mmd`
+### 9.7 `07 – Enterprise Clean Dependency Graph.md`
 
 - Provider isolation checks: `src/modules/auth/infrastructure/*`, `src/core/contracts/identity.ts`
-- Security runtime checks: `src/security/middleware/with-auth.ts`, `src/security/core/security-context.ts`
+- Security runtime checks: `src/security/middleware/with-auth.ts`, `src/security/core/security-context.ts`, `src/security/actions/secure-action.ts`
 - Authorization boundary checks: `src/security/core/authorization-facade.ts`, `src/core/contracts/authorization.ts`
 - Dependency direction checks: `src/core/contracts/*` vs `src/modules/*`
 
@@ -529,7 +530,7 @@ The following mapping is the audit source of truth for architecture diagrams.
 
 If you are new to this codebase, follow this order:
 
-1. Read architecture diagrams 01 → 07.
+1. Read architecture diagrams 01 → 09.
 2. Read sections 1–4 in this document.
 3. Inspect `core/contracts`, then `core/container`.
 4. Review `modules/auth` and `modules/authorization` to understand domain boundaries.

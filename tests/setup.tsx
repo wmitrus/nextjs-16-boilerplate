@@ -58,7 +58,6 @@ vi.mock('../src/core/runtime/bootstrap', async () => {
     createApp: vi.fn(() => container),
     getAppContainer: vi.fn(() => container),
     createEdgeRequestContainer: vi.fn(() => container),
-    getEdgeContainer: vi.fn(() => container),
   };
 });
 
@@ -83,7 +82,6 @@ vi.mock('../src/core/runtime/edge', async () => {
 
   return {
     createEdgeRequestContainer: vi.fn(() => container),
-    getEdgeContainer: vi.fn(() => container),
   };
 });
 

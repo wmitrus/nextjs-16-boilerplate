@@ -1,7 +1,8 @@
-Most important rules (which must not be broken)
-❌ No global \_db
-❌ No getDb()
-❌ Modules do not import DB directly
-❌ Env is not in the module
-❌ One common schema
-❌ Automatic migrations at runtime
+# Most important rules (must not be broken)
+
+❌ No global mutable DB singleton in feature/module code
+❌ No ad-hoc `getDb()` service locator
+❌ Modules must not bypass contracts with random DB access paths
+❌ Env parsing belongs to `src/core/env.ts`, not module internals
+❌ Do not collapse all module schemas into one shared ownership file
+❌ Never run automatic migrations in production runtime

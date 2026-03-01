@@ -3,7 +3,10 @@ import { NextResponse } from 'next/server';
 
 import { createAction } from '@/core/contracts/authorization';
 import type { Identity } from '@/core/contracts/identity';
-import type { TenantContext } from '@/core/contracts/tenancy';
+import {
+  MissingTenantContextError,
+  type TenantContext,
+} from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import { env } from '@/core/env';
 
@@ -153,7 +156,10 @@ export function withAuth(
           'Route access denied',
         );
       } catch (error) {
-        if (error instanceof AuthorizationError) {
+        if (
+          error instanceof AuthorizationError ||
+          error instanceof MissingTenantContextError
+        ) {
           if (ctx.isApi) {
             return NextResponse.json(
               {

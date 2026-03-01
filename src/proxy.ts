@@ -9,7 +9,7 @@ import type {
 } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
-import { getEdgeContainer } from '@/core/runtime/bootstrap';
+import { getEdgeContainer } from '@/core/runtime/edge';
 
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
@@ -66,14 +66,18 @@ function createRequestIdentitySource(
 function createRequestContainer(identitySource: RequestIdentitySource) {
   const requestContainer = getEdgeContainer();
 
-  requestContainer.register(AUTH.IDENTITY_SOURCE, identitySource);
+  requestContainer.register(AUTH.IDENTITY_SOURCE, identitySource, {
+    override: true,
+  });
   requestContainer.register(
     AUTH.IDENTITY_PROVIDER,
     new RequestScopedIdentityProvider(identitySource),
+    { override: true },
   );
   requestContainer.register(
     AUTH.TENANT_RESOLVER,
     new RequestScopedTenantResolver(identitySource),
+    { override: true },
   );
 
   return requestContainer;

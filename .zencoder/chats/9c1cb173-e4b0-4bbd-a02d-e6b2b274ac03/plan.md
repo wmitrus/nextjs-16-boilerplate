@@ -231,7 +231,7 @@ Phases 1–2 establish the foundation. Phases 3–4 wire the composition root. P
 
 ## Phase 11 – Enterprise Seed System
 
-### [ ] Step 11.1 – Create `src/modules/user/infrastructure/drizzle/seed.ts`
+### [x] Step 11.1 – Create `src/modules/user/infrastructure/drizzle/seed.ts`
 
 Module-level seed for users table.
 
@@ -240,7 +240,7 @@ Module-level seed for users table.
 - Fixed well-known UUIDs for idempotency
 - Upsert via `onConflictDoNothing()`
 
-### [ ] Step 11.2 – Create `src/modules/authorization/infrastructure/drizzle/seed.ts`
+### [x] Step 11.2 – Create `src/modules/authorization/infrastructure/drizzle/seed.ts`
 
 Module-level seed for authorization tables (tenants, roles, memberships, policies, tenantAttributes).
 
@@ -253,7 +253,7 @@ Module-level seed for authorization tables (tenants, roles, memberships, policie
 - TenantAttributes for both tenants
 - Upsert via `onConflictDoNothing()`
 
-### [ ] Step 11.3 – Create `src/modules/billing/infrastructure/drizzle/seed.ts`
+### [x] Step 11.3 – Create `src/modules/billing/infrastructure/drizzle/seed.ts`
 
 Module-level seed for subscriptions.
 
@@ -262,7 +262,7 @@ Module-level seed for subscriptions.
 - Active subscription per tenant (stripe provider)
 - Upsert via `onConflictDoNothing()`
 
-### [ ] Step 11.4 – Create `src/core/db/seed.ts`
+### [x] Step 11.4 – Create `src/core/db/seed.ts`
 
 Composition root for all seeds.
 
@@ -270,7 +270,7 @@ Composition root for all seeds.
 - `seedAll(db: DrizzleDb): Promise<SeedAllResult>`
 - Orchestrates in dependency order: users → authorization → billing
 
-### [ ] Step 11.5 – Create `scripts/db-seed.ts`
+### [x] Step 11.5 – Create `scripts/db-seed.ts`
 
 CLI entry point for running seeds.
 
@@ -279,10 +279,157 @@ CLI entry point for running seeds.
 - Calls `seedAll(db)` and logs structured output
 - Exits with code 1 on error
 
-### [ ] Step 11.6 – Update `package.json`
+### [x] Step 11.6 – Update `package.json`
 
 Add `db:seed` → `tsx scripts/db-seed.ts`
 
-### [ ] Step 11.7 – Run `pnpm typecheck` and `pnpm lint`
+### [x] Step 11.7 – Run `pnpm typecheck` and `pnpm lint`
+
+Both pass. ✅
 
 Both must pass.
+
+---
+
+## Phase 12 – DB Test Infrastructure (PGLite local + Testcontainers CI)
+
+### Drizzle config decision (documented)
+
+No `drizzle.test.ts` needed. Tests run migrations via `runMigrations(db, driver)` programmatically.
+
+- PGLite tests: `memory://` — never touches `./data/pglite`
+- Postgres CI tests: Testcontainers URL — never touches dev/prod
+- Zero env var reads inside test factory — explicit params only
+
+### [x] Step 12.1 – Install `@testcontainers/postgresql`
+
+`pnpm add -D @testcontainers/postgresql`
+
+### [x] Step 12.2 – Create `src/testing/db/create-test-db.ts`
+
+Shared test DB factory.
+
+- `TestDb` interface: `{ db: DrizzleDb; cleanup: () => Promise<void> }`
+- `createTestDb(driver?: DbDriver, url?: string): Promise<TestDb>`
+- PGLite path: creates `memory://` instance, runs migrations, cleanup = close pglite
+- Postgres path: connects to given URL, truncates all user tables, cleanup = truncate again (leave schema intact for next test)
+
+### [x] Step 12.3 – Create `tests/db/setup.postgres.ts`
+
+Testcontainers globalSetup for Vitest.
+
+- Starts `PostgreSqlContainer('postgres:16-alpine')`
+- Runs `runMigrations(db, 'postgres')` once
+- `provide('TEST_DATABASE_URL', container.getConnectionUri())`
+- teardown: `container.stop()`
+
+### [x] Step 12.4 – Create `vitest.db.config.ts`
+
+PGLite DB tests config.
+
+- `include: ['src/**/*.db.test.ts']`
+- `environment: 'node'`
+- No globalSetup (PGLite is in-process)
+- No setupFiles from unit test (no mocks — real DB)
+- `pool: 'threads'` (each thread gets own memory:// instance)
+
+### [x] Step 12.5 – Create `vitest.db.ci.config.ts`
+
+Testcontainers DB tests config.
+
+- Same `include: ['src/**/*.db.test.ts']`
+- `environment: 'node'`
+- `globalSetup: ['tests/db/setup.postgres.ts']`
+- `pool: 'forks', maxForks: 1` (sequential — shared Postgres DB, truncate between suites)
+
+### [x] Step 12.6 – Update `package.json`
+
+Add scripts:
+
+- `test:db` → `vitest run --config vitest.db.config.ts`
+- `test:db:ci` → `vitest run --config vitest.db.ci.config.ts`
+
+### [x] Step 12.7 – Create example `*.db.test.ts` files
+
+Two example tests co-located with repositories:
+
+- `src/modules/authorization/infrastructure/drizzle/DrizzlePolicyRepository.db.test.ts`
+- `src/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository.db.test.ts`
+
+Both work with PGLite (`pnpm test:db`) and Postgres CI (`pnpm test:db:ci`) — driver-agnostic via `createTestDb`.
+
+### [x] Step 12.8 – Run `pnpm typecheck` and `pnpm lint`
+
+Both pass. `pnpm test:db` → 9/9 ✅
+
+---
+
+## Phase 13 – CI Pipeline for DB Tests
+
+### [x] Step 13.1 – Fix connection leak in `tests/db/setup.postgres.ts`
+
+The migration postgres client is never closed. Fix: use `postgres()` directly,
+run migrations, then `client.end()`. Connection is released before tests start.
+
+### [x] Step 13.2 – Create `.github/workflows/db-tests.yml`
+
+GitHub Actions workflow for DB tests with Testcontainers.
+
+- `ubuntu-latest` (Docker pre-installed)
+- `TESTCONTAINERS_RYUK_DISABLED: "true"` (avoids Ryuk cleanup container issues in CI)
+- Pre-pull `postgres:16-alpine` to reduce test flakiness from slow Docker pulls
+- `pnpm test:db:ci`
+- Timeout: 15 minutes
+
+### [x] Step 13.3 – Run `pnpm typecheck` and `pnpm lint`
+
+Both pass. ✅
+
+---
+
+## Phase 14 – Local Podman Compose Pattern for DB CI Tests
+
+### [x] Step 14.1 – Create root `compose.yml` for local DB
+
+- Added `postgres:16-alpine` service for local DB tests
+- Host port `5433` mapped to container `5432` (avoids local conflicts)
+- Added health check via `pg_isready`
+- Added named volume for fast local re-runs
+
+### [x] Step 14.2 – Extend `resolveTestDb()` fallback behavior
+
+- Updated `src/testing/db/create-test-db.ts`
+- Driver detection now checks, in order:
+  1.  Vitest injected `TEST_DATABASE_URL` (CI/Testcontainers)
+  2.  `process.env.TEST_DATABASE_URL` (local Podman/Postgres)
+  3.  default in-memory PGLite
+
+### [x] Step 14.3 – Create `vitest.db.local.config.ts`
+
+- Added local DB config without `globalSetup`
+- Uses external running Postgres (from compose)
+- Kept include scope to `src/**/*.db.test.ts`
+- Uses `forks` + `fileParallelism: false` for shared DB safety
+
+### [x] Step 14.4 – Add local scripts in `package.json`
+
+- `db:migrate:local` — runs Drizzle migrations against local Postgres (`5433`)
+- `test:db:local` — runs DB tests with `TEST_DATABASE_URL` set to local Postgres
+
+### [x] Step 14.5 – Verify local flow end-to-end
+
+Expected local workflow:
+
+1. `podman compose up -d`
+2. `pnpm db:migrate:local`
+3. `pnpm test:db:local`
+
+Verified ✅ (`pnpm db:local:up`, `pnpm db:migrate:local`, `pnpm test:db:local`, `pnpm db:local:down`)
+
+### [x] Step 14.6 – Add project-local compose engine policy
+
+- Added `scripts/compose-db-local.mjs` as a project-level compose runner.
+- Default engine is `DB_COMPOSE_ENGINE=podman` (clean, predictable, no host-global changes).
+- Podman candidates are tried first (`podman-compose`, then `podman compose`).
+- Docker users can opt in with one change: `DB_COMPOSE_ENGINE=docker`.
+- `package.json` scripts `db:local:up` / `db:local:down` now route through this runner.

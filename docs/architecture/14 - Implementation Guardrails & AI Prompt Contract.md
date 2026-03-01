@@ -1,4 +1,4 @@
-# 12 - Implementation Guardrails & AI Prompt Contract
+# 14 - Implementation Guardrails & AI Prompt Contract
 
 ## Purpose
 
@@ -6,17 +6,20 @@ This is the **mandatory operating instruction** for all future design and implem
 
 It exists to prevent architecture drift and to protect the Modular Monolith baseline approved in:
 
-- [01 - Global Dependency Rules.mmd](./01%20-%20Global%20Dependency%20Rules.mmd)
-- [02 - Full Module Structure.mmd](./02%20-%20Full%20Module%20Structure.mmd)
-- [03 - Authorization Flow.mmd](./03%20-%20Authorization%20Flow.mmd)
-- [04 - Auth Provider Isolation.mmd](./04%20-%20Auth%20Provider%20Isolation.mmd)
-- [05 - Tenant Resolution Abstraction.mmd](./05%20-%20Tenant%20Resolution%20Abstraction.mmd)
-- [06 - Ideal FInal Dependency Graph (strict).mmd](./06%20-%20Ideal%20FInal%20Dependency%20Graph%20%28strict%29.mmd)
-- [07 - Enterprise Grade Check Graph.mmd](./07%20-%20Enterprise%20Grade%20Check%20Graph.mmd)
-- [08 - Modular Monolith - File Catalog.md](./08%20-%20Modular%20Monolith%20-%20File%20Catalog.md)
-- [09 - Final Modular Monolith Compliance Report.md](./09%20-%20Final%20Modular%20Monolith%20Compliance%20Report.md)
-- [10 - Executive Sign-Off - Modular Monolith.md](./10%20-%20Executive%20Sign-Off%20-%20Modular%20Monolith.md)
-- [11 - Development Commitment & Extension Contract.md](./11%20-%20Development%20Commitment%20%26%20Extension%20Contract.md)
+- [01 - Global Dependency Rules.md](./01%20-%20Global%20Dependency%20Rules.md)
+- [02 – Composition Root Architecture.md](./02%20%E2%80%93%20Composition%20Root%20Architecture.md)
+- [03 – Request Lifecycle.md](./03%20%E2%80%93%20Request%20Lifecycle.md)
+- [04 – DB Ownership.md](./04%20%E2%80%93%20DB%20Ownership.md)
+- [05 – Authorization Flow.md](./05%20%E2%80%93%20Authorization%20Flow.md)
+- [06 – Multi-Tenant SaaS Expansion Map.md](./06%20%E2%80%93%20Multi-Tenant%20SaaS%20Expansion%20Map.md)
+- [07 – Enterprise Clean Dependency Graph.md](./07%20%E2%80%93%20Enterprise%20Clean%20Dependency%20Graph.md)
+- [08 – Infrastructure Layer Separation.md](./08%20%E2%80%93%20Infrastructure%20Layer%20Separation.md)
+- [09 – Final Enterprise Flow (FULL PICTURE).md](./09%20%E2%80%93%20Final%20Enterprise%20Flow%20%28FULL%20PICTURE%29.md)
+- [10 - Modular Monolith - File Catalog.md](./10%20-%20Modular%20Monolith%20-%20File%20Catalog.md)
+- [11 - Final Modular Monolith Compliance Report.md](./11%20-%20Final%20Modular%20Monolith%20Compliance%20Report.md)
+- [12 - Executive Sign-Off - Modular Monolith.md](./12%20-%20Executive%20Sign-Off%20-%20Modular%20Monolith.md)
+- [13 - Development Commitment & Extension Contract.md](./13%20-%20Development%20Commitment%20%26%20Extension%20Contract.md)
+- [15 - Edge vs Node Composition Root Boundary.md](./15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md)
 
 ---
 
@@ -32,11 +35,11 @@ If context is missing, the task must stop and perform architecture context sync 
 
 Before any design/code work, read in this order:
 
-1. `12 - Implementation Guardrails & AI Prompt Contract.md` (this file)
-2. `10 - Executive Sign-Off - Modular Monolith.md`
-3. `11 - Development Commitment & Extension Contract.md`
-4. `08 - Modular Monolith - File Catalog.md`
-5. `01..07` diagrams
+1. `14 - Implementation Guardrails & AI Prompt Contract.md` (this file)
+2. `12 - Executive Sign-Off - Modular Monolith.md`
+3. `13 - Development Commitment & Extension Contract.md`
+4. `10 - Modular Monolith - File Catalog.md`
+5. `01..09` diagrams + `15 - Edge vs Node Composition Root Boundary.md`
 6. Relevant feature/domain docs for the target scope
 
 Output required before design begins:
@@ -169,7 +172,7 @@ Use this block as a standard prompt for any AI model/agent before design/coding:
 You are implementing in a strict Modular Monolith repository.
 
 Mandatory constraints:
-1) Read architecture docs 01..12 before proposing design.
+1) Read architecture docs 01..15 before proposing design.
 2) Preserve dependency direction:
    - app -> features/modules/security/shared/core
    - features -> modules/security/shared/core
@@ -197,7 +200,7 @@ If any rule is at risk, stop and redesign before coding.
 
 ## 6) Pre-design checklist (must be completed)
 
-- [ ] I read docs `01..12` and understand the baseline.
+- [ ] I read docs `01..15` and understand the baseline.
 - [ ] I identified affected layers and confirmed allowed dependency directions.
 - [ ] I confirmed where new code must live (and where it must not).
 - [ ] I identified whether a new contract/token is required.

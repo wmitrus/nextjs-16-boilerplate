@@ -3,14 +3,21 @@ import { PostgreSqlContainer } from 'testcontainers';
 import { createDb } from '@/core/db/create-db';
 
 let container;
+let dbRuntime;
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer().start();
 
-  db = createDb({
+  dbRuntime = createDb({
+    provider: 'drizzle',
     driver: 'postgres',
     url: container.getConnectionUri(),
   });
+});
+
+afterAll(async () => {
+  await dbRuntime?.close?.();
+  await container?.stop();
 });
 ```
 

@@ -1,0 +1,39 @@
+import { createDb } from '@/core/db/create-db';
+import { runMigrations } from '@/core/db/migrations/run-migrations';
+import type { DbDriver } from '@/core/db/types';
+
+function resolveDriver(): DbDriver {
+  const raw = process.env.DB_DRIVER?.trim();
+
+  if (raw === 'pglite' || raw === 'postgres') {
+    return raw;
+  }
+
+  return process.env.NODE_ENV === 'production' ? 'postgres' : 'pglite';
+}
+
+function resolveUrl(driver: DbDriver): string | undefined {
+  const url = process.env.DATABASE_URL?.trim();
+
+  if (driver === 'postgres' && !url) {
+    throw new Error('[migrate-cli] DATABASE_URL is required for postgres.');
+  }
+
+  return url;
+}
+
+async function main(): Promise<void> {
+  const driver = resolveDriver();
+  const url = resolveUrl(driver);
+
+  const db = createDb({ driver, url });
+  await runMigrations(db, driver);
+
+  console.log(`[migrate-cli] Migrations applied using driver: ${driver}`);
+}
+
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[migrate-cli] ${message}`);
+  process.exit(1);
+});

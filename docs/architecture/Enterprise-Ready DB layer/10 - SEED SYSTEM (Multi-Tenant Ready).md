@@ -1,10 +1,11 @@
 ## Structure
 
 ```bash
-core/db/seed/
-  seed-dev.ts
-  seed-test.ts
-  seed-factory.ts
+src/core/db/seed.ts
+scripts/db-seed.ts
+src/modules/authorization/infrastructure/drizzle/seed.ts
+src/modules/billing/infrastructure/drizzle/seed.ts
+src/modules/user/infrastructure/drizzle/seed.ts
 ```
 
 ## Seed per tenant:

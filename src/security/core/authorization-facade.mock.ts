@@ -4,12 +4,10 @@ import type * as authorizationFacade from './authorization-facade';
 
 export const mockAuthorizationCan = vi.fn();
 export const mockAuthorizationAuthorize = vi.fn();
-export const mockAuthorizationEnsureRequiredRole = vi.fn();
 
 export function resetAuthorizationFacadeMocks() {
   mockAuthorizationCan.mockReset();
   mockAuthorizationAuthorize.mockReset();
-  mockAuthorizationEnsureRequiredRole.mockReset();
 }
 
 vi.mock('./authorization-facade', async (importOriginal) => {
@@ -24,10 +22,6 @@ vi.mock('./authorization-facade', async (importOriginal) => {
 
       authorize(...args: unknown[]) {
         return mockAuthorizationAuthorize(...args);
-      }
-
-      ensureRequiredRole(...args: unknown[]) {
-        return mockAuthorizationEnsureRequiredRole(...args);
       }
     },
   };

@@ -15,19 +15,20 @@ It defines where security checks may run, where DB-backed authorization is allow
 
 ### Edge composition root
 
-- Entry point: `getEdgeContainer()`
+- Entry point: `createEdgeRequestContainer(config)`
 - Used by: `src/proxy.ts` middleware flow
 - Allowed dependencies:
   - identity provider
   - tenant resolver
-  - user repository (for onboarding checks)
 - Forbidden dependencies:
   - DB runtime
   - authorization service backed by Drizzle/Postgres/PGLite
 
 ### Node composition root
 
-- Entry point: `getAppContainer()`
+- Entry points:
+  - `getAppContainer()` (default env-driven helper)
+  - `createRequestContainer(config)` (preferred for tests and explicit profiles)
 - Used by: server actions, route handlers, server-only services
 - Allowed dependencies:
   - DB runtime via process-scope infrastructure
@@ -57,15 +58,16 @@ It defines where security checks may run, where DB-backed authorization is allow
 
 ## Required implementation rules
 
-1. `src/proxy.ts` must resolve dependencies from `getEdgeContainer()` only.
+1. `src/proxy.ts` must resolve dependencies from `createEdgeRequestContainer(config)` only.
 2. `withAuth` in middleware must run with `enforceResourceAuthorization: false`.
 3. No middleware code may resolve `AUTHORIZATION.SERVICE`.
 4. Resource-level authorization must be executed in Node flows (`secure-action`, route handlers, server-side orchestration).
 5. Process-scope DB runtime lifecycle remains centralized in `src/core/runtime/infrastructure.ts`.
+6. Request containers are ephemeral; DB runtime is process-scoped and shared.
 
 ## Forbidden patterns
 
-- Using `getAppContainer()` directly in middleware.
+- Using `getAppContainer()` or `createRequestContainer(config)` in middleware.
 - Importing or resolving `AUTHORIZATION.SERVICE` in Edge middleware composition.
 - Creating DB clients/pools per middleware request.
 - Moving policy decisions into `proxy.ts` to "save one server call".

@@ -5,7 +5,7 @@ import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { inject } from 'vitest';
 
-import { runMigrations } from '@/core/db/run-migrations';
+import { runMigrations } from '@/core/db/migrations/run-migrations';
 import type { DbDriver, DrizzleDb } from '@/core/db/types';
 
 export interface TestDb {

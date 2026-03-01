@@ -127,9 +127,9 @@ Imports `tenantsTable` from `authorization/schema.ts` for FK.
 
 Moved `./src/migrations/` → `./src/core/db/migrations/generated/`.
 
-### [ ] Step 7.3 – Verify migration diff is empty
+### [x] Step 7.3 – Verify migration diff is empty
 
-Run `pnpm db:generate` and confirm no new SQL is generated (table structures unchanged, only file locations moved).
+`pnpm db:generate` → "No schema changes, nothing to migrate" ✅ All 7 tables detected from split schema files.
 
 ---
 
@@ -162,28 +162,127 @@ Passed ✅
 
 Passed ✅
 
-### [ ] Step 9.3 – Run `pnpm test`
+### [x] Step 9.3 – Run `pnpm test`
 
-Unit tests to be verified.
+9 failed / 65 passed — failures are **pre-existing** (all `toBeInTheDocument` from missing `@testing-library/jest-dom` setup, unrelated to this refactor). ✅
 
-### [ ] Step 9.4 – Run `pnpm test:integration`
+### [x] Step 9.4 – Run `pnpm test:integration`
 
-Integration tests to be verified.
+1 failed / 11 passed — failure is **pre-existing** (same `toBeInTheDocument` issue), unrelated to this refactor. ✅
 
-### [ ] Step 9.5 – Run `pnpm skott:check:only` and `pnpm madge`
+### [x] Step 9.5 – Run `pnpm skott:check:only` and `pnpm madge`
 
-No circular dependencies check.
+✓ no circular dependencies found (both tools). ✅
 
-### [ ] Step 9.6 – Verify core has no module imports
+### [x] Step 9.6 – Verify core has no module imports
 
-Confirm `src/core/container/index.ts` has zero imports from `src/modules/*`.
+`src/core/container/index.ts` has zero imports from `src/modules/*`. ✅
+
+---
+
+## Phase 10 – Professional Migration Flow (DEV vs PROD vs CI)
+
+### [x] Step 10.1 – Create `src/core/db/migrations/config/drizzle.dev.ts`
+
+PGlite-only config. No env switching. Schema/out use cwd-relative paths (drizzle-kit resolves from cwd, not config file). ✅
+
+### [x] Step 10.2 – Create `src/core/db/migrations/config/drizzle.prod.ts`
+
+Postgres-only config. Throws at parse time if `DATABASE_URL` missing or not postgres://. ✅
+
+### [x] Step 10.3 – Create `src/core/db/run-migrations.ts`
+
+Programmatic `runMigrations(db, driver)` using dynamic import of the correct drizzle migrator. MIGRATIONS_FOLDER resolved via `import.meta.url`. ✅
+
+### [x] Step 10.4 – Replace `DB_PROVIDER` with `DB_DRIVER` in env schema
+
+- `src/core/env.ts`: `DB_DRIVER: z.enum(['pglite', 'postgres']).optional()`
+- `src/core/runtime/bootstrap.ts`: `env.DB_DRIVER ?? (env.NODE_ENV === 'production' ? 'postgres' : 'pglite')`
+- `src/testing/infrastructure/env.ts`: `DB_DRIVER: undefined`
+- `.env.example`: `DB_DRIVER=` with explanatory comment ✅
+
+### [x] Step 10.5 – Update `package.json` db scripts
+
+- `db:generate` → `--config=src/core/db/migrations/config/drizzle.dev.ts`
+- `db:migrate:dev` → `--config=src/core/db/migrations/config/drizzle.dev.ts`
+- `db:migrate:prod` → `--config=src/core/db/migrations/config/drizzle.prod.ts`
+- `db:studio` → `--config=src/core/db/migrations/config/drizzle.dev.ts`
+- Removed `db:migrate` (ambiguous) and `db:migrate:test` (CI uses programmatic `runMigrations`) ✅
+
+### [x] Step 10.6 – Delete `src/migrations/` (dead directory)
+
+Deleted. Only `src/core/db/migrations/generated/` remains. ✅
+
+### [x] Step 10.7 – Run `pnpm typecheck` and `pnpm lint`
+
+Both pass. `pnpm db:generate` verified — 7 tables, "No schema changes, nothing to migrate". ✅
 
 ---
 
 ## Execution Order
 
-Phase 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phase 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
 
-Phases 1–2 establish the foundation. Phases 3–4 wire the composition root. Phase 5 updates the entry point. Phase 6–7 fix schema ownership. Phase 8–9 verify everything.
+Phases 1–2 establish the foundation. Phases 3–4 wire the composition root. Phase 5 updates the entry point. Phase 6–7 fix schema ownership. Phase 8–9 verify everything. Phase 10 professionalizes migration flow. Phase 11 adds enterprise seed system.
 
 **Ask for confirmation before starting each phase.**
+
+---
+
+## Phase 11 – Enterprise Seed System
+
+### [ ] Step 11.1 – Create `src/modules/user/infrastructure/drizzle/seed.ts`
+
+Module-level seed for users table.
+
+- `UserSeedResult` interface with typed fixtures `{ alice, bob }`
+- `seedUsers(db: DrizzleDb): Promise<UserSeedResult>`
+- Fixed well-known UUIDs for idempotency
+- Upsert via `onConflictDoNothing()`
+
+### [ ] Step 11.2 – Create `src/modules/authorization/infrastructure/drizzle/seed.ts`
+
+Module-level seed for authorization tables (tenants, roles, memberships, policies, tenantAttributes).
+
+- `AuthSeedResult` interface with typed fixtures
+- `seedAuthorization(db: DrizzleDb, deps: { users: UserSeedResult }): Promise<AuthSeedResult>`
+- Two tenants: acme (enterprise plan) + globex (pro plan)
+- System roles per tenant: admin, member
+- Memberships: alice=acme:admin + globex:admin, bob=acme:member
+- Policies: admin=allow:\*, member=allow:read:users
+- TenantAttributes for both tenants
+- Upsert via `onConflictDoNothing()`
+
+### [ ] Step 11.3 – Create `src/modules/billing/infrastructure/drizzle/seed.ts`
+
+Module-level seed for subscriptions.
+
+- `BillingSeedResult` interface with typed fixtures
+- `seedBilling(db: DrizzleDb, deps: { tenants: AuthSeedResult['tenants'] }): Promise<BillingSeedResult>`
+- Active subscription per tenant (stripe provider)
+- Upsert via `onConflictDoNothing()`
+
+### [ ] Step 11.4 – Create `src/core/db/seed.ts`
+
+Composition root for all seeds.
+
+- `SeedAllResult` interface composing all module results
+- `seedAll(db: DrizzleDb): Promise<SeedAllResult>`
+- Orchestrates in dependency order: users → authorization → billing
+
+### [ ] Step 11.5 – Create `scripts/db-seed.ts`
+
+CLI entry point for running seeds.
+
+- Reads `DB_DRIVER` / `DATABASE_URL` from env
+- Creates db via `createDb`
+- Calls `seedAll(db)` and logs structured output
+- Exits with code 1 on error
+
+### [ ] Step 11.6 – Update `package.json`
+
+Add `db:seed` → `tsx scripts/db-seed.ts`
+
+### [ ] Step 11.7 – Run `pnpm typecheck` and `pnpm lint`
+
+Both must pass.

@@ -12,7 +12,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+import { usersReferenceTable } from '@/core/db/schema/references';
 
 export const contractTypeEnum = pgEnum('contract_type', [
   'standard',
@@ -51,7 +51,7 @@ export const membershipsTable = pgTable(
   {
     userId: uuid('user_id')
       .notNull()
-      .references(() => usersTable.id, { onDelete: 'cascade' }),
+      .references(() => usersReferenceTable.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenantsTable.id, { onDelete: 'cascade' }),

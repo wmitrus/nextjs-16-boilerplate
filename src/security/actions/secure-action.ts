@@ -6,6 +6,7 @@ import {
   type AuthorizationService,
   type ResourceContext,
 } from '@/core/contracts/authorization';
+import { MissingTenantContextError } from '@/core/contracts/tenancy';
 
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
@@ -62,12 +63,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
     | { status: 'unauthorized'; error: string }
     | { status: 'error'; error: string }
   > => {
-    const resolvedDependencies =
-      typeof dependencies === 'function' ? await dependencies() : dependencies;
-    const context = await resolvedDependencies.getSecurityContext();
-    const authorization: AuthorizationFacade = new AuthorizationFacade(
-      resolvedDependencies.authorizationService,
-    );
+    let context: SecurityContext | undefined;
     const effectiveResource: ResourceContext =
       resource ??
       ({
@@ -80,6 +76,15 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       createAction(resource?.type ?? 'system', handler.name || 'execute');
 
     try {
+      const resolvedDependencies =
+        typeof dependencies === 'function'
+          ? await dependencies()
+          : dependencies;
+      context = await resolvedDependencies.getSecurityContext();
+      const authorization: AuthorizationFacade = new AuthorizationFacade(
+        resolvedDependencies.authorizationService,
+      );
+
       // 1. Unified authorization check via central facade
       if (!context.user) {
         throw new AuthorizationError('Authentication required');
@@ -144,13 +149,15 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         error instanceof Error ? error.message : 'Internal Server Error';
 
       // 6. Audit Log (Failure)
-      await logActionAudit({
-        actionName,
-        input,
-        result: 'failure',
-        error: errorMessage,
-        context,
-      });
+      if (context) {
+        await logActionAudit({
+          actionName,
+          input,
+          result: 'failure',
+          error: errorMessage,
+          context,
+        });
+      }
 
       if (error instanceof z.ZodError) {
         return {
@@ -163,6 +170,13 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         return {
           status: 'unauthorized' as const,
           error: errorMessage,
+        };
+      }
+
+      if (error instanceof MissingTenantContextError) {
+        return {
+          status: 'unauthorized' as const,
+          error: 'Tenant context required',
         };
       }
 

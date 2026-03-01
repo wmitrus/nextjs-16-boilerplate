@@ -23,3 +23,9 @@ Detailed documentation for the features and configurations of this boilerplate:
 - [Dependency Upgrade Safety Policy](./usage/02%20-%20Dependency%20Upgrade%20Safety%20Policy.md)
 - [Testing Usage & DB Workflows](./usage/03%20-%20Testing%20Usage%20%26%20DB%20Workflows.md)
 - [Extending App Safely - Edge vs Node Authorization](./usage/04%20-%20Extending%20App%20Safely%20-%20Edge%20vs%20Node%20Authorization.md)
+
+## Getting Started Runbooks
+
+- [Runbooks Index](./getting-started/README.md)
+- [Local Quickstart - Single Tenant](./getting-started/01%20-%20Local%20Quickstart%20-%20Single%20Tenant.md)
+- [Verification Runbook - Security Showcase (Single Tenant)](<./getting-started/02%20-%20Verification%20Runbook%20-%20Security%20Showcase%20(Single%20Tenant).md>)

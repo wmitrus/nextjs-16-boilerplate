@@ -316,6 +316,24 @@ describe('Auth Middleware', () => {
     expect(mockHandler).toHaveBeenCalled();
   });
 
+  it('should skip onboarding repository lookups in edge mode when enforceResourceAuthorization is omitted', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({ path: '/dashboard' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+    });
+
+    await middleware(req, ctx);
+
+    expect(mockUserRepository.findById).not.toHaveBeenCalled();
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
   it('should redirect authenticated user to onboarding when tenant context is missing', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
     mockUserRepository.findById.mockResolvedValue({

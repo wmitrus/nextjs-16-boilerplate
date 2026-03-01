@@ -1,5 +1,5 @@
 import type { Container, Module } from '@/core/container';
-import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
+import { AUTHORIZATION } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db';
 
 import { DefaultAuthorizationService } from './domain/AuthorizationService';
@@ -9,11 +9,17 @@ import { DrizzlePolicyRepository } from './infrastructure/drizzle/DrizzlePolicyR
 import { DrizzleRoleRepository } from './infrastructure/drizzle/DrizzleRoleRepository';
 import { DrizzleTenantAttributesRepository } from './infrastructure/drizzle/DrizzleTenantAttributesRepository';
 
-export function createAuthorizationModule(): Module {
+export interface AuthorizationModuleDeps {
+  db: DrizzleDb;
+}
+
+export function createAuthorizationModule(
+  deps: AuthorizationModuleDeps,
+): Module {
+  const { db } = deps;
+
   return {
     register(container: Container) {
-      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-
       const policyRepository = new DrizzlePolicyRepository(db);
       const roleRepository = new DrizzleRoleRepository(db);
       const membershipRepository = new DrizzleMembershipRepository(db);

@@ -10,6 +10,18 @@ The security model is built on three main pillars:
 2.  **Layered Middleware Pipeline**: A composable request filtering system.
 3.  **Secure Action Wrapper**: A hardened interface for all server-side mutations.
 
+### 1.1 Runtime Boundary (Required Reading)
+
+Before extending middleware, auth flow, or authorization wiring, read these two documents:
+
+- Architecture source of truth: `docs/architecture/15 - Edge vs Node Composition Root Boundary.md`
+- Developer implementation playbook: `docs/usage/04 - Extending App Safely - Edge vs Node Authorization.md`
+
+This split is mandatory:
+
+- **Edge middleware** (`src/proxy.ts`) handles request-gate concerns only.
+- **Node runtime** handles DB-backed RBAC/ABAC authorization.
+
 ---
 
 ## 2. Security Context & Authorization

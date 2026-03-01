@@ -1,13 +1,13 @@
 ## DEV – PGLite
 
 ```bash
-DB_DRIVER=pglite pnpm drizzle-kit migrate --config=drizzle.dev.ts
+pnpm db:migrate:dev
 ```
 
 ## PROD – Supabase
 
 ```bash
-DATABASE_URL=postgres://... pnpm drizzle-kit migrate --config=drizzle.prod.ts
+DATABASE_URL=postgres://... pnpm db:migrate:prod
 ```
 
 > Always run migrations locally before deploying.

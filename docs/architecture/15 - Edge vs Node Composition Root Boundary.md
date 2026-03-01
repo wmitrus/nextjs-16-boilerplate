@@ -93,3 +93,18 @@ Any new security feature must first decide runtime placement:
 - If it is request-level gate/headers/rate/internal-key -> Edge middleware is valid.
 
 If uncertain, default to Node and keep middleware minimal.
+
+## External identity mapping rule
+
+When integrating external auth providers (Clerk/AuthJS/Supabase), keep mapping provider-agnostic and port-driven:
+
+- map `provider + external_user_id -> internal user UUID`
+- map `provider + external_tenant_id -> internal tenant UUID`
+
+Adapter contract rule (important):
+
+- `RequestScopedIdentityProvider` depends only on user mapping method.
+- `RequestScopedTenantResolver` depends only on tenant mapping method.
+- Do not force full mapper interfaces into adapters that use only one method.
+
+This preserves interface segregation, simplifies tests, and keeps modular boundaries clear.

@@ -9,7 +9,7 @@ import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
-import type { SecurityDependencies } from '@/security/core/security-dependencies';
+import type { NodeSecurityDependencies } from '@/security/core/security-dependencies';
 import { withAuth } from '@/security/middleware/with-auth';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
@@ -38,7 +38,7 @@ describe('Middleware Integration', () => {
     can: vi.fn(),
   } as unknown as Mocked<AuthorizationService>;
 
-  const securityDependencies: SecurityDependencies = {
+  const securityDependencies: NodeSecurityDependencies = {
     identityProvider: mockIdentityProvider,
     tenantResolver: mockTenantResolver,
     authorizationService: mockAuthorizationService,

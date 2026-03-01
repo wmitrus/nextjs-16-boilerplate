@@ -2,11 +2,11 @@
 
 import { z } from 'zod';
 
-import { createContainer } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import { appContainer } from '@/core/runtime/bootstrap';
 
 import { createSecureAction } from '@/security/actions/secure-action';
 import {
@@ -21,7 +21,7 @@ const updateSettingsSchema = z.object({
 });
 
 function createSecurityDependencies() {
-  const requestContainer = createContainer();
+  const requestContainer = appContainer.createChild();
   const securityContextDependencies: SecurityContextDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
@@ -40,10 +40,6 @@ function createSecurityDependencies() {
   };
 }
 
-/**
- * Example of a Secure Server Action.
- * Demonstrates: Zod validation, Auth requirement, Mutation Logging, and Replay Protection.
- */
 export const updateSecuritySettings = createSecureAction({
   schema: updateSettingsSchema,
   dependencies: createSecurityDependencies,

@@ -28,7 +28,9 @@ export function createApp(config: AppConfig): Container {
 function buildConfig(): AppConfig {
   return {
     db: {
-      driver: env.NODE_ENV === 'production' ? 'postgres' : 'pglite',
+      driver:
+        env.DB_DRIVER ??
+        (env.NODE_ENV === 'production' ? 'postgres' : 'pglite'),
       url: env.DATABASE_URL,
     },
     auth: {

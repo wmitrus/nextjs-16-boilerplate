@@ -110,6 +110,11 @@ Reference docs:
 - [Executive sign-off](./docs/architecture/10%20-%20Executive%20Sign-Off%20-%20Modular%20Monolith.md)
 - [Full compliance report](./docs/architecture/09%20-%20Final%20Modular%20Monolith%20Compliance%20Report.md)
 
+Runtime boundary docs (must-read for auth/middleware/authorization work):
+
+- [Edge vs Node Composition Root Boundary](./docs/architecture/15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md)
+- [Extending App Safely - Edge vs Node Authorization](./docs/usage/04%20-%20Extending%20App%20Safely%20-%20Edge%20vs%20Node%20Authorization.md)
+
 Copy-paste snippet for PR description:
 
 ```md

@@ -6,7 +6,7 @@ import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
-import { appContainer } from '@/core/runtime/bootstrap';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { createSecureAction } from '@/security/actions/secure-action';
 import {
@@ -21,7 +21,7 @@ const updateSettingsSchema = z.object({
 });
 
 function createSecurityDependencies() {
-  const requestContainer = appContainer.createChild();
+  const requestContainer = getAppContainer().createChild();
   const securityContextDependencies: SecurityContextDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,

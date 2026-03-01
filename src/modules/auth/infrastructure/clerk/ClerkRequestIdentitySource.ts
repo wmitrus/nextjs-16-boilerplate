@@ -6,16 +6,20 @@ import type {
 } from '@/core/contracts/identity';
 
 export class ClerkRequestIdentitySource implements RequestIdentitySource {
-  async get(): Promise<RequestIdentitySourceData> {
-    const { userId, orgId, sessionClaims } = await auth();
+  private cached?: Promise<RequestIdentitySourceData>;
 
-    return {
-      userId: userId ?? undefined,
-      orgId: orgId ?? undefined,
-      email:
-        typeof sessionClaims?.email === 'string'
-          ? sessionClaims.email
-          : undefined,
-    };
+  async get(): Promise<RequestIdentitySourceData> {
+    if (!this.cached) {
+      this.cached = auth().then(({ userId, orgId, sessionClaims }) => ({
+        userId: userId ?? undefined,
+        orgId: orgId ?? undefined,
+        email:
+          typeof sessionClaims?.email === 'string'
+            ? sessionClaims.email
+            : undefined,
+      }));
+    }
+
+    return this.cached;
   }
 }

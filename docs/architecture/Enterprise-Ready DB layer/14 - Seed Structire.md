@@ -1,4 +1,4 @@
-## Spec:
+# Seed structure (spec)
 
 > This is critical:
 
@@ -10,14 +10,14 @@
 - It should also create default policies.
 - Optionally, it can create plans/subscriptions. - must have for tests
 
+For test scenarios that validate billing or limits, include plans/subscriptions.
+
 ## Directory structure
 
 ```bash
-core/db/seed/
-  seed-dev.ts
-  seed-test.ts
-  factories/
-    tenant.factory.ts
-    user.factory.ts
-    role.factory.ts
+src/core/db/seed.ts
+scripts/db-seed.ts
+src/modules/authorization/infrastructure/drizzle/seed.ts
+src/modules/billing/infrastructure/drizzle/seed.ts
+src/modules/user/infrastructure/drizzle/seed.ts
 ```

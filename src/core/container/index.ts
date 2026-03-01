@@ -1,6 +1,3 @@
-import { authModule } from '@/modules/auth';
-import { authorizationModule } from '@/modules/authorization';
-
 export type RegistryKey = string | symbol;
 export type ServiceFactory<T> = (container: Container) => T;
 
@@ -27,10 +24,7 @@ export interface Module {
 export class Container {
   private services = new Map<RegistryKey, ServiceRegistration>();
 
-  constructor(
-    private onResolveMissing?: (container: Container) => void,
-    private parent?: Container,
-  ) {}
+  constructor(private parent?: Container) {}
 
   register<T>(key: RegistryKey, implementation: T): void {
     this.services.set(key, {
@@ -75,27 +69,6 @@ export class Container {
       return factory.factory(this) as T;
     }
 
-    if (this.onResolveMissing) {
-      this.onResolveMissing(this);
-      const resolvedAfterHook = this.services.get(key);
-      if (resolvedAfterHook) {
-        if (resolvedAfterHook.kind === 'value') {
-          return resolvedAfterHook.value as T;
-        }
-
-        const { factory } = resolvedAfterHook;
-        if (factory.singleton) {
-          if (factory.instance === undefined) {
-            factory.instance = factory.factory(this);
-          }
-
-          return factory.instance as T;
-        }
-
-        return factory.factory(this) as T;
-      }
-    }
-
     if (this.parent) {
       return this.parent.resolve<T>(key);
     }
@@ -108,24 +81,10 @@ export class Container {
   }
 
   createChild(): Container {
-    return new Container(undefined, this);
+    return new Container(this);
   }
 }
 
 export function createContainer(): Container {
-  const target = new Container();
-  registerCoreModules(target);
-  return target;
-}
-
-function registerCoreModules(target: Container): void {
-  target.registerModule(authModule);
-  target.registerModule(authorizationModule);
-}
-
-export const container = new Container(registerCoreModules);
-
-export function bootstrap() {
-  registerCoreModules(container);
-  return container;
+  return new Container();
 }

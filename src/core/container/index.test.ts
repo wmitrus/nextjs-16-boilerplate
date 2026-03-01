@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Container, createContainer, type Module } from './index';
 
@@ -36,16 +36,40 @@ describe('Container', () => {
     expect(container.resolve(KEY)).toBe(service);
   });
 
-  it('should overwrite implementation when registering with the same key', () => {
+  it('should throw on duplicate key without explicit override', () => {
+    const container = new Container();
+    const KEY = 'service';
+    const first = { id: 1 };
+
+    container.register(KEY, first);
+
+    expect(() => container.register(KEY, { id: 2 })).toThrow(
+      'Service already registered for key: service. Pass { override: true } to replace it.',
+    );
+  });
+
+  it('should overwrite implementation when override is explicit', () => {
     const container = new Container();
     const KEY = 'service';
     const first = { id: 1 };
     const second = { id: 2 };
 
     container.register(KEY, first);
-    container.register(KEY, second);
+    container.register(KEY, second, { override: true });
 
     expect(container.resolve(KEY)).toBe(second);
+  });
+
+  it('should cache singleton factory even when value is undefined', () => {
+    const container = new Container();
+    const KEY = Symbol('FactoryService');
+    const factory = vi.fn(() => undefined);
+
+    container.registerFactory(KEY, factory);
+
+    expect(container.resolve(KEY)).toBeUndefined();
+    expect(container.resolve(KEY)).toBeUndefined();
+    expect(factory).toHaveBeenCalledTimes(1);
   });
 
   it('should create a deterministic container with core modules registered', () => {

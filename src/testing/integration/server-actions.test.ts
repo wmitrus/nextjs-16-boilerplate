@@ -4,6 +4,7 @@ import type { Container } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import { MissingTenantContextError } from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -28,6 +29,7 @@ describe('Server Actions Integration', () => {
   let container: Container;
   let identityProvider: IdentityProvider;
   let authorizationService: AuthorizationService;
+  let tenantResolver: TenantResolver;
 
   const schema = z.object({
     name: z.string().min(3),
@@ -52,6 +54,7 @@ describe('Server Actions Integration', () => {
     authorizationService = container.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
+    tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
     resetClerkMocks();
     resetNextHeadersMocks();
     resetLoggerMocks();
@@ -65,7 +68,7 @@ describe('Server Actions Integration', () => {
 
   const getSecurityContextDependencies = (): SecurityContextDependencies => ({
     identityProvider,
-    tenantResolver: container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
+    tenantResolver,
   });
 
   const getSecureActionDependencies = () => ({
@@ -226,5 +229,28 @@ describe('Server Actions Integration', () => {
     const result = await action({ name: 'Zencoder' });
 
     expect(result.status).toBe('unauthorized');
+  });
+
+  it('should return unauthorized with tenant-context message when org context is missing', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new MissingTenantContextError(),
+    );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getSecureActionDependencies(),
+      handler: testHandler,
+    });
+
+    const result = await action({ name: 'Zencoder' });
+
+    expect(result.status).toBe('unauthorized');
+    if (result.status === 'unauthorized') {
+      expect(result.error).toBe('Tenant context required');
+    }
   });
 });

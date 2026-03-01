@@ -7,10 +7,6 @@ const DEFAULT_PGLITE_PATH = './data/pglite';
 const PGLITE_URL_PREFIX = 'pglite://';
 const FILE_URL_PREFIX = 'file:';
 
-export function clearPgliteRuntimeCache(): void {
-  return;
-}
-
 function resolvePglitePath(url?: string): string {
   if (!url?.trim()) return DEFAULT_PGLITE_PATH;
   const u = url.trim();

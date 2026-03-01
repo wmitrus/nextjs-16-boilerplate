@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { RequestIdentitySource } from '@/core/contracts/identity';
+import { MissingTenantContextError } from '@/core/contracts/tenancy';
 
 import { RequestScopedTenantResolver } from './RequestScopedTenantResolver';
 
@@ -23,20 +24,19 @@ describe('RequestScopedTenantResolver', () => {
     expect(context).toEqual({ tenantId: 'org_123', userId: 'user_123' });
   });
 
-  it('should fall back to identity.id when orgId is absent (personal workspace)', async () => {
+  it('should throw when orgId is absent', async () => {
     const resolver = new RequestScopedTenantResolver(makeSource({}));
-    const context = await resolver.resolve({ id: 'user_456' });
-
-    expect(context.tenantId).toBe('user_456');
-    expect(context.userId).toBe('user_456');
+    await expect(resolver.resolve({ id: 'user_456' })).rejects.toBeInstanceOf(
+      MissingTenantContextError,
+    );
   });
 
-  it('should fall back to identity.id when orgId is undefined (personal workspace)', async () => {
+  it('should throw when orgId is undefined', async () => {
     const resolver = new RequestScopedTenantResolver(
       makeSource({ orgId: undefined }),
     );
-    const context = await resolver.resolve({ id: 'user_789' });
-
-    expect(context.tenantId).toBe('user_789');
+    await expect(resolver.resolve({ id: 'user_789' })).rejects.toBeInstanceOf(
+      MissingTenantContextError,
+    );
   });
 });

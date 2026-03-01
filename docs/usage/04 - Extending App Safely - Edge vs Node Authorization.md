@@ -52,15 +52,19 @@ Required for:
 
 ## Composition APIs to use
 
-- Edge: `getEdgeContainer()`
-- Node: `getAppContainer()`
+- Edge: `createEdgeRequestContainer(config)`
+- Node:
+  - `getAppContainer()` for default env-driven setup
+  - `createRequestContainer(config)` for tests and explicit runtime profiles
 
-If you need to choose one and are unsure, choose `getAppContainer()` in Node context and keep middleware minimal.
+If you need to choose one and are unsure, choose Node context with explicit `createRequestContainer(config)` and keep middleware minimal.
 
 ## withAuth usage contract
 
 - Edge middleware must call `withAuth(..., { enforceResourceAuthorization: false })`.
 - Node flows keep resource authorization enabled by default.
+- Route authorization helper telemetry must pass runtime explicitly (`'edge' | 'node'`) into request-scoped context.
+- Current middleware path passes `'edge'`; if helper reuse is introduced in Node enforcement, pass `'node'` explicitly.
 
 ## Minimal implementation examples
 
@@ -91,6 +95,6 @@ If you need to choose one and are unsure, choose `getAppContainer()` in Node con
 - [ ] I chose runtime placement using the decision tree.
 - [ ] Middleware code does not resolve DB-backed authorization.
 - [ ] Node path contains resource-level authorization.
-- [ ] `getEdgeContainer()` is used only for Edge middleware composition.
-- [ ] `getAppContainer()` is used only in Node/server flows.
+- [ ] `createEdgeRequestContainer(config)` is used only for Edge middleware composition.
+- [ ] `getAppContainer()`/`createRequestContainer(config)` are used only in Node/server flows.
 - [ ] Relevant proxy/middleware/integration tests were updated.

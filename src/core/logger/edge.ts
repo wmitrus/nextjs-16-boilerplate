@@ -12,6 +12,14 @@ export function getEdgeLogger(): Logger {
   }
 
   const isServer = typeof window === 'undefined';
+  const vercelEnv =
+    typeof process !== 'undefined' ? process.env.VERCEL_ENV : undefined;
+  const revision =
+    typeof process !== 'undefined'
+      ? process.env.VERCEL_GITHUB_COMMIT_SHA
+      : undefined;
+  const nodeEnv =
+    typeof process !== 'undefined' ? process.env.NODE_ENV : undefined;
 
   const options: LoggerOptions = {
     level: isServer ? env.LOG_LEVEL : env.NEXT_PUBLIC_LOG_LEVEL || 'info',
@@ -23,10 +31,8 @@ export function getEdgeLogger(): Logger {
           : undefined,
     },
     base: {
-      env:
-        process.env.VERCEL_ENV ||
-        (isServer ? env.NODE_ENV : process.env.NODE_ENV),
-      revision: process.env.VERCEL_GITHUB_COMMIT_SHA,
+      env: vercelEnv || (isServer ? env.NODE_ENV : nodeEnv),
+      revision,
     },
   };
 

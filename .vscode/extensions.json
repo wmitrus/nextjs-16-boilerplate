@@ -1,0 +1,4 @@
+{
+  "recommendations": ["bierner.markdown-mermaid", "yzhang.markdown-all-in-one"],
+  "unwantedRecommendations": ["vstirbu.vscode-mermaid-preview"]
+}

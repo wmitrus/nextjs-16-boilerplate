@@ -35,8 +35,16 @@ export class Container {
 
   constructor(private parent?: Container) {}
 
+  has(key: RegistryKey): boolean {
+    if (this.services.has(key)) {
+      return true;
+    }
+
+    return this.parent?.has(key) ?? false;
+  }
+
   private assertCanRegister(key: RegistryKey, options?: RegistrationOptions) {
-    if (options?.override || !this.services.has(key)) {
+    if (options?.override || !this.has(key)) {
       return;
     }
 

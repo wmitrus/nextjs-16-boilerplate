@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
-import { container } from '@/core/container';
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
+import { appContainer } from '@/core/runtime/bootstrap';
 
 export default async function OnboardingLayout({
   children,
@@ -19,7 +19,7 @@ export default async function OnboardingLayout({
 }
 
 async function OnboardingGuard({ children }: { children: React.ReactNode }) {
-  const identityProvider = container.resolve<IdentityProvider>(
+  const identityProvider = appContainer.resolve<IdentityProvider>(
     AUTH.IDENTITY_PROVIDER,
   );
   const identity = await identityProvider.getCurrentIdentity();
@@ -28,10 +28,10 @@ async function OnboardingGuard({ children }: { children: React.ReactNode }) {
     redirect('/sign-in');
   }
 
-  const userRepository = container.resolve<UserRepository>(
+  const userRepository = appContainer.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
-  const user = await userRepository.findById(identity.id);
+  const user = await userRepository.findById(identity!.id);
   const onboardingComplete = user?.onboardingComplete;
 
   if (onboardingComplete === true) {

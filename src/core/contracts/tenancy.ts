@@ -1,6 +1,15 @@
 import type { Identity } from './identity';
 import type { SubjectId, TenantId } from './primitives';
 
+export class MissingTenantContextError extends Error {
+  constructor(
+    message = 'Missing tenant context (orgId) for authenticated user',
+  ) {
+    super(message);
+    this.name = 'MissingTenantContextError';
+  }
+}
+
 /**
  * TenantContext represents a specific tenant in a multi-tenant system.
  */

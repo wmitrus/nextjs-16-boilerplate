@@ -8,12 +8,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import type { TenantResolver } from '@/core/contracts/tenancy';
+import {
+  MissingTenantContextError,
+  type TenantResolver,
+} from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
 import { withAuth } from './with-auth';
 
-import type { NodeSecurityDependencies } from '@/security/core/security-dependencies';
+import type {
+  EdgeSecurityDependencies,
+  NodeSecurityDependencies,
+} from '@/security/core/security-dependencies';
 import {
   createMockRequest,
   createMockRouteContext,
@@ -42,6 +48,11 @@ describe('Auth Middleware', () => {
     identityProvider: mockIdentityProvider,
     tenantResolver: mockTenantResolver,
     authorizationService: mockAuthorizationService,
+  };
+
+  const edgeSecurityDependencies: EdgeSecurityDependencies = {
+    identityProvider: mockIdentityProvider,
+    tenantResolver: mockTenantResolver,
   };
 
   const mockHandler = vi
@@ -283,6 +294,77 @@ describe('Auth Middleware', () => {
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.code).toBe('UNAUTHORIZED');
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should skip onboarding repository lookups in edge mode', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({ path: '/dashboard' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      userRepository: mockUserRepository,
+      enforceResourceAuthorization: false,
+    });
+
+    await middleware(req, ctx);
+
+    expect(mockUserRepository.findById).not.toHaveBeenCalled();
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
+  it('should redirect authenticated user to onboarding when tenant context is missing', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+    mockTenantResolver.resolve.mockRejectedValue(
+      new MissingTenantContextError(),
+    );
+
+    const req = createMockRequest({ path: '/dashboard' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe(
+      'http://localhost/onboarding?reason=tenant-context-required',
+    );
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should return 409 JSON when tenant context is missing on API route', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+    mockTenantResolver.resolve.mockRejectedValue(
+      new MissingTenantContextError(),
+    );
+
+    const req = createMockRequest({ path: '/api/protected' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: true });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe('TENANT_CONTEXT_REQUIRED');
     expect(mockHandler).not.toHaveBeenCalled();
   });
 });

@@ -49,4 +49,26 @@ describe('ClerkUserRepository', () => {
       },
     });
   });
+
+  it('merges existing publicMetadata when updating onboarding status', async () => {
+    getUserMock.mockResolvedValue({
+      id: 'user_1',
+      publicMetadata: {
+        timezone: 'UTC',
+        targetLanguage: 'en',
+      },
+    });
+
+    const repository = new ClerkUserRepository();
+
+    await repository.updateOnboardingStatus('user_1', true);
+
+    expect(updateUserMock).toHaveBeenCalledWith('user_1', {
+      publicMetadata: {
+        timezone: 'UTC',
+        targetLanguage: 'en',
+        onboardingComplete: true,
+      },
+    });
+  });
 });

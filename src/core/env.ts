@@ -50,6 +50,7 @@ export const env = createEnv({
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
     AUTH_PROVIDER: z.enum(['clerk', 'authjs', 'supabase']).default('clerk'),
+    DB_PROVIDER: z.enum(['drizzle', 'prisma']).default('drizzle'),
     DATABASE_URL: z.string().optional(),
     DB_DRIVER: z.enum(['pglite', 'postgres']).optional(),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
@@ -117,6 +118,7 @@ export const env = createEnv({
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
     E2E_ENABLED: process.env.E2E_ENABLED,
     AUTH_PROVIDER: process.env.AUTH_PROVIDER,
+    DB_PROVIDER: process.env.DB_PROVIDER,
     DATABASE_URL: process.env.DATABASE_URL,
     DB_DRIVER: process.env.DB_DRIVER,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

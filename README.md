@@ -36,6 +36,40 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - `pnpm lint`: Run ESLint.
 - `pnpm typecheck`: Run full TypeScript typecheck.
 
+## Database Migrations
+
+This project uses one universal migration command:
+
+```bash
+pnpm db:migrate
+```
+
+Target database is selected by environment variables:
+
+- **DEV (PGlite)**
+
+  ```bash
+  NODE_ENV=development pnpm db:migrate
+  ```
+
+- **TEST (PGlite)**
+
+  ```bash
+  NODE_ENV=test DATABASE_URL=file:./data/pglite-test pnpm db:migrate
+  ```
+
+- **PROD (Postgres / Supabase)**
+
+  ```bash
+  NODE_ENV=production DATABASE_URL=postgresql://... pnpm db:migrate
+  ```
+
+Rules:
+
+- Never run `db:generate` in production runtime.
+- Commit migrations to the repository.
+- Keep `DATABASE_URL` server-side only.
+
 ## Architecture PR Gate (Modular Monolith)
 
 Use this in every architecture-sensitive PR to keep the baseline enforced.

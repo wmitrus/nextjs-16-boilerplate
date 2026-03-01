@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { z } from 'zod';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
+import { MissingTenantContextError } from '@/core/contracts/tenancy';
 
 import { logActionAudit } from './action-audit';
 import { validateReplayToken } from './action-replay';
@@ -136,5 +137,24 @@ describe('Secure Action Wrapper', () => {
     if (result.status === 'error') {
       expect(result.error).toBe('Internal Boom');
     }
+  });
+
+  it('should return unauthorized with tenant-context message when tenant is missing', async () => {
+    mockGetSecurityContext.mockRejectedValue(new MissingTenantContextError());
+
+    const handler = vi.fn();
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
+
+    const result = await action({ name: 'test' });
+
+    expect(result.status).toBe('unauthorized');
+    if (result.status === 'unauthorized') {
+      expect(result.error).toBe('Tenant context required');
+    }
+    expect(handler).not.toHaveBeenCalled();
   });
 });

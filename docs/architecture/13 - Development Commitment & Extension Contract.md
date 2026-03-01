@@ -1,16 +1,16 @@
-# 11 - Development Commitment & Extension Contract
+# 13 - Development Commitment & Extension Contract
 
 ## Document status
 
 **FINAL COMMITMENT (Team Baseline)**
 
-This document is the formal architectural commitment for continued system development on top of the Modular Monolith implementation in branch `feat/modular-monolith`.
+This document is the formal architectural commitment for continued system development on top of the Modular Monolith implementation in branch `feat/drizzle`.
 
 Related source documents:
 
-- `docs/architecture/09 - Final Modular Monolith Compliance Report.md`
-- `docs/architecture/10 - Executive Sign-Off - Modular Monolith.md`
-- `docs/architecture/08 - Modular Monolith - File Catalog.md`
+- `docs/architecture/11 - Final Modular Monolith Compliance Report.md`
+- `docs/architecture/12 - Executive Sign-Off - Modular Monolith.md`
+- `docs/architecture/10 - Modular Monolith - File Catalog.md`
 
 ---
 

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
-import { appContainer } from '@/core/runtime/bootstrap';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getSecurityContext } from './security-context';
 
@@ -23,10 +23,12 @@ describe('Security Context', () => {
   });
 
   beforeEach(() => {
-    identityProvider = appContainer.resolve<IdentityProvider>(
+    const container = getAppContainer();
+
+    identityProvider = container.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
     );
-    tenantResolver = appContainer.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
+    tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
     resetAllInfrastructureMocks();
     vi.clearAllMocks();
   });

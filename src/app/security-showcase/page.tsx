@@ -1,9 +1,9 @@
 import { headers } from 'next/headers';
 
-import { createContainer } from '@/core/container';
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import { appContainer } from '@/core/runtime/bootstrap';
 
 import { AdminOnlyExample } from '@/features/security-showcase/components/AdminOnlyExample';
 import { EnvDiagnosticsExample } from '@/features/security-showcase/components/EnvDiagnosticsExample';
@@ -24,7 +24,7 @@ export default async function SecurityShowcasePage() {
     cookieHeader.includes('__session=') ||
     cookieHeader.includes('__client_uat=');
 
-  const requestContainer = createContainer();
+  const requestContainer = appContainer.createChild();
   const securityContextDependencies: SecurityContextDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,

@@ -3,6 +3,10 @@ import { clerkClient } from '@clerk/nextjs/server';
 import type { SubjectId } from '@/core/contracts/primitives';
 import type { User, UserRepository } from '@/core/contracts/user';
 
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? { ...value } : {};
+}
+
 export class ClerkUserRepository implements UserRepository {
   async findById(userId: SubjectId): Promise<User | null> {
     try {
@@ -32,8 +36,13 @@ export class ClerkUserRepository implements UserRepository {
     },
   ): Promise<void> {
     const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+
     await client.users.updateUser(userId, {
-      publicMetadata: profile,
+      publicMetadata: {
+        ...toRecord(user.publicMetadata),
+        ...profile,
+      },
     });
   }
 

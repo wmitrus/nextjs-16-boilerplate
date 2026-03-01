@@ -1,23 +1,20 @@
-import { PGlite } from '@electric-sql/pglite';
-import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
-import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { createDb } from './create-db';
+import type { DrizzleDb } from './types';
 
-export type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, never>>;
+export type { DrizzleDb };
 
 let _db: DrizzleDb | undefined;
 
 export function getDb(): DrizzleDb {
   if (_db) return _db;
 
-  if (process.env.DATABASE_URL) {
-    _db = drizzlePostgres(
-      postgres(process.env.DATABASE_URL),
-    ) as unknown as DrizzleDb;
-  } else {
-    _db = drizzlePglite(new PGlite('.pglite')) as unknown as DrizzleDb;
-  }
+  const nodeEnv = process.env.NODE_ENV ?? 'development';
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+
+  _db = createDb({
+    driver: nodeEnv === 'production' ? 'postgres' : 'pglite',
+    url: databaseUrl,
+  });
 
   return _db;
 }

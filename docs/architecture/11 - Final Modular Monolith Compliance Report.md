@@ -1,13 +1,13 @@
-# 09 - Final Modular Monolith Compliance Report
+# 11 - Final Modular Monolith Compliance Report
 
 ## Status
 
 **Final verdict: PASS (no detected modular-monolith pattern breaks in audited scope).**
 
 - Repository: `wmitrus/nextjs-16-boilerplate`
-- Branch: `feat/modular-monolith`
+- Branch: `feat/drizzle`
 - Audit date: 2026-02-26
-- Architecture baseline: `docs/architecture/01..08`
+- Architecture baseline: `docs/architecture/01..10`
 
 ---
 
@@ -44,7 +44,7 @@ Audited implementation scope:
 
 Reference catalog for runtime/support files:
 
-- `docs/architecture/08 - Modular Monolith - File Catalog.md`
+- `docs/architecture/10 - Modular Monolith - File Catalog.md`
 
 ---
 
@@ -180,8 +180,9 @@ Security runtime accesses module capability through contracts/services, not dire
 Observed Clerk usage locations:
 
 - Adapter/domain boundary:
-  - `src/modules/auth/infrastructure/ClerkIdentityProvider.ts`
-  - `src/modules/auth/infrastructure/ClerkTenantResolver.ts`
+  - `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts`
+  - `src/modules/auth/infrastructure/RequestScopedIdentityProvider.ts`
+  - `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts`
   - `src/modules/auth/infrastructure/ClerkUserRepository.ts`
 - Framework delivery boundary:
   - `src/proxy.ts` (`clerkMiddleware`)
@@ -192,8 +193,9 @@ No evidence of Clerk leakage into core contracts or authorization domain core lo
 
 This aligns with:
 
-- `docs/architecture/04 - Auth Provider Isolation.mmd`
-- `docs/architecture/08 - Modular Monolith - File Catalog.md`
+- `docs/architecture/05 – Authorization Flow.md`
+- `docs/architecture/10 - Modular Monolith - File Catalog.md`
+- `docs/architecture/15 - Edge vs Node Composition Root Boundary.md`
 
 ---
 
@@ -209,9 +211,9 @@ Verified request-scoped composition and explicit dependency assembly at runtime 
 
 This implementation matches documented flow and boundaries in:
 
-- `docs/architecture/03 - Authorization Flow.mmd`
-- `docs/architecture/05 - Tenant Resolution Abstraction.mmd`
-- `docs/architecture/06 - Ideal FInal Dependency Graph (strict).mmd`
+- `docs/architecture/03 – Request Lifecycle.md`
+- `docs/architecture/05 – Authorization Flow.md`
+- `docs/architecture/15 - Edge vs Node Composition Root Boundary.md`
 
 ---
 
@@ -220,15 +222,20 @@ This implementation matches documented flow and boundaries in:
 Traceability is present at two levels:
 
 1. **Inline traceability markers** in architecture diagrams:
-   - `docs/architecture/01 - Global Dependency Rules.mmd`
-   - `docs/architecture/02 - Full Module Structure.mmd`
-   - `docs/architecture/03 - Authorization Flow.mmd`
-   - `docs/architecture/04 - Auth Provider Isolation.mmd`
-   - `docs/architecture/05 - Tenant Resolution Abstraction.mmd`
-   - `docs/architecture/06 - Ideal FInal Dependency Graph (strict).mmd`
-   - `docs/architecture/07 - Enterprise Grade Check Graph.mmd`
+
+- `docs/architecture/01 - Global Dependency Rules.md`
+- `docs/architecture/02 – Composition Root Architecture.md`
+- `docs/architecture/03 – Request Lifecycle.md`
+- `docs/architecture/04 – DB Ownership.md`
+- `docs/architecture/05 – Authorization Flow.md`
+- `docs/architecture/06 – Multi-Tenant SaaS Expansion Map.md`
+- `docs/architecture/07 – Enterprise Clean Dependency Graph.md`
+- `docs/architecture/08 – Infrastructure Layer Separation.md`
+- `docs/architecture/09 – Final Enterprise Flow (FULL PICTURE).md`
+
 2. **Central matrix** in:
-   - `docs/architecture/08 - Modular Monolith - File Catalog.md` (section 9)
+
+- `docs/architecture/10 - Modular Monolith - File Catalog.md` (section 9)
 
 This provides audit-grade cross-reference from architecture intent to concrete runtime files.
 

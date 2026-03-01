@@ -1,0 +1,20 @@
+flowchart TD
+
+ENV["Environment (env.ts)"]
+
+BOOTSTRAP["core/runtime/bootstrap.ts"]
+CREATEAPP["createApp(config)"]
+CONTAINER["Application Container (immutable)"]
+
+DB["createDb()"]
+AUTHMOD["createAuthModule(config)"]
+AUTHZMOD["createAuthorizationModule()"]
+
+ENV --> BOOTSTRAP
+BOOTSTRAP --> CREATEAPP
+
+CREATEAPP --> DB
+CREATEAPP --> AUTHMOD
+CREATEAPP --> AUTHZMOD
+
+CREATEAPP --> CONTAINER

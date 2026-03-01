@@ -1,0 +1,26 @@
+flowchart TD
+
+REQ["Request"]
+PROXY["proxy.ts"]
+
+CHILD["Request Container"]
+
+IDENTITYPROV["IdentityProvider (contract)"]
+TENANTRES["TenantResolver"]
+AUTHFACADE["AuthorizationFacade"]
+AUTHSERVICE["AuthorizationService"]
+POLICYENGINE["PolicyEngine"]
+
+DECISION{"Allow?"}
+
+REQ --> PROXY
+PROXY --> CHILD
+
+CHILD --> IDENTITYPROV
+CHILD --> TENANTRES
+
+CHILD --> AUTHFACADE
+AUTHFACADE --> AUTHSERVICE
+AUTHSERVICE --> POLICYENGINE
+
+POLICYENGINE --> DECISION

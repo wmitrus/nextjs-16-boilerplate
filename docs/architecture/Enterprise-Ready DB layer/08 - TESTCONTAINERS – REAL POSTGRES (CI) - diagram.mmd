@@ -1,0 +1,10 @@
+flowchart TD
+
+TEST["Vitest / E2E"]
+CONTAINER["Testcontainers Postgres"]
+CREATEDB["createDb({ driver: postgres })"]
+DRIZZLE["Drizzle"]
+
+TEST --> CONTAINER
+CONTAINER --> CREATEDB
+CREATEDB --> DRIZZLE

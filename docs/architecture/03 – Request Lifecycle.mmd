@@ -1,0 +1,25 @@
+flowchart TD
+
+REQ["Incoming HTTP Request"]
+PROXY["proxy.ts (Clerk middleware)"]
+
+APPC["Application Container"]
+CHILD["Request Child Container"]
+
+IDENTITY["CurrentIdentity"]
+REQCTX["RequestContext"]
+
+SECURITY["AuthorizationFacade"]
+DOMAIN["Domain Service"]
+RESPONSE["NextResponse"]
+
+REQ --> PROXY
+PROXY --> APPC
+APPC --> CHILD
+
+CHILD --> IDENTITY
+CHILD --> REQCTX
+
+CHILD --> SECURITY
+SECURITY --> DOMAIN
+DOMAIN --> RESPONSE

@@ -1,0 +1,11 @@
+flowchart LR
+
+POSTGRES["Postgres / Supabase"]
+PGLITE["PGLite"]
+TESTCONTAINERS["Testcontainers"]
+
+CREATEDB["createDb(config)"]
+
+POSTGRES --> CREATEDB
+PGLITE --> CREATEDB
+TESTCONTAINERS --> CREATEDB

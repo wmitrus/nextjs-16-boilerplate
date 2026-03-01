@@ -1,0 +1,23 @@
+flowchart TD
+
+CREATEAPP["createApp()"]
+CREATEDB["createDb(config)"]
+DB["Drizzle Instance"]
+
+AUTHMOD["modules/auth"]
+AUTHZMOD["modules/authorization"]
+USERMOD["modules/user"]
+BILLINGMOD["modules/billing (future)"]
+
+SCHEMA_AUTH["auth/schema.ts"]
+SCHEMA_AUTHZ["authorization/schema.ts"]
+SCHEMA_USER["user/schema.ts"]
+SCHEMA_BILLING["billing/schema.ts"]
+
+CREATEAPP --> CREATEDB
+CREATEDB --> DB
+
+AUTHMOD --> SCHEMA_AUTH
+AUTHZMOD --> SCHEMA_AUTHZ
+USERMOD --> SCHEMA_USER
+BILLINGMOD --> SCHEMA_BILLING

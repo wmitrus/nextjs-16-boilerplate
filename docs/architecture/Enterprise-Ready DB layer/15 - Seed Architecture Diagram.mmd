@@ -1,0 +1,18 @@
+flowchart TD
+
+SEED["Seed Runner"]
+TENANT["Create Tenant"]
+USER["Create User"]
+MEMBERSHIP["Create Membership"]
+ROLE["Create Role"]
+POLICY["Create Policy"]
+PLAN["Create Plan"]
+SUB["Create Subscription"]
+
+SEED --> TENANT
+TENANT --> USER
+USER --> MEMBERSHIP
+MEMBERSHIP --> ROLE
+ROLE --> POLICY
+TENANT --> PLAN
+PLAN --> SUB

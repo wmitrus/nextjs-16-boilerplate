@@ -1,32 +1,23 @@
 flowchart TD
-%% Traceability: src/app/**, src/features/**, src/modules/**, src/security/**, src/shared/**, src/core/**
-%% Runtime anchors: src/proxy.ts, src/core/container/index.ts, src/security/middleware/with-security.ts
+%% Enterprise Modular Monolith (Post-Refactor)
 
-APP["app/* (delivery)"]
+APP["app/* (Next delivery layer)"]
 FEATURES["features/*"]
 MODULES["modules/*"]
 SECURITY["security/*"]
-SHARED["shared/*"]
-CORE["core/* (contracts, container, env, logger)"]
+CORE["core/* (container, db, runtime, contracts)"]
 
 APP --> FEATURES
-APP --> MODULES
 APP --> SECURITY
-APP --> SHARED
 APP --> CORE
 
 FEATURES --> MODULES
 FEATURES --> SECURITY
-FEATURES --> SHARED
-FEATURES --> CORE
+
+SECURITY --> MODULES
+SECURITY --> CORE
 
 MODULES --> CORE
-MODULES --> SHARED
-
-SECURITY --> CORE
-SECURITY --> SHARED
-
-SHARED --> CORE
 
 CORE -. FORBIDDEN .-> MODULES
 CORE -. FORBIDDEN .-> SECURITY

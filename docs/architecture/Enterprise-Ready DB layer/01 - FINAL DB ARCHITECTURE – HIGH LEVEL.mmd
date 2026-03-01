@@ -1,0 +1,15 @@
+flowchart TD
+
+CONFIG["DbConfig"]
+CREATE["createDb(config)"]
+
+subgraph DRIVERS
+  PGLITE["PGLite Driver"]
+  POSTGRES["Postgres Driver"]
+end
+
+CREATE --> PGLITE
+CREATE --> POSTGRES
+
+PGLITE --> DB["Drizzle Instance"]
+POSTGRES --> DB

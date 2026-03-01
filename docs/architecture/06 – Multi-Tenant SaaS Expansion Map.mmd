@@ -1,0 +1,15 @@
+flowchart TD
+
+TENANT["Tenant"]
+MEMBERSHIP["Membership"]
+ROLE["Role (per tenant)"]
+FEATUREFLAG["FeatureFlag"]
+SUBSCRIPTION["Subscription"]
+PLAN["Plan"]
+
+TENANT --> MEMBERSHIP
+MEMBERSHIP --> ROLE
+
+TENANT --> FEATUREFLAG
+TENANT --> SUBSCRIPTION
+SUBSCRIPTION --> PLAN

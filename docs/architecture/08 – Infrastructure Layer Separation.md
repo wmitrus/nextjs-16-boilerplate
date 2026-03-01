@@ -3,18 +3,18 @@
 ```mermaid
 flowchart LR
 
-POSTGRES["Postgres"]
-PGLITE["PGLite"]
-TESTCONTAINERS["Testcontainers\n(test profile only)"]
+Postgres["Postgres"]
+Pglite["PGLite"]
+Testcontainers["Testcontainers\n(Test Profile Only)"]
 
-CREATEDB["createDb(config)"]
-POSTGRESDRV["createPostgres(url)"]
-PGLITEDRV["createPglite(url)"]
+DbFactory["DB Factory\ncreateDb(config)"]
+PostgresDriver["createPostgres(url)"]
+PgliteDriver["createPglite(url)"]
 
-POSTGRES --> POSTGRESDRV
-PGLITE --> PGLITEDRV
-POSTGRESDRV --> CREATEDB
-PGLITEDRV --> CREATEDB
+Postgres --> PostgresDriver
+Pglite --> PgliteDriver
+PostgresDriver --> DbFactory
+PgliteDriver --> DbFactory
 
-TESTCONTAINERS -. provides postgres url .-> POSTGRESDRV
+Testcontainers -. provides postgres URL .-> PostgresDriver
 ```

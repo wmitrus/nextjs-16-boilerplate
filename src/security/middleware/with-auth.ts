@@ -15,15 +15,44 @@ import {
   AuthorizationError,
 } from '@/security/core/authorization-facade';
 import { createRequestScopedContext } from '@/security/core/request-scoped-context';
-import type { SecurityDependencies } from '@/security/core/security-dependencies';
+import type {
+  EdgeSecurityDependencies,
+  NodeSecurityDependencies,
+  SecurityContextDependencies,
+} from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 
-type WithAuthOptions = {
-  dependencies: SecurityDependencies;
+type WithAuthBaseOptions = {
   userRepository: UserRepository;
   resolveIdentity?: () => Promise<Identity | null>;
   resolveTenant?: (identity: Identity) => Promise<TenantContext>;
 };
+
+type WithAuthNodeOptions = WithAuthBaseOptions & {
+  dependencies: NodeSecurityDependencies;
+  enforceResourceAuthorization?: true;
+};
+
+type WithAuthEdgeOptions = WithAuthBaseOptions & {
+  dependencies: EdgeSecurityDependencies;
+  enforceResourceAuthorization?: false;
+};
+
+type WithAuthOptions = WithAuthNodeOptions | WithAuthEdgeOptions;
+
+function resolveAuthorizationFacade(
+  options: WithAuthOptions,
+): AuthorizationFacade | null {
+  if (options.enforceResourceAuthorization === false) {
+    return null;
+  }
+
+  if (!('authorizationService' in options.dependencies)) {
+    return null;
+  }
+
+  return new AuthorizationFacade(options.dependencies.authorizationService);
+}
 
 async function resolveIdentity(
   options: WithAuthOptions,
@@ -112,16 +141,19 @@ async function authorizeRouteAccess(
   req: NextRequest,
   ctx: RouteContext,
   identity: Identity,
-  options: WithAuthOptions,
+  securityContextDependencies: SecurityContextDependencies,
+  resolveTenantOverride:
+    | ((identity: Identity) => Promise<TenantContext>)
+    | undefined,
   authorization: AuthorizationFacade,
 ): Promise<NextResponse | null> {
   if (ctx.isPublicRoute) {
     return null;
   }
 
-  const tenant = options.resolveTenant
-    ? await options.resolveTenant(identity)
-    : await options.dependencies.tenantResolver.resolve(identity);
+  const tenant = resolveTenantOverride
+    ? await resolveTenantOverride(identity)
+    : await securityContextDependencies.tenantResolver.resolve(identity);
 
   const correlationId =
     req.headers.get('x-correlation-id') ?? crypto.randomUUID();
@@ -185,8 +217,7 @@ export function withAuth(
   options: WithAuthOptions,
 ) {
   return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
-    const { authorizationService } = options.dependencies;
-    const authorization = new AuthorizationFacade(authorizationService);
+    const authorization = resolveAuthorizationFacade(options);
 
     // Internal API routes are handled by withInternalApiGuard and do not require session auth
     if (ctx.isInternalApi) {
@@ -238,9 +269,16 @@ export function withAuth(
     }
 
     // 4. Authorization check for authenticated non-public routes
-    if (identity && userId && !ctx.isPublicRoute) {
+    if (authorization && identity && userId && !ctx.isPublicRoute) {
       try {
-        await authorizeRouteAccess(req, ctx, identity, options, authorization);
+        await authorizeRouteAccess(
+          req,
+          ctx,
+          identity,
+          options.dependencies,
+          options.resolveTenant,
+          authorization,
+        );
       } catch (error) {
         if (
           error instanceof AuthorizationError ||

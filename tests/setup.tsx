@@ -55,8 +55,8 @@ vi.mock('../src/core/runtime/bootstrap', async () => {
   container.register(AUTHORIZATION.POLICY_REPOSITORY, {});
 
   return {
-    appContainer: container,
     createApp: vi.fn(() => container),
+    getAppContainer: vi.fn(() => container),
   };
 });
 

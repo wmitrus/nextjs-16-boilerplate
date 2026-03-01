@@ -1,14 +1,14 @@
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 
-import type { DrizzleDb } from '../types';
+import type { DbRuntime, DrizzleDb } from '../types';
 
 const DEFAULT_PGLITE_PATH = './data/pglite';
 const PGLITE_URL_PREFIX = 'pglite://';
 const FILE_URL_PREFIX = 'file:';
 const MEMORY_PGLITE_PATH = 'memory://';
 
-const cachedPgliteByPath = new Map<string, DrizzleDb>();
+const cachedPgliteByPath = new Map<string, DbRuntime>();
 
 function resolvePglitePath(url?: string): string {
   if (!url?.trim()) return DEFAULT_PGLITE_PATH;
@@ -22,11 +22,18 @@ function resolvePglitePath(url?: string): string {
   return u;
 }
 
-export function createPglite(url?: string): DrizzleDb {
+export function createPglite(url?: string): DbRuntime {
   const resolvedPath = resolvePglitePath(url);
 
   if (resolvedPath === MEMORY_PGLITE_PATH) {
-    return drizzle(new PGlite(resolvedPath)) as unknown as DrizzleDb;
+    const pglite = new PGlite(resolvedPath);
+    const db = drizzle(pglite) as unknown as DrizzleDb;
+    return {
+      db,
+      close: async () => {
+        await pglite.close();
+      },
+    };
   }
 
   const cachedDb = cachedPgliteByPath.get(resolvedPath);
@@ -34,7 +41,15 @@ export function createPglite(url?: string): DrizzleDb {
     return cachedDb;
   }
 
-  const db = drizzle(new PGlite(resolvedPath)) as unknown as DrizzleDb;
-  cachedPgliteByPath.set(resolvedPath, db);
-  return db;
+  const pglite = new PGlite(resolvedPath);
+  const db = drizzle(pglite) as unknown as DrizzleDb;
+  const runtime: DbRuntime = {
+    db,
+    close: async () => {
+      await pglite.close();
+    },
+  };
+
+  cachedPgliteByPath.set(resolvedPath, runtime);
+  return runtime;
 }

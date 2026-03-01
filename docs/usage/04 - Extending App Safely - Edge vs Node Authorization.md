@@ -74,6 +74,7 @@ For provider integrations (Clerk/AuthJS/Supabase):
 - keep adapter contracts segregated:
   - identity provider adapter consumes only user mapping method
   - tenant resolver adapter consumes only tenant mapping method
+- middleware/Edge must not run DB-backed resolve/create mapping
 
 Do not couple adapters to a full mapper surface if they only use one capability.
 

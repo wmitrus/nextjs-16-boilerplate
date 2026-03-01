@@ -16,8 +16,8 @@ Read and follow:
 
 - `docs/architecture/12 - Implementation Guardrails & AI Prompt Contract.md`
 - `docs/architecture/11 - Development Commitment & Extension Contract.md`
-- `docs/architecture/05 - Tenant Resolution Abstraction.mmd`
-- `docs/architecture/03 - Authorization Flow.mmd`
+- `docs/architecture/06 – Multi-Tenant SaaS Expansion Map.md`
+- `docs/architecture/05 – Authorization Flow.md`
 
 ### 1) Objective
 

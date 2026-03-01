@@ -15,7 +15,20 @@ Detailed documentation for the features and configurations of this boilerplate:
 
 ## Architecture Decisions
 
+- [Architecture Diagrams Index (01-09)](./architecture/01%20-%20Global%20Dependency%20Rules.md)
 - [Edge vs Node Composition Root Boundary](./architecture/15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md)
+
+## Architecture Diagrams (01-09)
+
+- [01 - Global Dependency Rules](./architecture/01%20-%20Global%20Dependency%20Rules.md)
+- [02 - Composition Root Architecture](./architecture/02%20%E2%80%93%20Composition%20Root%20Architecture.md)
+- [03 - Request Lifecycle](./architecture/03%20%E2%80%93%20Request%20Lifecycle.md)
+- [04 - DB Ownership](./architecture/04%20%E2%80%93%20DB%20Ownership.md)
+- [05 - Authorization Flow](./architecture/05%20%E2%80%93%20Authorization%20Flow.md)
+- [06 - Multi-Tenant SaaS Expansion Map](./architecture/06%20%E2%80%93%20Multi-Tenant%20SaaS%20Expansion%20Map.md)
+- [07 - Enterprise Clean Dependency Graph](./architecture/07%20%E2%80%93%20Enterprise%20Clean%20Dependency%20Graph.md)
+- [08 - Infrastructure Layer Separation](./architecture/08%20%E2%80%93%20Infrastructure%20Layer%20Separation.md)
+- [09 - Final Enterprise Flow (FULL PICTURE)](./architecture/09%20%E2%80%93%20Final%20Enterprise%20Flow%20%28FULL%20PICTURE%29.md)
 
 ## Usage & Operations
 

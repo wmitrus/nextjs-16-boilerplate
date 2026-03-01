@@ -10,6 +10,10 @@ const MEMORY_PGLITE_PATH = 'memory://';
 
 const cachedPgliteByPath = new Map<string, DbRuntime>();
 
+export function clearPgliteRuntimeCache(): void {
+  cachedPgliteByPath.clear();
+}
+
 function resolvePglitePath(url?: string): string {
   if (!url?.trim()) return DEFAULT_PGLITE_PATH;
   const u = url.trim();

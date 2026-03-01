@@ -1,8 +1,8 @@
 import { Container } from '@/core/container';
 import { INFRASTRUCTURE } from '@/core/contracts';
-import { createDb } from '@/core/db/create-db';
 import type { DbConfig } from '@/core/db/types';
 import { env } from '@/core/env';
+import { getInfrastructure } from '@/core/runtime/infrastructure';
 
 import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
@@ -42,14 +42,15 @@ function resolveDbDriver(): DbConfig['driver'] {
   );
 }
 
-export function createApp(config: AppConfig): Container {
+export function createRequestContainer(config: AppConfig): Container {
   const container = new Container();
 
-  const db = createDb(config.db);
-  container.register(INFRASTRUCTURE.DB, db);
+  const { dbRuntime } = getInfrastructure(config);
+
+  container.register(INFRASTRUCTURE.DB, dbRuntime.db);
 
   container.registerModule(createAuthModule(config.auth));
-  container.registerModule(createAuthorizationModule({ db }));
+  container.registerModule(createAuthorizationModule({ db: dbRuntime.db }));
 
   return container;
 }
@@ -68,5 +69,5 @@ function buildConfig(): AppConfig {
 }
 
 export function getAppContainer(): Container {
-  return createApp(buildConfig());
+  return createRequestContainer(buildConfig());
 }

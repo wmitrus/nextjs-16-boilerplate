@@ -1,5 +1,4 @@
 import { createDb } from '@/core/db/create-db';
-import { clearPgliteRuntimeCache } from '@/core/db/drivers/create-pglite';
 import type { DbConfig, DbRuntime } from '@/core/db/types';
 
 interface ProcessInfrastructure {
@@ -10,6 +9,10 @@ interface InfrastructureConfig {
   db: DbConfig;
 }
 
+// Process scope contract:
+// - dbRuntime is initialized once per process
+// - shared across request containers
+// - reset only via closeInfrastructure() (or process shutdown hooks)
 let cachedInfrastructure: ProcessInfrastructure | null = null;
 let shutdownHooksRegistered = false;
 
@@ -48,6 +51,7 @@ function registerShutdownHooks(): void {
 export function getInfrastructure(
   config: InfrastructureConfig,
 ): ProcessInfrastructure {
+  // Idempotent process-scope initialization.
   registerShutdownHooks();
 
   if (cachedInfrastructure) {
@@ -64,9 +68,9 @@ export function getInfrastructure(
 }
 
 export async function closeInfrastructure(): Promise<void> {
+  // Explicit reset point for tests and graceful shutdown paths.
   const activeInfrastructure = cachedInfrastructure;
   cachedInfrastructure = null;
 
   await activeInfrastructure?.dbRuntime.close?.();
-  clearPgliteRuntimeCache();
 }

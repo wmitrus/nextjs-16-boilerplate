@@ -3,20 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DbRuntime } from '@/core/db/types';
 
 const createDbMock = vi.hoisted(() => vi.fn());
-const clearPgliteRuntimeCacheMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/core/db/create-db', () => ({
   createDb: createDbMock,
 }));
 
-vi.mock('@/core/db/drivers/create-pglite', () => ({
-  clearPgliteRuntimeCache: clearPgliteRuntimeCacheMock,
-}));
-
 describe('runtime infrastructure process scope', () => {
   beforeEach(() => {
     createDbMock.mockReset();
-    clearPgliteRuntimeCacheMock.mockReset();
   });
 
   afterEach(async () => {
@@ -80,17 +74,8 @@ describe('runtime infrastructure process scope', () => {
     const second = getInfrastructure(config);
 
     expect(close).toHaveBeenCalledTimes(1);
-    expect(clearPgliteRuntimeCacheMock).toHaveBeenCalledTimes(1);
     expect(first.dbRuntime).toBe(firstRuntime);
     expect(second.dbRuntime).toBe(secondRuntime);
     expect(createDbMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('clears pglite cache even when no runtime is active', async () => {
-    const { closeInfrastructure } = await import('./infrastructure');
-
-    await closeInfrastructure();
-
-    expect(clearPgliteRuntimeCacheMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -4,7 +4,7 @@ import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
 import { resolveServerLogger } from '@/core/logger/di';
-import { appContainer } from '@/core/runtime/bootstrap';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 const logger = resolveServerLogger().child({
   type: 'API',
@@ -13,7 +13,9 @@ const logger = resolveServerLogger().child({
 });
 
 export const completeOnboarding = async (formData: FormData) => {
-  const identityProvider = appContainer.resolve<IdentityProvider>(
+  const container = getAppContainer();
+
+  const identityProvider = container.resolve<IdentityProvider>(
     AUTH.IDENTITY_PROVIDER,
   );
   const identity = await identityProvider.getCurrentIdentity();
@@ -40,7 +42,7 @@ export const completeOnboarding = async (formData: FormData) => {
     return { error: 'Missing required fields' };
   }
 
-  const userRepository = appContainer.resolve<UserRepository>(
+  const userRepository = container.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
 

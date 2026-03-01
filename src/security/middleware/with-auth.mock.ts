@@ -8,7 +8,10 @@ import type { UserRepository } from '@/core/contracts/user';
 
 import type { RouteContext } from './route-classification';
 
-import type { SecurityDependencies } from '@/security/core/security-dependencies';
+import type {
+  EdgeSecurityDependencies,
+  NodeSecurityDependencies,
+} from '@/security/core/security-dependencies';
 
 export const mockWithAuth = vi.fn<
   (req: NextRequest, ctx: RouteContext) => Promise<NextResponse | null>
@@ -24,8 +27,9 @@ vi.mock('./with-auth', () => ({
     (
       _handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
       _options: {
-        dependencies: SecurityDependencies;
+        dependencies: EdgeSecurityDependencies | NodeSecurityDependencies;
         userRepository: UserRepository;
+        enforceResourceAuthorization?: boolean;
         resolveIdentity?: () => Promise<Identity | null>;
         resolveTenant?: (identity: Identity) => Promise<TenantContext>;
       },

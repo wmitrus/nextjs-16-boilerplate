@@ -1,6 +1,16 @@
 import { createDb } from '@/core/db/create-db';
 import { runMigrations } from '@/core/db/migrations/run-migrations';
-import type { DbDriver } from '@/core/db/types';
+import type { DbDriver, DbProvider } from '@/core/db/types';
+
+function resolveProvider(): DbProvider {
+  const raw = process.env.DB_PROVIDER?.trim();
+
+  if (raw === 'drizzle' || raw === 'prisma') {
+    return raw;
+  }
+
+  return 'drizzle';
+}
 
 function resolveDriver(): DbDriver {
   const raw = process.env.DB_DRIVER?.trim();
@@ -23,13 +33,22 @@ function resolveUrl(driver: DbDriver): string | undefined {
 }
 
 async function main(): Promise<void> {
+  const provider = resolveProvider();
   const driver = resolveDriver();
   const url = resolveUrl(driver);
 
-  const db = createDb({ driver, url });
+  if (provider === 'prisma') {
+    throw new Error(
+      '[migrate-cli] DB_PROVIDER=prisma is configured, but Prisma migration provider is not implemented yet.',
+    );
+  }
+
+  const db = createDb({ provider, driver, url });
   await runMigrations(db, driver);
 
-  console.log(`[migrate-cli] Migrations applied using driver: ${driver}`);
+  console.log(
+    `[migrate-cli] Migrations applied using provider: ${provider}, driver: ${driver}`,
+  );
 }
 
 main().catch((error: unknown) => {

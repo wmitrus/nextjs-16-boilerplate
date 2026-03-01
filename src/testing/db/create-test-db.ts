@@ -35,6 +35,8 @@ export async function createTestDb(
  *
  * - If `TEST_DATABASE_URL` was provided by globalSetup (Testcontainers CI),
  *   uses `postgres` with that URL.
+ * - If `TEST_DATABASE_URL` is set in process env (local Podman/Postgres),
+ *   uses `postgres` with that URL.
  * - Otherwise defaults to in-memory `pglite`.
  *
  * Use this in `*.db.test.ts` files to make them driver-agnostic.
@@ -55,6 +57,11 @@ export async function resolveTestDb(
   const injectedUrl = inject('TEST_DATABASE_URL') as string | undefined;
   if (injectedUrl) {
     return createDbByDriver('postgres', injectedUrl);
+  }
+
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return createDbByDriver('postgres', envUrl);
   }
 
   return createDbByDriver('pglite', undefined);

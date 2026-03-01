@@ -129,6 +129,21 @@ Implication:
 
 For first-time setup, treat this as a data-mapping task, not an auth-runtime bug.
 
+## G) Identity mapping expectation (post-refactor)
+
+External provider IDs are resolved to internal UUIDs through provider-agnostic mapping.
+
+Important runtime boundary:
+
+- mapping resolve/create is Node-only
+- Edge middleware does not perform DB-backed mapping
+
+If you see controlled `unauthorized` due to subject mismatch, verify identity mapping data first, then role/policy data.
+
+Reference:
+
+- [Edge vs Node Composition Root Boundary](../architecture/15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md#external-identity-mapping-flow)
+
 ---
 
 ## F) What to capture when reporting setup issues

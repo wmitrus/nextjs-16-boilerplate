@@ -57,6 +57,33 @@ vi.mock('../src/core/runtime/bootstrap', async () => {
   return {
     createApp: vi.fn(() => container),
     getAppContainer: vi.fn(() => container),
+    createEdgeRequestContainer: vi.fn(() => container),
+    getEdgeContainer: vi.fn(() => container),
+  };
+});
+
+vi.mock('../src/core/runtime/edge', async () => {
+  const { Container } = await import('../src/core/container');
+
+  const container = new Container();
+  container.register(AUTH.IDENTITY_PROVIDER, {
+    getCurrentIdentity: vi.fn().mockResolvedValue(null),
+  });
+  container.register(AUTH.TENANT_RESOLVER, {
+    resolve: vi.fn().mockResolvedValue({
+      tenantId: 'test-tenant',
+      userId: 'test-user',
+    }),
+  });
+  container.register(AUTH.USER_REPOSITORY, {
+    findById: vi.fn().mockResolvedValue(null),
+    updateOnboardingStatus: vi.fn(),
+    updateProfile: vi.fn(),
+  });
+
+  return {
+    createEdgeRequestContainer: vi.fn(() => container),
+    getEdgeContainer: vi.fn(() => container),
   };
 });
 

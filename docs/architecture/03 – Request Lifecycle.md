@@ -3,33 +3,25 @@
 ```mermaid
 flowchart TD
 
-REQ["Incoming HTTP Request"]
-PROXY["proxy.ts\nclerkMiddleware + withSecurity pipeline"]
+Req["HTTP Request"]
+Proxy["Proxy Pipeline\n(Clerk + Security)"]
 
-EDGEC["Edge request container\ncreateEdgeRequestContainer()"]
-EDGESEC["Edge gates\ninternal API + rate limit + auth gate"]
-NEXT["NextResponse.next()"]
+EdgeC["Edge Request Container"]
+EdgeGates["Edge Gates\nInternal API + Rate Limit + Auth Gate"]
+Pass["Pass-through"]
 
-NODEENTRY["Server Action / Route Handler"]
-NODEC["Node request container\ngetAppContainer() or createRequestContainer()"]
+NodeEntry["Server Action / Route Handler"]
+NodeC["Node Request Container"]
 
-CTX["createSecurityContext()"]
-AUTHZ["AuthorizationFacade -> AuthorizationService"]
-POLICY["PolicyEngine + repositories"]
-DOMAIN["Domain service / handler"]
-RESPONSE["NextResponse"]
+Ctx["Security Context"]
+Authz["Authorization Facade -> Service"]
+Policy["Policy Engine + Repositories"]
+Domain["Domain Handler"]
+Res["Response"]
 
-REQ --> PROXY
-PROXY --> EDGEC
-EDGEC --> EDGESEC
-EDGESEC --> NEXT
+Req --> Proxy --> EdgeC --> EdgeGates --> Pass
 
-REQ --> NODEENTRY
-NODEENTRY --> NODEC
-NODEC --> CTX
+Req --> NodeEntry --> NodeC --> Ctx
 
-CTX --> AUTHZ
-AUTHZ --> POLICY
-POLICY --> DOMAIN
-DOMAIN --> RESPONSE
+Ctx --> Authz --> Policy --> Domain --> Res
 ```

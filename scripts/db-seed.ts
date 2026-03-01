@@ -45,9 +45,14 @@ async function run(): Promise<void> {
     `  target : ${driver === 'postgres' && url ? url : (url ?? './data/pglite')}`,
   );
 
-  const db = createDb({ provider, driver, url });
+  const dbRuntime = createDb({ provider, driver, url });
 
-  const result = await seedAll(db);
+  let result: Awaited<ReturnType<typeof seedAll>>;
+  try {
+    result = await seedAll(dbRuntime.db);
+  } finally {
+    await dbRuntime.close?.();
+  }
 
   console.log('[db:seed] Seed complete');
   console.log(`  users         : ${Object.keys(result.users).join(', ')}`);

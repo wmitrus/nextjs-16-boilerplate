@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 
+import { MissingTenantContextError } from '@/core/contracts/tenancy';
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
@@ -50,12 +51,18 @@ export async function createSecurityContext(
   let userContext: SecurityContext['user'];
 
   if (identity) {
-    const tenantContext = await tenantResolver.resolve(identity);
+    try {
+      const tenantContext = await tenantResolver.resolve(identity);
 
-    userContext = {
-      id: identity.id,
-      tenantId: tenantContext.tenantId,
-    };
+      userContext = {
+        id: identity.id,
+        tenantId: tenantContext.tenantId,
+      };
+    } catch (error) {
+      if (!(error instanceof MissingTenantContextError)) {
+        throw error;
+      }
+    }
   }
 
   return {

@@ -88,3 +88,24 @@ For safe package update workflow and rollback strategy, see:
 **Notes:**
 
 - Used only in CI pipelines.
+
+## Mermaid in Markdown (VS Code)
+
+**Purpose:** Stable rendering of Mermaid blocks embedded in `.md` files.
+
+**Recommended setup (workspace):**
+
+- Enable: `bierner.markdown-mermaid`
+- Enable: `yzhang.markdown-all-in-one`
+- Disable for workspace: `vstirbu.vscode-mermaid-preview` (not needed for architecture docs rendered from `.md`)
+
+**How to preview:**
+
+1. Open a markdown file with a Mermaid block (` ```mermaid ... ``` `).
+2. Run `Markdown: Open Preview to the Side` (or `Ctrl+Shift+V`).
+3. If preview is blank after extension changes, run `Developer: Reload Window`.
+
+**Notes:**
+
+- In this repository, architecture diagrams are embedded Mermaid blocks inside `.md` files.
+- For docs in `docs/architecture/*.md`, always use built-in Markdown preview.

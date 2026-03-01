@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDb } from './create-db';
-import type { DrizzleDb } from './types';
+import type { DbRuntime, DrizzleDb } from './types';
 
 const createPgliteMock = vi.hoisted(() => vi.fn());
 const createPostgresMock = vi.hoisted(() => vi.fn());
@@ -20,11 +20,13 @@ describe('createDb', () => {
     createPostgresMock.mockReset();
 
     createPgliteMock.mockReturnValue({
-      kind: 'pglite',
-    } as unknown as DrizzleDb);
+      db: { kind: 'pglite' } as unknown as DrizzleDb,
+      close: vi.fn(),
+    } as DbRuntime);
     createPostgresMock.mockReturnValue({
-      kind: 'postgres',
-    } as unknown as DrizzleDb);
+      db: { kind: 'postgres' } as unknown as DrizzleDb,
+      close: vi.fn(),
+    } as DbRuntime);
   });
 
   it('creates drizzle+pglite db', () => {
@@ -36,7 +38,8 @@ describe('createDb', () => {
 
     expect(createPgliteMock).toHaveBeenCalledWith('file:./data/pglite');
     expect(createPostgresMock).not.toHaveBeenCalled();
-    expect(db).toEqual({ kind: 'pglite' });
+    expect(db.db).toEqual({ kind: 'pglite' });
+    expect(db.close).toBeTypeOf('function');
   });
 
   it('creates drizzle+postgres db', () => {
@@ -45,7 +48,8 @@ describe('createDb', () => {
 
     expect(createPostgresMock).toHaveBeenCalledWith(url);
     expect(createPgliteMock).not.toHaveBeenCalled();
-    expect(db).toEqual({ kind: 'postgres' });
+    expect(db.db).toEqual({ kind: 'postgres' });
+    expect(db.close).toBeTypeOf('function');
   });
 
   it('throws when drizzle+postgres has no url', () => {

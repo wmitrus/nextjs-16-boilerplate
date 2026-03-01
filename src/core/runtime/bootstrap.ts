@@ -13,22 +13,27 @@ export interface AppConfig {
   auth: AuthModuleConfig;
 }
 
+function resolveDbProvider(): DbConfig['provider'] {
+  return env.DB_PROVIDER ?? 'drizzle';
+}
+
 function resolveDbDriver(): DbConfig['driver'] {
-  const legacyProvider = process.env.DB_PROVIDER?.trim();
+  const provider = resolveDbProvider();
   const configuredDriver = env.DB_DRIVER;
 
-  if (legacyProvider && !configuredDriver) {
+  if (provider === 'prisma' && configuredDriver === 'pglite') {
     throw new Error(
-      '[bootstrap] Detected legacy DB_PROVIDER without DB_DRIVER. DB_PROVIDER is no longer used. Set DB_DRIVER to pglite or postgres.',
+      '[bootstrap] DB_PROVIDER=prisma cannot be used with DB_DRIVER=pglite. Use postgres or leave DB_DRIVER unset.',
     );
   }
 
-  if (legacyProvider && configuredDriver && env.NODE_ENV !== 'test') {
-    process.emitWarning(
-      '[bootstrap] DB_PROVIDER is legacy and ignored. Using DB_DRIVER for runtime DB selection.',
-      {
-        code: 'LEGACY_DB_PROVIDER_IGNORED',
-      },
+  if (
+    provider === 'prisma' &&
+    env.NODE_ENV === 'production' &&
+    !env.DATABASE_URL
+  ) {
+    throw new Error(
+      '[bootstrap] DB_PROVIDER=prisma in production requires DATABASE_URL.',
     );
   }
 
@@ -52,6 +57,7 @@ export function createApp(config: AppConfig): Container {
 function buildConfig(): AppConfig {
   return {
     db: {
+      provider: resolveDbProvider(),
       driver: resolveDbDriver(),
       url: env.DATABASE_URL,
     },

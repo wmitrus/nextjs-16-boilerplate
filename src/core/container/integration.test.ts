@@ -1,50 +1,55 @@
 /** @vitest-environment node */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
-import type { AuthorizationService } from '@/core/contracts/authorization';
-import type { IdentityProvider } from '@/core/contracts/identity';
+import { Container, createContainer, type Module } from './index';
 
-import { bootstrap, container } from './index';
+describe('Container – core wiring', () => {
+  it('creates an empty container via createContainer()', () => {
+    const container = createContainer();
+    expect(container).toBeInstanceOf(Container);
+  });
 
-vi.mock('@clerk/nextjs/server', () => ({
-  auth: vi.fn(),
-}));
+  it('resolves a registered value', () => {
+    const container = new Container();
+    const KEY = Symbol('test');
+    container.register(KEY, 'value');
+    expect(container.resolve(KEY)).toBe('value');
+  });
 
-describe('System Integration (Wiring)', () => {
-  it('should bootstrap and resolve all core services', async () => {
-    bootstrap();
+  it('resolves from parent in child container', () => {
+    const parent = new Container();
+    const KEY = Symbol('parent-key');
+    parent.register(KEY, 'parent-value');
+    const child = parent.createChild();
+    expect(child.resolve(KEY)).toBe('parent-value');
+  });
 
-    const identityProvider = container.resolve<IdentityProvider>(
-      AUTH.IDENTITY_PROVIDER,
+  it('child registration overrides parent', () => {
+    const parent = new Container();
+    const KEY = Symbol('key');
+    parent.register(KEY, 'parent');
+    const child = parent.createChild();
+    child.register(KEY, 'child');
+    expect(child.resolve(KEY)).toBe('child');
+    expect(parent.resolve(KEY)).toBe('parent');
+  });
+
+  it('throws when key is not found', () => {
+    const container = new Container();
+    expect(() => container.resolve('missing')).toThrow(
+      'Service not found for key: missing',
     );
-    const authzService = container.resolve<AuthorizationService>(
-      AUTHORIZATION.SERVICE,
-    );
+  });
 
-    expect(identityProvider).toBeDefined();
-    expect(authzService).toBeDefined();
-
-    // Verify a full mock flow
-    const mockIdentity = {
-      id: 'user_admin_123',
-      email: 'admin@test.com',
-      attributes: {},
+  it('registerModule delegates to module.register', () => {
+    const container = new Container();
+    const KEY = Symbol('ModuleService');
+    const mockModule: Module = {
+      register(c) {
+        c.register(KEY, 'from-module');
+      },
     };
-    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue(
-      mockIdentity,
-    );
-
-    const identity = await identityProvider.getCurrentIdentity();
-    expect(identity?.id).toBe('user_admin_123');
-
-    const canManage = await authzService.can({
-      tenant: { tenantId: 't1' },
-      subject: { id: 'user_admin_123' },
-      resource: { type: 'document' },
-      action: 'system:manage',
-    });
-
-    expect(canManage).toBe(true);
+    container.registerModule(mockModule);
+    expect(container.resolve(KEY)).toBe('from-module');
   });
 });

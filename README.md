@@ -26,6 +26,12 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - [TypeScript, ESLint & Prettier Setup](./docs/features/02%20-%20TypeScript%20ESLint%20Prettier%20Setup.md) - Strict type safety, Flat Config linting, and Tailwind-aware formatting.
 - [Testing Infrastructure](./docs/features/07%20-%20Testing%20Infrastructure.md) - Three-tier testing strategy: Unit (Jest), Integration (MSW), and E2E (Playwright).
 
+## Getting Started Runbooks
+
+- [Runbooks Index](./docs/getting-started/README.md)
+- [Local Quickstart - Single Tenant](./docs/getting-started/01%20-%20Local%20Quickstart%20-%20Single%20Tenant.md)
+- [Verification Runbook - Security Showcase (Single Tenant)](<./docs/getting-started/02%20-%20Verification%20Runbook%20-%20Security%20Showcase%20(Single%20Tenant).md>)
+
 ## Scripts
 
 - `pnpm dev`: Start development server.

@@ -3,32 +3,30 @@
 ```mermaid
 flowchart TD
 
-BOOT["createRequestContainer(config)"]
-INFRA["getInfrastructure(config.db)\nprocess scope"]
-CREATEDB["createDb(config)"]
-DB["Drizzle DB runtime"]
+Boot["Node Request Bootstrap"]
+Infra["Process Infrastructure"]
+DbFactory["DB Factory\ncreateDb(config)"]
+Db["Drizzle DB Runtime"]
 
-AUTHMOD["modules/auth"]
-AUTHZMOD["modules/authorization"]
-USERMOD["modules/user"]
-BILLINGMOD["modules/billing"]
+AuthMod["Auth Module"]
+AuthzMod["Authorization Module"]
+UserMod["User Module"]
+BillingMod["Billing Module"]
 
-SCHEMA_AUTH["modules/auth/infrastructure/drizzle/schema.ts"]
-SCHEMA_AUTHZ["modules/authorization/infrastructure/drizzle/schema.ts"]
-SCHEMA_USER["modules/user/infrastructure/drizzle/schema.ts"]
-SCHEMA_BILLING["modules/billing/infrastructure/drizzle/schema.ts"]
+SchemaAuth["Auth Schema"]
+SchemaAuthz["Authorization Schema"]
+SchemaUser["User Schema"]
+SchemaBilling["Billing Schema"]
 
-BOOT --> INFRA
-INFRA --> CREATEDB
-CREATEDB --> DB
+Boot --> Infra --> DbFactory --> Db
 
-AUTHMOD --> SCHEMA_AUTH
-AUTHZMOD --> SCHEMA_AUTHZ
-USERMOD --> SCHEMA_USER
-BILLINGMOD --> SCHEMA_BILLING
+AuthMod --> SchemaAuth
+AuthzMod --> SchemaAuthz
+UserMod --> SchemaUser
+BillingMod --> SchemaBilling
 
-SCHEMA_AUTH --> DB
-SCHEMA_AUTHZ --> DB
-SCHEMA_USER --> DB
-SCHEMA_BILLING --> DB
+SchemaAuth --> Db
+SchemaAuthz --> Db
+SchemaUser --> Db
+SchemaBilling --> Db
 ```

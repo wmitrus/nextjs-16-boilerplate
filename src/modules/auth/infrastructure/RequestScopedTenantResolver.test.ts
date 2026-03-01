@@ -39,4 +39,32 @@ describe('RequestScopedTenantResolver', () => {
       MissingTenantContextError,
     );
   });
+
+  it('should map external orgId to internal tenant id when mapper is configured', async () => {
+    const mapper = {
+      resolveOrCreateInternalTenantId: vi
+        .fn()
+        .mockResolvedValue('10000000-0000-0000-0000-000000000123'),
+    };
+
+    const resolver = new RequestScopedTenantResolver(
+      makeSource({ orgId: 'org_123' }),
+      {
+        mapper,
+        provider: 'clerk',
+      },
+    );
+    const context = await resolver.resolve({
+      id: '00000000-0000-0000-0000-000000000999',
+    });
+
+    expect(mapper.resolveOrCreateInternalTenantId).toHaveBeenCalledWith({
+      provider: 'clerk',
+      externalTenantId: 'org_123',
+    });
+    expect(context).toEqual({
+      tenantId: '10000000-0000-0000-0000-000000000123',
+      userId: '00000000-0000-0000-0000-000000000999',
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import type { NextRequest, NextResponse } from 'next/server';
 
-import { resolveEdgeLogger } from '@/core/logger/di';
+import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';

@@ -44,6 +44,7 @@ vi.mock('@clerk/nextjs/server', () => ({
 
 vi.mock('@/core/env', () => ({
   env: {
+    AUTH_PROVIDER: 'clerk',
     NODE_ENV: 'test',
     VERCEL_ENV: 'test',
     INTERNAL_API_KEY: 'test-key',

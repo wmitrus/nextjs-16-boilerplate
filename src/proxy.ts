@@ -2,7 +2,6 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { createContainer } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type {
@@ -11,6 +10,7 @@ import type {
 } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
+import { appContainer } from '@/core/runtime/bootstrap';
 
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
@@ -46,7 +46,7 @@ function composeMiddlewares(
  * is established before any downstream code runs.
  *
  * A request-scoped RequestIdentitySource is built from the `auth` callback
- * and injected into the container — replacing the module-default ClerkRequestIdentitySource.
+ * and injected into the child container — replacing the module-default ClerkRequestIdentitySource.
  * This ensures auth() is called at most once per request (via getAuthResult cache)
  * and that domain classes never call auth() directly.
  *
@@ -81,7 +81,7 @@ export default clerkMiddleware(async (auth, request) => {
     },
   };
 
-  const requestContainer = createContainer();
+  const requestContainer = appContainer.createChild();
 
   requestContainer.register(AUTH.IDENTITY_SOURCE, requestIdentitySource);
   requestContainer.register(

@@ -22,7 +22,10 @@ describe('DrizzleMembershipRepository', () => {
     const db = createMockDb([{ userId: 'u1', tenantId: 't1' }]);
     const repo = new DrizzleMembershipRepository(db);
 
-    const result = await repo.isMember('u1', 't1');
+    const result = await repo.isMember(
+      '00000000-0000-0000-0000-000000000001',
+      '10000000-0000-0000-0000-000000000001',
+    );
 
     expect(result).toBe(true);
   });
@@ -31,8 +34,24 @@ describe('DrizzleMembershipRepository', () => {
     const db = createMockDb([]);
     const repo = new DrizzleMembershipRepository(db);
 
-    const result = await repo.isMember('u1', 't1');
+    const result = await repo.isMember(
+      '00000000-0000-0000-0000-000000000001',
+      '10000000-0000-0000-0000-000000000001',
+    );
 
     expect(result).toBe(false);
+  });
+
+  it('returns false for non-UUID identifiers without querying DB', async () => {
+    const db = createMockDb([{ userId: 'x', tenantId: 'y' }]);
+    const repo = new DrizzleMembershipRepository(db);
+
+    const result = await repo.isMember(
+      'user_395N3PAGGv4CJSyM3r6CbrLwPNH',
+      'org_3AMNAWzyMGNCWl3ixe2Q4lTMU8f',
+    );
+
+    expect(result).toBe(false);
+    expect(db.select).not.toHaveBeenCalled();
   });
 });

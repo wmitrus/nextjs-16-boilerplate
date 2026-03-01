@@ -14,6 +14,8 @@ export interface RouteContext {
   isOnboardingRoute: boolean;
   isPublicRoute: boolean;
   isStaticFile: boolean;
+  correlationId: string;
+  requestId: string;
 }
 
 /**
@@ -21,6 +23,9 @@ export interface RouteContext {
  */
 export function classifyRequest(req: NextRequest): RouteContext {
   const path = req.nextUrl.pathname;
+  const correlationId =
+    req.headers.get('x-correlation-id') ?? crypto.randomUUID();
+  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID();
 
   const isStaticFile =
     /\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)$/.test(
@@ -45,5 +50,7 @@ export function classifyRequest(req: NextRequest): RouteContext {
     isOnboardingRoute,
     isPublicRoute,
     isStaticFile,
+    correlationId,
+    requestId,
   };
 }

@@ -17,6 +17,7 @@ Detailed documentation for the features and configurations of this boilerplate:
 
 - [Architecture Diagrams Index (01-09)](./architecture/01%20-%20Global%20Dependency%20Rules.md)
 - [Edge vs Node Composition Root Boundary](./architecture/15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md)
+- [Enterprise-Ready DB Layer Index](./architecture/Enterprise-Ready%20DB%20layer/README.md)
 
 ## Architecture Diagrams (01-09)
 

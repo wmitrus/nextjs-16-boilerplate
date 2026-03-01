@@ -18,6 +18,158 @@ import { createRequestScopedContext } from '@/security/core/request-scoped-conte
 import type { SecurityDependencies } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 
+type WithAuthOptions = {
+  dependencies: SecurityDependencies;
+  userRepository: UserRepository;
+  resolveIdentity?: () => Promise<Identity | null>;
+  resolveTenant?: (identity: Identity) => Promise<TenantContext>;
+};
+
+async function resolveIdentity(
+  options: WithAuthOptions,
+): Promise<Identity | null> {
+  return options.resolveIdentity
+    ? options.resolveIdentity()
+    : options.dependencies.identityProvider.getCurrentIdentity();
+}
+
+async function resolveOnboardingComplete(
+  userRepository: UserRepository,
+  userId?: string,
+): Promise<boolean> {
+  if (!userId) {
+    return false;
+  }
+
+  const user = await userRepository.findById(userId);
+  return Boolean(user?.onboardingComplete);
+}
+
+function redirectAuthenticatedFromAuthRoute(
+  req: NextRequest,
+  ctx: RouteContext,
+  userId: string | undefined,
+  onboardingComplete: boolean,
+): NextResponse | null {
+  if (!userId || !ctx.isAuthRoute) {
+    return null;
+  }
+
+  const redirectUrl = onboardingComplete
+    ? new URL('/', req.url)
+    : new URL('/onboarding', req.url);
+
+  return NextResponse.redirect(redirectUrl);
+}
+
+function redirectForIncompleteOnboarding(
+  req: NextRequest,
+  ctx: RouteContext,
+  userId: string | undefined,
+  onboardingComplete: boolean,
+): NextResponse | null {
+  if (!userId || ctx.isOnboardingRoute || ctx.isPublicRoute || ctx.isApi) {
+    return null;
+  }
+
+  if (!onboardingComplete) {
+    return NextResponse.redirect(new URL('/onboarding', req.url));
+  }
+
+  return null;
+}
+
+function rejectUnauthenticatedPrivateRoute(
+  req: NextRequest,
+  ctx: RouteContext,
+  userId: string | undefined,
+): NextResponse | null {
+  const isE2eRoute =
+    req.nextUrl.pathname.startsWith('/e2e-error') ||
+    req.nextUrl.pathname.startsWith('/users');
+
+  if (userId || ctx.isPublicRoute || (env.E2E_ENABLED && isE2eRoute)) {
+    return null;
+  }
+
+  if (ctx.isApi) {
+    return NextResponse.json(
+      {
+        status: 'server_error',
+        error: 'Unauthorized',
+        code: 'UNAUTHORIZED',
+      },
+      { status: 401 },
+    );
+  }
+
+  const signInUrl = new URL('/sign-in', req.url);
+  signInUrl.searchParams.set('redirect_url', req.url);
+  return NextResponse.redirect(signInUrl);
+}
+
+async function authorizeRouteAccess(
+  req: NextRequest,
+  ctx: RouteContext,
+  identity: Identity,
+  options: WithAuthOptions,
+  authorization: AuthorizationFacade,
+): Promise<NextResponse | null> {
+  if (ctx.isPublicRoute) {
+    return null;
+  }
+
+  const tenant = options.resolveTenant
+    ? await options.resolveTenant(identity)
+    : await options.dependencies.tenantResolver.resolve(identity);
+
+  const correlationId =
+    req.headers.get('x-correlation-id') ?? crypto.randomUUID();
+  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID();
+
+  const requestScope = createRequestScopedContext({
+    identityId: identity.id,
+    tenantId: tenant.tenantId,
+    correlationId,
+    requestId,
+    runtime: 'edge',
+    environment: env.NODE_ENV,
+    metadata: {
+      path: req.nextUrl.pathname,
+      method: req.method,
+    },
+  });
+
+  await authorization.authorize(
+    {
+      tenant,
+      subject: {
+        id: identity.id,
+      },
+      resource: {
+        type: 'route',
+        id: req.nextUrl.pathname,
+      },
+      action: createAction('route', 'access'),
+      environment: {
+        ip:
+          req.headers.get('x-forwarded-for') ??
+          req.headers.get('x-real-ip') ??
+          undefined,
+        time: new Date(),
+        path: req.nextUrl.pathname,
+        method: req.method,
+      },
+      attributes: {
+        requestScope,
+      },
+    },
+    'Route access denied',
+  );
+
+  return null;
+}
+
 /**
  * Middleware to enforce authentication, onboarding, and authorization.
  *
@@ -30,18 +182,10 @@ import type { RouteContext } from '@/security/middleware/route-classification';
  */
 export function withAuth(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
-  options: {
-    dependencies: SecurityDependencies;
-    userRepository: UserRepository;
-    resolveIdentity?: () => Promise<Identity | null>;
-    resolveTenant?: (identity: Identity) => Promise<TenantContext>;
-  },
+  options: WithAuthOptions,
 ) {
   return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
-    const {
-      dependencies: { authorizationService, identityProvider, tenantResolver },
-      userRepository,
-    } = options;
+    const { authorizationService } = options.dependencies;
     const authorization = new AuthorizationFacade(authorizationService);
 
     // Internal API routes are handled by withInternalApiGuard and do not require session auth
@@ -54,107 +198,49 @@ export function withAuth(
       return handler(req, ctx);
     }
 
-    const identity = options.resolveIdentity
-      ? await options.resolveIdentity()
-      : await identityProvider.getCurrentIdentity();
+    const identity = await resolveIdentity(options);
     const userId = identity?.id;
-
-    let onboardingComplete = false;
-
-    if (userId) {
-      const user = await userRepository.findById(userId);
-      onboardingComplete = Boolean(user?.onboardingComplete);
-    }
+    const onboardingComplete = await resolveOnboardingComplete(
+      options.userRepository,
+      userId,
+    );
 
     // 1. Redirect authenticated users away from auth routes (sign-in/sign-up)
-    if (userId && ctx.isAuthRoute) {
-      const redirectUrl = onboardingComplete
-        ? new URL('/', req.url)
-        : new URL('/onboarding', req.url);
-
-      return NextResponse.redirect(redirectUrl);
+    const authRouteRedirect = redirectAuthenticatedFromAuthRoute(
+      req,
+      ctx,
+      userId,
+      onboardingComplete,
+    );
+    if (authRouteRedirect) {
+      return authRouteRedirect;
     }
 
     // 2. Enforce onboarding for private routes
-    if (userId && !ctx.isOnboardingRoute && !ctx.isPublicRoute && !ctx.isApi) {
-      if (!onboardingComplete) {
-        return NextResponse.redirect(new URL('/onboarding', req.url));
-      }
+    const onboardingRedirect = redirectForIncompleteOnboarding(
+      req,
+      ctx,
+      userId,
+      onboardingComplete,
+    );
+    if (onboardingRedirect) {
+      return onboardingRedirect;
     }
 
     // 3. Protect private routes
-    const isE2eRoute =
-      req.nextUrl.pathname.startsWith('/e2e-error') ||
-      req.nextUrl.pathname.startsWith('/users');
-
-    if (!userId && !ctx.isPublicRoute && !(env.E2E_ENABLED && isE2eRoute)) {
-      if (ctx.isApi) {
-        return NextResponse.json(
-          {
-            status: 'server_error',
-            error: 'Unauthorized',
-            code: 'UNAUTHORIZED',
-          },
-          { status: 401 },
-        );
-      }
-
-      const signInUrl = new URL('/sign-in', req.url);
-      signInUrl.searchParams.set('redirect_url', req.url);
-      return NextResponse.redirect(signInUrl);
+    const unauthenticatedReject = rejectUnauthenticatedPrivateRoute(
+      req,
+      ctx,
+      userId,
+    );
+    if (unauthenticatedReject) {
+      return unauthenticatedReject;
     }
 
     // 4. Authorization check for authenticated non-public routes
-    if (userId && !ctx.isPublicRoute) {
+    if (identity && userId && !ctx.isPublicRoute) {
       try {
-        const tenant = options.resolveTenant
-          ? await options.resolveTenant(identity!)
-          : await tenantResolver.resolve(identity!);
-
-        const correlationId =
-          req.headers.get('x-correlation-id') ?? crypto.randomUUID();
-        const requestId =
-          req.headers.get('x-request-id') ?? crypto.randomUUID();
-
-        const requestScope = createRequestScopedContext({
-          identityId: userId,
-          tenantId: tenant.tenantId,
-          correlationId,
-          requestId,
-          runtime: 'edge',
-          environment: env.NODE_ENV,
-          metadata: {
-            path: req.nextUrl.pathname,
-            method: req.method,
-          },
-        });
-
-        await authorization.authorize(
-          {
-            tenant,
-            subject: {
-              id: userId,
-            },
-            resource: {
-              type: 'route',
-              id: req.nextUrl.pathname,
-            },
-            action: createAction('route', 'access'),
-            environment: {
-              ip:
-                req.headers.get('x-forwarded-for') ??
-                req.headers.get('x-real-ip') ??
-                undefined,
-              time: new Date(),
-              path: req.nextUrl.pathname,
-              method: req.method,
-            },
-            attributes: {
-              requestScope,
-            },
-          },
-          'Route access denied',
-        );
+        await authorizeRouteAccess(req, ctx, identity, options, authorization);
       } catch (error) {
         if (
           error instanceof AuthorizationError ||

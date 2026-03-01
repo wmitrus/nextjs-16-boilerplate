@@ -8,8 +8,8 @@ import type {
   RequestIdentitySource,
 } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
-import type { UserRepository } from '@/core/contracts/user';
-import { getEdgeContainer } from '@/core/runtime/edge';
+import { env } from '@/core/env';
+import { createEdgeRequestContainer } from '@/core/runtime/edge';
 
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
@@ -64,7 +64,11 @@ function createRequestIdentitySource(
 }
 
 function createRequestContainer(identitySource: RequestIdentitySource) {
-  const requestContainer = getEdgeContainer();
+  const requestContainer = createEdgeRequestContainer({
+    auth: {
+      authProvider: env.AUTH_PROVIDER,
+    },
+  });
 
   requestContainer.register(AUTH.IDENTITY_SOURCE, identitySource, {
     override: true,
@@ -98,7 +102,6 @@ function resolveSecurityDependencies(
 
 function createSecurityPipeline(
   securityDependencies: EdgeSecurityDependencies,
-  userRepository: UserRepository,
 ) {
   const appSecurityPipeline = composeMiddlewares(
     [
@@ -107,7 +110,6 @@ function createSecurityPipeline(
       (next: ProxyHandler) =>
         withAuth(next, {
           dependencies: securityDependencies,
-          userRepository,
           enforceResourceAuthorization: false,
         }),
     ],
@@ -150,14 +152,7 @@ export default clerkMiddleware(async (auth, request) => {
   const requestIdentitySource = createRequestIdentitySource(getAuthResult);
   const requestContainer = createRequestContainer(requestIdentitySource);
   const securityDependencies = resolveSecurityDependencies(requestContainer);
-
-  const userRepository = requestContainer.resolve<UserRepository>(
-    AUTH.USER_REPOSITORY,
-  );
-  const securityPipeline = createSecurityPipeline(
-    securityDependencies,
-    userRepository,
-  );
+  const securityPipeline = createSecurityPipeline(securityDependencies);
 
   try {
     return await securityPipeline(request);

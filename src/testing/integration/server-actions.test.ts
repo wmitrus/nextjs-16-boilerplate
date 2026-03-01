@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
-import { container } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import { appContainer } from '@/core/runtime/bootstrap';
 
 import { createSecureAction } from '@/security/actions/secure-action';
 import {
@@ -43,10 +42,10 @@ describe('Server Actions Integration', () => {
   };
 
   beforeEach(() => {
-    identityProvider = container.resolve<IdentityProvider>(
+    identityProvider = appContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
     );
-    authorizationService = container.resolve<AuthorizationService>(
+    authorizationService = appContainer.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
     resetClerkMocks();
@@ -62,13 +61,13 @@ describe('Server Actions Integration', () => {
 
   const getSecurityContextDependencies = (): SecurityContextDependencies => ({
     identityProvider,
-    tenantResolver: container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
+    tenantResolver: appContainer.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
   });
 
   const getSecureActionDependencies = () => ({
     getSecurityContext: () =>
       getSecurityContext(getSecurityContextDependencies()),
-    authorizationService: container.resolve<AuthorizationService>(
+    authorizationService: appContainer.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     ),
   });

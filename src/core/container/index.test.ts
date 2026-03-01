@@ -72,6 +72,18 @@ describe('Container', () => {
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
+  it('should resolve has() recursively through parent', () => {
+    const parent = new Container();
+    const child = parent.createChild();
+    const KEY = Symbol('ParentService');
+
+    parent.register(KEY, { ok: true });
+
+    expect(parent.has(KEY)).toBe(true);
+    expect(child.has(KEY)).toBe(true);
+    expect(child.has(Symbol('Missing'))).toBe(false);
+  });
+
   it('should create a deterministic container with core modules registered', () => {
     const builtContainer = createContainer();
     expect(builtContainer).toBeInstanceOf(Container);

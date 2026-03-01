@@ -1,8 +1,8 @@
 import { createPglite } from './drivers/create-pglite';
 import { createPostgres } from './drivers/create-postgres';
-import type { DbConfig, DrizzleDb } from './types';
+import type { DbConfig, DbRuntime } from './types';
 
-export function createDb(config: DbConfig): DrizzleDb {
+export function createDb(config: DbConfig): DbRuntime {
   if (config.provider === 'drizzle') {
     if (config.driver === 'pglite') {
       return createPglite(config.url);

@@ -24,12 +24,27 @@ describe('Container – core wiring', () => {
     expect(child.resolve(KEY)).toBe('parent-value');
   });
 
-  it('child registration overrides parent', () => {
+  it('child registration without override cannot shadow parent', () => {
     const parent = new Container();
     const KEY = Symbol('key');
     parent.register(KEY, 'parent');
     const child = parent.createChild();
-    child.register(KEY, 'child');
+
+    expect(() => child.register(KEY, 'child')).toThrow(
+      `Service already registered for key: ${String(KEY)}. Pass { override: true } to replace it.`,
+    );
+    expect(child.resolve(KEY)).toBe('parent');
+    expect(parent.resolve(KEY)).toBe('parent');
+  });
+
+  it('child can shadow parent explicitly with override', () => {
+    const parent = new Container();
+    const KEY = Symbol('key');
+    parent.register(KEY, 'parent');
+    const child = parent.createChild();
+
+    child.register(KEY, 'child', { override: true });
+
     expect(child.resolve(KEY)).toBe('child');
     expect(parent.resolve(KEY)).toBe('parent');
   });

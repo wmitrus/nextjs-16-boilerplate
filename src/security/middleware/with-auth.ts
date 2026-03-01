@@ -22,19 +22,20 @@ import type {
 } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 
-type WithAuthBaseOptions = {
-  userRepository: UserRepository;
+type WithAuthCommonOptions = {
   resolveIdentity?: () => Promise<Identity | null>;
   resolveTenant?: (identity: Identity) => Promise<TenantContext>;
 };
 
-type WithAuthNodeOptions = WithAuthBaseOptions & {
+type WithAuthNodeOptions = WithAuthCommonOptions & {
   dependencies: NodeSecurityDependencies;
+  userRepository: UserRepository;
   enforceResourceAuthorization?: true;
 };
 
-type WithAuthEdgeOptions = WithAuthBaseOptions & {
+type WithAuthEdgeOptions = WithAuthCommonOptions & {
   dependencies: EdgeSecurityDependencies;
+  userRepository?: never;
   enforceResourceAuthorization?: false;
 };
 
@@ -76,8 +77,18 @@ async function resolveOnboardingComplete(
   return Boolean(user?.onboardingComplete);
 }
 
-function isEdgeAuthorizationMode(options: WithAuthOptions): boolean {
-  return options.enforceResourceAuthorization === false;
+async function resolveOnboardingCompleteForMode(
+  options: WithAuthOptions,
+  userId?: string,
+): Promise<boolean> {
+  if (options.enforceResourceAuthorization === false) {
+    return true;
+  }
+
+  return resolveOnboardingComplete(
+    (options as WithAuthNodeOptions).userRepository,
+    userId,
+  );
 }
 
 function redirectForMissingTenantContext(req: NextRequest): NextResponse {
@@ -168,15 +179,11 @@ async function authorizeRouteAccess(
     ? await resolveTenantOverride(identity)
     : await securityContextDependencies.tenantResolver.resolve(identity);
 
-  const correlationId =
-    req.headers.get('x-correlation-id') ?? crypto.randomUUID();
-  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID();
-
   const requestScope = createRequestScopedContext({
     identityId: identity.id,
     tenantId: tenant.tenantId,
-    correlationId,
-    requestId,
+    correlationId: ctx.correlationId,
+    requestId: ctx.requestId,
     runtime: 'edge',
     environment: env.NODE_ENV,
     metadata: {
@@ -244,9 +251,10 @@ export function withAuth(
 
     const identity = await resolveIdentity(options);
     const userId = identity?.id;
-    const onboardingComplete = isEdgeAuthorizationMode(options)
-      ? true
-      : await resolveOnboardingComplete(options.userRepository, userId);
+    const onboardingComplete = await resolveOnboardingCompleteForMode(
+      options,
+      userId,
+    );
 
     // 1. Redirect authenticated users away from auth routes (sign-in/sign-up)
     const authRouteRedirect = redirectAuthenticatedFromAuthRoute(

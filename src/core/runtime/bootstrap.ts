@@ -13,6 +13,30 @@ export interface AppConfig {
   auth: AuthModuleConfig;
 }
 
+function resolveDbDriver(): DbConfig['driver'] {
+  const legacyProvider = process.env.DB_PROVIDER?.trim();
+  const configuredDriver = env.DB_DRIVER;
+
+  if (legacyProvider && !configuredDriver) {
+    throw new Error(
+      '[bootstrap] Detected legacy DB_PROVIDER without DB_DRIVER. DB_PROVIDER is no longer used. Set DB_DRIVER to pglite or postgres.',
+    );
+  }
+
+  if (legacyProvider && configuredDriver && env.NODE_ENV !== 'test') {
+    process.emitWarning(
+      '[bootstrap] DB_PROVIDER is legacy and ignored. Using DB_DRIVER for runtime DB selection.',
+      {
+        code: 'LEGACY_DB_PROVIDER_IGNORED',
+      },
+    );
+  }
+
+  return (
+    configuredDriver ?? (env.NODE_ENV === 'production' ? 'postgres' : 'pglite')
+  );
+}
+
 export function createApp(config: AppConfig): Container {
   const container = new Container();
 
@@ -28,9 +52,7 @@ export function createApp(config: AppConfig): Container {
 function buildConfig(): AppConfig {
   return {
     db: {
-      driver:
-        env.DB_DRIVER ??
-        (env.NODE_ENV === 'production' ? 'postgres' : 'pglite'),
+      driver: resolveDbDriver(),
       url: env.DATABASE_URL,
     },
     auth: {

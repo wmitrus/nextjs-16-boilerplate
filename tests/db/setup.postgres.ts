@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import type { TestProject } from 'vitest/node';
 
-import { runMigrations } from '../../src/core/db/run-migrations';
+import { runMigrations } from '../../src/core/db/migrations/run-migrations';
 import type { DrizzleDb } from '../../src/core/db/types';
 
 let container: StartedPostgreSqlContainer;

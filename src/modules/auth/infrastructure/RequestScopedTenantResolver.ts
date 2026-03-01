@@ -2,7 +2,11 @@ import type {
   Identity,
   RequestIdentitySource,
 } from '@/core/contracts/identity';
-import type { TenantContext, TenantResolver } from '@/core/contracts/tenancy';
+import {
+  MissingTenantContextError,
+  type TenantContext,
+  type TenantResolver,
+} from '@/core/contracts/tenancy';
 
 export class RequestScopedTenantResolver implements TenantResolver {
   constructor(private readonly source: RequestIdentitySource) {}
@@ -10,8 +14,12 @@ export class RequestScopedTenantResolver implements TenantResolver {
   async resolve(identity: Identity): Promise<TenantContext> {
     const { orgId } = await this.source.get();
 
+    if (!orgId) {
+      throw new MissingTenantContextError();
+    }
+
     return {
-      tenantId: orgId ?? identity.id,
+      tenantId: orgId,
       userId: identity.id,
     };
   }

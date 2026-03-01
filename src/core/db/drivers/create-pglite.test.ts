@@ -16,7 +16,7 @@ vi.mock('drizzle-orm/pglite', () => ({
   drizzle: drizzleMock,
 }));
 
-import { clearPgliteRuntimeCache, createPglite } from './create-pglite';
+import { createPglite } from './create-pglite';
 
 describe('createPglite', () => {
   beforeEach(() => {
@@ -36,9 +36,5 @@ describe('createPglite', () => {
     await second.close?.();
 
     expect(closeMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('clearPgliteRuntimeCache remains callable', () => {
-    expect(() => clearPgliteRuntimeCache()).not.toThrow();
   });
 });

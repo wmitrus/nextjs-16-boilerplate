@@ -2,34 +2,34 @@
 
 ```mermaid
 flowchart TD
-APP["app/*"]
-FEATURES["features/*"]
-MODULES["modules/*"]
-SECURITY["security/*"]
-SHARED["shared/*"]
-CORE["core/*"]
+App["App"]
+Features["Features"]
+Modules["Modules"]
+Security["Security"]
+Shared["Shared"]
+Core["Core"]
 
-APP --> FEATURES
-APP --> MODULES
-APP --> SECURITY
-APP --> SHARED
-APP --> CORE
+App --> Features
+App --> Modules
+App --> Security
+App --> Shared
+App --> Core
 
-FEATURES --> MODULES
-FEATURES --> SECURITY
-FEATURES --> SHARED
-FEATURES --> CORE
+Features --> Modules
+Features --> Security
+Features --> Shared
+Features --> Core
 
-MODULES --> SHARED
-MODULES --> CORE
+Modules --> Shared
+Modules --> Core
 
-SECURITY --> SHARED
-SECURITY --> CORE
+Security --> Shared
+Security --> Core
 
-SHARED --> CORE
+Shared --> Core
 
-CORE -. forbidden .-> MODULES
-CORE -. forbidden .-> SECURITY
-CORE -. forbidden .-> FEATURES
-CORE -. forbidden .-> APP
+Core -. forbidden .-> Modules
+Core -. forbidden .-> Security
+Core -. forbidden .-> Features
+Core -. forbidden .-> App
 ```

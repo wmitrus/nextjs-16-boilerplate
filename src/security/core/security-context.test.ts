@@ -137,7 +137,7 @@ describe('Security Context', () => {
     expect(context.user?.tenantId).toBe('org_abc');
   });
 
-  it('should degrade to guest-like context when tenant is missing', async () => {
+  it('should throw when tenant is missing for authenticated user', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_without_org',
     });
@@ -148,10 +148,8 @@ describe('Security Context', () => {
     mockNextHeaders.mockReturnValue(new Headers());
     mockGetIP.mockResolvedValue('127.0.0.1');
 
-    const context = await getSecurityContext(getDependencies());
-
-    expect(context.user).toBeUndefined();
-    expect(context.correlationId).toBeDefined();
-    expect(context.requestId).toBeDefined();
+    await expect(getSecurityContext(getDependencies())).rejects.toBeInstanceOf(
+      MissingTenantContextError,
+    );
   });
 });

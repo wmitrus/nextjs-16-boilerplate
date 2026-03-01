@@ -38,6 +38,9 @@
     "release": "semantic-release",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:dev": "NODE_ENV=development drizzle-kit migrate",
+    "db:migrate:test": "NODE_ENV=test drizzle-kit migrate",
+    "db:migrate:prod": "NODE_ENV=production drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"
   },
   "lint-staged": {

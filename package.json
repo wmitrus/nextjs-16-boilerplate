@@ -41,8 +41,12 @@
     "db:generate": "drizzle-kit generate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:migrate:dev": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:migrate:prod": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
+    "db:migrate:local": "DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/app_test drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
+    "db:local:up": "node scripts/compose-db-local.mjs up -d test-db",
+    "db:local:down": "node scripts/compose-db-local.mjs down",
     "db:studio": "drizzle-kit studio --config=src/core/db/migrations/config/drizzle.dev.ts",
-    "db:seed": "tsx scripts/db-seed.ts"
+    "db:seed": "tsx scripts/db-seed.ts",
+    "test:db:local": "TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/app_test vitest run --config vitest.db.local.config.ts"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [

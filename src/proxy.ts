@@ -53,7 +53,7 @@ function createRequestIdentitySource(
 
       return {
         userId: userId ?? undefined,
-        orgId: orgId ?? undefined,
+        tenantExternalId: orgId ?? undefined,
         email:
           typeof sessionClaims?.email === 'string'
             ? sessionClaims.email

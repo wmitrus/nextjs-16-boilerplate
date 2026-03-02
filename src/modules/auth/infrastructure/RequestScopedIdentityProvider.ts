@@ -3,14 +3,13 @@ import type {
   IdentityProvider,
   RequestIdentitySource,
 } from '@/core/contracts/identity';
+import { UserNotProvisionedError } from '@/core/contracts/identity';
 
-import type {
-  ExternalAuthProvider,
-  ExternalIdentityMapper,
-} from './ExternalIdentityMapper';
+import type { ExternalAuthProvider } from './ExternalIdentityMapper';
+import type { InternalIdentityLookup } from './InternalIdentityLookup';
 
 interface RequestScopedIdentityProviderOptions {
-  mapper?: Pick<ExternalIdentityMapper, 'resolveOrCreateInternalUserId'>;
+  lookup?: InternalIdentityLookup;
   provider?: ExternalAuthProvider;
 }
 
@@ -27,16 +26,19 @@ export class RequestScopedIdentityProvider implements IdentityProvider {
       return null;
     }
 
-    let internalUserId = userId;
+    if (this.options.lookup && this.options.provider) {
+      const internalUserId = await this.options.lookup.findInternalUserId(
+        this.options.provider,
+        userId,
+      );
 
-    if (this.options.mapper && this.options.provider) {
-      internalUserId = await this.options.mapper.resolveOrCreateInternalUserId({
-        provider: this.options.provider,
-        externalUserId: userId,
-        email,
-      });
+      if (internalUserId === null) {
+        throw new UserNotProvisionedError();
+      }
+
+      return { id: internalUserId, email };
     }
 
-    return { id: internalUserId, email };
+    return { id: userId, email };
   }
 }

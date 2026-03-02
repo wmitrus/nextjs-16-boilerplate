@@ -9,7 +9,15 @@ export class SupabaseRequestIdentitySource implements RequestIdentitySource {
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
       this.cached = (async (): Promise<RequestIdentitySourceData> => {
-        throw new Error('SupabaseRequestIdentitySource: not implemented');
+        // TODO: Implement Supabase session resolution.
+        // Supabase does not provide org/tenant claims by default.
+        // tenantExternalId and tenantRole are always undefined for this provider.
+        return {
+          userId: undefined,
+          email: undefined,
+          tenantExternalId: undefined,
+          tenantRole: undefined,
+        };
       })();
     }
 

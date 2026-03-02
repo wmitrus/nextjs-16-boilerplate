@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 
+import { UserNotProvisionedError } from '@/core/contracts/identity';
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
@@ -38,7 +39,20 @@ export async function createSecurityContext(
 ): Promise<SecurityContext> {
   const { identityProvider, tenantResolver } = dependencies;
 
-  const identity = await identityProvider.getCurrentIdentity();
+  let identity;
+  try {
+    identity = await identityProvider.getCurrentIdentity();
+  } catch (err) {
+    if (err instanceof UserNotProvisionedError) {
+      // User is authenticated externally but has no internal provisioned record.
+      // Treat as unauthenticated for security context — access denied to secure features.
+      // User must complete onboarding (which will call ensureProvisioned() in PR-3).
+      identity = null;
+    } else {
+      throw err;
+    }
+  }
+
   const headerList = await headers();
 
   const ip = await getIP(headerList);

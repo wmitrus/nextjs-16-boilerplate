@@ -25,3 +25,7 @@ export const LOGGER = {
   SERVER: Symbol('ServerLogger'),
   EDGE: Symbol('EdgeLogger'),
 };
+
+export const PROVISIONING = {
+  SERVICE: Symbol('ProvisioningService'),
+};

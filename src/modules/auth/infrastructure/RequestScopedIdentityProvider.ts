@@ -39,6 +39,10 @@ export class RequestScopedIdentityProvider implements IdentityProvider {
       return { id: internalUserId, email };
     }
 
+    // Edge context-only fallback: no DB lookup configured.
+    // Returns external provider ID for authentication-presence checks only.
+    // identity.id here is NOT an internal UUID — must not be used for domain operations.
+    // See Identity.id invariant in contracts/identity.ts for details.
     return { id: userId, email };
   }
 }

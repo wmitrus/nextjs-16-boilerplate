@@ -2,6 +2,7 @@
 
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import { UserNotProvisionedError } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
@@ -18,7 +19,20 @@ export const completeOnboarding = async (formData: FormData) => {
   const identityProvider = container.resolve<IdentityProvider>(
     AUTH.IDENTITY_PROVIDER,
   );
-  const identity = await identityProvider.getCurrentIdentity();
+
+  let identity;
+  try {
+    identity = await identityProvider.getCurrentIdentity();
+  } catch (err) {
+    if (err instanceof UserNotProvisionedError) {
+      // User is authenticated but has no internal provisioned record yet.
+      // PR-3 will call ensureProvisioned() here (via AUTH.IDENTITY_SOURCE) before
+      // profile update. Until then, provisioning must precede onboarding completion.
+      logger.warn('Onboarding action called for unprovisioned user');
+      return { error: 'User provisioning not complete. Please try again.' };
+    }
+    throw err;
+  }
 
   if (!identity) {
     logger.warn('Onboarding attempt without identity');

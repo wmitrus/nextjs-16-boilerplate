@@ -45,6 +45,14 @@ export interface TreeifiedError {
   properties: Record<string, { errors: string[] }>;
 }
 
+function toUserFriendlyErrorMessage(message: string): string {
+  if (message.includes('Failed query:')) {
+    return 'Authentication sync is temporarily unavailable. Please try again.';
+  }
+
+  return message;
+}
+
 export function createSecureAction<TSchema extends z.ZodType, TResult>({
   schema,
   resource,
@@ -145,8 +153,10 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         data: result,
       };
     } catch (error) {
-      const errorMessage =
+      const rawErrorMessage =
         error instanceof Error ? error.message : 'Internal Server Error';
+      const userFriendlyErrorMessage =
+        toUserFriendlyErrorMessage(rawErrorMessage);
 
       // 6. Audit Log (Failure)
       if (context) {
@@ -154,7 +164,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
           actionName,
           input,
           result: 'failure',
-          error: errorMessage,
+          error: rawErrorMessage,
           context,
         });
       }
@@ -169,7 +179,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       if (error instanceof AuthorizationError) {
         return {
           status: 'unauthorized' as const,
-          error: errorMessage,
+          error: userFriendlyErrorMessage,
         };
       }
 
@@ -182,7 +192,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
 
       return {
         status: 'error' as const,
-        error: errorMessage,
+        error: userFriendlyErrorMessage,
       };
     }
   };

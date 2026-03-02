@@ -11,6 +11,21 @@ export class MissingTenantContextError extends Error {
 }
 
 /**
+ * Thrown when a user is authenticated and the tenant exists in DB, but the user
+ * has no membership record for that tenant.
+ * Applies to TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=db.
+ * User must be invited or explicitly enrolled before accessing the tenant.
+ */
+export class TenantMembershipRequiredError extends Error {
+  constructor(
+    message = 'User is not a member of the requested tenant. An invitation or explicit enrollment is required.',
+  ) {
+    super(message);
+    this.name = 'TenantMembershipRequiredError';
+  }
+}
+
+/**
  * TenantContext represents a specific tenant in a multi-tenant system.
  */
 export interface TenantContext {

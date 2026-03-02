@@ -10,14 +10,17 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
 
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
-      this.cached = auth().then(({ userId, orgId, sessionClaims }) => ({
-        userId: userId ?? undefined,
-        orgId: orgId ?? undefined,
-        email:
-          typeof sessionClaims?.email === 'string'
-            ? sessionClaims.email
-            : undefined,
-      }));
+      this.cached = auth().then(
+        ({ userId, orgId, orgRole, sessionClaims }) => ({
+          userId: userId ?? undefined,
+          email:
+            typeof sessionClaims?.email === 'string'
+              ? sessionClaims.email
+              : undefined,
+          tenantExternalId: orgId ?? undefined,
+          tenantRole: orgRole ?? undefined,
+        }),
+      );
     }
 
     return this.cached;

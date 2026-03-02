@@ -30,3 +30,9 @@ This index provides the recommended reading order for the DB architecture packag
 - Migrations: 09
 - Seed architecture and practice: 10, 14, 15, 16, 17
 - Guardrails: 12, 13
+
+## Command map (drizzle-kit only)
+
+- PGLite dev: `pnpm db:migrate:dev`, `pnpm db:studio`
+- Local Postgres: `pnpm db:migrate:local`, `pnpm db:studio:local`
+- Production target: `pnpm db:migrate:prod`

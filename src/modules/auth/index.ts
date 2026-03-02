@@ -1,11 +1,13 @@
 import type { Container, Module } from '@/core/container';
-import { AUTH } from '@/core/contracts';
+import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
+import type { DrizzleDb } from '@/core/db';
 
 import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
 import { ClerkUserRepository } from './infrastructure/ClerkUserRepository';
+import { DrizzleExternalIdentityMapper } from './infrastructure/drizzle/DrizzleExternalIdentityMapper';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from './infrastructure/RequestScopedTenantResolver';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
@@ -51,15 +53,26 @@ export function createAuthModule(config: AuthModuleConfig): Module {
     register(container: Container) {
       const identitySource = buildIdentitySource(config.authProvider);
       const userRepository = buildUserRepository(config.authProvider);
+      const mapper = container.has(INFRASTRUCTURE.DB)
+        ? new DrizzleExternalIdentityMapper(
+            container.resolve<DrizzleDb>(INFRASTRUCTURE.DB),
+          )
+        : undefined;
 
       container.register(AUTH.IDENTITY_SOURCE, identitySource);
       container.register(
         AUTH.IDENTITY_PROVIDER,
-        new RequestScopedIdentityProvider(identitySource),
+        new RequestScopedIdentityProvider(identitySource, {
+          mapper,
+          provider: config.authProvider,
+        }),
       );
       container.register(
         AUTH.TENANT_RESOLVER,
-        new RequestScopedTenantResolver(identitySource),
+        new RequestScopedTenantResolver(identitySource, {
+          mapper,
+          provider: config.authProvider,
+        }),
       );
       container.register(AUTH.USER_REPOSITORY, userRepository);
     },

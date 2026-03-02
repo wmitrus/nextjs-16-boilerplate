@@ -14,7 +14,10 @@ import type {
 } from './ExternalIdentityMapper';
 
 interface RequestScopedTenantResolverOptions {
-  mapper?: Pick<ExternalIdentityMapper, 'resolveOrCreateInternalTenantId'>;
+  mapper?: Pick<
+    ExternalIdentityMapper,
+    'resolveOrCreateInternalTenantId' | 'ensureTenantAccess'
+  >;
   provider?: ExternalAuthProvider;
 }
 
@@ -39,6 +42,11 @@ export class RequestScopedTenantResolver implements TenantResolver {
           provider: this.options.provider,
           externalTenantId: orgId,
         });
+
+      await this.options.mapper.ensureTenantAccess({
+        internalUserId: identity.id,
+        internalTenantId,
+      });
     }
 
     return {

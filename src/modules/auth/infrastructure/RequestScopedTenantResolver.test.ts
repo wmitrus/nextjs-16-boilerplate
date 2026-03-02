@@ -45,6 +45,7 @@ describe('RequestScopedTenantResolver', () => {
       resolveOrCreateInternalTenantId: vi
         .fn()
         .mockResolvedValue('10000000-0000-0000-0000-000000000123'),
+      ensureTenantAccess: vi.fn().mockResolvedValue(undefined),
     };
 
     const resolver = new RequestScopedTenantResolver(
@@ -61,6 +62,10 @@ describe('RequestScopedTenantResolver', () => {
     expect(mapper.resolveOrCreateInternalTenantId).toHaveBeenCalledWith({
       provider: 'clerk',
       externalTenantId: 'org_123',
+    });
+    expect(mapper.ensureTenantAccess).toHaveBeenCalledWith({
+      internalUserId: '00000000-0000-0000-0000-000000000999',
+      internalTenantId: '10000000-0000-0000-0000-000000000123',
     });
     expect(context).toEqual({
       tenantId: '10000000-0000-0000-0000-000000000123',

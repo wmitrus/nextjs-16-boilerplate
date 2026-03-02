@@ -1,6 +1,6 @@
 # Production Provisioning Refactor — Implementation Plan
 
-Status: `PR-0 COMPLETE — PR-1 AWAITING APPROVAL`
+Status: `PR-0 COMPLETE (all review findings fixed) — PR-1 AWAITING APPROVAL`
 Source: `.copilot/2026-03-02-production-provisioning-refactor/PLAN.md` + `IMPLEMENTATION_LOCKED.md`
 Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
@@ -41,7 +41,7 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
 ### [x] PR-0 — Identity Boundary Fix + Resolver Purity (Blocker)
 
-> **COMPLETE.** Exit criteria met: typecheck + lint pass, no write-side effects in resolvers.
+> **COMPLETE (post code-review fixes applied).** Exit criteria met: typecheck + lint pass, no write-side effects in resolvers.
 
 #### Step 0.1 — Normalize `RequestIdentitySourceData` contract
 
@@ -99,6 +99,10 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 - [x] `MissingTenantContextError`: updated message (no `orgId` reference)
 - [x] `pnpm typecheck` — PASS
 - [x] `pnpm lint` — PASS
+- [x] **Code-review P1**: `ensureTenantAccess()` made `async` — Promise contract correct; DB test now passes
+- [x] **Code-review P1**: `Identity.id` invariant updated — edge exception documented in comment; fallback path annotated
+- [x] **Code-review P1**: `UserNotProvisionedError` handled in `onboarding/layout.tsx`, `onboarding-actions.ts`, `security-context.ts`
+- [x] **Code-review P2**: AuthJs/Supabase sources return normalized `{tenantExternalId: undefined, tenantRole: undefined}` instead of throwing; tests updated
 
 ---
 

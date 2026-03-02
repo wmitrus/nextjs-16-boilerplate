@@ -9,14 +9,8 @@ import type {
 
 import { authTenantIdentitiesTable, authUserIdentitiesTable } from './schema';
 
-import {
-  membershipsTable,
-  rolesTable,
-  tenantsTable,
-} from '@/modules/authorization/infrastructure/drizzle/schema';
+import { tenantsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
-
-const DEFAULT_BOOTSTRAP_ROLE = 'member';
 
 function sanitizeForEmailLocalPart(value: string): string {
   return value
@@ -38,26 +32,13 @@ function buildTenantName(externalTenantId: string): string {
   return `Tenant ${externalTenantId.slice(0, 16)}`;
 }
 
+/**
+ * @deprecated Write-path methods (resolveOrCreate*) are being moved to ProvisioningService (PR-2).
+ * Use DrizzleInternalIdentityLookup for read-only ID resolution in the request lifecycle.
+ * This class will be removed once ProvisioningService is wired.
+ */
 export class DrizzleExternalIdentityMapper implements ExternalIdentityMapper {
   constructor(private readonly db: DrizzleDb) {}
-
-  async ensureTenantAccess(args: {
-    internalUserId: string;
-    internalTenantId: string;
-  }): Promise<void> {
-    const { internalTenantId, internalUserId } = args;
-
-    const role = await this.resolveOrCreateBootstrapRole(internalTenantId);
-
-    await this.db
-      .insert(membershipsTable)
-      .values({
-        userId: internalUserId,
-        tenantId: internalTenantId,
-        roleId: role.id,
-      })
-      .onConflictDoNothing();
-  }
 
   async resolveOrCreateInternalUserId(args: {
     provider: ExternalAuthProvider;
@@ -178,52 +159,13 @@ export class DrizzleExternalIdentityMapper implements ExternalIdentityMapper {
     return resolved[0].tenantId;
   }
 
-  private async resolveOrCreateBootstrapRole(tenantId: string): Promise<{
-    id: string;
-  }> {
-    const existingRole = await this.db
-      .select({ id: rolesTable.id })
-      .from(rolesTable)
-      .where(
-        and(
-          eq(rolesTable.tenantId, tenantId),
-          eq(rolesTable.name, DEFAULT_BOOTSTRAP_ROLE),
-        ),
-      )
-      .limit(1);
-
-    if (existingRole[0]?.id) {
-      return existingRole[0];
-    }
-
-    const newRoleId = crypto.randomUUID();
-    await this.db
-      .insert(rolesTable)
-      .values({
-        id: newRoleId,
-        tenantId,
-        name: DEFAULT_BOOTSTRAP_ROLE,
-        isSystem: true,
-      })
-      .onConflictDoNothing();
-
-    const resolvedRole = await this.db
-      .select({ id: rolesTable.id })
-      .from(rolesTable)
-      .where(
-        and(
-          eq(rolesTable.tenantId, tenantId),
-          eq(rolesTable.name, DEFAULT_BOOTSTRAP_ROLE),
-        ),
-      )
-      .limit(1);
-
-    if (!resolvedRole[0]?.id) {
-      throw new Error(
-        '[auth] Failed to resolve bootstrap role after create-or-link operation.',
-      );
-    }
-
-    return resolvedRole[0];
+  ensureTenantAccess(_args: {
+    internalUserId: string;
+    internalTenantId: string;
+  }): Promise<void> {
+    throw new Error(
+      '[DrizzleExternalIdentityMapper] ensureTenantAccess has been removed. ' +
+        'Membership bootstrap is handled exclusively by ProvisioningService.ensureProvisioned().',
+    );
   }
 }

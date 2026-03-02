@@ -7,7 +7,7 @@ export class SystemIdentitySource implements RequestIdentitySource {
   async get(): Promise<RequestIdentitySourceData> {
     return {
       userId: 'system',
-      orgId: 'system',
+      tenantExternalId: 'system',
       email: undefined,
     };
   }

@@ -159,7 +159,7 @@ export class DrizzleExternalIdentityMapper implements ExternalIdentityMapper {
     return resolved[0].tenantId;
   }
 
-  ensureTenantAccess(_args: {
+  async ensureTenantAccess(_args: {
     internalUserId: string;
     internalTenantId: string;
   }): Promise<void> {

@@ -139,6 +139,31 @@ describe('Secure Action Wrapper', () => {
     }
   });
 
+  it('should sanitize raw SQL query errors into a user-friendly message', async () => {
+    const handler = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'Failed query: select "user_id" from "auth_user_identities" where ...',
+        ),
+      );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
+
+    const result = await action({ name: 'test' });
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.error).toBe(
+        'Authentication sync is temporarily unavailable. Please try again.',
+      );
+    }
+  });
+
   it('should return unauthorized with tenant-context message when tenant is missing', async () => {
     mockGetSecurityContext.mockRejectedValue(new MissingTenantContextError());
 

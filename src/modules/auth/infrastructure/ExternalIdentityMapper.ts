@@ -11,4 +11,9 @@ export interface ExternalIdentityMapper {
     provider: ExternalAuthProvider;
     externalTenantId: string;
   }): Promise<string>;
+
+  ensureTenantAccess(args: {
+    internalUserId: string;
+    internalTenantId: string;
+  }): Promise<void>;
 }

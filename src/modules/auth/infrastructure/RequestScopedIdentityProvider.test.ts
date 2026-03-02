@@ -52,6 +52,7 @@ describe('RequestScopedIdentityProvider', () => {
         .fn()
         .mockResolvedValue('00000000-0000-0000-0000-000000000123'),
       findInternalTenantId: vi.fn(),
+      findPersonalTenantId: vi.fn(),
     };
 
     const provider = new RequestScopedIdentityProvider(
@@ -72,6 +73,7 @@ describe('RequestScopedIdentityProvider', () => {
     const lookup = {
       findInternalUserId: vi.fn().mockResolvedValue(null),
       findInternalTenantId: vi.fn(),
+      findPersonalTenantId: vi.fn(),
     };
 
     const provider = new RequestScopedIdentityProvider(
@@ -88,6 +90,7 @@ describe('RequestScopedIdentityProvider', () => {
     const lookup = {
       findInternalUserId: vi.fn().mockResolvedValue(null),
       findInternalTenantId: vi.fn(),
+      findPersonalTenantId: vi.fn(),
     };
     const insert = vi.fn();
 

@@ -7,7 +7,7 @@ import type { DrizzleDb } from '@/core/db';
 import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
 import { ClerkUserRepository } from './infrastructure/ClerkUserRepository';
-import { DrizzleExternalIdentityMapper } from './infrastructure/drizzle/DrizzleExternalIdentityMapper';
+import { DrizzleInternalIdentityLookup } from './infrastructure/drizzle/DrizzleInternalIdentityLookup';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from './infrastructure/RequestScopedTenantResolver';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
@@ -53,8 +53,9 @@ export function createAuthModule(config: AuthModuleConfig): Module {
     register(container: Container) {
       const identitySource = buildIdentitySource(config.authProvider);
       const userRepository = buildUserRepository(config.authProvider);
-      const mapper = container.has(INFRASTRUCTURE.DB)
-        ? new DrizzleExternalIdentityMapper(
+
+      const lookup = container.has(INFRASTRUCTURE.DB)
+        ? new DrizzleInternalIdentityLookup(
             container.resolve<DrizzleDb>(INFRASTRUCTURE.DB),
           )
         : undefined;
@@ -63,14 +64,14 @@ export function createAuthModule(config: AuthModuleConfig): Module {
       container.register(
         AUTH.IDENTITY_PROVIDER,
         new RequestScopedIdentityProvider(identitySource, {
-          mapper,
+          lookup,
           provider: config.authProvider,
         }),
       );
       container.register(
         AUTH.TENANT_RESOLVER,
         new RequestScopedTenantResolver(identitySource, {
-          mapper,
+          lookup,
           provider: config.authProvider,
         }),
       );

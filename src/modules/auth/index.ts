@@ -1,6 +1,10 @@
+import { cookies, headers } from 'next/headers';
+
 import type { Container, Module } from '@/core/container';
 import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
+import type { MembershipRepository } from '@/core/contracts/repositories';
+import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import type { DrizzleDb } from '@/core/db';
 
@@ -8,13 +12,30 @@ import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsReque
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
 import { ClerkUserRepository } from './infrastructure/ClerkUserRepository';
 import { DrizzleInternalIdentityLookup } from './infrastructure/drizzle/DrizzleInternalIdentityLookup';
+import type { ExternalAuthProvider } from './infrastructure/ExternalIdentityMapper';
+import type { InternalIdentityLookup } from './infrastructure/InternalIdentityLookup';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
-import { RequestScopedTenantResolver } from './infrastructure/RequestScopedTenantResolver';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
 import { SystemIdentitySource } from './infrastructure/system/SystemIdentitySource';
 
+import type { TenancyMode } from '@/modules/provisioning/domain/tenancy-mode';
+import type { TenantContextSource } from '@/modules/provisioning/domain/tenant-context-source';
+import { OrgDbTenantResolver } from '@/modules/provisioning/infrastructure/OrgDbTenantResolver';
+import { OrgProviderTenantResolver } from '@/modules/provisioning/infrastructure/OrgProviderTenantResolver';
+import { PersonalTenantResolver } from '@/modules/provisioning/infrastructure/PersonalTenantResolver';
+import { CompositeActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/CompositeActiveTenantSource';
+import { CookieActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/CookieActiveTenantSource';
+import { HeaderActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/HeaderActiveTenantSource';
+import { SingleTenantResolver } from '@/modules/provisioning/infrastructure/SingleTenantResolver';
+
 export interface AuthModuleConfig {
   authProvider: 'clerk' | 'authjs' | 'supabase';
+  tenancyMode: TenancyMode;
+  defaultTenantId?: string;
+  tenantContextSource?: TenantContextSource;
+  tenantContextHeader: string;
+  tenantContextCookie: string;
+  membershipRepository?: MembershipRepository;
 }
 
 type AuthProvider = AuthModuleConfig['authProvider'];
@@ -48,6 +69,66 @@ function buildUserRepository(authProvider: AuthProvider): UserRepository {
   }
 }
 
+function buildTenantResolver(
+  config: AuthModuleConfig,
+  identitySource: RequestIdentitySource,
+  lookup: InternalIdentityLookup | undefined,
+): TenantResolver {
+  switch (config.tenancyMode) {
+    case 'single': {
+      if (!config.defaultTenantId) {
+        throw new Error(
+          '[authModule] TENANCY_MODE=single requires DEFAULT_TENANT_ID to be set.',
+        );
+      }
+      return new SingleTenantResolver(config.defaultTenantId);
+    }
+
+    case 'personal': {
+      if (!lookup) {
+        throw new Error(
+          '[authModule] TENANCY_MODE=personal requires a database connection (InternalIdentityLookup).',
+        );
+      }
+      return new PersonalTenantResolver(lookup);
+    }
+
+    case 'org': {
+      if (config.tenantContextSource === 'db') {
+        if (!config.membershipRepository) {
+          throw new Error(
+            '[authModule] TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=db requires membershipRepository.',
+          );
+        }
+        const activeTenantSource = new CompositeActiveTenantSource([
+          new HeaderActiveTenantSource(headers, config.tenantContextHeader),
+          new CookieActiveTenantSource(cookies, config.tenantContextCookie),
+        ]);
+        return new OrgDbTenantResolver(
+          activeTenantSource,
+          config.membershipRepository,
+        );
+      }
+
+      if (!lookup) {
+        throw new Error(
+          '[authModule] TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider requires a database connection.',
+        );
+      }
+      return new OrgProviderTenantResolver(
+        identitySource,
+        lookup,
+        config.authProvider as ExternalAuthProvider,
+      );
+    }
+
+    default:
+      throw new Error(
+        `[authModule] Unknown TENANCY_MODE: ${config.tenancyMode}`,
+      );
+  }
+}
+
 export function createAuthModule(config: AuthModuleConfig): Module {
   return {
     register(container: Container) {
@@ -60,6 +141,12 @@ export function createAuthModule(config: AuthModuleConfig): Module {
           )
         : undefined;
 
+      const tenantResolver = buildTenantResolver(
+        config,
+        identitySource,
+        lookup,
+      );
+
       container.register(AUTH.IDENTITY_SOURCE, identitySource);
       container.register(
         AUTH.IDENTITY_PROVIDER,
@@ -68,13 +155,7 @@ export function createAuthModule(config: AuthModuleConfig): Module {
           provider: config.authProvider,
         }),
       );
-      container.register(
-        AUTH.TENANT_RESOLVER,
-        new RequestScopedTenantResolver(identitySource, {
-          lookup,
-          provider: config.authProvider,
-        }),
-      );
+      container.register(AUTH.TENANT_RESOLVER, tenantResolver);
       container.register(AUTH.USER_REPOSITORY, userRepository);
     },
   };

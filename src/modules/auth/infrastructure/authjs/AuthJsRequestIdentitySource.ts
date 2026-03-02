@@ -9,7 +9,15 @@ export class AuthJsRequestIdentitySource implements RequestIdentitySource {
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
       this.cached = (async (): Promise<RequestIdentitySourceData> => {
-        throw new Error('AuthJsRequestIdentitySource: not implemented');
+        // TODO: Implement Auth.js session resolution.
+        // Auth.js does not provide org/tenant claims by default.
+        // tenantExternalId and tenantRole are always undefined for this provider.
+        return {
+          userId: undefined,
+          email: undefined,
+          tenantExternalId: undefined,
+          tenantRole: undefined,
+        };
       })();
     }
 

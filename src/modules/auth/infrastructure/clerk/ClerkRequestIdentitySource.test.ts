@@ -14,10 +14,11 @@ describe('ClerkRequestIdentitySource', () => {
     vi.clearAllMocks();
   });
 
-  it('should return userId, orgId, and email from auth()', async () => {
+  it('returns userId, tenantExternalId, tenantRole, and email from auth()', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: 'user_123',
       orgId: 'org_456',
+      orgRole: 'org:admin',
       sessionClaims: { email: 'test@example.com' },
     } as unknown as Awaited<ReturnType<typeof auth>>);
 
@@ -26,15 +27,17 @@ describe('ClerkRequestIdentitySource', () => {
 
     expect(data).toEqual({
       userId: 'user_123',
-      orgId: 'org_456',
+      tenantExternalId: 'org_456',
+      tenantRole: 'org:admin',
       email: 'test@example.com',
     });
   });
 
-  it('should return undefined fields when auth returns nulls', async () => {
+  it('returns undefined fields when auth returns nulls', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: null,
       orgId: null,
+      orgRole: null,
       sessionClaims: null,
     } as unknown as Awaited<ReturnType<typeof auth>>);
 
@@ -42,14 +45,16 @@ describe('ClerkRequestIdentitySource', () => {
     const data = await source.get();
 
     expect(data.userId).toBeUndefined();
-    expect(data.orgId).toBeUndefined();
+    expect(data.tenantExternalId).toBeUndefined();
+    expect(data.tenantRole).toBeUndefined();
     expect(data.email).toBeUndefined();
   });
 
-  it('should return undefined email when sessionClaims has no email', async () => {
+  it('returns undefined email when sessionClaims has no email', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: 'user_123',
       orgId: null,
+      orgRole: null,
       sessionClaims: { metadata: {} },
     } as unknown as Awaited<ReturnType<typeof auth>>);
 
@@ -58,12 +63,30 @@ describe('ClerkRequestIdentitySource', () => {
 
     expect(data.userId).toBe('user_123');
     expect(data.email).toBeUndefined();
+    expect(data.tenantExternalId).toBeUndefined();
+    expect(data.tenantRole).toBeUndefined();
+  });
+
+  it('returns undefined tenantRole when user has no org role', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      userId: 'user_123',
+      orgId: 'org_456',
+      orgRole: null,
+      sessionClaims: {},
+    } as unknown as Awaited<ReturnType<typeof auth>>);
+
+    const source = new ClerkRequestIdentitySource();
+    const data = await source.get();
+
+    expect(data.tenantExternalId).toBe('org_456');
+    expect(data.tenantRole).toBeUndefined();
   });
 
   it('memoizes auth() result per source instance', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: 'user_123',
       orgId: 'org_456',
+      orgRole: 'org:member',
       sessionClaims: { email: 'test@example.com' },
     } as unknown as Awaited<ReturnType<typeof auth>>);
 

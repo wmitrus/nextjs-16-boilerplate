@@ -27,4 +27,11 @@ export interface InternalIdentityLookup {
     provider: ExternalAuthProvider,
     externalTenantId: string,
   ): Promise<string | null>;
+
+  /**
+   * Looks up the personal tenant UUID for a given internal user UUID.
+   * Used in TENANCY_MODE=personal where each user has exactly one personal tenant.
+   * Returns null if no personal tenant has been provisioned for this user yet.
+   */
+  findPersonalTenantId(internalUserId: string): Promise<string | null>;
 }

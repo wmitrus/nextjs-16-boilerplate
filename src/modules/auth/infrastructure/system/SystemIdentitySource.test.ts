@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { SystemIdentitySource } from './SystemIdentitySource';
 
 describe('SystemIdentitySource', () => {
-  it('returns system userId and orgId', async () => {
+  it('returns system userId and tenantExternalId', async () => {
     const source = new SystemIdentitySource();
     const result = await source.get();
 
     expect(result).toEqual({
       userId: 'system',
-      orgId: 'system',
+      tenantExternalId: 'system',
       email: undefined,
     });
   });

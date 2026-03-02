@@ -8,7 +8,7 @@ export class SupabaseRequestIdentitySource implements RequestIdentitySource {
 
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
-      this.cached = (async () => {
+      this.cached = (async (): Promise<RequestIdentitySourceData> => {
         throw new Error('SupabaseRequestIdentitySource: not implemented');
       })();
     }

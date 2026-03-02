@@ -3,7 +3,7 @@ import type { SubjectId, TenantId } from './primitives';
 
 export class MissingTenantContextError extends Error {
   constructor(
-    message = 'Missing tenant context (orgId) for authenticated user',
+    message = 'Missing tenant context (tenantExternalId) for authenticated user',
   ) {
     super(message);
     this.name = 'MissingTenantContextError';

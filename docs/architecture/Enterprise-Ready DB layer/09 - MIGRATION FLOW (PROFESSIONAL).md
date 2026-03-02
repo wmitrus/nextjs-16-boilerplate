@@ -4,6 +4,13 @@
 pnpm db:migrate:dev
 ```
 
+## LOCAL – Postgres container
+
+```bash
+pnpm db:local:up
+pnpm db:migrate:local
+```
+
 ## PROD – Supabase
 
 ```bash

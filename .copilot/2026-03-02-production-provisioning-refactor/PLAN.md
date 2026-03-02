@@ -58,7 +58,9 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
 ### Phase 0 — Identity Boundary & Resolver Purity (Blocker)
 
 - [ ] Ujednolicić semantykę ID w kontraktach (`internal` vs `external`) i dopisać invariants w komentarzach.
-- [ ] Rozdzielić mapper na read-path lookup oraz write-path provisioning API.
+- [ ] I-2: rozdzielić legacy `ExternalIdentityMapper`:
+  - [ ] read-path: nowy interfejs `InternalIdentityLookup` (lookup-only, `Promise<string | null>`)
+  - [ ] write-path: wyłącznie `ProvisioningService` (create/link/bootstrap)
 - [ ] Usunąć wszystkie write-side effects z `RequestScopedIdentityProvider` i `TenantResolver`.
 - [ ] Dodać błędy domenowe `USER_NOT_PROVISIONED` i `TENANT_NOT_PROVISIONED` w read-path.
 - [ ] Znormalizować raw identity fields:
@@ -66,7 +68,8 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
   - [ ] `tenantRole?` zamiast provider-specific `orgRole?`
 - [ ] Dodać `ActiveTenantContextSource` dla `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=db`.
 - [ ] Ustawić onboarding jako jedyny trigger provisioningu: `completeOnboarding()` -> `ensureProvisioned(...)` -> dalszy flow.
-- [ ] Usunąć bootstrap membership/role z mappera auth; mapper zostaje mapping-only.
+- [ ] Usunąć bootstrap membership/role z mappera auth i wycofać mapper z read-path.
+- [ ] Podmienić DI zależności resolvera/providera z `ExternalIdentityMapper` na `InternalIdentityLookup`.
 - [ ] Dodać testy regresji potwierdzające brak insertów w resolverze/providerze.
 
 ### Phase A — Contracts & Domain Constants
@@ -100,6 +103,9 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
 
 - [ ] Dodać `ProvisioningService` + `ProvisioningInput/Result` kontrakty.
 - [ ] Ustalić lokalizację modułu: `src/modules/provisioning`.
+- [ ] Dodać kontrakt read-only `InternalIdentityLookup`:
+  - [ ] `findInternalUserId(...) -> Promise<string | null>`
+  - [ ] `findInternalTenantId(...) -> Promise<string | null>`
 - [ ] Zdefiniować porty/repositories do operacji write/upsert (identity, tenant, role, membership, tenantAttributes).
 - [ ] Dodać write-path (`*CommandRepository`) dla: ensure role, upsert tenant_attributes, upsert policy defaults, insert membership.
 - [ ] Dodać kody błędów domenowych (`TENANT_USER_LIMIT_REACHED`, `TENANT_CONTEXT_REQUIRED`, itp.).
@@ -126,7 +132,7 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
   - [ ] `org/db`: rola wynika z membership DB (bez interpretacji tenant claimów providera).
 - [ ] Krok Limits: enforce free-tier limit **przed insertem nowego membership** (tylko gdy membership jeszcze nie istnieje).
 - [ ] Krok Membership: insert-only idempotent attach z wyliczoną rolą (bez auto-upgrade roli, bez auto-attach w `org/db` bez jawnego flow).
-- [ ] Mapper pozostaje warstwą mapowania ID (bez decyzji o roli/default policies).
+- [ ] Read-path używa `InternalIdentityLookup`; create/link dzieje się tylko w `ProvisioningService`.
 
 ### Phase D — Policy Templates (Tenant-Scoped)
 
@@ -154,6 +160,11 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
   - [ ] **Apply templates do DB per-tenant** — wykonywane przez provisioning (Phase C + D).
 - [ ] Traktować `db:seed:prod:templates` jako opcjonalny (potrzebny głównie dla danych globalnych/systemowych lub testów migracji deserializera).
 - [ ] Oddzielić `dev/test seed` od runtime provisioningu produkcyjnego.
+- [ ] I-3: znormalizować naming ról w seedach:
+  - [ ] internal canonical role names: `owner`/`member`
+  - [ ] dev/test seed: zamienić `admin` na `owner`
+  - [ ] dodać migrację/backfill dla lokalnych DB z istniejącą rolą `admin`
+  - [ ] zaktualizować fixtures/integration tests zależne od `admin`
 - [ ] Uzupełnić runbook: kiedy seed jest potrzebny, a kiedy wystarcza onboarding provisioning.
 
 ### Phase G — Testing Matrix
@@ -163,6 +174,7 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
 - [ ] Policy engine/repository integration: owner/member policy resolution.
 - [ ] E2E smoke: first login + org => provisioning => authorized feature path.
 - [ ] Regression: brak auto-admin i brak wildcard grantów.
+- [ ] Regression: brak canonical roli `admin` w seed/templates (dozwolony tylko alias claim -> `owner`).
 - [ ] Konfiguracyjny test matrix:
   - [ ] `AUTH_PROVIDER=clerk` + `TENANCY_MODE=single`
   - [ ] `AUTH_PROVIDER=clerk` + `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=provider`
@@ -185,6 +197,7 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
 
 - Flow first-login działa idempotentnie dla wszystkich wspieranych kombinacji provider/tenancy.
 - User otrzymuje tylko minimalne uprawnienia zgodne z rolą (`owner/member`) i templates.
+- Wewnętrzny model ról jest spójny (`owner/member`) we wszystkich seedach/templates/provisioning.
 - Brak wildcard bootstrap i brak auto-escalation.
 - Free-tier limit egzekwowany poprawnym kodem błędu.
 - Policy templates versioning działa i aktualizuje tenanty bez privilege creep.
@@ -229,7 +242,9 @@ Domknąć **produkcyjny flow provisioningu** bez skrótów:
 - [ ] `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts` — mapowanie `tenantExternalId` + `tenantRole` z claimów.
 - [ ] `src/modules/auth/infrastructure/authjs/*` + `supabase/*` — jawne `tenantExternalId/tenantRole` jako undefined (bez custom claims).
 - [ ] `src/modules/auth/ui/onboarding-actions.ts` — wywołanie `ensureProvisioned()` przed profile update/onboardingComplete.
-- [ ] `src/modules/auth/infrastructure/drizzle/DrizzleExternalIdentityMapper.ts` — usunąć logikę bootstrap roli/policies z mappera (mapping-only).
+- [ ] `src/modules/auth/infrastructure/InternalIdentityLookup.ts` — nowy kontrakt read-only (`string | null`).
+- [ ] `src/modules/auth/infrastructure/drizzle/DrizzleInternalIdentityLookup.ts` — implementacja SELECT-only.
+- [ ] `src/modules/auth/infrastructure/ExternalIdentityMapper.ts` — deprecate/remove z runtime read-path.
 - [ ] `src/modules/provisioning/infrastructure/request-context/*` — source adaptery dla active tenant (`org/db`).
 - [ ] Nowy moduł: `src/modules/provisioning/**` (`ProvisioningService`, `DrizzleProvisioningService`, `tenancy-mode`, `errors`, `policy/templates`, `index`).
 

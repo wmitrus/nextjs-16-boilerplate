@@ -69,6 +69,14 @@ pnpm db:migrate:dev
 pnpm db:seed
 ```
 
+If you use local Postgres container profile (`DB_DRIVER=postgres`), use:
+
+```bash
+pnpm db:local:up
+pnpm db:migrate:local
+pnpm db:seed
+```
+
 Notes:
 
 - `db:seed` creates baseline users/tenants/roles/policies for local development.

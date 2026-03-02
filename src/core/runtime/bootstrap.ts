@@ -1,18 +1,19 @@
 import { Container } from '@/core/container';
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DbConfig } from '@/core/db/types';
-import { env } from '@/core/env';
+import { env, validateTenancyConfig } from '@/core/env';
 import { getInfrastructure } from '@/core/runtime/infrastructure';
 
 import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
 import { createAuthorizationModule } from '@/modules/authorization';
+import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
 
 export { createEdgeRequestContainer } from './edge';
 
 export interface AppConfig {
   db: DbConfig;
-  auth: AuthModuleConfig;
+  auth: Omit<AuthModuleConfig, 'membershipRepository'>;
 }
 
 function resolveDbProvider(): DbConfig['provider'] {
@@ -45,17 +46,22 @@ function resolveDbDriver(): DbConfig['driver'] {
 }
 
 export function createRequestContainer(config: AppConfig): Container {
-  // Request scope contract:
-  // - returns a fresh container per invocation (no shared mutable service graph)
-  // - reuses process-scope infrastructure (DB runtime) via getInfrastructure(config)
-  // This keeps request isolation while avoiding per-request DB re-initialization.
-  const container = new Container();
+  validateTenancyConfig();
 
+  const container = new Container();
   const { dbRuntime } = getInfrastructure(config);
 
   container.register(INFRASTRUCTURE.DB, dbRuntime.db);
 
-  container.registerModule(createAuthModule(config.auth));
+  const membershipRepository =
+    config.auth.tenancyMode === 'org' &&
+    config.auth.tenantContextSource === 'db'
+      ? new DrizzleMembershipRepository(dbRuntime.db)
+      : undefined;
+
+  container.registerModule(
+    createAuthModule({ ...config.auth, membershipRepository }),
+  );
   container.registerModule(createAuthorizationModule({ db: dbRuntime.db }));
 
   return container;
@@ -70,12 +76,15 @@ function buildConfig(): AppConfig {
     },
     auth: {
       authProvider: env.AUTH_PROVIDER,
+      tenancyMode: env.TENANCY_MODE,
+      defaultTenantId: env.DEFAULT_TENANT_ID,
+      tenantContextSource: env.TENANT_CONTEXT_SOURCE,
+      tenantContextHeader: env.TENANT_CONTEXT_HEADER,
+      tenantContextCookie: env.TENANT_CONTEXT_COOKIE,
     },
   };
 }
 
 export function getAppContainer(): Container {
-  // Convenience helper for default env-driven config.
-  // Prefer createRequestContainer(config) in tests or multi-profile runtime setups.
   return createRequestContainer(buildConfig());
 }

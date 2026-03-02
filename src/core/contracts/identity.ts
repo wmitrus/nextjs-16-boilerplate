@@ -21,9 +21,14 @@
 
 export interface Identity {
   /**
-   * INVARIANT: Always an internal UUID from our database (users.id).
-   * Never an external provider ID (e.g. Clerk user_xxx).
+   * INVARIANT (Node/DB paths): When resolved via InternalIdentityLookup, always an
+   * internal UUID from our database (users.id). Never an external provider ID.
    * Used exclusively for domain/security/authorization — never passed to provider SDKs.
+   *
+   * Edge context-only exception: In Edge middleware (proxy.ts) where no DB lookup is
+   * configured, this field may temporarily hold the external provider ID for
+   * authentication-presence checks only (is user authenticated?). Such paths MUST
+   * have enforceResourceAuthorization: false and MUST NOT use identity.id for domain ops.
    */
   readonly id: string;
 

@@ -88,6 +88,8 @@ Drizzle config files are intentionally not in the project root.
 
 - Dev/PGLite config:
   - `src/core/db/migrations/config/drizzle.dev.ts`
+- Local Postgres config:
+  - `src/core/db/migrations/config/drizzle.local.ts`
 - Prod/Postgres config:
   - `src/core/db/migrations/config/drizzle.prod.ts`
 
@@ -100,8 +102,10 @@ Operational commands:
 
 - `pnpm db:generate` → uses dev config
 - `pnpm db:migrate:dev` → uses dev config
+- `pnpm db:migrate:local` → uses local config against local Postgres on `127.0.0.1:5433`
+- `pnpm db:studio` → opens studio for dev/PGLite config
+- `pnpm db:studio:local` → opens studio for local Postgres config
 - `pnpm db:migrate:prod` → uses prod config (`DATABASE_URL` required)
-- `pnpm db:migrate:local` → uses prod config against local Postgres on `127.0.0.1:5433`
 
 ## CI Guidance
 

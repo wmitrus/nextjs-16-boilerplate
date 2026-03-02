@@ -49,4 +49,21 @@ export class DrizzleInternalIdentityLookup implements InternalIdentityLookup {
 
     return result[0]?.tenantId ?? null;
   }
+
+  async findPersonalTenantId(internalUserId: string): Promise<string | null> {
+    // Personal tenants are stored with provider='personal' and externalTenantId=internalUserId.
+    // This convention is established by ProvisioningService.ensureProvisioned() in PR-2.
+    const result = await this.db
+      .select({ tenantId: authTenantIdentitiesTable.tenantId })
+      .from(authTenantIdentitiesTable)
+      .where(
+        and(
+          eq(authTenantIdentitiesTable.provider, 'personal'),
+          eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
+        ),
+      )
+      .limit(1);
+
+    return result[0]?.tenantId ?? null;
+  }
 }

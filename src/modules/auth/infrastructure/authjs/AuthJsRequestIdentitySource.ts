@@ -8,7 +8,7 @@ export class AuthJsRequestIdentitySource implements RequestIdentitySource {
 
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
-      this.cached = (async () => {
+      this.cached = (async (): Promise<RequestIdentitySourceData> => {
         throw new Error('AuthJsRequestIdentitySource: not implemented');
       })();
     }

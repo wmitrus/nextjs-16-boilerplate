@@ -35,7 +35,7 @@ export const env = createEnv({
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),
     LOG_INGEST_SECRET: z.string().optional(),
     SENTRY_DSN: z.url().optional(),
-    CLERK_SECRET_KEY: z.string().min(1),
+    CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).default('demo-internal-key'),
     SECURITY_AUDIT_LOG_ENABLED: z
@@ -78,7 +78,7 @@ export const env = createEnv({
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
     NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
     NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/sign-up'),
     NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: z.string().default('/'),
@@ -200,6 +200,46 @@ export function validateTenancyConfigValues(
         'Set TENANT_CONTEXT_SOURCE=provider for Clerk Organizations, or TENANT_CONTEXT_SOURCE=db for app-level tenant selection.',
     );
   }
+}
+
+/**
+ * Cross-field auth provider configuration validation against explicit values.
+ *
+ * Rules:
+ * - AUTH_PROVIDER=clerk requires CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ */
+export function validateAuthProviderConfigValues(
+  authProvider: string | undefined,
+  clerkSecretKey: string | undefined,
+  clerkPublishableKey: string | undefined,
+): void {
+  if (authProvider !== 'clerk') {
+    return;
+  }
+
+  if (!clerkSecretKey) {
+    throw new Error(
+      '[env] AUTH_PROVIDER=clerk requires CLERK_SECRET_KEY to be set.',
+    );
+  }
+
+  if (!clerkPublishableKey) {
+    throw new Error(
+      '[env] AUTH_PROVIDER=clerk requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to be set.',
+    );
+  }
+}
+
+/**
+ * Cross-field auth provider configuration validation from global env.
+ * Convenience wrapper around validateAuthProviderConfigValues for bootstrap/startup.
+ */
+export function validateAuthProviderConfig(): void {
+  validateAuthProviderConfigValues(
+    env.AUTH_PROVIDER,
+    env.CLERK_SECRET_KEY,
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  );
 }
 
 /**

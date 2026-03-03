@@ -17,6 +17,7 @@ export interface AppConfig {
   auth: Omit<AuthModuleConfig, 'membershipRepository'>;
   provisioning: {
     freeTierMaxUsers: number;
+    crossProviderEmailLinking: 'disabled' | 'verified-only';
   };
 }
 
@@ -77,6 +78,7 @@ export function createRequestContainer(config: AppConfig): Container {
     new DrizzleProvisioningService(
       dbRuntime.db,
       config.provisioning.freeTierMaxUsers,
+      config.provisioning.crossProviderEmailLinking,
     ),
   );
 
@@ -100,6 +102,7 @@ function buildConfig(): AppConfig {
     },
     provisioning: {
       freeTierMaxUsers: env.FREE_TIER_MAX_USERS,
+      crossProviderEmailLinking: env.CROSS_PROVIDER_EMAIL_LINKING,
     },
   };
 }

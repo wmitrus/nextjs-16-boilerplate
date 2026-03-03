@@ -327,3 +327,49 @@ describe('validateTenancyConfig', () => {
     expect(() => validateTenancyConfig()).not.toThrow();
   });
 });
+
+describe('validateTenancyConfigValues', () => {
+  it('throws when single without defaultTenantId', async () => {
+    vi.resetModules();
+    const { validateTenancyConfigValues } = await import('./env');
+    expect(() =>
+      validateTenancyConfigValues('single', undefined, undefined),
+    ).toThrow('TENANCY_MODE=single requires DEFAULT_TENANT_ID');
+  });
+
+  it('throws when org without tenantContextSource', async () => {
+    vi.resetModules();
+    const { validateTenancyConfigValues } = await import('./env');
+    expect(() =>
+      validateTenancyConfigValues('org', undefined, undefined),
+    ).toThrow('TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE');
+  });
+
+  it('passes for single with defaultTenantId', async () => {
+    vi.resetModules();
+    const { validateTenancyConfigValues } = await import('./env');
+    expect(() =>
+      validateTenancyConfigValues(
+        'single',
+        '550e8400-e29b-41d4-a716-446655440000',
+        undefined,
+      ),
+    ).not.toThrow();
+  });
+
+  it('passes for org with tenantContextSource=provider', async () => {
+    vi.resetModules();
+    const { validateTenancyConfigValues } = await import('./env');
+    expect(() =>
+      validateTenancyConfigValues('org', undefined, 'provider'),
+    ).not.toThrow();
+  });
+
+  it('passes for personal with no defaultTenantId or source', async () => {
+    vi.resetModules();
+    const { validateTenancyConfigValues } = await import('./env');
+    expect(() =>
+      validateTenancyConfigValues('personal', undefined, undefined),
+    ).not.toThrow();
+  });
+});

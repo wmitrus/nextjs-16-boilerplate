@@ -46,13 +46,14 @@ describe('Policy templates', () => {
     expect(resources).toContain('security');
   });
 
-  it('memberPolicies: user:read and user:update have self-access conditions', () => {
+  it('memberPolicies: user:read and user:update use supported self-access descriptor', () => {
     const userReadPolicies = memberPolicies.filter(
       (p) => p.resource === 'user' && p.actions.includes('user:read'),
     );
     expect(userReadPolicies.length).toBeGreaterThan(0);
     userReadPolicies.forEach((p) => {
       expect(p.conditions).toBeDefined();
+      expect((p.conditions as { type?: string }).type).toBe('isOwner');
     });
 
     const userUpdatePolicies = memberPolicies.filter(
@@ -61,6 +62,7 @@ describe('Policy templates', () => {
     expect(userUpdatePolicies.length).toBeGreaterThan(0);
     userUpdatePolicies.forEach((p) => {
       expect(p.conditions).toBeDefined();
+      expect((p.conditions as { type?: string }).type).toBe('isOwner');
     });
   });
 

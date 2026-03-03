@@ -625,6 +625,36 @@ describe('DrizzleProvisioningService (real DB)', () => {
     });
   });
 
+  describe('role escalation guard', () => {
+    it('does not escalate existing membership role when called with a different role claim', async () => {
+      const svc = makeService();
+
+      const first = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_noescalate_001',
+        tenantExternalId: 'org_noescalate_001',
+        tenantRole: 'org:member',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      expect(first.membershipRole).toBe('member');
+
+      const second = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_noescalate_001',
+        tenantExternalId: 'org_noescalate_001',
+        tenantRole: 'org:admin',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      expect(second.membershipRole).toBe('member');
+      expect(second.internalUserId).toBe(first.internalUserId);
+      expect(second.internalTenantId).toBe(first.internalTenantId);
+    });
+  });
+
   describe('org/db — no write side-effects before membership check (P1 fix)', () => {
     it('throws TenantMembershipRequiredError and does NOT create tenant_attributes or roles for user without membership', async () => {
       const svc = makeService();

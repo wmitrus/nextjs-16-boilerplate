@@ -111,15 +111,17 @@ Mapping runtime rule:
 ```mermaid
 flowchart LR
   A[External auth provider\nClerk/AuthJS/Supabase] --> B[RequestScopedIdentityProvider]
-  A --> C[RequestScopedTenantResolver]
-  B --> D[ExternalIdentityMapper\nprovider + external_user_id]
-  C --> E[ExternalIdentityMapper\nprovider + external_tenant_id]
-  D --> F[(auth_user_identities)]
-  E --> G[(auth_tenant_identities)]
-  F --> H[Internal user UUID]
-  G --> I[Internal tenant UUID]
-  H --> J[AuthorizationService / policies]
-  I --> J
+  A --> C[Tenant resolver strategy\n(single/personal/org-provider/org-db)]
+  B --> D[InternalIdentityLookup\nread-only lookup]
+  C --> D
+  D --> E[(auth_user_identities)]
+  D --> F[(auth_tenant_identities)]
+  E --> G[Internal user UUID]
+  F --> H[Internal tenant UUID]
+  G --> I[AuthorizationService / policies]
+  H --> I
+  J[ProvisioningService.ensureProvisioned\nwrite-path only] --> E
+  J --> F
 
   classDef edge fill:#f3f4f6,stroke:#9ca3af,color:#111827;
   classDef node fill:#ecfeff,stroke:#0891b2,color:#0c4a6e;
@@ -130,8 +132,8 @@ flowchart LR
 
 Adapter contract rule (important):
 
-- `RequestScopedIdentityProvider` depends only on user mapping method.
-- `RequestScopedTenantResolver` depends only on tenant mapping method.
-- Do not force full mapper interfaces into adapters that use only one method.
+- `RequestScopedIdentityProvider` and Node tenant resolvers use read-only lookup (`InternalIdentityLookup`).
+- Write-side mapping and creation belongs exclusively to `ProvisioningService.ensureProvisioned()`.
+- Keep lookup contracts segregated from write contracts to avoid resolver side effects.
 
 This preserves interface segregation, simplifies tests, and keeps modular boundaries clear.

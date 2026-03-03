@@ -14,7 +14,6 @@ import type { DrizzleDb } from '@/core/db';
 
 import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
-import { ClerkUserRepository } from './infrastructure/ClerkUserRepository';
 import { DrizzleInternalIdentityLookup } from './infrastructure/drizzle/DrizzleInternalIdentityLookup';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
@@ -29,6 +28,7 @@ import { CompositeActiveTenantSource } from '@/modules/provisioning/infrastructu
 import { CookieActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/CookieActiveTenantSource';
 import { HeaderActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/HeaderActiveTenantSource';
 import { SingleTenantResolver } from '@/modules/provisioning/infrastructure/SingleTenantResolver';
+import { DrizzleUserRepository } from '@/modules/user/infrastructure/drizzle/DrizzleUserRepository';
 
 export interface AuthModuleConfig {
   authProvider: 'clerk' | 'authjs' | 'supabase';
@@ -52,20 +52,6 @@ function buildIdentitySource(
       return new AuthJsRequestIdentitySource();
     case 'supabase':
       return new SupabaseRequestIdentitySource();
-    default:
-      throw new Error(`[authModule] Unknown AUTH_PROVIDER: ${authProvider}`);
-  }
-}
-
-function buildUserRepository(authProvider: AuthProvider): UserRepository {
-  switch (authProvider) {
-    case 'clerk':
-      return new ClerkUserRepository();
-    case 'authjs':
-    case 'supabase':
-      throw new Error(
-        `[authModule] AUTH_PROVIDER=${authProvider} requires a dedicated UserRepository implementation.`,
-      );
     default:
       throw new Error(`[authModule] Unknown AUTH_PROVIDER: ${authProvider}`);
   }
@@ -148,13 +134,15 @@ export function createAuthModule(config: AuthModuleConfig): Module {
   return {
     register(container: Container) {
       const identitySource = buildIdentitySource(config.authProvider);
-      const userRepository = buildUserRepository(config.authProvider);
+      if (!container.has(INFRASTRUCTURE.DB)) {
+        throw new Error(
+          '[authModule] Missing database runtime. Node auth module requires INFRASTRUCTURE.DB.',
+        );
+      }
 
-      const lookup = container.has(INFRASTRUCTURE.DB)
-        ? new DrizzleInternalIdentityLookup(
-            container.resolve<DrizzleDb>(INFRASTRUCTURE.DB),
-          )
-        : undefined;
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const userRepository: UserRepository = new DrizzleUserRepository(db);
+      const lookup = new DrizzleInternalIdentityLookup(db);
 
       const tenantResolver = buildTenantResolver(
         config,

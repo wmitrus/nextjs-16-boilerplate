@@ -10,6 +10,7 @@ describe('AuthJsRequestIdentitySource', () => {
     expect(result).toEqual({
       userId: undefined,
       email: undefined,
+      emailVerified: undefined,
       tenantExternalId: undefined,
       tenantRole: undefined,
     });

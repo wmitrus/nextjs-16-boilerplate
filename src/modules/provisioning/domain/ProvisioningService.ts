@@ -13,6 +13,12 @@ export interface ProvisioningInput {
   readonly provider: ExternalAuthProvider;
   readonly externalUserId: string;
   readonly email?: string;
+  /**
+   * Whether the email was verified by the auth provider.
+   * Gates cross-provider email-based account linking.
+   * Undefined or false → treated as unverified.
+   */
+  readonly emailVerified?: boolean;
   readonly tenantExternalId?: string;
   readonly tenantRole?: string;
   readonly activeTenantId?: string;

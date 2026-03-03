@@ -249,13 +249,13 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
 ---
 
-### [ ] PR-3 — Onboarding Integration + Policy Templates Versioning
+### [x] PR-3 — Onboarding Integration + Policy Templates Versioning
 
 > **Confirm before starting.** Exit criteria: `completeOnboarding()` provisions first, templates versioned, docs updated.
 
 #### Step 3.1 — Policy templates
 
-- [ ] Create `src/modules/provisioning/policy/templates.ts`:
+- [x] Create `src/modules/provisioning/policy/templates.ts`:
   - `POLICY_TEMPLATE_VERSION = 1` constant
   - `ownerPolicies`: explicit allow policies using `ACTIONS.*` constants (no wildcard)
   - `memberPolicies`: explicit allow policies with self-access condition `subject.userId == resource.userId` for `user:read` / `user:update`
@@ -263,20 +263,20 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
 #### Step 3.2 — Schema migration for `policy_template_version`
 
-- [ ] Add `policy_template_version` column to `tenant_attributes` table: `integer('policy_template_version').notNull().default(0)`
-- [ ] Generate Drizzle migration: `pnpm drizzle-kit generate`
-- [ ] Update `TenantAttributes` contract type (add `policyTemplateVersion?: number`)
+- [x] Add `policy_template_version` column to `tenant_attributes` table: `integer('policy_template_version').notNull().default(0)`
+- [x] Generate Drizzle migration: `pnpm drizzle-kit generate`
+- [x] Update `TenantAttributes` contract type (add `policyTemplateVersion?: number`)
 
 #### Step 3.3 — Policy versioning in provisioning
 
-- [ ] `DrizzleProvisioningService`: after membership step, check `tenant_attributes.policy_template_version` vs `POLICY_TEMPLATE_VERSION`
-- [ ] If stale (version < current): upsert missing policy defaults for `owner` + `member` roles idempotently
-- [ ] Persist new version to `tenant_attributes.policy_template_version` after successful apply
-- [ ] No privilege creep: only ADD missing policies (never remove or replace existing)
+- [x] `DrizzleProvisioningService`: after membership step, check `tenant_attributes.policy_template_version` vs `POLICY_TEMPLATE_VERSION`
+- [x] If stale (version < current): upsert missing policy defaults for `owner` + `member` roles idempotently
+- [x] Persist new version to `tenant_attributes.policy_template_version` after successful apply
+- [x] No privilege creep: only ADD missing policies (never remove or replace existing)
 
 #### Step 3.4 — Update `completeOnboarding()` (provisioning-first)
 
-- [ ] `src/modules/auth/ui/onboarding-actions.ts`:
+- [x] `src/modules/auth/ui/onboarding-actions.ts`:
   1. Resolve `AUTH.IDENTITY_SOURCE` from container → get raw `userId`, `email`, `tenantExternalId`, `tenantRole`
   2. Resolve `PROVISIONING.SERVICE` from container
   3. Call `provisioning.ensureProvisioned({ provider: env.AUTH_PROVIDER, externalUserId, email, tenantExternalId, tenantRole, activeTenantId, tenancyMode: env.TENANCY_MODE, tenantContextSource: env.TENANT_CONTEXT_SOURCE })`
@@ -285,38 +285,38 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
 #### Step 3.5 — Audit event
 
-- [ ] Log structured audit event on `provisioning:ensure` success/failure using existing server logger
+- [x] Log structured audit event on `provisioning:ensure` success/failure using existing server logger
 
 #### Step 3.6 — Harden dev seed (Phase F alignment)
 
-- [ ] `src/modules/authorization/infrastructure/drizzle/seed.ts`: replace wildcard policies with explicit `owner`/`member` action lists using `ACTIONS.*` constants
-- [ ] Rename seed roles from `admin` → `owner` (aligning with canonical internal names)
+- [x] `src/modules/authorization/infrastructure/drizzle/seed.ts`: replace wildcard policies with explicit `owner`/`member` action lists using `ACTIONS.*` constants
+- [x] Rename seed roles from `admin` → `owner` (aligning with canonical internal names)
 
 #### Step 3.7 — Phase H guardrails
 
-- [ ] `src/modules/provisioning/policy/templates.test.ts`: guard test — no template contains `actions: ['*']` or `resource: '*'`
-- [ ] Add test: `ensureProvisioned()` on existing membership with different role claim does not escalate role
-- [ ] Run `pnpm skott:check:only` + `pnpm madge` — no circular dependencies
+- [x] `src/modules/provisioning/policy/templates.test.ts`: guard test — no template contains `actions: ['*']` or `resource: '*'`
+- [x] Add test: `ensureProvisioned()` on existing membership with different role claim does not escalate role
+- [x] Run `pnpm skott:check:only` + `pnpm madge` — no circular dependencies
 
 #### Step 3.8 — Tests
 
-- [ ] Integration: `completeOnboarding()` calls `ensureProvisioned()` before profile update
-- [ ] Integration: `org/provider` without `tenantExternalId` → controlled failure (no profile update)
-- [ ] Integration: `org/db` without `activeTenantId` → controlled failure
-- [ ] Integration: `org/db` with active tenant but missing membership → `TenantMembershipRequiredError`
-- [ ] Unit: template version bump does not add wildcard policies
-- [ ] Run `pnpm typecheck` and `pnpm lint` — must pass
+- [x] Integration: `completeOnboarding()` calls `ensureProvisioned()` before profile update
+- [x] Integration: `org/provider` without `tenantExternalId` → controlled failure (no profile update)
+- [x] Integration: `org/db` without `activeTenantId` → controlled failure
+- [x] Integration: `org/db` with active tenant but missing membership → `TenantMembershipRequiredError`
+- [x] Unit: template version bump does not add wildcard policies
+- [x] Run `pnpm typecheck` and `pnpm lint` — must pass
 
 ---
 
 ## Global Guardrails (verified at each PR)
 
-- [ ] `AUTH_PROVIDER` and `TENANCY_MODE` are orthogonal (no hard-coded coupling)
-- [ ] No wildcard default policies (`*`) in provisioning output
-- [ ] No silent membership role escalation
-- [ ] Edge middleware remains context-only (no DB write)
-- [ ] All new code covered by focused tests
-- [ ] `pnpm typecheck` + `pnpm lint` pass before phase sign-off
+- [x] `AUTH_PROVIDER` and `TENANCY_MODE` are orthogonal (no hard-coded coupling)
+- [x] No wildcard default policies (`*`) in provisioning output
+- [x] No silent membership role escalation
+- [x] Edge middleware remains context-only (no DB write)
+- [x] All new code covered by focused tests
+- [x] `pnpm typecheck` + `pnpm lint` pass before phase sign-off
 
 ---
 

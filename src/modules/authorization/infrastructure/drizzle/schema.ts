@@ -106,6 +106,9 @@ export const tenantAttributesTable = pgTable(
       .default('standard'),
     features: jsonb('features').$type<string[]>().notNull().default([]),
     maxUsers: integer('max_users').notNull().default(5),
+    policyTemplateVersion: integer('policy_template_version')
+      .notNull()
+      .default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

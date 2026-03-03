@@ -52,7 +52,7 @@ const defaultEnv: MutableEnv = {
   DATABASE_URL: undefined,
   DB_DRIVER: undefined,
   TENANCY_MODE: 'single' as const,
-  DEFAULT_TENANT_ID: undefined,
+  DEFAULT_TENANT_ID: '550e8400-e29b-41d4-a716-446655440000',
   TENANT_CONTEXT_SOURCE: undefined,
   TENANT_CONTEXT_HEADER: 'x-tenant-id',
   TENANT_CONTEXT_COOKIE: 'active_tenant_id',

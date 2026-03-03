@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DrizzleExternalIdentityMapper } from './DrizzleExternalIdentityMapper';
 
+import { DrizzleProvisioningService } from '@/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService';
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
@@ -17,57 +18,63 @@ afterAll(async () => {
 });
 
 /**
- * @deprecated These write-path methods will be removed in PR-2 when
- * ProvisioningService.ensureProvisioned() takes ownership of create/link operations.
- * ensureTenantAccess() has already been removed — membership bootstrap belongs to ProvisioningService.
+ * @deprecated DrizzleExternalIdentityMapper now provides SELECT-only methods.
+ * Write-path operations are handled exclusively by ProvisioningService.ensureProvisioned().
  */
-describe('DrizzleExternalIdentityMapper (deprecated write-path — real DB)', () => {
-  it('resolves existing user identity mapping', async () => {
+describe('DrizzleExternalIdentityMapper (deprecated read-only — real DB)', () => {
+  it('resolves existing user identity mapping after provisioning', async () => {
+    const provisioning = new DrizzleProvisioningService(testDb.db, 5);
+    await provisioning.ensureProvisioned({
+      provider: 'clerk',
+      externalUserId: 'user_compat_read_001',
+      email: 'compat-read@example.com',
+      tenancyMode: 'personal',
+    });
+
     const mapper = new DrizzleExternalIdentityMapper(testDb.db);
-
-    const userId1 = await mapper.resolveOrCreateInternalUserId({
-      provider: 'clerk',
-      externalUserId: 'user_compat_001',
-      email: 'compat-user@example.com',
-    });
-
-    const userId2 = await mapper.resolveOrCreateInternalUserId({
-      provider: 'clerk',
-      externalUserId: 'user_compat_001',
-      email: 'compat-user@example.com',
-    });
-
-    expect(userId1).toBe(userId2);
-    expect(typeof userId1).toBe('string');
-    expect(userId1.length).toBeGreaterThan(0);
+    const userId = await mapper.resolveInternalUserId(
+      'clerk',
+      'user_compat_read_001',
+    );
+    expect(typeof userId).toBe('string');
+    expect(userId).not.toBeNull();
   });
 
-  it('resolves existing tenant identity mapping', async () => {
+  it('resolves existing tenant identity mapping after org/provider provisioning', async () => {
+    const provisioning = new DrizzleProvisioningService(testDb.db, 5);
+    await provisioning.ensureProvisioned({
+      provider: 'clerk',
+      externalUserId: 'user_compat_read_002',
+      tenantExternalId: 'org_compat_read_001',
+      tenantRole: 'org:admin',
+      tenancyMode: 'org',
+      tenantContextSource: 'provider',
+    });
+
     const mapper = new DrizzleExternalIdentityMapper(testDb.db);
-
-    const tenantId1 = await mapper.resolveOrCreateInternalTenantId({
-      provider: 'clerk',
-      externalTenantId: 'org_compat_001',
-    });
-
-    const tenantId2 = await mapper.resolveOrCreateInternalTenantId({
-      provider: 'clerk',
-      externalTenantId: 'org_compat_001',
-    });
-
-    expect(tenantId1).toBe(tenantId2);
-    expect(typeof tenantId1).toBe('string');
-    expect(tenantId1.length).toBeGreaterThan(0);
+    const tenantId = await mapper.resolveInternalTenantId(
+      'clerk',
+      'org_compat_read_001',
+    );
+    expect(typeof tenantId).toBe('string');
+    expect(tenantId).not.toBeNull();
   });
 
-  it('ensureTenantAccess throws — membership bootstrap belongs to ProvisioningService', async () => {
+  it('returns null for unknown user identity', async () => {
     const mapper = new DrizzleExternalIdentityMapper(testDb.db);
+    const result = await mapper.resolveInternalUserId(
+      'clerk',
+      'unknown_user_xxx',
+    );
+    expect(result).toBeNull();
+  });
 
-    await expect(
-      mapper.ensureTenantAccess({
-        internalUserId: crypto.randomUUID(),
-        internalTenantId: crypto.randomUUID(),
-      }),
-    ).rejects.toThrow('ensureTenantAccess has been removed');
+  it('returns null for unknown tenant identity', async () => {
+    const mapper = new DrizzleExternalIdentityMapper(testDb.db);
+    const result = await mapper.resolveInternalTenantId(
+      'clerk',
+      'unknown_org_xxx',
+    );
+    expect(result).toBeNull();
   });
 });

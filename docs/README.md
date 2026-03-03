@@ -29,3 +29,4 @@
 - [Local Quickstart - Single Tenant](./getting-started/01%20-%20Local%20Quickstart%20-%20Single%20Tenant.md)
 - [Verification Runbook - Security Showcase (Single Tenant)](<./getting-started/02%20-%20Verification%20Runbook%20-%20Security%20Showcase%20(Single%20Tenant).md>)
 - [Tenancy, Organizations, Roles and Onboarding - Runtime Matrix](./getting-started/03%20-%20Tenancy,%20Organizations,%20Roles%20and%20Onboarding%20-%20Runtime%20Matrix.md)
+- [Manual QA Checklist - Tenancy & Provisioning Runtime](./getting-started/04%20-%20Manual%20QA%20Checklist%20-%20Tenancy%20%26%20Provisioning%20Runtime.md)

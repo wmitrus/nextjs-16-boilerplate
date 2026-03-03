@@ -15,6 +15,13 @@
       "when": 1772399811828,
       "tag": "0001_unique_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772568760656,
+      "tag": "0002_slimy_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }

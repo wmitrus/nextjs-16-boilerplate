@@ -44,17 +44,17 @@ The `waitlistUrl` must be provided to the `ClerkProvider` in the Root Layout to 
 </ClerkProvider>
 ```
 
-## 3. Middleware (Proxy) Configuration
+## 3. Middleware Configuration
 
-The `/waitlist` route must be marked as a public route in [./src/proxy.ts](@/proxy.ts) to allow unauthenticated users to join the waitlist.
+The `/waitlist` route must be marked as public route policy so unauthenticated users can access it.
 
 ```typescript
-const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/waitlist(.*)', // Added to public routes
+// src/security/middleware/route-policy.ts
+export const PUBLIC_ROUTE_PREFIXES = [
   '/',
-]);
+  '/waitlist',
+  // ...
+] as const;
 ```
 
 ## 4. Waitlist Page

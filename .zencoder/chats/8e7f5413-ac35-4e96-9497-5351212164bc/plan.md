@@ -230,6 +230,12 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 - [x] `pnpm typecheck` — PASS (539 tests)
 - [x] `pnpm lint` — PASS
 - [x] `pnpm test` — 539 passed
+- [x] **3rd code-review P1**: Race-path policy bypass fixed — else-branch after INSERT ON CONFLICT/re-SELECT now applies same gate (`crossProviderEmailLinking` + `emailVerified`) when `resolved[0].id !== candidateId && isRealEmail`
+- [x] **3rd code-review P1**: Legacy tenant mapping compatibility — `resolveOrCreatePersonalTenant` + `resolveOrCreateOrgTenant` now SELECT `auth_tenant_identities` first; return existing (legacy random) UUID immediately if found; deterministic UUID only used for new tenants
+- [x] **3rd code-review P2**: DB tests added — legacy personal+org tenant UUID preserved; race-path gate invariant verified (unverified/disabled/verified-allowed scenarios against pre-existing user row)
+- [x] `pnpm typecheck` — PASS
+- [x] `pnpm lint` — PASS
+- [x] `pnpm test` — 544 passed
 
 ---
 

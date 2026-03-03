@@ -173,10 +173,17 @@ export const env = createEnv({
 /**
  * Cross-field tenancy configuration validation.
  * Call this in bootstrap/startup to enforce combination rules:
+ * - TENANCY_MODE=single requires DEFAULT_TENANT_ID
  * - TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE (provider|db)
- * - TENANCY_MODE=single with DEFAULT_TENANT_ID is recommended (logged, not fatal)
  */
 export function validateTenancyConfig(): void {
+  if (env.TENANCY_MODE === 'single' && !env.DEFAULT_TENANT_ID) {
+    throw new Error(
+      '[env] TENANCY_MODE=single requires DEFAULT_TENANT_ID to be set (must be a valid UUID). ' +
+        'Set DEFAULT_TENANT_ID=<uuid> in your environment variables.',
+    );
+  }
+
   if (env.TENANCY_MODE === 'org' && !env.TENANT_CONTEXT_SOURCE) {
     throw new Error(
       '[env] TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE to be set (provider|db). ' +

@@ -15,6 +15,9 @@ export { createEdgeRequestContainer } from './edge';
 export interface AppConfig {
   db: DbConfig;
   auth: Omit<AuthModuleConfig, 'membershipRepository'>;
+  provisioning: {
+    freeTierMaxUsers: number;
+  };
 }
 
 function resolveDbProvider(): DbConfig['provider'] {
@@ -71,7 +74,10 @@ export function createRequestContainer(config: AppConfig): Container {
 
   container.register(
     PROVISIONING.SERVICE,
-    new DrizzleProvisioningService(dbRuntime.db, env.FREE_TIER_MAX_USERS),
+    new DrizzleProvisioningService(
+      dbRuntime.db,
+      config.provisioning.freeTierMaxUsers,
+    ),
   );
 
   return container;
@@ -91,6 +97,9 @@ function buildConfig(): AppConfig {
       tenantContextSource: env.TENANT_CONTEXT_SOURCE,
       tenantContextHeader: env.TENANT_CONTEXT_HEADER,
       tenantContextCookie: env.TENANT_CONTEXT_COOKIE,
+    },
+    provisioning: {
+      freeTierMaxUsers: env.FREE_TIER_MAX_USERS,
     },
   };
 }

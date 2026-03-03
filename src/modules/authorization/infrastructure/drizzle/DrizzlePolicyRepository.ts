@@ -1,4 +1,4 @@
-import { asc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 
 import type { Action } from '@/core/contracts/authorization';
 import type {
@@ -16,14 +16,26 @@ export class DrizzlePolicyRepository implements PolicyRepository {
 
   async getPolicies(context: AuthorizationContext): Promise<Policy[]> {
     const { tenantId } = context.tenant;
+    const roleIds = [...(context.subject.roles ?? [])];
+
+    const roleScopeFilter =
+      roleIds.length > 0
+        ? or(
+            inArray(policiesTable.roleId, roleIds),
+            isNull(policiesTable.roleId),
+          )
+        : isNull(policiesTable.roleId);
 
     const rows = await this.db
       .select()
       .from(policiesTable)
       .where(
-        or(
-          eq(policiesTable.tenantId, tenantId),
-          isNull(policiesTable.tenantId),
+        and(
+          or(
+            eq(policiesTable.tenantId, tenantId),
+            isNull(policiesTable.tenantId),
+          ),
+          roleScopeFilter,
         ),
       )
       .orderBy(asc(policiesTable.createdAt));

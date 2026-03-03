@@ -1,6 +1,6 @@
 # Production Provisioning Refactor — Implementation Plan
 
-Status: `PR-0 COMPLETE (all review findings fixed) — PR-1 AWAITING APPROVAL`
+Status: `PR-0 COMPLETE — PR-1 COMPLETE (all review findings fixed) — PR-2 AWAITING APPROVAL`
 Source: `.copilot/2026-03-02-production-provisioning-refactor/PLAN.md` + `IMPLEMENTATION_LOCKED.md`
 Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
@@ -167,6 +167,11 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 - [x] Unit: `OrgDbTenantResolver` with tenant but missing membership → `TenantMembershipRequiredError`
 - [x] `pnpm typecheck` — PASS
 - [x] `pnpm lint` — PASS
+- [x] **Code-review P1**: Security boundary error handling — `MissingTenantContextError`/`TenantNotProvisionedError`/`TenantMembershipRequiredError` handled in `security-context.ts`, `with-auth.ts`, `secure-action.ts`
+- [x] **Code-review P1**: `buildTenantResolver()` — explicit guard for `TENANCY_MODE=org` without `TENANT_CONTEXT_SOURCE`; explicit switch on `tenantContextSource`; no implicit fallback
+- [x] **Code-review P1**: `TENANCY_MODE=single` requires `DEFAULT_TENANT_ID` — enforced in `validateTenancyConfig()`; `.env.example` updated with valid UUID; `testing/infrastructure/env.ts` updated
+- [x] **Code-review P2**: Module boundary leak fixed — `ExternalAuthProvider` + `InternalIdentityLookup` moved to `@/core/contracts/identity`; backward-compat re-exports in old locations; provisioning resolvers + `auth/index.ts` updated to import from core contracts
+- [x] **Code-review P2**: Missing tests added — `findPersonalTenantId`, `HeaderActiveTenantSource`, `CookieActiveTenantSource`, `CompositeActiveTenantSource`
 
 ---
 

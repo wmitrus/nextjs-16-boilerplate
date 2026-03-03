@@ -63,6 +63,7 @@ export const ownerPolicies: readonly PolicyTemplate[] = [
  * Members have read-only access to tenant resources and can manage their own profile.
  *
  * Self-access conditions restrict user:read and user:update to the requesting user's own record.
+ * Uses the existing condition descriptor DSL consumed by deserializeCondition().
  *
  * INVARIANT: No wildcard resources or actions (resource='*', actions=['*']).
  */
@@ -76,13 +77,13 @@ export const memberPolicies: readonly PolicyTemplate[] = [
     effect: 'allow',
     resource: RESOURCES.USER,
     actions: [ACTIONS.USER_READ],
-    conditions: { 'subject.userId': { $eq: 'resource.userId' } },
+    conditions: { type: 'isOwner' },
   },
   {
     effect: 'allow',
     resource: RESOURCES.USER,
     actions: [ACTIONS.USER_UPDATE],
-    conditions: { 'subject.userId': { $eq: 'resource.userId' } },
+    conditions: { type: 'isOwner' },
   },
   {
     effect: 'allow',

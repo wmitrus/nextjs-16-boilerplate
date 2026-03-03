@@ -1,6 +1,11 @@
 import { headers } from 'next/headers';
 
 import { UserNotProvisionedError } from '@/core/contracts/identity';
+import {
+  MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
+} from '@/core/contracts/tenancy';
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
@@ -64,12 +69,26 @@ export async function createSecurityContext(
   let userContext: SecurityContext['user'];
 
   if (identity) {
-    const tenantContext = await tenantResolver.resolve(identity);
-
-    userContext = {
-      id: identity.id,
-      tenantId: tenantContext.tenantId,
-    };
+    try {
+      const tenantContext = await tenantResolver.resolve(identity);
+      userContext = {
+        id: identity.id,
+        tenantId: tenantContext.tenantId,
+      };
+    } catch (err) {
+      if (
+        err instanceof MissingTenantContextError ||
+        err instanceof TenantNotProvisionedError ||
+        err instanceof TenantMembershipRequiredError
+      ) {
+        // Tenant context unavailable for this request.
+        // Treat as no tenant context — callers (withAuth, secure-action) handle
+        // the appropriate redirect or unauthorized response.
+        userContext = undefined;
+      } else {
+        throw err;
+      }
+    }
   }
 
   return {

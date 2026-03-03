@@ -1,5 +1,5 @@
 import { Container } from '@/core/container';
-import { INFRASTRUCTURE } from '@/core/contracts';
+import { INFRASTRUCTURE, PROVISIONING } from '@/core/contracts';
 import type { DbConfig } from '@/core/db/types';
 import { env, validateTenancyConfigValues } from '@/core/env';
 import { getInfrastructure } from '@/core/runtime/infrastructure';
@@ -8,6 +8,7 @@ import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
 import { createAuthorizationModule } from '@/modules/authorization';
 import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
+import { DrizzleProvisioningService } from '@/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService';
 
 export { createEdgeRequestContainer } from './edge';
 
@@ -67,6 +68,11 @@ export function createRequestContainer(config: AppConfig): Container {
     createAuthModule({ ...config.auth, membershipRepository }),
   );
   container.registerModule(createAuthorizationModule({ db: dbRuntime.db }));
+
+  container.register(
+    PROVISIONING.SERVICE,
+    new DrizzleProvisioningService(dbRuntime.db, env.FREE_TIER_MAX_USERS),
+  );
 
   return container;
 }

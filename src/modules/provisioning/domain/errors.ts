@@ -35,3 +35,23 @@ export class MissingProvisioningInputError extends Error {
     this.name = 'MissingProvisioningInputError';
   }
 }
+
+/**
+ * Thrown when a new auth provider presents an email that already belongs to a different
+ * internal user account, but cross-provider linking policy does not permit auto-linking.
+ *
+ * Conditions that trigger this error:
+ * - CROSS_PROVIDER_EMAIL_LINKING=disabled (always block)
+ * - CROSS_PROVIDER_EMAIL_LINKING=verified-only and emailVerified !== true
+ *
+ * Resolution: operator must manually link accounts or user must re-authenticate with the
+ * original provider.
+ */
+export class CrossProviderLinkingNotAllowedError extends Error {
+  constructor(
+    message = 'Cross-provider account linking is not allowed. Re-authenticate with your original provider or contact support.',
+  ) {
+    super(message);
+    this.name = 'CrossProviderLinkingNotAllowedError';
+  }
+}

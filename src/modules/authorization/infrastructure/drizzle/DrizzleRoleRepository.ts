@@ -8,16 +8,15 @@ import type {
 } from '@/core/contracts/repositories';
 import type { DrizzleDb } from '@/core/db';
 
-import { membershipsTable, rolesTable } from './schema';
+import { membershipsTable } from './schema';
 
 export class DrizzleRoleRepository implements RoleRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async getRoles(subjectId: SubjectId, tenantId: TenantId): Promise<RoleId[]> {
     const rows = await this.db
-      .select({ name: rolesTable.name })
+      .select({ roleId: membershipsTable.roleId })
       .from(membershipsTable)
-      .innerJoin(rolesTable, eq(rolesTable.id, membershipsTable.roleId))
       .where(
         and(
           eq(membershipsTable.userId, subjectId),
@@ -25,6 +24,6 @@ export class DrizzleRoleRepository implements RoleRepository {
         ),
       );
 
-    return rows.map((row) => row.name);
+    return rows.map((row) => row.roleId);
   }
 }

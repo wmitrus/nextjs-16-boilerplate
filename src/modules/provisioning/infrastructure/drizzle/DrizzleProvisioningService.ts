@@ -308,6 +308,22 @@ async function resolveOrCreateUser(
       );
     }
 
+    // Race condition: another transaction won the INSERT for the same real email.
+    // We must apply the same policy gate here — the check in the if-branch above
+    // did not run because our SELECT saw no existing user at that point.
+    if (resolved[0].id !== candidateId && isRealEmail) {
+      if (crossProviderEmailLinking === 'disabled') {
+        throw new CrossProviderLinkingNotAllowedError(
+          'CROSS_PROVIDER_EMAIL_LINKING=disabled. Cannot auto-link account via email.',
+        );
+      }
+      if (emailVerified !== true) {
+        throw new CrossProviderLinkingNotAllowedError(
+          'Cross-provider account linking requires emailVerified=true from the auth provider.',
+        );
+      }
+    }
+
     internalUserId = resolved[0].id;
     userCreatedNow = resolved[0].id === candidateId;
   }
@@ -395,14 +411,35 @@ async function resolveTenant(
 /**
  * Resolves or creates a personal tenant for the given internal user.
  *
- * Race-safety: uses a deterministic tenant UUID derived from the user's internal ID.
- * Two concurrent transactions will compute the same tenantId and both INSERT with
- * ON CONFLICT DO NOTHING — only one will create the row; neither orphans a tenant.
+ * Legacy compatibility: always reads the existing auth_tenant_identities mapping first.
+ * Tenants created before the deterministic UUID migration retain their original random UUID.
+ *
+ * Race-safety: uses a deterministic tenant UUID for new tenants so concurrent transactions
+ * compute the same ID and both INSERT with ON CONFLICT DO NOTHING — no orphaned rows.
  */
 async function resolveOrCreatePersonalTenant(
   db: DrizzleDb,
   internalUserId: string,
 ): Promise<{ internalTenantId: string; tenantCreatedNow: boolean }> {
+  // Check for pre-existing mapping first (handles legacy random-UUID tenants)
+  const existingMapping = await db
+    .select({ tenantId: authTenantIdentitiesTable.tenantId })
+    .from(authTenantIdentitiesTable)
+    .where(
+      and(
+        eq(authTenantIdentitiesTable.provider, 'personal'),
+        eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
+      ),
+    )
+    .limit(1);
+
+  if (existingMapping[0]?.tenantId) {
+    return {
+      internalTenantId: existingMapping[0].tenantId,
+      tenantCreatedNow: false,
+    };
+  }
+
   const tenantId = deterministicTenantId(`personal:${internalUserId}`);
 
   const tenantRows = await db
@@ -420,6 +457,9 @@ async function resolveOrCreatePersonalTenant(
     })
     .onConflictDoNothing();
 
+  // Re-read after concurrent insert: another transaction may have won the race
+  // and inserted the mapping with the same deterministic ID (both rows are identical,
+  // so the read-path and write-path always agree).
   return {
     internalTenantId: tenantId,
     tenantCreatedNow: tenantRows.length > 0,
@@ -429,15 +469,36 @@ async function resolveOrCreatePersonalTenant(
 /**
  * Resolves or creates an org tenant identified by (provider, externalTenantId).
  *
- * Race-safety: uses a deterministic tenant UUID derived from provider + externalTenantId.
- * Concurrent transactions for the same org will compute the same tenantId and conflict-
- * resolve cleanly via ON CONFLICT DO NOTHING — no orphaned tenant rows possible.
+ * Legacy compatibility: always reads the existing auth_tenant_identities mapping first.
+ * Tenants created before the deterministic UUID migration retain their original random UUID.
+ *
+ * Race-safety: uses a deterministic tenant UUID for new tenants so concurrent transactions
+ * compute the same ID and both INSERT with ON CONFLICT DO NOTHING — no orphaned rows.
  */
 async function resolveOrCreateOrgTenant(
   db: DrizzleDb,
   provider: ExternalAuthProvider,
   externalTenantId: string,
 ): Promise<{ internalTenantId: string; tenantCreatedNow: boolean }> {
+  // Check for pre-existing mapping first (handles legacy random-UUID tenants)
+  const existingMapping = await db
+    .select({ tenantId: authTenantIdentitiesTable.tenantId })
+    .from(authTenantIdentitiesTable)
+    .where(
+      and(
+        eq(authTenantIdentitiesTable.provider, provider),
+        eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
+      ),
+    )
+    .limit(1);
+
+  if (existingMapping[0]?.tenantId) {
+    return {
+      internalTenantId: existingMapping[0].tenantId,
+      tenantCreatedNow: false,
+    };
+  }
+
   const tenantId = deterministicTenantId(`${provider}:${externalTenantId}`);
 
   const tenantRows = await db

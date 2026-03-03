@@ -9,6 +9,7 @@ import {
   tenantsTable,
 } from './schema';
 
+import { POLICY_TEMPLATE_VERSION } from '@/modules/provisioning/policy/templates';
 import type { UserSeedResult } from '@/modules/user/infrastructure/drizzle/seed';
 
 export interface TenantRecord {
@@ -74,7 +75,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.ROUTE,
     actions: [ACTIONS.ROUTE_ACCESS],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000002',
@@ -88,7 +89,7 @@ const POLICIES = [
       ACTIONS.USER_INVITE,
       ACTIONS.USER_DEACTIVATE,
     ],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000003',
@@ -101,7 +102,7 @@ const POLICIES = [
       ACTIONS.TENANT_UPDATE,
       ACTIONS.TENANT_MANAGE_MEMBERS,
     ],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000004',
@@ -110,7 +111,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.BILLING,
     actions: [ACTIONS.BILLING_READ, ACTIONS.BILLING_UPDATE],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000005',
@@ -119,7 +120,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.SECURITY,
     actions: [ACTIONS.SECURITY_READ_AUDIT, ACTIONS.SECURITY_MANAGE_POLICIES],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000006',
@@ -128,7 +129,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.ROUTE,
     actions: [ACTIONS.ROUTE_ACCESS],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000007',
@@ -137,7 +138,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.USER,
     actions: [ACTIONS.USER_READ],
-    conditions: { 'subject.userId': { $eq: 'resource.userId' } },
+    conditions: { type: 'isOwner' },
   },
   {
     id: '30000000-0000-0000-0000-000000000008',
@@ -146,7 +147,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.USER,
     actions: [ACTIONS.USER_UPDATE],
-    conditions: { 'subject.userId': { $eq: 'resource.userId' } },
+    conditions: { type: 'isOwner' },
   },
   {
     id: '30000000-0000-0000-0000-000000000009',
@@ -155,7 +156,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.TENANT,
     actions: [ACTIONS.TENANT_READ],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000010',
@@ -164,7 +165,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.BILLING,
     actions: [ACTIONS.BILLING_READ],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000011',
@@ -173,7 +174,7 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.ROUTE,
     actions: [ACTIONS.ROUTE_ACCESS],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000012',
@@ -187,7 +188,7 @@ const POLICIES = [
       ACTIONS.USER_INVITE,
       ACTIONS.USER_DEACTIVATE,
     ],
-    conditions: null,
+    conditions: {},
   },
   {
     id: '30000000-0000-0000-0000-000000000013',
@@ -200,7 +201,25 @@ const POLICIES = [
       ACTIONS.TENANT_UPDATE,
       ACTIONS.TENANT_MANAGE_MEMBERS,
     ],
-    conditions: null,
+    conditions: {},
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000014',
+    tenantId: TENANTS.globex.id,
+    roleId: ROLES.globexOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.BILLING,
+    actions: [ACTIONS.BILLING_READ, ACTIONS.BILLING_UPDATE],
+    conditions: {},
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000015',
+    tenantId: TENANTS.globex.id,
+    roleId: ROLES.globexOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.SECURITY,
+    actions: [ACTIONS.SECURITY_READ_AUDIT, ACTIONS.SECURITY_MANAGE_POLICIES],
+    conditions: {},
   },
 ];
 
@@ -211,6 +230,7 @@ const TENANT_ATTRIBUTES = [
     contractType: 'enterprise' as const,
     features: ['advanced-analytics', 'sso', 'audit-log'],
     maxUsers: 100,
+    policyTemplateVersion: POLICY_TEMPLATE_VERSION,
   },
   {
     tenantId: TENANTS.globex.id,
@@ -218,6 +238,7 @@ const TENANT_ATTRIBUTES = [
     contractType: 'standard' as const,
     features: ['advanced-analytics'],
     maxUsers: 25,
+    policyTemplateVersion: POLICY_TEMPLATE_VERSION,
   },
 ];
 

@@ -1,35 +1,20 @@
-# Feature Documentation
+# Documentation Index
 
-Detailed documentation for the features and configurations of this boilerplate:
+## Core Features
 
-1. [Next.js 16 Readiness](./features/01%20-%20Next.js%2016%20Readiness.md)
-2. [TypeScript, ESLint & Prettier Setup](./features/02%20-%20TypeScript%20ESLint%20Prettier%20Setup.md)
-3. [Conventional Commits](./features/03%20-%20Conventional%20Commits.md)
-4. [Git Hooks (Husky)](<./features/04%20-%20Git%20Hooks%20(Husky).md>)
-5. [Staged Linting](./features/05%20-%20Staged%20Linting.md)
-6. [Quality Tools](./features/06%20-%20Quality%20Tools.md)
-7. [Testing Infrastructure](./features/07%20-%20Testing%20Infrastructure.md)
-8. [Logging & Observability](./features/12%20-%20Logging%20%26%20Observability.md)
-9. [CI/CD & Lighthouse CI](./features/19%20-%20CI-CD%20%26%20Lighthouse%20CI.md)
-10. [Next.js 16 Cache Components, PPR & Devtools MCP](./features/21%20-%20Next.js%2016%20Cache%20Components,%20PPR%20%26%20Devtools%20MCP.md)
+1. [Environment & T3-Env](./features/11%20-%20Environment%20%26%20T3-Env.md)
+2. [Environment Requirements](./features/ENV-requirements.md)
+3. [Clerk Authentication](./features/15%20-%20Clerk%20Authentication.md)
+4. [Clerk Waitlist](./features/16%20-%20Clerk%20Waitlist.md)
+5. [Clerk Onboarding](./features/17%20-%20Clerk%20Onboarding.md)
+6. [RBAC Baseline](./features/22%20-%20RBAC%20Baseline.md)
+7. [ABAC Foundation](./features/23%20-%20ABAC%20Foundation.md)
 
 ## Architecture Decisions
 
 - [Architecture Diagrams Index (01-09)](./architecture/01%20-%20Global%20Dependency%20Rules.md)
 - [Edge vs Node Composition Root Boundary](./architecture/15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md)
 - [Enterprise-Ready DB Layer Index](./architecture/Enterprise-Ready%20DB%20layer/README.md)
-
-## Architecture Diagrams (01-09)
-
-- [01 - Global Dependency Rules](./architecture/01%20-%20Global%20Dependency%20Rules.md)
-- [02 - Composition Root Architecture](./architecture/02%20%E2%80%93%20Composition%20Root%20Architecture.md)
-- [03 - Request Lifecycle](./architecture/03%20%E2%80%93%20Request%20Lifecycle.md)
-- [04 - DB Ownership](./architecture/04%20%E2%80%93%20DB%20Ownership.md)
-- [05 - Authorization Flow](./architecture/05%20%E2%80%93%20Authorization%20Flow.md)
-- [06 - Multi-Tenant SaaS Expansion Map](./architecture/06%20%E2%80%93%20Multi-Tenant%20SaaS%20Expansion%20Map.md)
-- [07 - Enterprise Clean Dependency Graph](./architecture/07%20%E2%80%93%20Enterprise%20Clean%20Dependency%20Graph.md)
-- [08 - Infrastructure Layer Separation](./architecture/08%20%E2%80%93%20Infrastructure%20Layer%20Separation.md)
-- [09 - Final Enterprise Flow (FULL PICTURE)](./architecture/09%20%E2%80%93%20Final%20Enterprise%20Flow%20%28FULL%20PICTURE%29.md)
 
 ## Usage & Operations
 
@@ -43,3 +28,4 @@ Detailed documentation for the features and configurations of this boilerplate:
 - [Runbooks Index](./getting-started/README.md)
 - [Local Quickstart - Single Tenant](./getting-started/01%20-%20Local%20Quickstart%20-%20Single%20Tenant.md)
 - [Verification Runbook - Security Showcase (Single Tenant)](<./getting-started/02%20-%20Verification%20Runbook%20-%20Security%20Showcase%20(Single%20Tenant).md>)
+- [Tenancy, Organizations, Roles and Onboarding - Runtime Matrix](./getting-started/03%20-%20Tenancy,%20Organizations,%20Roles%20and%20Onboarding%20-%20Runtime%20Matrix.md)

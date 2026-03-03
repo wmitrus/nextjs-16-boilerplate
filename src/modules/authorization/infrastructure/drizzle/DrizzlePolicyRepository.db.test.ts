@@ -36,15 +36,16 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     expect(policies.length).toBeGreaterThan(0);
   });
 
-  it('includes allow-all policy for admin role', async () => {
+  it('contains no wildcard policies (resource or actions)', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies(baseContext);
 
-    const allowAll = policies.find(
-      (p) => p.effect === 'allow' && p.resource === '*',
+    const wildcardResource = policies.find((p) => p.resource === '*');
+    const wildcardActions = policies.find(
+      (p) => Array.isArray(p.actions) && (p.actions as string[]).includes('*'),
     );
-    expect(allowAll).toBeDefined();
-    expect(allowAll?.actions).toContain('*');
+    expect(wildcardResource).toBeUndefined();
+    expect(wildcardActions).toBeUndefined();
   });
 
   it('returns empty array for unknown tenant', async () => {
@@ -57,14 +58,14 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     expect(policies).toEqual([]);
   });
 
-  it('returns member policy (allow read on users)', async () => {
+  it('returns owner policy with explicit user resource actions', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies(baseContext);
 
-    const memberPolicy = policies.find(
-      (p) => p.effect === 'allow' && p.resource === 'users',
+    const ownerUserPolicy = policies.find(
+      (p) => p.effect === 'allow' && p.resource === 'user',
     );
-    expect(memberPolicy).toBeDefined();
-    expect(memberPolicy?.actions).toContain('read');
+    expect(ownerUserPolicy).toBeDefined();
+    expect(ownerUserPolicy?.actions).toContain('user:read');
   });
 });

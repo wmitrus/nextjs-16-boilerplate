@@ -59,6 +59,9 @@ export const env = createEnv({
     TENANT_CONTEXT_HEADER: z.string().default('x-tenant-id'),
     TENANT_CONTEXT_COOKIE: z.string().default('active_tenant_id'),
     FREE_TIER_MAX_USERS: z.coerce.number().int().positive().default(5),
+    CROSS_PROVIDER_EMAIL_LINKING: z
+      .enum(['disabled', 'verified-only'])
+      .default('verified-only'),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -133,6 +136,7 @@ export const env = createEnv({
     TENANT_CONTEXT_HEADER: process.env.TENANT_CONTEXT_HEADER,
     TENANT_CONTEXT_COOKIE: process.env.TENANT_CONTEXT_COOKIE,
     FREE_TIER_MAX_USERS: process.env.FREE_TIER_MAX_USERS,
+    CROSS_PROVIDER_EMAIL_LINKING: process.env.CROSS_PROVIDER_EMAIL_LINKING,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:

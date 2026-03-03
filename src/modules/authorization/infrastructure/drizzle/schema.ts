@@ -82,7 +82,10 @@ export const policiesTable = pgTable(
     effect: text('effect', { enum: ['allow', 'deny'] }).notNull(),
     resource: text('resource').notNull(),
     actions: jsonb('actions').$type<string[]>().notNull(),
-    conditions: jsonb('conditions').$type<Record<string, unknown>>(),
+    conditions: jsonb('conditions')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -91,6 +94,14 @@ export const policiesTable = pgTable(
     index('idx_policies_tenant').on(t.tenantId),
     index('idx_policies_role').on(t.roleId),
     index('idx_policies_resource').on(t.resource),
+    unique('unique_policy_identity_per_role').on(
+      t.tenantId,
+      t.roleId,
+      t.effect,
+      t.resource,
+      t.actions,
+      t.conditions,
+    ),
   ],
 );
 

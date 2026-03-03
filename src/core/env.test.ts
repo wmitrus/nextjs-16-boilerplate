@@ -400,3 +400,50 @@ describe('validateTenancyConfigValues', () => {
     ).not.toThrow();
   });
 });
+
+describe('validateAuthProviderConfigValues', () => {
+  it('passes for authjs without Clerk keys', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues('authjs', undefined, undefined),
+    ).not.toThrow();
+  });
+
+  it('passes for supabase without Clerk keys', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues('supabase', undefined, undefined),
+    ).not.toThrow();
+  });
+
+  it('throws for clerk when CLERK_SECRET_KEY is missing', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues('clerk', undefined, 'pk_test_mock'),
+    ).toThrow('AUTH_PROVIDER=clerk requires CLERK_SECRET_KEY');
+  });
+
+  it('throws for clerk when NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is missing', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues('clerk', 'sk_test_mock', undefined),
+    ).toThrow('AUTH_PROVIDER=clerk requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
+  });
+
+  it('passes for clerk when both Clerk keys are present', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues('clerk', 'sk_test_mock', 'pk_test_mock'),
+    ).not.toThrow();
+  });
+});

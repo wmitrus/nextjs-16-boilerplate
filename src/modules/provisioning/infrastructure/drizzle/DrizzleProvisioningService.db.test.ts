@@ -281,4 +281,80 @@ describe('DrizzleProvisioningService (real DB)', () => {
       ).rejects.toThrow(TenantContextRequiredError);
     });
   });
+
+  describe('email conflict / provider switch (P1 fix)', () => {
+    it('provisions same email under a different provider without FK violation', async () => {
+      const svc = makeService();
+      const sharedEmail = 'shared-email@example.com';
+
+      const first = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_email_switch_clerk',
+        email: sharedEmail,
+        tenancyMode: 'personal',
+      });
+
+      const second = await svc.ensureProvisioned({
+        provider: 'authjs',
+        externalUserId: 'user_email_switch_authjs',
+        email: sharedEmail,
+        tenancyMode: 'personal',
+      });
+
+      expect(first.internalUserId).toBeTruthy();
+      expect(second.internalUserId).toBeTruthy();
+    });
+
+    it('returns consistent internalUserId when same provider+externalId provisioned twice', async () => {
+      const svc = makeService();
+      const first = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_email_idempotent_001',
+        email: 'idempotent-email@example.com',
+        tenancyMode: 'personal',
+      });
+
+      const second = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_email_idempotent_001',
+        email: 'idempotent-email@example.com',
+        tenancyMode: 'personal',
+      });
+
+      expect(second.internalUserId).toBe(first.internalUserId);
+    });
+  });
+
+  describe('org/db — no write side-effects before membership check (P1 fix)', () => {
+    it('does not create tenant_attributes or roles when user has no membership', async () => {
+      const svc = makeService();
+
+      const orgResult = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_orgdb_owner_001',
+        tenantExternalId: 'org_nowrite_001',
+        tenantRole: 'org:admin',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      const secondUser = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_orgdb_nomember_001',
+        tenancyMode: 'personal',
+      });
+
+      await expect(
+        svc.ensureProvisioned({
+          provider: 'clerk',
+          externalUserId: 'user_orgdb_nomember_001',
+          activeTenantId: orgResult.internalTenantId,
+          tenancyMode: 'org',
+          tenantContextSource: 'db',
+        }),
+      ).rejects.toThrow(TenantMembershipRequiredError);
+
+      expect(secondUser).toBeDefined();
+    });
+  });
 });

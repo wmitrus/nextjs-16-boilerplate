@@ -29,6 +29,7 @@ describe('DrizzleTenantAttributesRepository', () => {
       contractType: 'standard',
       features: [],
       userLimit: 5,
+      policyTemplateVersion: 0,
     });
   });
 
@@ -39,6 +40,7 @@ describe('DrizzleTenantAttributesRepository', () => {
       contractType: 'enterprise',
       features: ['sso', 'audit-log'],
       maxUsers: 100,
+      policyTemplateVersion: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -52,6 +54,7 @@ describe('DrizzleTenantAttributesRepository', () => {
       contractType: 'enterprise',
       features: ['sso', 'audit-log'],
       userLimit: 100,
+      policyTemplateVersion: 1,
     });
   });
 });

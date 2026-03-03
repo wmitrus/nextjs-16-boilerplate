@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
@@ -9,11 +9,15 @@ import {
   TenantContextRequiredError,
   TenantUserLimitReachedError,
 } from '../../domain/errors';
+import { POLICY_TEMPLATE_VERSION } from '../../policy/templates';
 
 import { DrizzleProvisioningService } from './DrizzleProvisioningService';
 import {
   authTenantIdentitiesTable,
   authUserIdentitiesTable,
+  policiesTable,
+  rolesTable,
+  tenantAttributesTable,
   tenantsTable,
   usersTable,
 } from './schema';
@@ -652,6 +656,84 @@ describe('DrizzleProvisioningService (real DB)', () => {
       expect(second.membershipRole).toBe('member');
       expect(second.internalUserId).toBe(first.internalUserId);
       expect(second.internalTenantId).toBe(first.internalTenantId);
+    });
+  });
+
+  describe('policy template versioning idempotence', () => {
+    it('re-applying templates for the same tenant does not create duplicate policies', async () => {
+      const svc = makeService();
+      const provisioned = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_policy_idempotence_001',
+        tenantExternalId: 'org_policy_idempotence_001',
+        tenantRole: 'org:admin',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      const tenantId = provisioned.internalTenantId;
+      const beforeRows = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(policiesTable)
+        .where(eq(policiesTable.tenantId, tenantId));
+      const beforeCount = beforeRows[0]?.count ?? 0;
+      expect(beforeCount).toBeGreaterThan(0);
+
+      await testDb.db
+        .update(tenantAttributesTable)
+        .set({ policyTemplateVersion: 0 })
+        .where(eq(tenantAttributesTable.tenantId, tenantId));
+
+      await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_policy_idempotence_001',
+        tenantExternalId: 'org_policy_idempotence_001',
+        tenantRole: 'org:admin',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      const afterRows = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(policiesTable)
+        .where(eq(policiesTable.tenantId, tenantId));
+      const afterCount = afterRows[0]?.count ?? 0;
+
+      expect(afterCount).toBe(beforeCount);
+
+      const attrs = await testDb.db
+        .select({
+          policyTemplateVersion: tenantAttributesTable.policyTemplateVersion,
+        })
+        .from(tenantAttributesTable)
+        .where(eq(tenantAttributesTable.tenantId, tenantId))
+        .limit(1);
+
+      expect(attrs[0]?.policyTemplateVersion).toBe(POLICY_TEMPLATE_VERSION);
+    });
+
+    it('tenant has exactly one owner and one member role', async () => {
+      const svc = makeService();
+      const provisioned = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_role_uniqueness_001',
+        tenantExternalId: 'org_role_uniqueness_001',
+        tenantRole: 'org:admin',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      const rows = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(rolesTable)
+        .where(
+          and(
+            eq(rolesTable.tenantId, provisioned.internalTenantId),
+            sql`${rolesTable.name} IN ('owner', 'member')`,
+          ),
+        );
+
+      expect(rows[0]?.count).toBe(2);
     });
   });
 

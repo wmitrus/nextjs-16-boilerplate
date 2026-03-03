@@ -1,11 +1,14 @@
 'use server';
 
-import { AUTH } from '@/core/contracts';
+import { AUTH, PROVISIONING } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import { UserNotProvisionedError } from '@/core/contracts/identity';
+import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
+import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
+
+import type { ProvisioningService } from '@/modules/provisioning/domain/ProvisioningService';
 
 const logger = resolveServerLogger().child({
   type: 'API',
@@ -16,27 +19,61 @@ const logger = resolveServerLogger().child({
 export const completeOnboarding = async (formData: FormData) => {
   const container = getAppContainer();
 
-  const identityProvider = container.resolve<IdentityProvider>(
-    AUTH.IDENTITY_PROVIDER,
+  const identitySource = container.resolve<RequestIdentitySource>(
+    AUTH.IDENTITY_SOURCE,
   );
 
-  let identity;
-  try {
-    identity = await identityProvider.getCurrentIdentity();
-  } catch (err) {
-    if (err instanceof UserNotProvisionedError) {
-      // User is authenticated but has no internal provisioned record yet.
-      // PR-3 will call ensureProvisioned() here (via AUTH.IDENTITY_SOURCE) before
-      // profile update. Until then, provisioning must precede onboarding completion.
-      logger.warn('Onboarding action called for unprovisioned user');
-      return { error: 'User provisioning not complete. Please try again.' };
-    }
-    throw err;
+  const rawIdentity = await identitySource.get();
+
+  if (!rawIdentity.userId) {
+    logger.warn('Onboarding attempt without authenticated identity');
+    return { error: 'No logged in user' };
   }
 
-  if (!identity) {
-    logger.warn('Onboarding attempt without identity');
-    return { error: 'No logged in user' };
+  const provisioningService = container.resolve<ProvisioningService>(
+    PROVISIONING.SERVICE,
+  );
+
+  let provisioningResult;
+  try {
+    provisioningResult = await provisioningService.ensureProvisioned({
+      provider: env.AUTH_PROVIDER,
+      externalUserId: rawIdentity.userId,
+      email: rawIdentity.email,
+      emailVerified: rawIdentity.emailVerified,
+      tenantExternalId: rawIdentity.tenantExternalId,
+      tenantRole: rawIdentity.tenantRole,
+      activeTenantId: env.DEFAULT_TENANT_ID,
+      tenancyMode: env.TENANCY_MODE,
+      tenantContextSource: env.TENANT_CONTEXT_SOURCE,
+    });
+
+    logger.info(
+      {
+        event: 'provisioning:ensure',
+        status: 'success',
+        provider: env.AUTH_PROVIDER,
+        tenancyMode: env.TENANCY_MODE,
+        internalUserId: provisioningResult.internalUserId,
+        internalTenantId: provisioningResult.internalTenantId,
+        membershipRole: provisioningResult.membershipRole,
+        userCreatedNow: provisioningResult.userCreatedNow,
+        tenantCreatedNow: provisioningResult.tenantCreatedNow,
+      },
+      'provisioning:ensure succeeded',
+    );
+  } catch (err) {
+    logger.error(
+      {
+        event: 'provisioning:ensure',
+        status: 'failure',
+        provider: env.AUTH_PROVIDER,
+        tenancyMode: env.TENANCY_MODE,
+        err,
+      },
+      'provisioning:ensure failed — aborting onboarding',
+    );
+    return { error: 'Provisioning failed. Please try again.' };
   }
 
   const targetLanguage = formData.get('targetLanguage');
@@ -44,16 +81,32 @@ export const completeOnboarding = async (formData: FormData) => {
   const learningGoal = formData.get('learningGoal');
 
   logger.debug(
-    { userId: identity.id, targetLanguage, proficiencyLevel, learningGoal },
+    {
+      userId: provisioningResult.internalUserId,
+      targetLanguage,
+      proficiencyLevel,
+      learningGoal,
+    },
     'Onboarding form submission',
   );
 
   if (!targetLanguage || !proficiencyLevel || !learningGoal) {
     logger.warn(
-      { userId: identity.id },
+      { userId: provisioningResult.internalUserId },
       'Missing required fields in onboarding',
     );
     return { error: 'Missing required fields' };
+  }
+
+  const identityProvider = container.resolve<IdentityProvider>(
+    AUTH.IDENTITY_PROVIDER,
+  );
+
+  const identity = await identityProvider.getCurrentIdentity();
+
+  if (!identity) {
+    logger.warn('Identity not found after successful provisioning');
+    return { error: 'No logged in user' };
   }
 
   const userRepository = container.resolve<UserRepository>(

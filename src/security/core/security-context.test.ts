@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import { MissingTenantContextError } from '@/core/contracts/tenancy';
+import {
+  MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
+} from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -137,12 +141,44 @@ describe('Security Context', () => {
     expect(context.user?.tenantId).toBe('org_abc');
   });
 
-  it('should return user=undefined when tenant context is missing for authenticated user', async () => {
+  it('should return user=undefined when tenant context is missing (MissingTenantContextError)', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_without_org',
     });
     vi.mocked(tenantResolver.resolve).mockRejectedValue(
       new MissingTenantContextError(),
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+  });
+
+  it('should return user=undefined when tenant is not provisioned (TenantNotProvisionedError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_no_tenant',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantNotProvisionedError(),
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+  });
+
+  it('should return user=undefined when tenant membership is required (TenantMembershipRequiredError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_not_member',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantMembershipRequiredError(),
     );
 
     mockNextHeaders.mockReturnValue(new Headers());

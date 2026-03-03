@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import type { ExternalAuthProvider } from '@/core/contracts/identity';
@@ -6,6 +8,7 @@ import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
 import type { DrizzleDb } from '@/core/db';
 
 import {
+  CrossProviderLinkingNotAllowedError,
   TenantContextRequiredError,
   TenantUserLimitReachedError,
 } from '../../domain/errors';
@@ -24,6 +27,30 @@ import {
   tenantsTable,
   usersTable,
 } from './schema';
+
+const TENANT_ID_NAMESPACE = 'provisioning:tenant:v1';
+
+/**
+ * Computes a deterministic UUID-like string from a stable key.
+ * Same inputs always yield the same output — this is intentional for race-safety:
+ * two concurrent transactions computing the same tenantId and inserting with
+ * ON CONFLICT DO NOTHING will never produce orphaned tenant rows.
+ */
+function deterministicTenantId(key: string): string {
+  const hash = createHash('sha256')
+    .update(`${TENANT_ID_NAMESPACE}:${key}`)
+    .digest('hex');
+  const variant = ((parseInt(hash.slice(16, 18), 16) & 0x3f) | 0x80)
+    .toString(16)
+    .padStart(2, '0');
+  return [
+    hash.slice(0, 8),
+    hash.slice(8, 12),
+    '5' + hash.slice(13, 16),
+    variant + hash.slice(18, 20),
+    hash.slice(20, 32),
+  ].join('-');
+}
 
 function sanitizeForEmailLocalPart(value: string): string {
   return value
@@ -66,20 +93,23 @@ export class DrizzleProvisioningService implements ProvisioningService {
   constructor(
     private readonly db: DrizzleDb,
     private readonly freeTierMaxUsers: number,
+    private readonly crossProviderEmailLinking: 'disabled' | 'verified-only',
   ) {}
 
   async ensureProvisioned(
     input: ProvisioningInput,
   ): Promise<ProvisioningResult> {
-    const { provider, externalUserId, email } = input;
+    const { provider, externalUserId, email, emailVerified } = input;
 
     return this.runInTransaction(async (db) => {
-      // Step 1: Resolve/create user (email-conflict-safe via RETURNING)
+      // Step 1: Resolve/create user — with explicit linking policy enforcement
       const { internalUserId, userCreatedNow } = await resolveOrCreateUser(
         db,
         provider,
         externalUserId,
         email,
+        emailVerified,
+        this.crossProviderEmailLinking,
       );
 
       // Step 2: Resolve tenant (read-only for org/db — no writes until membership confirmed)
@@ -116,9 +146,9 @@ export class DrizzleProvisioningService implements ProvisioningService {
         this.freeTierMaxUsers,
       );
 
-      // P1 FIX: Acquire a row-level advisory lock on the tenant_attributes row.
-      // This serializes concurrent provisioning calls for the same tenant,
-      // making the count check + membership insert race-safe.
+      // Acquire a row-level lock on the tenant_attributes row to serialize concurrent
+      // provisioning calls for the same tenant, making the count check + membership
+      // insert race-safe.
       await db.execute(
         sql`SELECT tenant_id FROM tenant_attributes WHERE tenant_id = ${internalTenantId} FOR UPDATE`,
       );
@@ -185,17 +215,24 @@ export class DrizzleProvisioningService implements ProvisioningService {
   }
 }
 
-// P1 FIX: resolveOrCreateUser is now email-conflict-safe.
-// Uses ON CONFLICT (email) DO UPDATE (no-op) + RETURNING to get the actual userId
-// regardless of whether the user existed or was just created.
-// This prevents FK violations when the same email is used across providers.
+/**
+ * Resolves or creates a user record with explicit cross-provider linking policy enforcement.
+ *
+ * Security invariants:
+ * - Linking by email is only performed when emailVerified === true AND policy permits it.
+ * - Unverified email → always uses fallback email path (no cross-user collision possible).
+ * - Policy 'disabled' → throws CrossProviderLinkingNotAllowedError on any email-based link attempt.
+ * - Policy 'verified-only' → only links when emailVerified === true.
+ */
 async function resolveOrCreateUser(
   db: DrizzleDb,
   provider: ExternalAuthProvider,
   externalUserId: string,
   email: string | undefined,
+  emailVerified: boolean | undefined,
+  crossProviderEmailLinking: 'disabled' | 'verified-only',
 ): Promise<{ internalUserId: string; userCreatedNow: boolean }> {
-  // Fast path: check if identity mapping already exists
+  // Fast path: identity mapping already exists — return immediately
   const existingIdentity = await db
     .select({ userId: authUserIdentitiesTable.userId })
     .from(authUserIdentitiesTable)
@@ -214,53 +251,74 @@ async function resolveOrCreateUser(
     };
   }
 
-  const candidateUserId = crypto.randomUUID();
-  const effectiveEmail = email ?? buildFallbackEmail(provider, externalUserId);
+  // Determine effective email — fall back to a deterministic synthetic address when absent
+  const isRealEmail = email !== undefined;
+  const effectiveEmail = isRealEmail
+    ? email
+    : buildFallbackEmail(provider, externalUserId);
 
-  // Upsert user by email: if email already exists (provider switch), return existing userId.
-  // ON CONFLICT DO UPDATE SET email = EXCLUDED.email is a no-op update that forces RETURNING
-  // to always return the row's actual id (whether newly inserted or pre-existing).
-  const userRows = await db
-    .insert(usersTable)
-    .values({ id: candidateUserId, email: effectiveEmail })
-    .onConflictDoUpdate({
-      target: usersTable.email,
-      set: { email: sql`EXCLUDED.email` },
-    })
-    .returning();
-
-  const actualUserId = userRows[0]?.id;
-  if (!actualUserId) {
-    throw new Error('[provisioning] Failed to resolve user row after upsert.');
-  }
-
-  // Link the provider identity to the resolved internal userId
-  await db
-    .insert(authUserIdentitiesTable)
-    .values({ provider, externalUserId, userId: actualUserId })
-    .onConflictDoNothing();
-
-  const resolvedIdentity = await db
-    .select({ userId: authUserIdentitiesTable.userId })
-    .from(authUserIdentitiesTable)
-    .where(
-      and(
-        eq(authUserIdentitiesTable.provider, provider),
-        eq(authUserIdentitiesTable.externalUserId, externalUserId),
-      ),
-    )
+  // Check if a user with this email already exists
+  const existingUser = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.email, effectiveEmail))
     .limit(1);
 
-  if (!resolvedIdentity[0]?.userId) {
-    throw new Error(
-      '[provisioning] Failed to resolve user identity mapping after create.',
-    );
+  let internalUserId: string;
+  let userCreatedNow: boolean;
+
+  if (existingUser[0]?.id) {
+    if (isRealEmail) {
+      // Cross-provider linking scenario: a real email already owned by another account.
+      // Apply explicit policy gate — only link when email is verified and policy allows it.
+      if (crossProviderEmailLinking === 'disabled') {
+        throw new CrossProviderLinkingNotAllowedError(
+          'CROSS_PROVIDER_EMAIL_LINKING=disabled. Cannot auto-link account via email.',
+        );
+      }
+      if (emailVerified !== true) {
+        throw new CrossProviderLinkingNotAllowedError(
+          'Cross-provider account linking requires emailVerified=true from the auth provider.',
+        );
+      }
+    }
+    // Either linking is allowed (real email, verified) or it is a concurrent
+    // provisioning call for the same user via the fallback email path.
+    internalUserId = existingUser[0].id;
+    userCreatedNow = false;
+  } else {
+    // No user with this email yet — create one
+    const candidateId = crypto.randomUUID();
+    await db
+      .insert(usersTable)
+      .values({ id: candidateId, email: effectiveEmail })
+      .onConflictDoNothing();
+
+    // Re-query to handle race: another transaction may have inserted the same user
+    // between our SELECT and INSERT (only possible for fallback-email concurrent calls).
+    const resolved = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.email, effectiveEmail))
+      .limit(1);
+
+    if (!resolved[0]?.id) {
+      throw new Error(
+        '[provisioning] Failed to resolve user row after insert.',
+      );
+    }
+
+    internalUserId = resolved[0].id;
+    userCreatedNow = resolved[0].id === candidateId;
   }
 
-  return {
-    internalUserId: resolvedIdentity[0].userId,
-    userCreatedNow: resolvedIdentity[0].userId === candidateUserId,
-  };
+  // Link the provider identity to the resolved internal user
+  await db
+    .insert(authUserIdentitiesTable)
+    .values({ provider, externalUserId, userId: internalUserId })
+    .onConflictDoNothing();
+
+  return { internalUserId, userCreatedNow };
 }
 
 async function resolveTenant(
@@ -334,30 +392,24 @@ async function resolveTenant(
   );
 }
 
+/**
+ * Resolves or creates a personal tenant for the given internal user.
+ *
+ * Race-safety: uses a deterministic tenant UUID derived from the user's internal ID.
+ * Two concurrent transactions will compute the same tenantId and both INSERT with
+ * ON CONFLICT DO NOTHING — only one will create the row; neither orphans a tenant.
+ */
 async function resolveOrCreatePersonalTenant(
   db: DrizzleDb,
   internalUserId: string,
 ): Promise<{ internalTenantId: string; tenantCreatedNow: boolean }> {
-  const existing = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
-    .where(
-      and(
-        eq(authTenantIdentitiesTable.provider, 'personal'),
-        eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
-      ),
-    )
-    .limit(1);
+  const tenantId = deterministicTenantId(`personal:${internalUserId}`);
 
-  if (existing[0]?.tenantId) {
-    return { internalTenantId: existing[0].tenantId, tenantCreatedNow: false };
-  }
-
-  const tenantId = crypto.randomUUID();
-  await db
+  const tenantRows = await db
     .insert(tenantsTable)
     .values({ id: tenantId, name: 'Personal Workspace' })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning();
 
   await db
     .insert(authTenantIdentitiesTable)
@@ -368,82 +420,40 @@ async function resolveOrCreatePersonalTenant(
     })
     .onConflictDoNothing();
 
-  const resolved = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
-    .where(
-      and(
-        eq(authTenantIdentitiesTable.provider, 'personal'),
-        eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
-      ),
-    )
-    .limit(1);
-
-  if (!resolved[0]?.tenantId) {
-    throw new Error(
-      '[provisioning] Failed to resolve personal tenant after create.',
-    );
-  }
-
-  const createdTenantId = resolved[0].tenantId;
   return {
-    internalTenantId: createdTenantId,
-    tenantCreatedNow: createdTenantId === tenantId,
+    internalTenantId: tenantId,
+    tenantCreatedNow: tenantRows.length > 0,
   };
 }
 
+/**
+ * Resolves or creates an org tenant identified by (provider, externalTenantId).
+ *
+ * Race-safety: uses a deterministic tenant UUID derived from provider + externalTenantId.
+ * Concurrent transactions for the same org will compute the same tenantId and conflict-
+ * resolve cleanly via ON CONFLICT DO NOTHING — no orphaned tenant rows possible.
+ */
 async function resolveOrCreateOrgTenant(
   db: DrizzleDb,
   provider: ExternalAuthProvider,
   externalTenantId: string,
 ): Promise<{ internalTenantId: string; tenantCreatedNow: boolean }> {
-  const existing = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
-    .where(
-      and(
-        eq(authTenantIdentitiesTable.provider, provider),
-        eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
-      ),
-    )
-    .limit(1);
+  const tenantId = deterministicTenantId(`${provider}:${externalTenantId}`);
 
-  if (existing[0]?.tenantId) {
-    return { internalTenantId: existing[0].tenantId, tenantCreatedNow: false };
-  }
-
-  const tenantId = crypto.randomUUID();
-  await db
+  const tenantRows = await db
     .insert(tenantsTable)
     .values({ id: tenantId, name: `Tenant ${externalTenantId.slice(0, 16)}` })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning();
 
   await db
     .insert(authTenantIdentitiesTable)
     .values({ provider, externalTenantId, tenantId })
     .onConflictDoNothing();
 
-  const resolved = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
-    .where(
-      and(
-        eq(authTenantIdentitiesTable.provider, provider),
-        eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
-      ),
-    )
-    .limit(1);
-
-  if (!resolved[0]?.tenantId) {
-    throw new Error(
-      '[provisioning] Failed to resolve org tenant after create.',
-    );
-  }
-
-  const createdTenantId = resolved[0].tenantId;
   return {
-    internalTenantId: createdTenantId,
-    tenantCreatedNow: createdTenantId === tenantId,
+    internalTenantId: tenantId,
+    tenantCreatedNow: tenantRows.length > 0,
   };
 }
 

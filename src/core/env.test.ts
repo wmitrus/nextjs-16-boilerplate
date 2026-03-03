@@ -265,6 +265,33 @@ describe('tenancy env vars', () => {
     const env = await loadEnv();
     expect(env.TENANT_CONTEXT_SOURCE).toBeUndefined();
   });
+
+  it('CROSS_PROVIDER_EMAIL_LINKING defaults to verified-only', async () => {
+    setEnv({ CROSS_PROVIDER_EMAIL_LINKING: undefined });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.CROSS_PROVIDER_EMAIL_LINKING).toBe('verified-only');
+  });
+
+  it('accepts disabled as CROSS_PROVIDER_EMAIL_LINKING value', async () => {
+    setEnv({ CROSS_PROVIDER_EMAIL_LINKING: 'disabled' });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.CROSS_PROVIDER_EMAIL_LINKING).toBe('disabled');
+  });
+
+  it('accepts verified-only as CROSS_PROVIDER_EMAIL_LINKING value', async () => {
+    setEnv({ CROSS_PROVIDER_EMAIL_LINKING: 'verified-only' });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.CROSS_PROVIDER_EMAIL_LINKING).toBe('verified-only');
+  });
+
+  it('throws on invalid CROSS_PROVIDER_EMAIL_LINKING value', async () => {
+    setEnv({ CROSS_PROVIDER_EMAIL_LINKING: 'always' });
+    vi.resetModules();
+    await expect(loadEnv()).rejects.toThrow();
+  });
 });
 
 describe('validateTenancyConfig', () => {

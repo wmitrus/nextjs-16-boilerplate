@@ -1,3 +1,4 @@
+import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 import type { DrizzleDb } from '@/core/db';
 
 import {
@@ -27,9 +28,9 @@ export interface AuthSeedResult {
     globex: TenantRecord;
   };
   roles: {
-    acmeAdmin: RoleRecord;
+    acmeOwner: RoleRecord;
     acmeMember: RoleRecord;
-    globexAdmin: RoleRecord;
+    globexOwner: RoleRecord;
   };
 }
 
@@ -45,10 +46,10 @@ const TENANTS = {
 } satisfies Record<string, TenantRecord>;
 
 const ROLES = {
-  acmeAdmin: {
+  acmeOwner: {
     id: '20000000-0000-0000-0000-000000000001',
     tenantId: TENANTS.acme.id,
-    name: 'admin',
+    name: 'owner',
     isSystem: true,
   },
   acmeMember: {
@@ -57,10 +58,10 @@ const ROLES = {
     name: 'member',
     isSystem: true,
   },
-  globexAdmin: {
+  globexOwner: {
     id: '20000000-0000-0000-0000-000000000003',
     tenantId: TENANTS.globex.id,
-    name: 'admin',
+    name: 'owner',
     isSystem: true,
   },
 };
@@ -69,28 +70,136 @@ const POLICIES = [
   {
     id: '30000000-0000-0000-0000-000000000001',
     tenantId: TENANTS.acme.id,
-    roleId: ROLES.acmeAdmin.id,
+    roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
-    resource: '*',
-    actions: ['*'],
+    resource: RESOURCES.ROUTE,
+    actions: [ACTIONS.ROUTE_ACCESS],
     conditions: null,
   },
   {
     id: '30000000-0000-0000-0000-000000000002',
     tenantId: TENANTS.acme.id,
-    roleId: ROLES.acmeMember.id,
+    roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
-    resource: 'users',
-    actions: ['read'],
+    resource: RESOURCES.USER,
+    actions: [
+      ACTIONS.USER_READ,
+      ACTIONS.USER_UPDATE,
+      ACTIONS.USER_INVITE,
+      ACTIONS.USER_DEACTIVATE,
+    ],
     conditions: null,
   },
   {
     id: '30000000-0000-0000-0000-000000000003',
-    tenantId: TENANTS.globex.id,
-    roleId: ROLES.globexAdmin.id,
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
-    resource: '*',
-    actions: ['*'],
+    resource: RESOURCES.TENANT,
+    actions: [
+      ACTIONS.TENANT_READ,
+      ACTIONS.TENANT_UPDATE,
+      ACTIONS.TENANT_MANAGE_MEMBERS,
+    ],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000004',
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.BILLING,
+    actions: [ACTIONS.BILLING_READ, ACTIONS.BILLING_UPDATE],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000005',
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.SECURITY,
+    actions: [ACTIONS.SECURITY_READ_AUDIT, ACTIONS.SECURITY_MANAGE_POLICIES],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000006',
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeMember.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.ROUTE,
+    actions: [ACTIONS.ROUTE_ACCESS],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000007',
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeMember.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.USER,
+    actions: [ACTIONS.USER_READ],
+    conditions: { 'subject.userId': { $eq: 'resource.userId' } },
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000008',
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeMember.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.USER,
+    actions: [ACTIONS.USER_UPDATE],
+    conditions: { 'subject.userId': { $eq: 'resource.userId' } },
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000009',
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeMember.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.TENANT,
+    actions: [ACTIONS.TENANT_READ],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000010',
+    tenantId: TENANTS.acme.id,
+    roleId: ROLES.acmeMember.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.BILLING,
+    actions: [ACTIONS.BILLING_READ],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000011',
+    tenantId: TENANTS.globex.id,
+    roleId: ROLES.globexOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.ROUTE,
+    actions: [ACTIONS.ROUTE_ACCESS],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000012',
+    tenantId: TENANTS.globex.id,
+    roleId: ROLES.globexOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.USER,
+    actions: [
+      ACTIONS.USER_READ,
+      ACTIONS.USER_UPDATE,
+      ACTIONS.USER_INVITE,
+      ACTIONS.USER_DEACTIVATE,
+    ],
+    conditions: null,
+  },
+  {
+    id: '30000000-0000-0000-0000-000000000013',
+    tenantId: TENANTS.globex.id,
+    roleId: ROLES.globexOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.TENANT,
+    actions: [
+      ACTIONS.TENANT_READ,
+      ACTIONS.TENANT_UPDATE,
+      ACTIONS.TENANT_MANAGE_MEMBERS,
+    ],
     conditions: null,
   },
 ];
@@ -134,12 +243,12 @@ export async function seedAuthorization(
       {
         userId: alice.id,
         tenantId: TENANTS.acme.id,
-        roleId: ROLES.acmeAdmin.id,
+        roleId: ROLES.acmeOwner.id,
       },
       {
         userId: alice.id,
         tenantId: TENANTS.globex.id,
-        roleId: ROLES.globexAdmin.id,
+        roleId: ROLES.globexOwner.id,
       },
       {
         userId: bob.id,
@@ -159,9 +268,9 @@ export async function seedAuthorization(
   return {
     tenants: TENANTS,
     roles: {
-      acmeAdmin: ROLES.acmeAdmin,
+      acmeOwner: ROLES.acmeOwner,
       acmeMember: ROLES.acmeMember,
-      globexAdmin: ROLES.globexAdmin,
+      globexOwner: ROLES.globexOwner,
     },
   };
 }

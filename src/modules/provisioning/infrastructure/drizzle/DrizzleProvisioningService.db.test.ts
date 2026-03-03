@@ -1,4 +1,5 @@
 /** @vitest-environment node */
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
@@ -453,8 +454,8 @@ describe('DrizzleProvisioningService (real DB)', () => {
     });
   });
 
-  describe('race-path policy gate (P1 fix — else-branch gate invariant)', () => {
-    it('unverified email link is rejected even when user row already exists in DB (simulates race-settled state)', async () => {
+  describe('cross-provider gate — existingUser branch (user row pre-exists, no identity mapping)', () => {
+    it('unverified email link is rejected when user already exists without identity mapping (existingUser branch)', async () => {
       const db = testDb.db;
       const existingUserId = crypto.randomUUID();
       const raceEmail = 'race-gate@example.com';
@@ -476,7 +477,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       ).rejects.toThrow(CrossProviderLinkingNotAllowedError);
     });
 
-    it('disabled policy rejects even verified-email link when user row already exists (race-settled state)', async () => {
+    it('disabled policy rejects even verified-email link when user already exists without identity mapping', async () => {
       const db = testDb.db;
       const existingUserId = crypto.randomUUID();
       const raceEmail = 'race-gate-disabled@example.com';
@@ -498,7 +499,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       ).rejects.toThrow(CrossProviderLinkingNotAllowedError);
     });
 
-    it('verified-only policy allows link when user row already exists with verified email (race-settled state)', async () => {
+    it('verified-only policy allows link when user already exists and email is verified — returns DB-authoritative userId', async () => {
       const db = testDb.db;
       const existingUserId = crypto.randomUUID();
       const raceEmail = 'race-gate-allowed@example.com';
@@ -518,6 +519,109 @@ describe('DrizzleProvisioningService (real DB)', () => {
       });
 
       expect(result.internalUserId).toBe(existingUserId);
+
+      const mapping = await db
+        .select({ userId: authUserIdentitiesTable.userId })
+        .from(authUserIdentitiesTable)
+        .where(
+          and(
+            eq(authUserIdentitiesTable.provider, 'clerk'),
+            eq(
+              authUserIdentitiesTable.externalUserId,
+              'user_race_allowed_clerk',
+            ),
+          ),
+        )
+        .limit(1);
+
+      expect(mapping[0]?.userId).toBe(existingUserId);
+      expect(result.internalUserId).toBe(mapping[0]?.userId);
+    });
+  });
+
+  describe('canonical mapping re-read — authoritative DB value returned after insert', () => {
+    it('returned internalUserId always matches auth_user_identities row (canonical re-read)', async () => {
+      const svc = makeService();
+      const result = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_canonical_reread_001',
+        email: 'canonical-reread@example.com',
+        emailVerified: true,
+        tenancyMode: 'personal',
+      });
+
+      const mapping = await testDb.db
+        .select({ userId: authUserIdentitiesTable.userId })
+        .from(authUserIdentitiesTable)
+        .where(
+          and(
+            eq(authUserIdentitiesTable.provider, 'clerk'),
+            eq(
+              authUserIdentitiesTable.externalUserId,
+              'user_canonical_reread_001',
+            ),
+          ),
+        )
+        .limit(1);
+
+      expect(mapping[0]?.userId).toBeTruthy();
+      expect(result.internalUserId).toBe(mapping[0]?.userId);
+    });
+
+    it('returned internalTenantId always matches auth_tenant_identities row for personal tenant (canonical re-read)', async () => {
+      const svc = makeService();
+      const result = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_canonical_tenant_reread_001',
+        email: 'canonical-tenant-reread@example.com',
+        tenancyMode: 'personal',
+      });
+
+      const mapping = await testDb.db
+        .select({ tenantId: authTenantIdentitiesTable.tenantId })
+        .from(authTenantIdentitiesTable)
+        .where(
+          and(
+            eq(authTenantIdentitiesTable.provider, 'personal'),
+            eq(
+              authTenantIdentitiesTable.externalTenantId,
+              result.internalUserId,
+            ),
+          ),
+        )
+        .limit(1);
+
+      expect(mapping[0]?.tenantId).toBeTruthy();
+      expect(result.internalTenantId).toBe(mapping[0]?.tenantId);
+    });
+
+    it('returned internalTenantId always matches auth_tenant_identities row for org/provider tenant (canonical re-read)', async () => {
+      const svc = makeService();
+      const result = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_canonical_org_reread_001',
+        tenantExternalId: 'org_canonical_reread_001',
+        tenantRole: 'org:admin',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      const mapping = await testDb.db
+        .select({ tenantId: authTenantIdentitiesTable.tenantId })
+        .from(authTenantIdentitiesTable)
+        .where(
+          and(
+            eq(authTenantIdentitiesTable.provider, 'clerk'),
+            eq(
+              authTenantIdentitiesTable.externalTenantId,
+              'org_canonical_reread_001',
+            ),
+          ),
+        )
+        .limit(1);
+
+      expect(mapping[0]?.tenantId).toBeTruthy();
+      expect(result.internalTenantId).toBe(mapping[0]?.tenantId);
     });
   });
 

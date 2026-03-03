@@ -27,12 +27,12 @@ describe('DrizzleRoleRepository', () => {
     expect(result).toEqual([]);
   });
 
-  it('returns role names for existing membership', async () => {
-    const db = createMockDb([{ name: 'admin' }, { name: 'editor' }]);
+  it('returns role IDs for existing membership', async () => {
+    const db = createMockDb([{ roleId: 'role-1' }, { roleId: 'role-2' }]);
     const repo = new DrizzleRoleRepository(db);
 
     const result = await repo.getRoles('u1', 't1');
 
-    expect(result).toEqual(['admin', 'editor']);
+    expect(result).toEqual(['role-1', 'role-2']);
   });
 });

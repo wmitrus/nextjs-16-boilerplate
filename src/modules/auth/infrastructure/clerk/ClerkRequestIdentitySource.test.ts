@@ -14,12 +14,12 @@ describe('ClerkRequestIdentitySource', () => {
     vi.clearAllMocks();
   });
 
-  it('returns userId, tenantExternalId, tenantRole, and email from auth()', async () => {
+  it('returns userId, tenantExternalId, tenantRole, email, and emailVerified from auth()', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: 'user_123',
       orgId: 'org_456',
       orgRole: 'org:admin',
-      sessionClaims: { email: 'test@example.com' },
+      sessionClaims: { email: 'test@example.com', email_verified: true },
     } as unknown as Awaited<ReturnType<typeof auth>>);
 
     const source = new ClerkRequestIdentitySource();
@@ -30,7 +30,36 @@ describe('ClerkRequestIdentitySource', () => {
       tenantExternalId: 'org_456',
       tenantRole: 'org:admin',
       email: 'test@example.com',
+      emailVerified: true,
     });
+  });
+
+  it('returns emailVerified=undefined when email_verified claim is absent', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      userId: 'user_123',
+      orgId: null,
+      orgRole: null,
+      sessionClaims: { email: 'test@example.com' },
+    } as unknown as Awaited<ReturnType<typeof auth>>);
+
+    const source = new ClerkRequestIdentitySource();
+    const data = await source.get();
+
+    expect(data.emailVerified).toBeUndefined();
+  });
+
+  it('returns emailVerified=undefined when email_verified is false', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      userId: 'user_123',
+      orgId: null,
+      orgRole: null,
+      sessionClaims: { email: 'test@example.com', email_verified: false },
+    } as unknown as Awaited<ReturnType<typeof auth>>);
+
+    const source = new ClerkRequestIdentitySource();
+    const data = await source.get();
+
+    expect(data.emailVerified).toBeUndefined();
   });
 
   it('returns undefined fields when auth returns nulls', async () => {

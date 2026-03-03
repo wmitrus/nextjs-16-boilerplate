@@ -23,7 +23,11 @@ afterAll(async () => {
  */
 describe('DrizzleExternalIdentityMapper (deprecated read-only — real DB)', () => {
   it('resolves existing user identity mapping after provisioning', async () => {
-    const provisioning = new DrizzleProvisioningService(testDb.db, 5);
+    const provisioning = new DrizzleProvisioningService(
+      testDb.db,
+      5,
+      'verified-only',
+    );
     await provisioning.ensureProvisioned({
       provider: 'clerk',
       externalUserId: 'user_compat_read_001',
@@ -41,7 +45,11 @@ describe('DrizzleExternalIdentityMapper (deprecated read-only — real DB)', () 
   });
 
   it('resolves existing tenant identity mapping after org/provider provisioning', async () => {
-    const provisioning = new DrizzleProvisioningService(testDb.db, 5);
+    const provisioning = new DrizzleProvisioningService(
+      testDb.db,
+      5,
+      'verified-only',
+    );
     await provisioning.ensureProvisioned({
       provider: 'clerk',
       externalUserId: 'user_compat_read_002',

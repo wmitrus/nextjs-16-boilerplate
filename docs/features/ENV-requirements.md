@@ -1,130 +1,144 @@
 # Environment Requirements
 
-This document lists the environment variables required (or optional) to run the project. Update this file whenever new variables are added.
+This document is the runtime source of truth for environment setup after the tenancy/provisioning refactor.
 
----
+All vars are defined in `src/core/env.ts`.
 
-## Required for Local Development
+## 1. Setup Commands
 
-Create a local file:
+Create local env file:
 
 ```bash
 pnpm env:init
 ```
 
-Then validate it:
+Validate env schema consistency:
 
 ```bash
 pnpm env:check
 ```
 
----
+## 2. Configuration Axes
 
-## Local Environment (.env.local)
+Runtime behavior is controlled by independent axes:
 
-These are used by `pnpm env:init` and validated by `pnpm env:check`.
+1. `AUTH_PROVIDER=clerk|authjs|supabase`
+2. `TENANCY_MODE=single|personal|org`
+3. `TENANT_CONTEXT_SOURCE=provider|db` (required only for `TENANCY_MODE=org`)
 
-### Required (Local + Vercel)
+## 3. Cross-Field Validation Rules
 
-| Variable                            | Required | Purpose           | Example       |
-| ----------------------------------- | -------- | ----------------- | ------------- |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Yes      | Clerk public key  | `pk_test_...` |
-| `CLERK_SECRET_KEY`                  | Yes      | Clerk private key | `sk_test_...` |
+The app fails fast at startup when these rules are violated:
 
-### Optional (Local + Vercel)
+1. `TENANCY_MODE=single` requires `DEFAULT_TENANT_ID` (valid UUID).
+2. `TENANCY_MODE=org` requires `TENANT_CONTEXT_SOURCE`.
+3. `AUTH_PROVIDER=clerk` requires:
+   - `CLERK_SECRET_KEY`
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 
-| Variable                                          | Default       | Purpose                                                     |
-| ------------------------------------------------- | ------------- | ----------------------------------------------------------- |
-| `NEXT_PUBLIC_CLERK_SIGN_IN_URL`                   | `/sign-in`    | URL for sign-in page                                        |
-| `NEXT_PUBLIC_CLERK_SIGN_UP_URL`                   | `/sign-up`    | URL for sign-up page                                        |
-| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/`           | Where to go after sign-in                                   |
-| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/`           | Where to go after sign-up                                   |
-| `NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL`    | `/onboarding` | Forced redirect after sign-up                               |
-| `NEXT_PUBLIC_CLERK_WAITLIST_URL`                  | `/waitlist`   | URL for the waitlist page                                   |
-| `NEXT_PUBLIC_APP_URL`                             | -             | Public base URL                                             |
-| `NEXT_PUBLIC_E2E_ENABLED`                         | -             | Enable test-only UI for E2E                                 |
-| `UPSTASH_REDIS_REST_URL`                          | -             | Upstash Redis REST URL                                      |
-| `UPSTASH_REDIS_REST_TOKEN`                        | -             | Upstash Redis REST token                                    |
-| `API_RATE_LIMIT_REQUESTS`                         | `10`          | API rate limit requests                                     |
-| `API_RATE_LIMIT_WINDOW`                           | `60 s`        | API rate limit window                                       |
-| `LOGFLARE_API_KEY`                                | -             | Logflare API key                                            |
-| `LOGFLARE_SOURCE_TOKEN`                           | -             | Logflare source token                                       |
-| `LOGFLARE_SOURCE_NAME`                            | -             | Logflare source name                                        |
-| `LOG_LEVEL`                                       | `info`        | Pino log level                                              |
-| `LOG_INGEST_SECRET`                               | -             | Shared secret for edge ingest                               |
-| `INTERNAL_API_KEY`                                | -             | Secret for /api/internal access                             |
-| `SECURITY_AUDIT_LOG_ENABLED`                      | `true`        | Toggle mutation audit logging                               |
-| `SECURITY_ALLOWED_OUTBOUND_HOSTS`                 | -             | Comma-separated list of allowed hosts                       |
-| `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED`            | `false`       | Browser log forwarding via `/api/logs`                      |
-| `NEXT_PUBLIC_CSP_SCRIPT_EXTRA`                    | -             | Extra origins for CSP script-src                            |
-| `NEXT_PUBLIC_CSP_CONNECT_EXTRA`                   | -             | Extra origins for CSP connect-src                           |
-| `NEXT_PUBLIC_CSP_FRAME_EXTRA`                     | -             | Extra origins for CSP frame-src                             |
-| `NEXT_PUBLIC_CSP_IMG_EXTRA`                       | -             | Extra origins for CSP img-src                               |
-| `NEXT_PUBLIC_CSP_FONT_EXTRA`                      | -             | Extra origins for CSP font-src                              |
-| `NEXT_PUBLIC_CSP_STYLE_EXTRA`                     | -             | Extra origins for CSP style-src                             |
-| `CHROMATIC_PROJECT_TOKEN`                         | -             | Chromatic uploads in CI                                     |
-| `NODE_ENV`                                        | `development` | Runtime mode                                                |
-| `VERCEL_ENV`                                      | -             | Vercel environment (prod/preview/dev)                       |
-| `SECURITY_ALLOWED_OUTBOUND_HOSTS`                 | See env.ts    | Allowed hosts for secureFetch                               |
-| `SECURITY_AUDIT_LOG_ENABLED`                      | `true`        | Enable security audit logging                               |
-| `INTERNAL_API_KEY`                                | -             | Key for internal API routes (Gen: `pnpm generate:secret`)   |
-| `LOG_INGEST_SECRET`                               | -             | Shared secret for edge ingest (Gen: `pnpm generate:secret`) |
+## 4. Auth Provider Vars
 
----
+### 4.1 Clerk (required only when `AUTH_PROVIDER=clerk`)
 
-## Vercel Environment Variables
-
-Set these in **Vercel Project Settings > Environment Variables** for Preview and Production as needed.
-
-Use the same variables as **Local Environment** plus any production values (real Clerk keys, Upstash, Logflare). The following are the minimum required for the app to boot:
-
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- Optional Clerk route vars:
+  - `NEXT_PUBLIC_CLERK_SIGN_IN_URL`
+  - `NEXT_PUBLIC_CLERK_SIGN_UP_URL`
+  - `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`
+  - `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL`
+  - `NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL`
+  - `NEXT_PUBLIC_CLERK_WAITLIST_URL`
 
----
+### 4.2 Auth.js / Supabase
 
-## GitHub Actions: Secrets
+No Clerk keys are required when `AUTH_PROVIDER=authjs|supabase`.
 
-Set these in **GitHub Settings > Secrets and variables > Actions**.
+Important current status:
 
-### Required for Vercel Deployments
+- `AuthJsRequestIdentitySource` and `SupabaseRequestIdentitySource` are placeholder adapters (return no authenticated identity).
+- These providers are architecture-ready but not runtime-complete yet.
 
-| Secret                            | Purpose                                 |
-| --------------------------------- | --------------------------------------- |
-| `VERCEL_TOKEN`                    | Vercel Access Token                     |
-| `VERCEL_ORG_ID`                   | Vercel Organization ID                  |
-| `VERCEL_PROJECT_ID`               | Vercel Project ID                       |
-| `VERCEL_AUTOMATION_BYPASS_SECRET` | Bypass Vercel Protection for Lighthouse |
-| `LHCI_TOKEN`                      | Lighthouse CI build token               |
+## 5. Tenancy Vars
 
-**LHCI note:** Configure your LHCI server URL via `LHCI_SERVER_BASE_URL`. See [CI/CD & Lighthouse CI](./19%20-%20CI-CD%20%26%20Lighthouse%20CI.md) for full setup.
+- `TENANCY_MODE=single|personal|org`
+- `DEFAULT_TENANT_ID` (required for `single`)
+- `TENANT_CONTEXT_SOURCE=provider|db` (required for `org`)
+- `TENANT_CONTEXT_HEADER` (default: `x-tenant-id`)
+- `TENANT_CONTEXT_COOKIE` (default: `active_tenant_id`)
 
-### Required for Automated Releases
+Provisioning-related vars:
 
-| Secret                                    | Purpose                              |
-| ----------------------------------------- | ------------------------------------ |
-| `SEMANTIC_RELEASE_GITHUB_APP_ID`          | GitHub App ID for automated releases |
-| `SEMANTIC_RELEASE_GITHUB_APP_PRIVATE_KEY` | Private key for automated releases   |
+- `FREE_TIER_MAX_USERS` (default: `5`)
+- `CROSS_PROVIDER_EMAIL_LINKING=disabled|verified-only` (default: `verified-only`)
 
-### Optional
+## 6. Minimal Runtime Profiles
 
-| Secret                    | Purpose                             |
-| ------------------------- | ----------------------------------- |
-| `CHROMATIC_PROJECT_TOKEN` | Storybook visual regression testing |
+### Profile A: Clerk + Single Tenant
 
----
+```dotenv
+AUTH_PROVIDER=clerk
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 
-## GitHub Actions: Variables
+TENANCY_MODE=single
+DEFAULT_TENANT_ID=550e8400-e29b-41d4-a716-446655440000
+```
 
-Set these in **GitHub Settings > Secrets and variables > Actions**.
+### Profile B: Clerk + Personal Tenant
 
-| Variable               | Purpose                                 |
-| ---------------------- | --------------------------------------- |
-| `LHCI_SERVER_BASE_URL` | LHCI server URL used by `lighthouserc`  |
-| `PRODUCTION_URL`       | Production URL for scheduled Lighthouse |
+```dotenv
+AUTH_PROVIDER=clerk
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 
----
+TENANCY_MODE=personal
+```
 
-## Source of Truth
+### Profile C: Clerk + Org (provider context)
 
-All variables are defined and validated in `src/core/env.ts` using **@t3-oss/env-nextjs**.
+```dotenv
+AUTH_PROVIDER=clerk
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+
+TENANCY_MODE=org
+TENANT_CONTEXT_SOURCE=provider
+```
+
+### Profile D: Clerk + Org (db context)
+
+```dotenv
+AUTH_PROVIDER=clerk
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+
+TENANCY_MODE=org
+TENANT_CONTEXT_SOURCE=db
+TENANT_CONTEXT_HEADER=x-tenant-id
+TENANT_CONTEXT_COOKIE=active_tenant_id
+```
+
+## 7. Shared Infrastructure Vars
+
+Commonly required:
+
+- `DB_PROVIDER`
+- `DB_DRIVER`
+- `DATABASE_URL` (required for postgres driver)
+- `NODE_ENV`
+
+Security and ops vars remain optional with defaults unless your deployment policy requires strict values.
+
+## 8. Production Notes
+
+1. Keep secrets only in deployment secret stores.
+2. Never commit real keys to `.env.example`.
+3. Validate env before deploy using `pnpm env:check` and CI gates.
+
+## 9. Canonical References
+
+- Env schema: `src/core/env.ts`
+- Bootstrap validation: `src/core/runtime/bootstrap.ts`
+- Tenancy resolver wiring: `src/modules/auth/index.ts`
+- Provisioning flow: `src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.ts`

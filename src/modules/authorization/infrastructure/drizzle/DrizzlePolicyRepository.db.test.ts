@@ -24,8 +24,8 @@ afterAll(async () => {
 const baseContext: AuthorizationContext = {
   tenant: { tenantId: '10000000-0000-0000-0000-000000000001' },
   subject: { id: '00000000-0000-0000-0000-000000000001' },
-  resource: { type: 'users' },
-  action: 'users:read',
+  resource: { type: 'user' },
+  action: 'user:read',
 };
 
 describe('DrizzlePolicyRepository (real DB)', () => {
@@ -67,5 +67,33 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     );
     expect(ownerUserPolicy).toBeDefined();
     expect(ownerUserPolicy?.actions).toContain('user:read');
+  });
+
+  it('member user self-access policy deserializes to executable condition', async () => {
+    const repo = new DrizzlePolicyRepository(testDb.db);
+    const policies = await repo.getPolicies(baseContext);
+
+    const memberReadPolicy = policies.find(
+      (p) =>
+        p.effect === 'allow' &&
+        p.resource === 'user' &&
+        p.actions.includes('user:read') &&
+        p.condition !== undefined,
+    );
+    expect(memberReadPolicy).toBeDefined();
+
+    const allowContext: AuthorizationContext = {
+      ...baseContext,
+      subject: { id: 'self-user-id' },
+      resource: { type: 'user', id: 'self-user-id' },
+      action: 'user:read',
+    };
+    const denyContext: AuthorizationContext = {
+      ...allowContext,
+      resource: { type: 'user', id: 'different-user-id' },
+    };
+
+    expect(memberReadPolicy?.condition?.(allowContext)).toBe(true);
+    expect(memberReadPolicy?.condition?.(denyContext)).toBe(false);
   });
 });

@@ -1,8 +1,7 @@
 import type { Identity } from '@/core/contracts/identity';
+import type { InternalIdentityLookup } from '@/core/contracts/identity';
 import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import type { TenantContext, TenantResolver } from '@/core/contracts/tenancy';
-
-import type { InternalIdentityLookup } from '@/modules/auth/infrastructure/InternalIdentityLookup';
 
 /**
  * TENANCY_MODE=personal: each user has exactly one personal tenant.

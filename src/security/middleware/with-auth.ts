@@ -5,6 +5,8 @@ import { createAction } from '@/core/contracts/authorization';
 import type { Identity } from '@/core/contracts/identity';
 import {
   MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
   type TenantContext,
 } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
@@ -291,7 +293,10 @@ export function withAuth(
           'edge',
         );
       } catch (error) {
-        if (error instanceof MissingTenantContextError) {
+        if (
+          error instanceof MissingTenantContextError ||
+          error instanceof TenantNotProvisionedError
+        ) {
           if (ctx.isApi) {
             return NextResponse.json(
               {
@@ -304,6 +309,21 @@ export function withAuth(
           }
 
           return redirectForMissingTenantContext(req);
+        }
+
+        if (error instanceof TenantMembershipRequiredError) {
+          if (ctx.isApi) {
+            return NextResponse.json(
+              {
+                status: 'server_error',
+                error: 'Tenant membership required',
+                code: 'TENANT_MEMBERSHIP_REQUIRED',
+              },
+              { status: 403 },
+            );
+          }
+
+          return NextResponse.redirect(new URL('/', req.url));
         }
 
         if (error instanceof AuthorizationError) {

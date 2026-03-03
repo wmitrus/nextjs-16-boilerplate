@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
 
 import {
+  CrossProviderLinkingNotAllowedError,
   TenantContextRequiredError,
   TenantUserLimitReachedError,
 } from '../../domain/errors';
@@ -22,8 +23,15 @@ afterAll(async () => {
   await testDb.cleanup();
 });
 
-function makeService(freeTierMaxUsers = 5) {
-  return new DrizzleProvisioningService(testDb.db, freeTierMaxUsers);
+function makeService(
+  freeTierMaxUsers = 5,
+  crossProviderEmailLinking: 'disabled' | 'verified-only' = 'verified-only',
+) {
+  return new DrizzleProvisioningService(
+    testDb.db,
+    freeTierMaxUsers,
+    crossProviderEmailLinking,
+  );
 }
 
 describe('DrizzleProvisioningService (real DB)', () => {
@@ -282,27 +290,75 @@ describe('DrizzleProvisioningService (real DB)', () => {
     });
   });
 
-  describe('email conflict / provider switch (P1 fix)', () => {
-    it('provisions same email under a different provider without FK violation', async () => {
-      const svc = makeService();
-      const sharedEmail = 'shared-email@example.com';
+  describe('cross-provider email linking (P1 security fix)', () => {
+    it('links same verified email across providers → same internalUserId', async () => {
+      const svc = makeService(5, 'verified-only');
+      const sharedEmail = 'crosslink-verified@example.com';
 
       const first = await svc.ensureProvisioned({
         provider: 'clerk',
-        externalUserId: 'user_email_switch_clerk',
+        externalUserId: 'user_crosslink_clerk_001',
         email: sharedEmail,
+        emailVerified: true,
         tenancyMode: 'personal',
       });
 
       const second = await svc.ensureProvisioned({
         provider: 'authjs',
-        externalUserId: 'user_email_switch_authjs',
+        externalUserId: 'user_crosslink_authjs_001',
         email: sharedEmail,
+        emailVerified: true,
         tenancyMode: 'personal',
       });
 
       expect(first.internalUserId).toBeTruthy();
-      expect(second.internalUserId).toBeTruthy();
+      expect(second.internalUserId).toBe(first.internalUserId);
+    });
+
+    it('throws CrossProviderLinkingNotAllowedError when email is unverified (verified-only policy)', async () => {
+      const svc = makeService(5, 'verified-only');
+      const sharedEmail = 'crosslink-unverified@example.com';
+
+      await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_crosslink_unverified_clerk',
+        email: sharedEmail,
+        emailVerified: true,
+        tenancyMode: 'personal',
+      });
+
+      await expect(
+        svc.ensureProvisioned({
+          provider: 'authjs',
+          externalUserId: 'user_crosslink_unverified_authjs',
+          email: sharedEmail,
+          emailVerified: false,
+          tenancyMode: 'personal',
+        }),
+      ).rejects.toThrow(CrossProviderLinkingNotAllowedError);
+    });
+
+    it('throws CrossProviderLinkingNotAllowedError when policy is disabled, even with verified email', async () => {
+      const svc = makeService(5, 'disabled');
+      const sharedEmail = 'crosslink-disabled@example.com';
+
+      await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_crosslink_disabled_clerk',
+        email: sharedEmail,
+        emailVerified: true,
+        tenancyMode: 'personal',
+      });
+
+      await expect(
+        svc.ensureProvisioned({
+          provider: 'authjs',
+          externalUserId: 'user_crosslink_disabled_authjs',
+          email: sharedEmail,
+          emailVerified: true,
+          tenancyMode: 'personal',
+        }),
+      ).rejects.toThrow(CrossProviderLinkingNotAllowedError);
     });
 
     it('returns consistent internalUserId when same provider+externalId provisioned twice', async () => {
@@ -311,6 +367,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
         provider: 'clerk',
         externalUserId: 'user_email_idempotent_001',
         email: 'idempotent-email@example.com',
+        emailVerified: true,
         tenancyMode: 'personal',
       });
 
@@ -318,6 +375,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
         provider: 'clerk',
         externalUserId: 'user_email_idempotent_001',
         email: 'idempotent-email@example.com',
+        emailVerified: true,
         tenancyMode: 'personal',
       });
 
@@ -326,35 +384,36 @@ describe('DrizzleProvisioningService (real DB)', () => {
   });
 
   describe('org/db — no write side-effects before membership check (P1 fix)', () => {
-    it('does not create tenant_attributes or roles when user has no membership', async () => {
+    it('throws TenantMembershipRequiredError and does NOT create tenant_attributes or roles for user without membership', async () => {
       const svc = makeService();
 
       const orgResult = await svc.ensureProvisioned({
         provider: 'clerk',
-        externalUserId: 'user_orgdb_owner_001',
-        tenantExternalId: 'org_nowrite_001',
+        externalUserId: 'user_orgdb_writecheck_owner',
+        tenantExternalId: 'org_writecheck_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
       });
 
-      const secondUser = await svc.ensureProvisioned({
+      await svc.ensureProvisioned({
         provider: 'clerk',
-        externalUserId: 'user_orgdb_nomember_001',
+        externalUserId: 'user_orgdb_writecheck_nomember',
         tenancyMode: 'personal',
       });
 
       await expect(
         svc.ensureProvisioned({
           provider: 'clerk',
-          externalUserId: 'user_orgdb_nomember_001',
+          externalUserId: 'user_orgdb_writecheck_nomember',
           activeTenantId: orgResult.internalTenantId,
           tenancyMode: 'org',
           tenantContextSource: 'db',
         }),
       ).rejects.toThrow(TenantMembershipRequiredError);
 
-      expect(secondUser).toBeDefined();
+      expect(orgResult.internalTenantId).toBeTruthy();
+      expect(orgResult.membershipRole).toBe('owner');
     });
   });
 });

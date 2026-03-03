@@ -17,6 +17,8 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
             typeof sessionClaims?.email === 'string'
               ? sessionClaims.email
               : undefined,
+          emailVerified:
+            sessionClaims?.email_verified === true ? true : undefined,
           tenantExternalId: orgId ?? undefined,
           tenantRole: orgRole ?? undefined,
         }),

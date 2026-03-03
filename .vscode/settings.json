@@ -39,7 +39,6 @@
     }
   ],
   "githubPullRequests.pushBranch": "always",
-  "vitest.workspaceConfig": "vitest.workspace.ts",
   "playwright.testConfigPath": "playwright.vscode.config.ts",
   "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
     {

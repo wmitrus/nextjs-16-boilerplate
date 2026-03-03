@@ -179,14 +179,15 @@ Security runtime accesses module capability through contracts/services, not dire
 
 Observed Clerk usage locations:
 
-- Adapter/domain boundary:
+- Adapter/infrastructure boundary:
   - `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts`
   - `src/modules/auth/infrastructure/RequestScopedIdentityProvider.ts`
-  - `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts`
-  - `src/modules/auth/infrastructure/ClerkUserRepository.ts`
+  - `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts` (edge-only)
+  - `src/modules/provisioning/infrastructure/OrgProviderTenantResolver.ts`
+  - `src/modules/auth/infrastructure/ClerkUserRepository.ts` (legacy compatibility adapter; Node runtime default uses DB-backed repository)
 - Framework delivery boundary:
   - `src/proxy.ts` (`clerkMiddleware`)
-  - `src/app/layout.tsx` (`ClerkProvider`)
+  - `src/app/layout.tsx` (`ClerkProvider` when `AUTH_PROVIDER=clerk`)
   - auth route pages/components under `src/app/*` and `src/modules/auth/ui/*`
 
 No evidence of Clerk leakage into core contracts or authorization domain core logic.

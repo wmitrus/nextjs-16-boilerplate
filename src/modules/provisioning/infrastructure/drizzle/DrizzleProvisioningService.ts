@@ -328,13 +328,40 @@ async function resolveOrCreateUser(
     userCreatedNow = resolved[0].id === candidateId;
   }
 
-  // Link the provider identity to the resolved internal user
+  // Link the provider identity to the resolved internal user.
+  // ON CONFLICT DO NOTHING because a concurrent transaction may have already committed
+  // this mapping with the same (provider, externalUserId) PK.
   await db
     .insert(authUserIdentitiesTable)
     .values({ provider, externalUserId, userId: internalUserId })
     .onConflictDoNothing();
 
-  return { internalUserId, userCreatedNow };
+  // Re-read the mapping as the authoritative source of truth.
+  // A concurrent transaction could have committed a mapping with the same PK but
+  // pointing to a different userId (e.g. concurrent onboarding race).
+  // The DB record is canonical — always use what the DB says.
+  const canonicalMapping = await db
+    .select({ userId: authUserIdentitiesTable.userId })
+    .from(authUserIdentitiesTable)
+    .where(
+      and(
+        eq(authUserIdentitiesTable.provider, provider),
+        eq(authUserIdentitiesTable.externalUserId, externalUserId),
+      ),
+    )
+    .limit(1);
+
+  if (!canonicalMapping[0]?.userId) {
+    throw new Error(
+      '[provisioning] Failed to resolve identity mapping after insert.',
+    );
+  }
+
+  return {
+    internalUserId: canonicalMapping[0].userId,
+    userCreatedNow:
+      userCreatedNow && canonicalMapping[0].userId === internalUserId,
+  };
 }
 
 async function resolveTenant(
@@ -457,12 +484,31 @@ async function resolveOrCreatePersonalTenant(
     })
     .onConflictDoNothing();
 
-  // Re-read after concurrent insert: another transaction may have won the race
-  // and inserted the mapping with the same deterministic ID (both rows are identical,
-  // so the read-path and write-path always agree).
+  // Re-read the mapping as the authoritative source of truth.
+  // Both concurrent transactions compute the same deterministic tenantId, so the
+  // re-read is always consistent — but it closes the theoretical gap where an
+  // in-flight mapping insert conflicts with a committed one.
+  const canonicalMapping = await db
+    .select({ tenantId: authTenantIdentitiesTable.tenantId })
+    .from(authTenantIdentitiesTable)
+    .where(
+      and(
+        eq(authTenantIdentitiesTable.provider, 'personal'),
+        eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
+      ),
+    )
+    .limit(1);
+
+  if (!canonicalMapping[0]?.tenantId) {
+    throw new Error(
+      '[provisioning] Failed to resolve personal tenant mapping after insert.',
+    );
+  }
+
   return {
-    internalTenantId: tenantId,
-    tenantCreatedNow: tenantRows.length > 0,
+    internalTenantId: canonicalMapping[0].tenantId,
+    tenantCreatedNow:
+      tenantRows.length > 0 && canonicalMapping[0].tenantId === tenantId,
   };
 }
 
@@ -512,9 +558,30 @@ async function resolveOrCreateOrgTenant(
     .values({ provider, externalTenantId, tenantId })
     .onConflictDoNothing();
 
+  // Re-read the mapping as the authoritative source of truth.
+  // Concurrent transactions computing the same deterministic tenantId will both
+  // conflict-resolve cleanly — but re-reading ensures the returned ID is canonical.
+  const canonicalMapping = await db
+    .select({ tenantId: authTenantIdentitiesTable.tenantId })
+    .from(authTenantIdentitiesTable)
+    .where(
+      and(
+        eq(authTenantIdentitiesTable.provider, provider),
+        eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
+      ),
+    )
+    .limit(1);
+
+  if (!canonicalMapping[0]?.tenantId) {
+    throw new Error(
+      '[provisioning] Failed to resolve org tenant mapping after insert.',
+    );
+  }
+
   return {
-    internalTenantId: tenantId,
-    tenantCreatedNow: tenantRows.length > 0,
+    internalTenantId: canonicalMapping[0].tenantId,
+    tenantCreatedNow:
+      tenantRows.length > 0 && canonicalMapping[0].tenantId === tenantId,
   };
 }
 

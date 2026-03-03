@@ -1,6 +1,6 @@
 # Production Provisioning Refactor — Implementation Plan
 
-Status: `PR-0 COMPLETE — PR-1 COMPLETE (all review findings fixed) — PR-2 COMPLETE — PR-3 AWAITING APPROVAL`
+Status: `PR-0 COMPLETE — PR-1 COMPLETE (all review findings fixed) — PR-2 COMPLETE (all code-review P1/P2 findings fixed) — PR-3 AWAITING APPROVAL`
 Source: `.copilot/2026-03-02-production-provisioning-refactor/PLAN.md` + `IMPLEMENTATION_LOCKED.md`
 Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
@@ -218,7 +218,12 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 - [x] DB integration: `personal` mode creates exactly one tenant per user
 - [x] `pnpm typecheck` — PASS
 - [x] `pnpm lint` — PASS
-- [x] `pnpm test` — 532 passed (25 new tests)
+- [x] `pnpm test` — 535 passed (all PR-2 code-review P1/P2 fixes applied + new tests added)
+- [x] **Code-review P1**: org/db write side-effects removed — membership check now first, returns early before any writes
+- [x] **Code-review P1**: email FK conflict fixed — ON CONFLICT DO UPDATE + .returning() gets actual userId regardless of provider
+- [x] **Code-review P1**: free-tier guard made race-safe — SELECT FOR UPDATE on tenant_attributes row serializes concurrent calls
+- [x] **Code-review P2**: config leak fixed — freeTierMaxUsers threaded via AppConfig.provisioning instead of reading global env directly
+- [x] **Code-review P2**: arch boundary fixed — DrizzleProvisioningService imports only from ./schema (local re-export aggregation file)
 
 ---
 

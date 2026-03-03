@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { createContainer } from '@/core/container';
-import { AUTH } from '@/core/contracts';
+import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
 import type { UserRepository } from '@/core/contracts/user';
-
-import { ClerkUserRepository } from './infrastructure/ClerkUserRepository';
+import type { DrizzleDb } from '@/core/db';
 
 import { createAuthModule } from './index';
+
+import { DrizzleUserRepository } from '@/modules/user/infrastructure/drizzle/DrizzleUserRepository';
 
 const baseConfig = {
   tenancyMode: 'single' as const,
@@ -16,8 +17,14 @@ const baseConfig = {
 };
 
 describe('createAuthModule', () => {
-  it('registers Clerk user repository for clerk provider', () => {
+  function createContainerWithDb() {
     const container = createContainer();
+    container.register(INFRASTRUCTURE.DB, {} as DrizzleDb);
+    return container;
+  }
+
+  it('registers DB-backed user repository for clerk provider', () => {
+    const container = createContainerWithDb();
     const authModule = createAuthModule({
       ...baseConfig,
       authProvider: 'clerk',
@@ -29,30 +36,46 @@ describe('createAuthModule', () => {
       AUTH.USER_REPOSITORY,
     );
 
-    expect(userRepository).toBeInstanceOf(ClerkUserRepository);
+    expect(userRepository).toBeInstanceOf(DrizzleUserRepository);
   });
 
-  it('fails fast for authjs until dedicated user repository exists', () => {
-    const container = createContainer();
+  it('registers DB-backed user repository for authjs provider', () => {
+    const container = createContainerWithDb();
     const authModule = createAuthModule({
       ...baseConfig,
       authProvider: 'authjs',
     });
 
-    expect(() => authModule.register(container)).toThrow(
-      'AUTH_PROVIDER=authjs requires a dedicated UserRepository implementation.',
+    authModule.register(container);
+    const userRepository = container.resolve<UserRepository>(
+      AUTH.USER_REPOSITORY,
     );
+    expect(userRepository).toBeInstanceOf(DrizzleUserRepository);
   });
 
-  it('fails fast for supabase until dedicated user repository exists', () => {
-    const container = createContainer();
+  it('registers DB-backed user repository for supabase provider', () => {
+    const container = createContainerWithDb();
     const authModule = createAuthModule({
       ...baseConfig,
       authProvider: 'supabase',
     });
 
+    authModule.register(container);
+    const userRepository = container.resolve<UserRepository>(
+      AUTH.USER_REPOSITORY,
+    );
+    expect(userRepository).toBeInstanceOf(DrizzleUserRepository);
+  });
+
+  it('fails fast when DB runtime is missing', () => {
+    const container = createContainer();
+    const authModule = createAuthModule({
+      ...baseConfig,
+      authProvider: 'clerk',
+    });
+
     expect(() => authModule.register(container)).toThrow(
-      'AUTH_PROVIDER=supabase requires a dedicated UserRepository implementation.',
+      'Missing database runtime. Node auth module requires INFRASTRUCTURE.DB.',
     );
   });
 });

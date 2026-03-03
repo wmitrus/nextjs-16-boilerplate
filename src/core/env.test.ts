@@ -282,8 +282,25 @@ describe('validateTenancyConfig', () => {
     );
   });
 
-  it('passes when TENANCY_MODE=single without TENANT_CONTEXT_SOURCE', async () => {
-    setEnv({ TENANCY_MODE: 'single', TENANT_CONTEXT_SOURCE: undefined });
+  it('throws when TENANCY_MODE=single without DEFAULT_TENANT_ID', async () => {
+    setEnv({
+      TENANCY_MODE: 'single',
+      DEFAULT_TENANT_ID: undefined,
+      TENANT_CONTEXT_SOURCE: undefined,
+    });
+    vi.resetModules();
+    const { validateTenancyConfig } = await loadModule();
+    expect(() => validateTenancyConfig()).toThrow(
+      'TENANCY_MODE=single requires DEFAULT_TENANT_ID',
+    );
+  });
+
+  it('passes when TENANCY_MODE=single with DEFAULT_TENANT_ID', async () => {
+    setEnv({
+      TENANCY_MODE: 'single',
+      DEFAULT_TENANT_ID: '00000000-0000-0000-0000-000000000001',
+      TENANT_CONTEXT_SOURCE: undefined,
+    });
     vi.resetModules();
     const { validateTenancyConfig } = await loadModule();
     expect(() => validateTenancyConfig()).not.toThrow();

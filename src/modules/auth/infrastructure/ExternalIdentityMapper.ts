@@ -1,4 +1,6 @@
-export type ExternalAuthProvider = 'clerk' | 'authjs' | 'supabase';
+import type { ExternalAuthProvider } from '@/core/contracts/identity';
+
+export type { ExternalAuthProvider } from '@/core/contracts/identity';
 
 export interface ExternalIdentityMapper {
   resolveOrCreateInternalUserId(args: {

@@ -1,9 +1,10 @@
 import { and, eq } from 'drizzle-orm';
 
+import type {
+  ExternalAuthProvider,
+  InternalIdentityLookup,
+} from '@/core/contracts/identity';
 import type { DrizzleDb } from '@/core/db';
-
-import type { ExternalAuthProvider } from '../ExternalIdentityMapper';
-import type { InternalIdentityLookup } from '../InternalIdentityLookup';
 
 import { authTenantIdentitiesTable, authUserIdentitiesTable } from './schema';
 

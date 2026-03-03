@@ -1,6 +1,6 @@
 # Production Provisioning Refactor — Implementation Plan
 
-Status: `PR-0 COMPLETE — PR-1 COMPLETE (all review findings fixed) — PR-2 COMPLETE (all code-review P1/P2 findings fixed) — PR-3 AWAITING APPROVAL`
+Status: `PR-0 COMPLETE — PR-1 COMPLETE — PR-2 COMPLETE (2nd code-review P1/P2 findings fixed) — PR-3 AWAITING APPROVAL`
 Source: `.copilot/2026-03-02-production-provisioning-refactor/PLAN.md` + `IMPLEMENTATION_LOCKED.md`
 Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
@@ -224,6 +224,12 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 - [x] **Code-review P1**: free-tier guard made race-safe — SELECT FOR UPDATE on tenant_attributes row serializes concurrent calls
 - [x] **Code-review P2**: config leak fixed — freeTierMaxUsers threaded via AppConfig.provisioning instead of reading global env directly
 - [x] **Code-review P2**: arch boundary fixed — DrizzleProvisioningService imports only from ./schema (local re-export aggregation file)
+- [x] **2nd code-review P1**: Email auto-link security — `emailVerified?: boolean` added to `RequestIdentitySourceData` + `ProvisioningInput`; `CrossProviderLinkingNotAllowedError` added; `CROSS_PROVIDER_EMAIL_LINKING` env var (default: `verified-only`); `resolveOrCreateUser` now checks policy gate explicitly before any cross-provider link
+- [x] **2nd code-review P1**: Tenant creation race fixed — deterministic UUID via SHA-256 hash of `(namespace + key)` for personal + org/provider; `ON CONFLICT DO NOTHING` on both `tenants` + `auth_tenant_identities` → no orphaned tenant rows possible
+- [x] **2nd code-review P2**: DB tests now assert key invariants — verified email linking returns same `internalUserId`; unverified email throws `CrossProviderLinkingNotAllowedError`; disabled policy blocks even verified email; org/db no-write asserts correct owner role
+- [x] `pnpm typecheck` — PASS (539 tests)
+- [x] `pnpm lint` — PASS
+- [x] `pnpm test` — 539 passed
 
 ---
 

@@ -1,98 +1,64 @@
 # Environment & T3-Env
 
-This project uses **@t3-oss/env-nextjs** with **Zod** to validate environment variables at runtime. The schema lives in `src/core/env.ts`.
+This project uses `@t3-oss/env-nextjs` + `zod` in `src/core/env.ts`.
 
----
-
-## Quick Start
-
-1. Create `.env.local` from the example:
+## 1. Quick Start
 
 ```bash
 pnpm env:init
-```
-
-2. Validate `.env.example` against the schema:
-
-```bash
 pnpm env:check
 ```
 
----
+## 2. Schema Structure
 
-## How T3-Env Is Structured
+`src/core/env.ts` defines:
 
-`src/core/env.ts` defines three areas:
+- `server`: server-only variables
+- `client`: browser-exposed vars (`NEXT_PUBLIC_*`)
+- `runtimeEnv`: explicit mapping from `process.env`
 
-- **server**: server-only variables (never exposed to the client)
-- **client**: public variables that must be prefixed with `NEXT_PUBLIC_`
-- **runtimeEnv**: actual values read from `process.env`
+## 3. Important Refactor Additions
 
-Example (simplified):
+### 3.1 Auth provider axis
 
-```ts
-export const env = createEnv({
-  server: {
-    NODE_ENV: z
-      .enum(['development', 'test', 'production'])
-      .default('development'),
-    CHROMATIC_PROJECT_TOKEN: z.string().optional(),
-  },
-  client: {
-    NEXT_PUBLIC_APP_URL: z.string().url().optional(),
-  },
-  runtimeEnv: {
-    NODE_ENV: process.env.NODE_ENV,
-    CHROMATIC_PROJECT_TOKEN: process.env.CHROMATIC_PROJECT_TOKEN,
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-  },
-});
-```
+- `AUTH_PROVIDER=clerk|authjs|supabase`
 
----
+Cross-field validation:
 
-## Adding a New Environment Variable
+- when `AUTH_PROVIDER=clerk`, both Clerk keys are required
 
-1. Add it to the schema in `src/core/env.ts`:
-   - Server-only: place in `server`
-   - Client-exposed: place in `client` with `NEXT_PUBLIC_` prefix
+### 3.2 Tenancy axis
 
-2. Add the key to `.env.example` with a placeholder value.
+- `TENANCY_MODE=single|personal|org`
+- `TENANT_CONTEXT_SOURCE=provider|db` (required when `TENANCY_MODE=org`)
+- `DEFAULT_TENANT_ID` (required when `TENANCY_MODE=single`)
+- `TENANT_CONTEXT_HEADER` / `TENANT_CONTEXT_COOKIE`
 
-3. Set the actual value in your local `.env.local`.
+### 3.3 Provisioning policy axis
 
-4. For CI/CD, add it in **GitHub → Settings → Secrets and variables → Actions**.
+- `FREE_TIER_MAX_USERS`
+- `CROSS_PROVIDER_EMAIL_LINKING=disabled|verified-only`
 
----
+## 4. Validation Functions
 
-## Example: Chromatic Token
+Defined in `src/core/env.ts`:
 
-1. In `src/core/env.ts`:
+1. `validateTenancyConfigValues(...)`
+2. `validateAuthProviderConfigValues(...)`
 
-- `CHROMATIC_PROJECT_TOKEN` is already defined under `server`.
+These are called at bootstrap to fail fast for invalid runtime combinations.
 
-2. Add to `.env.local`:
+## 5. Update Rules
 
-```
-CHROMATIC_PROJECT_TOKEN=your_token_here
-```
+When adding a new env var:
 
-3. Add to GitHub Actions secrets:
+1. Add it to `src/core/env.ts` schema.
+2. Add it to `.env.example`.
+3. Add tests in `src/core/env.test.ts`.
+4. Update relevant docs in `docs/features/ENV-requirements.md`.
 
-- Name: `CHROMATIC_PROJECT_TOKEN`
-- Value: your Chromatic project token
+## 6. References
 
----
-
-## Validation Rules
-
-- `pnpm env:check` ensures **every key in `src/core/env.ts` exists in `.env.example`**.
-- CI can fail if `.env.example` is missing keys.
-
----
-
-## Tips
-
-- Use `NEXT_PUBLIC_` prefix only when a variable must be available in the browser.
-- Keep secrets out of `.env.example` (use placeholders instead).
-- Update `.env.example` whenever you modify the schema.
+- `docs/features/ENV-requirements.md`
+- `src/core/env.ts`
+- `src/core/env.test.ts`

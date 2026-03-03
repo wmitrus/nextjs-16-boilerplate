@@ -328,10 +328,9 @@ This section documents each implemented runtime/support file (excluding test fil
 - `src/modules/auth/index.ts` — registers the auth module in the DI container.
 - `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts` — Clerk request identity source adapter.
 - `src/modules/auth/infrastructure/RequestScopedIdentityProvider.ts` — request-scoped identity provider adapter.
-- `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts` — request-scoped tenant resolver adapter.
-- `src/modules/auth/infrastructure/ExternalIdentityMapper.ts` — provider-agnostic external-to-internal ID mapping contract.
-- `src/modules/auth/infrastructure/drizzle/DrizzleExternalIdentityMapper.ts` — Drizzle-based external identity mapper implementation.
-- `src/modules/auth/infrastructure/ClerkUserRepository.ts` — Clerk-based user repository adapter.
+- `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts` — edge-only request-scoped tenant resolver adapter.
+- `src/modules/auth/infrastructure/drizzle/DrizzleInternalIdentityLookup.ts` — read-only external-to-internal ID lookup implementation.
+- `src/modules/auth/infrastructure/ClerkUserRepository.ts` — legacy provider-bound user adapter (kept for compatibility; not current Node runtime default).
 - `src/modules/auth/ui/HeaderAuthControls.tsx` — auth controls (sign-in/sign-up/user) for the header.
 - `src/modules/auth/ui/HeaderWithAuth.tsx` — composes neutral header with auth controls.
 - `src/modules/auth/ui/onboarding-actions.ts` — UI-layer actions for onboarding flow.
@@ -508,12 +507,12 @@ The following mapping is the audit source of truth for architecture diagrams.
 
 - Tenant contract: `src/core/contracts/tenancy.ts`
 - Edge auth gate: `src/security/middleware/with-auth.ts` (`enforceResourceAuthorization: false` in `src/proxy.ts`)
-- Runtime tenant usage: `src/security/core/security-context.ts`, `src/modules/auth/infrastructure/RequestScopedTenantResolver.ts`
+- Runtime tenant usage: `src/security/core/security-context.ts`, `src/modules/auth/index.ts`, `src/modules/provisioning/infrastructure/*TenantResolver.ts`
 - Node authorization handoff: `src/security/core/authorization-facade.ts`, `src/security/actions/secure-action.ts`
 
 ### 9.6 `06 – Multi-Tenant SaaS Expansion Map.md`
 
-- External identity mapping anchors: `src/modules/auth/infrastructure/ExternalIdentityMapper.ts`, `src/modules/auth/infrastructure/drizzle/DrizzleExternalIdentityMapper.ts`
+- External identity mapping anchors: `src/core/contracts/identity.ts`, `src/modules/auth/infrastructure/drizzle/DrizzleInternalIdentityLookup.ts`
 - Mapping tables: `src/modules/auth/infrastructure/drizzle/schema.ts`
 - Tenant/member/policy anchors: `src/modules/authorization/infrastructure/drizzle/schema.ts`, `src/modules/authorization/domain/AuthorizationService.ts`
 

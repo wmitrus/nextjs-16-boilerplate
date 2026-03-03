@@ -1,6 +1,8 @@
 import type { Identity } from './identity';
 import type { SubjectId, TenantId } from './primitives';
 
+export { TenantNotProvisionedError } from './identity';
+
 export class MissingTenantContextError extends Error {
   constructor(
     message = 'Missing tenant context (tenantExternalId) for authenticated user',

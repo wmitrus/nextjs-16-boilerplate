@@ -1,7 +1,7 @@
 import { Container } from '@/core/container';
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DbConfig } from '@/core/db/types';
-import { env, validateTenancyConfig } from '@/core/env';
+import { env, validateTenancyConfigValues } from '@/core/env';
 import { getInfrastructure } from '@/core/runtime/infrastructure';
 
 import { createAuthModule } from '@/modules/auth';
@@ -46,7 +46,11 @@ function resolveDbDriver(): DbConfig['driver'] {
 }
 
 export function createRequestContainer(config: AppConfig): Container {
-  validateTenancyConfig();
+  validateTenancyConfigValues(
+    config.auth.tenancyMode,
+    config.auth.defaultTenantId,
+    config.auth.tenantContextSource,
+  );
 
   const container = new Container();
   const { dbRuntime } = getInfrastructure(config);

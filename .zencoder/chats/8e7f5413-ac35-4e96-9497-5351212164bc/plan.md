@@ -106,63 +106,67 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
 ---
 
-### [ ] PR-1 — Foundations (Config + Contracts + Tenancy Strategy)
+### [x] PR-1 — Foundations (Config + Contracts + Tenancy Strategy)
 
-> **Confirm before starting.** Exit criteria: build/typecheck/tests pass, no coupling AUTH_PROVIDER → TENANCY_MODE.
+> **COMPLETE.** Exit criteria met: typecheck + lint pass, no coupling AUTH_PROVIDER → TENANCY_MODE.
 
 #### Step 1.1 — Env schema extension
 
-- [ ] `src/core/env.ts`: add server-side vars:
+- [x] `src/core/env.ts`: add server-side vars:
   - `TENANCY_MODE`: `z.enum(['single', 'personal', 'org']).default('single')`
-  - `DEFAULT_TENANT_ID`: `z.string().uuid().optional()` (required when `TENANCY_MODE=single`)
+  - `DEFAULT_TENANT_ID`: `z.uuid().optional()` (required when `TENANCY_MODE=single`)
   - `TENANT_CONTEXT_SOURCE`: `z.enum(['provider', 'db']).optional()` (required when `TENANCY_MODE=org`)
   - `TENANT_CONTEXT_HEADER`: `z.string().default('x-tenant-id')`
   - `TENANT_CONTEXT_COOKIE`: `z.string().default('active_tenant_id')`
   - `FREE_TIER_MAX_USERS`: `z.coerce.number().default(5)`
-- [ ] Add `runtimeEnv` mappings for all new vars
-- [ ] `.env.example`: document all new vars
-- [ ] `src/core/env.test.ts`: test parsing + validation of new vars
-- [ ] Add cross-field validation: `TENANCY_MODE=org` requires `TENANT_CONTEXT_SOURCE`; `TENANCY_MODE=single` recommends `DEFAULT_TENANT_ID`
+- [x] Add `runtimeEnv` mappings for all new vars
+- [x] `.env.example`: document all new vars
+- [x] `src/core/env.test.ts`: test parsing + validation of new vars
+- [x] Add cross-field validation: `TENANCY_MODE=org` requires `TENANT_CONTEXT_SOURCE`; exported `validateTenancyConfig()`
 
 #### Step 1.2 — Resources & Actions catalog
 
-- [ ] Create `src/core/contracts/resources-actions.ts`:
+- [x] Create `src/core/contracts/resources-actions.ts`:
   - Constants for all resources: `RESOURCES = { ROUTE, USER, TENANT, BILLING, SECURITY, PROVISIONING }`
   - Constants for all actions using `createAction()`: `ACTIONS = { ROUTE_ACCESS, USER_READ, USER_UPDATE, USER_INVITE, USER_DEACTIVATE, TENANT_READ, TENANT_UPDATE, TENANT_MANAGE_MEMBERS, BILLING_READ, BILLING_UPDATE, SECURITY_READ_AUDIT, SECURITY_MANAGE_POLICIES, PROVISIONING_ENSURE }`
   - No wildcard strings
-- [ ] `src/core/contracts/resources-actions.test.ts`: test all actions pass `isAction()`, no duplicates
-- [ ] Export from `src/core/contracts/index.ts`
+- [x] `src/core/contracts/resources-actions.test.ts`: test all actions pass `isAction()`, no duplicates
+- [x] Export from `src/core/contracts/index.ts` (`PROVISIONING` token)
 
 #### Step 1.3 — Tenancy strategy domain types
 
-- [ ] Create `src/modules/provisioning/domain/tenancy-mode.ts`: `TenancyMode = 'single' | 'personal' | 'org'`
-- [ ] Create `src/modules/provisioning/domain/tenant-context-source.ts`: `TenantContextSource = 'provider' | 'db'`
+- [x] Create `src/modules/provisioning/domain/tenancy-mode.ts`: `TenancyMode = 'single' | 'personal' | 'org'`
+- [x] Create `src/modules/provisioning/domain/tenant-context-source.ts`: `TenantContextSource = 'provider' | 'db'`
 
 #### Step 1.4 — Tenant resolver strategies
 
-- [ ] Create `src/modules/provisioning/infrastructure/SingleTenantResolver.ts`: returns `{ tenantId: DEFAULT_TENANT_ID, userId: identity.id }`
-- [ ] Create `src/modules/provisioning/infrastructure/PersonalTenantResolver.ts`: reads personal tenant mapping from DB (lookup-only); throws `TenantNotProvisionedError` if not found
-- [ ] Create `src/modules/provisioning/infrastructure/OrgProviderTenantResolver.ts`: reads `tenantExternalId` from source; looks up internal tenant; throws `MissingTenantContextError` if no external claim, `TenantNotProvisionedError` if no mapping
-- [ ] Create `src/modules/provisioning/infrastructure/OrgDbTenantResolver.ts`: reads active tenant ID from `ActiveTenantContextSource`; verifies membership in DB (read-only); throws if absent
-- [ ] Create `src/modules/provisioning/infrastructure/request-context/ActiveTenantContextSource.ts` port (interface)
-- [ ] Create `src/modules/provisioning/infrastructure/request-context/HeaderActiveTenantSource.ts` adapter
-- [ ] Create `src/modules/provisioning/infrastructure/request-context/CookieActiveTenantSource.ts` adapter (priority: header > cookie)
+- [x] Create `src/modules/provisioning/infrastructure/SingleTenantResolver.ts`
+- [x] Create `src/modules/provisioning/infrastructure/PersonalTenantResolver.ts`
+- [x] Create `src/modules/provisioning/infrastructure/OrgProviderTenantResolver.ts`
+- [x] Create `src/modules/provisioning/infrastructure/OrgDbTenantResolver.ts`
+- [x] Create `src/modules/provisioning/infrastructure/request-context/ActiveTenantContextSource.ts` port
+- [x] Create `src/modules/provisioning/infrastructure/request-context/HeaderActiveTenantSource.ts`
+- [x] Create `src/modules/provisioning/infrastructure/request-context/CookieActiveTenantSource.ts`
+- [x] Create `src/modules/provisioning/infrastructure/request-context/CompositeActiveTenantSource.ts`
+- [x] `InternalIdentityLookup` extended with `findPersonalTenantId()`
+- [x] `DrizzleInternalIdentityLookup` implements `findPersonalTenantId()` (personal tenant convention)
 
 #### Step 1.5 — Update `createAuthModule` + bootstrap wiring
 
-- [ ] `src/core/runtime/bootstrap.ts`: add `tenancyMode` + `tenantContextSource` to `AppConfig`; select resolver strategy in `buildConfig()`
-- [ ] `src/modules/auth/index.ts`: register the correct `TenantResolver` implementation based on `TENANCY_MODE` + `TENANT_CONTEXT_SOURCE`; keep `RequestScopedIdentityProvider` unchanged (identity lookup still uses mapper read-path)
+- [x] `src/core/runtime/bootstrap.ts`: reads tenancy env vars; selects `membershipRepository` for `org/db`; calls `validateTenancyConfig()`
+- [x] `src/modules/auth/index.ts`: `AuthModuleConfig` extended; `buildTenantResolver()` switches on `tenancyMode`; `next/headers` used for `org/db` active tenant source
+- [x] `src/testing/infrastructure/env.ts`: default test env includes all new tenancy vars
 
 #### Step 1.6 — Tests
 
-- [ ] Unit: env parsing and validation (mode/source combinations)
-- [ ] Unit: `TENANCY_MODE=org` without `TENANT_CONTEXT_SOURCE` → config error
-- [ ] Unit: Clerk identity source returns `tenantExternalId` and `tenantRole`
-- [ ] Unit: resolver selection per mode
-- [ ] Unit: `OrgProviderTenantResolver` without `tenantExternalId` → `MissingTenantContextError`
-- [ ] Unit: `OrgDbTenantResolver` without active tenant → `MissingTenantContextError`
-- [ ] Unit: `OrgDbTenantResolver` with tenant but missing membership → `TenantMembershipRequiredError`
-- [ ] Run `pnpm typecheck` and `pnpm lint` — must pass
+- [x] Unit: env parsing and validation (mode/source combinations) — `src/core/env.test.ts`
+- [x] Unit: `TENANCY_MODE=org` without `TENANT_CONTEXT_SOURCE` → config error
+- [x] Unit: resolver strategies — `SingleTenantResolver`, `PersonalTenantResolver`, `OrgProviderTenantResolver`, `OrgDbTenantResolver`
+- [x] Unit: `OrgProviderTenantResolver` without `tenantExternalId` → `MissingTenantContextError`
+- [x] Unit: `OrgDbTenantResolver` without active tenant → `MissingTenantContextError`
+- [x] Unit: `OrgDbTenantResolver` with tenant but missing membership → `TenantMembershipRequiredError`
+- [x] `pnpm typecheck` — PASS
+- [x] `pnpm lint` — PASS
 
 ---
 

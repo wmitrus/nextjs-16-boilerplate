@@ -1,5 +1,7 @@
 import type {
+  ExternalAuthProvider,
   Identity,
+  InternalIdentityLookup,
   RequestIdentitySource,
 } from '@/core/contracts/identity';
 import { TenantNotProvisionedError } from '@/core/contracts/identity';
@@ -8,9 +10,6 @@ import {
   type TenantContext,
   type TenantResolver,
 } from '@/core/contracts/tenancy';
-
-import type { ExternalAuthProvider } from '@/modules/auth/infrastructure/ExternalIdentityMapper';
-import type { InternalIdentityLookup } from '@/modules/auth/infrastructure/InternalIdentityLookup';
 
 /**
  * TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider

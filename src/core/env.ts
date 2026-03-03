@@ -171,23 +171,41 @@ export const env = createEnv({
 });
 
 /**
- * Cross-field tenancy configuration validation.
- * Call this in bootstrap/startup to enforce combination rules:
+ * Cross-field tenancy configuration validation against explicit values.
+ * Decoupled from global `env` — accepts values from any source (config object, env, test fixtures).
+ *
+ * Rules:
  * - TENANCY_MODE=single requires DEFAULT_TENANT_ID
  * - TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE (provider|db)
  */
-export function validateTenancyConfig(): void {
-  if (env.TENANCY_MODE === 'single' && !env.DEFAULT_TENANT_ID) {
+export function validateTenancyConfigValues(
+  tenancyMode: string | undefined,
+  defaultTenantId: string | undefined,
+  tenantContextSource: string | undefined,
+): void {
+  if (tenancyMode === 'single' && !defaultTenantId) {
     throw new Error(
       '[env] TENANCY_MODE=single requires DEFAULT_TENANT_ID to be set (must be a valid UUID). ' +
         'Set DEFAULT_TENANT_ID=<uuid> in your environment variables.',
     );
   }
 
-  if (env.TENANCY_MODE === 'org' && !env.TENANT_CONTEXT_SOURCE) {
+  if (tenancyMode === 'org' && !tenantContextSource) {
     throw new Error(
       '[env] TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE to be set (provider|db). ' +
         'Set TENANT_CONTEXT_SOURCE=provider for Clerk Organizations, or TENANT_CONTEXT_SOURCE=db for app-level tenant selection.',
     );
   }
+}
+
+/**
+ * Cross-field tenancy configuration validation from global env.
+ * Convenience wrapper around validateTenancyConfigValues for bootstrap/startup.
+ */
+export function validateTenancyConfig(): void {
+  validateTenancyConfigValues(
+    env.TENANCY_MODE,
+    env.DEFAULT_TENANT_ID,
+    env.TENANT_CONTEXT_SOURCE,
+  );
 }

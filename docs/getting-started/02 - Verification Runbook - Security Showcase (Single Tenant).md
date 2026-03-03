@@ -2,32 +2,14 @@
 
 ## Purpose
 
-This runbook is a practical validation script for first-time setup.
+Validate auth + provisioning + onboarding + route authorization in single-tenant mode.
 
-Use it after completing:
+Profile assumed:
 
-- [01 - Local Quickstart - Single Tenant](./01%20-%20Local%20Quickstart%20-%20Single%20Tenant.md)
+- `AUTH_PROVIDER=clerk`
+- `TENANCY_MODE=single`
 
-Goal: verify that auth, tenant context, and secure action flow are wired correctly.
-
----
-
-## Test Scenario
-
-Page: `/security-showcase`
-
-Action under test: **Update Settings** (server action)
-
-Expected behavior:
-
-- no unhandled server exception
-- controlled action result (`success` / controlled `unauthorized` / controlled `validation_error`)
-
----
-
-## A) Pre-flight checks
-
-Run in project root:
+## A) Pre-flight
 
 ```bash
 pnpm env:check
@@ -36,123 +18,43 @@ pnpm db:seed
 pnpm dev
 ```
 
-Checkpoint:
+## B) Manual test flow
 
-- app starts on `http://localhost:3000`
-- no startup env validation errors
+1. Open `/security-showcase`.
+2. Sign in.
+3. If redirected, complete `/onboarding`.
+4. Return to `/security-showcase`.
+5. Execute secure action: **Update Settings**.
 
----
+## C) Expected outcomes
 
-## B) Session + tenant context checks (Clerk)
+### 1. Success path
 
-For your signed-in test user, verify in Clerk:
+- no unhandled exception
+- controlled success response from secure action
 
-1. User belongs to at least one organization.
-2. That organization is active in current session context.
+### 2. Controlled auth errors
 
-If org context is missing, secure action should return a controlled unauthorized response:
+Possible controlled responses:
 
-- `Tenant context required`
+- `Authentication required` (not signed in)
+- `Forbidden` (policy denied)
+- `Tenant context required` (misconfigured tenancy/profile)
 
-This is expected and indicates tenant guard works correctly.
+## D) Important clarification for single mode
 
----
+Do not debug Clerk organizations for this profile.
 
-## C) Manual verification steps
+`TENANCY_MODE=single` does not require Clerk org context. Tenant is resolved from `DEFAULT_TENANT_ID`.
 
-1. Open `/security-showcase`
-2. Sign in
-3. In **Secure Server Action Form**, click **Update Settings**
+## E) Evidence to capture when reporting issues
 
-Observe terminal logs and UI status/error.
+1. Effective tenancy/auth env values (redact secrets)
+2. terminal output around request
+3. exact UI/server error message
+4. whether onboarding submit returned success
 
----
+## Related Docs
 
-## D) Result interpretation (what it means)
-
-### 1) Result: `success`
-
-Meaning:
-
-- authentication is valid
-- tenant context is valid
-- authorization path allowed the action
-
-### 2) Result: `unauthorized` + `Tenant context required`
-
-Meaning:
-
-- user is authenticated
-- tenant/org context is missing in session
-
-Action:
-
-- fix Clerk organization membership/active org for current session
-
-### 3) Result: `unauthorized` + `Authentication required`
-
-Meaning:
-
-- no authenticated identity in current request/session
-
-Action:
-
-- sign in again and re-test
-
-### 4) Result: `unauthorized` + permission denied message
-
-Meaning:
-
-- authenticated + tenant context available
-- authorization denied by membership/roles/policy
-
-Action:
-
-- verify authorization data and subject mapping in DB
-
----
-
-## E) Known local-dev caveat (important)
-
-Current authorization seed uses fixed UUID users in DB fixtures.
-
-Also note: Clerk organization roles (Admin/Member) are not used as direct app
-authorization roles in this flow. They control organization membership UX in Clerk,
-but app authorization decisions come from DB memberships + DB policies.
-
-When using external auth providers (for example Clerk), identity IDs may not match those seeded UUID records automatically.
-
-Implication:
-
-- tenant context can be valid
-- action can still be denied by policy/membership checks due to subject mismatch
-
-For first-time setup, treat this as a data-mapping task, not an auth-runtime bug.
-
-## G) Identity mapping expectation (post-refactor)
-
-External provider IDs are resolved to internal UUIDs through provider-agnostic mapping.
-
-Important runtime boundary:
-
-- mapping resolve/create is Node-only
-- Edge middleware does not perform DB-backed mapping
-
-If you see controlled `unauthorized` due to subject mismatch, verify identity mapping data first, then role/policy data.
-
-Reference:
-
-- [Edge vs Node Composition Root Boundary](../architecture/15%20-%20Edge%20vs%20Node%20Composition%20Root%20Boundary.md#external-identity-mapping-flow)
-
----
-
-## F) What to capture when reporting setup issues
-
-Provide these 4 artifacts in one message:
-
-1. Current `.env.local` values (redact secrets).
-2. Terminal output around `POST /security-showcase`.
-3. Exact action result shown in UI (`status`, `error`).
-4. Confirmation whether user has active org context in Clerk.
-
-This is the minimum diagnostic set required for deterministic support.
+- `docs/getting-started/01 - Local Quickstart - Single Tenant.md`
+- `docs/getting-started/03 - Tenancy, Organizations, Roles and Onboarding - Runtime Matrix.md`

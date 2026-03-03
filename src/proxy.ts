@@ -2,6 +2,7 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+import type { Container } from '@/core/container';
 import { AUTH } from '@/core/contracts';
 import type {
   IdentityProvider,
@@ -88,7 +89,7 @@ function createRequestContainer(identitySource: RequestIdentitySource) {
 }
 
 function resolveSecurityDependencies(
-  requestContainer: ReturnType<typeof createRequestContainer>,
+  requestContainer: Container,
 ): EdgeSecurityDependencies {
   return {
     identityProvider: requestContainer.resolve<IdentityProvider>(
@@ -128,29 +129,10 @@ function composeMiddlewares(
   }, handler);
 }
 
-/**
- * Proxy composition layer.
- *
- * clerkMiddleware() is the outermost wrapper so that Clerk's runtime context
- * is established before any downstream code runs.
- *
- * A request-scoped RequestIdentitySource is built from the `auth` callback
- * and injected into the child container — replacing the module-default ClerkRequestIdentitySource.
- * This ensures auth() is called at most once per request (via getAuthResult cache)
- * and that domain classes never call auth() directly.
- *
- * Execution order:
- * 1. clerkMiddleware (Clerk context setup, auth callback provided)
- * 2. withSecurity (Classification, Correlation, Security Headers)
- * 3. withInternalApiGuard (Internal API Key Validation)
- * 4. withRateLimit (API Throttling)
- * 5. withAuth (Identity, Onboarding, Authorization)
- * 6. terminalHandler (NextResponse.next())
- */
-export default clerkMiddleware(async (auth, request) => {
-  const getAuthResult = createAuthResultGetter(auth);
-  const requestIdentitySource = createRequestIdentitySource(getAuthResult);
-  const requestContainer = createRequestContainer(requestIdentitySource);
+async function runSecurityPipeline(
+  request: NextRequest,
+  requestContainer: Container,
+): Promise<NextResponse> {
   const securityDependencies = resolveSecurityDependencies(requestContainer);
   const securityPipeline = createSecurityPipeline(securityDependencies);
 
@@ -167,7 +149,48 @@ export default clerkMiddleware(async (auth, request) => {
       { status: 500 },
     );
   }
-});
+}
+
+async function nonClerkProxy(request: NextRequest): Promise<NextResponse> {
+  const requestContainer = createEdgeRequestContainer({
+    auth: {
+      authProvider: env.AUTH_PROVIDER,
+    },
+  });
+
+  return runSecurityPipeline(request, requestContainer);
+}
+
+/**
+ * Proxy composition layer.
+ *
+ * - AUTH_PROVIDER=clerk:
+ *   clerkMiddleware() wraps the pipeline and a request-scoped identity source
+ *   is injected from Clerk auth() output.
+ *
+ * - AUTH_PROVIDER=authjs|supabase:
+ *   runs the same security middleware chain with provider-specific edge auth module
+ *   wiring (no Clerk wrapper).
+ *
+ * Shared execution order:
+ * 1. withSecurity (Classification, Correlation, Security Headers)
+ * 2. withInternalApiGuard (Internal API Key Validation)
+ * 3. withRateLimit (API Throttling)
+ * 4. withAuth (Identity, Onboarding, Authorization)
+ * 5. terminalHandler (NextResponse.next())
+ */
+const proxyHandler =
+  env.AUTH_PROVIDER === 'clerk'
+    ? clerkMiddleware(async (auth, request) => {
+        const getAuthResult = createAuthResultGetter(auth);
+        const requestIdentitySource =
+          createRequestIdentitySource(getAuthResult);
+        const requestContainer = createRequestContainer(requestIdentitySource);
+        return runSecurityPipeline(request, requestContainer);
+      })
+    : nonClerkProxy;
+
+export default proxyHandler;
 
 export const config = {
   matcher: [

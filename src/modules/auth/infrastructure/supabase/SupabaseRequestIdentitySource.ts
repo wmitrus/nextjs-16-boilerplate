@@ -15,6 +15,7 @@ export class SupabaseRequestIdentitySource implements RequestIdentitySource {
         return {
           userId: undefined,
           email: undefined,
+          emailVerified: undefined,
           tenantExternalId: undefined,
           tenantRole: undefined,
         };

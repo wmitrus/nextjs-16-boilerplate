@@ -2,7 +2,11 @@ import { cookies, headers } from 'next/headers';
 
 import type { Container, Module } from '@/core/container';
 import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
-import type { RequestIdentitySource } from '@/core/contracts/identity';
+import type {
+  ExternalAuthProvider,
+  InternalIdentityLookup,
+  RequestIdentitySource,
+} from '@/core/contracts/identity';
 import type { MembershipRepository } from '@/core/contracts/repositories';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
@@ -12,8 +16,6 @@ import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsReque
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
 import { ClerkUserRepository } from './infrastructure/ClerkUserRepository';
 import { DrizzleInternalIdentityLookup } from './infrastructure/drizzle/DrizzleInternalIdentityLookup';
-import type { ExternalAuthProvider } from './infrastructure/ExternalIdentityMapper';
-import type { InternalIdentityLookup } from './infrastructure/InternalIdentityLookup';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
 import { SystemIdentitySource } from './infrastructure/system/SystemIdentitySource';
@@ -94,6 +96,13 @@ function buildTenantResolver(
     }
 
     case 'org': {
+      if (!config.tenantContextSource) {
+        throw new Error(
+          '[authModule] TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE to be set (provider|db). ' +
+            'Set TENANT_CONTEXT_SOURCE=provider for Clerk Organizations, or TENANT_CONTEXT_SOURCE=db for app-level tenant selection.',
+        );
+      }
+
       if (config.tenantContextSource === 'db') {
         if (!config.membershipRepository) {
           throw new Error(
@@ -110,15 +119,21 @@ function buildTenantResolver(
         );
       }
 
-      if (!lookup) {
-        throw new Error(
-          '[authModule] TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider requires a database connection.',
+      if (config.tenantContextSource === 'provider') {
+        if (!lookup) {
+          throw new Error(
+            '[authModule] TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider requires a database connection.',
+          );
+        }
+        return new OrgProviderTenantResolver(
+          identitySource,
+          lookup,
+          config.authProvider as ExternalAuthProvider,
         );
       }
-      return new OrgProviderTenantResolver(
-        identitySource,
-        lookup,
-        config.authProvider as ExternalAuthProvider,
+
+      throw new Error(
+        `[authModule] Unknown TENANT_CONTEXT_SOURCE: ${config.tenantContextSource}`,
       );
     }
 

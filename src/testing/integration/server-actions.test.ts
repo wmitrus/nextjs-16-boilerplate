@@ -4,7 +4,11 @@ import type { Container } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
-import { MissingTenantContextError } from '@/core/contracts/tenancy';
+import {
+  MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
+} from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -231,13 +235,53 @@ describe('Server Actions Integration', () => {
     expect(result.status).toBe('unauthorized');
   });
 
-  it('should return unauthorized when org context is missing (tenant error is gracefully degraded)', async () => {
+  it('should return unauthorized when org context is missing (MissingTenantContextError gracefully degraded)', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_123',
       email: 'test@example.com',
     });
     vi.mocked(tenantResolver.resolve).mockRejectedValue(
       new MissingTenantContextError(),
+    );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getSecureActionDependencies(),
+      handler: testHandler,
+    });
+
+    const result = await action({ name: 'Zencoder' });
+
+    expect(result.status).toBe('unauthorized');
+  });
+
+  it('should return unauthorized when tenant not provisioned (TenantNotProvisionedError gracefully degraded)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantNotProvisionedError(),
+    );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getSecureActionDependencies(),
+      handler: testHandler,
+    });
+
+    const result = await action({ name: 'Zencoder' });
+
+    expect(result.status).toBe('unauthorized');
+  });
+
+  it('should return unauthorized when user has no tenant membership (TenantMembershipRequiredError gracefully degraded)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantMembershipRequiredError(),
     );
 
     const action = createSecureAction({

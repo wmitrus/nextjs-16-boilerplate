@@ -51,6 +51,12 @@ const defaultEnv: MutableEnv = {
   DB_PROVIDER: 'drizzle' as const,
   DATABASE_URL: undefined,
   DB_DRIVER: undefined,
+  TENANCY_MODE: 'single' as const,
+  DEFAULT_TENANT_ID: undefined,
+  TENANT_CONTEXT_SOURCE: undefined,
+  TENANT_CONTEXT_HEADER: 'x-tenant-id',
+  TENANT_CONTEXT_COOKIE: 'active_tenant_id',
+  FREE_TIER_MAX_USERS: 5,
 };
 
 /**

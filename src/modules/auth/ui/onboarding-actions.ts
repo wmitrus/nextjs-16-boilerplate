@@ -1,5 +1,7 @@
 'use server';
 
+import { cookies, headers } from 'next/headers';
+
 import { AUTH, PROVISIONING } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
@@ -15,6 +17,25 @@ const logger = resolveServerLogger().child({
   category: 'onboarding',
   module: 'onboarding-actions',
 });
+
+async function resolveActiveTenantIdForProvisioning(): Promise<
+  string | undefined
+> {
+  if (env.TENANCY_MODE === 'single') {
+    return env.DEFAULT_TENANT_ID;
+  }
+
+  if (env.TENANCY_MODE === 'org' && env.TENANT_CONTEXT_SOURCE === 'db') {
+    const headerList = await headers();
+    const headerTenantId = headerList.get(env.TENANT_CONTEXT_HEADER);
+    if (headerTenantId) return headerTenantId;
+
+    const cookieStore = await cookies();
+    return cookieStore.get(env.TENANT_CONTEXT_COOKIE)?.value;
+  }
+
+  return undefined;
+}
 
 export const completeOnboarding = async (formData: FormData) => {
   const container = getAppContainer();
@@ -34,6 +55,8 @@ export const completeOnboarding = async (formData: FormData) => {
     PROVISIONING.SERVICE,
   );
 
+  const activeTenantId = await resolveActiveTenantIdForProvisioning();
+
   let provisioningResult;
   try {
     provisioningResult = await provisioningService.ensureProvisioned({
@@ -43,7 +66,7 @@ export const completeOnboarding = async (formData: FormData) => {
       emailVerified: rawIdentity.emailVerified,
       tenantExternalId: rawIdentity.tenantExternalId,
       tenantRole: rawIdentity.tenantRole,
-      activeTenantId: env.DEFAULT_TENANT_ID,
+      activeTenantId,
       tenancyMode: env.TENANCY_MODE,
       tenantContextSource: env.TENANT_CONTEXT_SOURCE,
     });

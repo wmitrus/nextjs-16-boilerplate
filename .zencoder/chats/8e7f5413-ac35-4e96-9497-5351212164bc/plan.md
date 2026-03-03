@@ -236,6 +236,12 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 - [x] `pnpm typecheck` — PASS
 - [x] `pnpm lint` — PASS
 - [x] `pnpm test` — 544 passed
+- [x] **4th code-review P1**: `resolveOrCreateUser` re-reads `auth_user_identities` after identity insert — canonical DB mapping used as source of truth for `internalUserId`; `userCreatedNow` accounts for canonical ID
+- [x] **4th code-review P1**: `resolveOrCreatePersonalTenant` + `resolveOrCreateOrgTenant` re-read `auth_tenant_identities` after mapping insert — canonical DB mapping used as source of truth for `internalTenantId`; `tenantCreatedNow` accounts for canonical ID
+- [x] **4th code-review P2**: Test suites renamed to accurately describe which branch they exercise; `canonical mapping re-read` test suite added — verifies returned IDs match DB-authoritative `auth_user_identities` + `auth_tenant_identities` rows for user, personal, and org/provider cases
+- [x] `pnpm typecheck` — PASS
+- [x] `pnpm lint` — PASS
+- [x] `pnpm test` — 547 passed
 
 ---
 

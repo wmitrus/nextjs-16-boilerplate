@@ -10,6 +10,12 @@ import {
 } from '../../domain/errors';
 
 import { DrizzleProvisioningService } from './DrizzleProvisioningService';
+import {
+  authTenantIdentitiesTable,
+  authUserIdentitiesTable,
+  tenantsTable,
+  usersTable,
+} from './schema';
 
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
@@ -380,6 +386,138 @@ describe('DrizzleProvisioningService (real DB)', () => {
       });
 
       expect(second.internalUserId).toBe(first.internalUserId);
+    });
+  });
+
+  describe('legacy mapping compatibility (P1 fix — deterministic UUID migration)', () => {
+    it('personal tenant: returns legacy random UUID from auth_tenant_identities instead of computing new deterministic one', async () => {
+      const db = testDb.db;
+      const legacyUserId = crypto.randomUUID();
+      const legacyTenantId = crypto.randomUUID();
+
+      await db
+        .insert(usersTable)
+        .values({ id: legacyUserId, email: 'legacy-personal@example.com' });
+      await db.insert(authUserIdentitiesTable).values({
+        provider: 'clerk',
+        externalUserId: 'user_legacy_personal_ext',
+        userId: legacyUserId,
+      });
+      await db
+        .insert(tenantsTable)
+        .values({ id: legacyTenantId, name: 'Legacy Personal Workspace' });
+      await db.insert(authTenantIdentitiesTable).values({
+        provider: 'personal',
+        externalTenantId: legacyUserId,
+        tenantId: legacyTenantId,
+      });
+
+      const svc = makeService();
+      const result = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_legacy_personal_ext',
+        email: 'legacy-personal@example.com',
+        tenancyMode: 'personal',
+      });
+
+      expect(result.internalUserId).toBe(legacyUserId);
+      expect(result.internalTenantId).toBe(legacyTenantId);
+      expect(result.tenantCreatedNow).toBe(false);
+    });
+
+    it('org/provider tenant: returns legacy random UUID from auth_tenant_identities instead of computing new deterministic one', async () => {
+      const db = testDb.db;
+      const legacyTenantId = crypto.randomUUID();
+
+      await db
+        .insert(tenantsTable)
+        .values({ id: legacyTenantId, name: 'Legacy Org Tenant' });
+      await db.insert(authTenantIdentitiesTable).values({
+        provider: 'clerk',
+        externalTenantId: 'org_legacy_ext_001',
+        tenantId: legacyTenantId,
+      });
+
+      const svc = makeService();
+      const result = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_legacy_org_ext_001',
+        tenantExternalId: 'org_legacy_ext_001',
+        tenantRole: 'org:admin',
+        tenancyMode: 'org',
+        tenantContextSource: 'provider',
+      });
+
+      expect(result.internalTenantId).toBe(legacyTenantId);
+      expect(result.tenantCreatedNow).toBe(false);
+    });
+  });
+
+  describe('race-path policy gate (P1 fix — else-branch gate invariant)', () => {
+    it('unverified email link is rejected even when user row already exists in DB (simulates race-settled state)', async () => {
+      const db = testDb.db;
+      const existingUserId = crypto.randomUUID();
+      const raceEmail = 'race-gate@example.com';
+
+      await db
+        .insert(usersTable)
+        .values({ id: existingUserId, email: raceEmail });
+
+      const svc = makeService(5, 'verified-only');
+
+      await expect(
+        svc.ensureProvisioned({
+          provider: 'clerk',
+          externalUserId: 'user_race_gate_clerk',
+          email: raceEmail,
+          emailVerified: false,
+          tenancyMode: 'personal',
+        }),
+      ).rejects.toThrow(CrossProviderLinkingNotAllowedError);
+    });
+
+    it('disabled policy rejects even verified-email link when user row already exists (race-settled state)', async () => {
+      const db = testDb.db;
+      const existingUserId = crypto.randomUUID();
+      const raceEmail = 'race-gate-disabled@example.com';
+
+      await db
+        .insert(usersTable)
+        .values({ id: existingUserId, email: raceEmail });
+
+      const svc = makeService(5, 'disabled');
+
+      await expect(
+        svc.ensureProvisioned({
+          provider: 'clerk',
+          externalUserId: 'user_race_disabled_clerk',
+          email: raceEmail,
+          emailVerified: true,
+          tenancyMode: 'personal',
+        }),
+      ).rejects.toThrow(CrossProviderLinkingNotAllowedError);
+    });
+
+    it('verified-only policy allows link when user row already exists with verified email (race-settled state)', async () => {
+      const db = testDb.db;
+      const existingUserId = crypto.randomUUID();
+      const raceEmail = 'race-gate-allowed@example.com';
+
+      await db
+        .insert(usersTable)
+        .values({ id: existingUserId, email: raceEmail });
+
+      const svc = makeService(5, 'verified-only');
+
+      const result = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_race_allowed_clerk',
+        email: raceEmail,
+        emailVerified: true,
+        tenancyMode: 'personal',
+      });
+
+      expect(result.internalUserId).toBe(existingUserId);
     });
   });
 

@@ -28,6 +28,7 @@ vi.mock('next/headers', () => ({
 vi.mock('@/core/env', () => ({
   env: mockEnv,
   validateTenancyConfig: vi.fn(),
+  validateTenancyConfigValues: vi.fn(),
 }));
 
 // Mock the composition root to avoid real DB/Clerk initialization in unit tests

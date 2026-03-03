@@ -6,7 +6,11 @@ import {
   type AuthorizationService,
   type ResourceContext,
 } from '@/core/contracts/authorization';
-import { MissingTenantContextError } from '@/core/contracts/tenancy';
+import {
+  MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
+} from '@/core/contracts/tenancy';
 
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
@@ -183,10 +187,20 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         };
       }
 
-      if (error instanceof MissingTenantContextError) {
+      if (
+        error instanceof MissingTenantContextError ||
+        error instanceof TenantNotProvisionedError
+      ) {
         return {
           status: 'unauthorized' as const,
           error: 'Tenant context required',
+        };
+      }
+
+      if (error instanceof TenantMembershipRequiredError) {
+        return {
+          status: 'unauthorized' as const,
+          error: 'Tenant membership required',
         };
       }
 

@@ -10,11 +10,17 @@ import { seedUsers } from '@/modules/user/infrastructure/drizzle/seed';
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
+let acmeTenantId: string;
+let acmeOwnerRoleId: string;
+let acmeMemberRoleId: string;
 
 beforeAll(async () => {
   testDb = await resolveTestDb();
   const users = await seedUsers(testDb.db);
-  await seedAuthorization(testDb.db, { users });
+  const auth = await seedAuthorization(testDb.db, { users });
+  acmeTenantId = auth.tenants.acme.id;
+  acmeOwnerRoleId = auth.roles.acmeOwner.id;
+  acmeMemberRoleId = auth.roles.acmeMember.id;
 });
 
 afterAll(async () => {
@@ -29,16 +35,24 @@ const baseContext: AuthorizationContext = {
 };
 
 describe('DrizzlePolicyRepository (real DB)', () => {
-  it('returns policies for a known tenant', async () => {
+  it('returns policies for a known tenant + assigned role', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
-    const policies = await repo.getPolicies(baseContext);
+    const policies = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: acmeTenantId },
+      subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
+    });
 
     expect(policies.length).toBeGreaterThan(0);
   });
 
   it('contains no wildcard policies (resource or actions)', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
-    const policies = await repo.getPolicies(baseContext);
+    const policies = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: acmeTenantId },
+      subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
+    });
 
     const wildcardResource = policies.find((p) => p.resource === '*');
     const wildcardActions = policies.find(
@@ -53,25 +67,55 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     const policies = await repo.getPolicies({
       ...baseContext,
       tenant: { tenantId: 'ffffffff-ffff-ffff-ffff-ffffffffffff' },
+      subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
     });
 
     expect(policies).toEqual([]);
   });
 
-  it('returns owner policy with explicit user resource actions', async () => {
+  it('returns owner policies for owner role', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
-    const policies = await repo.getPolicies(baseContext);
+    const policies = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: acmeTenantId },
+      subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
+      action: 'user:invite',
+    });
 
-    const ownerUserPolicy = policies.find(
-      (p) => p.effect === 'allow' && p.resource === 'user',
+    const ownerInvitePolicy = policies.find(
+      (p) =>
+        p.effect === 'allow' &&
+        p.resource === 'user' &&
+        p.actions.includes('user:invite'),
     );
-    expect(ownerUserPolicy).toBeDefined();
-    expect(ownerUserPolicy?.actions).toContain('user:read');
+    expect(ownerInvitePolicy).toBeDefined();
   });
 
-  it('member user self-access policy deserializes to executable condition', async () => {
+  it('does not return owner-only policies for member role', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
-    const policies = await repo.getPolicies(baseContext);
+    const policies = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: acmeTenantId },
+      subject: { id: baseContext.subject.id, roles: [acmeMemberRoleId] },
+      action: 'user:invite',
+    });
+
+    const ownerInvitePolicy = policies.find(
+      (p) =>
+        p.effect === 'allow' &&
+        p.resource === 'user' &&
+        p.actions.includes('user:invite'),
+    );
+    expect(ownerInvitePolicy).toBeUndefined();
+  });
+
+  it('member self-access policy deserializes to executable condition', async () => {
+    const repo = new DrizzlePolicyRepository(testDb.db);
+    const policies = await repo.getPolicies({
+      ...baseContext,
+      tenant: { tenantId: acmeTenantId },
+      subject: { id: baseContext.subject.id, roles: [acmeMemberRoleId] },
+    });
 
     const memberReadPolicy = policies.find(
       (p) =>

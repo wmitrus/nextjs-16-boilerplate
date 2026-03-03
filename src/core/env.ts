@@ -53,6 +53,12 @@ export const env = createEnv({
     DB_PROVIDER: z.enum(['drizzle', 'prisma']).default('drizzle'),
     DATABASE_URL: z.string().optional(),
     DB_DRIVER: z.enum(['pglite', 'postgres']).optional(),
+    TENANCY_MODE: z.enum(['single', 'personal', 'org']).default('single'),
+    DEFAULT_TENANT_ID: z.uuid().optional(),
+    TENANT_CONTEXT_SOURCE: z.enum(['provider', 'db']).optional(),
+    TENANT_CONTEXT_HEADER: z.string().default('x-tenant-id'),
+    TENANT_CONTEXT_COOKIE: z.string().default('active_tenant_id'),
+    FREE_TIER_MAX_USERS: z.coerce.number().int().positive().default(5),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -121,6 +127,12 @@ export const env = createEnv({
     DB_PROVIDER: process.env.DB_PROVIDER,
     DATABASE_URL: process.env.DATABASE_URL,
     DB_DRIVER: process.env.DB_DRIVER,
+    TENANCY_MODE: process.env.TENANCY_MODE,
+    DEFAULT_TENANT_ID: process.env.DEFAULT_TENANT_ID,
+    TENANT_CONTEXT_SOURCE: process.env.TENANT_CONTEXT_SOURCE,
+    TENANT_CONTEXT_HEADER: process.env.TENANT_CONTEXT_HEADER,
+    TENANT_CONTEXT_COOKIE: process.env.TENANT_CONTEXT_COOKIE,
+    FREE_TIER_MAX_USERS: process.env.FREE_TIER_MAX_USERS,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:
@@ -157,3 +169,18 @@ export const env = createEnv({
    */
   emptyStringAsUndefined: true,
 });
+
+/**
+ * Cross-field tenancy configuration validation.
+ * Call this in bootstrap/startup to enforce combination rules:
+ * - TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE (provider|db)
+ * - TENANCY_MODE=single with DEFAULT_TENANT_ID is recommended (logged, not fatal)
+ */
+export function validateTenancyConfig(): void {
+  if (env.TENANCY_MODE === 'org' && !env.TENANT_CONTEXT_SOURCE) {
+    throw new Error(
+      '[env] TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE to be set (provider|db). ' +
+        'Set TENANT_CONTEXT_SOURCE=provider for Clerk Organizations, or TENANT_CONTEXT_SOURCE=db for app-level tenant selection.',
+    );
+  }
+}

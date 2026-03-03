@@ -205,3 +205,108 @@ describe('env', () => {
     expect(env.SECURITY_AUDIT_LOG_ENABLED).toBe(true);
   });
 });
+
+describe('tenancy env vars', () => {
+  it('TENANCY_MODE defaults to single', async () => {
+    setEnv({ TENANCY_MODE: undefined });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.TENANCY_MODE).toBe('single');
+  });
+
+  it('TENANT_CONTEXT_HEADER defaults to x-tenant-id', async () => {
+    setEnv({ TENANT_CONTEXT_HEADER: undefined });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.TENANT_CONTEXT_HEADER).toBe('x-tenant-id');
+  });
+
+  it('TENANT_CONTEXT_COOKIE defaults to active_tenant_id', async () => {
+    setEnv({ TENANT_CONTEXT_COOKIE: undefined });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.TENANT_CONTEXT_COOKIE).toBe('active_tenant_id');
+  });
+
+  it('FREE_TIER_MAX_USERS defaults to 5', async () => {
+    setEnv({ FREE_TIER_MAX_USERS: undefined });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.FREE_TIER_MAX_USERS).toBe(5);
+  });
+
+  it('accepts personal and org as TENANCY_MODE values', async () => {
+    setEnv({ TENANCY_MODE: 'personal' });
+    vi.resetModules();
+    let env = await loadEnv();
+    expect(env.TENANCY_MODE).toBe('personal');
+
+    setEnv({ TENANCY_MODE: 'org' });
+    vi.resetModules();
+    env = await loadEnv();
+    expect(env.TENANCY_MODE).toBe('org');
+  });
+
+  it('accepts provider and db as TENANT_CONTEXT_SOURCE values', async () => {
+    setEnv({ TENANT_CONTEXT_SOURCE: 'provider' });
+    vi.resetModules();
+    let env = await loadEnv();
+    expect(env.TENANT_CONTEXT_SOURCE).toBe('provider');
+
+    setEnv({ TENANT_CONTEXT_SOURCE: 'db' });
+    vi.resetModules();
+    env = await loadEnv();
+    expect(env.TENANT_CONTEXT_SOURCE).toBe('db');
+  });
+
+  it('TENANT_CONTEXT_SOURCE is undefined when not set', async () => {
+    setEnv({ TENANT_CONTEXT_SOURCE: undefined });
+    vi.resetModules();
+    const env = await loadEnv();
+    expect(env.TENANT_CONTEXT_SOURCE).toBeUndefined();
+  });
+});
+
+describe('validateTenancyConfig', () => {
+  const loadModule = async () => {
+    const mod = await import('./env');
+    return { env: mod.env, validateTenancyConfig: mod.validateTenancyConfig };
+  };
+
+  it('throws when TENANCY_MODE=org without TENANT_CONTEXT_SOURCE', async () => {
+    setEnv({ TENANCY_MODE: 'org', TENANT_CONTEXT_SOURCE: undefined });
+    vi.resetModules();
+    const { validateTenancyConfig } = await loadModule();
+    expect(() => validateTenancyConfig()).toThrow(
+      'TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE',
+    );
+  });
+
+  it('passes when TENANCY_MODE=single without TENANT_CONTEXT_SOURCE', async () => {
+    setEnv({ TENANCY_MODE: 'single', TENANT_CONTEXT_SOURCE: undefined });
+    vi.resetModules();
+    const { validateTenancyConfig } = await loadModule();
+    expect(() => validateTenancyConfig()).not.toThrow();
+  });
+
+  it('passes when TENANCY_MODE=personal without TENANT_CONTEXT_SOURCE', async () => {
+    setEnv({ TENANCY_MODE: 'personal', TENANT_CONTEXT_SOURCE: undefined });
+    vi.resetModules();
+    const { validateTenancyConfig } = await loadModule();
+    expect(() => validateTenancyConfig()).not.toThrow();
+  });
+
+  it('passes when TENANCY_MODE=org with TENANT_CONTEXT_SOURCE=provider', async () => {
+    setEnv({ TENANCY_MODE: 'org', TENANT_CONTEXT_SOURCE: 'provider' });
+    vi.resetModules();
+    const { validateTenancyConfig } = await loadModule();
+    expect(() => validateTenancyConfig()).not.toThrow();
+  });
+
+  it('passes when TENANCY_MODE=org with TENANT_CONTEXT_SOURCE=db', async () => {
+    setEnv({ TENANCY_MODE: 'org', TENANT_CONTEXT_SOURCE: 'db' });
+    vi.resetModules();
+    const { validateTenancyConfig } = await loadModule();
+    expect(() => validateTenancyConfig()).not.toThrow();
+  });
+});

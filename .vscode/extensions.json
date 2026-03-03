@@ -1,4 +1,9 @@
 {
-  "recommendations": ["bierner.markdown-mermaid", "yzhang.markdown-all-in-one"],
+  "recommendations": [
+    "bierner.markdown-mermaid",
+    "yzhang.markdown-all-in-one",
+    "vitest.explorer",
+    "ms-playwright.playwright"
+  ],
   "unwantedRecommendations": ["vstirbu.vscode-mermaid-preview"]
 }

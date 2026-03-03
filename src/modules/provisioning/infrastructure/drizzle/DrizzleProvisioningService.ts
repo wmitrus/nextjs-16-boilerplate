@@ -681,7 +681,8 @@ async function getActiveMemberCount(
  *
  * INVARIANTS:
  * - Only ADDS policies that are not already present (no removal, no privilege creep).
- * - Policy uniqueness is determined by (tenantId, roleId, resource, effect, actions hash).
+ * - Policy uniqueness is enforced by DB unique constraint:
+ *   (tenantId, roleId, effect, resource, actions, conditions).
  * - Updates policy_template_version only after all templates are applied.
  * - No wildcard resource ('*') or wildcard actions (['*']) are ever inserted.
  */
@@ -717,7 +718,7 @@ async function applyPolicyTemplateVersion(
           effect: policy.effect,
           resource: policy.resource,
           actions: policy.actions,
-          conditions: policy.conditions ?? null,
+          conditions: policy.conditions ?? {},
         })
         .onConflictDoNothing();
     }
@@ -734,7 +735,7 @@ async function applyPolicyTemplateVersion(
           effect: policy.effect,
           resource: policy.resource,
           actions: policy.actions,
-          conditions: policy.conditions ?? null,
+          conditions: policy.conditions ?? {},
         })
         .onConflictDoNothing();
     }

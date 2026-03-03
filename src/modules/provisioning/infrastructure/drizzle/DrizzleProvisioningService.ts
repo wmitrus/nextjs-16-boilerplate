@@ -17,11 +17,17 @@ import type {
   ProvisioningResult,
   ProvisioningService,
 } from '../../domain/ProvisioningService';
+import {
+  POLICY_TEMPLATE_VERSION,
+  memberPolicies,
+  ownerPolicies,
+} from '../../policy/templates';
 
 import {
   authTenantIdentitiesTable,
   authUserIdentitiesTable,
   membershipsTable,
+  policiesTable,
   rolesTable,
   tenantAttributesTable,
   tenantsTable,
@@ -156,7 +162,10 @@ export class DrizzleProvisioningService implements ProvisioningService {
       // Step 4: Ensure canonical system roles for this tenant
       const roleMap = await ensureRoles(db, internalTenantId);
 
-      // Step 5: Idempotent path — return early if membership already exists
+      // Step 5: Apply policy template versioning — idempotent, only adds missing policies
+      await applyPolicyTemplateVersion(db, internalTenantId, roleMap);
+
+      // Step 6: Idempotent path — return early if membership already exists
       const existing = await getMembership(
         db,
         internalUserId,
@@ -172,16 +181,16 @@ export class DrizzleProvisioningService implements ProvisioningService {
         };
       }
 
-      // Step 6: Decide role for new membership
+      // Step 7: Decide role for new membership
       const membershipRole = decideNewMembershipRole(input, tenantCreatedNow);
 
-      // Step 7: Enforce free-tier limit before insert (race-safe — locked above)
+      // Step 8: Enforce free-tier limit before insert (race-safe — locked above)
       const memberCount = await getActiveMemberCount(db, internalTenantId);
       if (memberCount >= this.freeTierMaxUsers) {
         throw new TenantUserLimitReachedError();
       }
 
-      // Step 8: Insert membership idempotently — onConflictDoNothing preserves existing role
+      // Step 9: Insert membership idempotently — onConflictDoNothing preserves existing role
       const roleId = roleMap.get(membershipRole);
       if (!roleId) {
         throw new Error(
@@ -664,4 +673,75 @@ async function getActiveMemberCount(
     .where(eq(membershipsTable.tenantId, tenantId));
 
   return rows[0]?.count ?? 0;
+}
+
+/**
+ * Checks the stored policy template version and idempotently upserts any missing
+ * default policies when the stored version is behind the current template version.
+ *
+ * INVARIANTS:
+ * - Only ADDS policies that are not already present (no removal, no privilege creep).
+ * - Policy uniqueness is determined by (tenantId, roleId, resource, effect, actions hash).
+ * - Updates policy_template_version only after all templates are applied.
+ * - No wildcard resource ('*') or wildcard actions (['*']) are ever inserted.
+ */
+async function applyPolicyTemplateVersion(
+  db: DrizzleDb,
+  tenantId: string,
+  roleMap: Map<string, string>,
+): Promise<void> {
+  const attrRows = await db
+    .select({
+      policyTemplateVersion: tenantAttributesTable.policyTemplateVersion,
+    })
+    .from(tenantAttributesTable)
+    .where(eq(tenantAttributesTable.tenantId, tenantId))
+    .limit(1);
+
+  const currentVersion = attrRows[0]?.policyTemplateVersion ?? 0;
+  if (currentVersion >= POLICY_TEMPLATE_VERSION) {
+    return;
+  }
+
+  const ownerRoleId = roleMap.get('owner');
+  const memberRoleId = roleMap.get('member');
+
+  if (ownerRoleId) {
+    for (const policy of ownerPolicies) {
+      await db
+        .insert(policiesTable)
+        .values({
+          id: crypto.randomUUID(),
+          tenantId,
+          roleId: ownerRoleId,
+          effect: policy.effect,
+          resource: policy.resource,
+          actions: policy.actions,
+          conditions: policy.conditions ?? null,
+        })
+        .onConflictDoNothing();
+    }
+  }
+
+  if (memberRoleId) {
+    for (const policy of memberPolicies) {
+      await db
+        .insert(policiesTable)
+        .values({
+          id: crypto.randomUUID(),
+          tenantId,
+          roleId: memberRoleId,
+          effect: policy.effect,
+          resource: policy.resource,
+          actions: policy.actions,
+          conditions: policy.conditions ?? null,
+        })
+        .onConflictDoNothing();
+    }
+  }
+
+  await db
+    .update(tenantAttributesTable)
+    .set({ policyTemplateVersion: POLICY_TEMPLATE_VERSION })
+    .where(eq(tenantAttributesTable.tenantId, tenantId));
 }

@@ -66,6 +66,13 @@ export interface IdentityProvider {
 export interface RequestIdentitySourceData {
   readonly userId?: string;
   readonly email?: string;
+  /**
+   * Whether the email claim was verified by the auth provider.
+   * MUST be explicitly set to `true` only when the provider guarantees email ownership.
+   * Undefined or false → treated as unverified.
+   * Used by ProvisioningService to gate cross-provider email-based account linking.
+   */
+  readonly emailVerified?: boolean;
   readonly tenantExternalId?: string;
   readonly tenantRole?: string;
 }

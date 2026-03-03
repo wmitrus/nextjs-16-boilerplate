@@ -18,14 +18,12 @@ import type {
 import {
   authTenantIdentitiesTable,
   authUserIdentitiesTable,
-} from '@/modules/auth/infrastructure/drizzle/schema';
-import {
   membershipsTable,
   rolesTable,
   tenantAttributesTable,
   tenantsTable,
-} from '@/modules/authorization/infrastructure/drizzle/schema';
-import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+  usersTable,
+} from './schema';
 
 function sanitizeForEmailLocalPart(value: string): string {
   return value
@@ -76,6 +74,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
     const { provider, externalUserId, email } = input;
 
     return this.runInTransaction(async (db) => {
+      // Step 1: Resolve/create user (email-conflict-safe via RETURNING)
       const { internalUserId, userCreatedNow } = await resolveOrCreateUser(
         db,
         provider,
@@ -83,20 +82,15 @@ export class DrizzleProvisioningService implements ProvisioningService {
         email,
       );
 
+      // Step 2: Resolve tenant (read-only for org/db — no writes until membership confirmed)
       const { internalTenantId, tenantCreatedNow } = await resolveTenant(
         db,
         input,
         internalUserId,
       );
 
-      await upsertTenantAttributesDefaults(
-        db,
-        internalTenantId,
-        this.freeTierMaxUsers,
-      );
-
-      const roleMap = await ensureRoles(db, internalTenantId);
-
+      // P1 FIX: org/db membership check BEFORE any write side-effects.
+      // The tenant was resolved read-only above; user must already have a membership.
       if (input.tenancyMode === 'org' && input.tenantContextSource === 'db') {
         const existing = await getMembership(
           db,
@@ -115,6 +109,24 @@ export class DrizzleProvisioningService implements ProvisioningService {
         };
       }
 
+      // Step 3: Upsert tenant_attributes defaults (only reached for non-org/db modes)
+      await upsertTenantAttributesDefaults(
+        db,
+        internalTenantId,
+        this.freeTierMaxUsers,
+      );
+
+      // P1 FIX: Acquire a row-level advisory lock on the tenant_attributes row.
+      // This serializes concurrent provisioning calls for the same tenant,
+      // making the count check + membership insert race-safe.
+      await db.execute(
+        sql`SELECT tenant_id FROM tenant_attributes WHERE tenant_id = ${internalTenantId} FOR UPDATE`,
+      );
+
+      // Step 4: Ensure canonical system roles for this tenant
+      const roleMap = await ensureRoles(db, internalTenantId);
+
+      // Step 5: Idempotent path — return early if membership already exists
       const existing = await getMembership(
         db,
         internalUserId,
@@ -130,13 +142,16 @@ export class DrizzleProvisioningService implements ProvisioningService {
         };
       }
 
+      // Step 6: Decide role for new membership
       const membershipRole = decideNewMembershipRole(input, tenantCreatedNow);
 
+      // Step 7: Enforce free-tier limit before insert (race-safe — locked above)
       const memberCount = await getActiveMemberCount(db, internalTenantId);
       if (memberCount >= this.freeTierMaxUsers) {
         throw new TenantUserLimitReachedError();
       }
 
+      // Step 8: Insert membership idempotently — onConflictDoNothing preserves existing role
       const roleId = roleMap.get(membershipRole);
       if (!roleId) {
         throw new Error(
@@ -170,13 +185,18 @@ export class DrizzleProvisioningService implements ProvisioningService {
   }
 }
 
+// P1 FIX: resolveOrCreateUser is now email-conflict-safe.
+// Uses ON CONFLICT (email) DO UPDATE (no-op) + RETURNING to get the actual userId
+// regardless of whether the user existed or was just created.
+// This prevents FK violations when the same email is used across providers.
 async function resolveOrCreateUser(
   db: DrizzleDb,
   provider: ExternalAuthProvider,
   externalUserId: string,
   email: string | undefined,
 ): Promise<{ internalUserId: string; userCreatedNow: boolean }> {
-  const existing = await db
+  // Fast path: check if identity mapping already exists
+  const existingIdentity = await db
     .select({ userId: authUserIdentitiesTable.userId })
     .from(authUserIdentitiesTable)
     .where(
@@ -187,25 +207,40 @@ async function resolveOrCreateUser(
     )
     .limit(1);
 
-  if (existing[0]?.userId) {
-    return { internalUserId: existing[0].userId, userCreatedNow: false };
+  if (existingIdentity[0]?.userId) {
+    return {
+      internalUserId: existingIdentity[0].userId,
+      userCreatedNow: false,
+    };
   }
 
-  const userId = crypto.randomUUID();
-  await db
-    .insert(usersTable)
-    .values({
-      id: userId,
-      email: email ?? buildFallbackEmail(provider, externalUserId),
-    })
-    .onConflictDoNothing();
+  const candidateUserId = crypto.randomUUID();
+  const effectiveEmail = email ?? buildFallbackEmail(provider, externalUserId);
 
+  // Upsert user by email: if email already exists (provider switch), return existing userId.
+  // ON CONFLICT DO UPDATE SET email = EXCLUDED.email is a no-op update that forces RETURNING
+  // to always return the row's actual id (whether newly inserted or pre-existing).
+  const userRows = await db
+    .insert(usersTable)
+    .values({ id: candidateUserId, email: effectiveEmail })
+    .onConflictDoUpdate({
+      target: usersTable.email,
+      set: { email: sql`EXCLUDED.email` },
+    })
+    .returning();
+
+  const actualUserId = userRows[0]?.id;
+  if (!actualUserId) {
+    throw new Error('[provisioning] Failed to resolve user row after upsert.');
+  }
+
+  // Link the provider identity to the resolved internal userId
   await db
     .insert(authUserIdentitiesTable)
-    .values({ provider, externalUserId, userId })
+    .values({ provider, externalUserId, userId: actualUserId })
     .onConflictDoNothing();
 
-  const resolved = await db
+  const resolvedIdentity = await db
     .select({ userId: authUserIdentitiesTable.userId })
     .from(authUserIdentitiesTable)
     .where(
@@ -216,16 +251,15 @@ async function resolveOrCreateUser(
     )
     .limit(1);
 
-  if (!resolved[0]?.userId) {
+  if (!resolvedIdentity[0]?.userId) {
     throw new Error(
       '[provisioning] Failed to resolve user identity mapping after create.',
     );
   }
 
-  const createdUserId = resolved[0].userId;
   return {
-    internalUserId: createdUserId,
-    userCreatedNow: createdUserId === userId,
+    internalUserId: resolvedIdentity[0].userId,
+    userCreatedNow: resolvedIdentity[0].userId === candidateUserId,
   };
 }
 

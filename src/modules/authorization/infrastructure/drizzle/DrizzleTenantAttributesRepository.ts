@@ -14,6 +14,7 @@ const DEFAULTS: TenantAttributes = {
   contractType: 'standard',
   features: [],
   userLimit: 5,
+  policyTemplateVersion: 0,
 };
 
 export class DrizzleTenantAttributesRepository implements TenantAttributesRepository {
@@ -34,6 +35,7 @@ export class DrizzleTenantAttributesRepository implements TenantAttributesReposi
       contractType: row.contractType as TenantAttributes['contractType'],
       features: (row.features ?? []) as string[],
       userLimit: row.maxUsers,
+      policyTemplateVersion: row.policyTemplateVersion,
     };
   }
 }

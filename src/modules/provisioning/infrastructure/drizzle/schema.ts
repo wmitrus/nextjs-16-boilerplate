@@ -4,6 +4,7 @@ export {
 } from '@/modules/auth/infrastructure/drizzle/schema';
 export {
   membershipsTable,
+  policiesTable,
   rolesTable,
   tenantAttributesTable,
   tenantsTable,

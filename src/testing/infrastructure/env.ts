@@ -57,6 +57,7 @@ const defaultEnv: MutableEnv = {
   TENANT_CONTEXT_HEADER: 'x-tenant-id',
   TENANT_CONTEXT_COOKIE: 'active_tenant_id',
   FREE_TIER_MAX_USERS: 5,
+  CROSS_PROVIDER_EMAIL_LINKING: 'verified-only' as const,
 };
 
 /**

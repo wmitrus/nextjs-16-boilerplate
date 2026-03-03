@@ -177,7 +177,7 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 
 ### [x] PR-2 — Provisioning Engine (Transactional + Least Privilege)
 
-> **COMPLETE.** Exit criteria met: `ensureProvisioned()` covers all modes, no wildcard policies, no role escalation. 532 tests pass.
+> **COMPLETE (APPROVED — 4 code-review iterations, all P1/P2 findings fixed).** Exit criteria met: `ensureProvisioned()` covers all modes, no wildcard policies, no role escalation. 551 tests pass.
 
 #### Step 2.1 — Domain errors module
 
@@ -242,6 +242,10 @@ Execution order: PR-0 → PR-1 → PR-2 → PR-3
 - [x] `pnpm typecheck` — PASS
 - [x] `pnpm lint` — PASS
 - [x] `pnpm test` — 547 passed
+- [x] **4th code-review P2 (approval)**: `CROSS_PROVIDER_EMAIL_LINKING` env var tests added — default `verified-only`, accepts `disabled`/`verified-only`, rejects invalid values
+- [x] `pnpm typecheck` — PASS
+- [x] `pnpm lint` — PASS
+- [x] `pnpm test` — 551 passed
 
 ---
 

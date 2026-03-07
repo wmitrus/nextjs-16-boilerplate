@@ -271,7 +271,7 @@ function main() {
     console.error(
       `❌ Missing or invalid E2E Clerk fixture vars:\n- ${missing.join(
         '\n- ',
-      )}\nSet them in .env.e2e.local (preferred) or export them in the shell before running the scenario.`,
+      )}\nSet them in .env.e2e.local (preferred), .env.e2e, or export them in the shell before running the scenario.`,
     );
     process.exit(1);
   }

@@ -86,6 +86,11 @@ describe('completeOnboarding', () => {
     });
 
     identityProvider.getCurrentIdentity.mockResolvedValue({ id: 'u-1' });
+    userRepository.findById.mockResolvedValue({
+      id: 'u-1',
+      email: 'user@example.com',
+      onboardingComplete: false,
+    });
     userRepository.updateProfile.mockResolvedValue(undefined);
     userRepository.updateOnboardingStatus.mockResolvedValue(undefined);
   });

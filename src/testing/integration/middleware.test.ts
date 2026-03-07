@@ -160,7 +160,7 @@ describe('Middleware Integration', () => {
     expect(res.status).toBe(429);
   });
 
-  it('should redirect authenticated users away from auth routes to home', async () => {
+  it('should redirect authenticated users away from auth routes to bootstrap', async () => {
     const pipeline = createPipeline();
 
     const req = createMockRequest({ path: '/sign-in' });
@@ -168,7 +168,7 @@ describe('Middleware Integration', () => {
     const res = await pipeline(req);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
   });
 
   it('should redirect authenticated users to onboarding if not complete', async () => {

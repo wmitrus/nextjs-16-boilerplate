@@ -113,6 +113,24 @@ Operational commands:
 - Local compose DB is a developer convenience and should not replace CI isolation.
 - Do not run automatic runtime migrations in production app startup.
 
+## Provisioning Hardening Mandatory Suites
+
+For release candidates after provisioning refactor, treat these suites as mandatory:
+
+1. `pnpm test` (unit)
+2. `pnpm test:integration` (API/page middleware integration)
+3. `pnpm test:db` (provisioning transactional invariants)
+4. targeted e2e provisioning runtime checks (including unprovisioned external-session scenario)
+
+Manual runtime matrix must include all tenancy profiles:
+
+- Scenario A: `TENANCY_MODE=single`
+- Scenario B: `TENANCY_MODE=personal`
+- Scenario C: `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=provider`
+- Scenario D: `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=db`
+
+Authoritative runtime probe for internal state is `/api/me/provisioning-status`.
+
 ## Troubleshooting
 
 - `podman compose` calls `docker-compose` unexpectedly

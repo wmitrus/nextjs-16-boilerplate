@@ -124,7 +124,7 @@ export default async function BootstrapPage({
       return <BootstrapErrorUI error="tenant_config" />;
     }
 
-    return <BootstrapErrorUI error="tenant_config" />;
+    throw err;
   }
 
   const userRepository = container.resolve<UserRepository>(
@@ -132,7 +132,21 @@ export default async function BootstrapPage({
   );
   const user = await userRepository.findById(internalUserId);
 
-  if (!user?.onboardingComplete) {
+  if (!user) {
+    logger.error(
+      {
+        event: 'provisioning:bootstrap',
+        status: 'invariant_violated',
+        internalUserId,
+      },
+      'Bootstrap invariant violated: provisioning succeeded but user record is missing',
+    );
+    throw new Error(
+      'Bootstrap invariant violated: provisioned user not found in database',
+    );
+  }
+
+  if (!user.onboardingComplete) {
     redirect(`/onboarding?redirect_url=${encodeURIComponent(safeTarget)}`);
   }
 

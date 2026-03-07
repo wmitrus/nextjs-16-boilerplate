@@ -9,7 +9,8 @@ export const VARIANT_NAMES = [
   'single-free-tier-low',
 ];
 
-const ENV_DIR = path.resolve(process.cwd(), 'scripts/e2e/env');
+const ROOT_DIR = process.cwd();
+const ENV_DIR = path.resolve(ROOT_DIR, 'scripts/e2e/env');
 
 function parseEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -61,10 +62,8 @@ export function loadScenarioEnv({
 } = {}) {
   const merged = {};
 
-  Object.assign(
-    merged,
-    loadFileIfExists(path.resolve(process.cwd(), '.env.local')),
-  );
+  Object.assign(merged, loadFileIfExists(path.resolve(ROOT_DIR, '.env.local')));
+  Object.assign(merged, loadFileIfExists(path.resolve(ROOT_DIR, '.env.e2e')));
   Object.assign(merged, loadFileIfExists(path.join(ENV_DIR, 'base.env')));
 
   if (scenario) {
@@ -78,7 +77,7 @@ export function loadScenarioEnv({
   if (includeLocal) {
     Object.assign(
       merged,
-      loadFileIfExists(path.resolve(process.cwd(), '.env.e2e.local')),
+      loadFileIfExists(path.resolve(ROOT_DIR, '.env.e2e.local')),
     );
   }
 
@@ -102,5 +101,5 @@ export function resolveScenarioDatabaseUrl({ scenario, variant } = {}) {
 
 export function resolveScenarioDatabasePath({ scenario, variant } = {}) {
   const databaseUrl = resolveScenarioDatabaseUrl({ scenario, variant });
-  return path.resolve(process.cwd(), databaseUrl.replace(/^file:\.?\/?/, ''));
+  return path.resolve(ROOT_DIR, databaseUrl.replace(/^file:\.?\/?/, ''));
 }

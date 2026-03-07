@@ -19,7 +19,11 @@ export default async function OnboardingLayout({
   );
 }
 
-async function OnboardingGuard({ children }: { children: React.ReactNode }) {
+export async function OnboardingGuard({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const container = getAppContainer();
 
   const identityProvider = container.resolve<IdentityProvider>(

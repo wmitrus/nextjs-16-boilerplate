@@ -64,6 +64,12 @@ export default function RootLayout({
               signUpFallbackRedirectUrl={
                 env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
               }
+              signInForceRedirectUrl={
+                env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL
+              }
+              signUpForceRedirectUrl={
+                env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL
+              }
             >
               <AppLayoutContent>{children}</AppLayoutContent>
             </ClerkProvider>

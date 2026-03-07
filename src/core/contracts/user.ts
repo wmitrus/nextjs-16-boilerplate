@@ -7,9 +7,9 @@ export interface User {
   readonly id: SubjectId;
   readonly email?: string;
   readonly onboardingComplete: boolean;
-  readonly targetLanguage?: string;
-  readonly proficiencyLevel?: string;
-  readonly learningGoal?: string;
+  readonly displayName?: string;
+  readonly locale?: string;
+  readonly timezone?: string;
 }
 
 /**
@@ -32,9 +32,9 @@ export interface UserRepository {
   updateProfile(
     id: SubjectId,
     profile: {
-      readonly targetLanguage?: string;
-      readonly proficiencyLevel?: string;
-      readonly learningGoal?: string;
+      readonly displayName?: string;
+      readonly locale?: string;
+      readonly timezone?: string;
     },
   ): Promise<void>;
 }

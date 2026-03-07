@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   applyEnv,
@@ -107,6 +108,7 @@ function main() {
 
   const databasePath = resolveScenarioDatabasePath({ scenario, variant });
   fs.rmSync(databasePath, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
   const checkArgs = ['scripts/check-e2e-auth-env.mjs', '--scenario', scenario];
   if (variant) {

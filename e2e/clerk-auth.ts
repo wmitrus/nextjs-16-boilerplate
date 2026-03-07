@@ -153,6 +153,7 @@ async function establishProgrammaticSessionWithoutBootstrap(
 ): Promise<void> {
   // Follow Clerk's recommended Playwright flow:
   // load Clerk on a public page, then sign in via the helper.
+  await setupClerkTestingToken({ page });
   await page.goto('/');
   await clerk.signIn({
     page,
@@ -162,6 +163,40 @@ async function establishProgrammaticSessionWithoutBootstrap(
       password: credentials.password,
     },
   });
+
+  await clerk.loaded({ page });
+
+  try {
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          window.Clerk?.loaded && window.Clerk?.session && window.Clerk?.user,
+        ),
+      { timeout: 10_000 },
+    );
+  } catch (error) {
+    const url = page.url();
+    const bodyText = await page
+      .locator('body')
+      .innerText()
+      .catch(() => '');
+    const needsSecondFactor =
+      url.includes('/sign-in/factor-two') ||
+      /check your email|verification code|second factor/i.test(bodyText);
+
+    if (needsSecondFactor) {
+      throw new Error(
+        "Clerk E2E sign-in requires a second factor. This runtime helper intentionally supports only Clerk's documented first-factor Playwright flow. Disable Client Trust / MFA for dedicated password fixtures, or move these fixtures to a different supported auth strategy.",
+      );
+    }
+
+    const message =
+      error instanceof Error ? error.message : 'unknown Clerk sign-in failure';
+
+    throw new Error(
+      `Clerk Playwright helper did not establish a session. Verify that the app keys point to the correct Clerk test instance, password sign-in is enabled, and the fixture is not blocked by Client Trust / MFA. Original error: ${message}`,
+    );
+  }
 }
 
 export async function signInWithCredentials(

@@ -17,7 +17,7 @@ const makeMembershipRepo = (isMember: boolean) => ({
 
 describe('OrgDbTenantResolver', () => {
   const identity = { id: '00000000-0000-0000-0000-000000000999' };
-  const tenantId = '10000000-0000-0000-0000-000000000001';
+  const tenantId = '10000000-0000-4000-8000-000000000001';
 
   it('returns tenant context when user is a member of the active tenant', async () => {
     const source = makeActiveTenantSource(tenantId);

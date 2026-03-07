@@ -24,7 +24,7 @@ describe('DrizzleMembershipRepository', () => {
 
     const result = await repo.isMember(
       '00000000-0000-0000-0000-000000000001',
-      '10000000-0000-0000-0000-000000000001',
+      '10000000-0000-4000-8000-000000000001',
     );
 
     expect(result).toBe(true);
@@ -36,7 +36,7 @@ describe('DrizzleMembershipRepository', () => {
 
     const result = await repo.isMember(
       '00000000-0000-0000-0000-000000000001',
-      '10000000-0000-0000-0000-000000000001',
+      '10000000-0000-4000-8000-000000000001',
     );
 
     expect(result).toBe(false);

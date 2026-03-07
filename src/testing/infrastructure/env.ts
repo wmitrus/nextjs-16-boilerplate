@@ -42,9 +42,10 @@ const defaultEnv: MutableEnv = {
   NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
   NEXT_PUBLIC_CLERK_SIGN_IN_URL: '/sign-in',
   NEXT_PUBLIC_CLERK_SIGN_UP_URL: '/sign-up',
-  NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: '/',
-  NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: '/',
-  NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: '/onboarding',
+  NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: '/auth/bootstrap',
+  NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: '/auth/bootstrap',
+  NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL: '/auth/bootstrap',
+  NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: '/auth/bootstrap',
   NEXT_PUBLIC_CLERK_WAITLIST_URL: '/waitlist',
   E2E_ENABLED: false,
   AUTH_PROVIDER: 'clerk' as const,
@@ -52,7 +53,7 @@ const defaultEnv: MutableEnv = {
   DATABASE_URL: undefined,
   DB_DRIVER: undefined,
   TENANCY_MODE: 'single' as const,
-  DEFAULT_TENANT_ID: '550e8400-e29b-41d4-a716-446655440000',
+  DEFAULT_TENANT_ID: '10000000-0000-4000-8000-000000000001',
   TENANT_CONTEXT_SOURCE: undefined,
   TENANT_CONTEXT_HEADER: 'x-tenant-id',
   TENANT_CONTEXT_COOKIE: 'active_tenant_id',
@@ -68,4 +69,14 @@ export const mockEnv = { ...defaultEnv } as unknown as MutableEnv;
 
 export function resetEnvMocks() {
   Object.assign(mockEnv, defaultEnv);
+}
+
+export function setTenancyProfile(profile: {
+  tenancyMode: 'single' | 'personal' | 'org';
+  tenantContextSource?: 'provider' | 'db';
+  defaultTenantId?: string;
+}) {
+  mockEnv.TENANCY_MODE = profile.tenancyMode;
+  mockEnv.TENANT_CONTEXT_SOURCE = profile.tenantContextSource;
+  mockEnv.DEFAULT_TENANT_ID = profile.defaultTenantId;
 }

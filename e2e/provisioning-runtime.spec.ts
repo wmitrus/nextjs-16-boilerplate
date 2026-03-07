@@ -93,18 +93,52 @@ async function expectProvisioningReady(
   page: Page,
   expectedTenancyMode: 'single' | 'personal' | 'org',
 ): Promise<void> {
-  const probe = await page.request.get('/api/me/provisioning-status');
-  expect(probe.status()).toBe(200);
+  const probe = await browserJsonRequest(page, '/api/me/provisioning-status');
+  expect(probe.status).toBe(200);
 
-  const probeBody = await probe.json();
+  const probeBody = probe.body as {
+    status: string;
+    data: {
+      tenancyMode: string;
+      internalUserId: string;
+      internalTenantId: string;
+      onboardingComplete: boolean;
+    };
+  };
   expect(probeBody.status).toBe('ok');
   expect(probeBody.data.tenancyMode).toBe(expectedTenancyMode);
   expect(probeBody.data.internalUserId).toBeTruthy();
   expect(probeBody.data.internalTenantId).toBeTruthy();
   expect(probeBody.data.onboardingComplete).toBe(true);
 
-  const api = await page.request.get('/api/users');
-  expect(api.status()).toBe(200);
+  const api = await browserJsonRequest(page, '/api/users');
+  expect(api.status).toBe(200);
+}
+
+async function browserJsonRequest(
+  page: Page,
+  pathname: string,
+): Promise<{ status: number; body: unknown }> {
+  return page.evaluate(async (input) => {
+    const token = await window.Clerk?.session?.getToken();
+    const response = await fetch(input, {
+      credentials: 'same-origin',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    let body: unknown = null;
+
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+
+    return {
+      status: response.status,
+      body,
+    };
+  }, pathname);
 }
 
 async function expectBootstrapErrorUi(
@@ -215,10 +249,10 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInClerkIdentityE2E(page, 'singleProvisionedUser');
 
-    const probe = await page.request.get('/api/me/provisioning-status');
-    expect(probe.status()).toBe(409);
+    const probe = await browserJsonRequest(page, '/api/me/provisioning-status');
+    expect(probe.status).toBe(409);
 
-    const probeBody = await probe.json();
+    const probeBody = probe.body as { code: string };
     expect(probeBody.code).toBe('BOOTSTRAP_REQUIRED');
 
     await waitForBootstrapRequest(page, async () => {
@@ -480,10 +514,10 @@ test.describe('Provisioning Runtime E2E', () => {
     await signInClerkOrgDbSeededMemberE2E(page);
     await setActiveTenantCookie(page, SEEDED_TENANT_IDS.globex);
 
-    const response = await page.request.get('/api/users');
-    expect(response.status()).toBe(403);
+    const response = await browserJsonRequest(page, '/api/users');
+    expect(response.status).toBe(403);
 
-    const body = await response.json();
+    const body = response.body as { code: string };
     expect(body.code).toBe('TENANT_MEMBERSHIP_REQUIRED');
   });
 

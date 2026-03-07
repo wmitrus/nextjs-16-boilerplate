@@ -169,12 +169,13 @@ pnpm e2e:neg:free-tier-limit
 
 Under the hood the runner:
 
-1. loads `scripts/e2e/env/base.env`
-2. loads the selected scenario env
-3. loads an optional variant env
-4. loads `.env.e2e` and `.env.e2e.local`
-5. resets the scenario-specific PGlite DB
-6. migrates, seeds, validates env, then runs Playwright
+1. loads `.env.local` for backwards-compatible local defaults
+2. loads `.env.e2e` for shared local E2E values
+3. loads `scripts/e2e/env/base.env`
+4. loads the selected scenario env and optional variant env
+5. loads `.env.e2e.local` as the highest-precedence local overlay
+6. resets the scenario-specific PGlite DB
+7. migrates, seeds, validates env, then runs Playwright
 
 ## 7. DB State Notes
 

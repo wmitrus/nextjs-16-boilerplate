@@ -14,13 +14,13 @@ describe('PersonalTenantResolver', () => {
   const identity = { id: '00000000-0000-0000-0000-000000000999' };
 
   it('returns the personal tenant for the given user', async () => {
-    const lookup = makeLookup('10000000-0000-0000-0000-000000000001');
+    const lookup = makeLookup('10000000-0000-4000-8000-000000000001');
     const resolver = new PersonalTenantResolver(lookup);
 
     const context = await resolver.resolve(identity);
 
     expect(lookup.findPersonalTenantId).toHaveBeenCalledWith(identity.id);
-    expect(context.tenantId).toBe('10000000-0000-0000-0000-000000000001');
+    expect(context.tenantId).toBe('10000000-0000-4000-8000-000000000001');
     expect(context.userId).toBe(identity.id);
   });
 
@@ -34,7 +34,7 @@ describe('PersonalTenantResolver', () => {
   });
 
   it('does not call findInternalTenantId or findInternalUserId', async () => {
-    const lookup = makeLookup('10000000-0000-0000-0000-000000000001');
+    const lookup = makeLookup('10000000-0000-4000-8000-000000000001');
     const resolver = new PersonalTenantResolver(lookup);
 
     await resolver.resolve(identity);

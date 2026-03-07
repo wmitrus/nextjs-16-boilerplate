@@ -30,12 +30,7 @@ async function OnboardingGuard({ children }: { children: React.ReactNode }) {
     identity = await identityProvider.getCurrentIdentity();
   } catch (err) {
     if (err instanceof UserNotProvisionedError) {
-      // User is authenticated but not yet provisioned (no internal record).
-      // Allow them to reach the onboarding page — PR-3 will call ensureProvisioned()
-      // inside completeOnboarding() to bootstrap their user/tenant/membership.
-      return (
-        <div className="container mx-auto max-w-2xl px-4 py-12">{children}</div>
-      );
+      redirect('/auth/bootstrap');
     }
     throw err;
   }
@@ -48,10 +43,13 @@ async function OnboardingGuard({ children }: { children: React.ReactNode }) {
     AUTH.USER_REPOSITORY,
   );
   const user = await userRepository.findById(identity.id);
-  const onboardingComplete = user?.onboardingComplete;
 
-  if (onboardingComplete === true) {
-    redirect('/');
+  if (!user) {
+    redirect('/auth/bootstrap');
+  }
+
+  if (user.onboardingComplete) {
+    redirect('/users');
   }
 
   return (

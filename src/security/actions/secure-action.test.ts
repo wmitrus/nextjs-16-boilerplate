@@ -164,7 +164,7 @@ describe('Secure Action Wrapper', () => {
     }
   });
 
-  it('should return unauthorized with tenant-context message when tenant is missing', async () => {
+  it('should return tenant_context_required when tenant is missing', async () => {
     mockGetSecurityContext.mockRejectedValue(new MissingTenantContextError());
 
     const handler = vi.fn();
@@ -176,10 +176,7 @@ describe('Secure Action Wrapper', () => {
 
     const result = await action({ name: 'test' });
 
-    expect(result.status).toBe('unauthorized');
-    if (result.status === 'unauthorized') {
-      expect(result.error).toBe('Tenant context required');
-    }
+    expect(result.status).toBe('tenant_context_required');
     expect(handler).not.toHaveBeenCalled();
   });
 });

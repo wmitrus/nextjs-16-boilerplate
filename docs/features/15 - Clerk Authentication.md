@@ -80,6 +80,21 @@ Clerk orgs are optional and depend on tenancy mode:
 3. `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=provider`: `tenantExternalId` (Clerk org) is required.
 4. `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=db`: active tenant comes from app header/cookie context, not provider org claim.
 
+Dashboard requirements by scenario:
+
+| Tenancy profile | Organizations feature | Clerk org membership | Active org in session | Additional requirement                      |
+| --------------- | --------------------- | -------------------- | --------------------- | ------------------------------------------- |
+| `single`        | optional              | not required         | not required          | email sign-in enabled                       |
+| `personal`      | optional              | not required         | not required          | email sign-in enabled                       |
+| `org/provider`  | required              | required             | required              | assign org role for owner/member path tests |
+| `org/db`        | optional (ignored)    | not required         | not required          | set active tenant in app header/cookie      |
+
+Minimal universal Clerk baseline:
+
+1. Configure `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`.
+2. Enable email sign-in/sign-up.
+3. Use verified test emails when validating cross-provider linking policy (`CROSS_PROVIDER_EMAIL_LINKING=verified-only`).
+
 ## 8. Related Docs
 
 - `docs/features/ENV-requirements.md`

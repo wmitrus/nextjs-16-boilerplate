@@ -196,8 +196,9 @@ Execution model:
    - `pnpm db:seed`
    - `pnpm dev`
 3. Validate positive/negative paths on `/users` and `/api/users`.
-4. Treat `/security-showcase` mutation as diagnostic (non-gating) until explicit policy mapping for that action is aligned.
-5. Run mandatory non-UI provisioning security gates:
+4. Validate provisioning truth on `/api/me/provisioning-status` (authoritative probe).
+5. Treat `/security-showcase` mutation as diagnostic (non-gating) until explicit policy mapping for that action is aligned.
+6. Run mandatory non-UI provisioning security gates:
    - `pnpm test:db -- src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.db.test.ts -t "cross-provider email linking"`
    - `pnpm test:db -- src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.db.test.ts -t "free-tier limit"`
 
@@ -206,6 +207,7 @@ Execution model:
 | Situation                                                                                     | Expected result                                 |
 | --------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | Not signed in                                                                                 | `Authentication required` / redirect to sign-in |
+| Signed in externally, not provisioned internally                                              | `ONBOARDING_REQUIRED` (API `409`)               |
 | Missing tenant context (`org/provider` without active org, or `org/db` without header/cookie) | `Tenant context required`                       |
 | Tenant selected but user not member (`org/db`)                                                | `Tenant membership required`                    |
 | Policy denies action                                                                          | `Forbidden`                                     |
@@ -225,3 +227,5 @@ Use Clerk profiles to validate tenancy/provisioning logic now; add provider-spec
 - onboarding action: `src/modules/auth/ui/onboarding-actions.ts`
 - provisioning service: `src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.ts`
 - route auth middleware: `src/security/middleware/with-auth.ts`
+- node provisioning gate: `src/security/core/node-provisioning-access.ts`
+- authoritative runtime probe: `src/app/api/me/provisioning-status/route.ts`

@@ -172,39 +172,7 @@ export async function signInWithCredentials(
       ),
     { timeout: 10_000 },
   );
-
-  const sessionToken = await page.evaluate(async () => {
-    const token = await window.Clerk?.session?.getToken();
-    return typeof token === 'string' && token.length > 0 ? token : null;
-  });
-
-  if (!sessionToken) {
-    throw new Error('Clerk E2E sign-in did not produce a session token.');
-  }
-
-  const baseUrl =
-    process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
-
-  await page.context().addCookies([
-    {
-      name: '__session',
-      value: sessionToken,
-      url: baseUrl,
-      sameSite: 'Lax',
-    },
-    {
-      name: '__client_uat',
-      value: String(Math.floor(Date.now() / 1000)),
-      url: baseUrl,
-      sameSite: 'Lax',
-    },
-  ]);
-
-  await page.context().setExtraHTTPHeaders({
-    Authorization: `Bearer ${sessionToken}`,
-  });
-
-  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.waitForLoadState('networkidle');
 }
 
 export async function signInClerkIdentityE2E(

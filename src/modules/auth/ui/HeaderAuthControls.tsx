@@ -29,11 +29,14 @@ export function HeaderAuthControls() {
           <SignedOut>
             <SignInButton
               mode="modal"
+              forceRedirectUrl={
+                env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL
+              }
               fallbackRedirectUrl={
                 env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
               }
               signUpFallbackRedirectUrl={
-                env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL
+                env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
               }
               signUpForceRedirectUrl={
                 env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL
@@ -52,7 +55,7 @@ export function HeaderAuthControls() {
                 env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
               }
               signInForceRedirectUrl={
-                env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+                env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL
               }
             >
               <button className="inline-flex h-9 items-center justify-center rounded-full bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">

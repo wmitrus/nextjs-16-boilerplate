@@ -29,23 +29,23 @@ describe('ClerkUserRepository', () => {
       id: 'user_1',
       publicMetadata: {
         onboardingComplete: true,
-        timezone: 'UTC',
+        timezone: 'Europe/Warsaw',
       },
     });
 
     const repository = new ClerkUserRepository();
 
     await repository.updateProfile('user_1', {
-      targetLanguage: 'en',
-      proficiencyLevel: 'b2',
+      displayName: 'Alice',
+      locale: 'pl-PL',
     });
 
     expect(updateUserMock).toHaveBeenCalledWith('user_1', {
       publicMetadata: {
         onboardingComplete: true,
-        timezone: 'UTC',
-        targetLanguage: 'en',
-        proficiencyLevel: 'b2',
+        timezone: 'Europe/Warsaw',
+        displayName: 'Alice',
+        locale: 'pl-PL',
       },
     });
   });
@@ -54,8 +54,8 @@ describe('ClerkUserRepository', () => {
     getUserMock.mockResolvedValue({
       id: 'user_1',
       publicMetadata: {
-        timezone: 'UTC',
-        targetLanguage: 'en',
+        displayName: 'Alice',
+        locale: 'pl-PL',
       },
     });
 
@@ -65,8 +65,8 @@ describe('ClerkUserRepository', () => {
 
     expect(updateUserMock).toHaveBeenCalledWith('user_1', {
       publicMetadata: {
-        timezone: 'UTC',
-        targetLanguage: 'en',
+        displayName: 'Alice',
+        locale: 'pl-PL',
         onboardingComplete: true,
       },
     });

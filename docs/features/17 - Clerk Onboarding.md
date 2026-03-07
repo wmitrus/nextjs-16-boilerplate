@@ -16,19 +16,19 @@ Onboarding is not just profile capture. It explicitly provisions internal record
    - `tenantExternalId` + `tenantRole`
    - `activeTenantId` (for `single` or `org/db` modes)
    - `tenancyMode` + `tenantContextSource`
-3. Resolve internal identity (`AUTH.IDENTITY_PROVIDER`).
-4. Persist onboarding profile in `AUTH.USER_REPOSITORY` using internal UUID.
+3. Verify the provisioned internal user exists via `AUTH.USER_REPOSITORY.findById(internalUserId)`.
+4. Persist onboarding profile in `AUTH.USER_REPOSITORY` using the canonical `internalUserId` returned by provisioning.
 
 ## 2. Persisted User Profile Fields
 
 Onboarding writes these fields:
 
 - `onboardingComplete` (boolean)
-- `targetLanguage`
-- `proficiencyLevel`
-- `learningGoal`
+- `displayName`
+- `locale`
+- `timezone`
 
-These fields are used by middleware onboarding checks (`with-auth`) through `UserRepository`.
+These fields are used by Node-side readiness checks through `UserRepository`.
 
 ## 3. Tenant Context Resolution During Onboarding
 
@@ -40,17 +40,18 @@ These fields are used by middleware onboarding checks (`with-auth`) through `Use
 
 ## 4. Access Behavior Before Provisioning
 
-`src/app/onboarding/layout.tsx` allows authenticated users with no internal identity mapping:
+`src/app/onboarding/layout.tsx` does not bootstrap users directly:
 
 - catches `UserNotProvisionedError`
-- keeps user on onboarding page
+- redirects to `/auth/bootstrap`
+- if internal identity exists but user row is missing, also redirects to `/auth/bootstrap`
 
-This is intentional: onboarding is the write path that creates mappings and tenant membership.
+This is intentional: bootstrap is the primary provisioning write path. Onboarding only completes profile data after bootstrap succeeds.
 
 After hardening:
 
 - protected pages and APIs are gated in Node runtime,
-- active Clerk session without internal provisioning returns controlled denial (`ONBOARDING_REQUIRED`),
+- active Clerk session without internal provisioning returns controlled denial (`BOOTSTRAP_REQUIRED`),
 - runtime probe endpoint `/api/me/provisioning-status` is the authoritative way to verify internal provisioning state.
 
 ## 5. Clerk Claims Used by Provisioning
@@ -92,14 +93,16 @@ This prevents unsafe account linking when email ownership is not verified.
 1. Set `AUTH_PROVIDER=clerk` with valid keys.
 2. Set desired tenancy vars (`TENANCY_MODE`, `TENANT_CONTEXT_SOURCE`, `DEFAULT_TENANT_ID` when needed).
 3. Run DB migrations and seed.
-4. Sign in via Clerk.
-5. Complete onboarding form once.
-6. Confirm redirect behavior:
+4. Ensure both Clerk sign-in and sign-up redirect to `/auth/bootstrap`.
+5. Sign in via Clerk.
+6. Complete onboarding form once if bootstrap redirects to `/onboarding`.
+7. Confirm redirect behavior:
    - authenticated + onboarding complete -> no onboarding loop
    - unauthenticated -> redirect to sign-in
-7. Optional verification after DB reset:
+8. Optional verification after DB reset:
    - you may still have active Clerk session cookie,
-   - `/api/me/provisioning-status` must return controlled `409 ONBOARDING_REQUIRED` until onboarding re-provisions internal state.
+   - `/api/me/provisioning-status` must return controlled `409 BOOTSTRAP_REQUIRED` until `/auth/bootstrap` re-provisions internal state,
+   - after bootstrap, incomplete profile state redirects to `/onboarding`.
 
 ## 9. Related Docs
 

@@ -29,6 +29,7 @@ export const createMockSecurityContext = (
   requestId: 'req_123',
   runtime: 'node',
   environment: 'test',
+  readinessStatus: 'ALLOWED',
   ...overrides,
 });
 

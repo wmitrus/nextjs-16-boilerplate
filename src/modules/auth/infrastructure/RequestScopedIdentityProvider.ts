@@ -1,11 +1,11 @@
 import type {
+  ExternalAuthProvider,
   Identity,
   IdentityProvider,
   RequestIdentitySource,
 } from '@/core/contracts/identity';
 import { UserNotProvisionedError } from '@/core/contracts/identity';
 
-import type { ExternalAuthProvider } from './ExternalIdentityMapper';
 import type { InternalIdentityLookup } from './InternalIdentityLookup';
 
 interface RequestScopedIdentityProviderOptions {

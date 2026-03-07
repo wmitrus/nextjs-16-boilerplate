@@ -49,12 +49,12 @@ describe('DrizzleInternalIdentityLookup', () => {
 
   describe('findInternalTenantId', () => {
     it('returns internal tenant ID when mapping exists', async () => {
-      const db = makeDb([{ tenantId: '10000000-0000-0000-0000-000000000001' }]);
+      const db = makeDb([{ tenantId: '10000000-0000-4000-8000-000000000001' }]);
       const lookup = new DrizzleInternalIdentityLookup(db as never);
 
       const result = await lookup.findInternalTenantId('clerk', 'org_ext_456');
 
-      expect(result).toBe('10000000-0000-0000-0000-000000000001');
+      expect(result).toBe('10000000-0000-4000-8000-000000000001');
     });
 
     it('returns null when no mapping exists', async () => {

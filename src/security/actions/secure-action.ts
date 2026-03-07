@@ -102,19 +102,40 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       );
 
       // 1. Readiness checks (ordered by specificity)
-      if (context.readinessStatus === 'BOOTSTRAP_REQUIRED') {
-        return { status: 'bootstrap_required' as const };
+      const readinessDeniedStatus = (() => {
+        switch (context.readinessStatus) {
+          case 'BOOTSTRAP_REQUIRED':
+            return 'bootstrap_required' as const;
+          case 'ONBOARDING_REQUIRED':
+            return 'onboarding_required' as const;
+          case 'TENANT_CONTEXT_REQUIRED':
+            return 'tenant_context_required' as const;
+          case 'TENANT_MEMBERSHIP_REQUIRED':
+            return 'tenant_membership_required' as const;
+          default:
+            return null;
+        }
+      })();
+
+      if (readinessDeniedStatus !== null) {
+        await logActionAudit({
+          actionName,
+          input,
+          result: 'failure',
+          error: `Readiness check failed: ${context.readinessStatus}`,
+          context,
+        });
+        return { status: readinessDeniedStatus };
       }
-      if (context.readinessStatus === 'ONBOARDING_REQUIRED') {
-        return { status: 'onboarding_required' as const };
-      }
-      if (context.readinessStatus === 'TENANT_CONTEXT_REQUIRED') {
-        return { status: 'tenant_context_required' as const };
-      }
-      if (context.readinessStatus === 'TENANT_MEMBERSHIP_REQUIRED') {
-        return { status: 'tenant_membership_required' as const };
-      }
+
       if (!context.user) {
+        await logActionAudit({
+          actionName,
+          input,
+          result: 'failure',
+          error: 'Authentication required',
+          context,
+        });
         return {
           status: 'unauthorized' as const,
           error: 'Authentication required',

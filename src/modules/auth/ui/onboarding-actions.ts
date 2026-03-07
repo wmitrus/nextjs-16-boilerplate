@@ -11,6 +11,8 @@ import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
+
 import {
   CrossProviderLinkingNotAllowedError,
   TenantContextRequiredError,
@@ -130,26 +132,27 @@ export const completeOnboarding = async (formData: FormData) => {
     return { error: 'Provisioning failed. Please try again.' };
   }
 
-  const targetLanguage = formData.get('targetLanguage');
-  const proficiencyLevel = formData.get('proficiencyLevel');
-  const learningGoal = formData.get('learningGoal');
+  const displayName = formData.get('displayName');
+  const locale = formData.get('locale');
+  const timezone = formData.get('timezone');
+  const rawRedirectUrl = formData.get('redirect_url');
 
   logger.debug(
     {
       userId: provisioningResult.internalUserId,
-      targetLanguage,
-      proficiencyLevel,
-      learningGoal,
+      displayName,
+      locale,
+      timezone,
     },
     'Onboarding form submission',
   );
 
-  if (!targetLanguage || !proficiencyLevel || !learningGoal) {
+  if (!displayName || typeof displayName !== 'string' || !displayName.trim()) {
     logger.warn(
       { userId: provisioningResult.internalUserId },
-      'Missing required fields in onboarding',
+      'Missing required displayName in onboarding',
     );
-    return { error: 'Missing required fields' };
+    return { error: 'Display name is required' };
   }
 
   const identityProvider = container.resolve<IdentityProvider>(
@@ -167,18 +170,23 @@ export const completeOnboarding = async (formData: FormData) => {
     AUTH.USER_REPOSITORY,
   );
 
+  const safeRedirectUrl = sanitizeRedirectUrl(
+    typeof rawRedirectUrl === 'string' ? rawRedirectUrl : '',
+    '/users',
+  );
+
   try {
     await userRepository.updateProfile(identity.id, {
-      targetLanguage: targetLanguage as string,
-      proficiencyLevel: proficiencyLevel as string,
-      learningGoal: learningGoal as string,
+      displayName: displayName.trim(),
+      locale: typeof locale === 'string' && locale ? locale : undefined,
+      timezone: typeof timezone === 'string' && timezone ? timezone : undefined,
     });
     await userRepository.updateOnboardingStatus(identity.id, true);
     logger.debug(
       { userId: identity.id },
       'User profile and onboarding status updated successfully',
     );
-    return { message: 'Onboarding completed' };
+    return { message: 'Onboarding completed', redirectUrl: safeRedirectUrl };
   } catch (err) {
     logger.error(
       { err, userId: identity.id },

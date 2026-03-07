@@ -17,9 +17,9 @@ export class ClerkUserRepository implements UserRepository {
         id: user.id,
         email: user.emailAddresses[0]?.emailAddress,
         onboardingComplete: Boolean(user.publicMetadata?.onboardingComplete),
-        targetLanguage: user.publicMetadata?.targetLanguage as string,
-        proficiencyLevel: user.publicMetadata?.proficiencyLevel as string,
-        learningGoal: user.publicMetadata?.learningGoal as string,
+        displayName: user.publicMetadata?.displayName as string | undefined,
+        locale: user.publicMetadata?.locale as string | undefined,
+        timezone: user.publicMetadata?.timezone as string | undefined,
       };
     } catch (_error) {
       // In a real app, we should handle specific Clerk error codes
@@ -30,9 +30,9 @@ export class ClerkUserRepository implements UserRepository {
   async updateProfile(
     userId: SubjectId,
     profile: {
-      readonly targetLanguage?: string;
-      readonly proficiencyLevel?: string;
-      readonly learningGoal?: string;
+      readonly displayName?: string;
+      readonly locale?: string;
+      readonly timezone?: string;
     },
   ): Promise<void> {
     const client = await clerkClient();

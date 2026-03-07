@@ -1,8 +1,8 @@
 # Manual QA Checklist - Tenancy & Provisioning Runtime
 
-This checklist is for real runtime verification after the provisioning/tenancy refactor.
+This checklist validates real runtime behavior after the provisioning/tenancy refactor.
 
-Use it to validate behavior for:
+Scope:
 
 - tenants
 - organizations
@@ -11,7 +11,17 @@ Use it to validate behavior for:
 
 ## 0. Pre-flight (run once)
 
-1. Set baseline env (start with single profile):
+### 0.1 Execution model (authoritative)
+
+Use **chained mode** for this checklist.
+
+- one DB state for the full run
+- one browser session
+- fixed order: `A -> B -> C -> D`
+
+This matches `05 - One-Page Runtime Execution Sheet`.
+
+### 0.2 Baseline env
 
 ```dotenv
 AUTH_PROVIDER=clerk
@@ -19,14 +29,14 @@ CLERK_SECRET_KEY=sk_test_...
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 
 TENANCY_MODE=single
-DEFAULT_TENANT_ID=10000000-0000-0000-0000-000000000001
+DEFAULT_TENANT_ID=10000000-0000-4000-8000-000000000001
 
 DB_PROVIDER=drizzle
 DB_DRIVER=pglite
 DATABASE_URL=file:./data/pglite
 ```
 
-2. Start clean runtime:
+### 0.3 Start runtime
 
 ```bash
 pnpm env:check
@@ -35,9 +45,7 @@ pnpm db:seed
 pnpm dev
 ```
 
-3. Use a fresh browser profile/incognito for each scenario.
-
-## 1. Shared quick probes
+## 1. Shared probes
 
 ### 1.1 Unauthenticated API probe
 
@@ -71,21 +79,22 @@ Profile:
 
 ```dotenv
 TENANCY_MODE=single
-DEFAULT_TENANT_ID=10000000-0000-0000-0000-000000000001
+DEFAULT_TENANT_ID=10000000-0000-4000-8000-000000000001
 ```
 
 Checklist:
 
 - [ ] Sign in with Clerk user that has no organization.
 - [ ] If redirected to onboarding, submit onboarding form successfully.
-- [ ] Open `/users` -> page loads (no redirect loop).
-- [ ] Open `/security-showcase` -> submit **Update Settings**.
+- [ ] Open `/users` (no redirect loop).
+- [ ] Run browser authenticated API probe (`/api/users`) and expect `200`.
+- [ ] Optional diagnostic: run Update Settings in `/security-showcase` (controlled result, no crash).
 
 Expected:
 
 - onboarding completes
-- secure action result contains success
-- no tenant-context errors
+- tenancy context resolves
+- `/api/users` returns `200`
 
 ## 3. Scenario B - Personal Tenant (tenant per user)
 
@@ -100,12 +109,14 @@ Checklist:
 - [ ] Restart app after env change.
 - [ ] Sign in (same or new Clerk user).
 - [ ] Complete onboarding.
-- [ ] Open `/users` and `/security-showcase`.
+- [ ] Open `/users`.
+- [ ] Run browser authenticated API probe (`/api/users`) and expect `200`.
+- [ ] Optional diagnostic: Update Settings in `/security-showcase`.
 
 Expected:
 
 - personal tenant is provisioned
-- secure action succeeds
+- `/api/users` returns `200`
 - no org is required
 
 ## 4. Scenario C - Org via Provider (Clerk Organizations)
@@ -117,51 +128,56 @@ TENANCY_MODE=org
 TENANT_CONTEXT_SOURCE=provider
 ```
 
-### 4.1 Negative path (missing org context)
+### 4.1 Clerk setup
+
+1. Enable Organizations in Clerk Dashboard.
+2. Create organization for tests.
+3. Add test user to this organization.
+4. Set this org as active in current session (UserButton account/org context).
+5. For role-path tests:
+   - org role containing `admin`/`owner` -> internal `owner`
+   - otherwise -> internal `member`
+
+### 4.2 Negative path A (missing org context)
 
 Checklist:
 
-- [ ] Sign in user with no active organization in session.
+- [ ] Sign in user with no active org in session.
 - [ ] Open `/users`.
+- [ ] Run browser authenticated API probe.
 
 Expected:
 
-- redirect to `/onboarding?reason=tenant-context-required`
+- redirect `/onboarding?reason=tenant-context-required`
+- API status `409`, code `TENANT_CONTEXT_REQUIRED`
 
-API check (same logged-in session):
-
-```js
-fetch('/api/users')
-  .then(async (r) => ({ status: r.status, body: await r.json() }))
-  .then(console.log);
-```
-
-Expected:
-
-- status `409`
-- code `TENANT_CONTEXT_REQUIRED`
-
-### 4.2 Positive path (active org context)
-
-Clerk setup:
-
-1. Enable Organizations.
-2. Create organization.
-3. Add test user to organization.
-4. Ensure this org is active in current session.
+### 4.3 Negative path B (active org but tenant not provisioned yet)
 
 Checklist:
 
-- [ ] Sign in with active org session.
-- [ ] Complete onboarding.
+- [ ] Activate org in session.
+- [ ] Before onboarding, open `/users`.
+- [ ] Run browser authenticated API probe.
+
+Expected:
+
+- still redirected to onboarding with `tenant-context-required`
+- API status `409`, code `TENANT_CONTEXT_REQUIRED`
+
+### 4.4 Positive path
+
+Checklist:
+
+- [ ] Complete onboarding with active org context.
 - [ ] Open `/users`.
-- [ ] Run secure action in `/security-showcase`.
+- [ ] Run browser authenticated API probe (`/api/users`).
+- [ ] Optional diagnostic: Update Settings in `/security-showcase`.
 
 Expected:
 
 - onboarding provisioning succeeds
-- no tenant-context errors
-- protected routes/actions work
+- protected routes work
+- API status `200`
 
 ## 5. Scenario D - Org via DB Context
 
@@ -185,14 +201,12 @@ document.cookie = 'active_tenant_id=; Max-Age=0; path=/';
 ```
 
 - [ ] Open `/users`.
+- [ ] Run browser authenticated API probe.
 
 Expected:
 
-- redirect to `/onboarding?reason=tenant-context-required`
-
-API expected:
-
-- `409` + `TENANT_CONTEXT_REQUIRED`
+- redirect `/onboarding?reason=tenant-context-required`
+- API `409` + `TENANT_CONTEXT_REQUIRED`
 
 ### 5.2 Active tenant but no membership
 
@@ -200,16 +214,10 @@ Set non-member tenant in cookie:
 
 ```js
 document.cookie =
-  'active_tenant_id=10000000-0000-0000-0000-000000000002; path=/';
+  'active_tenant_id=10000000-0000-4000-8000-000000000002; path=/';
 ```
 
-Run:
-
-```js
-fetch('/api/users')
-  .then(async (r) => ({ status: r.status, body: await r.json() }))
-  .then(console.log);
-```
+Run API probe.
 
 Expected:
 
@@ -218,19 +226,20 @@ Expected:
 
 ### 5.3 Active tenant with membership (success)
 
-Use tenant where your user already has membership.
+Use tenant where current user has membership.
 
-If you first completed Scenario A, use:
+In chained mode this is typically available after Scenario A:
 
 ```js
 document.cookie =
-  'active_tenant_id=10000000-0000-0000-0000-000000000001; path=/';
+  'active_tenant_id=10000000-0000-4000-8000-000000000001; path=/';
 ```
 
 Then test:
 
 - [ ] `/users` loads
-- [ ] `/security-showcase` secure action succeeds
+- [ ] browser API probe returns `200`
+- [ ] Optional diagnostic: `/security-showcase` action
 
 ## 6. Role Mapping Checks (owner/member)
 
@@ -260,35 +269,49 @@ Expected:
 
 - role names are only `owner` or `member`
 
-## 7. Onboarding Assertions
+## 7. Onboarding assertions
 
 For every successful first login in each scenario:
 
 - [ ] onboarding form submit returns success
 - [ ] next request is not redirected back to onboarding
-- [ ] `/users` and secure action are usable
+- [ ] `/users` and `/api/users` are usable
 
 If onboarding fails, expected controlled error strings include:
 
 - `Provisioning failed. Please try again.`
 - `Missing required fields`
 
-## 8. Known Limits in current runtime
+## 8. Non-UI provisioning security gates (required)
+
+These checks cover critical paths not fully executable via Clerk-only manual flow.
+
+```bash
+pnpm test:db -- src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.db.test.ts -t "cross-provider email linking"
+pnpm test:db -- src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.db.test.ts -t "free-tier limit"
+```
+
+Expected:
+
+- both targeted DB test groups pass
+
+## 9. Known limits in current runtime
 
 - `AUTH_PROVIDER=authjs` and `AUTH_PROVIDER=supabase` are not yet runtime-complete.
 - Identity source adapters for those providers currently return no authenticated identity.
 
-Do not treat those two provider runtime failures as tenancy/provisioning regressions yet.
+Do not treat those provider runtime failures as tenancy/provisioning regressions yet.
 
-## 9. Pass Criteria
+## 10. Pass criteria
 
 Checklist is PASS when:
 
-1. All positive-path scenarios succeed (`single`, `personal`, `org/provider`, `org/db`).
+1. All positive-path scenarios succeed (`single`, `personal`, `org/provider`, `org/db`) on `/users` and `/api/users`.
 2. All negative-path scenarios return controlled responses (401/403/409 or onboarding redirect).
-3. No unhandled runtime exceptions appear in terminal for tested flows.
+3. Non-UI provisioning security gates pass.
+4. No unhandled runtime exceptions appear in terminal for tested flows.
 
-## 10. Related Docs
+## 11. Related docs
 
 - `docs/getting-started/03 - Tenancy, Organizations, Roles and Onboarding - Runtime Matrix.md`
 - `docs/features/ENV-requirements.md`

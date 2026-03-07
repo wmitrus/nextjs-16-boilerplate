@@ -36,6 +36,10 @@ Important runtime contract:
 - The test harness must not manually mint or inject Clerk session cookies.
 - If a Clerk fixture signs in only through an interactive "Check your email"
   or "new device" challenge, that fixture is not E2E-ready for this suite.
+- In practice, the first thing to check is Clerk's Client Trust / additional
+  sign-in verification behavior for the test instance. If that policy is on
+  for these fixtures, the runtime helper will correctly stop instead of trying
+  to bypass the challenge with custom cookies.
 
 ## 2. Required Organizations
 
@@ -265,6 +269,9 @@ If the Clerk helper sign-in does not result in an authenticated app session:
 3. Confirm password sign-in is enabled for the instance.
 4. Confirm the instance does not force an extra verification step for these
    password fixtures.
-5. If the browser lands on a "Check your email" screen for an existing test
+5. Check Client Trust / new-device verification behavior in the Clerk test
+   instance. If it is enabled for these users, the helper will not be able to
+   complete password sign-in as a first-factor-only flow.
+6. If the browser lands on a "Check your email" screen for an existing test
    user, treat that as a Clerk fixture/policy problem, not as a provisioning or
    tenant-resolution problem in the app.

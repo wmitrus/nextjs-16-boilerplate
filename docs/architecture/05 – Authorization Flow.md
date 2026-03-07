@@ -5,9 +5,10 @@ flowchart TD
 
 Req["Request"]
 Proxy["Proxy (Edge auth gate)"]
-EdgeGate{"Signed in + tenant?"}
+EdgeGate{"Signed in?"}
 
 NodeEntry["Server Action / Route"]
+NodeProv["Node Provisioning Gate\ninternal identity + onboarding + tenant/membership"]
 Secure["Secure Action"]
 Ctx["Security Context"]
 
@@ -22,7 +23,9 @@ Req --> Proxy --> EdgeGate
 EdgeGate -->|yes| NodeEntry
 EdgeGate -->|no| Deny["Unauthorized"]
 
-NodeEntry --> Secure --> Ctx
+NodeEntry --> NodeProv
+NodeProv -->|ready| Secure --> Ctx
+NodeProv -->|not ready| DenyProv["409/403 Controlled Response"]
 
 Ctx --> Facade --> Service --> Engine --> Repos
 

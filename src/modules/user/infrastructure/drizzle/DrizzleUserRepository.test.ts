@@ -36,9 +36,9 @@ describe('DrizzleUserRepository', () => {
         id: 'user-1',
         email: 'user@example.com',
         onboardingComplete: true,
-        targetLanguage: 'en',
-        proficiencyLevel: 'b2',
-        learningGoal: 'fluency',
+        displayName: 'Alice',
+        locale: 'pl-PL',
+        timezone: 'Europe/Warsaw',
       },
     ]);
     const repository = new DrizzleUserRepository(db);
@@ -49,9 +49,9 @@ describe('DrizzleUserRepository', () => {
       id: 'user-1',
       email: 'user@example.com',
       onboardingComplete: true,
-      targetLanguage: 'en',
-      proficiencyLevel: 'b2',
-      learningGoal: 'fluency',
+      displayName: 'Alice',
+      locale: 'pl-PL',
+      timezone: 'Europe/Warsaw',
     });
   });
 });

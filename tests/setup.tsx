@@ -25,11 +25,17 @@ vi.mock('next/headers', () => ({
   cookies: mockCookies,
 }));
 
-vi.mock('@/core/env', () => ({
-  env: mockEnv,
-  validateTenancyConfig: vi.fn(),
-  validateTenancyConfigValues: vi.fn(),
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    env: mockEnv,
+    validateTenancyConfig: vi.fn(),
+    validateTenancyConfigValues: vi.fn(),
+    validateAuthProviderConfig: vi.fn(),
+    validateAuthProviderConfigValues: vi.fn(),
+  };
+});
 
 // Mock the composition root to avoid real DB/Clerk initialization in unit tests
 vi.mock('../src/core/runtime/bootstrap', async () => {

@@ -30,13 +30,19 @@ vi.mock('pino-logflare', () => ({
   createWriteStream: vi.fn(() => ({ on: vi.fn() })),
 }));
 
-vi.mock('@/core/env', () => ({
-  env: {
-    LOGFLARE_API_KEY: 'test-key',
-    LOGFLARE_SOURCE_TOKEN: 'test-token',
-    LOG_LEVEL: 'info',
-  },
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      LOGFLARE_API_KEY: 'test-key',
+      LOGFLARE_SOURCE_TOKEN: 'test-token',
+      LOG_LEVEL: 'info',
+    },
+  };
+});
 
 describe('logger utils', () => {
   beforeEach(() => {

@@ -47,9 +47,6 @@ describe('completeOnboarding', () => {
   const provisioningService = {
     ensureProvisioned: vi.fn(),
   };
-  const identityProvider = {
-    getCurrentIdentity: vi.fn(),
-  };
   const userRepository = {
     findById: vi.fn(),
     updateOnboardingStatus: vi.fn(),
@@ -63,7 +60,6 @@ describe('completeOnboarding', () => {
       resolve: (token: symbol) => {
         if (token === AUTH.IDENTITY_SOURCE) return identitySource;
         if (token === PROVISIONING.SERVICE) return provisioningService;
-        if (token === AUTH.IDENTITY_PROVIDER) return identityProvider;
         if (token === AUTH.USER_REPOSITORY) return userRepository;
         return undefined;
       },
@@ -85,7 +81,6 @@ describe('completeOnboarding', () => {
       tenantCreatedNow: false,
     });
 
-    identityProvider.getCurrentIdentity.mockResolvedValue({ id: 'u-1' });
     userRepository.findById.mockResolvedValue({
       id: 'u-1',
       email: 'user@example.com',
@@ -141,6 +136,22 @@ describe('completeOnboarding', () => {
       error:
         'Tenant context is invalid or missing. Verify tenancy configuration and try again.',
     });
+    expect(userRepository.updateProfile).not.toHaveBeenCalled();
+    expect(userRepository.updateOnboardingStatus).not.toHaveBeenCalled();
+  });
+
+  it('throws when provisioning succeeds but the internal user row is missing', async () => {
+    userRepository.findById.mockResolvedValue(null);
+
+    const formData = new FormData();
+    formData.set('displayName', 'Alice');
+    formData.set('locale', 'pl-PL');
+    formData.set('timezone', 'Europe/Warsaw');
+
+    await expect(completeOnboarding(formData)).rejects.toThrow(
+      'Onboarding invariant violated: provisioned user not found in database',
+    );
+
     expect(userRepository.updateProfile).not.toHaveBeenCalled();
     expect(userRepository.updateOnboardingStatus).not.toHaveBeenCalled();
   });

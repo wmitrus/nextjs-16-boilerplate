@@ -38,7 +38,8 @@ Behavior:
 
 - tenant context always resolves to `DEFAULT_TENANT_ID`
 - no Clerk organization requirement
-- first onboarding creates internal user + membership role `member`
+- first authenticated bootstrap creates internal user + membership role `member`
+- onboarding completes generic profile fields after bootstrap succeeds
 
 ## 2.2 Personal tenant (tenant per user)
 
@@ -52,9 +53,10 @@ TENANCY_MODE=personal
 
 Behavior:
 
-- first onboarding creates personal tenant for user
+- first authenticated bootstrap creates personal tenant for user
 - membership role is `owner`
 - no Clerk organization requirement
+- onboarding completes generic profile fields after bootstrap succeeds
 
 ## 2.3 Org via provider claim (Clerk Organizations)
 
@@ -71,10 +73,11 @@ Behavior:
 
 - requires `tenantExternalId` claim from provider (`orgId`)
 - missing org context -> `MissingTenantContextError`
-- first onboarding maps org to internal tenant and creates membership
+- first authenticated bootstrap maps org to internal tenant and creates membership
 - role from provider claim mapping:
   - claim containing `admin`/`owner` -> `owner`
   - otherwise -> `member`
+- onboarding completes generic profile fields after bootstrap succeeds
 
 ## 2.4 Org via DB-selected tenant
 
@@ -109,19 +112,21 @@ Common baseline (all scenarios):
 
 ### 3.1 Scenario `TENANCY_MODE=single`
 
-| Step | Command / Action                                     | Expected                                              |
-| ---- | ---------------------------------------------------- | ----------------------------------------------------- |
-| S-1  | Keep Organizations disabled (or enabled but unused). | provider org context not required                     |
-| S-2  | Ensure test user exists in Clerk and can sign in.    | authenticated session works                           |
-| S-3  | Run onboarding once after sign-in.                   | internal user is provisioned in shared default tenant |
+| Step | Command / Action                                             | Expected                                                                       |
+| ---- | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| S-1  | Keep Organizations disabled (or enabled but unused).         | provider org context not required                                              |
+| S-2  | Ensure test user exists in Clerk and can sign in.            | authenticated session works                                                    |
+| S-3  | Sign in and confirm redirect lands on `/auth/bootstrap`.     | bootstrap route executes before any protected page                             |
+| S-4  | Complete onboarding if bootstrap redirects to `/onboarding`. | internal user is provisioned in shared default tenant and profile is completed |
 
 ### 3.2 Scenario `TENANCY_MODE=personal`
 
-| Step | Command / Action                                     | Expected                              |
-| ---- | ---------------------------------------------------- | ------------------------------------- |
-| P-1  | Keep Organizations disabled (or enabled but unused). | provider org context not required     |
-| P-2  | Ensure test user can sign in with email auth.        | authenticated session works           |
-| P-3  | Complete onboarding on first login.                  | personal tenant is created and linked |
+| Step | Command / Action                                             | Expected                                                    |
+| ---- | ------------------------------------------------------------ | ----------------------------------------------------------- |
+| P-1  | Keep Organizations disabled (or enabled but unused).         | provider org context not required                           |
+| P-2  | Ensure test user can sign in with email auth.                | authenticated session works                                 |
+| P-3  | Sign in and confirm redirect lands on `/auth/bootstrap`.     | personal tenant is provisioned before onboarding            |
+| P-4  | Complete onboarding if bootstrap redirects to `/onboarding`. | personal tenant is created and linked; profile is completed |
 
 ### 3.3 Scenario `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=provider`
 
@@ -167,9 +172,9 @@ On onboarding submit (`completeOnboarding`):
 
 Saved profile fields:
 
-- `targetLanguage`
-- `proficiencyLevel`
-- `learningGoal`
+- `displayName`
+- `locale`
+- `timezone`
 - `onboardingComplete`
 
 ## 6. Cross-Provider Linking Policy
@@ -207,7 +212,7 @@ Execution model:
 | Situation                                                                                     | Expected result                                 |
 | --------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | Not signed in                                                                                 | `Authentication required` / redirect to sign-in |
-| Signed in externally, not provisioned internally                                              | `ONBOARDING_REQUIRED` (API `409`)               |
+| Signed in externally, not provisioned internally                                              | `BOOTSTRAP_REQUIRED` (API `409`)                |
 | Missing tenant context (`org/provider` without active org, or `org/db` without header/cookie) | `Tenant context required`                       |
 | Tenant selected but user not member (`org/db`)                                                | `Tenant membership required`                    |
 | Policy denies action                                                                          | `Forbidden`                                     |

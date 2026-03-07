@@ -3,6 +3,8 @@ import { resolveServerLogger } from '@/core/logger/di';
 import { createSuccessResponse } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
+
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'users',
@@ -15,7 +17,17 @@ const sampleUsers = [
   { id: '3', name: 'Grace Hopper', email: 'grace@sample.dev' },
 ];
 
-export const GET = withErrorHandler(async () => {
-  logger.debug({ count: sampleUsers.length }, 'Serving sample users');
-  return createSuccessResponse(sampleUsers);
-});
+export const GET = withErrorHandler(
+  withNodeProvisioning(async (_request, _context, access) => {
+    logger.debug(
+      {
+        count: sampleUsers.length,
+        userId: access.identity.id,
+        tenantId: access.tenant.tenantId,
+      },
+      'Serving sample users',
+    );
+
+    return createSuccessResponse(sampleUsers);
+  }),
+);

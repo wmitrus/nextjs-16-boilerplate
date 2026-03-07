@@ -33,15 +33,15 @@ describe('DrizzleUserRepository (real DB)', () => {
     const repo = new DrizzleUserRepository(testDb.db);
 
     await repo.updateProfile(aliceId, {
-      targetLanguage: 'pl',
-      proficiencyLevel: 'b1',
-      learningGoal: 'conversation',
+      displayName: 'Alice Smith',
+      locale: 'pl-PL',
+      timezone: 'Europe/Warsaw',
     });
 
     const user = await repo.findById(aliceId);
-    expect(user?.targetLanguage).toBe('pl');
-    expect(user?.proficiencyLevel).toBe('b1');
-    expect(user?.learningGoal).toBe('conversation');
+    expect(user?.displayName).toBe('Alice Smith');
+    expect(user?.locale).toBe('pl-PL');
+    expect(user?.timezone).toBe('Europe/Warsaw');
   });
 
   it('updates onboarding status', async () => {

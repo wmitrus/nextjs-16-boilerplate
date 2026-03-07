@@ -8,6 +8,7 @@ import {
   TenantNotProvisionedError,
 } from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getSecurityContext } from './security-context';
@@ -21,10 +22,12 @@ import {
 describe('Security Context', () => {
   let identityProvider: IdentityProvider;
   let tenantResolver: TenantResolver;
+  let userRepository: UserRepository;
 
   const getDependencies = () => ({
     identityProvider,
     tenantResolver,
+    userRepository,
   });
 
   beforeEach(() => {
@@ -34,8 +37,15 @@ describe('Security Context', () => {
       AUTH.IDENTITY_PROVIDER,
     );
     tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
+    userRepository = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
     resetAllInfrastructureMocks();
     vi.clearAllMocks();
+
+    vi.mocked(userRepository.findById).mockImplementation(async (id) => ({
+      id,
+      email: `${id}@example.com`,
+      onboardingComplete: true,
+    }));
   });
 
   it('should return guest context when not authenticated', async () => {

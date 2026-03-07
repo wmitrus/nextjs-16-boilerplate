@@ -2,6 +2,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
 
 import {
@@ -298,6 +299,18 @@ describe('DrizzleProvisioningService (real DB)', () => {
           tenancyMode: 'single',
         }),
       ).rejects.toThrow(TenantContextRequiredError);
+    });
+
+    it('throws TenantNotProvisionedError when configured default tenant does not exist', async () => {
+      const svc = makeService();
+      await expect(
+        svc.ensureProvisioned({
+          provider: 'clerk',
+          externalUserId: 'user_single_missing_default_tenant',
+          tenancyMode: 'single',
+          activeTenantId: '99999999-0000-4000-8000-000000000999',
+        }),
+      ).rejects.toThrow(TenantNotProvisionedError);
     });
   });
 

@@ -1,4 +1,4 @@
-import { createPageObjects } from '@clerk/testing/playwright/unstable';
+import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright';
 import type { Page } from '@playwright/test';
 
 export type ClerkE2EIdentity =
@@ -140,10 +140,6 @@ export function hasClerkE2ECredentials(): boolean {
   return hasClerkIdentityE2ECredentials('singleProvisionedUser');
 }
 
-function getBaseUrl(): string {
-  return process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
-}
-
 async function completeGenericOnboarding(page: Page): Promise<void> {
   await page.getByLabel(/display name/i).fill('E2E User');
   await page.getByLabel(/language/i).selectOption('en-US');
@@ -151,65 +147,28 @@ async function completeGenericOnboarding(page: Page): Promise<void> {
   await page.getByRole('button', { name: /get started/i }).click();
 }
 
-async function establishUiSessionWithoutBootstrap(
+async function establishProgrammaticSessionWithoutBootstrap(
   page: Page,
   credentials: { username: string; password: string },
 ): Promise<void> {
-  if (!credentials.username.includes('@')) {
-    throw new Error(
-      'Clerk E2E fixtures must use email-based sign-in credentials.',
-    );
-  }
-
-  const clerkUi = createPageObjects({
+  // Follow Clerk's recommended Playwright flow:
+  // load Clerk on a public page, then sign in via the helper.
+  await page.goto('/');
+  await clerk.signIn({
     page,
-    baseURL: getBaseUrl(),
-  });
-  const bootstrapPath = '/auth/bootstrap';
-  const bootstrapPattern = `**${bootstrapPath}**`;
-  const bootstrapPauseMarker = 'bootstrap paused for e2e';
-  const bootstrapBlocker = async (
-    route: Parameters<Page['route']>[1] extends (
-      route: infer T,
-      ...args: never[]
-    ) => unknown
-      ? T
-      : never,
-  ) => {
-    if (!route.request().isNavigationRequest()) {
-      await route.continue();
-      return;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/html; charset=utf-8',
-      body: `<html><body>${bootstrapPauseMarker}</body></html>`,
-    });
-  };
-
-  await page.route(bootstrapPattern, bootstrapBlocker);
-
-  try {
-    await clerkUi.signIn.goTo();
-    await clerkUi.signIn.signInWithEmailAndInstantPassword({
-      email: credentials.username,
+    signInParams: {
+      strategy: 'password',
+      identifier: credentials.username,
       password: credentials.password,
-      waitForSession: false,
-    });
-
-    await page.waitForURL(new RegExp(`${bootstrapPath}(\\?.*)?$`));
-    await page.getByText(bootstrapPauseMarker).waitFor();
-  } finally {
-    await page.unroute(bootstrapPattern, bootstrapBlocker);
-  }
+    },
+  });
 }
 
 export async function signInWithCredentials(
   page: Page,
   credentials: { username: string; password: string },
 ): Promise<void> {
-  await establishUiSessionWithoutBootstrap(page, credentials);
+  await establishProgrammaticSessionWithoutBootstrap(page, credentials);
 }
 
 export async function signInClerkIdentityE2E(
@@ -237,7 +196,7 @@ export async function signInUnprovisionedE2E(page: Page): Promise<void> {
 }
 
 export async function withClerkTestingToken(page: Page): Promise<void> {
-  await page.goto('/');
+  await setupClerkTestingToken({ page });
 }
 
 export function hasClerkSingleNewUserE2ECredentials(): boolean {

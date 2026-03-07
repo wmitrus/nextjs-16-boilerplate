@@ -128,6 +128,117 @@ describe('Auth Middleware', () => {
     expect(mockHandler).not.toHaveBeenCalled();
   });
 
+  it('should pass through bootstrap route with valid session and no internal user lookup', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'external_user_1',
+    });
+
+    const req = createMockRequest({ path: '/auth/bootstrap' });
+    const ctx = createMockRouteContext({
+      isBootstrapRoute: true,
+      isPublicRoute: false,
+    });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(mockHandler).toHaveBeenCalledTimes(1);
+    expect(mockUserRepository.findById).not.toHaveBeenCalled();
+  });
+
+  it('should redirect bootstrap route to sign-in when no session exists', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue(null);
+
+    const req = createMockRequest({ path: '/auth/bootstrap' });
+    const ctx = createMockRouteContext({
+      isBootstrapRoute: true,
+      isPublicRoute: false,
+    });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/sign-in');
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should redirect authenticated users from sign-up route to bootstrap', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+
+    const req = createMockRequest({ path: '/sign-up' });
+    const ctx = createMockRouteContext({
+      isAuthRoute: true,
+      isPublicRoute: true,
+    });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should pass through sign-in route when no session exists', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue(null);
+
+    const req = createMockRequest({ path: '/sign-in' });
+    const ctx = createMockRouteContext({
+      isAuthRoute: true,
+      isPublicRoute: true,
+    });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(mockHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not redirect non-auth routes through bootstrap', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+
+    const req = createMockRequest({ path: '/dashboard' });
+    const ctx = createMockRouteContext({ isPublicRoute: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(mockHandler).toHaveBeenCalledTimes(1);
+  });
+
   it('should redirect to onboarding for private routes if onboarding is incomplete', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',

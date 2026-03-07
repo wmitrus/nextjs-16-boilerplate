@@ -92,18 +92,21 @@ describe('completeOnboarding', () => {
 
   it('executes provisioning before writing profile and onboarding status', async () => {
     const formData = new FormData();
-    formData.set('targetLanguage', 'spanish');
-    formData.set('proficiencyLevel', 'beginner');
-    formData.set('learningGoal', 'travel');
+    formData.set('displayName', 'Alice');
+    formData.set('locale', 'pl-PL');
+    formData.set('timezone', 'Europe/Warsaw');
 
     const result = await completeOnboarding(formData);
 
-    expect(result).toEqual({ message: 'Onboarding completed' });
+    expect(result).toEqual({
+      message: 'Onboarding completed',
+      redirectUrl: '/users',
+    });
     expect(provisioningService.ensureProvisioned).toHaveBeenCalledTimes(1);
     expect(userRepository.updateProfile).toHaveBeenCalledWith('u-1', {
-      targetLanguage: 'spanish',
-      proficiencyLevel: 'beginner',
-      learningGoal: 'travel',
+      displayName: 'Alice',
+      locale: 'pl-PL',
+      timezone: 'Europe/Warsaw',
     });
     expect(userRepository.updateOnboardingStatus).toHaveBeenCalledWith(
       'u-1',
@@ -123,9 +126,9 @@ describe('completeOnboarding', () => {
     );
 
     const formData = new FormData();
-    formData.set('targetLanguage', 'spanish');
-    formData.set('proficiencyLevel', 'beginner');
-    formData.set('learningGoal', 'travel');
+    formData.set('displayName', 'Alice');
+    formData.set('locale', 'pl-PL');
+    formData.set('timezone', 'Europe/Warsaw');
 
     const result = await completeOnboarding(formData);
 

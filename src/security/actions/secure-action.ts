@@ -73,6 +73,10 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         errors: TreeifiedError;
       }
     | { status: 'unauthorized'; error: string }
+    | { status: 'bootstrap_required' }
+    | { status: 'onboarding_required' }
+    | { status: 'tenant_context_required' }
+    | { status: 'tenant_membership_required' }
     | { status: 'error'; error: string }
   > => {
     let context: SecurityContext | undefined;
@@ -97,9 +101,24 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         resolvedDependencies.authorizationService,
       );
 
-      // 1. Unified authorization check via central facade
+      // 1. Readiness checks (ordered by specificity)
+      if (context.readinessStatus === 'BOOTSTRAP_REQUIRED') {
+        return { status: 'bootstrap_required' as const };
+      }
+      if (context.readinessStatus === 'ONBOARDING_REQUIRED') {
+        return { status: 'onboarding_required' as const };
+      }
+      if (context.readinessStatus === 'TENANT_CONTEXT_REQUIRED') {
+        return { status: 'tenant_context_required' as const };
+      }
+      if (context.readinessStatus === 'TENANT_MEMBERSHIP_REQUIRED') {
+        return { status: 'tenant_membership_required' as const };
+      }
       if (!context.user) {
-        throw new AuthorizationError('Authentication required');
+        return {
+          status: 'unauthorized' as const,
+          error: 'Authentication required',
+        };
       }
 
       const requestScope = createRequestScopedContextFromSecurityContext(
@@ -191,17 +210,11 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         error instanceof MissingTenantContextError ||
         error instanceof TenantNotProvisionedError
       ) {
-        return {
-          status: 'unauthorized' as const,
-          error: 'Tenant context required',
-        };
+        return { status: 'tenant_context_required' as const };
       }
 
       if (error instanceof TenantMembershipRequiredError) {
-        return {
-          status: 'unauthorized' as const,
-          error: 'Tenant membership required',
-        };
+        return { status: 'tenant_membership_required' as const };
       }
 
       return {

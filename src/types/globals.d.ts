@@ -4,9 +4,9 @@ declare global {
   interface CustomJwtSessionClaims {
     metadata: {
       onboardingComplete?: boolean;
-      targetLanguage?: string;
-      proficiencyLevel?: string;
-      learningGoal?: string;
+      displayName?: string;
+      locale?: string;
+      timezone?: string;
     };
   }
 }

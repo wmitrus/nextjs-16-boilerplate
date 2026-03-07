@@ -39,7 +39,7 @@ This document.
 
 ### Phase 1 — State Machine + Bootstrap Route (Core)
 
-#### [ ] Task 1.1 — Extend type contracts with BOOTSTRAP_REQUIRED
+#### [x] Task 1.1 — Extend type contracts with BOOTSTRAP_REQUIRED
 
 Files to modify:
 
@@ -51,7 +51,7 @@ Files to modify:
 
 Verification: `pnpm typecheck` passes.
 
-#### [ ] Task 1.2 — Update protected API wrapper
+#### [x] Task 1.2 — Update protected API wrapper
 
 File to modify:
 
@@ -59,7 +59,7 @@ File to modify:
 
 Verification: existing tests still pass; new test case added.
 
-#### [ ] Task 1.3 — Create safe redirect utility
+#### [x] Task 1.3 — Create safe redirect utility
 
 New file: `src/shared/lib/routing/safe-redirect.ts`
 
@@ -75,7 +75,7 @@ Test cases:
 - Valid: `/users`, `/app/dashboard`, `/onboarding`
 - Invalid: `https://evil.com`, `//evil.com`, empty string, `javascript:alert(1)`
 
-#### [ ] Task 1.4 — Create /auth/bootstrap route
+#### [x] Task 1.4 — Create /auth/bootstrap route
 
 New files:
 
@@ -101,7 +101,7 @@ New files:
   - "Sign out" button → calls Clerk `useClerk().signOut()` then redirects to `/sign-in`
   - No sensitive internal error details exposed
 
-#### [ ] Task 1.5 — Update route classification
+#### [x] Task 1.5 — Update route classification
 
 Files to modify:
 
@@ -110,7 +110,7 @@ Files to modify:
 
 Verification: existing `with-auth.test.ts` still passes; add bootstrap route test cases.
 
-#### [ ] Task 1.6 — Update users/layout.tsx redirect mapping
+#### [x] Task 1.6 — Update users/layout.tsx redirect mapping
 
 File to modify:
 
@@ -121,7 +121,7 @@ File to modify:
   }
   ```
 
-#### [ ] Task 1.7 — Update env.ts Clerk redirect defaults
+#### [x] Task 1.7 — Update env.ts Clerk redirect defaults
 
 File to modify:
 
@@ -133,7 +133,7 @@ File to modify:
   - Add both new vars to `runtimeEnv`
 - `.env.example` — Add/update corresponding entries
 
-#### [ ] Task 1.8 — Update ClerkProvider to pass forceRedirectUrl props
+#### [x] Task 1.8 — Update ClerkProvider to pass forceRedirectUrl props
 
 File to modify:
 
@@ -151,7 +151,7 @@ File to modify:
 >
 ```
 
-#### [ ] Task 1.9 — Fix HeaderAuthControls modal redirect props
+#### [x] Task 1.9 — Fix HeaderAuthControls modal redirect props
 
 File to modify:
 
@@ -184,7 +184,7 @@ Final correct shape:
 
 Note: This is a Clerk-specific component. The fix is scoped to the Clerk adapter boundary. When `AUTH_PROVIDER !== 'clerk'`, this component is not rendered.
 
-#### [ ] Task 1.10 — Fix auth-route recovery to redirect through bootstrap (with redirect_url preservation)
+#### [x] Task 1.10 — Fix auth-route recovery to redirect through bootstrap (with redirect_url preservation)
 
 **Problem**: `with-auth.ts` `redirectAuthenticatedFromAuthRoute()` (line 93–108) currently redirects authenticated users who hit `/sign-in` or `/sign-up` directly to either `/` (if onboarding complete) or `/onboarding` (if not). It never sends them through `/auth/bootstrap`. This means a real runtime path exists where:
 
@@ -217,7 +217,7 @@ Tests to add (Task 3.5b):
 - Active session + `/sign-up` → redirect `/auth/bootstrap`
 - Active session + empty DB + `/sign-in` → redirects to `/auth/bootstrap` (does NOT bounce to `/`)
 
-#### [ ] Task 1.11 — Extend SecurityContext with typed readiness status (with correct Edge/Node dependency split)
+#### [x] Task 1.11 — Extend SecurityContext with typed readiness status (with correct Edge/Node dependency split)
 
 **Problem**: The final design requires protected pages, protected APIs, and **secure server actions** to all participate in the same internal-readiness model. Currently:
 
@@ -309,7 +309,7 @@ Tests to add (Task 3.5c):
 - Secure action: `TENANT_CONTEXT_REQUIRED` context → returns `{ status: 'tenant_context_required' }`
 - Secure action: `TENANT_MEMBERSHIP_REQUIRED` context → returns `{ status: 'tenant_membership_required' }`
 
-#### [ ] Task 1.12 — Update all blast-radius consumers of the breaking security-context/action changes
+#### [x] Task 1.12 — Update all blast-radius consumers of the breaking security-context/action changes
 
 **Problem**: The `createSecurityContext()` signature change (requires `NodeSecurityContextDependencies` with `userRepository`) and the new `SecureActionResult` statuses are a **breaking change** with real consumers already in the codebase. These must be explicitly updated.
 
@@ -392,14 +392,14 @@ Tests to add / update (Task 3.5c extended):
 
 ### Phase 2 — DB Schema + Onboarding Refactor
 
-#### [ ] Task 2.1 — DB schema migration (generic profile fields)
+#### [x] Task 2.1 — DB schema migration (generic profile fields)
 
 Files to modify:
 
 - `src/modules/user/infrastructure/drizzle/schema.ts` — Replace `targetLanguage`, `proficiencyLevel`, `learningGoal` with `displayName`, `locale`, `timezone`
 - Generate migration: `pnpm db:generate` (creates migration file in `src/core/db/migrations/generated/`)
 
-#### [ ] Task 2.2 — Update User contract and all UserRepository implementations
+#### [x] Task 2.2 — Update User contract and all UserRepository implementations
 
 Files to modify:
 
@@ -411,7 +411,7 @@ Files to modify:
 
 Note: `ClerkUserRepository` stores profile fields in Clerk `publicMetadata` as a cache — NOT for auth correctness. DB remains the source of truth. This Clerk metadata is a convenience for Clerk-specific UI display only.
 
-#### [ ] Task 2.3 — Update onboarding server action
+#### [x] Task 2.3 — Update onboarding server action
 
 File to modify:
 
@@ -423,7 +423,7 @@ File to modify:
   - Call `userRepository.updateProfile(identity.id, { displayName, locale, timezone })`
   - Return `{ message: 'Onboarding completed', redirectUrl: safeRedirectUrl }` on success
 
-#### [ ] Task 2.4 — Update onboarding page UI
+#### [x] Task 2.4 — Update onboarding page UI
 
 File to modify:
 
@@ -436,7 +436,7 @@ File to modify:
   - After success: `router.push(res.redirectUrl ?? '/users')` — uses preserved target, not hardcoded path
   - Remove `useUser` / `user.reload()` (no longer needed for Clerk metadata sync)
 
-#### [ ] Task 2.5 — Update onboarding layout to remove bootstrap path
+#### [x] Task 2.5 — Update onboarding layout to remove bootstrap path
 
 Files to modify:
 
@@ -458,7 +458,7 @@ Final layout behavior:
 
 ### Phase 3 — Test Coverage
 
-#### [ ] Task 3.1 — Unit tests: state machine
+#### [x] Task 3.1 — Unit tests: state machine
 
 File to create/modify:
 
@@ -468,23 +468,23 @@ File to create/modify:
   - User exists + `onboardingComplete=false` → status is `ONBOARDING_REQUIRED`
   - All 7 states covered with distinct test cases
 
-#### [ ] Task 3.2 — Unit tests: safe-redirect utility
+#### [x] Task 3.2 — Unit tests: safe-redirect utility
 
 File: `src/shared/lib/routing/safe-redirect.test.ts` (created in Task 1.3)
 
-#### [ ] Task 3.3 — Unit tests: with-node-provisioning BOOTSTRAP_REQUIRED
+#### [x] Task 3.3 — Unit tests: with-node-provisioning BOOTSTRAP_REQUIRED
 
 File to modify:
 
 - `src/security/api/with-node-provisioning.test.ts` — Add test: `BOOTSTRAP_REQUIRED` outcome → 409 with `{ code: 'BOOTSTRAP_REQUIRED' }`
 
-#### [ ] Task 3.4 — Unit tests: route classification
+#### [x] Task 3.4 — Unit tests: route classification
 
 File to modify:
 
 - `src/security/middleware/route-classification.test.ts` — Add test: `/auth/bootstrap` → `isBootstrapRoute: true`, `isAuthRoute: false`, `isPublicRoute: false`
 
-#### [ ] Task 3.5 — Unit tests: with-auth bootstrap passthrough
+#### [x] Task 3.5 — Unit tests: with-auth bootstrap passthrough
 
 File to modify:
 
@@ -492,7 +492,7 @@ File to modify:
   - Bootstrap route with valid session but no internal user → passes through (no redirect to sign-in)
   - Bootstrap route with no session → redirects to sign-in
 
-#### [ ] Task 3.5b — Unit tests: auth-route recovery redirects through bootstrap
+#### [x] Task 3.5b — Unit tests: auth-route recovery redirects through bootstrap
 
 File to modify:
 
@@ -502,7 +502,7 @@ File to modify:
   - No session + `/sign-in` → returns `null` (pass through to Clerk page)
   - Active session + non-auth route → returns `null` (this function is no-op for non-auth routes)
 
-#### [ ] Task 3.5c — Unit tests: secure action typed readiness responses
+#### [x] Task 3.5c — Unit tests: secure action typed readiness responses
 
 File to modify:
 
@@ -514,7 +514,7 @@ File to modify:
   - Mock `readinessStatus: 'UNAUTHENTICATED'` → action returns `{ status: 'unauthorized', error: 'Authentication required' }`
   - Verify no handler execution occurs for any readiness-denied state
 
-#### [ ] Task 3.5d — Unit tests: security-context readinessStatus mapping
+#### [x] Task 3.5d — Unit tests: security-context readinessStatus mapping
 
 File to modify:
 
@@ -526,7 +526,7 @@ File to modify:
   - `TenantMembershipRequiredError` → `readinessStatus: 'TENANT_MEMBERSHIP_REQUIRED'`
   - Full valid context → `readinessStatus: 'ALLOWED'`, `user` populated
 
-#### [ ] Task 3.5e — Unit tests: onboarding layout UserNotProvisionedError → bootstrap redirect
+#### [x] Task 3.5e — Unit tests: onboarding layout UserNotProvisionedError → bootstrap redirect
 
 File to modify:
 
@@ -535,13 +535,13 @@ File to modify:
   - Authenticated + `onboardingComplete: true` → layout redirects to `/users`
   - Authenticated + `onboardingComplete: false` → renders children
 
-#### [ ] Task 3.6 — Unit tests: bootstrap error UI mapping
+#### [x] Task 3.6 — Unit tests: bootstrap error UI mapping
 
 File: `src/app/auth/bootstrap/bootstrap-error.test.tsx`
 
 Test: each error type renders correct message; no internal error details visible.
 
-#### [ ] Task 3.7 — Integration tests: bootstrap route
+#### [x] Task 3.7 — Integration tests: bootstrap route
 
 File: `src/app/auth/bootstrap/page.test.tsx`
 
@@ -556,20 +556,20 @@ Integration test cases (using Vitest + mock container):
 - `TenantUserLimitReachedError` → renders bootstrap error UI with `quota_exceeded` error
 - External URL in `redirect_url` → sanitized to `/users` (no open redirect)
 
-#### [ ] Task 3.7b — Integration tests: /api/me/provisioning-status with BOOTSTRAP_REQUIRED
+#### [x] Task 3.7b — Integration tests: /api/me/provisioning-status with BOOTSTRAP_REQUIRED
 
 File to modify:
 
 - `src/app/api/me/provisioning-status/route.ts` — Verify the endpoint is wrapped by `withNodeProvisioning`; since `withNodeProvisioning` now returns 409 `BOOTSTRAP_REQUIRED` for bootstrap-required state, the probe endpoint automatically surfaces this state. Add explicit integration test case.
 - Test file (integration): verify `BOOTSTRAP_REQUIRED` → probe returns 409 with `{ code: 'BOOTSTRAP_REQUIRED' }` (not 200 with `authenticated: true`).
 
-#### [ ] Task 3.8 — Integration tests: protected layout
+#### [x] Task 3.8 — Integration tests: protected layout
 
 File to modify:
 
 - `src/app/users/layout.test.tsx` — Add test: `BOOTSTRAP_REQUIRED` access outcome → redirects to `/auth/bootstrap?redirect_url=/users`
 
-#### [ ] Task 3.9 — DB integration tests: bootstrap idempotency
+#### [x] Task 3.9 — DB integration tests: bootstrap idempotency
 
 File to modify/create:
 
@@ -578,19 +578,19 @@ File to modify/create:
   - Idempotent re-bootstrap does not duplicate records
   - No role escalation on repeated `ensureProvisioned()`
 
-#### [ ] Task 3.10 — E2E: extend clerk-auth.ts with all test user helpers
+#### [x] Task 3.10 — E2E: extend clerk-auth.ts with all test user helpers
 
 File to modify:
 
 - `e2e/clerk-auth.ts` — Add helper functions per spec section 2.9
 
-#### [ ] Task 3.11 — E2E: extend check-e2e-auth-env.mjs
+#### [x] Task 3.11 — E2E: extend check-e2e-auth-env.mjs
 
 File to modify:
 
 - `scripts/check-e2e-auth-env.mjs` — Validate all new E2E env vars
 
-#### [ ] Task 3.12 — E2E fixture documentation
+#### [x] Task 3.12 — E2E fixture documentation
 
 New file: `scripts/e2e-clerk-fixtures.md`
 

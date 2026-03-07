@@ -31,8 +31,16 @@ export function SettingsFormExample() {
     } else if (result.status === 'validation_error') {
       setError(`Validation failed: ${JSON.stringify(result.errors)}`);
       setStatus(null);
+    } else if (result.status === 'bootstrap_required') {
+      window.location.href = '/auth/bootstrap';
+    } else if (result.status === 'onboarding_required') {
+      window.location.href = '/onboarding';
     } else {
-      setError(result.error ?? 'Something went wrong');
+      setError(
+        'error' in result
+          ? (result.error ?? 'Something went wrong')
+          : 'Session state requires attention',
+      );
       setStatus(null);
     }
   };

@@ -29,7 +29,6 @@ Before coding, classify the change:
 Allowed examples:
 
 - unauthenticated redirect to sign-in
-- onboarding redirect checks via user profile lookup
 - API key guard for internal routes
 - rate-limit response and security headers
 
@@ -46,6 +45,7 @@ Not allowed in Edge:
 
 Required for:
 
+- provisioning/onboarding readiness (internal user + tenant + membership)
 - RBAC/ABAC resource-level checks
 - policy engine decisions
 - tenant attribute-based authorization
@@ -62,6 +62,7 @@ If you need to choose one and are unsure, choose Node context with explicit `cre
 ## withAuth usage contract
 
 - Edge middleware must call `withAuth(..., { enforceResourceAuthorization: false })`.
+- Edge middleware must not assume onboarding/provisioning completeness.
 - Node flows keep resource authorization enabled by default.
 - Route authorization helper telemetry must pass runtime explicitly (`'edge' | 'node'`) into request-scoped context.
 - Current middleware path passes `'edge'`; if helper reuse is introduced in Node enforcement, pass `'node'` explicitly.

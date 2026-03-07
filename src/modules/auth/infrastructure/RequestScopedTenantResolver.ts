@@ -1,4 +1,5 @@
 import type {
+  ExternalAuthProvider,
   Identity,
   RequestIdentitySource,
 } from '@/core/contracts/identity';
@@ -9,7 +10,6 @@ import {
   type TenantResolver,
 } from '@/core/contracts/tenancy';
 
-import type { ExternalAuthProvider } from './ExternalIdentityMapper';
 import type { InternalIdentityLookup } from './InternalIdentityLookup';
 
 interface RequestScopedTenantResolverOptions {

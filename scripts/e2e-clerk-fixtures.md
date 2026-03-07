@@ -18,9 +18,24 @@ Before creating fixtures in Clerk Dashboard:
 
 1. Use the Clerk test instance for this repository.
 2. Enable email + password sign-in/sign-up.
-3. Enable Organizations.
-4. Set both sign-in and sign-up force redirect URLs to `/auth/bootstrap`.
-5. Store local Clerk fixture secrets in `.env.e2e.local` or `.env.e2e`.
+3. Make email address a valid sign-in identifier for the instance.
+4. For password-based E2E fixtures, do not require an additional sign-in step
+   that forces email-code verification or other second-factor verification for
+   these users.
+5. Do not require MFA for the dedicated E2E password users.
+6. Enable Organizations only for the `org/provider` and `org/db` scenarios.
+   They are not required for `single` or `personal`.
+7. Set both sign-in and sign-up force redirect URLs to `/auth/bootstrap`.
+8. Store local Clerk fixture secrets in `.env.e2e.local` or `.env.e2e`.
+
+Important runtime contract:
+
+- The runtime suite is designed around Clerk's recommended Playwright helper
+  flow: load Clerk on a public page, then call
+  `clerk.signIn({ signInParams: { strategy: 'password', ... } })`.
+- The test harness must not manually mint or inject Clerk session cookies.
+- If a Clerk fixture signs in only through an interactive "Check your email"
+  or "new device" challenge, that fixture is not E2E-ready for this suite.
 
 ## 2. Required Organizations
 
@@ -95,6 +110,11 @@ Assign memberships like this:
 
 Do not use Clerk organization membership as tenant truth in `org/db`. That mode
 is DB-managed and depends on seeded app-side membership only.
+
+For `single` and `personal`:
+
+- do not assign organizations unless you are intentionally testing an org flow
+- tenant truth remains in the application database, not in Clerk
 
 ## 5. Env Mapping
 
@@ -230,3 +250,21 @@ Expected:
 
 - success when the required identities and org slugs are configured
 - warning only if legacy alias vars are used instead of canonical names
+
+## 10. Troubleshooting
+
+If the Clerk helper sign-in does not result in an authenticated app session:
+
+1. Confirm the app keys point to the same Clerk test instance as the fixtures:
+   - `CLERK_SECRET_KEY`
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+2. Confirm the fixture user has:
+   - email address
+   - password set
+   - email verified when the scenario expects a verified user
+3. Confirm password sign-in is enabled for the instance.
+4. Confirm the instance does not force an extra verification step for these
+   password fixtures.
+5. If the browser lands on a "Check your email" screen for an existing test
+   user, treat that as a Clerk fixture/policy problem, not as a provisioning or
+   tenant-resolution problem in the app.

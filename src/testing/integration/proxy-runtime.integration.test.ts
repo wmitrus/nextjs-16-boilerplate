@@ -54,21 +54,27 @@ vi.mock('@clerk/nextjs/server', () => ({
   })),
 }));
 
-vi.mock('@/core/env', () => ({
-  env: {
-    NODE_ENV: 'test',
-    VERCEL_ENV: 'test',
-    INTERNAL_API_KEY: 'test-key',
-    E2E_ENABLED: false,
-    SECURITY_ALLOWED_OUTBOUND_HOSTS: '',
-    NEXT_PUBLIC_CSP_SCRIPT_EXTRA: '',
-    NEXT_PUBLIC_CSP_CONNECT_EXTRA: '',
-    NEXT_PUBLIC_CSP_FRAME_EXTRA: '',
-    NEXT_PUBLIC_CSP_IMG_EXTRA: '',
-    NEXT_PUBLIC_CSP_STYLE_EXTRA: '',
-    NEXT_PUBLIC_CSP_FONT_EXTRA: '',
-  },
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      NODE_ENV: 'test',
+      VERCEL_ENV: 'test',
+      INTERNAL_API_KEY: 'test-key',
+      E2E_ENABLED: false,
+      SECURITY_ALLOWED_OUTBOUND_HOSTS: '',
+      NEXT_PUBLIC_CSP_SCRIPT_EXTRA: '',
+      NEXT_PUBLIC_CSP_CONNECT_EXTRA: '',
+      NEXT_PUBLIC_CSP_FRAME_EXTRA: '',
+      NEXT_PUBLIC_CSP_IMG_EXTRA: '',
+      NEXT_PUBLIC_CSP_STYLE_EXTRA: '',
+      NEXT_PUBLIC_CSP_FONT_EXTRA: '',
+    },
+  };
+});
 
 vi.mock('@/core/logger/edge', () => ({
   logger: {

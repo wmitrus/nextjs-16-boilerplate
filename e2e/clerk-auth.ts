@@ -17,7 +17,10 @@ export function hasClerkE2ECredentials(): boolean {
   );
 }
 
-export async function signInE2E(page: Page): Promise<void> {
+export async function signInWithCredentials(
+  page: Page,
+  credentials: { username: string; password: string },
+): Promise<void> {
   await setupClerkTestingToken({ page });
 
   await page.goto('/');
@@ -26,18 +29,45 @@ export async function signInE2E(page: Page): Promise<void> {
     page,
     signInParams: {
       strategy: 'password',
-      identifier: required(
-        process.env.E2E_CLERK_USER_USERNAME,
-        'E2E_CLERK_USER_USERNAME',
-      ),
-      password: required(
-        process.env.E2E_CLERK_USER_PASSWORD,
-        'E2E_CLERK_USER_PASSWORD',
-      ),
+      identifier: credentials.username,
+      password: credentials.password,
     },
   });
 
   await clerk.loaded({ page });
+}
+
+export async function signInE2E(page: Page): Promise<void> {
+  await signInWithCredentials(page, {
+    username: required(
+      process.env.E2E_CLERK_USER_USERNAME,
+      'E2E_CLERK_USER_USERNAME',
+    ),
+    password: required(
+      process.env.E2E_CLERK_USER_PASSWORD,
+      'E2E_CLERK_USER_PASSWORD',
+    ),
+  });
+}
+
+export function hasClerkUnprovisionedE2ECredentials(): boolean {
+  return Boolean(
+    process.env.E2E_CLERK_UNPROVISIONED_USER_USERNAME &&
+    process.env.E2E_CLERK_UNPROVISIONED_USER_PASSWORD,
+  );
+}
+
+export async function signInUnprovisionedE2E(page: Page): Promise<void> {
+  await signInWithCredentials(page, {
+    username: required(
+      process.env.E2E_CLERK_UNPROVISIONED_USER_USERNAME,
+      'E2E_CLERK_UNPROVISIONED_USER_USERNAME',
+    ),
+    password: required(
+      process.env.E2E_CLERK_UNPROVISIONED_USER_PASSWORD,
+      'E2E_CLERK_UNPROVISIONED_USER_PASSWORD',
+    ),
+  });
 }
 
 export async function withClerkTestingToken(page: Page): Promise<void> {

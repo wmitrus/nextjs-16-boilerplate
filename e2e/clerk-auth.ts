@@ -5,12 +5,12 @@ export type ClerkE2EIdentity =
   | 'singleNewUser'
   | 'singleProvisionedUser'
   | 'personalNewUser'
-  | 'orgOwner'
-  | 'orgMember'
-  | 'orgNonMember'
-  | 'unverifiedEmailUser';
+  | 'orgProviderOwner'
+  | 'orgProviderMember'
+  | 'orgDbSeededMember'
+  | 'linkingBlockedUnverified';
 
-export type ClerkE2EOrganization = 'owner' | 'member' | 'empty';
+export type ClerkE2EOrganization = 'providerOwner' | 'providerMember';
 
 interface EnvAliasPair {
   readonly username: readonly string[];
@@ -42,28 +42,45 @@ const IDENTITY_ENV: Record<ClerkE2EIdentity, EnvAliasPair> = {
     username: ['E2E_CLERK_PERSONAL_NEW_USER_USERNAME'],
     password: ['E2E_CLERK_PERSONAL_NEW_USER_PASSWORD'],
   },
-  orgOwner: {
-    username: ['E2E_CLERK_ORG_OWNER_USERNAME'],
-    password: ['E2E_CLERK_ORG_OWNER_PASSWORD'],
+  orgProviderOwner: {
+    username: [
+      'E2E_CLERK_ORG_PROVIDER_OWNER_USERNAME',
+      'E2E_CLERK_ORG_OWNER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_ORG_PROVIDER_OWNER_PASSWORD',
+      'E2E_CLERK_ORG_OWNER_PASSWORD',
+    ],
   },
-  orgMember: {
-    username: ['E2E_CLERK_ORG_MEMBER_USERNAME'],
-    password: ['E2E_CLERK_ORG_MEMBER_PASSWORD'],
+  orgProviderMember: {
+    username: [
+      'E2E_CLERK_ORG_PROVIDER_MEMBER_USERNAME',
+      'E2E_CLERK_ORG_MEMBER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_ORG_PROVIDER_MEMBER_PASSWORD',
+      'E2E_CLERK_ORG_MEMBER_PASSWORD',
+    ],
   },
-  orgNonMember: {
-    username: ['E2E_CLERK_ORG_NON_MEMBER_USERNAME'],
-    password: ['E2E_CLERK_ORG_NON_MEMBER_PASSWORD'],
+  orgDbSeededMember: {
+    username: ['E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME'],
+    password: ['E2E_CLERK_ORG_DB_SEEDED_MEMBER_PASSWORD'],
   },
-  unverifiedEmailUser: {
-    username: ['E2E_CLERK_UNVERIFIED_EMAIL_USER_USERNAME'],
-    password: ['E2E_CLERK_UNVERIFIED_EMAIL_USER_PASSWORD'],
+  linkingBlockedUnverified: {
+    username: [
+      'E2E_CLERK_LINK_BLOCKED_UNVERIFIED_USERNAME',
+      'E2E_CLERK_UNVERIFIED_EMAIL_USER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_LINK_BLOCKED_UNVERIFIED_PASSWORD',
+      'E2E_CLERK_UNVERIFIED_EMAIL_USER_PASSWORD',
+    ],
   },
 };
 
 const ORGANIZATION_ENV: Record<ClerkE2EOrganization, string> = {
-  owner: 'E2E_CLERK_ORG_OWNER_SLUG',
-  member: 'E2E_CLERK_ORG_MEMBER_SLUG',
-  empty: 'E2E_CLERK_ORG_EMPTY_SLUG',
+  providerOwner: 'E2E_CLERK_ORG_PROVIDER_OWNER_SLUG',
+  providerMember: 'E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG',
 };
 
 function required(value: string | undefined, variableName: string): string {
@@ -193,37 +210,59 @@ export async function signInClerkPersonalNewUserE2E(page: Page): Promise<void> {
 }
 
 export function hasClerkOrgOwnerE2ECredentials(): boolean {
-  return hasClerkIdentityE2ECredentials('orgOwner');
+  return hasClerkIdentityE2ECredentials('orgProviderOwner');
 }
 
 export async function signInClerkOrgOwnerE2E(page: Page): Promise<void> {
-  await signInClerkIdentityE2E(page, 'orgOwner');
+  await signInClerkIdentityE2E(page, 'orgProviderOwner');
 }
 
 export function hasClerkOrgMemberE2ECredentials(): boolean {
-  return hasClerkIdentityE2ECredentials('orgMember');
+  return hasClerkIdentityE2ECredentials('orgProviderMember');
 }
 
 export async function signInClerkOrgMemberE2E(page: Page): Promise<void> {
-  await signInClerkIdentityE2E(page, 'orgMember');
+  await signInClerkIdentityE2E(page, 'orgProviderMember');
 }
 
-export function hasClerkOrgNonMemberE2ECredentials(): boolean {
-  return hasClerkIdentityE2ECredentials('orgNonMember');
+export function hasClerkOrgProviderOwnerE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgProviderOwner');
 }
 
-export async function signInClerkOrgNonMemberE2E(page: Page): Promise<void> {
-  await signInClerkIdentityE2E(page, 'orgNonMember');
-}
-
-export function hasClerkUnverifiedEmailUserE2ECredentials(): boolean {
-  return hasClerkIdentityE2ECredentials('unverifiedEmailUser');
-}
-
-export async function signInClerkUnverifiedEmailUserE2E(
+export async function signInClerkOrgProviderOwnerE2E(
   page: Page,
 ): Promise<void> {
-  await signInClerkIdentityE2E(page, 'unverifiedEmailUser');
+  await signInClerkIdentityE2E(page, 'orgProviderOwner');
+}
+
+export function hasClerkOrgProviderMemberE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgProviderMember');
+}
+
+export async function signInClerkOrgProviderMemberE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'orgProviderMember');
+}
+
+export function hasClerkOrgDbSeededMemberE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgDbSeededMember');
+}
+
+export async function signInClerkOrgDbSeededMemberE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'orgDbSeededMember');
+}
+
+export function hasClerkLinkingBlockedUnverifiedE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('linkingBlockedUnverified');
+}
+
+export async function signInClerkLinkingBlockedUnverifiedE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'linkingBlockedUnverified');
 }
 
 export function hasClerkE2EOrganizationSlug(

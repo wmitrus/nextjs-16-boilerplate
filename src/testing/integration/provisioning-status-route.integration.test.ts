@@ -30,11 +30,11 @@ import { GET } from '@/app/api/me/provisioning-status/route';
 describe('/api/me/provisioning-status route integration', () => {
   const context = { params: Promise.resolve({}) };
 
-  it('returns controlled 409 when user is authenticated but not provisioned', async () => {
+  it('returns controlled 409 when bootstrap is required', async () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
-      status: 'ONBOARDING_REQUIRED',
-      code: 'USER_NOT_PROVISIONED',
-      message: 'Not provisioned',
+      status: 'BOOTSTRAP_REQUIRED',
+      code: 'BOOTSTRAP_REQUIRED',
+      message: 'Bootstrap required',
     });
 
     const response = await GET(
@@ -44,7 +44,8 @@ describe('/api/me/provisioning-status route integration', () => {
 
     expect(response.status).toBe(409);
     const body = await response.json();
-    expect(body.code).toBe('ONBOARDING_REQUIRED');
+    expect(body.code).toBe('BOOTSTRAP_REQUIRED');
+    expect(body.data).toBeUndefined();
   });
 
   it('returns internal provisioning snapshot for allowed access', async () => {

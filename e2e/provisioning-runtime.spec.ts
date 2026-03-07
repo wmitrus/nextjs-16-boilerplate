@@ -5,8 +5,8 @@ import {
   getClerkE2EOrganizationSlug,
   hasClerkIdentityE2ECredentials,
   signInClerkIdentityE2E,
-  signInClerkOrgMemberE2E,
-  signInClerkOrgOwnerE2E,
+  signInClerkOrgDbSeededMemberE2E,
+  signInClerkOrgProviderOwnerE2E,
   signInClerkPersonalNewUserE2E,
   signInSingleNewUserE2E,
 } from './clerk-auth';
@@ -209,11 +209,11 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('personalNewUser'),
-      'Set E2E_CLERK_PERSONAL_NEW_USER_USERNAME and E2E_CLERK_PERSONAL_NEW_USER_PASSWORD for the unprovisioned-session probe path.',
+      !hasClerkIdentityE2ECredentials('singleProvisionedUser'),
+      'Set E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME and E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD for the bootstrap-required probe path.',
     );
 
-    await signInClerkIdentityE2E(page, 'personalNewUser');
+    await signInClerkIdentityE2E(page, 'singleProvisionedUser');
 
     const probe = await page.request.get('/api/me/provisioning-status');
     expect(probe.status()).toBe(409);
@@ -304,11 +304,11 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with TENANCY_MODE=single and CROSS_PROVIDER_EMAIL_LINKING=disabled.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('unverifiedEmailUser'),
-      'Set E2E_CLERK_UNVERIFIED_EMAIL_USER_USERNAME and E2E_CLERK_UNVERIFIED_EMAIL_USER_PASSWORD.',
+      !hasClerkIdentityE2ECredentials('linkingBlockedUnverified'),
+      'Set E2E_CLERK_LINK_BLOCKED_UNVERIFIED_USERNAME and E2E_CLERK_LINK_BLOCKED_UNVERIFIED_PASSWORD.',
     );
 
-    await signInClerkIdentityE2E(page, 'unverifiedEmailUser');
+    await signInClerkIdentityE2E(page, 'linkingBlockedUnverified');
 
     await page.goto('/auth/bootstrap');
     await expectBootstrapErrorUi(page, /linked to a different sign-in method/i);
@@ -323,11 +323,11 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with TENANCY_MODE=single and FREE_TIER_MAX_USERS <= 2.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('orgNonMember'),
-      'Set E2E_CLERK_ORG_NON_MEMBER_USERNAME and E2E_CLERK_ORG_NON_MEMBER_PASSWORD.',
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
     );
 
-    await signInClerkIdentityE2E(page, 'orgNonMember');
+    await signInClerkIdentityE2E(page, 'singleNewUser');
 
     await page.goto('/auth/bootstrap');
     await expectBootstrapErrorUi(page, /workspace has reached its user limit/i);
@@ -382,12 +382,15 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with AUTH_PROVIDER=clerk, TENANCY_MODE=org and TENANT_CONTEXT_SOURCE=provider.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('orgOwner'),
-      'Set E2E_CLERK_ORG_OWNER_USERNAME and E2E_CLERK_ORG_OWNER_PASSWORD.',
+      !hasClerkIdentityE2ECredentials('orgProviderOwner'),
+      'Set E2E_CLERK_ORG_PROVIDER_OWNER_USERNAME and E2E_CLERK_ORG_PROVIDER_OWNER_PASSWORD.',
     );
 
-    await signInClerkOrgOwnerE2E(page);
-    await setActiveOrganization(page, getClerkE2EOrganizationSlug('owner'));
+    await signInClerkOrgProviderOwnerE2E(page);
+    await setActiveOrganization(
+      page,
+      getClerkE2EOrganizationSlug('providerOwner'),
+    );
 
     await page.goto('/auth/bootstrap?redirect_url=/users');
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
@@ -404,11 +407,11 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with AUTH_PROVIDER=clerk, TENANCY_MODE=org and TENANT_CONTEXT_SOURCE=provider.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('orgOwner'),
-      'Set E2E_CLERK_ORG_OWNER_USERNAME and E2E_CLERK_ORG_OWNER_PASSWORD.',
+      !hasClerkIdentityE2ECredentials('orgProviderOwner'),
+      'Set E2E_CLERK_ORG_PROVIDER_OWNER_USERNAME and E2E_CLERK_ORG_PROVIDER_OWNER_PASSWORD.',
     );
 
-    await signInClerkOrgOwnerE2E(page);
+    await signInClerkOrgProviderOwnerE2E(page);
     await clearActiveOrganization(page);
 
     await page.goto('/auth/bootstrap');
@@ -426,11 +429,11 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with AUTH_PROVIDER=clerk, TENANCY_MODE=org and TENANT_CONTEXT_SOURCE=db.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('orgMember'),
-      'Set E2E_CLERK_ORG_MEMBER_USERNAME and E2E_CLERK_ORG_MEMBER_PASSWORD.',
+      !hasClerkIdentityE2ECredentials('orgDbSeededMember'),
+      'Set E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME and E2E_CLERK_ORG_DB_SEEDED_MEMBER_PASSWORD.',
     );
 
-    await signInClerkOrgMemberE2E(page);
+    await signInClerkOrgDbSeededMemberE2E(page);
     await clearActiveTenantCookie(page);
 
     await page.goto('/auth/bootstrap');
@@ -448,11 +451,11 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with AUTH_PROVIDER=clerk, TENANCY_MODE=org and TENANT_CONTEXT_SOURCE=db.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('orgMember'),
-      'Set E2E_CLERK_ORG_MEMBER_USERNAME and E2E_CLERK_ORG_MEMBER_PASSWORD. The email should map to the seeded Acme member for org/db positive-path E2E.',
+      !hasClerkIdentityE2ECredentials('orgDbSeededMember'),
+      'Set E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME and E2E_CLERK_ORG_DB_SEEDED_MEMBER_PASSWORD. The email must be bob@example.com for the seeded org/db positive path.',
     );
 
-    await signInClerkOrgMemberE2E(page);
+    await signInClerkOrgDbSeededMemberE2E(page);
     await setActiveTenantCookie(page, SEEDED_TENANT_IDS.acme);
 
     await page.goto('/auth/bootstrap?redirect_url=/users');
@@ -470,11 +473,11 @@ test.describe('Provisioning Runtime E2E', () => {
       'Run this scenario with AUTH_PROVIDER=clerk, TENANCY_MODE=org and TENANT_CONTEXT_SOURCE=db.',
     );
     test.skip(
-      !hasClerkIdentityE2ECredentials('orgMember'),
-      'Set E2E_CLERK_ORG_MEMBER_USERNAME and E2E_CLERK_ORG_MEMBER_PASSWORD. The email should map to the seeded Acme member for org/db negative membership-path E2E.',
+      !hasClerkIdentityE2ECredentials('orgDbSeededMember'),
+      'Set E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME and E2E_CLERK_ORG_DB_SEEDED_MEMBER_PASSWORD. The email must be bob@example.com for the seeded org/db membership path.',
     );
 
-    await signInClerkOrgMemberE2E(page);
+    await signInClerkOrgDbSeededMemberE2E(page);
     await setActiveTenantCookie(page, SEEDED_TENANT_IDS.globex);
 
     const response = await page.request.get('/api/users');

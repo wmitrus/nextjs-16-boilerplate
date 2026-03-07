@@ -10,8 +10,16 @@ import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
 
-import type { SecurityContextDependencies } from './security-dependencies';
+import type { NodeSecurityContextDependencies } from './security-dependencies';
 export type { SecurityContextDependencies } from './security-dependencies';
+
+export type ReadinessStatus =
+  | 'ALLOWED'
+  | 'BOOTSTRAP_REQUIRED'
+  | 'ONBOARDING_REQUIRED'
+  | 'TENANT_CONTEXT_REQUIRED'
+  | 'TENANT_MEMBERSHIP_REQUIRED'
+  | 'UNAUTHENTICATED';
 
 export interface SecurityContext {
   user?: {
@@ -25,6 +33,7 @@ export interface SecurityContext {
   runtime: 'edge' | 'node';
   environment: 'development' | 'test' | 'production';
   requestId: string;
+  readinessStatus: ReadinessStatus;
 }
 
 /**
@@ -40,69 +49,99 @@ export interface SecurityContext {
  * Role resolution and authorization precomputation belong in AuthorizationService.
  */
 export async function createSecurityContext(
-  dependencies: SecurityContextDependencies,
+  dependencies: NodeSecurityContextDependencies,
 ): Promise<SecurityContext> {
-  const { identityProvider, tenantResolver } = dependencies;
-
-  let identity;
-  try {
-    identity = await identityProvider.getCurrentIdentity();
-  } catch (err) {
-    if (err instanceof UserNotProvisionedError) {
-      // User is authenticated externally but has no internal provisioned record.
-      // Treat as unauthenticated for security context — access denied to secure features.
-      // User must complete onboarding (which will call ensureProvisioned() in PR-3).
-      identity = null;
-    } else {
-      throw err;
-    }
-  }
+  const { identityProvider, tenantResolver, userRepository } = dependencies;
 
   const headerList = await headers();
-
   const ip = await getIP(headerList);
   const userAgent = headerList.get('user-agent') ?? undefined;
   const correlationId =
     headerList.get('x-correlation-id') ?? crypto.randomUUID();
   const requestId = headerList.get('x-request-id') ?? crypto.randomUUID();
 
-  let userContext: SecurityContext['user'];
-
-  if (identity) {
-    try {
-      const tenantContext = await tenantResolver.resolve(identity);
-      userContext = {
-        id: identity.id,
-        tenantId: tenantContext.tenantId,
-      };
-    } catch (err) {
-      if (
-        err instanceof MissingTenantContextError ||
-        err instanceof TenantNotProvisionedError ||
-        err instanceof TenantMembershipRequiredError
-      ) {
-        // Tenant context unavailable for this request.
-        // Treat as no tenant context — callers (withAuth, secure-action) handle
-        // the appropriate redirect or unauthorized response.
-        userContext = undefined;
-      } else {
-        throw err;
-      }
-    }
-  }
-
-  return {
-    user: userContext,
+  const baseContext = {
     ip,
     userAgent,
     correlationId,
     requestId,
     runtime:
       typeof process !== 'undefined' && process.release?.name === 'node'
-        ? 'node'
-        : 'edge',
+        ? ('node' as const)
+        : ('edge' as const),
     environment: env.NODE_ENV as 'development' | 'test' | 'production',
   };
+
+  let identity;
+  try {
+    identity = await identityProvider.getCurrentIdentity();
+  } catch (err) {
+    if (err instanceof UserNotProvisionedError) {
+      return {
+        ...baseContext,
+        user: undefined,
+        readinessStatus: 'BOOTSTRAP_REQUIRED',
+      };
+    }
+    throw err;
+  }
+
+  if (!identity) {
+    return {
+      ...baseContext,
+      user: undefined,
+      readinessStatus: 'UNAUTHENTICATED',
+    };
+  }
+
+  const user = await userRepository.findById(identity.id);
+
+  if (!user) {
+    return {
+      ...baseContext,
+      user: undefined,
+      readinessStatus: 'BOOTSTRAP_REQUIRED',
+    };
+  }
+
+  if (!user.onboardingComplete) {
+    return {
+      ...baseContext,
+      user: undefined,
+      readinessStatus: 'ONBOARDING_REQUIRED',
+    };
+  }
+
+  try {
+    const tenantContext = await tenantResolver.resolve(identity);
+    return {
+      ...baseContext,
+      user: {
+        id: identity.id,
+        tenantId: tenantContext.tenantId,
+      },
+      readinessStatus: 'ALLOWED',
+    };
+  } catch (err) {
+    if (
+      err instanceof MissingTenantContextError ||
+      err instanceof TenantNotProvisionedError
+    ) {
+      return {
+        ...baseContext,
+        user: undefined,
+        readinessStatus: 'TENANT_CONTEXT_REQUIRED',
+      };
+    }
+    if (err instanceof TenantMembershipRequiredError) {
+      return {
+        ...baseContext,
+        user: undefined,
+        readinessStatus: 'TENANT_MEMBERSHIP_REQUIRED',
+      };
+    }
+    throw err;
+  }
 }
 
 export const getSecurityContext = createSecurityContext;

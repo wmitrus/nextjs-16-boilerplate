@@ -20,6 +20,7 @@ export const mockCreateSecureAction = vi.fn(
             requestId: 'test',
             runtime: 'node',
             environment: 'test',
+            readinessStatus: 'ALLOWED' as const,
           },
         }),
       };

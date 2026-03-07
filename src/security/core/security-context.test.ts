@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { AUTH } from '@/core/contracts';
+import { UserNotProvisionedError } from '@/core/contracts/identity';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import {
   MissingTenantContextError,
@@ -56,8 +57,22 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('UNAUTHENTICATED');
     expect(context.ip).toBe('127.0.0.1');
     expect(context.correlationId).toBeDefined();
+  });
+
+  it('should return BOOTSTRAP_REQUIRED when identityProvider throws UserNotProvisionedError', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockRejectedValue(
+      new UserNotProvisionedError(),
+    );
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('BOOTSTRAP_REQUIRED');
   });
 
   it('should return user context when authenticated', async () => {
@@ -85,6 +100,7 @@ describe('Security Context', () => {
       id: 'user_123',
       tenantId: 'tenant_123',
     });
+    expect(context.readinessStatus).toBe('ALLOWED');
     expect(context.ip).toBe('1.1.1.1');
     expect(context.userAgent).toBe('test-agent');
     expect(context.correlationId).toBe('test-correlation');
@@ -130,8 +146,27 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('UNAUTHENTICATED');
     expect(context.correlationId).toBeDefined();
     expect(context.requestId).toBeDefined();
+  });
+
+  it('should return ONBOARDING_REQUIRED when user exists but onboarding is incomplete', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_incomplete',
+    });
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_incomplete',
+      email: 'user_incomplete@example.com',
+      onboardingComplete: false,
+    });
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('ONBOARDING_REQUIRED');
   });
 
   it('should use tenant from tenantResolver', async () => {
@@ -165,6 +200,7 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_CONTEXT_REQUIRED');
   });
 
   it('should return user=undefined when tenant is not provisioned (TenantNotProvisionedError)', async () => {
@@ -181,6 +217,7 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_CONTEXT_REQUIRED');
   });
 
   it('should return user=undefined when tenant membership is required (TenantMembershipRequiredError)', async () => {
@@ -197,5 +234,6 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_MEMBERSHIP_REQUIRED');
   });
 });

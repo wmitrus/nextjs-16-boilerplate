@@ -76,7 +76,7 @@ describe('Auth Middleware', () => {
     mockHandler.mockClear();
   });
 
-  it('should redirect authenticated users from auth routes to home if onboarding is complete', async () => {
+  it('should redirect authenticated users from auth routes to bootstrap (onboarding complete)', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',
     });
@@ -98,11 +98,11 @@ describe('Auth Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
     expect(mockHandler).not.toHaveBeenCalled();
   });
 
-  it('should redirect authenticated users from auth routes to onboarding if incomplete', async () => {
+  it('should redirect authenticated users from auth routes to bootstrap (onboarding incomplete)', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',
     });
@@ -124,7 +124,7 @@ describe('Auth Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/onboarding');
+    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
     expect(mockHandler).not.toHaveBeenCalled();
   });
 

@@ -176,7 +176,7 @@ async function nonClerkProxy(request: NextRequest): Promise<NextResponse> {
  * 1. withSecurity (Classification, Correlation, Security Headers)
  * 2. withInternalApiGuard (Internal API Key Validation)
  * 3. withRateLimit (API Throttling)
- * 4. withAuth (Identity, Onboarding, Authorization)
+ * 4. withAuth (Session presence gate only in Edge mode)
  * 5. terminalHandler (NextResponse.next())
  */
 const proxyHandler =

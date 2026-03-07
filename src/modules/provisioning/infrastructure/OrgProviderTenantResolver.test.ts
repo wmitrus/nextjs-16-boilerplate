@@ -20,7 +20,7 @@ describe('OrgProviderTenantResolver', () => {
 
   it('resolves internal tenant id from provider external id', async () => {
     const source = makeSource({ tenantExternalId: 'org_ext_123' });
-    const lookup = makeLookup('10000000-0000-0000-0000-000000000001');
+    const lookup = makeLookup('10000000-0000-4000-8000-000000000001');
     const resolver = new OrgProviderTenantResolver(source, lookup, 'clerk');
 
     const context = await resolver.resolve(identity);
@@ -29,13 +29,13 @@ describe('OrgProviderTenantResolver', () => {
       'clerk',
       'org_ext_123',
     );
-    expect(context.tenantId).toBe('10000000-0000-0000-0000-000000000001');
+    expect(context.tenantId).toBe('10000000-0000-4000-8000-000000000001');
     expect(context.userId).toBe(identity.id);
   });
 
   it('throws MissingTenantContextError when no tenantExternalId in provider claims', async () => {
     const source = makeSource({});
-    const lookup = makeLookup('10000000-0000-0000-0000-000000000001');
+    const lookup = makeLookup('10000000-0000-4000-8000-000000000001');
     const resolver = new OrgProviderTenantResolver(source, lookup, 'clerk');
 
     await expect(resolver.resolve(identity)).rejects.toBeInstanceOf(

@@ -3,7 +3,6 @@
 import { cookies, headers } from 'next/headers';
 
 import { AUTH, PROVISIONING } from '@/core/contracts';
-import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
@@ -155,17 +154,6 @@ export const completeOnboarding = async (formData: FormData) => {
     return { error: 'Display name is required' };
   }
 
-  const identityProvider = container.resolve<IdentityProvider>(
-    AUTH.IDENTITY_PROVIDER,
-  );
-
-  const identity = await identityProvider.getCurrentIdentity();
-
-  if (!identity) {
-    logger.warn('Identity not found after successful provisioning');
-    return { error: 'No logged in user' };
-  }
-
   const userRepository = container.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
@@ -188,20 +176,20 @@ export const completeOnboarding = async (formData: FormData) => {
   }
 
   try {
-    await userRepository.updateProfile(identity.id, {
+    await userRepository.updateProfile(internalUserId, {
       displayName: displayName.trim(),
       locale: typeof locale === 'string' && locale ? locale : undefined,
       timezone: typeof timezone === 'string' && timezone ? timezone : undefined,
     });
-    await userRepository.updateOnboardingStatus(identity.id, true);
+    await userRepository.updateOnboardingStatus(internalUserId, true);
     logger.debug(
-      { userId: identity.id },
+      { userId: internalUserId },
       'User profile and onboarding status updated successfully',
     );
     return { message: 'Onboarding completed', redirectUrl: safeRedirectUrl };
   } catch (err) {
     logger.error(
-      { err, userId: identity.id },
+      { err, userId: internalUserId },
       'Error updating user metadata during onboarding',
     );
     return { error: 'There was an error updating your profile.' };

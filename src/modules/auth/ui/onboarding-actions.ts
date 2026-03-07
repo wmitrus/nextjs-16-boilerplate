@@ -175,6 +175,18 @@ export const completeOnboarding = async (formData: FormData) => {
     '/users',
   );
 
+  const internalUserId = provisioningResult.internalUserId;
+  const existingUser = await userRepository.findById(internalUserId);
+  if (!existingUser) {
+    logger.error(
+      { userId: internalUserId },
+      'Onboarding invariant violated: provisioned user not found in database',
+    );
+    throw new Error(
+      'Onboarding invariant violated: provisioned user not found in database',
+    );
+  }
+
   try {
     await userRepository.updateProfile(identity.id, {
       displayName: displayName.trim(),

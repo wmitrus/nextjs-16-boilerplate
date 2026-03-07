@@ -52,7 +52,10 @@ vi.mock('../src/core/runtime/bootstrap', async () => {
     }),
   });
   container.register(AUTH.USER_REPOSITORY, {
+    findById: vi.fn().mockResolvedValue(null),
     updateAttributes: vi.fn(),
+    updateOnboardingStatus: vi.fn(),
+    updateProfile: vi.fn(),
   });
   container.register(AUTHORIZATION.SERVICE, {
     can: vi.fn().mockResolvedValue(true),

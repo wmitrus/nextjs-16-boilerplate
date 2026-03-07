@@ -7,15 +7,21 @@ import { env } from '@/core/env';
 
 import { getLogStreams } from './streams';
 
-vi.mock('@/core/env', () => ({
-  env: {
-    NODE_ENV: 'development',
-    LOG_DIR: 'logs',
-    LOG_TO_FILE_DEV: false,
-    LOG_TO_FILE_PROD: false,
-    LOGFLARE_SERVER_ENABLED: false,
-  },
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      NODE_ENV: 'development',
+      LOG_DIR: 'logs',
+      LOG_TO_FILE_DEV: false,
+      LOG_TO_FILE_PROD: false,
+      LOGFLARE_SERVER_ENABLED: false,
+    },
+  };
+});
 
 vi.mock('./utils', () => ({
   createConsoleStream: vi.fn(() => ({ type: 'console' })),

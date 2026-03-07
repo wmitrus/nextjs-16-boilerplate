@@ -95,7 +95,7 @@ describe('RequestScopedTenantResolver', () => {
       findInternalUserId: vi.fn(),
       findInternalTenantId: vi
         .fn()
-        .mockResolvedValue('10000000-0000-0000-0000-000000000001'),
+        .mockResolvedValue('10000000-0000-4000-8000-000000000001'),
       findPersonalTenantId: vi.fn(),
     };
     const insert = vi.fn();

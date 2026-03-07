@@ -7,11 +7,12 @@ Req["HTTP Request"]
 Proxy["Proxy Pipeline\n(Clerk + Security)"]
 
 EdgeC["Edge Request Container"]
-EdgeGates["Edge Gates\nInternal API + Rate Limit + Auth Gate"]
+EdgeGates["Edge Gates\nInternal API + Rate Limit + Session Presence Gate"]
 Pass["Pass-through"]
 
 NodeEntry["Server Action / Route Handler"]
 NodeC["Node Request Container"]
+NodeGate["Node Provisioning Gate\nIdentity + Onboarding + Tenant + Membership"]
 
 Ctx["Security Context"]
 Authz["Authorization Facade -> Service"]
@@ -21,7 +22,7 @@ Res["Response"]
 
 Req --> Proxy --> EdgeC --> EdgeGates --> Pass
 
-Req --> NodeEntry --> NodeC --> Ctx
+Req --> NodeEntry --> NodeC --> NodeGate --> Ctx
 
 Ctx --> Authz --> Policy --> Domain --> Res
 ```

@@ -28,7 +28,7 @@ afterAll(async () => {
 });
 
 const baseContext: AuthorizationContext = {
-  tenant: { tenantId: '10000000-0000-0000-0000-000000000001' },
+  tenant: { tenantId: '10000000-0000-4000-8000-000000000001' },
   subject: { id: '00000000-0000-0000-0000-000000000001' },
   resource: { type: 'user' },
   action: 'user:read',

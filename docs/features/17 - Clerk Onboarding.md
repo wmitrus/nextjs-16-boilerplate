@@ -47,6 +47,12 @@ These fields are used by middleware onboarding checks (`with-auth`) through `Use
 
 This is intentional: onboarding is the write path that creates mappings and tenant membership.
 
+After hardening:
+
+- protected pages and APIs are gated in Node runtime,
+- active Clerk session without internal provisioning returns controlled denial (`ONBOARDING_REQUIRED`),
+- runtime probe endpoint `/api/me/provisioning-status` is the authoritative way to verify internal provisioning state.
+
 ## 5. Clerk Claims Used by Provisioning
 
 For Clerk mode, onboarding relies on these mapped claims:
@@ -91,6 +97,9 @@ This prevents unsafe account linking when email ownership is not verified.
 6. Confirm redirect behavior:
    - authenticated + onboarding complete -> no onboarding loop
    - unauthenticated -> redirect to sign-in
+7. Optional verification after DB reset:
+   - you may still have active Clerk session cookie,
+   - `/api/me/provisioning-status` must return controlled `409 ONBOARDING_REQUIRED` until onboarding re-provisions internal state.
 
 ## 9. Related Docs
 

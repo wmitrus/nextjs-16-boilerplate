@@ -13,9 +13,9 @@ export const usersTable = pgTable(
     id: uuid('id').primaryKey(),
     email: text('email').unique().notNull(),
     onboardingComplete: boolean('onboarding_complete').notNull().default(false),
-    targetLanguage: text('target_language'),
-    proficiencyLevel: text('proficiency_level'),
-    learningGoal: text('learning_goal'),
+    displayName: text('display_name'),
+    locale: text('locale'),
+    timezone: text('timezone'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

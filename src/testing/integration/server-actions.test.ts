@@ -10,14 +10,15 @@ import {
   TenantNotProvisionedError,
 } from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { createSecureAction } from '@/security/actions/secure-action';
 import {
   getSecurityContext,
-  type SecurityContextDependencies,
   type SecurityContext,
 } from '@/security/core/security-context';
+import type { NodeSecurityContextDependencies } from '@/security/core/security-dependencies';
 import { resetClerkMocks } from '@/testing/infrastructure/clerk';
 import { resetEnvMocks } from '@/testing/infrastructure/env';
 import {
@@ -34,6 +35,7 @@ describe('Server Actions Integration', () => {
   let identityProvider: IdentityProvider;
   let authorizationService: AuthorizationService;
   let tenantResolver: TenantResolver;
+  let userRepository: UserRepository;
 
   const schema = z.object({
     name: z.string().min(3),
@@ -59,21 +61,31 @@ describe('Server Actions Integration', () => {
       AUTHORIZATION.SERVICE,
     );
     tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
+    userRepository = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
     resetClerkMocks();
     resetNextHeadersMocks();
     resetLoggerMocks();
     resetEnvMocks();
     vi.clearAllMocks();
 
+    // Default: user is provisioned and onboarded
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+      onboardingComplete: true,
+    });
+
     // Default headers
     mockHeaders.set('x-forwarded-for', '127.0.0.1');
     mockHeaders.set('user-agent', 'test-agent');
   });
 
-  const getSecurityContextDependencies = (): SecurityContextDependencies => ({
-    identityProvider,
-    tenantResolver,
-  });
+  const getSecurityContextDependencies =
+    (): NodeSecurityContextDependencies => ({
+      identityProvider,
+      tenantResolver,
+      userRepository,
+    });
 
   const getSecureActionDependencies = () => ({
     getSecurityContext: () =>
@@ -235,7 +247,7 @@ describe('Server Actions Integration', () => {
     expect(result.status).toBe('unauthorized');
   });
 
-  it('should return unauthorized when org context is missing (MissingTenantContextError gracefully degraded)', async () => {
+  it('should return tenant_context_required when org context is missing (MissingTenantContextError)', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_123',
       email: 'test@example.com',
@@ -252,10 +264,10 @@ describe('Server Actions Integration', () => {
 
     const result = await action({ name: 'Zencoder' });
 
-    expect(result.status).toBe('unauthorized');
+    expect(result.status).toBe('tenant_context_required');
   });
 
-  it('should return unauthorized when tenant not provisioned (TenantNotProvisionedError gracefully degraded)', async () => {
+  it('should return tenant_context_required when tenant not provisioned (TenantNotProvisionedError)', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_123',
       email: 'test@example.com',
@@ -272,10 +284,10 @@ describe('Server Actions Integration', () => {
 
     const result = await action({ name: 'Zencoder' });
 
-    expect(result.status).toBe('unauthorized');
+    expect(result.status).toBe('tenant_context_required');
   });
 
-  it('should return unauthorized when user has no tenant membership (TenantMembershipRequiredError gracefully degraded)', async () => {
+  it('should return tenant_membership_required when user has no tenant membership (TenantMembershipRequiredError)', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_123',
       email: 'test@example.com',
@@ -292,6 +304,6 @@ describe('Server Actions Integration', () => {
 
     const result = await action({ name: 'Zencoder' });
 
-    expect(result.status).toBe('unauthorized');
+    expect(result.status).toBe('tenant_membership_required');
   });
 });

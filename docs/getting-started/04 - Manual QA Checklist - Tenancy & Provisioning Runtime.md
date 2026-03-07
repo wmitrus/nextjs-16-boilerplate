@@ -63,7 +63,7 @@ Expected:
 After signing in, run in browser console:
 
 ```js
-fetch('/api/users')
+fetch('/api/me/provisioning-status')
   .then(async (r) => ({ status: r.status, body: await r.json() }))
   .then(console.log);
 ```
@@ -71,7 +71,20 @@ fetch('/api/users')
 Expected (happy path):
 
 - status `200`
-- users payload
+- payload contains `internalUserId`, `internalTenantId`, `onboardingComplete`, `tenancyMode`
+
+### 1.3 Optional domain probe
+
+```js
+fetch('/api/users')
+  .then(async (r) => ({ status: r.status, body: await r.json() }))
+  .then(console.log);
+```
+
+Expected:
+
+- same auth/provisioning semantics as probe endpoint
+- for happy path: status `200`
 
 ## 2. Scenario A - Single Tenant (no Clerk org required)
 
@@ -87,7 +100,8 @@ Checklist:
 - [ ] Sign in with Clerk user that has no organization.
 - [ ] If redirected to onboarding, submit onboarding form successfully.
 - [ ] Open `/users` (no redirect loop).
-- [ ] Run browser authenticated API probe (`/api/users`) and expect `200`.
+- [ ] Run browser authenticated provisioning probe (`/api/me/provisioning-status`) and expect `200`.
+- [ ] Run browser domain probe (`/api/users`) and expect `200`.
 - [ ] Optional diagnostic: run Update Settings in `/security-showcase` (controlled result, no crash).
 
 Expected:
@@ -110,7 +124,8 @@ Checklist:
 - [ ] Sign in (same or new Clerk user).
 - [ ] Complete onboarding.
 - [ ] Open `/users`.
-- [ ] Run browser authenticated API probe (`/api/users`) and expect `200`.
+- [ ] Run browser authenticated provisioning probe (`/api/me/provisioning-status`) and expect `200`.
+- [ ] Run browser domain probe (`/api/users`) and expect `200`.
 - [ ] Optional diagnostic: Update Settings in `/security-showcase`.
 
 Expected:
@@ -144,7 +159,8 @@ Checklist:
 
 - [ ] Sign in user with no active org in session.
 - [ ] Open `/users`.
-- [ ] Run browser authenticated API probe.
+- [ ] Run browser authenticated provisioning probe.
+- [ ] Run browser domain probe.
 
 Expected:
 
@@ -157,7 +173,8 @@ Checklist:
 
 - [ ] Activate org in session.
 - [ ] Before onboarding, open `/users`.
-- [ ] Run browser authenticated API probe.
+- [ ] Run browser authenticated provisioning probe.
+- [ ] Run browser domain probe.
 
 Expected:
 
@@ -170,7 +187,8 @@ Checklist:
 
 - [ ] Complete onboarding with active org context.
 - [ ] Open `/users`.
-- [ ] Run browser authenticated API probe (`/api/users`).
+- [ ] Run browser authenticated provisioning probe (`/api/me/provisioning-status`).
+- [ ] Run browser domain probe (`/api/users`).
 - [ ] Optional diagnostic: Update Settings in `/security-showcase`.
 
 Expected:
@@ -201,7 +219,8 @@ document.cookie = 'active_tenant_id=; Max-Age=0; path=/';
 ```
 
 - [ ] Open `/users`.
-- [ ] Run browser authenticated API probe.
+- [ ] Run browser authenticated provisioning probe.
+- [ ] Run browser domain probe.
 
 Expected:
 
@@ -276,6 +295,7 @@ For every successful first login in each scenario:
 - [ ] onboarding form submit returns success
 - [ ] next request is not redirected back to onboarding
 - [ ] `/users` and `/api/users` are usable
+- [ ] `/api/me/provisioning-status` returns `200` and internal IDs
 
 If onboarding fails, expected controlled error strings include:
 

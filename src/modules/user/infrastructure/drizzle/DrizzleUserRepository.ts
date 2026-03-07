@@ -15,9 +15,9 @@ export class DrizzleUserRepository implements UserRepository {
         id: usersTable.id,
         email: usersTable.email,
         onboardingComplete: usersTable.onboardingComplete,
-        targetLanguage: usersTable.targetLanguage,
-        proficiencyLevel: usersTable.proficiencyLevel,
-        learningGoal: usersTable.learningGoal,
+        displayName: usersTable.displayName,
+        locale: usersTable.locale,
+        timezone: usersTable.timezone,
       })
       .from(usersTable)
       .where(eq(usersTable.id, id))
@@ -32,9 +32,9 @@ export class DrizzleUserRepository implements UserRepository {
       id: row.id,
       email: row.email,
       onboardingComplete: row.onboardingComplete,
-      targetLanguage: row.targetLanguage ?? undefined,
-      proficiencyLevel: row.proficiencyLevel ?? undefined,
-      learningGoal: row.learningGoal ?? undefined,
+      displayName: row.displayName ?? undefined,
+      locale: row.locale ?? undefined,
+      timezone: row.timezone ?? undefined,
     };
   }
 
@@ -54,28 +54,28 @@ export class DrizzleUserRepository implements UserRepository {
   async updateProfile(
     id: SubjectId,
     profile: {
-      readonly targetLanguage?: string;
-      readonly proficiencyLevel?: string;
-      readonly learningGoal?: string;
+      readonly displayName?: string;
+      readonly locale?: string;
+      readonly timezone?: string;
     },
   ): Promise<void> {
     const updatePayload: {
-      targetLanguage?: string;
-      proficiencyLevel?: string;
-      learningGoal?: string;
+      displayName?: string;
+      locale?: string;
+      timezone?: string;
       updatedAt: Date;
     } = {
       updatedAt: new Date(),
     };
 
-    if (profile.targetLanguage !== undefined) {
-      updatePayload.targetLanguage = profile.targetLanguage;
+    if (profile.displayName !== undefined) {
+      updatePayload.displayName = profile.displayName;
     }
-    if (profile.proficiencyLevel !== undefined) {
-      updatePayload.proficiencyLevel = profile.proficiencyLevel;
+    if (profile.locale !== undefined) {
+      updatePayload.locale = profile.locale;
     }
-    if (profile.learningGoal !== undefined) {
-      updatePayload.learningGoal = profile.learningGoal;
+    if (profile.timezone !== undefined) {
+      updatePayload.timezone = profile.timezone;
     }
 
     await this.db

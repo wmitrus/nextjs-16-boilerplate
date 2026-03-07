@@ -16,6 +16,7 @@ import { DrizzleProvisioningService } from './DrizzleProvisioningService';
 import {
   authTenantIdentitiesTable,
   authUserIdentitiesTable,
+  membershipsTable,
   policiesTable,
   rolesTable,
   tenantAttributesTable,
@@ -101,6 +102,109 @@ describe('DrizzleProvisioningService (real DB)', () => {
 
       expect(first.internalTenantId).toBe(second.internalTenantId);
       expect(second.internalTenantId).toBe(third.internalTenantId);
+    });
+
+    it('creates backing records on first bootstrap and does not duplicate them on repeat', async () => {
+      const svc = makeService();
+      const input = {
+        provider: 'clerk' as const,
+        externalUserId: 'user_personal_records_001',
+        email: 'personal-records-001@example.com',
+        tenancyMode: 'personal' as const,
+      };
+
+      const first = await svc.ensureProvisioned(input);
+
+      const userRowsAfterFirst = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(usersTable)
+        .where(eq(usersTable.id, first.internalUserId));
+      const userIdentityRowsAfterFirst = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(authUserIdentitiesTable)
+        .where(
+          and(
+            eq(authUserIdentitiesTable.provider, 'clerk'),
+            eq(
+              authUserIdentitiesTable.externalUserId,
+              'user_personal_records_001',
+            ),
+          ),
+        );
+      const tenantRowsAfterFirst = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(tenantsTable)
+        .where(eq(tenantsTable.id, first.internalTenantId));
+      const tenantIdentityRowsAfterFirst = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(authTenantIdentitiesTable)
+        .where(
+          and(
+            eq(authTenantIdentitiesTable.provider, 'personal'),
+            eq(
+              authTenantIdentitiesTable.externalTenantId,
+              first.internalUserId,
+            ),
+          ),
+        );
+      const membershipRowsAfterFirst = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(membershipsTable)
+        .where(
+          and(
+            eq(membershipsTable.userId, first.internalUserId),
+            eq(membershipsTable.tenantId, first.internalTenantId),
+          ),
+        );
+
+      expect(userRowsAfterFirst[0]?.count).toBe(1);
+      expect(userIdentityRowsAfterFirst[0]?.count).toBe(1);
+      expect(tenantRowsAfterFirst[0]?.count).toBe(1);
+      expect(tenantIdentityRowsAfterFirst[0]?.count).toBe(1);
+      expect(membershipRowsAfterFirst[0]?.count).toBe(1);
+
+      const second = await svc.ensureProvisioned(input);
+
+      expect(second.internalUserId).toBe(first.internalUserId);
+      expect(second.internalTenantId).toBe(first.internalTenantId);
+
+      const userIdentityRowsAfterSecond = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(authUserIdentitiesTable)
+        .where(
+          and(
+            eq(authUserIdentitiesTable.provider, 'clerk'),
+            eq(
+              authUserIdentitiesTable.externalUserId,
+              'user_personal_records_001',
+            ),
+          ),
+        );
+      const tenantIdentityRowsAfterSecond = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(authTenantIdentitiesTable)
+        .where(
+          and(
+            eq(authTenantIdentitiesTable.provider, 'personal'),
+            eq(
+              authTenantIdentitiesTable.externalTenantId,
+              first.internalUserId,
+            ),
+          ),
+        );
+      const membershipRowsAfterSecond = await testDb.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(membershipsTable)
+        .where(
+          and(
+            eq(membershipsTable.userId, first.internalUserId),
+            eq(membershipsTable.tenantId, first.internalTenantId),
+          ),
+        );
+
+      expect(userIdentityRowsAfterSecond[0]?.count).toBe(1);
+      expect(tenantIdentityRowsAfterSecond[0]?.count).toBe(1);
+      expect(membershipRowsAfterSecond[0]?.count).toBe(1);
     });
   });
 

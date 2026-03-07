@@ -31,7 +31,7 @@ CLERK_SECRET_KEY=sk_test_...
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 
 TENANCY_MODE=single
-DEFAULT_TENANT_ID=10000000-0000-0000-0000-000000000001
+DEFAULT_TENANT_ID=10000000-0000-4000-8000-000000000001
 ```
 
 Behavior:
@@ -99,32 +99,50 @@ Behavior:
 
 ## 3. Clerk Setup by Tenancy Use Case
 
-## 3.1 Single
+Common baseline (all scenarios):
 
-1. Create Clerk app and keys.
-2. Do not configure organizations unless you want them for UI.
-3. Sign in and complete onboarding.
+1. Set valid Clerk keys in env:
+   - `CLERK_SECRET_KEY`
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+2. Enable email sign-in/sign-up in Clerk.
+3. Use verified test emails when validating `CROSS_PROVIDER_EMAIL_LINKING=verified-only`.
 
-## 3.2 Personal
+### 3.1 Scenario `TENANCY_MODE=single`
 
-1. Create Clerk app and keys.
-2. Do not configure organizations.
-3. Sign in and complete onboarding.
+| Step | Command / Action                                     | Expected                                              |
+| ---- | ---------------------------------------------------- | ----------------------------------------------------- |
+| S-1  | Keep Organizations disabled (or enabled but unused). | provider org context not required                     |
+| S-2  | Ensure test user exists in Clerk and can sign in.    | authenticated session works                           |
+| S-3  | Run onboarding once after sign-in.                   | internal user is provisioned in shared default tenant |
 
-## 3.3 Org + provider source
+### 3.2 Scenario `TENANCY_MODE=personal`
 
-1. Enable Clerk Organizations.
-2. Create at least one organization.
-3. Add test user to organization.
-4. Ensure active organization is selected in session.
-5. Sign in and complete onboarding.
+| Step | Command / Action                                     | Expected                              |
+| ---- | ---------------------------------------------------- | ------------------------------------- |
+| P-1  | Keep Organizations disabled (or enabled but unused). | provider org context not required     |
+| P-2  | Ensure test user can sign in with email auth.        | authenticated session works           |
+| P-3  | Complete onboarding on first login.                  | personal tenant is created and linked |
 
-## 3.4 Org + DB source
+### 3.3 Scenario `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=provider`
 
-1. Organizations in Clerk are optional.
-2. Ensure internal tenant + membership already exist in DB.
-3. Set active tenant via header/cookie in requests.
-4. Sign in and access protected routes.
+| Step | Command / Action                                                                                                                      | Expected                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| OP-1 | Enable Organizations in Clerk Dashboard.                                                                                              | organization APIs and claims are available    |
+| OP-2 | Create organization for tests (example: `org-provider-test`).                                                                         | org exists                                    |
+| OP-3 | Add test user to that organization.                                                                                                   | membership exists in Clerk                    |
+| OP-4 | Set that organization as active in current session (UserButton account/org context).                                                  | provider session exposes `orgId` claim        |
+| OP-5 | Set org role in Clerk for role-path tests:<br/>- contains `admin` or `owner` -> internal `owner`<br/>- otherwise -> internal `member` | deterministic role mapping in provisioning    |
+| OP-6 | Complete onboarding and access protected routes.                                                                                      | no `TENANT_CONTEXT_REQUIRED` on positive path |
+
+### 3.4 Scenario `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=db`
+
+| Step | Command / Action                                                          | Expected                                                             |
+| ---- | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| OD-1 | Organizations are optional in Clerk (can remain disabled).                | provider org context is ignored in resolver                          |
+| OD-2 | Ensure test user can sign in with email auth.                             | authenticated session works                                          |
+| OD-3 | Ensure internal tenant membership exists in app DB.                       | positive path is reachable                                           |
+| OD-4 | Set active tenant via `TENANT_CONTEXT_HEADER` or `TENANT_CONTEXT_COOKIE`. | tenant context resolved from app-controlled source                   |
+| OD-5 | Access protected routes/actions.                                          | member tenant -> success, non-member -> `TENANT_MEMBERSHIP_REQUIRED` |
 
 ## 4. Internal Role Model
 
@@ -167,18 +185,21 @@ Rules:
 
 ## 7. Runtime Test Checklist Per Scenario
 
-Use the same flow for each supported scenario (`single`, `personal`, `org/provider`, `org/db`).
+Authoritative runtime flow is defined in `04` and `05`.
 
-1. Set env profile.
-2. Run:
+Execution model:
+
+1. Use chained mode (`A -> B -> C -> D`) with one DB state and one browser session.
+2. Run setup once:
    - `pnpm env:check`
    - `pnpm db:migrate:dev`
    - `pnpm db:seed`
    - `pnpm dev`
-3. Sign in.
-4. Complete onboarding (if first login).
-5. Validate protected page and secure action behavior.
-6. Validate expected error when intentionally breaking tenant context.
+3. Validate positive/negative paths on `/users` and `/api/users`.
+4. Treat `/security-showcase` mutation as diagnostic (non-gating) until explicit policy mapping for that action is aligned.
+5. Run mandatory non-UI provisioning security gates:
+   - `pnpm test:db -- src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.db.test.ts -t "cross-provider email linking"`
+   - `pnpm test:db -- src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.db.test.ts -t "free-tier limit"`
 
 ## 8. Expected Controlled Errors
 

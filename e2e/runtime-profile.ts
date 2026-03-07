@@ -48,12 +48,24 @@ function readEnvFile(filePath: string): Record<string, string> {
   return env;
 }
 
+const envE2ELocal = readEnvFile(path.resolve(process.cwd(), '.env.e2e.local'));
+const envE2E = readEnvFile(path.resolve(process.cwd(), '.env.e2e'));
 const envLocal = readEnvFile(path.resolve(process.cwd(), '.env.local'));
 
 function readValue(name: string): string | undefined {
   const processValue = process.env[name];
   if (processValue && processValue.trim().length > 0) {
     return processValue;
+  }
+
+  const envE2ELocalValue = envE2ELocal[name];
+  if (envE2ELocalValue && envE2ELocalValue.trim().length > 0) {
+    return envE2ELocalValue;
+  }
+
+  const envE2EValue = envE2E[name];
+  if (envE2EValue && envE2EValue.trim().length > 0) {
+    return envE2EValue;
   }
 
   const fileValue = envLocal[name];

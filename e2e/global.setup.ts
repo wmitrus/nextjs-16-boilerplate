@@ -32,15 +32,25 @@ function readEnvFile(filePath: string): Record<string, string> {
 }
 
 function ensureClerkTestingEnv(): void {
+  const envE2ELocal = readEnvFile(
+    path.resolve(process.cwd(), '.env.e2e.local'),
+  );
+  const envE2E = readEnvFile(path.resolve(process.cwd(), '.env.e2e'));
   const envLocal = readEnvFile(path.resolve(process.cwd(), '.env.local'));
   const envExample = readEnvFile(path.resolve(process.cwd(), '.env.example'));
 
   process.env.CLERK_SECRET_KEY =
-    process.env.CLERK_SECRET_KEY ?? envLocal.CLERK_SECRET_KEY ?? '';
+    process.env.CLERK_SECRET_KEY ??
+    envE2ELocal.CLERK_SECRET_KEY ??
+    envE2E.CLERK_SECRET_KEY ??
+    envLocal.CLERK_SECRET_KEY ??
+    '';
 
   process.env.CLERK_PUBLISHABLE_KEY =
     process.env.CLERK_PUBLISHABLE_KEY ??
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+    envE2ELocal.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+    envE2E.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     envLocal.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     envExample.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     '';

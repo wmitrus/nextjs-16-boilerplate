@@ -8,6 +8,7 @@ describe('isValidInternalRedirect', () => {
     expect(isValidInternalRedirect('/app/dashboard')).toBe(true);
     expect(isValidInternalRedirect('/onboarding')).toBe(true);
     expect(isValidInternalRedirect('/auth/bootstrap')).toBe(true);
+    expect(isValidInternalRedirect('/users?tab=settings')).toBe(true);
   });
 
   it('rejects empty string', () => {
@@ -41,6 +42,9 @@ describe('sanitizeRedirectUrl', () => {
     expect(sanitizeRedirectUrl('/app/dashboard', '/users')).toBe(
       '/app/dashboard',
     );
+    expect(sanitizeRedirectUrl('/users?tab=settings', '/users')).toBe(
+      '/users?tab=settings',
+    );
   });
 
   it('returns fallback when url is invalid', () => {
@@ -48,5 +52,6 @@ describe('sanitizeRedirectUrl', () => {
     expect(sanitizeRedirectUrl('//evil.com', '/users')).toBe('/users');
     expect(sanitizeRedirectUrl('', '/users')).toBe('/users');
     expect(sanitizeRedirectUrl('javascript:alert(1)', '/users')).toBe('/users');
+    expect(sanitizeRedirectUrl('users', '/users')).toBe('/users');
   });
 });

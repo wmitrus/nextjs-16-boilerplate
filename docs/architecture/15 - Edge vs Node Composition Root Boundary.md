@@ -49,10 +49,12 @@ It defines where security checks may run, where DB-backed authorization is allow
 - internal API guard
 - rate limiting
 - authentication gate (signed in vs not signed in)
-- onboarding redirects
+- security headers
+- coarse route gating only (no DB-backed provisioning truth)
 
 ### Node responsibilities
 
+- provisioning/onboarding readiness gate (internal identity, onboarding state, tenant context, membership)
 - resource-level authorization (`AuthorizationService`, policies, ABAC attributes)
 - domain security decisions requiring persistence
 
@@ -62,8 +64,9 @@ It defines where security checks may run, where DB-backed authorization is allow
 2. `withAuth` in middleware must run with `enforceResourceAuthorization: false`.
 3. No middleware code may resolve `AUTHORIZATION.SERVICE`.
 4. Resource-level authorization must be executed in Node flows (`secure-action`, route handlers, server-side orchestration).
-5. Process-scope DB runtime lifecycle remains centralized in `src/core/runtime/infrastructure.ts`.
-6. Request containers are ephemeral; DB runtime is process-scoped and shared.
+5. Onboarding/provisioning readiness must be validated in Node flows for protected pages and APIs.
+6. Process-scope DB runtime lifecycle remains centralized in `src/core/runtime/infrastructure.ts`.
+7. Request containers are ephemeral; DB runtime is process-scoped and shared.
 
 ## Forbidden patterns
 
@@ -71,6 +74,7 @@ It defines where security checks may run, where DB-backed authorization is allow
 - Importing or resolving `AUTHORIZATION.SERVICE` in Edge middleware composition.
 - Creating DB clients/pools per middleware request.
 - Moving policy decisions into `proxy.ts` to "save one server call".
+- Treating Edge-authenticated external session as proof of internal provisioning completeness.
 
 ## Validation gates for this boundary
 

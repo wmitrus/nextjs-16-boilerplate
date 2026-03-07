@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/core/env', () => ({
-  env: {
-    API_RATE_LIMIT_REQUESTS: 10,
-    API_RATE_LIMIT_WINDOW: '60 s',
-  },
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      API_RATE_LIMIT_REQUESTS: 10,
+      API_RATE_LIMIT_WINDOW: '60 s',
+    },
+  };
+});
 
 import { localRateLimit } from './rate-limit-local';
 

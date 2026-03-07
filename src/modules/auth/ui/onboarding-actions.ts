@@ -5,11 +5,17 @@ import { cookies, headers } from 'next/headers';
 import { AUTH, PROVISIONING } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
+import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
 import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import {
+  CrossProviderLinkingNotAllowedError,
+  TenantContextRequiredError,
+  TenantUserLimitReachedError,
+} from '@/modules/provisioning/domain/errors';
 import type { ProvisioningService } from '@/modules/provisioning/domain/ProvisioningService';
 
 const logger = resolveServerLogger().child({
@@ -96,6 +102,31 @@ export const completeOnboarding = async (formData: FormData) => {
       },
       'provisioning:ensure failed — aborting onboarding',
     );
+
+    if (err instanceof CrossProviderLinkingNotAllowedError) {
+      return {
+        error:
+          'Account linking is blocked by security policy. Sign in with your original provider or contact support.',
+      };
+    }
+
+    if (
+      err instanceof TenantContextRequiredError ||
+      err instanceof TenantNotProvisionedError
+    ) {
+      return {
+        error:
+          'Tenant context is invalid or missing. Verify tenancy configuration and try again.',
+      };
+    }
+
+    if (err instanceof TenantUserLimitReachedError) {
+      return {
+        error:
+          'This tenant reached the free-tier user limit. Upgrade the plan to add more users.',
+      };
+    }
+
     return { error: 'Provisioning failed. Please try again.' };
   }
 

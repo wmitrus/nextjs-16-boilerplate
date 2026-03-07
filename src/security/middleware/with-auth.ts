@@ -150,7 +150,8 @@ function rejectUnauthenticatedPrivateRoute(
   }
 
   const signInUrl = new URL('/sign-in', req.url);
-  signInUrl.searchParams.set('redirect_url', req.url);
+  const requestedPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+  signInUrl.searchParams.set('redirect_url', requestedPath);
   return NextResponse.redirect(signInUrl);
 }
 

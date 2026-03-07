@@ -241,10 +241,14 @@ async function resolveOrCreateUser(
   emailVerified: boolean | undefined,
   crossProviderEmailLinking: 'disabled' | 'verified-only',
 ): Promise<{ internalUserId: string; userCreatedNow: boolean }> {
-  // Fast path: identity mapping already exists — return immediately
+  // Fast path: identity mapping already exists — verify users row is intact
   const existingIdentity = await db
-    .select({ userId: authUserIdentitiesTable.userId })
+    .select({
+      userId: authUserIdentitiesTable.userId,
+      existingUserId: usersTable.id,
+    })
     .from(authUserIdentitiesTable)
+    .leftJoin(usersTable, eq(usersTable.id, authUserIdentitiesTable.userId))
     .where(
       and(
         eq(authUserIdentitiesTable.provider, provider),
@@ -254,6 +258,11 @@ async function resolveOrCreateUser(
     .limit(1);
 
   if (existingIdentity[0]?.userId) {
+    if (!existingIdentity[0].existingUserId) {
+      throw new Error(
+        '[provisioning] Identity mapping points to missing user row — bootstrap invariant violated.',
+      );
+    }
     return {
       internalUserId: existingIdentity[0].userId,
       userCreatedNow: false,

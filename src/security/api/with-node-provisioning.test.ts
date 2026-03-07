@@ -46,6 +46,24 @@ describe('withNodeProvisioning', () => {
     expect(body.code).toBe('ONBOARDING_REQUIRED');
   });
 
+  it('returns 409 when access outcome is BOOTSTRAP_REQUIRED', async () => {
+    const handler = withNodeProvisioning(
+      async () => NextResponse.json({ ok: true }),
+      {
+        resolveAccess: async () => ({
+          status: 'BOOTSTRAP_REQUIRED',
+          code: 'BOOTSTRAP_REQUIRED',
+          message: 'Bootstrap required',
+        }),
+      },
+    );
+
+    const response = await handler(createRequest('/api/users'), context);
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.code).toBe('BOOTSTRAP_REQUIRED');
+  });
+
   it('returns 409 with DEFAULT_TENANT_NOT_FOUND code when single-tenant config is invalid', async () => {
     const handler = withNodeProvisioning(
       async () => NextResponse.json({ ok: true }),

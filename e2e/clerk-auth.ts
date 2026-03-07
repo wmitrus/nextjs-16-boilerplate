@@ -148,16 +148,31 @@ export async function signInWithCredentials(
 
   await page.goto('/');
 
-  await clerk.signIn({
-    page,
-    signInParams: {
-      strategy: 'password',
-      identifier: credentials.username,
-      password: credentials.password,
-    },
-  });
+  if (credentials.username.includes('@')) {
+    await clerk.signIn({
+      page,
+      emailAddress: credentials.username,
+    });
+  } else {
+    await clerk.signIn({
+      page,
+      signInParams: {
+        strategy: 'password',
+        identifier: credentials.username,
+        password: credentials.password,
+      },
+    });
+  }
 
   await clerk.loaded({ page });
+  await page.waitForFunction(
+    () =>
+      Boolean(
+        window.Clerk?.loaded && window.Clerk?.session && window.Clerk?.user,
+      ),
+    { timeout: 10_000 },
+  );
+  await page.goto('/', { waitUntil: 'networkidle' });
 }
 
 export async function signInClerkIdentityE2E(

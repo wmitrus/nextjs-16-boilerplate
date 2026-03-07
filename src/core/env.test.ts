@@ -325,7 +325,7 @@ describe('validateTenancyConfig', () => {
   it('passes when TENANCY_MODE=single with DEFAULT_TENANT_ID', async () => {
     setEnv({
       TENANCY_MODE: 'single',
-      DEFAULT_TENANT_ID: '550e8400-e29b-41d4-a716-446655440000',
+      DEFAULT_TENANT_ID: '10000000-0000-4000-8000-000000000001',
       TENANT_CONTEXT_SOURCE: undefined,
     });
     vi.resetModules();
@@ -378,7 +378,7 @@ describe('validateTenancyConfigValues', () => {
     expect(() =>
       validateTenancyConfigValues(
         'single',
-        '550e8400-e29b-41d4-a716-446655440000',
+        '10000000-0000-4000-8000-000000000001',
         undefined,
       ),
     ).not.toThrow();

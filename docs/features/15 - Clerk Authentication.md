@@ -71,6 +71,12 @@ Common optional route vars:
 
 This preserves edge/node composition boundaries and avoids provider leakage.
 
+Important:
+
+- Edge middleware validates session presence only.
+- Internal provisioning/onboarding truth is enforced by Node gate on protected pages/APIs.
+- Use `/api/me/provisioning-status` as authoritative runtime probe.
+
 ## 7. Clerk Organizations vs Tenancy
 
 Clerk orgs are optional and depend on tenancy mode:

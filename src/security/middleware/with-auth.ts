@@ -94,17 +94,18 @@ function redirectAuthenticatedFromAuthRoute(
   req: NextRequest,
   ctx: RouteContext,
   userId: string | undefined,
-  onboardingComplete: boolean,
 ): NextResponse | null {
   if (!userId || !ctx.isAuthRoute) {
     return null;
   }
 
-  const redirectUrl = onboardingComplete
-    ? new URL('/', req.url)
-    : new URL('/onboarding', req.url);
+  const bootstrapUrl = new URL('/auth/bootstrap', req.url);
+  const existingRedirectUrl = req.nextUrl.searchParams.get('redirect_url');
+  if (existingRedirectUrl) {
+    bootstrapUrl.searchParams.set('redirect_url', existingRedirectUrl);
+  }
 
-  return NextResponse.redirect(redirectUrl);
+  return NextResponse.redirect(bootstrapUrl);
 }
 
 function redirectForIncompleteOnboarding(
@@ -220,10 +221,10 @@ async function authorizeRouteAccess(
  *
  * Rules:
  * 1️⃣ Auth routes: redirect signed-in users
- * 2️⃣ Private routes: enforce onboarding
+ * 2️⃣ Private routes: enforce onboarding (Node mode only)
  * 3️⃣ API routes: return JSON error on unauthorized
  * 4️⃣ E2E routes bypass auth if env.E2E_ENABLED
- * 5️⃣ Route access: authorized via PolicyEngine with ABAC environment context
+ * 5️⃣ Route access: authorized via PolicyEngine with ABAC environment context (Node mode only)
  */
 export function withAuth(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
@@ -244,6 +245,15 @@ export function withAuth(
 
     const identity = await resolveIdentity(options);
     const userId = identity?.id;
+
+    // Bootstrap route: authenticated users pass through; unauthenticated → sign-in
+    if (ctx.isBootstrapRoute) {
+      if (!userId) {
+        return NextResponse.redirect(new URL('/sign-in', req.url));
+      }
+      return handler(req, ctx);
+    }
+
     const onboardingComplete = isNodeMode(options)
       ? await resolveOnboardingComplete(options.userRepository, userId)
       : true;
@@ -253,21 +263,22 @@ export function withAuth(
       req,
       ctx,
       userId,
-      onboardingComplete,
     );
     if (authRouteRedirect) {
       return authRouteRedirect;
     }
 
     // 2. Enforce onboarding for private routes
-    const onboardingRedirect = redirectForIncompleteOnboarding(
-      req,
-      ctx,
-      userId,
-      onboardingComplete,
-    );
-    if (onboardingRedirect) {
-      return onboardingRedirect;
+    if (isNodeMode(options)) {
+      const onboardingRedirect = redirectForIncompleteOnboarding(
+        req,
+        ctx,
+        userId,
+        onboardingComplete,
+      );
+      if (onboardingRedirect) {
+        return onboardingRedirect;
+      }
     }
 
     // 3. Protect private routes

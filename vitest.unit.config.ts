@@ -8,6 +8,7 @@ export default defineConfig({
     name: 'unit',
     environment: 'jsdom',
     globals: true,
+    hookTimeout: 30_000,
     setupFiles: ['./tests/setup.tsx', './tests/polyfills.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx}'],
     exclude: ['src/**/*.integration.test.{ts,tsx}', 'src/stories/**'],

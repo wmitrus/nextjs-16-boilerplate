@@ -51,6 +51,20 @@ describe('evaluateNodeProvisioningAccess', () => {
     const result = await evaluateNodeProvisioningAccess(deps);
 
     expect(result.status).toBe('BOOTSTRAP_REQUIRED');
+    expect(result.status).not.toBe('ONBOARDING_REQUIRED');
+    if (result.status !== 'ALLOWED') {
+      expect(result.code).toBe('BOOTSTRAP_REQUIRED');
+    }
+  });
+
+  it('returns BOOTSTRAP_REQUIRED when identity resolves but internal user row is missing', async () => {
+    const deps = createDeps();
+    deps.userRepository.findById.mockResolvedValue(null);
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('BOOTSTRAP_REQUIRED');
+    expect(result.status).not.toBe('ONBOARDING_REQUIRED');
     if (result.status !== 'ALLOWED') {
       expect(result.code).toBe('BOOTSTRAP_REQUIRED');
     }

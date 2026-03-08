@@ -4,6 +4,8 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+import { shouldDropDevClientSentryEvent } from '@/shared/lib/observability/sentry-dev-filters';
+
 const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 if (sentryDsn) {
@@ -18,6 +20,13 @@ if (sentryDsn) {
     // Enable sending user PII (Personally Identifiable Information)
     // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
     sendDefaultPii: true,
+    beforeSend(event, hint) {
+      if (shouldDropDevClientSentryEvent(event, hint, process.env.NODE_ENV)) {
+        return null;
+      }
+
+      return event;
+    },
   });
 }
 

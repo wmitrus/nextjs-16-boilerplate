@@ -4,7 +4,7 @@ import { useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 
 const ERROR_MESSAGES: Record<
-  'cross_provider_linking' | 'quota_exceeded' | 'tenant_config',
+  'cross_provider_linking' | 'quota_exceeded' | 'tenant_config' | 'db_error',
   string
 > = {
   cross_provider_linking:
@@ -13,10 +13,16 @@ const ERROR_MESSAGES: Record<
     'This workspace has reached its user limit. Please contact your workspace administrator to upgrade the plan.',
   tenant_config:
     'Workspace configuration is incomplete or missing. Please contact your administrator.',
+  db_error:
+    'Local database error — the dev database may be corrupted. Run `pnpm db:reset:pglite` and restart the dev server (`pnpm dev`), then try signing in again.',
 };
 
 interface BootstrapErrorUIProps {
-  error: 'cross_provider_linking' | 'quota_exceeded' | 'tenant_config';
+  error:
+    | 'cross_provider_linking'
+    | 'quota_exceeded'
+    | 'tenant_config'
+    | 'db_error';
 }
 
 export function BootstrapErrorUI({ error }: BootstrapErrorUIProps) {

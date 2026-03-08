@@ -16,7 +16,11 @@ vi.mock('drizzle-orm/pglite', () => ({
   drizzle: drizzleMock,
 }));
 
-import { createPglite } from './create-pglite';
+import {
+  PGliteWasmAbortError,
+  createPglite,
+  resolvePglitePath,
+} from './create-pglite';
 
 describe('createPglite', () => {
   beforeEach(() => {
@@ -36,5 +40,81 @@ describe('createPglite', () => {
     await second.close?.();
 
     expect(closeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws PGliteWasmAbortError when constructor throws RuntimeError with Aborted()', () => {
+    const runtimeError = new Error('Aborted()');
+    runtimeError.name = 'RuntimeError';
+    Object.defineProperty(runtimeError, 'constructor', {
+      value: { name: 'RuntimeError' },
+    });
+    pgliteCtorMock.mockImplementationOnce(() => {
+      throw runtimeError;
+    });
+
+    expect(() => createPglite('./data/pglite')).toThrow(PGliteWasmAbortError);
+    expect(() => createPglite('./data/pglite')).toThrow(/pnpm db:reset:pglite/);
+  });
+
+  it('throws PGliteWasmAbortError when constructor throws plain Error with Aborted() message', () => {
+    pgliteCtorMock.mockImplementationOnce(() => {
+      throw new Error('Aborted(). Build with -sASSERTIONS for more info.');
+    });
+
+    expect(() => createPglite('./data/pglite')).toThrow(PGliteWasmAbortError);
+  });
+
+  it('re-throws non-WASM errors unchanged', () => {
+    const originalError = new Error('disk full');
+    pgliteCtorMock.mockImplementationOnce(() => {
+      throw originalError;
+    });
+
+    expect(() => createPglite('./data/pglite')).toThrow(originalError);
+    expect(() => createPglite('./data/pglite')).not.toThrow(
+      PGliteWasmAbortError,
+    );
+  });
+
+  it('PGliteWasmAbortError carries the resolved path', () => {
+    pgliteCtorMock.mockImplementationOnce(() => {
+      throw new Error('Aborted()');
+    });
+
+    let caught: unknown;
+    try {
+      createPglite('file:./data/custom');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(PGliteWasmAbortError);
+    expect((caught as PGliteWasmAbortError).path).toBe('./data/custom');
+  });
+});
+
+describe('resolvePglitePath', () => {
+  it('returns default path for undefined input', () => {
+    expect(resolvePglitePath(undefined)).toBe('./data/pglite');
+  });
+
+  it('returns default path for empty string', () => {
+    expect(resolvePglitePath('')).toBe('./data/pglite');
+  });
+
+  it('strips file: prefix', () => {
+    expect(resolvePglitePath('file:./data/pglite')).toBe('./data/pglite');
+  });
+
+  it('strips pglite:// prefix', () => {
+    expect(resolvePglitePath('pglite://./data/custom')).toBe('./data/custom');
+  });
+
+  it('returns bare path unchanged', () => {
+    expect(resolvePglitePath('./data/mydb')).toBe('./data/mydb');
+  });
+
+  it('falls back to default when file: prefix yields empty string', () => {
+    expect(resolvePglitePath('file:')).toBe('./data/pglite');
   });
 });

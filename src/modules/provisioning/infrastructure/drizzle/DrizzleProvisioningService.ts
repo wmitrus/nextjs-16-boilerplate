@@ -6,6 +6,7 @@ import type { ExternalAuthProvider } from '@/core/contracts/identity';
 import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
 import type { DrizzleDb } from '@/core/db';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import {
   CrossProviderLinkingNotAllowedError,
@@ -35,6 +36,11 @@ import {
 } from './schema';
 
 const TENANT_ID_NAMESPACE = 'provisioning:tenant:v1';
+const logger = resolveServerLogger().child({
+  type: 'API',
+  category: 'provisioning',
+  module: 'drizzle-provisioning-service',
+});
 
 /**
  * Computes a deterministic UUID-like string from a stable key.
@@ -70,6 +76,10 @@ function buildFallbackEmail(
   externalId: string,
 ): string {
   return `external+${sanitizeForEmailLocalPart(provider)}-${sanitizeForEmailLocalPart(externalId)}@local.invalid`;
+}
+
+function isSyntheticFallbackEmail(email: string): boolean {
+  return email.endsWith('@local.invalid') && email.startsWith('external+');
 }
 
 function mapTenantRoleClaim(claim: string | undefined): 'owner' | 'member' {
@@ -246,6 +256,7 @@ async function resolveOrCreateUser(
     .select({
       userId: authUserIdentitiesTable.userId,
       existingUserId: usersTable.id,
+      existingEmail: usersTable.email,
     })
     .from(authUserIdentitiesTable)
     .leftJoin(usersTable, eq(usersTable.id, authUserIdentitiesTable.userId))
@@ -263,6 +274,49 @@ async function resolveOrCreateUser(
         '[provisioning] Identity mapping points to missing user row — bootstrap invariant violated.',
       );
     }
+
+    const currentEmail = existingIdentity[0].existingEmail;
+    if (
+      typeof email === 'string' &&
+      currentEmail &&
+      isSyntheticFallbackEmail(currentEmail) &&
+      currentEmail !== email
+    ) {
+      const emailOwner = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.email, email))
+        .limit(1);
+
+      if (!emailOwner[0]?.id) {
+        await db
+          .update(usersTable)
+          .set({ email })
+          .where(eq(usersTable.id, existingIdentity[0].userId));
+
+        logger.info(
+          {
+            event: 'provisioning:repair_synthetic_email',
+            provider,
+            externalUserId,
+            internalUserId: existingIdentity[0].userId,
+          },
+          'Provisioning repaired a synthetic fallback email using a real provider email claim',
+        );
+      } else if (emailOwner[0].id !== existingIdentity[0].userId) {
+        logger.warn(
+          {
+            event: 'provisioning:repair_synthetic_email_skipped',
+            provider,
+            externalUserId,
+            internalUserId: existingIdentity[0].userId,
+            conflictingUserId: emailOwner[0].id,
+          },
+          'Provisioning could not repair a synthetic fallback email because the real email is already owned by another user',
+        );
+      }
+    }
+
     return {
       internalUserId: existingIdentity[0].userId,
       userCreatedNow: false,
@@ -271,6 +325,19 @@ async function resolveOrCreateUser(
 
   // Determine effective email — fall back to a deterministic synthetic address when absent
   const isRealEmail = email !== undefined;
+  if (!isRealEmail) {
+    const logMethod =
+      process.env.NODE_ENV === 'test' ? logger.debug : logger.warn;
+    logMethod.call(
+      logger,
+      {
+        event: 'provisioning:fallback_email',
+        provider,
+        externalUserId,
+      },
+      'Provisioning is using a synthetic fallback email because the auth provider did not supply an email claim',
+    );
+  }
   const effectiveEmail = isRealEmail
     ? email
     : buildFallbackEmail(provider, externalUserId);

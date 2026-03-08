@@ -120,6 +120,9 @@ async function resetPglite() {
 
   if (result.success) {
     console.log(`✅ ${result.message}`);
+    console.warn(
+      '⚠️  Restart your dev server (pnpm dev) for the new database to take effect.',
+    );
   } else {
     console.error(`❌ ${result.message}`);
     process.exit(1);

@@ -1,6 +1,6 @@
 import path from 'path';
 
-import type { DestinationStream } from 'pino';
+import type { DestinationStream, StreamEntry } from 'pino';
 
 import { env } from '@/core/env';
 
@@ -15,7 +15,7 @@ import {
  * This approach avoids nested if/else blocks and provides a declarative way
  * to manage multiple transports.
  */
-export function getLogStreams(): DestinationStream[] {
+export function getLogStreams(): StreamEntry[] {
   const isServer = typeof window === 'undefined';
   if (!isServer) return [];
 
@@ -41,5 +41,10 @@ export function getLogStreams(): DestinationStream[] {
   ];
 
   // Filter out any null or undefined streams
-  return streams.filter((s): s is DestinationStream => !!s);
+  return streams
+    .filter((s): s is DestinationStream => !!s)
+    .map((stream) => ({
+      level: 'trace' as const,
+      stream,
+    }));
 }

@@ -197,6 +197,11 @@ async function establishProgrammaticSessionWithoutBootstrap(
       `Clerk Playwright helper did not establish a session. Verify that the app keys point to the correct Clerk test instance, password sign-in is enabled, and the fixture is not blocked by Client Trust / MFA. Original error: ${message}`,
     );
   }
+
+  // Clerk's recommended flow performs a navigation after sign-in.
+  // This allows the app server to observe the established browser session
+  // before the runtime tests hit protected APIs or routes.
+  await page.goto('/', { waitUntil: 'networkidle' });
 }
 
 export async function signInWithCredentials(

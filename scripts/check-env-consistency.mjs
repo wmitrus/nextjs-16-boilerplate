@@ -45,6 +45,47 @@ function checkEnvConsistency() {
   }
 
   console.log('✅ .env.example is in sync with src/core/env.ts');
+
+  const { warnings } = checkClerkRedirectUrls(
+    process.env,
+    process.env.NODE_ENV,
+  );
+  if (warnings.length > 0) {
+    console.warn('⚠️  Clerk redirect URL drift detected:');
+    for (const w of warnings) {
+      console.warn(w);
+    }
+    console.warn(
+      `   Expected: ${EXPECTED_BOOTSTRAP_PATH} for all sign-in/sign-up redirect URLs.`,
+    );
+    console.warn(
+      '   If your .env.local overrides these, update them to /auth/bootstrap.',
+    );
+  }
+}
+
+const CLERK_REDIRECT_VARS = [
+  'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL',
+];
+
+const EXPECTED_BOOTSTRAP_PATH = '/auth/bootstrap';
+
+export function checkClerkRedirectUrls(effectiveEnv, nodeEnv = 'development') {
+  if (nodeEnv === 'production') {
+    return { warnings: [] };
+  }
+
+  const warnings = [];
+  for (const key of CLERK_REDIRECT_VARS) {
+    const value = effectiveEnv[key];
+    if (value !== undefined && value !== EXPECTED_BOOTSTRAP_PATH) {
+      warnings.push(`  ${key}=${value} (expected ${EXPECTED_BOOTSTRAP_PATH})`);
+    }
+  }
+  return { warnings };
 }
 
 // Only run if called directly

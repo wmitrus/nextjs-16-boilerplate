@@ -77,9 +77,31 @@ export async function performPgliteReset(config, deps) {
     };
   }
 
+  log('[reset-pglite] Running: pnpm db:seed');
+
+  const seedResult = spawnSyncFn('pnpm', ['db:seed'], {
+    stdio: 'inherit',
+    env: process.env,
+  });
+
+  if (seedResult.error) {
+    return {
+      success: false,
+      message: `[reset-pglite] Failed to spawn pnpm db:seed: ${seedResult.error.message}`,
+    };
+  }
+
+  if (seedResult.status !== 0) {
+    return {
+      success: false,
+      message: `[reset-pglite] pnpm db:seed exited with status ${seedResult.status ?? 'unknown'}.`,
+    };
+  }
+
   return {
     success: true,
-    message: '[reset-pglite] Done. PGlite database reset successfully.',
+    message:
+      '[reset-pglite] Done. PGlite database reset and seeded successfully.',
   };
 }
 

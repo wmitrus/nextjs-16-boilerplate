@@ -134,6 +134,21 @@ Changes:
 
 ---
 
+### [ ] Task 9 — Add seed step to `reset-pglite.mjs`
+
+**Files:** `scripts/reset-pglite.mjs`, `scripts/reset-pglite.test.ts`
+
+Changes:
+
+- After successful `db:migrate:dev`, call `spawnSync('pnpm', ['db:seed'])` with same error-handling pattern
+- Return `{ success: false }` if seed fails (spawn error or non-zero exit)
+- Update success message to reflect full reset+seed flow
+- Add tests: seed called after successful migrate; seed not called when migrate fails; seed failure returns `{ success: false }`
+
+**Verification:** `pnpm test` — all tests pass ✅
+
+---
+
 ### [x] Task 8 — Final quality gate
 
 Run and record results:

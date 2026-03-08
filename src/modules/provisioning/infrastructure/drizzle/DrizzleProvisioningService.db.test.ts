@@ -48,6 +48,58 @@ function makeService(
 }
 
 describe('DrizzleProvisioningService (real DB)', () => {
+  it('coalesces concurrent ensureProvisioned calls for the same identity across service instances', async () => {
+    const input = {
+      provider: 'clerk' as const,
+      externalUserId: 'user_singleflight_001',
+      email: 'singleflight-001@example.com',
+      tenancyMode: 'single' as const,
+      activeTenantId: '10000000-0000-4000-8000-000000000001',
+    };
+
+    await testDb.db
+      .insert(tenantsTable)
+      .values({
+        id: '10000000-0000-4000-8000-000000000001',
+        name: 'Singleflight Tenant',
+      })
+      .onConflictDoNothing();
+
+    const [first, second, third] = await Promise.all([
+      makeService().ensureProvisioned(input),
+      makeService().ensureProvisioned(input),
+      makeService().ensureProvisioned(input),
+    ]);
+
+    expect(second.internalUserId).toBe(first.internalUserId);
+    expect(third.internalUserId).toBe(first.internalUserId);
+    expect(second.internalTenantId).toBe(first.internalTenantId);
+    expect(third.internalTenantId).toBe(first.internalTenantId);
+
+    const userIdentityRows = await testDb.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(authUserIdentitiesTable)
+      .where(
+        and(
+          eq(authUserIdentitiesTable.provider, 'clerk'),
+          eq(authUserIdentitiesTable.externalUserId, input.externalUserId),
+        ),
+      );
+
+    const membershipRows = await testDb.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(membershipsTable)
+      .where(
+        and(
+          eq(membershipsTable.userId, first.internalUserId),
+          eq(membershipsTable.tenantId, first.internalTenantId),
+        ),
+      );
+
+    expect(userIdentityRows[0]?.count).toBe(1);
+    expect(membershipRows[0]?.count).toBe(1);
+  });
+
   describe('personal mode', () => {
     it('provisions user + personal tenant on first call', async () => {
       const svc = makeService();

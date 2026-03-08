@@ -26,7 +26,19 @@ Before creating fixtures in Clerk Dashboard:
 6. Enable Organizations only for the `org/provider` and `org/db` scenarios.
    They are not required for `single` or `personal`.
 7. Set both sign-in and sign-up force redirect URLs to `/auth/bootstrap`.
-8. Store local Clerk fixture secrets in `.env.e2e.local` or `.env.e2e`.
+8. Ensure the Clerk session token exposes a real email claim to `auth()`.
+   Supported contracts in this boilerplate are:
+   - preferred explicit custom session claim: `email`
+   - supported backward-compatible custom session claim: `primaryEmail`
+9. Store local Clerk fixture secrets in `.env.e2e.local` or `.env.e2e`.
+
+Recommended custom session token snippet:
+
+```json
+{
+  "email": "{{user.primary_email_address}}"
+}
+```
 
 Important runtime contract:
 
@@ -40,6 +52,9 @@ Important runtime contract:
   sign-in verification behavior for the test instance. If that policy is on
   for these fixtures, the runtime helper will correctly stop instead of trying
   to bypass the challenge with custom cookies.
+- If the app provisions users with `external+clerk-...@local.invalid`, the
+  session token did not expose a usable email claim. That is a contract/config
+  problem, not a valid steady-state for production.
 
 ## 2. Required Organizations
 

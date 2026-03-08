@@ -64,6 +64,17 @@ For Clerk mode, onboarding relies on these mapped claims:
 - `tenantExternalId` (org)
 - `tenantRole` (org role)
 
+Email contract:
+
+- preferred/default: Clerk Session Token v2 `email` claim
+- supported custom alternative: `primaryEmail`
+- if neither is present, provisioning falls back to a synthetic
+  `external+clerk-...@local.invalid` address to preserve identity uniqueness
+  and bootstrap continuity, but that is not a valid production steady-state
+- if a user was previously provisioned with that synthetic address and a real
+  email claim becomes available later, bootstrap now repairs the internal
+  `users.email` value automatically when it is safe to do so
+
 If required tenant context is missing for the selected mode, provisioning fails with controlled domain errors.
 
 ## 6. Role Outcome on First Provisioning

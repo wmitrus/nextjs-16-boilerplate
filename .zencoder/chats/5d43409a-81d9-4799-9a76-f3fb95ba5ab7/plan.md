@@ -134,7 +134,7 @@ Changes:
 
 ---
 
-### [ ] Task 9 — Add seed step to `reset-pglite.mjs`
+### [x] Task 9 — Add seed step to `reset-pglite.mjs`
 
 **Files:** `scripts/reset-pglite.mjs`, `scripts/reset-pglite.test.ts`
 
@@ -146,6 +146,22 @@ Changes:
 - Add tests: seed called after successful migrate; seed not called when migrate fails; seed failure returns `{ success: false }`
 
 **Verification:** `pnpm test` — all tests pass ✅
+
+---
+
+### [x] Task 10 — Handle PGlite WASM abort gracefully in bootstrap + reset restart warning
+
+**Files:** `src/app/auth/bootstrap/bootstrap-error.tsx`, `src/app/auth/bootstrap/page.tsx`, `scripts/reset-pglite.mjs`
+
+Root cause: running `pnpm db:reset:pglite` while `pnpm dev` is active corrupts the live PGlite WASM instance → bootstrap re-throws `RuntimeError: Aborted()` → Turbopack can't serialize it cross server/client boundary → blank white page.
+
+Changes:
+
+- `bootstrap-error.tsx`: add `db_error` variant with "Local database error" message + run `pnpm db:reset:pglite` and restart dev server instructions
+- `bootstrap/page.tsx`: detect `RuntimeError: Aborted()` / `PGliteWasmAbortError` in catch block → return `<BootstrapErrorUI error="db_error" />` instead of re-throwing
+- `reset-pglite.mjs`: after success print `⚠️  Restart your dev server (pnpm dev) for the new database to take effect.`
+
+**Verification:** `pnpm typecheck`, `pnpm lint`, `pnpm test` pass ✅
 
 ---
 

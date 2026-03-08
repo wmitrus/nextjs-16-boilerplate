@@ -20,14 +20,27 @@ Save findings to `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/2a635
 - Affected components
 - Proposed solution
 
-### [ ] Step: Implementation
+### [x] Step: Implementation (reverted — build error)
 
-Read `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/2a635837-4b28-4726-8029-61eadacc1082/investigation.md`
-Implement the bug fix.
+Previous attempt used `next/dynamic` with `ssr: false` directly in a Server Component.
+Next.js App Router **does not allow** `ssr: false` in Server Components — it must live in a `'use client'` component.
 
-1. Add/adjust regression test(s) that fail before the fix and pass after
-2. Implement the fix
-3. Run relevant tests
-4. Update `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/2a635837-4b28-4726-8029-61eadacc1082/investigation.md` with implementation notes and test results
+### [x] Step: Correct Implementation (reverted — functional regression)
 
-If blocked or uncertain, ask the user for direction.
+`next/dynamic` + `ssr: false` renders `null` server-side — the skeleton only appears client-side, causing Clerk form to never appear.
+
+### [ ] Step: Final Correct Implementation
+
+Use `useEffect` + `useState(mounted)` inside the Client Component.
+
+- Server renders skeleton (mounted=false initial state)
+- Client hydrates with same skeleton → no mismatch
+- After useEffect → Clerk component mounts → no hydration error, form appears
+
+Proper Next.js App Router pattern:
+
+1. Create `sign-up-client.tsx` (`'use client'`) that owns `dynamic(..., { ssr: false })`
+2. Create `sign-in-client.tsx` (`'use client'`) same
+3. Server Component pages import and render these client wrappers
+4. Update page tests to mock the client wrapper modules
+5. Run tests, typecheck, lint

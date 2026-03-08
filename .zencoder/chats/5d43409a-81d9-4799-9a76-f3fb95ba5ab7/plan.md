@@ -18,7 +18,7 @@ Detailed tasks defined below. Implementation step replaced.
 
 ## Implementation Tasks
 
-### [x] Task 1 — Promote `resolvePglitePath` and add `PGliteWasmAbortError` to `create-pglite.ts`
+### [ ] Task 1 — Promote `resolvePglitePath` and add `PGliteWasmAbortError` to `create-pglite.ts`
 
 **File:** `src/core/db/drivers/create-pglite.ts`
 
@@ -34,7 +34,7 @@ Changes:
 
 ---
 
-### [x] Task 2 — Extend `create-pglite.test.ts` with WASM abort coverage
+### [ ] Task 2 — Extend `create-pglite.test.ts` with WASM abort coverage
 
 **File:** `src/core/db/drivers/create-pglite.test.ts`
 
@@ -50,7 +50,7 @@ Changes:
 
 ---
 
-### [x] Task 3 — Create `scripts/reset-pglite.mjs`
+### [ ] Task 3 — Create `scripts/reset-pglite.mjs`
 
 **File:** `scripts/reset-pglite.mjs` (new)
 
@@ -71,7 +71,7 @@ Changes:
 
 ---
 
-### [x] Task 4 — Create `scripts/reset-pglite.test.ts`
+### [ ] Task 4 — Create `scripts/reset-pglite.test.ts`
 
 **File:** `scripts/reset-pglite.test.ts` (new)
 
@@ -88,7 +88,7 @@ Changes:
 
 ---
 
-### [x] Task 5 — Add `db:reset:pglite` to `package.json`
+### [ ] Task 5 — Add `db:reset:pglite` to `package.json`
 
 **File:** `package.json`
 
@@ -100,7 +100,7 @@ Changes:
 
 ---
 
-### [x] Task 6 — Add `checkClerkRedirectUrls` to `check-env-consistency.mjs`
+### [ ] Task 6 — Add `checkClerkRedirectUrls` to `check-env-consistency.mjs`
 
 **File:** `scripts/check-env-consistency.mjs`
 
@@ -115,7 +115,7 @@ Changes:
 
 ---
 
-### [x] Task 7 — Extend `check-env-consistency.test.ts` with Clerk redirect checks
+### [ ] Task 7 — Extend `check-env-consistency.test.ts` with Clerk redirect checks
 
 **File:** `scripts/check-env-consistency.test.ts`
 
@@ -132,7 +132,7 @@ Changes:
 
 ---
 
-### [x] Task 8 — Final quality gate
+### [ ] Task 8 — Final quality gate
 
 Run and record results:
 

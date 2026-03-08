@@ -36,6 +36,7 @@ import {
 } from './schema';
 
 const TENANT_ID_NAMESPACE = 'provisioning:tenant:v1';
+const inFlightProvisioning = new Map<string, Promise<ProvisioningResult>>();
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'provisioning',
@@ -105,6 +106,26 @@ function decideNewMembershipRole(
   return 'member';
 }
 
+function buildProvisioningSingleFlightKey(
+  input: ProvisioningInput,
+  freeTierMaxUsers: number,
+  crossProviderEmailLinking: 'disabled' | 'verified-only',
+): string {
+  return JSON.stringify({
+    provider: input.provider,
+    externalUserId: input.externalUserId,
+    email: input.email ?? null,
+    emailVerified: input.emailVerified ?? null,
+    tenancyMode: input.tenancyMode,
+    tenantContextSource: input.tenantContextSource ?? null,
+    tenantExternalId: input.tenantExternalId ?? null,
+    tenantRole: input.tenantRole ?? null,
+    activeTenantId: input.activeTenantId ?? null,
+    freeTierMaxUsers,
+    crossProviderEmailLinking,
+  });
+}
+
 export class DrizzleProvisioningService implements ProvisioningService {
   constructor(
     private readonly db: DrizzleDb,
@@ -115,9 +136,29 @@ export class DrizzleProvisioningService implements ProvisioningService {
   async ensureProvisioned(
     input: ProvisioningInput,
   ): Promise<ProvisioningResult> {
+    const singleFlightKey = buildProvisioningSingleFlightKey(
+      input,
+      this.freeTierMaxUsers,
+      this.crossProviderEmailLinking,
+    );
+    const existingProvisioning = inFlightProvisioning.get(singleFlightKey);
+
+    if (existingProvisioning) {
+      logger.debug(
+        {
+          event: 'provisioning:ensure_singleflight_reused',
+          provider: input.provider,
+          externalUserId: input.externalUserId,
+          tenancyMode: input.tenancyMode,
+        },
+        'Provisioning reused an in-flight ensureProvisioned() call for the same identity',
+      );
+      return existingProvisioning;
+    }
+
     const { provider, externalUserId, email, emailVerified } = input;
 
-    return this.runInTransaction(async (db) => {
+    const provisioningPromise = this.runInTransaction(async (db) => {
       // Step 1: Resolve/create user — with explicit linking policy enforcement
       const { internalUserId, userCreatedNow } = await resolveOrCreateUser(
         db,
@@ -220,7 +261,14 @@ export class DrizzleProvisioningService implements ProvisioningService {
         tenantCreatedNow,
         userCreatedNow,
       };
+    }).finally(() => {
+      if (inFlightProvisioning.get(singleFlightKey) === provisioningPromise) {
+        inFlightProvisioning.delete(singleFlightKey);
+      }
     });
+
+    inFlightProvisioning.set(singleFlightKey, provisioningPromise);
+    return provisioningPromise;
   }
 
   private async runInTransaction<T>(

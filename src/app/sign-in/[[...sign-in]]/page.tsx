@@ -1,7 +1,14 @@
+import dynamic from 'next/dynamic';
 import { connection } from 'next/server';
-import { Suspense } from 'react';
 
 import { env } from '@/core/env';
+
+const SignIn = dynamic(() => import('@clerk/nextjs').then((m) => m.SignIn), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[400px] w-[400px] animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800" />
+  ),
+});
 
 export default async function Page() {
   await connection();
@@ -15,17 +22,9 @@ export default async function Page() {
     );
   }
 
-  const { SignIn } = await import('@clerk/nextjs');
-
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <Suspense
-        fallback={
-          <div className="h-[400px] w-[400px] animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800" />
-        }
-      >
-        <SignIn path="/sign-in" />
-      </Suspense>
+      <SignIn path="/sign-in" />
     </div>
   );
 }

@@ -208,6 +208,54 @@ describe('DrizzleProvisioningService (real DB)', () => {
     });
   });
 
+  describe('email fallback repair', () => {
+    it('repairs a synthetic fallback email when a real provider email becomes available later', async () => {
+      const svc = makeService();
+      await testDb.db
+        .insert(tenantsTable)
+        .values({
+          id: '10000000-0000-4000-8000-000000000001',
+          name: 'Single Tenant Repair',
+        })
+        .onConflictDoNothing();
+
+      const first = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_fallback_repair_001',
+        tenancyMode: 'single',
+        activeTenantId: '10000000-0000-4000-8000-000000000001',
+      });
+
+      const fallbackUserBeforeRepair = await testDb.db
+        .select({ email: usersTable.email })
+        .from(usersTable)
+        .where(eq(usersTable.id, first.internalUserId))
+        .limit(1);
+
+      expect(fallbackUserBeforeRepair[0]?.email).toBe(
+        'external+clerk-user_fallback_repair_001@local.invalid',
+      );
+
+      const second = await svc.ensureProvisioned({
+        provider: 'clerk',
+        externalUserId: 'user_fallback_repair_001',
+        email: 'repaired@example.com',
+        emailVerified: true,
+        tenancyMode: 'single',
+        activeTenantId: '10000000-0000-4000-8000-000000000001',
+      });
+
+      const repairedUser = await testDb.db
+        .select({ email: usersTable.email })
+        .from(usersTable)
+        .where(eq(usersTable.id, second.internalUserId))
+        .limit(1);
+
+      expect(second.internalUserId).toBe(first.internalUserId);
+      expect(repairedUser[0]?.email).toBe('repaired@example.com');
+    });
+  });
+
   describe('org/provider mode', () => {
     it('provisions user + org tenant with owner role from claim', async () => {
       const svc = makeService();

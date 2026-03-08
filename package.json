@@ -61,6 +61,7 @@
     "db:studio": "drizzle-kit studio --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:studio:local": "DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/app_test drizzle-kit studio --config=src/core/db/migrations/config/drizzle.local.ts",
     "db:seed": "tsx scripts/db-seed.ts",
+    "db:reset:pglite": "node scripts/reset-pglite.mjs",
     "test:db:local": "TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/app_test vitest run --config vitest.db.local.config.ts"
   },
   "lint-staged": {

@@ -48,36 +48,54 @@ describe('createPglite', () => {
     Object.defineProperty(runtimeError, 'constructor', {
       value: { name: 'RuntimeError' },
     });
-    pgliteCtorMock.mockImplementationOnce(() => {
+    pgliteCtorMock.mockImplementationOnce(function MockThrow() {
       throw runtimeError;
     });
 
-    expect(() => createPglite('./data/pglite')).toThrow(PGliteWasmAbortError);
-    expect(() => createPglite('./data/pglite')).toThrow(/pnpm db:reset:pglite/);
+    let caught: unknown;
+    try {
+      createPglite('./data/pglite');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(PGliteWasmAbortError);
+    expect((caught as PGliteWasmAbortError).message).toMatch(
+      /pnpm db:reset:pglite/,
+    );
   });
 
   it('throws PGliteWasmAbortError when constructor throws plain Error with Aborted() message', () => {
-    pgliteCtorMock.mockImplementationOnce(() => {
+    pgliteCtorMock.mockImplementationOnce(function MockThrow() {
       throw new Error('Aborted(). Build with -sASSERTIONS for more info.');
     });
 
-    expect(() => createPglite('./data/pglite')).toThrow(PGliteWasmAbortError);
+    let caught: unknown;
+    try {
+      createPglite('./data/pglite');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(PGliteWasmAbortError);
   });
 
   it('re-throws non-WASM errors unchanged', () => {
     const originalError = new Error('disk full');
-    pgliteCtorMock.mockImplementationOnce(() => {
+    pgliteCtorMock.mockImplementationOnce(function MockThrow() {
       throw originalError;
     });
 
-    expect(() => createPglite('./data/pglite')).toThrow(originalError);
-    expect(() => createPglite('./data/pglite')).not.toThrow(
-      PGliteWasmAbortError,
-    );
+    let caught: unknown;
+    try {
+      createPglite('./data/pglite');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBe(originalError);
+    expect(caught).not.toBeInstanceOf(PGliteWasmAbortError);
   });
 
   it('PGliteWasmAbortError carries the resolved path', () => {
-    pgliteCtorMock.mockImplementationOnce(() => {
+    pgliteCtorMock.mockImplementationOnce(function MockThrow() {
       throw new Error('Aborted()');
     });
 

@@ -19,13 +19,14 @@ export default function ErrorBoundary({
   reset: () => void;
 }) {
   useEffect(() => {
-    logger.error(
-      {
-        err: error,
-        digest: error.digest,
-      },
-      'Root Error Boundary caught an error',
-    );
+    const errorPayload = {
+      errorName: error.name,
+      errorMessage: error.message,
+      digest: error.digest,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    };
+
+    logger.error(errorPayload, 'Root Error Boundary caught an error');
 
     if (error instanceof Error) {
       Sentry.captureException(error, {

@@ -1,7 +1,8 @@
 import { connection } from 'next/server';
-import { Suspense } from 'react';
 
 import { env } from '@/core/env';
+
+import { SignUpClient } from './sign-up-client';
 
 export default async function SignUpPage() {
   await connection();
@@ -15,17 +16,9 @@ export default async function SignUpPage() {
     );
   }
 
-  const { SignUp } = await import('@clerk/nextjs');
-
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <Suspense
-        fallback={
-          <div className="h-[600px] w-[400px] animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800" />
-        }
-      >
-        <SignUp path="/sign-up" />
-      </Suspense>
+      <SignUpClient />
     </div>
   );
 }

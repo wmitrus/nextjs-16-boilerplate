@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { AUTH, PROVISIONING } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
+import { PGliteWasmAbortError } from '@/core/db/drivers/create-pglite';
 import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
@@ -122,6 +123,15 @@ export default async function BootstrapPage({
 
     if (err instanceof TenantContextRequiredError) {
       return <BootstrapErrorUI error="tenant_config" />;
+    }
+
+    if (
+      err instanceof PGliteWasmAbortError ||
+      (err instanceof Error &&
+        (err.constructor?.name === 'RuntimeError' ||
+          /aborted\(\)/i.test(err.message)))
+    ) {
+      return <BootstrapErrorUI error="db_error" />;
     }
 
     throw err;

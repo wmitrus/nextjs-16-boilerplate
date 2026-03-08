@@ -96,6 +96,38 @@ describe('ClerkRequestIdentitySource', () => {
     expect(data.tenantRole).toBeUndefined();
   });
 
+  it('reads email from primaryEmail custom claim when default email claim is absent', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      userId: 'user_123',
+      orgId: null,
+      orgRole: null,
+      sessionClaims: { primaryEmail: 'custom@example.com' },
+    } as unknown as Awaited<ReturnType<typeof auth>>);
+
+    const source = new ClerkRequestIdentitySource();
+    const data = await source.get();
+
+    expect(data.userId).toBe('user_123');
+    expect(data.email).toBe('custom@example.com');
+  });
+
+  it('prefers default email claim over primaryEmail custom claim', async () => {
+    vi.mocked(auth).mockResolvedValue({
+      userId: 'user_123',
+      orgId: null,
+      orgRole: null,
+      sessionClaims: {
+        email: 'default@example.com',
+        primaryEmail: 'custom@example.com',
+      },
+    } as unknown as Awaited<ReturnType<typeof auth>>);
+
+    const source = new ClerkRequestIdentitySource();
+    const data = await source.get();
+
+    expect(data.email).toBe('default@example.com');
+  });
+
   it('returns undefined tenantRole when user has no org role', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: 'user_123',

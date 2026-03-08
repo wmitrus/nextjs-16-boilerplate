@@ -25,6 +25,30 @@ export function getMissingKeys(envTsContent, exampleContent) {
   return allKeys.filter((key) => !exampleContent.includes(`${key}=`));
 }
 
+const CLERK_REDIRECT_VARS = [
+  'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL',
+];
+
+const EXPECTED_BOOTSTRAP_PATH = '/auth/bootstrap';
+
+export function checkClerkRedirectUrls(effectiveEnv, nodeEnv = 'development') {
+  if (nodeEnv === 'production') {
+    return { warnings: [] };
+  }
+
+  const warnings = [];
+  for (const key of CLERK_REDIRECT_VARS) {
+    const value = effectiveEnv[key];
+    if (value !== undefined && value !== EXPECTED_BOOTSTRAP_PATH) {
+      warnings.push(`  ${key}=${value} (expected ${EXPECTED_BOOTSTRAP_PATH})`);
+    }
+  }
+  return { warnings };
+}
+
 function checkEnvConsistency() {
   const envTsPath = path.join(ROOT, 'src/core/env.ts');
   const examplePath = path.join(ROOT, '.env.example');
@@ -62,30 +86,6 @@ function checkEnvConsistency() {
       '   If your .env.local overrides these, update them to /auth/bootstrap.',
     );
   }
-}
-
-const CLERK_REDIRECT_VARS = [
-  'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL',
-  'NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL',
-  'NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL',
-  'NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL',
-];
-
-const EXPECTED_BOOTSTRAP_PATH = '/auth/bootstrap';
-
-export function checkClerkRedirectUrls(effectiveEnv, nodeEnv = 'development') {
-  if (nodeEnv === 'production') {
-    return { warnings: [] };
-  }
-
-  const warnings = [];
-  for (const key of CLERK_REDIRECT_VARS) {
-    const value = effectiveEnv[key];
-    if (value !== undefined && value !== EXPECTED_BOOTSTRAP_PATH) {
-      warnings.push(`  ${key}=${value} (expected ${EXPECTED_BOOTSTRAP_PATH})`);
-    }
-  }
-  return { warnings };
 }
 
 // Only run if called directly

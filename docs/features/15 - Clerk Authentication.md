@@ -27,12 +27,45 @@ Core contracts, provisioning domain, authorization domain, and security core do 
 `ClerkRequestIdentitySource` maps provider claims to `RequestIdentitySourceData`:
 
 - `userId` <- Clerk `userId`
-- `email` <- `sessionClaims.email`
+- `email` <- `sessionClaims.email` or `sessionClaims.primaryEmail`
 - `emailVerified` <- `sessionClaims.email_verified === true`
 - `tenantExternalId` <- Clerk `orgId`
 - `tenantRole` <- Clerk `orgRole`
 
 This data is external-only. Internal UUID resolution happens separately via `InternalIdentityLookup` and provisioning.
+
+Operational rule:
+
+- Clerk Session Token v2 does not provide a default email claim in the compact claims set used by `auth().sessionClaims`
+- preferred custom contract for this boilerplate: add `email` to the session token
+- supported backward-compatible alternative: add `primaryEmail` to the session token
+- fallback `external+clerk-...@local.invalid` is an emergency continuity path only, not a valid production steady-state
+
+### 3.1 Session Token Setup
+
+If runtime provisioning stores synthetic `@local.invalid` emails, fix the Clerk session token contract.
+
+Clerk Dashboard:
+
+1. Go to `Sessions`.
+2. Open `Customize session token`.
+3. Add this minimal custom claim:
+
+```json
+{
+  "email": "{{user.primary_email_address}}"
+}
+```
+
+4. Save.
+5. Sign out completely and sign in again so a new session token is minted.
+
+Expected result after the next bootstrap:
+
+- `auth().sessionClaims.email` will be available
+- `auth().sessionClaims.primaryEmail` is still supported if you intentionally use that custom name
+- provisioning should store the real Clerk email in `users.email`
+- if the user was previously created with `external+clerk-...@local.invalid`, the next bootstrap will repair that row automatically when safe
 
 ## 4. Env Setup (Clerk)
 

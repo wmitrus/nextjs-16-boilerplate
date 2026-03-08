@@ -1,51 +1,147 @@
-# Full SDD workflow
+# Implementation Plan: Local Dev Reliability — Auth/Provisioning Stabilization
 
-## Workflow Steps
+## Completed Phases
 
 ### [x] Step: Requirements
 
-Create a Product Requirements Document (PRD) based on the feature description.
-
-1. Review existing codebase to understand current architecture and patterns
-2. Analyze the feature definition and identify unclear aspects
-3. Ask the user for clarifications on aspects that significantly impact scope or user experience
-4. Make reasonable decisions for minor details based on context and conventions
-5. If user can't clarify, make a decision, state the assumption, and continue
-
-Save the PRD to `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/5d43409a-81d9-4799-9a76-f3fb95ba5ab7/requirements.md`.
+PRD saved to `requirements.md`.
 
 ### [x] Step: Technical Specification
 
-Create a technical specification based on the PRD in `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/5d43409a-81d9-4799-9a76-f3fb95ba5ab7/requirements.md`.
+Spec saved to `spec.md`.
 
-1. Review existing codebase architecture and identify reusable components
-2. Define the implementation approach
+### [x] Step: Planning
 
-Save to `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/5d43409a-81d9-4799-9a76-f3fb95ba5ab7/spec.md` with:
+Detailed tasks defined below. Implementation step replaced.
 
-- Technical context (language, dependencies)
-- Implementation approach referencing existing code patterns
-- Source code structure changes
-- Data model / API / interface changes
-- Delivery phases (incremental, testable milestones)
-- Verification approach using project lint/test commands
+---
 
-### [ ] Step: Planning
+## Implementation Tasks
 
-Create a detailed implementation plan based on `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/5d43409a-81d9-4799-9a76-f3fb95ba5ab7/spec.md`.
+### [x] Task 1 — Promote `resolvePglitePath` and add `PGliteWasmAbortError` to `create-pglite.ts`
 
-1. Break down the work into concrete tasks
-2. Each task should reference relevant contracts and include verification steps
-3. Replace the Implementation step below with the planned tasks
+**File:** `src/core/db/drivers/create-pglite.ts`
 
-Rule of thumb for step size: each step should represent a coherent unit of work (e.g., implement a component, add an API endpoint, write tests for a module). Avoid steps that are too granular (single function) or too broad (entire feature).
+Changes:
 
-If the feature is trivial and doesn't warrant full specification, update this workflow to remove unnecessary steps and explain the reasoning to the user.
+- Export `resolvePglitePath` as a named export (was private)
+- Add exported `PGliteWasmAbortError extends Error` with `readonly path: string`
+- Add private `isWasmAbortError(err: unknown): boolean` helper
+- Wrap `new PGlite(resolvedPath)` in try/catch inside `createPglite()`
+- Rethrow detected WASM panics as `PGliteWasmAbortError` with actionable message
 
-Save to `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/5d43409a-81d9-4799-9a76-f3fb95ba5ab7/plan.md`.
+**Verification:** `pnpm typecheck` passes on modified file
 
-### [ ] Step: Implementation
+---
 
-This step should be replaced with detailed implementation tasks from the Planning step.
+### [x] Task 2 — Extend `create-pglite.test.ts` with WASM abort coverage
 
-If Planning didn't replace this step, execute the tasks in `/home/ozi/projects/nextjs-16-boilerplate/.zencoder/chats/5d43409a-81d9-4799-9a76-f3fb95ba5ab7/plan.md`, updating checkboxes as you go. Run planned tests/lint and record results in plan.md.
+**File:** `src/core/db/drivers/create-pglite.test.ts`
+
+Changes:
+
+- Import `PGliteWasmAbortError` from the module under test
+- Add test: PGlite constructor throws `RuntimeError` with `Aborted()` → `createPglite` throws `PGliteWasmAbortError`
+- Add test: PGlite constructor throws plain `Error('Aborted(). Build with -sASSERTIONS')` → same
+- Add test: PGlite constructor throws other error → re-thrown unchanged
+- Add test: `resolvePglitePath` is exported and handles all 3 prefix rules
+
+**Verification:** `pnpm test` — all tests in `create-pglite.test.ts` pass
+
+---
+
+### [x] Task 3 — Create `scripts/reset-pglite.mjs`
+
+**File:** `scripts/reset-pglite.mjs` (new)
+
+Changes:
+
+- Inline `resolvePglitePathFromUrl(url)` (mirrors `create-pglite.ts` logic)
+- Export `performPgliteReset(config, deps)` pure function:
+  - `config: { nodeEnv, databaseUrl }`
+  - `deps: { rm, spawnSync, log }`
+  - Guards against `nodeEnv === 'production'`
+  - Calls `deps.rm(resolvedPath, { recursive: true, force: true })`
+  - Calls `deps.spawnSync('pnpm', ['db:migrate:dev'], { stdio: 'inherit' })`
+  - Returns `{ success: boolean, message: string }`
+- CLI runner `resetPglite()` guarded by `process.argv[1]` check
+- Pass real `fs.promises.rm`, `child_process.spawnSync`, `console.log` as deps
+
+**Verification:** `node scripts/reset-pglite.mjs` (manual smoke) — wipes and re-migrates
+
+---
+
+### [x] Task 4 — Create `scripts/reset-pglite.test.ts`
+
+**File:** `scripts/reset-pglite.test.ts` (new)
+
+Changes:
+
+- Import `performPgliteReset`, `resolvePglitePathFromUrl` from `./reset-pglite.mjs`
+- Test: production guard returns `{ success: false }` and does not call `rm` or `spawnSync`
+- Test: `resolvePglitePathFromUrl` — `file:` prefix, `pglite://` prefix, bare path, blank/undefined
+- Test: successful reset — `rm` called with correct path + options, `spawnSync` called with `pnpm db:migrate:dev`, returns `{ success: true }`
+- Test: `rm` rejects → returns `{ success: false }` with error message, `spawnSync` not called
+- Test: `spawnSync` returns non-zero status → returns `{ success: false }`
+
+**Verification:** `pnpm test` — all tests in `reset-pglite.test.ts` pass
+
+---
+
+### [x] Task 5 — Add `db:reset:pglite` to `package.json`
+
+**File:** `package.json`
+
+Changes:
+
+- Add `"db:reset:pglite": "node scripts/reset-pglite.mjs"` to `scripts` block (after `db:seed`)
+
+**Verification:** `pnpm db:reset:pglite --help` (or just running it) executes without module-not-found errors
+
+---
+
+### [x] Task 6 — Add `checkClerkRedirectUrls` to `check-env-consistency.mjs`
+
+**File:** `scripts/check-env-consistency.mjs`
+
+Changes:
+
+- Add exported pure function `checkClerkRedirectUrls(effectiveEnv, nodeEnv)`
+  - No-ops (`{ warnings: [] }`) if `nodeEnv === 'production'`
+  - Checks 4 vars against `/auth/bootstrap`; collects warnings for any that differ (when defined)
+- Extend `checkEnvConsistency()` CLI runner to call `checkClerkRedirectUrls(process.env, process.env.NODE_ENV)` and print warnings (no `process.exit(1)`)
+
+**Verification:** `pnpm env:check` runs without crash; shows warning when redirect URL is set to wrong value
+
+---
+
+### [x] Task 7 — Extend `check-env-consistency.test.ts` with Clerk redirect checks
+
+**File:** `scripts/check-env-consistency.test.ts`
+
+Changes:
+
+- Import `checkClerkRedirectUrls` from `./check-env-consistency.mjs`
+- Test: all 4 vars are `/auth/bootstrap` → `warnings` is empty
+- Test: one var is `/onboarding` → exactly one warning entry containing the var name and actual value
+- Test: all 4 drifted → 4 warning entries
+- Test: `nodeEnv === 'production'` → always `{ warnings: [] }` regardless of values
+- Test: undefined/absent variable → no warning for that var (missing is not drift)
+
+**Verification:** `pnpm test` — all tests in `check-env-consistency.test.ts` pass
+
+---
+
+### [x] Task 8 — Final quality gate
+
+Run and record results:
+
+- `pnpm test` — all unit tests pass
+- `pnpm typecheck` — zero type errors
+- `pnpm lint` — zero lint errors
+
+**Results:** (to be filled in during implementation)
+
+- `pnpm test`: pending
+- `pnpm typecheck`: pending
+- `pnpm lint`: pending

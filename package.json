@@ -38,6 +38,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "release": "semantic-release",
+    "arch:lint": "./scripts/architecture-lint.sh",
     "db:generate": "drizzle-kit generate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:migrate:dev": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:migrate:prod": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
@@ -165,7 +166,10 @@
       "tmp": ">=0.2.4"
     },
     "onlyBuiltDependencies": [
-      "msw",
+      "@clerk/shared",
+      "@parcel/watcher",
+      "@sentry/cli",
+      "esbuild",
       "sharp",
       "unrs-resolver"
     ],

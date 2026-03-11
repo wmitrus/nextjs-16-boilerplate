@@ -35,7 +35,8 @@
     "chromatic": "chromatic",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "arch:lint": "./scripts/architecture-lint.sh"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mjs}": [
@@ -146,7 +147,10 @@
       "tmp": ">=0.2.4"
     },
     "onlyBuiltDependencies": [
-      "msw",
+      "@clerk/shared",
+      "@parcel/watcher",
+      "@sentry/cli",
+      "esbuild",
       "sharp",
       "unrs-resolver"
     ],

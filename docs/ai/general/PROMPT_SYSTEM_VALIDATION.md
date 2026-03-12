@@ -260,19 +260,26 @@ Every run of this harness must produce:
 
 1. Objective
 2. Inventory
-3. Validation Scope
-4. Pass/Fail Summary
-5. Critical Gaps
-6. Major Gaps
-7. Minor Gaps
-8. Informational Notes
-9. Architectural Assessment
-10. Portability Assessment
-11. Recommended Minimal Changes
-12. Verdict
+3. Pass/Fail Summary
+4. Critical Gaps
+5. Major Gaps
+6. Minor Gaps
+7. Architectural Assessment
+8. Portability Assessment
+9. Recommended Minimal Changes
+10. Verdict
 
 Requirements:
 
+- `Pass/Fail Summary` must report pass/fail explicitly for each validation category:
+  - source of truth and drift
+  - authority model
+  - mode and workflow completeness
+  - single-agent portability
+  - output contract quality
+  - enforcement quality
+  - reusability for VS Code AI integrations
+  - validation readiness
 - quote exact file paths when identifying evidence
 - distinguish confirmed issues from inference
 - do not implement fixes during the validation run
@@ -285,32 +292,102 @@ Requirements:
 Use the following prompt as the canonical self-audit prompt for this package.
 
 ```md
-Validate the AI operating package in `docs/ai/general` using Prompt System Validation mode.
+You are auditing an AI operating package intended to work across VS Code-integrated AI tools.
 
-Read at minimum:
+Your task is to validate the prompt system itself, not to implement code changes.
 
-- `docs/ai/general/MODE_MANIFEST.md`
-- `docs/ai/general/00 - Agent Interaction Protocol.md`
-- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
-- `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`
+Scope:
 
-Then inspect the remaining files in `docs/ai/general` as needed.
+- Read all files inside `docs/ai/general`
+- Treat those files as the source material under audit
+- Do not assume missing files exist
+- Do not infer undocumented capabilities from a specific AI platform
 
-Audit goal:
+Validation objective:
+Determine whether this package provides a professional, reusable, tool-agnostic setup for agent modes and workflows, with clear authority boundaries, reliable workflow branching, and practical portability across AI tools that may support either:
 
-- determine whether the prompt system is internally coherent
-- determine whether the mode/workflow system is complete enough for reuse
-- determine whether the package is portable across VS Code AI tools
-- identify governance drift, stale references, missing routing, or missing validation structure
+- true multi-agent orchestration
+- or only a single active agent/prompt at a time
 
-Constraints:
+Required validation rules:
 
-- this is a read-only audit of the prompt package
-- do not implement fixes
-- do not review unrelated repository code unless needed to validate prompt claims
-- be explicit about confirmed evidence versus inference
+1. Source of truth and drift
 
-Use the required response format defined in `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`.
+- Verify whether referenced files actually exist.
+- Flag stale paths, duplicate canonicals, or contradictory file naming.
+- Distinguish minor naming drift from execution-blocking drift.
+
+2. Authority model
+
+- Validate whether agent authority is explicit, non-overlapping, and conflict-resolvable.
+- Verify whether the implementation role is subordinate and constrained.
+- Identify any ambiguity in ownership across architecture, security, and runtime.
+
+3. Mode and workflow completeness
+
+- Identify all operating modes or equivalent constructs present in the docs.
+- Identify all workflows and their trigger conditions.
+- Check whether mode selection is explicit enough for a generic AI tool.
+- Flag missing mode registry, trigger matrix, or branching rules.
+
+4. Single-agent portability
+
+- Assess whether the package can be executed by a tool that cannot spawn specialist sub-agents.
+- Check whether the docs define a fallback sequential execution model inside one agent/session.
+- If missing, classify as a portability gap.
+
+5. Output contract quality
+
+- Check whether workflows produce consistent outputs across:
+  - findings
+  - constraints
+  - blocked states
+  - validation results
+  - residual risks
+- Flag missing shared schema or inconsistent status/severity taxonomies.
+
+6. Enforcement quality
+
+- Determine whether the package gives enough instruction to prevent:
+  - architecture drift
+  - security-review omission when relevant
+  - runtime-review omission when relevant
+  - speculative implementation before constraints are clear
+- Identify where enforcement is strong versus aspirational.
+
+7. Reusability for VS Code AI integrations
+
+- Evaluate whether the package is sufficiently editor/tool agnostic.
+- Flag assumptions that depend on a specific AI runtime, agent framework, or orchestration capability.
+- Prefer minimal fixes, not redesign.
+
+8. Validation readiness
+
+- Determine whether the package includes a built-in way to audit itself.
+- If not, state that gap explicitly.
+
+Required response format:
+
+1. Objective
+2. Inventory
+3. Pass/Fail Summary
+4. Critical Gaps
+5. Major Gaps
+6. Minor Gaps
+7. Architectural Assessment
+8. Portability Assessment
+9. Recommended Minimal Changes
+10. Verdict
+
+Additional requirements:
+
+- `Pass/Fail Summary` must report pass/fail explicitly for each validation category.
+- Be strict and evidence-based.
+- Quote exact file paths when identifying issues.
+- Distinguish confirmed issues from informed inference.
+- Do not implement fixes.
+- Do not rewrite the entire system.
+- Optimize for production-grade maintainability and low blast radius.
 ```
 
 ---

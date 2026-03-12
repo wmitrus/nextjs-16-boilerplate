@@ -1,0 +1,5 @@
+{
+  "setup_script": "pnpm install",
+  "dev_server_script": "pnpm dev",
+  "verification_script": "pnpm typecheck && pnpm lint && pnpm arch:lint && pnpm test"
+}

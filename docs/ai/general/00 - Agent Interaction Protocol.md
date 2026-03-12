@@ -15,7 +15,8 @@ Authority order:
 1. Architecture Guard Agent
 2. Security/Auth Agent
 3. Next.js Runtime Agent
-4. Implementation Agent
+4. Validation Strategy Agent
+5. Implementation Agent
 
 Rules:
 
@@ -46,6 +47,14 @@ Next.js Runtime Agent
   - caching behavior
   - Vercel runtime constraints
 
+Validation Strategy Agent
+
+- final authority on:
+  - minimum sensible validation scope
+  - validation level selection
+  - repository validation strategy sufficiency
+  - identifying validation blind spots, over-mocking, and false-confidence patterns
+
 Implementation Agent
 
 - must follow constraints from all above agents
@@ -58,5 +67,6 @@ If agents disagree:
 Architecture Guard decides structure.
 Security/Auth decides enforcement.
 Next.js Runtime decides runtime placement.
+Validation Strategy decides validation scope once risk and constraints are known.
 
 Implementation agent must defer to them.

@@ -16,8 +16,8 @@ MANDATORY CONTEXT FILES
 
 At the start of any non-trivial task, you must read and follow:
 
-- docs/ai/AGENT_PROTOCOL.md
-- docs/ai/REPOSITORY_AI_CONTEXT.md
+- docs/ai/general/00 - Agent Interaction Protocol.md
+- docs/ai/general/REPOSITORY_AI_CONTEXT.md
 
 These files define repository-specific operating rules and must be treated as active constraints.
 

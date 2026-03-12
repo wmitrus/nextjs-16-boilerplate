@@ -273,7 +273,7 @@ Lint script behavior:
 
 Current known drift relevant to linting:
 
-- some prompts refer to `docs/ai/AGENT_PROTOCOL.md`, but the live canonical file is `docs/ai/00 - Agent Interaction Protocol.md`
+- some prompts may refer to `docs/ai/AGENT_PROTOCOL.md` or `docs/ai/00 - Agent Interaction Protocol.md`, but the live canonical file is `docs/ai/general/00 - Agent Interaction Protocol.md`
 
 Severity:
 

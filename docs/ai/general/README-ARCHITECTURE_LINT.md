@@ -4,9 +4,9 @@
 Run Architecture Lint Mode.
 
 Read:
-- docs/ai/AGENT_PROTOCOL.md
-- docs/ai/REPOSITORY_AI_CONTEXT.md
-- docs/ai/ARCHITECTURE_LINT_RULES.md
+- docs/ai/general/00 - Agent Interaction Protocol.md
+- docs/ai/general/REPOSITORY_AI_CONTEXT.md
+- docs/ai/general/ARCHITECTURE_LINT_RULES.md
 
 Then:
 

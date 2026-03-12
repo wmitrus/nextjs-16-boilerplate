@@ -156,13 +156,13 @@ AI must judge whether current boundaries make those futures easier or harder.
 
 Before performing architectural, security, or runtime analysis, AI agents should read:
 
-- `docs/ai/00 - Agent Interaction Protocol.md`
-- `docs/ai/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 
 Canonical-path clarification:
 
-- the live repository protocol file is `docs/ai/00 - Agent Interaction Protocol.md`
-- some prompts may still refer to `docs/ai/AGENT_PROTOCOL.md`; treat that as stale naming, not as a second source of truth
+- the live repository protocol file is `docs/ai/general/00 - Agent Interaction Protocol.md`
+- some prompts may still refer to `docs/ai/AGENT_PROTOCOL.md` or `docs/ai/00 - Agent Interaction Protocol.md`; treat those as stale paths, not as separate sources of truth
 
 These files define:
 

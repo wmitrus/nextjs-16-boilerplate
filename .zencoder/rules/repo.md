@@ -7,155 +7,146 @@ alwaysApply: true
 
 ## Summary
 
-This is a modern **Next.js 16** boilerplate project bootstrapped with `create-next-app`. It features a lean setup with **React 19**, **TypeScript**, and **Tailwind CSS 4**, following the **Next.js App Router** architecture.
+A production-grade **Next.js 16** boilerplate implementing a **Modular Monolith** architecture. Features React 19, TypeScript strict mode, Tailwind CSS 4, Clerk authentication, Sentry error tracking, Upstash rate limiting, and a three-tier testing strategy (Unit / Integration / E2E).
 
 ## Structure
 
-- **src/app**: Core application logic using the Next.js App Router. Contains routes, layouts, and global styles.
-- **src/features**: Domain-specific components, logic, and hooks.
-- **src/shared**: Reusable UI components, generic hooks, and utilities.
-- **src/core**: Foundational configurations, constants, and global logic.
-- **public**: Static assets like icons and images.
-- **root**: Configuration files for TypeScript, ESLint, PostCSS, and Next.js.
+- **`src/app/`**: Next.js App Router - routes, layouts, global styles, error boundaries.
+- **`src/core/`**: Foundational layer — T3-Env config (`env.ts`), logger, DI container, error contracts.
+- **`src/features/`**: Domain-specific feature modules (e.g., `user-management`, `security-showcase`).
+- **`src/modules/`**: Infrastructure modules — `auth/` (Clerk), `authorization/` (ABAC).
+- **`src/security/`**: Centralized security logic — middleware, RSC guards, outbound filtering, audit actions.
+- **`src/shared/`**: Reusable UI components, hooks, utilities, and types.
+- **`src/testing/`**: Shared test factories, MSW infrastructure, integration helpers.
+- **`src/stories/`**: Storybook component stories.
+- **`e2e/`**: Playwright end-to-end test specs.
+- **`tests/`**: Global Vitest setup files and polyfills.
+- **`scripts/`**: Utility scripts (env setup/check, secret generation, E2E auth check).
+- **`docs/`**: Feature documentation, architecture decisions, SDD, usage guides.
+- **`.github/workflows/`**: CI/CD pipelines (PR validation, deploy, release, Lighthouse, security scan).
 
 ## Language & Runtime
 
 **Language**: TypeScript  
-**Version**: ^5 (TypeScript), Node.js ^20 (Minimum 20.9.0)  
-**Build System**: Next.js Build (Turbopack by default)  
-**Package Manager**: pnpm (indicated by `pnpm-lock.yaml`)
+**Version**: TypeScript `^5`, Node.js `24` (`.node-version` / `engines: "node": "24.x"`)  
+**Build System**: Next.js 16 Build (Turbopack — default for dev & build)  
+**Package Manager**: pnpm (lockfile: `pnpm-lock.yaml`)
 
-## Next.js 16 Development Standards
+## Next.js 16 Key Configuration (`next.config.ts`)
 
-### 1. Async Dynamic APIs
-
-Next.js 16 requires dynamic APIs to be accessed asynchronously. Always `await` the following:
-
-- `params` and `searchParams` in layouts, pages, and metadata.
-- `cookies()`, `headers()`, and `draftMode()`.
-
-### 2. Cache Components & PPR
-
-The project uses the **Cache Components** model (`cacheComponents: true` in `next.config.ts`).
-
-- Use the `"use cache"` directive to explicitly opt-in to caching for components, functions, or pages.
-- Partial Prerendering (PPR) is enabled by default with Cache Components; use `<Suspense>` to define dynamic boundaries.
-
-### 3. React Compiler
-
-**React Compiler** is enabled (`reactCompiler: true`).
-
-- Manual memoization (`useMemo`, `useCallback`, `memo`) is generally unnecessary and should be avoided unless the compiler cannot optimize a specific pattern.
-- Ensure `babel-plugin-react-compiler` is maintained in `devDependencies`.
-
-### 4. Middleware vs Proxy
-
-- Use `proxy.ts` (Node.js runtime) for request interception and network boundary logic.
-- `middleware.ts` is deprecated for Node.js use cases and should only be used if the Edge runtime is strictly required.
-
-### 5. Caching APIs
-
-- **`revalidateTag(tag, 'max')`**: Use for Stale-While-Revalidate (SWR) behavior.
-- **`updateTag(tag)`**: Use in Server Actions for "read-your-writes" semantics (immediate refresh).
-- **`refresh()`**: Use in Server Actions to refresh uncached data only.
-
-### 6. Performance
-
-- **Turbopack**: Default bundler for dev and build.
-- **Filesystem Caching**: Enabled for dev restarts via `turbopackFileSystemCacheForDev`.
-
-### 7. Linting & Formatting
-
-- **ESLint 9**: Uses Flat Config (`eslint.config.mjs`) with `next/core-web-vitals` and `next/typescript`.
-- **JSON Linting**: Fully integrated via `eslint-plugin-jsonc` for red underlines in JSON/JSONC files.
-- **Prettier**: Integrated into ESLint with `prettier-plugin-tailwindcss` for class sorting.
-- **Import Sorting**: Automatically enforced via `eslint-plugin-import`.
-- **Validation**: Use `pnpm typecheck` for types and `pnpm lint` for code quality.
-- **VS Code**: Configured in `.vscode/settings.json` to automatically fix and format on save (supports TS, JS, and JSON).
-
-### 8. Conventional Commits
-
-- Use `pnpm commit` (aliased to `cz`) for creating standardized, machine-readable commit messages.
-- The `commit-msg` hook validates all commits against the Conventional Commits specification.
-
-### 9. Git Hooks & Quality Gates
-
-- **Husky**: Manages git hooks for local quality assurance.
-- **pre-commit**: Automatically runs `lint-staged` to format and lint changed files.
-- **pre-push**: Enforces a full quality suite: `typecheck`, `skott:check:only` (circular dependencies), `depcheck` (unused packages), and `madge` (circular dependencies).
-- **Mandatory Compliance**: Every agent must ensure `pnpm typecheck` and `pnpm lint` pass without errors for all created or modified files before concluding a task.
-
-## Documentation Standards
-
-- **Feature Docs**: All new features must be documented in `docs/features/`.
-- **Naming Convention**: Use the format `XX - Feature Name.md` (e.g., `01 - Next.js 16 Readiness.md`).
-- **Standardized Content**: Follow the existing patterns for Purpose, High-level behavior, Implementation, and Usage.
-
-## TypeScript Configuration
-
-- **Strict Mode**: Enforced in `tsconfig.json`.
-- **Path Aliases**:
-  - `@/features/*`: Maps to `src/features/*`
-  - `@/shared/*`: Maps to `src/shared/*`
-  - `@/core/*`: Maps to `src/core/*`
-  - `@/*`: Maps to `src/*`
-
-## Quality Tools & Commands
-
-- **`pnpm typecheck`**: Runs TypeScript compiler in no-emit mode.
-- **`pnpm skott:check:only`**: Analyzes the dependency graph and detects circular dependencies.
-- **`pnpm depcheck`**: Scans for unused or missing dependencies.
-- **`pnpm madge`**: Specialized circular dependency detection for the `src` directory.
+- `cacheComponents: true` — Cache Components model enabled (PPR-compatible).
+- `reactCompiler: true` — React Compiler active; avoid manual `useMemo`/`useCallback`/`memo`.
+- `experimental.turbopackFileSystemCacheForDev: true` — Filesystem caching for dev restarts.
+- Sentry integrated via `withSentryConfig` (source maps, tunnel route in production, Vercel Cron monitors).
 
 ## Dependencies
 
 **Main Dependencies**:
 
-- **next**: 16.1.4
-- **react**: 19.2.3
-- **react-dom**: 19.2.3
+- **next**: `16.1.6`
+- **react** / **react-dom**: `19.2.4`
+- **@clerk/nextjs**: `^6.39.0` — Authentication
+- **@sentry/nextjs**: `^10.40.0` — Error tracking & observability
+- **@t3-oss/env-nextjs**: `^0.13.10` — Type-safe environment variables
+- **@upstash/ratelimit** + **@upstash/redis**: Rate limiting
+- **zod**: `^4.3.6` — Schema validation
+- **pino** + **pino-logflare**: `^10.3.1` — Structured logging
+- **clsx** + **tailwind-merge**: Utility class helpers
 
 **Development Dependencies**:
 
-- **tailwindcss**: ^4
-- **eslint**: ^9
-- **prettier**: ^3
-- **typescript**: ^5
+- **tailwindcss**: `^4.2.1`
+- **eslint**: `^9.39.3` (Flat Config)
+- **prettier**: `^3.8.1`
+- **typescript**: `^5`
+- **vitest**: `^4.0.18` + **@vitest/coverage-v8**
+- **@playwright/test**: `^1.58.2`
+- **storybook**: `^10.2.13` (`@storybook/nextjs-vite`)
+- **msw**: `^2.12.10` — API mocking
+- **@testing-library/react**: `^16.3.2`
+- **husky**: `^9.1.7` + **lint-staged**: `^16.2.7`
+- **semantic-release**: `^25.0.3`
+- **babel-plugin-react-compiler**: `^1.0.0`
+- **skott** + **madge** + **depcheck**: Dependency analysis
 
 ## Build & Installation
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Run development server
-pnpm dev
-
-# Build for production
-pnpm build
-
-# Start production server
-pnpm start
-
-# Type checking
-pnpm typecheck
-
-# Linting
-pnpm lint
+pnpm install          # Install dependencies
+pnpm env:init         # Initialize .env.local from .env.example
+pnpm env:check        # Verify env consistency
+pnpm dev              # Dev server (Turbopack)
+pnpm build            # Production build
+pnpm start            # Production server
+pnpm typecheck        # TypeScript check (tsc --noEmit)
+pnpm lint             # ESLint (Flat Config)
+pnpm commit           # Conventional commits via commitizen
+pnpm release          # Semantic release
 ```
 
 ## Main Files & Resources
 
-- **src/app/page.tsx**: Main entry point for the homepage.
-- **src/app/layout.tsx**: Root layout component.
-- **next.config.ts**: Next.js configuration.
-- **eslint.config.mjs**: ESLint flat configuration.
-- **tsconfig.json**: TypeScript configuration.
-- **tailwind.config.mjs**: PostCSS/Tailwind configuration.
+- **`src/app/page.tsx`**: Homepage entry point.
+- **`src/app/layout.tsx`**: Root layout.
+- **`src/core/env.ts`**: T3-Env schema — single source of truth for all env vars.
+- **`next.config.ts`**: Next.js configuration with Sentry wrapper.
+- **`eslint.config.mjs`**: ESLint 9 Flat Config.
+- **`tsconfig.json`**: TypeScript strict config with path aliases.
+- **`postcss.config.mjs`**: PostCSS / Tailwind CSS 4 config.
+- **`src/proxy.ts`**: Node.js runtime request proxy (replaces middleware for Node use cases).
+- **`src/instrumentation.ts`** / **`src/instrumentation-client.ts`**: Sentry instrumentation hooks.
+- **`.env.example`**: Template with all required environment variables.
 
-## Project Structure
+## TypeScript Path Aliases
 
-- **src/**: Application source code.
-- **public/**: Static public assets.
-- **package.json**: Project manifest and scripts.
-- **pnpm-lock.yaml**: Dependency lockfile.
+| Alias          | Resolves to      |
+| -------------- | ---------------- |
+| `@/*`          | `src/*`          |
+| `@/features/*` | `src/features/*` |
+| `@/shared/*`   | `src/shared/*`   |
+| `@/core/*`     | `src/core/*`     |
+
+## Testing
+
+**Frameworks**: Vitest (unit + integration + Storybook), Playwright (E2E)  
+**Coverage**: v8 provider, 80% threshold for unit tests (lines/functions/branches/statements)
+
+| Suite       | Config                                    | Pattern                                                | Command                 |
+| ----------- | ----------------------------------------- | ------------------------------------------------------ | ----------------------- |
+| Unit        | `vitest.unit.config.ts`                   | `src/**/*.test.{ts,tsx}`, `scripts/**/*.test.{ts,tsx}` | `pnpm test`             |
+| Integration | `vitest.integration.config.ts`            | `src/**/*.integration.test.{ts,tsx}`                   | `pnpm test:integration` |
+| Storybook   | `vitest.config.ts` (project: `storybook`) | `.stories.{ts,tsx}`                                    | `pnpm test:storybook`   |
+| E2E         | `playwright.config.ts`                    | `e2e/**/*.spec.ts`                                     | `pnpm e2e`              |
+| All Vitest  | `vitest.config.ts`                        | All above                                              | `pnpm test:all`         |
+
+**Test co-location**: Unit tests reside next to source files (e.g., `src/core/env.ts` → `src/core/env.test.ts`).  
+**Setup files**: `tests/setup.tsx`, `tests/polyfills.ts`.  
+**E2E browsers**: Chromium only (Playwright); base URL `http://localhost:3000`.
+
+## Git Hooks & Quality Gates
+
+- **pre-commit**: `lint-staged` — ESLint fix + Prettier on JS/TS; Prettier on JSON/CSS/MD; `tsc-files` on TS.
+- **pre-push**: `pnpm typecheck` → `pnpm skott:check:only` → `pnpm depcheck` → `pnpm madge`.
+- **commit-msg**: `commitlint` — enforces Conventional Commits spec.
+
+## CI/CD Workflows (`.github/workflows/`)
+
+- **`pr-validation.yml`**: Runs typecheck, lint, unit tests on every PR.
+- **`prod-deploy.yml`** / **`preview-deploy.yml`**: Vercel deployments.
+- **`release.yml`**: Semantic release automation.
+- **`lighthouse.yml`**: Lighthouse CI performance audits.
+- **`deployChromatic.yml`**: Chromatic visual regression tests.
+- **`security-scan.yml`**: Security scanning.
+- **`e2e-label.yml`**: E2E test label automation.
+
+## Environment Variables (Key Groups)
+
+Managed via `src/core/env.ts` (T3-Env + Zod). Groups:
+
+- **App**: `NODE_ENV`, `NEXT_PUBLIC_APP_URL`
+- **Auth (Clerk)**: `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, redirect URLs
+- **Error Tracking (Sentry)**: `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`
+- **Logging**: `LOG_LEVEL`, `LOGFLARE_*`, `PINO_*`
+- **Rate Limiting**: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `API_RATE_LIMIT_*`
+- **Security**: `INTERNAL_API_KEY`, `SECURITY_AUDIT_LOG_ENABLED`, `SECURITY_ALLOWED_OUTBOUND_HOSTS`, CSP allowlists
+- **E2E**: `E2E_ENABLED`, `E2E_CLERK_USER_USERNAME`, `E2E_CLERK_USER_PASSWORD`

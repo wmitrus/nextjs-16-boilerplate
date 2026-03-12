@@ -1,6 +1,15 @@
 {
+  "explorer.compactFolders": false,
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
+  },
+  "editor.detectIndentation": false,
+  "editor.formatOnSave": false,
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
   },
   "eslint.validate": [
     "javascript",
@@ -10,7 +19,7 @@
     "json",
     "jsonc"
   ],
-  "editor.formatOnSave": false,
+  "prettier.requireConfig": true,
   "zencoder.inlineSuggestions.enable": false,
   "github.copilot.chat.commitMessageGeneration.instructions": [
     {

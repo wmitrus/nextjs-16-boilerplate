@@ -384,6 +384,49 @@ Forbidden in this mode:
 
 ---
 
+### Mode: `prompt-system-validation`
+
+Purpose:
+
+- validate the AI operating package itself as a governed prompt system
+
+Use when:
+
+- auditing `docs/ai/general`
+- validating prompt-package changes
+- checking mode/workflow/authority consistency
+- verifying portability across VS Code AI tools
+
+Primary validation harness:
+
+- `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`
+
+Required governing files:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`
+
+Required outputs:
+
+- objective
+- inventory
+- validation scope
+- pass/fail summary
+- critical/major/minor gaps
+- architectural assessment
+- portability assessment
+- recommended minimal changes
+- verdict
+
+Forbidden in this mode:
+
+- implementing fixes during the validation run
+- treating repository architecture lint as equivalent to prompt-system validation
+
+---
+
 ## Mode selection rules
 
 Choose exactly one primary mode first.
@@ -393,8 +436,9 @@ Selection order:
 1. If the task is a vulnerability, auth bug, trust-boundary issue, cache leak, or sensitive-data incident, use `security-incident-workflow`.
 2. If the task is a behavior-preserving cleanup/refactor, use `safe-refactor-workflow`.
 3. If the task is a new feature or non-trivial behavior change, use `safe-feature-workflow`.
-4. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
-5. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
+4. If the task is a read-only audit of the AI package itself, use `prompt-system-validation`.
+5. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
+6. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
 
 Do not start in `implementation` if architecture, security, or runtime constraints are unresolved.
 

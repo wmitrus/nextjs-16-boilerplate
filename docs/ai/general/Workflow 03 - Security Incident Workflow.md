@@ -64,8 +64,8 @@ Never:
 
 Before specialist review or implementation, agents must read and follow:
 
-- docs/ai/00 - Agent Interaction Protocol.md
-- docs/ai/REPOSITORY_AI_CONTEXT.md
+- docs/ai/general/00 - Agent Interaction Protocol.md
+- docs/ai/general/REPOSITORY_AI_CONTEXT.md
 
 ==================================================
 FORBIDDEN REMEDIATION PATTERNS

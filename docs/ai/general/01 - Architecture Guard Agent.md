@@ -427,7 +427,7 @@ This repository defines a multi-agent governance model.
 
 Before performing architectural or security analysis, read:
 
-docs/ai/00 - Agent Interaction Protocol.md
-docs/ai/REPOSITORY_AI_CONTEXT.md
+docs/ai/general/00 - Agent Interaction Protocol.md
+docs/ai/general/REPOSITORY_AI_CONTEXT.md
 
 Follow the authority rules and responsibility boundaries defined in that document.

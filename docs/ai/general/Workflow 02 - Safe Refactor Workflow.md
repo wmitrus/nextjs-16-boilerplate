@@ -5,6 +5,10 @@ Safely perform refactors, cleanup, module moves, dependency cleanup, and structu
 
 This workflow is platform-agnostic and compatible with Codex, Zencoder, or similar agent environments.
 
+Mode ID:
+
+- `safe-refactor-workflow`
+
 Available agents:
 
 - Architecture Guard Agent
@@ -59,6 +63,7 @@ Never:
 
 Before specialist review or implementation, agents must read and follow:
 
+- docs/ai/general/MODE_MANIFEST.md
 - docs/ai/general/00 - Agent Interaction Protocol.md
 - docs/ai/general/REPOSITORY_AI_CONTEXT.md
 

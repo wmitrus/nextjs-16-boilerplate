@@ -2,6 +2,10 @@ AGENT INTERACTION PROTOCOL
 
 Agents in this repository operate under a layered responsibility model.
 
+Canonical mode routing and mode-selection rules live in:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+
 Authority order:
 
 1. Architecture Guard Agent

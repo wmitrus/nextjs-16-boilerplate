@@ -156,6 +156,7 @@ AI must judge whether current boundaries make those futures easier or harder.
 
 Before performing architectural, security, or runtime analysis, AI agents should read:
 
+- `docs/ai/general/MODE_MANIFEST.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 
@@ -166,6 +167,7 @@ Canonical-path clarification:
 
 These files define:
 
+- mode-selection rules
 - repository identity
 - non-negotiable rules
 - agent authority boundaries

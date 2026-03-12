@@ -5,12 +5,22 @@ Safely introduce a new feature or non-trivial change while preserving architectu
 
 This workflow is platform-agnostic and may be used in Codex, Zencoder, or similar agent environments.
 
+Mode ID:
+
+- `safe-feature-workflow`
+
 Available agents:
 
 - Architecture Guard Agent
 - Security/Auth Agent
 - Next.js Runtime Agent
 - Implementation Agent
+
+Before running this workflow, read:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 
 ==================================================
 WORKFLOW GOAL

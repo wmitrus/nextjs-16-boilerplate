@@ -4,6 +4,7 @@
 Run Architecture Lint Mode.
 
 Read:
+- docs/ai/general/MODE_MANIFEST.md
 - docs/ai/general/00 - Agent Interaction Protocol.md
 - docs/ai/general/REPOSITORY_AI_CONTEXT.md
 - docs/ai/general/ARCHITECTURE_LINT_RULES.md

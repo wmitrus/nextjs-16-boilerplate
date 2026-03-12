@@ -50,13 +50,15 @@ When multiple specialist perspectives are involved, authority order is:
 1. Architecture Guard Agent
 2. Security/Auth Agent
 3. Next.js Runtime Agent
-4. Implementation Agent
+4. Validation Strategy Agent
+5. Implementation Agent
 
 Conflict handling:
 
 - Architecture Guard decides structure, boundaries, dependency direction, and DI/composition shape.
 - Security/Auth decides authentication, authorization, trust boundaries, tenant handling, and sensitive-data enforcement.
 - Next.js Runtime decides server/client placement, route/server-action behavior, runtime placement, caching, and deployment/runtime assumptions.
+- Validation Strategy decides minimum sensible validation scope once the relevant risks and specialist constraints are known.
 - Implementation Agent must follow the above constraints and must not invent new architecture or policy.
 
 ---
@@ -214,6 +216,75 @@ Required outputs:
 - validation performed
 - residual risks
 - explicit blocked status if constraints are insufficient
+
+---
+
+### Mode: `repository-baseline-validation`
+
+Purpose:
+
+- assess the repository-wide validation strategy and quality-gate sufficiency
+
+Use when:
+
+- auditing whether the current validation stack is production-grade
+- evaluating whether CI checks and test layers are sufficient for safe future work
+- identifying blind spots, over-mocking, weak checks, or missing critical validation coverage
+
+Primary authority:
+
+- Validation Strategy Agent
+
+Required governing files:
+
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/05 - Validation Strategy Agent.md`
+
+Required outputs:
+
+- repository validation posture
+- current-state findings
+- validation-risk assessment
+- recommended validation-scope improvements
+- risks and tradeoffs
+- validation commands or checks
+- recommended next action
+
+---
+
+### Mode: `change-validation`
+
+Purpose:
+
+- determine the minimum sensible validation scope for a specific feature, fix, or refactor
+
+Use when:
+
+- planning validation for a non-trivial change
+- deciding which validation layers are required
+- preventing both under-validation and wasteful over-validation
+
+Primary authority:
+
+- Validation Strategy Agent
+
+Required governing files:
+
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/05 - Validation Strategy Agent.md`
+
+Required outputs:
+
+- change risk classification
+- current-state findings relevant to validation
+- validation-risk assessment
+- minimum required validation
+- optional additional validation
+- validation not required
+- validation commands or checks
+- recommended next action
 
 ---
 
@@ -436,9 +507,11 @@ Selection order:
 1. If the task is a vulnerability, auth bug, trust-boundary issue, cache leak, or sensitive-data incident, use `security-incident-workflow`.
 2. If the task is a behavior-preserving cleanup/refactor, use `safe-refactor-workflow`.
 3. If the task is a new feature or non-trivial behavior change, use `safe-feature-workflow`.
-4. If the task is a read-only audit of the AI package itself, use `prompt-system-validation`.
-5. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
-6. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
+4. If the task is a repository-wide audit of testing, CI checks, or validation sufficiency, use `repository-baseline-validation`.
+5. If the task is to determine the minimum sensible validation plan for a specific change, use `change-validation`.
+6. If the task is a read-only audit of the AI package itself, use `prompt-system-validation`.
+7. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
+8. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
 
 Do not start in `implementation` if architecture, security, or runtime constraints are unresolved.
 

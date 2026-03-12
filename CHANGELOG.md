@@ -1,3 +1,31 @@
+# [1.10.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.9.1...v1.10.0) (2026-03-12)
+
+
+### Features
+
+* **agents:** add agent interaction protocol documentation ([aa25ad3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/aa25ad321d2ec3a1c1ca4a0f967fe0ff00ba9fb5))
+* **agents:** add foundational architectural guidelines and principles ([ab83507](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ab83507d23e54dbd1b7cfd42f921dea9b51dd333))
+* **audit:** add comprehensive agent setup audit documentation ([e5cf832](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e5cf8329334bb9d2d512676477651d4d60ad8e47))
+* **cli:** add codacy CLI v2 installation script ([9da8b3b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9da8b3b58aa8cbaa391fe61d1a77898e875ae9e3))
+* **codacy:** add initial configuration for Codacy analysis ([5d12a5a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5d12a5af5fdec059d7641cff0a79f44fdc247040))
+* **docs:** add architecture lint rules and usage guidelines ([065645e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/065645eaf109d6bbfc98b40fc2f3ef859f8c8f76))
+* **docs:** add architecture review template ([90cb3ee](https://github.com/wmitrus/nextjs-16-boilerplate/commit/90cb3eecc5a890bf141ed63843f458f859f59507))
+* **docs:** add constraints summary template ([72405e4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/72405e41edb9a2d5647e459f9bb03643ad3d9be5))
+* **docs:** add Debug / Investigation Agent documentation ([ed57876](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ed5787651429bc33d654b0182ed59c96beba6b96))
+* **docs:** add runtime review template for runtime-sensitive changes ([6c8a3f8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6c8a3f8bbad1ffebbb2570b2a7bf8e9dca03c86f))
+* **docs:** add Safe Feature Workflow documentation ([19b2127](https://github.com/wmitrus/nextjs-16-boilerplate/commit/19b21278536e51a59b561c5291f2a9a18a0f9cac))
+* **docs:** add Security Incident Workflow documentation ([e6a5783](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e6a578318a48ed42c59c7d7d3bdf84d9492c286e))
+* **docs:** add Security Incident Workflow for auth/provisioning incidents ([2557870](https://github.com/wmitrus/nextjs-16-boilerplate/commit/255787012d75d861c26b079264d6f7e817abb985))
+* **docs:** add security review template ([a90bc9b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a90bc9b4be65106b4853e0b3e2a0ebfebcab3054))
+* **docs:** add validation review template ([5cc6d66](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5cc6d66678ae85b3ccfbe8b5bbd3c1c8b1830bbf))
+* **docs:** add Validation Strategy Agent documentation ([5c8408b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5c8408b09d405b977695125522f726cfb6dcc6c8))
+* **docs:** add ZenFlow Artifacts Guide ([793ef89](https://github.com/wmitrus/nextjs-16-boilerplate/commit/793ef89c0ffb7dc1a7dc016d81a96f518d9eab84))
+* **docs:** update authority order and add validation modes ([6daefd9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6daefd9c607781929346335b2448f487ad860af9))
+* **docs:** update authority order and add Validation Strategy Agent ([52d3967](https://github.com/wmitrus/nextjs-16-boilerplate/commit/52d3967728ce5ea93537f7d46c7657cf38e464ee))
+* **lint:** add architecture lint script for dependency checks ([3450423](https://github.com/wmitrus/nextjs-16-boilerplate/commit/34504239746881dbd814302ee89a16518e6ffa8d))
+* **workflow:** add feature development workflow documentation ([766c459](https://github.com/wmitrus/nextjs-16-boilerplate/commit/766c4593c4076d4a9af81636eae6f405d97dd679))
+* **workflow:** add safe refactor workflow documentation ([af389c0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/af389c058bebb7b22f532c4da95e2447d7e41669))
+
 ## [1.9.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.9.0...v1.9.1) (2026-02-28)
 
 

@@ -172,3 +172,7 @@ These files define:
 - non-negotiable rules
 - agent authority boundaries
 - conflict resolution model
+
+For prompt-package self-audit, also use:
+
+- `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`

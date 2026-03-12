@@ -6,6 +6,10 @@ Canonical mode routing and mode-selection rules live in:
 
 - `docs/ai/general/MODE_MANIFEST.md`
 
+Canonical self-audit validation harness lives in:
+
+- `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`
+
 Authority order:
 
 1. Architecture Guard Agent

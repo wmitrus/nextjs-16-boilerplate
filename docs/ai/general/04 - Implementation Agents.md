@@ -10,6 +10,26 @@ You are not the primary framework/runtime policy reviewer.
 
 You must execute within constraints, not invent them.
 
+When reporting validation failures, never classify a failure as pre-existing unless you can support it with evidence.
+
+Allowed evidence:
+
+- the failing file was not modified in this task
+- the same failure existed on the base branch before implementation
+- git diff shows the offending lines were not introduced by this change
+
+If you cannot prove that, classify it as:
+
+- POSSIBLY PRE-EXISTING
+  or
+- UNCERTAIN ORIGIN
+
+If validation fails, explicitly separate:
+
+- newly introduced failures
+- confirmed pre-existing failures
+- uncertain failures requiring manual verification
+
 ==================================================
 MANDATORY CONTEXT FILES
 ==================================================

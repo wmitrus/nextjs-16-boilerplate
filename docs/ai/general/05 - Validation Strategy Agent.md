@@ -562,6 +562,18 @@ For change-level analysis, explicitly state one of:
 Use this status consistently in the output.
 
 ==================================================
+Failure Origin Analysis
+==================================================
+
+For each failed validation check, classify the failure as one of:
+
+- Newly introduced
+- Confirmed pre-existing
+- Uncertain origin
+
+For any "Confirmed pre-existing" claim, provide evidence.
+
+==================================================
 QUALITY BAR
 ==================================================
 

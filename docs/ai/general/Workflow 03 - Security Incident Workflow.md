@@ -335,6 +335,14 @@ If the fix touched:
 
 then re-run the relevant specialist agent(s) for focused confirmation.
 
+If any validation check fails, the agent must document whether the failure is:
+
+- newly introduced
+- confirmed pre-existing
+- uncertain origin
+
+The agent must not classify a failure as pre-existing without evidence.
+
 ==================================================
 DECISION / BRANCHING RULES
 ==================================================

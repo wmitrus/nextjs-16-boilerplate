@@ -207,6 +207,30 @@ describe('BootstrapPage', () => {
     );
   });
 
+  it('renders db_error UI when PGlite throws ENOENT during provisioning', async () => {
+    const enoentError = Object.assign(
+      new Error("ENOENT: no such file or directory, mkdir './data/pglite'"),
+      { code: 'ENOENT' },
+    );
+    provisioningService.ensureProvisioned.mockRejectedValue(enoentError);
+
+    render(await BootstrapPage(makeProps()));
+
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
+  it('renders db_error UI when PGlite throws EPERM during provisioning', async () => {
+    const epermError = Object.assign(
+      new Error("EPERM: operation not permitted, mkdir './data/pglite'"),
+      { code: 'EPERM' },
+    );
+    provisioningService.ensureProvisioned.mockRejectedValue(epermError);
+
+    render(await BootstrapPage(makeProps()));
+
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
   it('sanitizes external redirect_url values to /users', async () => {
     userRepository.findById.mockResolvedValue({
       id: 'u-1',

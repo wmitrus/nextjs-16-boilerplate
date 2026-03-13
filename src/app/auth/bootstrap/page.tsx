@@ -1,4 +1,3 @@
-import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { AUTH, PROVISIONING } from '@/core/contracts';
@@ -11,39 +10,23 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
-import { BootstrapErrorUI } from './bootstrap-error';
+import { buildProvisioningInput } from '../build-provisioning-input';
 
+import { BootstrapErrorUI } from './bootstrap-error';
+import { BootstrapOrgRequired } from './bootstrap-org-required';
+
+import type { ProvisioningService } from '@/modules/provisioning';
 import {
   CrossProviderLinkingNotAllowedError,
   TenantContextRequiredError,
   TenantUserLimitReachedError,
-} from '@/modules/provisioning/domain/errors';
-import type { ProvisioningService } from '@/modules/provisioning/domain/ProvisioningService';
+} from '@/modules/provisioning';
 
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'auth',
   module: 'bootstrap',
 });
-
-async function resolveActiveTenantIdForProvisioning(): Promise<
-  string | undefined
-> {
-  if (env.TENANCY_MODE === 'single') {
-    return env.DEFAULT_TENANT_ID;
-  }
-
-  if (env.TENANCY_MODE === 'org' && env.TENANT_CONTEXT_SOURCE === 'db') {
-    const headerList = await headers();
-    const headerTenantId = headerList.get(env.TENANT_CONTEXT_HEADER);
-    if (headerTenantId) return headerTenantId;
-
-    const cookieStore = await cookies();
-    return cookieStore.get(env.TENANT_CONTEXT_COOKIE)?.value;
-  }
-
-  return undefined;
-}
 
 export default async function BootstrapPage({
   searchParams,
@@ -65,25 +48,24 @@ export default async function BootstrapPage({
     redirect('/sign-in');
   }
 
+  if (
+    env.TENANCY_MODE === 'org' &&
+    env.TENANT_CONTEXT_SOURCE === 'provider' &&
+    !rawIdentity.tenantExternalId
+  ) {
+    return <BootstrapOrgRequired />;
+  }
+
   const provisioningService = container.resolve<ProvisioningService>(
     PROVISIONING.SERVICE,
   );
-  const activeTenantId = await resolveActiveTenantIdForProvisioning();
+  const provisioningInput = await buildProvisioningInput(rawIdentity);
 
   let internalUserId: string;
 
   try {
-    const result = await provisioningService.ensureProvisioned({
-      provider: env.AUTH_PROVIDER,
-      externalUserId: rawIdentity.userId,
-      email: rawIdentity.email,
-      emailVerified: rawIdentity.emailVerified,
-      tenantExternalId: rawIdentity.tenantExternalId,
-      tenantRole: rawIdentity.tenantRole,
-      activeTenantId,
-      tenancyMode: env.TENANCY_MODE,
-      tenantContextSource: env.TENANT_CONTEXT_SOURCE,
-    });
+    const result =
+      await provisioningService.ensureProvisioned(provisioningInput);
 
     logger.info(
       {

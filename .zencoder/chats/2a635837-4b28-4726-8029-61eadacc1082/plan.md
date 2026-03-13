@@ -29,7 +29,7 @@ Next.js App Router **does not allow** `ssr: false` in Server Components — it m
 
 `next/dynamic` + `ssr: false` renders `null` server-side — the skeleton only appears client-side, causing Clerk form to never appear.
 
-### [ ] Step: Final Correct Implementation
+### [x] Step: Final Correct Implementation
 
 Use `useEffect` + `useState(mounted)` inside the Client Component.
 

@@ -231,7 +231,7 @@ Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/arch-lint-analysis.md
 
-### [ ] Step: arch:lint Remediation
+### [x] Step: arch:lint Remediation
 
 Implement the changes determined in the arch:lint analysis step (lint rule adjustment and/or code move).
 

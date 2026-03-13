@@ -92,11 +92,17 @@ print_section "Architecture lint"
 
 print_section "Layer dependency checks"
 
+# src/core/runtime/bootstrap.ts and src/core/runtime/edge.ts are the
+# Node and Edge composition root entry points (see docs/architecture/02).
+# They intentionally import from modules to wire concrete implementations.
+# src/core/container/** is the DI Container class — same exception.
 fail_matches \
   "core must not import app/features/security/modules outside composition root" \
   "from '@/(app|features|security|modules)/" \
   src/core \
   --glob '!src/core/container/**' \
+  --glob '!src/core/runtime/bootstrap.ts' \
+  --glob '!src/core/runtime/edge.ts' \
   --glob '!**/*.test.*'
 
 fail_matches \

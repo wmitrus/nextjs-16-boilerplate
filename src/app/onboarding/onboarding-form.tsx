@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
-import { completeOnboarding } from '@/modules/auth/ui/onboarding-actions';
+import { completeOnboarding } from './actions';
 
 export function OnboardingForm({ redirectUrl }: { redirectUrl: string }) {
   const [error, setError] = React.useState('');

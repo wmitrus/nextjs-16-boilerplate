@@ -11,6 +11,11 @@ const redirectMock = vi.hoisted(() =>
 
 const getAppContainerMock = vi.hoisted(() => vi.fn());
 
+const envState = vi.hoisted(() => ({
+  TENANCY_MODE: 'single' as string,
+  TENANT_CONTEXT_SOURCE: undefined as string | undefined,
+}));
+
 vi.mock('next/navigation', () => ({
   redirect: redirectMock,
 }));
@@ -38,9 +43,13 @@ vi.mock('@/core/env', async (importOriginal) => {
     env: {
       ...actual.env,
       AUTH_PROVIDER: 'clerk',
-      TENANCY_MODE: 'single',
+      get TENANCY_MODE() {
+        return envState.TENANCY_MODE;
+      },
+      get TENANT_CONTEXT_SOURCE() {
+        return envState.TENANT_CONTEXT_SOURCE;
+      },
       DEFAULT_TENANT_ID: '10000000-0000-4000-8000-000000000001',
-      TENANT_CONTEXT_SOURCE: undefined,
       TENANT_CONTEXT_HEADER: 'x-tenant-id',
       TENANT_CONTEXT_COOKIE: 'active_tenant_id',
     },
@@ -51,6 +60,10 @@ vi.mock('./bootstrap-error', () => ({
   BootstrapErrorUI: ({ error }: { error: string }) => (
     <div data-testid="bootstrap-error">{error}</div>
   ),
+}));
+
+vi.mock('./bootstrap-org-required', () => ({
+  BootstrapOrgRequired: () => <div data-testid="bootstrap-org-required" />,
 }));
 
 import BootstrapPage from './page';
@@ -84,6 +97,9 @@ describe('BootstrapPage', () => {
   beforeEach(() => {
     redirectMock.mockClear();
     vi.clearAllMocks();
+
+    envState.TENANCY_MODE = 'single';
+    envState.TENANT_CONTEXT_SOURCE = undefined;
 
     getAppContainerMock.mockReturnValue({
       resolve: (token: symbol) => {
@@ -201,5 +217,43 @@ describe('BootstrapPage', () => {
     await expect(
       BootstrapPage(makeProps('https://evil.example/steal')),
     ).rejects.toThrow('REDIRECT:/users');
+  });
+
+  describe('org+provider mode — org context absent at sign-up', () => {
+    beforeEach(() => {
+      envState.TENANCY_MODE = 'org';
+      envState.TENANT_CONTEXT_SOURCE = 'provider';
+    });
+
+    it('renders org-required interstitial when tenantExternalId is absent and does not call ensureProvisioned', async () => {
+      identitySource.get.mockResolvedValue({
+        userId: 'user_ext_1',
+        email: 'user@example.com',
+        emailVerified: true,
+        tenantExternalId: undefined,
+        tenantRole: undefined,
+      });
+
+      render(await BootstrapPage(makeProps()));
+
+      expect(screen.getByTestId('bootstrap-org-required')).toBeDefined();
+      expect(provisioningService.ensureProvisioned).not.toHaveBeenCalled();
+    });
+
+    it('proceeds to ensureProvisioned when tenantExternalId is present', async () => {
+      identitySource.get.mockResolvedValue({
+        userId: 'user_ext_1',
+        email: 'user@example.com',
+        emailVerified: true,
+        tenantExternalId: 'org_abc',
+        tenantRole: 'org:member',
+      });
+
+      await expect(BootstrapPage(makeProps())).rejects.toThrow(
+        'REDIRECT:/onboarding?redirect_url=%2Fusers',
+      );
+
+      expect(provisioningService.ensureProvisioned).toHaveBeenCalledTimes(1);
+    });
   });
 });

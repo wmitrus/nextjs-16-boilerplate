@@ -111,7 +111,10 @@ export default async function BootstrapPage({
       err instanceof PGliteWasmAbortError ||
       (err instanceof Error &&
         (err.constructor?.name === 'RuntimeError' ||
-          /aborted\(\)/i.test(err.message)))
+          /aborted\(\)/i.test(err.message) ||
+          (err as NodeJS.ErrnoException).code === 'ENOENT' ||
+          (err as NodeJS.ErrnoException).code === 'EPERM' ||
+          (err as NodeJS.ErrnoException).code === 'EACCES'))
     ) {
       return <BootstrapErrorUI error="db_error" />;
     }

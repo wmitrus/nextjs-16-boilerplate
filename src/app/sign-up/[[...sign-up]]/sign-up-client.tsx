@@ -1,14 +1,22 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+import { SignUp } from '@clerk/nextjs';
+import { useSyncExternalStore } from 'react';
 
-const SignUp = dynamic(() => import('@clerk/nextjs').then((m) => m.SignUp), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[600px] w-[400px] animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800" />
-  ),
-});
+const emptySubscribe = () => () => {};
 
 export function SignUpClient() {
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+
+  if (!mounted) {
+    return (
+      <div className="h-[600px] w-[400px] animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800" />
+    );
+  }
+
   return <SignUp path="/sign-up" />;
 }

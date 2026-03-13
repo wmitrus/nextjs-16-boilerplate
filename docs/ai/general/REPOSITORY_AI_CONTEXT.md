@@ -152,6 +152,16 @@ AI must judge whether current boundaries make those futures easier or harder.
 
 ---
 
+## Next.js Runtime Notes
+
+Repository-specific runtime conventions:
+
+- In Next.js 16, `proxy.ts` is the repository’s middleware-equivalent runtime entrypoint.
+- Treat `src/proxy.ts` as the middleware/proxy boundary for request classification, request-scoped security setup, and runtime enforcement orchestration.
+- Agents must not assume `middleware.ts` exists or is the active entrypoint in this repository.
+
+---
+
 ## AI governance files
 
 Before performing architectural, security, or runtime analysis, AI agents should read:

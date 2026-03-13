@@ -1,6 +1,9 @@
 import { createDb } from '@/core/db/create-db';
-import { seedAll } from '@/core/db/seed';
-import type { DbDriver, DbProvider } from '@/core/db/types';
+import type { DbDriver, DbProvider, DrizzleDb } from '@/core/db/types';
+
+import { seedAuthorization } from '@/modules/authorization/infrastructure/drizzle/seed';
+import { seedBilling } from '@/modules/billing/infrastructure/drizzle/seed';
+import { seedUsers } from '@/modules/user/infrastructure/drizzle/seed';
 
 function resolveProvider(): DbProvider {
   const explicit = process.env.DB_PROVIDER?.trim();
@@ -19,6 +22,14 @@ function resolveDriver(): DbDriver {
   if (explicit === 'postgres' || explicit === 'pglite') return explicit;
 
   return nodeEnv === 'production' ? 'postgres' : 'pglite';
+}
+
+async function seedAll(db: DrizzleDb) {
+  const users = await seedUsers(db);
+  const authorization = await seedAuthorization(db, { users });
+  const billing = await seedBilling(db, { tenants: authorization.tenants });
+
+  return { users, authorization, billing };
 }
 
 async function run(): Promise<void> {

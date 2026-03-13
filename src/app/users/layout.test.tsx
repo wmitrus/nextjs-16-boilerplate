@@ -65,7 +65,7 @@ describe('UsersLayout node provisioning guard', () => {
     );
   });
 
-  it('redirects tenant-context-required user to onboarding reason route', async () => {
+  it('redirects tenant-context-required user to bootstrap recovery route', async () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'TENANT_CONTEXT_REQUIRED',
       code: 'TENANT_CONTEXT_REQUIRED',
@@ -73,7 +73,7 @@ describe('UsersLayout node provisioning guard', () => {
     });
 
     await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
-      'REDIRECT:/onboarding?reason=tenant-context-required',
+      'REDIRECT:/auth/bootstrap?reason=tenant-lost',
     );
   });
 

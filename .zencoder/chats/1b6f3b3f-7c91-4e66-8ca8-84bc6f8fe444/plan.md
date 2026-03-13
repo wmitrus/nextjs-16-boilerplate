@@ -160,7 +160,7 @@ Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/validation-strategy.md
 
-### [ ] Step: Implementation
+### [x] Step: Implementation
 
 Run **Implementation Agent**.
 
@@ -185,7 +185,7 @@ Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/implementation-report.md
 
-### [ ] Step: Validation
+### [x] Step: Validation
 
 Run the validation plan defined in:
 
@@ -203,7 +203,7 @@ Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/validation-report.md
 
-### [ ] Step: Final Security Check
+### [x] Step: Final Security Check
 
 Run **Security/Auth Agent** again if the fix touched:
 
@@ -222,3 +222,19 @@ The agent should confirm:
 Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/security-final.md
+
+### [x] Step: arch:lint Failure Analysis
+
+Review arch:lint failures in `src/core/db/seed.ts`, `src/core/runtime/bootstrap.ts`, and `src/core/runtime/edge.ts`. Determine for each file whether the violation is a true boundary violation, an approved composition-root-style exception not yet modelled by the rule, a candidate for refactoring, or a lint rule adjustment.
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/arch-lint-analysis.md
+
+### [ ] Step: arch:lint Remediation
+
+Implement the changes determined in the arch:lint analysis step (lint rule adjustment and/or code move).
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/arch-lint-remediation.md

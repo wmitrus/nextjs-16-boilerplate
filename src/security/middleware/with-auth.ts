@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { createAction } from '@/core/contracts/authorization';
 import type { Identity } from '@/core/contracts/identity';
+import { UserNotProvisionedError } from '@/core/contracts/identity';
 import {
   MissingTenantContextError,
   TenantMembershipRequiredError,
@@ -244,16 +245,28 @@ export function withAuth(
       return handler(req, ctx);
     }
 
-    const identity = await resolveIdentity(options);
-    const userId = identity?.id;
-
-    // Bootstrap route: authenticated users pass through; unauthenticated → sign-in
+    // Bootstrap route: check authentication presence before full identity resolution.
+    // Prevents UserNotProvisionedError from propagating for new users in Node mode
+    // where the DB-backed identity provider would throw before the user is provisioned.
     if (ctx.isBootstrapRoute) {
-      if (!userId) {
+      let bootstrapUserId: string | undefined;
+      try {
+        const bootstrapIdentity = await resolveIdentity(options);
+        bootstrapUserId = bootstrapIdentity?.id;
+      } catch (err) {
+        if (err instanceof UserNotProvisionedError) {
+          return handler(req, ctx);
+        }
+        throw err;
+      }
+      if (!bootstrapUserId) {
         return NextResponse.redirect(new URL('/sign-in', req.url));
       }
       return handler(req, ctx);
     }
+
+    const identity = await resolveIdentity(options);
+    const userId = identity?.id;
 
     const onboardingComplete = isNodeMode(options)
       ? await resolveOnboardingComplete(options.userRepository, userId)

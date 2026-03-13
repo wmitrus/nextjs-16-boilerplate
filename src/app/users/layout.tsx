@@ -24,7 +24,7 @@ export default async function UsersLayout({
   }
 
   if (access.status === 'TENANT_CONTEXT_REQUIRED') {
-    redirect('/onboarding?reason=tenant-context-required');
+    redirect('/auth/bootstrap?reason=tenant-lost');
   }
 
   if (

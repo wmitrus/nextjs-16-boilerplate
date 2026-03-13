@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import { UserNotProvisionedError } from '@/core/contracts/identity';
 import {
   MissingTenantContextError,
   TenantMembershipRequiredError,
@@ -168,6 +169,27 @@ describe('Auth Middleware', () => {
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toBe('http://localhost/sign-in');
     expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should pass through bootstrap route when identity provider throws UserNotProvisionedError (Node mode new user)', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockRejectedValue(
+      new UserNotProvisionedError(),
+    );
+
+    const req = createMockRequest({ path: '/auth/bootstrap' });
+    const ctx = createMockRouteContext({
+      isBootstrapRoute: true,
+      isPublicRoute: false,
+    });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(mockHandler).toHaveBeenCalledTimes(1);
   });
 
   it('should redirect authenticated users from sign-up route to bootstrap', async () => {

@@ -1,5 +1,7 @@
 'use server';
 
+import { redirect } from 'next/navigation';
+
 import { AUTH, PROVISIONING } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import { TenantNotProvisionedError } from '@/core/contracts/identity';
@@ -158,7 +160,6 @@ export const completeOnboarding = async (formData: FormData) => {
       { userId: internalUserId },
       'User profile and onboarding status updated successfully',
     );
-    return { message: 'Onboarding completed', redirectUrl: safeRedirectUrl };
   } catch (err) {
     logger.error(
       { err, userId: internalUserId },
@@ -166,4 +167,6 @@ export const completeOnboarding = async (formData: FormData) => {
     );
     return { error: 'There was an error updating your profile.' };
   }
+
+  redirect(safeRedirectUrl);
 };

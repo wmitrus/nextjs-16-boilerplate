@@ -288,3 +288,11 @@ Determine the minimum required validation scope for the approved onboarding navi
 Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/onboarding-validation-strategy.md
+
+### [ ] Step: Implementation — Onboarding Navigation Fix
+
+Implement approved fix: redirect() in completeOnboarding, remove client router.push/redirectUrl prop, update tests.
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/onboarding-impl-report.md

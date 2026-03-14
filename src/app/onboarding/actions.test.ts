@@ -6,7 +6,17 @@ import { completeOnboarding } from './actions';
 
 import { TenantContextRequiredError } from '@/modules/provisioning/domain/errors';
 
+const redirectMock = vi.hoisted(() =>
+  vi.fn((url: string) => {
+    throw new Error(`REDIRECT:${url}`);
+  }),
+);
+
 const getAppContainerMock = vi.hoisted(() => vi.fn());
+
+vi.mock('next/navigation', () => ({
+  redirect: redirectMock,
+}));
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: getAppContainerMock,
@@ -90,18 +100,17 @@ describe('completeOnboarding', () => {
     userRepository.updateOnboardingStatus.mockResolvedValue(undefined);
   });
 
-  it('executes provisioning before writing profile and onboarding status', async () => {
+  it('executes provisioning before writing profile and onboarding status, then redirects to /users', async () => {
     const formData = new FormData();
     formData.set('displayName', 'Alice');
     formData.set('locale', 'pl-PL');
     formData.set('timezone', 'Europe/Warsaw');
 
-    const result = await completeOnboarding(formData);
+    await expect(completeOnboarding(formData)).rejects.toThrow(
+      'REDIRECT:/users',
+    );
 
-    expect(result).toEqual({
-      message: 'Onboarding completed',
-      redirectUrl: '/users',
-    });
+    expect(redirectMock).toHaveBeenCalledWith('/users');
     expect(provisioningService.ensureProvisioned).toHaveBeenCalledTimes(1);
     expect(userRepository.updateProfile).toHaveBeenCalledWith('u-1', {
       displayName: 'Alice',
@@ -120,6 +129,18 @@ describe('completeOnboarding', () => {
     expect(provisionCallOrder).toBeLessThan(profileCallOrder);
   });
 
+  it('redirects to sanitized custom redirect_url from formData on success', async () => {
+    const formData = new FormData();
+    formData.set('displayName', 'Alice');
+    formData.set('redirect_url', '/dashboard');
+
+    await expect(completeOnboarding(formData)).rejects.toThrow(
+      'REDIRECT:/dashboard',
+    );
+
+    expect(redirectMock).toHaveBeenCalledWith('/dashboard');
+  });
+
   it('returns controlled error for tenant-context provisioning failure', async () => {
     provisioningService.ensureProvisioned.mockRejectedValue(
       new TenantContextRequiredError('missing tenant context'),
@@ -136,6 +157,7 @@ describe('completeOnboarding', () => {
       error:
         'Tenant context is invalid or missing. Verify tenancy configuration and try again.',
     });
+    expect(redirectMock).not.toHaveBeenCalled();
     expect(userRepository.updateProfile).not.toHaveBeenCalled();
     expect(userRepository.updateOnboardingStatus).not.toHaveBeenCalled();
   });
@@ -152,6 +174,7 @@ describe('completeOnboarding', () => {
       'Onboarding invariant violated: provisioned user not found in database',
     );
 
+    expect(redirectMock).not.toHaveBeenCalled();
     expect(userRepository.updateProfile).not.toHaveBeenCalled();
     expect(userRepository.updateOnboardingStatus).not.toHaveBeenCalled();
   });

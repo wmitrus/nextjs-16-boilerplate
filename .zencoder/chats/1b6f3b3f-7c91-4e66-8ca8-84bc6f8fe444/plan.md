@@ -255,7 +255,7 @@ Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/sentry-fix-report.md
 
-### [ ] Step: Flow Trace Matrix — sign-up → bootstrap → onboarding → users (TENANCY_MODE=single)
+### [x] Step: Flow Trace Matrix — sign-up → bootstrap → onboarding → users (TENANCY_MODE=single)
 
 Build a complete per-step trace matrix for the full new-user sign-up flow.
 For each step: entry point, expected state, actual state, source of truth, redirect / next step, likely failure conditions.
@@ -264,3 +264,19 @@ Focus on where the flow diverges after successful bootstrap in TENANCY_MODE=sing
 Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/flow-trace-matrix.md
+
+### [x] Step: Onboarding Runtime Investigation
+
+Investigate why the sign-up flow stops at /onboarding?redirect_url=%2Fusers after successful bootstrap in TENANCY_MODE=single. Focus on runtime correctness of the client form action pattern and navigation path.
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/onboarding-runtime-investigation.md
+
+### [x] Step: Architecture Review — Onboarding Navigation Fix
+
+Review the proposed onboarding navigation fix (moving from client-side router.push to server-side redirect()) for architectural safety, boundary impact, and minimum remediation shape.
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/onboarding-arch-review.md

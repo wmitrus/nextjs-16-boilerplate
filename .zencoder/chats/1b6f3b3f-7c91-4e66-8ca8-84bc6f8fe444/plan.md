@@ -280,3 +280,11 @@ Review the proposed onboarding navigation fix (moving from client-side router.pu
 Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/onboarding-arch-review.md
+
+### [x] Step: Validation Strategy — Onboarding Navigation Fix
+
+Determine the minimum required validation scope for the approved onboarding navigation fix (redirect() in server action, remove client router.push).
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/onboarding-validation-strategy.md

@@ -10,6 +10,10 @@ Canonical self-audit validation harness lives in:
 
 - `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`
 
+If the issue is a runtime bug:
+Architecture Guard must not redesign the system.
+Only verify that the proposed fix respects existing architecture.
+
 Authority order:
 
 1. Architecture Guard Agent

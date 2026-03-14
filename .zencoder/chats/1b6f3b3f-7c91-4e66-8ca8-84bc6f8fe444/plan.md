@@ -238,3 +238,29 @@ Implement the changes determined in the arch:lint analysis step (lint rule adjus
 Output file:
 
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/arch-lint-remediation.md
+
+### [x] Step: Sentry Network Error Investigation
+
+Investigate `TypeError: network error` at `<BootstrapPage>` captured in Sentry. Correlate Sentry trace with server logs, identify root cause, and produce an investigation report.
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/sentry-investigation.md
+
+### [x] Step: Sentry Network Error Fix (Implementation)
+
+Based on sentry-investigation.md, implement the minimum safe fix and validate.
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/sentry-fix-report.md
+
+### [ ] Step: Flow Trace Matrix — sign-up → bootstrap → onboarding → users (TENANCY_MODE=single)
+
+Build a complete per-step trace matrix for the full new-user sign-up flow.
+For each step: entry point, expected state, actual state, source of truth, redirect / next step, likely failure conditions.
+Focus on where the flow diverges after successful bootstrap in TENANCY_MODE=single.
+
+Output file:
+
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/1b6f3b3f-7c91-4e66-8ca8-84bc6f8fe444/flow-trace-matrix.md

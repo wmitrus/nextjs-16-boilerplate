@@ -1,14 +1,12 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
 import { completeOnboarding } from './actions';
 
-export function OnboardingForm({ redirectUrl }: { redirectUrl: string }) {
+export function OnboardingForm() {
   const [error, setError] = React.useState('');
   const [isPending, setIsPending] = React.useState(false);
-  const router = useRouter();
 
   const handleSubmit = async (formData: FormData) => {
     setIsPending(true);
@@ -16,9 +14,6 @@ export function OnboardingForm({ redirectUrl }: { redirectUrl: string }) {
 
     try {
       const res = await completeOnboarding(formData);
-      if (res?.message) {
-        router.push(res.redirectUrl ?? redirectUrl);
-      }
       if (res?.error) {
         setError(res.error);
       }
@@ -37,8 +32,6 @@ export function OnboardingForm({ redirectUrl }: { redirectUrl: string }) {
       </p>
 
       <form action={handleSubmit} className="space-y-6">
-        <input type="hidden" name="redirect_url" value={redirectUrl} />
-
         <div>
           <label
             htmlFor="displayName"

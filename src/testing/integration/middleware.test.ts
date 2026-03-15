@@ -171,6 +171,19 @@ describe('Middleware Integration', () => {
     expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
   });
 
+  it('should allow Clerk callback state to complete on auth routes', async () => {
+    const pipeline = createPipeline();
+
+    const req = createMockRequest({
+      path: '/sign-up?__clerk_db_jwt=test-token&redirect_url=%2Fusers',
+    });
+
+    const res = await pipeline(req);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+  });
+
   it('should redirect authenticated users to onboarding if not complete', async () => {
     const pipeline = createPipeline();
 

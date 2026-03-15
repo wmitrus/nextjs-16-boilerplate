@@ -45,6 +45,14 @@ type WithAuthEdgeOptions = WithAuthCommonOptions & {
 type WithAuthOptions = WithAuthNodeOptions | WithAuthEdgeOptions;
 
 const TENANT_CONTEXT_REQUIRED_REDIRECT = '/onboarding';
+const CLERK_CALLBACK_QUERY_PARAMS = new Set([
+  '__clerk_db_jwt',
+  '__clerk_synced',
+  '__clerk_redirect_url',
+  '__clerk_handshake',
+  '__clerk_handshake_nonce',
+  '__session',
+]);
 
 function isNodeMode(options: WithAuthOptions): options is WithAuthNodeOptions {
   return 'userRepository' in options;
@@ -91,12 +99,24 @@ function redirectForMissingTenantContext(req: NextRequest): NextResponse {
   return NextResponse.redirect(redirectUrl);
 }
 
+function hasClerkCallbackState(req: NextRequest): boolean {
+  return [...req.nextUrl.searchParams.keys()].some((key) =>
+    CLERK_CALLBACK_QUERY_PARAMS.has(key),
+  );
+}
+
 function redirectAuthenticatedFromAuthRoute(
   req: NextRequest,
   ctx: RouteContext,
   userId: string | undefined,
 ): NextResponse | null {
   if (!userId || !ctx.isAuthRoute) {
+    return null;
+  }
+
+  // Let Clerk finish its own dev callback/session sync lifecycle before we
+  // redirect authenticated users away from hosted auth routes.
+  if (hasClerkCallbackState(req)) {
     return null;
   }
 

@@ -24,6 +24,18 @@ Include:
 
 ---
 
+## Artifact Execution Rule
+
+For every workflow step:
+
+- the file shown under `Output:` is mandatory
+- the active agent must create or overwrite that markdown file
+- the artifact file must contain the full result for the step
+- the agent must not respond only in chat without writing the artifact
+- after writing the artifact, the agent should give only a short completion summary in chat
+
+---
+
 ### [ ] Step: Flow Trace Investigation
 
 Trace the execution path through the system.

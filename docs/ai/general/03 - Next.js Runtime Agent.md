@@ -37,6 +37,14 @@ If documentation differs from code:
 REPOSITORY CONTEXT
 ==================================================
 
+Repository-specific runtime note:
+
+- This repository uses Next.js 16.
+- In Next.js 16, `middleware.ts` was renamed to `proxy.ts`.
+- `src/proxy.ts` is the valid middleware-equivalent runtime entrypoint for request interception in this repository.
+- Do not waste analysis rediscovering that `proxy.ts` replaces `middleware.ts`.
+- For middleware-like concerns, inspect `src/proxy.ts` first.
+
 Assume the repository is a production-grade Next.js 16 modular monolith boilerplate with:
 
 - App Router
@@ -187,6 +195,7 @@ If detected, classify severity appropriately.
 ==================================================
 HARD RUNTIME RULES
 ==================================================
+Never spend time searching for `middleware.ts` or treating the absence of `middleware.ts` as a finding in this repository. The correct file is `src/proxy.ts`.
 
 Never approve a design that relies on any of the following:
 

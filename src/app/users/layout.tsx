@@ -1,20 +1,87 @@
 import { redirect } from 'next/navigation';
 
+import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
+
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
+
+const logger = resolveServerLogger().child({
+  type: 'API',
+  category: 'auth',
+  module: 'users-guard',
+});
 
 export default async function UsersLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const requestContext = await getServerRequestLogContext({
+    pathname: '/users',
+  });
+
   let access;
   try {
     access = await resolveNodeProvisioningAccess(getAppContainer());
-  } catch {
+  } catch (err) {
+    logger.error(
+      {
+        event: 'users_guard:decision',
+        correlationId: requestContext.correlationId,
+        requestId: requestContext.requestId,
+        pathname: '/users',
+        tenancyMode: 'unknown',
+        userRecordExists: null,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: null,
+        provisioningRequired: true,
+        decision: 'redirect:/auth/bootstrap',
+        reason: 'unsupported_state',
+        err,
+      },
+      'Users guard failed while resolving provisioning access and redirected to bootstrap recovery route',
+    );
     redirect('/auth/bootstrap?reason=db-error');
   }
+
+  const decision =
+    access.status === 'ALLOWED'
+      ? 'stay:/users'
+      : access.status === 'ONBOARDING_REQUIRED'
+        ? 'redirect:/onboarding'
+        : access.status === 'UNAUTHENTICATED'
+          ? 'redirect:/sign-in'
+          : access.status === 'BOOTSTRAP_REQUIRED' ||
+              access.status === 'TENANT_CONTEXT_REQUIRED'
+            ? 'redirect:/auth/bootstrap'
+            : 'redirect:/';
+
+  logger.info(
+    {
+      event: 'users_guard:decision',
+      correlationId: requestContext.correlationId,
+      requestId: requestContext.requestId,
+      pathname: '/users',
+      authenticatedExternalUserId: access.diagnostics.externalUserId,
+      internalIdentityId: access.diagnostics.internalIdentityId,
+      internalTenantId: access.diagnostics.internalTenantId,
+      tenancyMode: access.diagnostics.tenancyMode,
+      userRecordExists: access.diagnostics.userRecordExists,
+      tenantRecordExists: access.diagnostics.tenantRecordExists,
+      membershipExists: access.diagnostics.membershipExists,
+      onboardingStateExists: access.diagnostics.onboardingStateExists,
+      onboardingComplete: access.diagnostics.onboardingComplete,
+      provisioningRequired: access.diagnostics.provisioningRequired,
+      decision,
+      reason: access.diagnostics.reason,
+      status: access.status,
+      code: 'code' in access ? access.code : undefined,
+    },
+    'Users guard evaluated post-auth landing decision',
+  );
 
   if (access.status === 'UNAUTHENTICATED') {
     redirect('/sign-in?redirect_url=/users');

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { Container } from '@/core/container';
 import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import type { DrizzleDb } from '@/core/db';
@@ -40,6 +41,9 @@ function createTenantExistsProbe(db: DrizzleDb) {
 export async function resolveNodeProvisioningAccess(
   container: Container,
 ): Promise<NodeProvisioningAccessOutcome> {
+  const requestIdentitySource = container.resolve<RequestIdentitySource>(
+    AUTH.IDENTITY_SOURCE,
+  );
   const identityProvider = container.resolve<IdentityProvider>(
     AUTH.IDENTITY_PROVIDER,
   );
@@ -57,11 +61,14 @@ export async function resolveNodeProvisioningAccess(
     tenantExistsProbe = createTenantExistsProbe(db);
   }
 
+  const rawIdentity = await requestIdentitySource.get();
+
   return evaluateNodeProvisioningAccess({
     identityProvider,
     tenantResolver,
     userRepository,
     tenancyMode: env.TENANCY_MODE,
+    rawIdentity,
     tenantExistsProbe,
   });
 }

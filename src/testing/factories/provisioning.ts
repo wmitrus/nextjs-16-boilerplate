@@ -1,7 +1,24 @@
 import type {
   NodeProvisioningAccessAllowed,
+  NodeProvisioningAccessDiagnostics,
   NodeProvisioningAccessOutcome,
 } from '@/security/core/node-provisioning-access';
+
+function makeProvisioningDiagnostics(
+  overrides: Partial<NodeProvisioningAccessDiagnostics> = {},
+): NodeProvisioningAccessDiagnostics {
+  return {
+    tenancyMode: 'personal',
+    userRecordExists: true,
+    tenantRecordExists: true,
+    membershipExists: true,
+    onboardingStateExists: true,
+    onboardingComplete: true,
+    provisioningRequired: false,
+    reason: 'already_ready',
+    ...overrides,
+  };
+}
 
 export function makeAllowedProvisioningAccess(
   overrides: Partial<NodeProvisioningAccessAllowed> = {},
@@ -15,6 +32,7 @@ export function makeAllowedProvisioningAccess(
       email: 'user@test.dev',
       onboardingComplete: true,
     },
+    diagnostics: makeProvisioningDiagnostics(),
     ...overrides,
   };
 }

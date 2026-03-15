@@ -49,7 +49,9 @@ export function resetLoggerMocks() {
   vi.mocked(mockLogger.info).mockReset();
   vi.mocked(mockLogger.debug).mockReset();
   vi.mocked(mockLogger.fatal).mockReset();
-  vi.mocked(mockLogger.child).mockReset();
+  const childMock = mockLogger.child as unknown as ReturnType<typeof vi.fn>;
+  childMock.mockReset();
+  childMock.mockImplementation(() => mockChildLogger);
   vi.mocked(mockChildLogger.warn).mockReset();
   vi.mocked(mockChildLogger.error).mockReset();
   vi.mocked(mockChildLogger.info).mockReset();

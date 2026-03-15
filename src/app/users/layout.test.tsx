@@ -77,6 +77,16 @@ describe('UsersLayout node provisioning guard', () => {
     );
   });
 
+  it('redirects to bootstrap db-error when resolveNodeProvisioningAccess throws', async () => {
+    resolveNodeProvisioningAccessMock.mockRejectedValue(
+      new Error('DB connection lost'),
+    );
+
+    await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
+      'REDIRECT:/auth/bootstrap?reason=db-error',
+    );
+  });
+
   it('returns children when access is ALLOWED', async () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'ALLOWED',

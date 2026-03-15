@@ -125,7 +125,22 @@ export default async function BootstrapPage({
   const userRepository = container.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
-  const user = await userRepository.findById(internalUserId);
+
+  let user;
+  try {
+    user = await userRepository.findById(internalUserId);
+  } catch (err) {
+    logger.error(
+      {
+        event: 'provisioning:bootstrap',
+        status: 'db_error',
+        internalUserId,
+        err,
+      },
+      'Bootstrap: userRepository.findById threw after successful provisioning',
+    );
+    return <BootstrapErrorUI error="db_error" />;
+  }
 
   if (!user) {
     logger.error(
@@ -136,9 +151,7 @@ export default async function BootstrapPage({
       },
       'Bootstrap invariant violated: provisioning succeeded but user record is missing',
     );
-    throw new Error(
-      'Bootstrap invariant violated: provisioned user not found in database',
-    );
+    return <BootstrapErrorUI error="db_error" />;
   }
 
   if (!user.onboardingComplete) {

@@ -36,7 +36,7 @@ export async function OnboardingGuard({
     if (err instanceof UserNotProvisionedError) {
       redirect('/auth/bootstrap');
     }
-    throw err;
+    redirect('/auth/bootstrap?reason=db-error');
   }
 
   if (!identity) {
@@ -46,7 +46,13 @@ export async function OnboardingGuard({
   const userRepository = container.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
-  const user = await userRepository.findById(identity.id);
+
+  let user;
+  try {
+    user = await userRepository.findById(identity.id);
+  } catch {
+    redirect('/auth/bootstrap?reason=db-error');
+  }
 
   if (!user) {
     redirect('/auth/bootstrap');

@@ -166,12 +166,48 @@ export function GlobalErrorHandlers() {
       }
     };
 
+    const handleCspViolation = (event: SecurityPolicyViolationEvent) => {
+      try {
+        let documentUri = '';
+        try {
+          const url = new URL(event.documentURI);
+          documentUri = `${url.origin}${url.pathname}`;
+        } catch {
+          documentUri = event.documentURI.split('?')[0] ?? '';
+        }
+
+        let blockedUri = '';
+        try {
+          const url = new URL(event.blockedURI);
+          blockedUri = `${url.origin}${url.pathname}`;
+        } catch {
+          blockedUri = event.blockedURI.split('?')[0] ?? '';
+        }
+
+        logger.warn(
+          {
+            violatedDirective: event.violatedDirective,
+            effectiveDirective: event.effectiveDirective,
+            blockedURI: blockedUri,
+            documentURI: documentUri,
+            disposition: event.disposition,
+            statusCode: event.statusCode,
+          },
+          'CSP Violation',
+        );
+      } catch (err) {
+        console.error('Failed to log CSP violation:', err);
+      }
+    };
+
     window.addEventListener('error', handleError);
     window.addEventListener('unhandledrejection', handleRejection);
+    window.addEventListener('securitypolicyviolation', handleCspViolation);
 
     return () => {
       window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleRejection);
+      window.removeEventListener('securitypolicyviolation', handleCspViolation);
       clearInterval(cleanupInterval);
     };
   }, []);

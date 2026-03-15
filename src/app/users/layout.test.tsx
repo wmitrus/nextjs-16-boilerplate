@@ -23,6 +23,17 @@ vi.mock('@/security/core/node-provisioning-runtime', () => ({
 
 import UsersLayout from './layout';
 
+const diagnostics = {
+  tenancyMode: 'personal' as const,
+  userRecordExists: null,
+  tenantRecordExists: null,
+  membershipExists: null,
+  onboardingStateExists: null,
+  onboardingComplete: null,
+  provisioningRequired: false,
+  reason: 'unsupported_state' as const,
+};
+
 describe('UsersLayout node provisioning guard', () => {
   beforeEach(() => {
     redirectMock.mockClear();
@@ -34,6 +45,10 @@ describe('UsersLayout node provisioning guard', () => {
       status: 'UNAUTHENTICATED',
       code: 'UNAUTHENTICATED',
       message: 'Authentication required',
+      diagnostics: {
+        ...diagnostics,
+        reason: 'unauthenticated',
+      },
     });
 
     await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
@@ -46,6 +61,11 @@ describe('UsersLayout node provisioning guard', () => {
       status: 'BOOTSTRAP_REQUIRED',
       code: 'BOOTSTRAP_REQUIRED',
       message: 'Bootstrap required',
+      diagnostics: {
+        ...diagnostics,
+        provisioningRequired: true,
+        reason: 'provisioning_required',
+      },
     });
 
     await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
@@ -58,6 +78,13 @@ describe('UsersLayout node provisioning guard', () => {
       status: 'ONBOARDING_REQUIRED',
       code: 'ONBOARDING_INCOMPLETE',
       message: 'Onboarding required',
+      diagnostics: {
+        ...diagnostics,
+        userRecordExists: true,
+        onboardingStateExists: true,
+        onboardingComplete: false,
+        reason: 'missing_onboarding_state',
+      },
     });
 
     await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
@@ -70,6 +97,14 @@ describe('UsersLayout node provisioning guard', () => {
       status: 'TENANT_CONTEXT_REQUIRED',
       code: 'TENANT_CONTEXT_REQUIRED',
       message: 'Tenant context required',
+      diagnostics: {
+        ...diagnostics,
+        userRecordExists: true,
+        tenantRecordExists: false,
+        onboardingStateExists: true,
+        onboardingComplete: true,
+        reason: 'missing_tenant',
+      },
     });
 
     await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
@@ -95,6 +130,17 @@ describe('UsersLayout node provisioning guard', () => {
       user: {
         id: 'u-1',
         onboardingComplete: true,
+      },
+      diagnostics: {
+        ...diagnostics,
+        internalIdentityId: 'u-1',
+        internalTenantId: 't-1',
+        userRecordExists: true,
+        tenantRecordExists: true,
+        membershipExists: true,
+        onboardingStateExists: true,
+        onboardingComplete: true,
+        reason: 'already_ready',
       },
     });
 

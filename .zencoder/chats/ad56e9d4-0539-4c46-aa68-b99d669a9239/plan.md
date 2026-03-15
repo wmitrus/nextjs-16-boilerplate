@@ -130,6 +130,25 @@ Support fixes:
 
 ---
 
+### [x] Step: Logflare Stream Fix
+
+Root cause identified by Next.js Runtime Agent:
+
+- pino-logflare throws plain string (not Error) when both sourceToken AND sourceName are passed
+- .env.local had both LOGFLARE_SOURCE_TOKEN and LOGFLARE_SOURCE_NAME set
+- catch block used `instanceof Error` check → showed "Unknown error" instead of actual message
+- serverExternalPackages fix (pino, pino-logflare, pino-pretty) was also correct and necessary
+
+Changes made:
+
+- src/core/logger/utils.ts: prefer sourceToken, fall back to sourceName (never pass both)
+- src/core/logger/utils.ts: catch block now uses String(err) instead of 'Unknown error'
+- src/core/logger/utils.test.ts: 3 new tests covering source preference and string error display
+
+Validation: typecheck PASS, lint PASS, 736 tests PASS (116 files)
+
+---
+
 ### [ ] Step: Remaining Work (Priority 2 remainder + Priority 3)
 
 - [ ] Create src/app/api/csp-report/route.ts

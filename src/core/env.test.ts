@@ -74,12 +74,8 @@ describe('env', () => {
 
     expect(env.NEXT_PUBLIC_CLERK_SIGN_IN_URL).toBe('/sign-in');
     expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_URL).toBe('/sign-up');
-    expect(env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL).toBe(
-      '/auth/bootstrap',
-    );
-    expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL).toBe(
-      '/auth/bootstrap',
-    );
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL).toBeUndefined();
+    expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL).toBeUndefined();
   });
 
   it('validates logger env variables', async () => {

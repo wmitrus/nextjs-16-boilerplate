@@ -13,7 +13,7 @@ exports
 !.yarn/versions
 
 # logs
-logs
+/logs/*
 
 /bin/*
 !/bin/git-branch-origin

@@ -6,7 +6,14 @@ import type { ExternalAuthProvider } from '@/core/contracts/identity';
 import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import { TenantMembershipRequiredError } from '@/core/contracts/tenancy';
 import type { DrizzleDb } from '@/core/db';
+import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
+
+import {
+  getOrCreateActivityState,
+  getRuntimeDiagnosticState,
+} from '@/shared/lib/observability/runtime-diagnostic-state';
+import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
 
 import {
   CrossProviderLinkingNotAllowedError,
@@ -42,6 +49,40 @@ const logger = resolveServerLogger().child({
   category: 'provisioning',
   module: 'drizzle-provisioning-service',
 });
+
+function previewEmail(email: string | undefined): string | undefined {
+  if (!email) return undefined;
+
+  const [localPart, domain] = email.split('@');
+  if (!localPart || !domain) {
+    return '[invalid-email]';
+  }
+
+  return `${localPart.slice(0, 1)}***@${domain}`;
+}
+
+function isRetryableProvisioningError(err: unknown): boolean {
+  if (!(err instanceof Error)) {
+    return false;
+  }
+
+  const code = (err as NodeJS.ErrnoException).code;
+  if (
+    code === 'ENOENT' ||
+    code === 'EPERM' ||
+    code === 'EACCES' ||
+    code === 'EBUSY' ||
+    code === 'EMFILE'
+  ) {
+    return true;
+  }
+
+  return /aborted\(\)|timeout|temporar|busy|locked/i.test(err.message);
+}
+
+function buildProvisioningSubjectKey(input: ProvisioningInput): string {
+  return `${input.provider}:${input.externalUserId}`;
+}
 
 /**
  * Computes a deterministic UUID-like string from a stable key.
@@ -136,6 +177,15 @@ export class DrizzleProvisioningService implements ProvisioningService {
   async ensureProvisioned(
     input: ProvisioningInput,
   ): Promise<ProvisioningResult> {
+    const requestContext = await getServerRequestLogContext();
+    const diagnostics = getRuntimeDiagnosticState();
+    const runId = crypto.randomUUID();
+    const startedAt = Date.now();
+    const subjectKey = buildProvisioningSubjectKey(input);
+    const subjectState = getOrCreateActivityState(
+      diagnostics.provisioningSubjects,
+      subjectKey,
+    );
     const singleFlightKey = buildProvisioningSingleFlightKey(
       input,
       this.freeTierMaxUsers,
@@ -144,124 +194,444 @@ export class DrizzleProvisioningService implements ProvisioningService {
     const existingProvisioning = inFlightProvisioning.get(singleFlightKey);
 
     if (existingProvisioning) {
-      logger.debug(
+      logger.warn(
         {
-          event: 'provisioning:ensure_singleflight_reused',
+          event: 'provisioning:ensure:singleflight_reused',
+          correlationId: requestContext.correlationId,
+          requestId: requestContext.requestId,
+          pathname: requestContext.pathname,
+          runId,
+          subjectKey,
           provider: input.provider,
           externalUserId: input.externalUserId,
           tenancyMode: input.tenancyMode,
+          activeRunCount: subjectState.activeCount,
+          isDuplicate: true,
         },
         'Provisioning reused an in-flight ensureProvisioned() call for the same identity',
       );
       return existingProvisioning;
     }
 
+    subjectState.totalStarts += 1;
+    subjectState.activeCount += 1;
+    subjectState.lastStartedAt = startedAt;
+
     const { provider, externalUserId, email, emailVerified } = input;
+    let currentStage:
+      | 'start'
+      | 'db_init'
+      | 'migrations'
+      | 'transaction_start'
+      | 'identity_lookup'
+      | 'tenant_upsert'
+      | 'membership_upsert'
+      | 'onboarding_state_check'
+      | 'complete' = 'start';
+    let internalSubjectState:
+      | ReturnType<typeof getOrCreateActivityState>
+      | undefined;
+    let internalSubjectKey: string | undefined;
 
-    const provisioningPromise = this.runInTransaction(async (db) => {
-      // Step 1: Resolve/create user — with explicit linking policy enforcement
-      const { internalUserId, userCreatedNow } = await resolveOrCreateUser(
-        db,
-        provider,
-        externalUserId,
-        email,
-        emailVerified,
-        this.crossProviderEmailLinking,
-      );
+    const baseLogFields = {
+      correlationId: requestContext.correlationId,
+      requestId: requestContext.requestId,
+      pathname: requestContext.pathname,
+      runId,
+      provider,
+      externalUserId,
+      externalTenantId: input.tenantExternalId,
+      tenancyMode: input.tenancyMode,
+      tenantContextSource: input.tenantContextSource,
+      activeTenantId: input.activeTenantId,
+      emailPreview: previewEmail(email),
+      emailVerified,
+      subjectKey,
+    };
 
-      // Step 2: Resolve tenant (read-only for org/db — no writes until membership confirmed)
-      const { internalTenantId, tenantCreatedNow } = await resolveTenant(
-        db,
-        input,
-        internalUserId,
-      );
+    logger.info(
+      {
+        event: 'provisioning:ensure:start',
+        ...baseLogFields,
+        activeRunCount: subjectState.activeCount,
+        totalRunCount: subjectState.totalStarts,
+        isDuplicateSubject: subjectState.activeCount > 1,
+      },
+      'Provisioning ensure started',
+    );
 
-      // P1 FIX: org/db membership check BEFORE any write side-effects.
-      // The tenant was resolved read-only above; user must already have a membership.
-      if (input.tenancyMode === 'org' && input.tenantContextSource === 'db') {
-        const existing = await getMembership(
-          db,
-          internalUserId,
-          internalTenantId,
+    currentStage = 'db_init';
+    logger.debug(
+      {
+        event: 'provisioning:ensure:db_init_start',
+        ...baseLogFields,
+        dbDriver:
+          env.DB_DRIVER ??
+          (env.NODE_ENV === 'production' ? 'postgres' : 'pglite'),
+      },
+      'Provisioning observed injected DB runtime before transaction start',
+    );
+    logger.debug(
+      {
+        event: 'provisioning:ensure:db_init_success',
+        ...baseLogFields,
+        dbDriver:
+          env.DB_DRIVER ??
+          (env.NODE_ENV === 'production' ? 'postgres' : 'pglite'),
+      },
+      'Provisioning confirmed DB runtime is available',
+    );
+
+    currentStage = 'migrations';
+    logger.debug(
+      {
+        event: 'provisioning:ensure:migrations_start',
+        ...baseLogFields,
+        invokedInRequestPath: false,
+        skipped: true,
+      },
+      'Provisioning checked migration stage for request path diagnostics',
+    );
+    logger.debug(
+      {
+        event: 'provisioning:ensure:migrations_success',
+        ...baseLogFields,
+        invokedInRequestPath: false,
+        skipped: true,
+      },
+      'Provisioning confirmed migrations are not run inside the request path',
+    );
+
+    const provisioningPromise = (async () => {
+      try {
+        currentStage = 'transaction_start';
+        logger.debug(
+          {
+            event: 'provisioning:ensure:transaction_start',
+            ...baseLogFields,
+          },
+          'Provisioning transaction starting',
         );
-        if (!existing) {
-          throw new TenantMembershipRequiredError();
+
+        const result = await this.runInTransaction(async (db) => {
+          currentStage = 'identity_lookup';
+          logger.debug(
+            {
+              event: 'provisioning:ensure:identity_lookup_start',
+              ...baseLogFields,
+            },
+            'Provisioning identity lookup starting',
+          );
+
+          logger.debug(
+            {
+              event: 'provisioning:ensure:user_upsert_start',
+              ...baseLogFields,
+            },
+            'Provisioning user resolution/upsert starting',
+          );
+
+          const { internalUserId, userCreatedNow } = await resolveOrCreateUser(
+            db,
+            provider,
+            externalUserId,
+            email,
+            emailVerified,
+            this.crossProviderEmailLinking,
+          );
+
+          internalSubjectKey = internalUserId;
+          internalSubjectState = getOrCreateActivityState(
+            diagnostics.provisioningInternalSubjects,
+            internalSubjectKey,
+          );
+          internalSubjectState.totalStarts += 1;
+          internalSubjectState.activeCount += 1;
+          internalSubjectState.lastStartedAt = Date.now();
+
+          logger.debug(
+            {
+              event: 'provisioning:ensure:identity_lookup_result',
+              ...baseLogFields,
+              internalUserId,
+              userCreatedNow,
+              activeInternalRunCount: internalSubjectState.activeCount,
+              isDuplicateInternalIdentity: internalSubjectState.activeCount > 1,
+            },
+            'Provisioning identity lookup resolved internal user',
+          );
+
+          logger.debug(
+            {
+              event: 'provisioning:ensure:user_upsert_success',
+              ...baseLogFields,
+              internalUserId,
+              userCreatedNow,
+            },
+            'Provisioning user resolution/upsert completed',
+          );
+
+          currentStage = 'tenant_upsert';
+          logger.debug(
+            {
+              event: 'provisioning:ensure:tenant_upsert_start',
+              ...baseLogFields,
+              internalUserId,
+            },
+            'Provisioning tenant resolution/upsert starting',
+          );
+
+          const { internalTenantId, tenantCreatedNow } = await resolveTenant(
+            db,
+            input,
+            internalUserId,
+          );
+
+          logger.debug(
+            {
+              event: 'provisioning:ensure:tenant_upsert_success',
+              ...baseLogFields,
+              internalUserId,
+              internalTenantId,
+              tenantCreatedNow,
+            },
+            'Provisioning tenant resolution/upsert completed',
+          );
+
+          currentStage = 'membership_upsert';
+          logger.debug(
+            {
+              event: 'provisioning:ensure:membership_upsert_start',
+              ...baseLogFields,
+              internalUserId,
+              internalTenantId,
+            },
+            'Provisioning membership upsert starting',
+          );
+
+          if (
+            input.tenancyMode === 'org' &&
+            input.tenantContextSource === 'db'
+          ) {
+            const existing = await getMembership(
+              db,
+              internalUserId,
+              internalTenantId,
+            );
+            if (!existing) {
+              throw new TenantMembershipRequiredError();
+            }
+
+            logger.debug(
+              {
+                event: 'provisioning:ensure:membership_upsert_success',
+                ...baseLogFields,
+                internalUserId,
+                internalTenantId,
+                membershipRole: existing.roleName,
+                membershipOperation: 'existing_membership',
+              },
+              'Provisioning resolved existing membership in org/db mode',
+            );
+
+            currentStage = 'onboarding_state_check';
+            const onboardingState = await db
+              .select({ onboardingComplete: usersTable.onboardingComplete })
+              .from(usersTable)
+              .where(eq(usersTable.id, internalUserId))
+              .limit(1);
+
+            logger.debug(
+              {
+                event: 'provisioning:ensure:onboarding_state_check',
+                ...baseLogFields,
+                internalUserId,
+                internalTenantId,
+                onboardingStateExists: Boolean(onboardingState[0]),
+                onboardingComplete: onboardingState[0]?.onboardingComplete,
+              },
+              'Provisioning inspected onboarding state after existing membership resolution',
+            );
+
+            return {
+              internalUserId,
+              internalTenantId,
+              membershipRole: existing.roleName as 'owner' | 'member',
+              tenantCreatedNow,
+              userCreatedNow,
+            };
+          }
+
+          await upsertTenantAttributesDefaults(
+            db,
+            internalTenantId,
+            this.freeTierMaxUsers,
+          );
+
+          await db.execute(
+            sql`SELECT tenant_id FROM tenant_attributes WHERE tenant_id = ${internalTenantId} FOR UPDATE`,
+          );
+
+          const roleMap = await ensureRoles(db, internalTenantId);
+          await applyPolicyTemplateVersion(db, internalTenantId, roleMap);
+
+          const existing = await getMembership(
+            db,
+            internalUserId,
+            internalTenantId,
+          );
+          if (existing) {
+            logger.debug(
+              {
+                event: 'provisioning:ensure:membership_upsert_success',
+                ...baseLogFields,
+                internalUserId,
+                internalTenantId,
+                membershipRole: existing.roleName,
+                membershipOperation: 'existing_membership',
+              },
+              'Provisioning found an existing membership and skipped insert',
+            );
+
+            currentStage = 'onboarding_state_check';
+            const onboardingState = await db
+              .select({ onboardingComplete: usersTable.onboardingComplete })
+              .from(usersTable)
+              .where(eq(usersTable.id, internalUserId))
+              .limit(1);
+
+            logger.debug(
+              {
+                event: 'provisioning:ensure:onboarding_state_check',
+                ...baseLogFields,
+                internalUserId,
+                internalTenantId,
+                onboardingStateExists: Boolean(onboardingState[0]),
+                onboardingComplete: onboardingState[0]?.onboardingComplete,
+              },
+              'Provisioning inspected onboarding state after existing membership check',
+            );
+
+            return {
+              internalUserId,
+              internalTenantId,
+              membershipRole: existing.roleName as 'owner' | 'member',
+              tenantCreatedNow,
+              userCreatedNow,
+            };
+          }
+
+          const membershipRole = decideNewMembershipRole(
+            input,
+            tenantCreatedNow,
+          );
+          const memberCount = await getActiveMemberCount(db, internalTenantId);
+          if (memberCount >= this.freeTierMaxUsers) {
+            throw new TenantUserLimitReachedError();
+          }
+
+          const roleId = roleMap.get(membershipRole);
+          if (!roleId) {
+            throw new Error(
+              `[provisioning] Role '${membershipRole}' not found in tenant '${internalTenantId}'`,
+            );
+          }
+
+          await db
+            .insert(membershipsTable)
+            .values({
+              userId: internalUserId,
+              tenantId: internalTenantId,
+              roleId,
+            })
+            .onConflictDoNothing();
+
+          logger.debug(
+            {
+              event: 'provisioning:ensure:membership_upsert_success',
+              ...baseLogFields,
+              internalUserId,
+              internalTenantId,
+              membershipRole,
+              memberCountBeforeInsert: memberCount,
+              membershipOperation: 'insert_or_conflict_noop',
+            },
+            'Provisioning membership upsert completed',
+          );
+
+          currentStage = 'onboarding_state_check';
+          const onboardingState = await db
+            .select({ onboardingComplete: usersTable.onboardingComplete })
+            .from(usersTable)
+            .where(eq(usersTable.id, internalUserId))
+            .limit(1);
+
+          logger.debug(
+            {
+              event: 'provisioning:ensure:onboarding_state_check',
+              ...baseLogFields,
+              internalUserId,
+              internalTenantId,
+              onboardingStateExists: Boolean(onboardingState[0]),
+              onboardingComplete: onboardingState[0]?.onboardingComplete,
+            },
+            'Provisioning inspected onboarding state after membership upsert',
+          );
+
+          return {
+            internalUserId,
+            internalTenantId,
+            membershipRole,
+            tenantCreatedNow,
+            userCreatedNow,
+          };
+        });
+
+        currentStage = 'complete';
+        logger.info(
+          {
+            event: 'provisioning:ensure:complete',
+            ...baseLogFields,
+            internalUserId: result.internalUserId,
+            internalTenantId: result.internalTenantId,
+            membershipRole: result.membershipRole,
+            userCreatedNow: result.userCreatedNow,
+            tenantCreatedNow: result.tenantCreatedNow,
+            durationMs: Date.now() - startedAt,
+          },
+          'Provisioning ensure completed successfully',
+        );
+
+        return result;
+      } catch (err) {
+        logger.error(
+          {
+            event: 'provisioning:ensure:failure',
+            ...baseLogFields,
+            internalUserId: internalSubjectKey,
+            stage: currentStage,
+            durationMs: Date.now() - startedAt,
+            retryable: isRetryableProvisioningError(err),
+            errorName: err instanceof Error ? err.name : 'UnknownError',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            errorStack: err instanceof Error ? err.stack : undefined,
+          },
+          'Provisioning ensure failed',
+        );
+        throw err;
+      } finally {
+        if (internalSubjectState) {
+          internalSubjectState.activeCount = Math.max(
+            0,
+            internalSubjectState.activeCount - 1,
+          );
+          internalSubjectState.lastFinishedAt = Date.now();
         }
-        return {
-          internalUserId,
-          internalTenantId,
-          membershipRole: existing.roleName as 'owner' | 'member',
-          tenantCreatedNow,
-          userCreatedNow,
-        };
       }
+    })().finally(() => {
+      subjectState.activeCount = Math.max(0, subjectState.activeCount - 1);
+      subjectState.lastFinishedAt = Date.now();
 
-      // Step 3: Upsert tenant_attributes defaults (only reached for non-org/db modes)
-      await upsertTenantAttributesDefaults(
-        db,
-        internalTenantId,
-        this.freeTierMaxUsers,
-      );
-
-      // Acquire a row-level lock on the tenant_attributes row to serialize concurrent
-      // provisioning calls for the same tenant, making the count check + membership
-      // insert race-safe.
-      await db.execute(
-        sql`SELECT tenant_id FROM tenant_attributes WHERE tenant_id = ${internalTenantId} FOR UPDATE`,
-      );
-
-      // Step 4: Ensure canonical system roles for this tenant
-      const roleMap = await ensureRoles(db, internalTenantId);
-
-      // Step 5: Apply policy template versioning — idempotent, only adds missing policies
-      await applyPolicyTemplateVersion(db, internalTenantId, roleMap);
-
-      // Step 6: Idempotent path — return early if membership already exists
-      const existing = await getMembership(
-        db,
-        internalUserId,
-        internalTenantId,
-      );
-      if (existing) {
-        return {
-          internalUserId,
-          internalTenantId,
-          membershipRole: existing.roleName as 'owner' | 'member',
-          tenantCreatedNow,
-          userCreatedNow,
-        };
-      }
-
-      // Step 7: Decide role for new membership
-      const membershipRole = decideNewMembershipRole(input, tenantCreatedNow);
-
-      // Step 8: Enforce free-tier limit before insert (race-safe — locked above)
-      const memberCount = await getActiveMemberCount(db, internalTenantId);
-      if (memberCount >= this.freeTierMaxUsers) {
-        throw new TenantUserLimitReachedError();
-      }
-
-      // Step 9: Insert membership idempotently — onConflictDoNothing preserves existing role
-      const roleId = roleMap.get(membershipRole);
-      if (!roleId) {
-        throw new Error(
-          `[provisioning] Role '${membershipRole}' not found in tenant '${internalTenantId}'`,
-        );
-      }
-
-      await db
-        .insert(membershipsTable)
-        .values({ userId: internalUserId, tenantId: internalTenantId, roleId })
-        .onConflictDoNothing();
-
-      return {
-        internalUserId,
-        internalTenantId,
-        membershipRole,
-        tenantCreatedNow,
-        userCreatedNow,
-      };
-    }).finally(() => {
       if (inFlightProvisioning.get(singleFlightKey) === provisioningPromise) {
         inFlightProvisioning.delete(singleFlightKey);
       }

@@ -55,6 +55,25 @@ describe('OnboardingGuard', () => {
     ).rejects.toThrow('REDIRECT:/auth/bootstrap');
   });
 
+  it('redirects to bootstrap db-error when getCurrentIdentity throws a non-UserNotProvisionedError', async () => {
+    identityProvider.getCurrentIdentity.mockRejectedValue(
+      new Error('DB connection lost'),
+    );
+
+    await expect(
+      OnboardingGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/auth/bootstrap?reason=db-error');
+  });
+
+  it('redirects to bootstrap db-error when userRepository.findById throws', async () => {
+    identityProvider.getCurrentIdentity.mockResolvedValue({ id: 'u-1' });
+    userRepository.findById.mockRejectedValue(new Error('DB connection lost'));
+
+    await expect(
+      OnboardingGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/auth/bootstrap?reason=db-error');
+  });
+
   it('redirects unauthenticated users to sign-in', async () => {
     identityProvider.getCurrentIdentity.mockResolvedValue(null);
 

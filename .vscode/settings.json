@@ -23,28 +23,169 @@
   "zencoder.inlineSuggestions.enable": false,
   "github.copilot.chat.commitMessageGeneration.instructions": [
     {
-      "text": "Always use Conventional Commits format: <type>[optional scope]: <description>"
+      "text": "Generate commit messages using Conventional Commits format: <type>[optional scope]: <description>"
+    },
+
+    {
+      "text": "Classify the PRIMARY intent of the staged diff before writing the message."
     },
     {
-      "text": "Use these types accurately: build, ci, chore, docs, feat, fix, perf, refactor, revert, style, test"
+      "text": "Choose the most specific valid type, not the broadest one."
+    },
+
+    {
+      "text": "Use feat only when the staged changes introduce new functionality in production code or public developer-facing capabilities."
     },
     {
-      "text": "Include scope in parentheses after type when changes affect specific modules/components (ex: feat(auth): add login)"
+      "text": "Use fix only when the staged changes correct broken, incorrect, unsafe, or unintended behavior in production code."
     },
     {
-      "text": "For multiple distinct changes, generate separate commit messages - one per logical change"
+      "text": "Use refactor only when production code is restructured without changing externally observable behavior, outputs, API contracts, persistence semantics, or business rules."
     },
     {
-      "text": "Body text (if needed) starts on new line using imperative mood, separated by blank line from subject"
+      "text": "Use test only when the staged changes only add, remove, or modify tests, fixtures, mocks, test helpers, or test configuration, without changing production behavior."
     },
     {
-      "text": "Use bullet points with hyphens (-) for breaking changes or detailed explanations in body"
+      "text": "Use docs only for documentation-only changes."
     },
     {
-      "text": "Keep subject line under 72 characters, body lines under 100 characters max"
+      "text": "Use style only for formatting, whitespace, import ordering, or other non-semantic stylistic changes."
     },
     {
-      "text": "Write in imperative mood (\"add feature\" not \"added feature\")"
+      "text": "Use build only for package manager, dependency, compiler, bundler, or build system changes."
+    },
+    {
+      "text": "Use ci only for CI/CD workflows, pipelines, automation runners, or related scripts."
+    },
+    {
+      "text": "Use perf only when the primary purpose is measurable performance improvement."
+    },
+    {
+      "text": "Use chore only for maintenance work that does not fit build, ci, docs, style, test, perf, refactor, feat, or fix."
+    },
+    {
+      "text": "Use revert only when reverting a previous commit."
+    },
+
+    {
+      "text": "Never use feat for test-only changes."
+    },
+    {
+      "text": "Never use refactor when behavior changes, bug fixes, new features, schema changes, permission changes, or validation changes are introduced."
+    },
+    {
+      "text": "Never use chore when a more specific type fits."
+    },
+
+    {
+      "text": "Classify based on the actual staged diff, not filenames alone."
+    },
+    {
+      "text": "If both production code and tests are changed for the same logical purpose, classify by the production change, not by the presence of test files."
+    },
+    {
+      "text": "If the staged diff contains multiple unrelated logical changes, prefer separate commits instead of one combined message."
+    },
+
+    {
+      "text": "Include scope in parentheses when one module, bounded context, feature area, or package clearly dominates the staged diff."
+    },
+    {
+      "text": "Infer scope from the dominant module or component, for example auth, onboarding, billing, api, ui, db, infra, or tests."
+    },
+
+    {
+      "text": "Write the subject in imperative mood."
+    },
+    {
+      "text": "Keep the subject under 72 characters."
+    },
+
+    {
+      "text": "Commit message structure must follow this exact format:"
+    },
+    {
+      "text": "<type>[optional scope]: <short description>"
+    },
+    {
+      "text": "(blank line)"
+    },
+    {
+      "text": "- bullet describing the main change"
+    },
+    {
+      "text": "- bullet describing additional modification or context"
+    },
+    {
+      "text": "- bullet describing impact, reason, or technical detail if applicable"
+    },
+
+    {
+      "text": "Always insert exactly ONE blank line between the subject and the body section."
+    },
+    {
+      "text": "The body must never start immediately after the subject line."
+    },
+    {
+      "text": "If bullet points are present, the commit MUST contain the blank line separator."
+    },
+
+    {
+      "text": "When the staged diff contains more than one meaningful change, ALWAYS include a body section using hyphen bullet points."
+    },
+    {
+      "text": "Each bullet must summarize one concrete change detected in the diff."
+    },
+    {
+      "text": "Prefer 2 to 5 bullet points when a body is present."
+    },
+    {
+      "text": "Bullet lines must start with '- ' and stay under 100 characters."
+    },
+
+    {
+      "text": "A single-line commit message is allowed ONLY for trivial changes such as formatting, typo fixes, or single dependency updates."
+    },
+
+    {
+      "text": "Prefer lowercase type and scope."
+    },
+
+    {
+      "text": "Examples:"
+    },
+    {
+      "text": "feat(auth): add magic-link login"
+    },
+    {
+      "text": "(blank line)"
+    },
+    {
+      "text": "- implement token-based login flow"
+    },
+    {
+      "text": "- add API endpoint issuing login links"
+    },
+    {
+      "text": "- extend session validation to support magic links"
+    },
+    {
+      "text": ""
+    },
+    {
+      "text": "test(auth): add coverage for session expiration"
+    },
+    {
+      "text": "(blank line)"
+    },
+    {
+      "text": "- add tests for expired session redirect"
+    },
+    {
+      "text": "- mock authentication state"
+    },
+    {
+      "text": "- verify middleware rejects invalid sessions"
     }
   ],
   "githubPullRequests.pushBranch": "always",

@@ -29,6 +29,8 @@ export function HeaderAuthControls() {
           <SignedOut>
             <SignInButton
               mode="modal"
+              // Keep modal flows aligned with provider-level stable post-auth
+              // landing. Server guards decide whether bootstrap is needed.
               forceRedirectUrl={
                 env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL
               }

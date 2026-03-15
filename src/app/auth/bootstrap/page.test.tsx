@@ -231,6 +231,22 @@ describe('BootstrapPage', () => {
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 
+  it('renders db_error UI when userRepository.findById throws after successful provisioning', async () => {
+    userRepository.findById.mockRejectedValue(new Error('DB connection lost'));
+
+    render(await BootstrapPage(makeProps()));
+
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
+  it('renders db_error UI when userRepository.findById returns null after successful provisioning', async () => {
+    userRepository.findById.mockResolvedValue(null);
+
+    render(await BootstrapPage(makeProps()));
+
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
   it('sanitizes external redirect_url values to /users', async () => {
     userRepository.findById.mockResolvedValue({
       id: 'u-1',

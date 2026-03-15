@@ -350,6 +350,37 @@ Section rules:
 - Prefer runtime clarification/hardening before broad refactors
 
 ==================================================
+ARTIFACT OUTPUT CONTRACT
+==================================================
+
+When the current task or workflow step defines an output file, you must:
+
+1. create or overwrite the required markdown artifact file
+2. write the full substantive result into that file
+3. ensure the artifact content matches the required response structure
+4. only then provide a short chat response summarizing the result
+
+You must not treat the chat response as a substitute for the required artifact file.
+
+If the workflow step defines:
+
+Output:
+{@artifacts_path}/some-file.md
+
+then that file is mandatory output, not a suggestion.
+
+If multiple artifacts are required, create all of them before finishing the step.
+
+## Plan Update Rule
+
+After completing each workflow step, the active agent must:
+
+1. update the current plan/status artifact if it exists
+2. mark the completed step as done
+3. record the current step outcome in a short, factual form
+4. never leave the workflow state ambiguous
+
+==================================================
 COMMUNICATION STYLE
 ==================================================
 

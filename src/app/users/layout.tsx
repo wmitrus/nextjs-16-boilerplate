@@ -9,7 +9,12 @@ export default async function UsersLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const access = await resolveNodeProvisioningAccess(getAppContainer());
+  let access;
+  try {
+    access = await resolveNodeProvisioningAccess(getAppContainer());
+  } catch {
+    redirect('/auth/bootstrap?reason=db-error');
+  }
 
   if (access.status === 'UNAUTHENTICATED') {
     redirect('/sign-in?redirect_url=/users');

@@ -162,7 +162,7 @@ describe('completeOnboarding', () => {
     expect(userRepository.updateOnboardingStatus).not.toHaveBeenCalled();
   });
 
-  it('throws when provisioning succeeds but the internal user row is missing', async () => {
+  it('returns database error when provisioning succeeds but the internal user row is missing', async () => {
     userRepository.findById.mockResolvedValue(null);
 
     const formData = new FormData();
@@ -170,10 +170,27 @@ describe('completeOnboarding', () => {
     formData.set('locale', 'pl-PL');
     formData.set('timezone', 'Europe/Warsaw');
 
-    await expect(completeOnboarding(formData)).rejects.toThrow(
-      'Onboarding invariant violated: provisioned user not found in database',
-    );
+    const result = await completeOnboarding(formData);
 
+    expect(result).toEqual({
+      error: 'A database error occurred. Please try again.',
+    });
+    expect(redirectMock).not.toHaveBeenCalled();
+    expect(userRepository.updateProfile).not.toHaveBeenCalled();
+    expect(userRepository.updateOnboardingStatus).not.toHaveBeenCalled();
+  });
+
+  it('returns database error when userRepository.findById throws after successful provisioning', async () => {
+    userRepository.findById.mockRejectedValue(new Error('DB connection lost'));
+
+    const formData = new FormData();
+    formData.set('displayName', 'Alice');
+
+    const result = await completeOnboarding(formData);
+
+    expect(result).toEqual({
+      error: 'A database error occurred. Please try again.',
+    });
     expect(redirectMock).not.toHaveBeenCalled();
     expect(userRepository.updateProfile).not.toHaveBeenCalled();
     expect(userRepository.updateOnboardingStatus).not.toHaveBeenCalled();

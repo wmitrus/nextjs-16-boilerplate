@@ -218,6 +218,44 @@ describe('Auth Middleware', () => {
     expect(mockHandler).not.toHaveBeenCalled();
   });
 
+  it.each([
+    '__clerk_db_jwt',
+    '__clerk_synced',
+    '__clerk_redirect_url',
+    '__clerk_handshake',
+    '__clerk_handshake_nonce',
+    '__session',
+  ])(
+    'should allow Clerk callback state on auth routes when query param %s is present',
+    async (queryParam) => {
+      mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+        id: 'user_1',
+      });
+      mockUserRepository.findById.mockResolvedValue({
+        id: 'user_1',
+        onboardingComplete: true,
+      });
+
+      const req = createMockRequest({
+        path: `/sign-in?${queryParam}=test-value&redirect_url=%2Fusers`,
+      });
+      const ctx = createMockRouteContext({
+        isAuthRoute: true,
+        isPublicRoute: true,
+      });
+
+      const middleware = withAuth(mockHandler, {
+        dependencies: securityDependencies,
+        userRepository: mockUserRepository,
+      });
+      const res = await middleware(req, ctx);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('location')).toBeNull();
+      expect(mockHandler).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('should pass through sign-in route when no session exists', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue(null);
 

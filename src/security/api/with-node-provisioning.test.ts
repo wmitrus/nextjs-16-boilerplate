@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { withNodeProvisioning } from './with-node-provisioning';
 
+const diagnostics = {
+  tenancyMode: 'personal' as const,
+  userRecordExists: null,
+  tenantRecordExists: null,
+  membershipExists: null,
+  onboardingStateExists: null,
+  onboardingComplete: null,
+  provisioningRequired: false,
+  reason: 'unsupported_state' as const,
+};
+
 describe('withNodeProvisioning', () => {
   function createRequest(path: string) {
     return new NextRequest(new URL(`http://localhost${path}`));
@@ -18,6 +29,10 @@ describe('withNodeProvisioning', () => {
           status: 'UNAUTHENTICATED',
           code: 'UNAUTHENTICATED',
           message: 'Authentication required',
+          diagnostics: {
+            ...diagnostics,
+            reason: 'unauthenticated',
+          },
         }),
       },
     );
@@ -36,6 +51,13 @@ describe('withNodeProvisioning', () => {
           status: 'ONBOARDING_REQUIRED',
           code: 'ONBOARDING_INCOMPLETE',
           message: 'Onboarding required',
+          diagnostics: {
+            ...diagnostics,
+            userRecordExists: true,
+            onboardingStateExists: true,
+            onboardingComplete: false,
+            reason: 'missing_onboarding_state',
+          },
         }),
       },
     );
@@ -54,6 +76,11 @@ describe('withNodeProvisioning', () => {
           status: 'BOOTSTRAP_REQUIRED',
           code: 'BOOTSTRAP_REQUIRED',
           message: 'Bootstrap required',
+          diagnostics: {
+            ...diagnostics,
+            provisioningRequired: true,
+            reason: 'provisioning_required',
+          },
         }),
       },
     );
@@ -72,6 +99,14 @@ describe('withNodeProvisioning', () => {
           status: 'TENANT_CONTEXT_REQUIRED',
           code: 'DEFAULT_TENANT_NOT_FOUND',
           message: 'default tenant missing',
+          diagnostics: {
+            ...diagnostics,
+            userRecordExists: true,
+            tenantRecordExists: false,
+            onboardingStateExists: true,
+            onboardingComplete: true,
+            reason: 'missing_tenant',
+          },
         }),
       },
     );
@@ -90,6 +125,15 @@ describe('withNodeProvisioning', () => {
           status: 'TENANT_MEMBERSHIP_REQUIRED',
           code: 'TENANT_MEMBERSHIP_REQUIRED',
           message: 'membership required',
+          diagnostics: {
+            ...diagnostics,
+            userRecordExists: true,
+            tenantRecordExists: true,
+            membershipExists: false,
+            onboardingStateExists: true,
+            onboardingComplete: true,
+            reason: 'missing_membership',
+          },
         }),
       },
     );
@@ -112,6 +156,17 @@ describe('withNodeProvisioning', () => {
           id: 'u-1',
           email: 'user@example.com',
           onboardingComplete: true,
+        },
+        diagnostics: {
+          ...diagnostics,
+          internalIdentityId: 'u-1',
+          internalTenantId: 't-1',
+          userRecordExists: true,
+          tenantRecordExists: true,
+          membershipExists: true,
+          onboardingStateExists: true,
+          onboardingComplete: true,
+          reason: 'already_ready',
         },
       }),
     });

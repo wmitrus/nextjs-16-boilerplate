@@ -1,4 +1,8 @@
-import type { Identity, IdentityProvider } from '@/core/contracts/identity';
+import type {
+  Identity,
+  IdentityProvider,
+  RequestIdentitySourceData,
+} from '@/core/contracts/identity';
 import { UserNotProvisionedError } from '@/core/contracts/identity';
 import {
   MissingTenantContextError,
@@ -29,17 +33,45 @@ export type NodeProvisioningDenyCode =
   | 'TENANT_MEMBERSHIP_REQUIRED'
   | 'FORBIDDEN';
 
+export type UsersGuardDecisionReason =
+  | 'already_ready'
+  | 'unauthenticated'
+  | 'provisioning_required'
+  | 'missing_user'
+  | 'missing_tenant'
+  | 'missing_membership'
+  | 'missing_onboarding_state'
+  | 'forbidden'
+  | 'unsupported_state';
+
+export interface NodeProvisioningAccessDiagnostics {
+  readonly externalUserId?: string;
+  readonly externalTenantId?: string;
+  readonly internalIdentityId?: string;
+  readonly internalTenantId?: string;
+  readonly tenancyMode: ProvisioningTenancyMode;
+  readonly userRecordExists: boolean | null;
+  readonly tenantRecordExists: boolean | null;
+  readonly membershipExists: boolean | null;
+  readonly onboardingStateExists: boolean | null;
+  readonly onboardingComplete: boolean | null;
+  readonly provisioningRequired: boolean;
+  readonly reason: UsersGuardDecisionReason;
+}
+
 export interface NodeProvisioningAccessAllowed {
   readonly status: 'ALLOWED';
   readonly identity: Identity;
   readonly tenant: TenantContext;
   readonly user: User;
+  readonly diagnostics: NodeProvisioningAccessDiagnostics;
 }
 
 export interface NodeProvisioningAccessDenied {
   readonly status: Exclude<NodeProvisioningAccessStatus, 'ALLOWED'>;
   readonly code: NodeProvisioningDenyCode;
   readonly message: string;
+  readonly diagnostics: NodeProvisioningAccessDiagnostics;
 }
 
 export type NodeProvisioningAccessOutcome =
@@ -51,6 +83,7 @@ interface NodeProvisioningAccessDependencies {
   readonly tenantResolver: TenantResolver;
   readonly userRepository: UserRepository;
   readonly tenancyMode: ProvisioningTenancyMode;
+  readonly rawIdentity?: RequestIdentitySourceData;
   readonly tenantExistsProbe?: (tenantId: string) => Promise<boolean>;
   readonly authorize?: (context: {
     readonly identity: Identity;
@@ -62,6 +95,9 @@ interface NodeProvisioningAccessDependencies {
 export async function evaluateNodeProvisioningAccess(
   deps: NodeProvisioningAccessDependencies,
 ): Promise<NodeProvisioningAccessOutcome> {
+  const externalUserId = deps.rawIdentity?.userId;
+  const externalTenantId = deps.rawIdentity?.tenantExternalId;
+
   let identity: Identity | null;
 
   try {
@@ -73,6 +109,18 @@ export async function evaluateNodeProvisioningAccess(
         code: 'BOOTSTRAP_REQUIRED',
         message:
           'User is authenticated externally but not provisioned internally. Bootstrap required.',
+        diagnostics: {
+          externalUserId,
+          externalTenantId,
+          tenancyMode: deps.tenancyMode,
+          userRecordExists: false,
+          tenantRecordExists: null,
+          membershipExists: null,
+          onboardingStateExists: null,
+          onboardingComplete: null,
+          provisioningRequired: true,
+          reason: 'provisioning_required',
+        },
       };
     }
     throw error;
@@ -83,6 +131,18 @@ export async function evaluateNodeProvisioningAccess(
       status: 'UNAUTHENTICATED',
       code: 'UNAUTHENTICATED',
       message: 'Authentication required.',
+      diagnostics: {
+        externalUserId,
+        externalTenantId,
+        tenancyMode: deps.tenancyMode,
+        userRecordExists: null,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: null,
+        onboardingComplete: null,
+        provisioningRequired: false,
+        reason: 'unauthenticated',
+      },
     };
   }
 
@@ -94,6 +154,19 @@ export async function evaluateNodeProvisioningAccess(
       code: 'BOOTSTRAP_REQUIRED',
       message:
         'User record is missing in internal database. Bootstrap required.',
+      diagnostics: {
+        externalUserId,
+        externalTenantId,
+        internalIdentityId: identity.id,
+        tenancyMode: deps.tenancyMode,
+        userRecordExists: false,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: false,
+        onboardingComplete: null,
+        provisioningRequired: true,
+        reason: 'missing_user',
+      },
     };
   }
 
@@ -103,6 +176,19 @@ export async function evaluateNodeProvisioningAccess(
       code: 'ONBOARDING_INCOMPLETE',
       message:
         'Onboarding must be completed before accessing protected resources.',
+      diagnostics: {
+        externalUserId,
+        externalTenantId,
+        internalIdentityId: identity.id,
+        tenancyMode: deps.tenancyMode,
+        userRecordExists: true,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: true,
+        onboardingComplete: false,
+        provisioningRequired: false,
+        reason: 'missing_onboarding_state',
+      },
     };
   }
 
@@ -118,6 +204,19 @@ export async function evaluateNodeProvisioningAccess(
         status: 'TENANT_CONTEXT_REQUIRED',
         code: 'TENANT_CONTEXT_REQUIRED',
         message: 'Tenant context required.',
+        diagnostics: {
+          externalUserId,
+          externalTenantId,
+          internalIdentityId: identity.id,
+          tenancyMode: deps.tenancyMode,
+          userRecordExists: true,
+          tenantRecordExists: false,
+          membershipExists: null,
+          onboardingStateExists: true,
+          onboardingComplete: true,
+          provisioningRequired: false,
+          reason: 'missing_tenant',
+        },
       };
     }
 
@@ -126,6 +225,19 @@ export async function evaluateNodeProvisioningAccess(
         status: 'TENANT_MEMBERSHIP_REQUIRED',
         code: 'TENANT_MEMBERSHIP_REQUIRED',
         message: 'Tenant membership required.',
+        diagnostics: {
+          externalUserId,
+          externalTenantId,
+          internalIdentityId: identity.id,
+          tenancyMode: deps.tenancyMode,
+          userRecordExists: true,
+          tenantRecordExists: true,
+          membershipExists: false,
+          onboardingStateExists: true,
+          onboardingComplete: true,
+          provisioningRequired: false,
+          reason: 'missing_membership',
+        },
       };
     }
 
@@ -140,6 +252,20 @@ export async function evaluateNodeProvisioningAccess(
         code: 'DEFAULT_TENANT_NOT_FOUND',
         message:
           'Default tenant from configuration does not exist in database. Fix DEFAULT_TENANT_ID seed/config mismatch.',
+        diagnostics: {
+          externalUserId,
+          externalTenantId,
+          internalIdentityId: identity.id,
+          internalTenantId: tenant.tenantId,
+          tenancyMode: deps.tenancyMode,
+          userRecordExists: true,
+          tenantRecordExists: false,
+          membershipExists: null,
+          onboardingStateExists: true,
+          onboardingComplete: true,
+          provisioningRequired: false,
+          reason: 'missing_tenant',
+        },
       };
     }
   }
@@ -151,6 +277,20 @@ export async function evaluateNodeProvisioningAccess(
         status: 'FORBIDDEN',
         code: 'FORBIDDEN',
         message: 'Forbidden.',
+        diagnostics: {
+          externalUserId,
+          externalTenantId,
+          internalIdentityId: identity.id,
+          internalTenantId: tenant.tenantId,
+          tenancyMode: deps.tenancyMode,
+          userRecordExists: true,
+          tenantRecordExists: true,
+          membershipExists: true,
+          onboardingStateExists: true,
+          onboardingComplete: true,
+          provisioningRequired: false,
+          reason: 'forbidden',
+        },
       };
     }
   }
@@ -160,5 +300,19 @@ export async function evaluateNodeProvisioningAccess(
     identity,
     tenant,
     user,
+    diagnostics: {
+      externalUserId,
+      externalTenantId,
+      internalIdentityId: identity.id,
+      internalTenantId: tenant.tenantId,
+      tenancyMode: deps.tenancyMode,
+      userRecordExists: true,
+      tenantRecordExists: true,
+      membershipExists: true,
+      onboardingStateExists: true,
+      onboardingComplete: true,
+      provisioningRequired: false,
+      reason: 'already_ready',
+    },
   };
 }

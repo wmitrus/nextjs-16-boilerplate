@@ -6,6 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "predev": "node -e \"try{require('fs').unlinkSync('data/pglite/postmaster.pid')}catch(e){}\"",
     "dev": "next dev",
     "dev:webpack": "next dev --webpack",
     "build": "next build",

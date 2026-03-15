@@ -47,7 +47,7 @@ export function createFileStream(
     return null;
   }
 
-  const stream = destination({ dest: logFile, mkdir: true });
+  const stream = destination({ dest: logFile, sync: true, mkdir: true });
 
   stream.on('error', (err: Error) => {
     console.error('File stream error:', err);
@@ -59,12 +59,9 @@ export function createFileStream(
 /**
  * Creates a Logflare write stream for external logging.
  * Returns null if credentials are missing or stream creation fails.
- * Disables Logflare in preview/production to avoid connection issues.
+ * Enable/disable via LOGFLARE_SERVER_ENABLED env flag.
  */
 export function createLogflareWriteStream(): DestinationStream | null {
-  const isPreview = process.env.VERCEL_ENV === 'preview';
-  const isProduction = process.env.VERCEL_ENV === 'production';
-
   if (
     !env.LOGFLARE_API_KEY ||
     (!env.LOGFLARE_SOURCE_TOKEN && !env.LOGFLARE_SOURCE_NAME)
@@ -75,20 +72,12 @@ export function createLogflareWriteStream(): DestinationStream | null {
     return null;
   }
 
-  if (isPreview || isProduction) {
-    console.info(
-      'Logflare stream disabled in',
-      isPreview ? 'preview' : 'production',
-      'environment',
-    );
-    return null;
-  }
-
   try {
     const stream = createWriteStream({
       apiKey: env.LOGFLARE_API_KEY,
-      sourceToken: env.LOGFLARE_SOURCE_TOKEN,
-      sourceName: env.LOGFLARE_SOURCE_NAME,
+      ...(env.LOGFLARE_SOURCE_TOKEN
+        ? { sourceToken: env.LOGFLARE_SOURCE_TOKEN }
+        : { sourceName: env.LOGFLARE_SOURCE_NAME }),
     });
 
     stream.on('error', (err: Error) => {
@@ -103,7 +92,7 @@ export function createLogflareWriteStream(): DestinationStream | null {
   } catch (err) {
     console.error(
       'Failed to initialize Logflare stream:',
-      err instanceof Error ? err.message : 'Unknown error',
+      err instanceof Error ? err.message : String(err),
     );
     return null;
   }

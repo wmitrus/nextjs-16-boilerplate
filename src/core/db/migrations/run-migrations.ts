@@ -2,6 +2,9 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { DbDriver, DrizzleDb } from '@/core/db/types';
+import { resolveServerLogger } from '@/core/logger/di';
+
+import { getRuntimeDiagnosticState } from '@/shared/lib/observability/runtime-diagnostic-state';
 
 function resolveMigrationsFolder(): string {
   const moduleUrl = import.meta.url;
@@ -15,25 +18,88 @@ function resolveMigrationsFolder(): string {
 }
 
 const MIGRATIONS_FOLDER = resolveMigrationsFolder();
+const logger = resolveServerLogger().child({
+  type: 'API',
+  category: 'db',
+  module: 'run-migrations',
+});
 
 export async function runMigrations(
   db: DrizzleDb,
   driver: DbDriver,
 ): Promise<void> {
+  const diagnostics = getRuntimeDiagnosticState();
+  diagnostics.migrationInvocations += 1;
+  diagnostics.migrationActiveCount += 1;
+
+  logger.info(
+    {
+      event: 'db:migrations:start',
+      driver,
+      migrationsFolder: MIGRATIONS_FOLDER,
+      invocationCount: diagnostics.migrationInvocations,
+      activeInvocationCount: diagnostics.migrationActiveCount,
+    },
+    'Database migration run starting',
+  );
+
   if (process.env.NEXT_RUNTIME === 'edge') {
+    diagnostics.migrationActiveCount = Math.max(
+      0,
+      diagnostics.migrationActiveCount - 1,
+    );
     throw new Error(
       '[runMigrations] Migrations are not supported in Edge runtime. Run them in Node CLI/test contexts only.',
     );
   }
 
-  if (driver === 'pglite') {
-    const { migrate } = await import('drizzle-orm/pglite/migrator');
+  try {
+    if (driver === 'pglite') {
+      const { migrate } = await import('drizzle-orm/pglite/migrator');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await migrate(db as any, { migrationsFolder: MIGRATIONS_FOLDER });
+
+      logger.info(
+        {
+          event: 'db:migrations:success',
+          driver,
+          migrationsFolder: MIGRATIONS_FOLDER,
+          invocationCount: diagnostics.migrationInvocations,
+        },
+        'Database migration run completed',
+      );
+      return;
+    }
+
+    const { migrate } = await import('drizzle-orm/postgres-js/migrator');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await migrate(db as any, { migrationsFolder: MIGRATIONS_FOLDER });
-    return;
-  }
 
-  const { migrate } = await import('drizzle-orm/postgres-js/migrator');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await migrate(db as any, { migrationsFolder: MIGRATIONS_FOLDER });
+    logger.info(
+      {
+        event: 'db:migrations:success',
+        driver,
+        migrationsFolder: MIGRATIONS_FOLDER,
+        invocationCount: diagnostics.migrationInvocations,
+      },
+      'Database migration run completed',
+    );
+  } catch (err) {
+    logger.error(
+      {
+        event: 'db:migrations:failure',
+        driver,
+        migrationsFolder: MIGRATIONS_FOLDER,
+        invocationCount: diagnostics.migrationInvocations,
+        err,
+      },
+      'Database migration run failed',
+    );
+    throw err;
+  } finally {
+    diagnostics.migrationActiveCount = Math.max(
+      0,
+      diagnostics.migrationActiveCount - 1,
+    );
+  }
 }

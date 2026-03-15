@@ -69,3 +69,30 @@ Output:
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/d7fbaba9-1170-4052-aa3b-e8144a7b5541/validation-report.md
 
 Status: All checks already run during implementation. Formal report optional.
+
+---
+
+### [x] Step: /auth/bootstrap RSC Stream Abort Investigation
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/d7fbaba9-1170-4052-aa3b-e8144a7b5541/bootstrap-investigation.md
+
+Status: ROOT CAUSE IDENTIFIED (two compounding causes)
+
+Primary cause: PGlite WASM crash recovery abort
+
+- data/pglite/postmaster.pid exists with stale PID (-42) — dev server is NOT running
+- postmaster.pid causes PostgreSQL crash recovery on next PGlite start
+- If crash recovery fails → Emscripten abort() → process.exit(1) → uncatchable → ERR_INCOMPLETE_CHUNKED_ENCODING
+
+Secondary cause (confirmed): Schema missing
+
+- data/pglite/base/5/ has NO user-range OIDs (> 16384)
+- 6 migration SQL files exist but have NOT been applied to the PGlite database
+- Even if PGlite starts OK, first query in ensureProvisioned() fails with "relation does not exist"
+- This IS caught by try/catch but re-thrown (no isinstance match) → RSC stream abort WITH logs
+
+Code path: DrizzleProvisioningService.ensureProvisioned → runInTransaction → first Drizzle query
+Likely failing statement: first SELECT in resolveOrCreateUser() inside the transaction
+
+Next action: pnpm db:reset:pglite → pnpm db:migrate:cli

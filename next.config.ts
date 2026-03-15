@@ -4,7 +4,12 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   cacheComponents: true,
   reactCompiler: true,
-  serverExternalPackages: ['@electric-sql/pglite'],
+  serverExternalPackages: [
+    '@electric-sql/pglite',
+    'pino',
+    'pino-logflare',
+    'pino-pretty',
+  ],
   experimental: {
     turbopackFileSystemCacheForDev: true,
   },

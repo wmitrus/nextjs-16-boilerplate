@@ -96,3 +96,62 @@ Code path: DrizzleProvisioningService.ensureProvisioned → runInTransaction →
 Likely failing statement: first SELECT in resolveOrCreateUser() inside the transaction
 
 Next action: pnpm db:reset:pglite → pnpm db:migrate:cli
+
+---
+
+### [x] Step: Full Runtime Flow Review (post-PGlite reset)
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/d7fbaba9-1170-4052-aa3b-e8144a7b5541/runtime-flow-review.md
+
+Status: REVIEW COMPLETE
+
+Findings:
+
+- Bootstrap flow is now structurally functional post-reset + migration
+- MAJOR: userRepository.findById() is OUTSIDE try/catch in bootstrap/page.tsx and onboarding/actions.ts
+- MAJOR: OnboardingGuard layout only catches UserNotProvisionedError; DB errors abort RSC stream
+- MAJOR: resolveNodeProvisioningAccess in users/layout has no try/catch
+- INFO: PGlite postmaster.pid recurrence risk on SIGKILL — recommend predev cleanup script
+- CSP error from challenges.cloudflare.com is Cloudflare iframe-internal, NOT repository-fixable, NOT related to bootstrap fix
+- All client/server and edge/node placements are correct
+- Logger usage in render paths is safe (pino synchronous writes)
+
+Next: Confirm and proceed to implementation of remaining fixes if approved.
+
+---
+
+### [x] Step: Clerk Sign-Up Error Storm Investigation
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/d7fbaba9-1170-4052-aa3b-e8144a7b5541/clerk-redirect-investigation.md
+
+Status: ROOT CAUSES IDENTIFIED
+
+Findings:
+
+PRIMARY: Clerk v5 receives relative path `/auth/bootstrap` for `signUpForceRedirectUrl` / `signInForceRedirectUrl` props and internally calls `new URL("/auth/bootstrap")` without a base URL → TypeError: Invalid URL (20+ times). Root cause: all Clerk redirect env vars use relative paths in defaults (env.ts), .env.example, and .env.local.
+
+SECONDARY: Clerk component cascade crashes (ClientClerkProvider, NextClientClerkProvider, \_\_experimental_CheckoutProvider with props=undefined) are DOWNSTREAM of the Invalid URL errors corrupting Clerk's internal state machine.
+
+NOT A BUG (this repo): CSS SyntaxError for ::-moz-placeholder / :-ms-input-placeholder is Clerk library issue. Cloudflare Turnstile SecurityError is iframe-internal.
+
+NOT A BUG (by design): Server logs do not contain browser-side JS errors. Sentry does not auto-capture errors caught internally by third-party libraries (they appear as breadcrumbs only).
+
+CONFIRMED: Sentry `TypeError: network error` on /auth/bootstrap is from an EARLIER session (6:12 PM) — NOT from the current session (6:51 PM). RSC abort fix from Phase 6 is working.
+
+MISSING FROM .env.local: `NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL` (falls back to env.ts default = relative path, same net effect).
+
+Next action: Verify H1 by changing all four Clerk redirect URLs to absolute in .env.local and restarting. If TypeError: Invalid URL stops → confirm and fix defaults in env.ts + .env.example.
+
+---
+
+### [ ] Step: Clerk Redirect URL Fix (pending confirmation)
+
+Status: BLOCKED — awaiting user confirmation that H1 is correct (test in .env.local first).
+
+Proposed changes if H1 confirmed:
+
+1. Remove hardcoded defaults for NEXT*PUBLIC_CLERK_SIGN*\*\_FORCE_REDIRECT_URL in env.ts (must be explicitly configured per-environment)
+2. Update .env.example to use absolute URL format
+3. Add NEXT_PUBLIC_APP_URL usage or document absolute URL requirement

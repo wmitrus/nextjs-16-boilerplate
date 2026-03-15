@@ -138,15 +138,24 @@ export const completeOnboarding = async (formData: FormData) => {
   );
 
   const internalUserId = provisioningResult.internalUserId;
-  const existingUser = await userRepository.findById(internalUserId);
+
+  let existingUser;
+  try {
+    existingUser = await userRepository.findById(internalUserId);
+  } catch (err) {
+    logger.error(
+      { err, userId: internalUserId },
+      'Onboarding: userRepository.findById threw after successful provisioning',
+    );
+    return { error: 'A database error occurred. Please try again.' };
+  }
+
   if (!existingUser) {
     logger.error(
       { userId: internalUserId },
       'Onboarding invariant violated: provisioned user not found in database',
     );
-    throw new Error(
-      'Onboarding invariant violated: provisioned user not found in database',
-    );
+    return { error: 'A database error occurred. Please try again.' };
   }
 
   try {

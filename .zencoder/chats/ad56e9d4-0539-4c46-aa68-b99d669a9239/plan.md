@@ -74,48 +74,65 @@ Output: Provided as response to user.
 
 ---
 
-### [ ] Step: Design Decision
+### [x] Step: Design Decision
 
-User confirms before implementation proceeds.
+User confirmed implementation proceeds.
 
 ---
 
-### [ ] Step: Implementation (if requested)
+### [x] Step: Implementation (Priority 1 + partial Priority 2)
 
-Priority 1 - UNBLOCKS EVERYTHING:
+Priority 1 - UNBLOCKS EVERYTHING - COMPLETE:
 
-- src/app/api/logs/route.ts (CREATE)
+- src/app/api/logs/route.ts (CREATED)
   - POST only
   - Zod validate ClientLogPayload shape
-  - Enforce size limit (≤ 8KB body)
-  - Dedicated rate limit (separate from API_RATE_LIMIT_REQUESTS)
-  - Validate x-log-ingest-secret for source='edge', skip for source='browser'
-  - Sanitize context before forwarding (strip secrets, depth-limit, truncate strings)
-  - Override type/category/module with server-controlled values
-  - Forward to resolveServerLogger()
+  - Enforce size limit (≤ 8KB body, Content-Length header + actual body check)
+  - Dedicated rate limit (prefix: ratelimit:log-ingest, 60 req/60s, separate from API budget)
+  - Validate x-log-ingest-secret for source='edge'; fall back to 'browser' if missing/wrong
+  - sanitizeContext(): strips secret keys, reserved top-level fields, depth-limits to 3, truncates to 2KB, limits arrays to 10 primitives
+  - Server-controlled type/category/module/source fields
+  - Forward to resolveServerLogger().child(...)
   - Return 204
+- src/app/api/logs/route.test.ts (CREATED) — 13 unit tests, all passing
 
-Priority 2 - SECURITY OBSERVABILITY:
+Priority 2 - SECURITY OBSERVABILITY - PARTIAL:
 
-- src/app/api/csp-report/route.ts (CREATE)
-  - POST only, accept application/csp-report
-  - Strip original-policy, referrer, sanitize document-uri
-  - Own rate limit
-  - Log at warn level with category:'security'
-- src/security/middleware/with-headers.ts (ADD report-uri /api/csp-report)
-- src/shared/components/error/global-error-handlers.tsx (ADD securitypolicyviolation listener)
+- src/shared/components/error/global-error-handlers.tsx (UPDATED)
+  - Added securitypolicyviolation listener
+  - Strips query params from documentURI and blockedURI
+  - Omits originalPolicy and referrer
+  - Logs at warn level
+- src/shared/components/error/global-error-handlers.test.tsx (UPDATED)
+  - Added 6 CSP violation tests, all passing
 
-Priority 3 - CLEANUP:
+NOT YET DONE (Priority 2 remainder):
 
-- Rename NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED → NEXT_PUBLIC_BROWSER_LOG_INGEST_ENABLED
-- src/core/env.ts + .env.example + LOG_INGEST_SECRET documented as required for edge
+- src/app/api/csp-report/route.ts — browser-native report-uri endpoint not created
+- src/security/middleware/with-headers.ts — report-uri directive not added to CSP
+
+Priority 3 - CLEANUP - NOT DONE:
+
+- NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED rename not done
+- LOG_INGEST_SECRET not yet documented in .env.example
+
+Support fixes:
+
+- src/testing/infrastructure/logger.ts — resetLoggerMocks() now restores child.mockImplementation after reset
 
 ---
 
-### [ ] Step: Validation
+### [x] Step: Validation
 
-Run repository validation commands:
+- pnpm typecheck: PASS
+- pnpm lint: PASS (after --fix for prettier formatting)
+- pnpm test: PASS — 733 tests, 116 test files
 
-- pnpm typecheck
-- pnpm lint
-- pnpm test
+---
+
+### [ ] Step: Remaining Work (Priority 2 remainder + Priority 3)
+
+- [ ] Create src/app/api/csp-report/route.ts
+- [ ] Add report-uri /api/csp-report to CSP header in src/security/middleware/with-headers.ts
+- [ ] (Optional) Rename NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED → NEXT_PUBLIC_BROWSER_LOG_INGEST_ENABLED
+- [ ] (Optional) Document LOG_INGEST_SECRET in .env.example

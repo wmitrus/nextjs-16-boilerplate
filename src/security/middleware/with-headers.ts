@@ -56,7 +56,10 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
 
   if (isPreview || isDev || isClerkDevKey) {
     clerkDomains.push('https://*.clerk.accounts.dev');
+    clerkDomains.push('wss://*.clerk.accounts.dev');
   }
+
+  const cloudflareDomains = ['https://challenges.cloudflare.com'];
 
   const vercelInsightsScriptDomains = ['https://va.vercel-scripts.com'];
   const vercelInsightsConnectDomains = ['https://vitals.vercel-insights.com'];
@@ -72,6 +75,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     "'unsafe-inline'",
     "'unsafe-eval'",
     ...clerkDomains,
+    ...cloudflareDomains,
     ...sentryScriptDomains,
     ...(isPreview || isDev ? vercelInsightsScriptDomains : []),
     isPreview ? 'https://vercel.live' : '',
@@ -91,6 +95,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
   const connectSrc = [
     "'self'",
     ...clerkDomains,
+    ...cloudflareDomains,
     ...(isPreview || isDev ? vercelInsightsConnectDomains : []),
     'https://clerk-telemetry.com',
     ...sentryDomains,
@@ -103,6 +108,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
   const frameSrc = [
     "'self'",
     ...clerkDomains,
+    ...cloudflareDomains,
     isPreview ? 'https://vercel.live' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_FRAME_EXTRA),
   ]

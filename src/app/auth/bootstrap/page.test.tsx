@@ -207,6 +207,28 @@ describe('BootstrapPage', () => {
     );
   });
 
+  it('renders db_error UI when provisioning throws a generic unknown error (e.g. Postgres runtime error)', async () => {
+    provisioningService.ensureProvisioned.mockRejectedValue(
+      new Error('unexpected database error'),
+    );
+
+    render(await BootstrapPage(makeProps()));
+
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
+  it('renders db_error UI when provisioning throws an ECONNREFUSED error (e.g. Postgres container not running)', async () => {
+    const connRefusedError = Object.assign(
+      new Error('connect ECONNREFUSED 127.0.0.1:5432'),
+      { code: 'ECONNREFUSED' },
+    );
+    provisioningService.ensureProvisioned.mockRejectedValue(connRefusedError);
+
+    render(await BootstrapPage(makeProps()));
+
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
   it('renders db_error UI when PGlite throws ENOENT during provisioning', async () => {
     const enoentError = Object.assign(
       new Error("ENOENT: no such file or directory, mkdir './data/pglite'"),

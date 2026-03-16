@@ -1,6 +1,6 @@
 services:
   dev-db:
-    image: postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
     container_name: nextjs16_dev_db
     restart: unless-stopped
     ports:
@@ -18,7 +18,7 @@ services:
       - nextjs16_dev_db_data:/var/lib/postgresql/data
 
   test-db:
-    image: postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
     container_name: nextjs16_test_db
     restart: unless-stopped
     ports:

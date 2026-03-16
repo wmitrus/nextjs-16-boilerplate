@@ -1,4 +1,22 @@
 services:
+  dev-db:
+    image: postgres:16-alpine
+    container_name: nextjs16_dev_db
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_dev
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d app_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - nextjs16_dev_db_data:/var/lib/postgresql/data
+
   test-db:
     image: postgres:16-alpine
     container_name: nextjs16_test_db
@@ -18,4 +36,5 @@ services:
       - nextjs16_test_db_data:/var/lib/postgresql/data
 
 volumes:
+  nextjs16_dev_db_data:
   nextjs16_test_db_data:

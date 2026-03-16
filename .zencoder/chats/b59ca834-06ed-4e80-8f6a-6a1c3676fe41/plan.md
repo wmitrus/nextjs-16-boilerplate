@@ -133,3 +133,28 @@ After implementation:
 - `pnpm typecheck` passes ✅
 - `pnpm lint` passes ✅
 - All `drizzle.local.ts` references updated ✅
+
+---
+
+### [x] Corrective Pass
+
+Investigated three reported implementation gaps and one runtime issue. All gaps were already resolved in the prior implementation. See `db-corrective-pass.md`.
+
+- Seed flow: `scripts/db-seed.ts` exists with full implementation, all seed modules present ✅
+- `postgres` dependency: `postgres@3.4.8` installed, `postgres-schema-reset.ts` fully operational ✅
+- Deprecated alias docs: `docs/local-db.md` has explicit "Deprecated aliases" section ✅
+- `podman-compose.yml` runtime fix: fully-qualified image names, correct container names (user fix) ✅
+- `pnpm db:dev:up` → container starts ✅
+- `pnpm db:dev:migrate` → connects successfully ✅
+
+Output: `db-corrective-pass.md`
+
+---
+
+### [x] Schema reset drizzle metadata fix
+
+**Bug**: `postgres-schema-reset.ts` dropped `public` schema but left `drizzle` schema intact. Drizzle Kit stores migration tracking in `drizzle.__drizzle_migrations`. After reset, Drizzle saw all migrations as applied and skipped recreating tables, causing seed to fail with `relation "users" does not exist`.
+
+**Fix**: Added `DROP SCHEMA IF EXISTS drizzle CASCADE` after `DROP SCHEMA public CASCADE` in `scripts/lib/postgres-schema-reset.ts`.
+
+- `pnpm typecheck` ✅

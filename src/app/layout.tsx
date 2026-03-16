@@ -8,6 +8,7 @@ import { env } from '@/core/env';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
+import { normalizeClerkPostAuthRedirect } from '@/modules/auth/lib/clerk-redirects';
 import { HeaderWithAuth } from '@/modules/auth/ui/HeaderWithAuth';
 
 import './globals.css';
@@ -46,6 +47,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
+  const signInFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
+    env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
+    env.NEXT_PUBLIC_APP_URL,
+  );
+  const signUpFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
+    env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL,
+    env.NEXT_PUBLIC_APP_URL,
+  );
+  const signInForceRedirectUrl = normalizeClerkPostAuthRedirect(
+    env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL,
+    env.NEXT_PUBLIC_APP_URL,
+  );
+  const signUpForceRedirectUrl = normalizeClerkPostAuthRedirect(
+    env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL,
+    env.NEXT_PUBLIC_APP_URL,
+  );
 
   return (
     <html lang="en">
@@ -59,19 +76,12 @@ export default function RootLayout({
               signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
               waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
               // Land on a stable app route after auth. Server guards own any
-              // follow-up redirect into bootstrap or onboarding.
-              signInFallbackRedirectUrl={
-                env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
-              }
-              signUpFallbackRedirectUrl={
-                env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
-              }
-              signInForceRedirectUrl={
-                env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL
-              }
-              signUpForceRedirectUrl={
-                env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL
-              }
+              // follow-up redirect into bootstrap or onboarding. Normalize
+              // post-auth targets to absolute same-origin URLs for Clerk.
+              signInFallbackRedirectUrl={signInFallbackRedirectUrl}
+              signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
+              signInForceRedirectUrl={signInForceRedirectUrl}
+              signUpForceRedirectUrl={signUpForceRedirectUrl}
             >
               <AppLayoutContent>{children}</AppLayoutContent>
             </ClerkProvider>

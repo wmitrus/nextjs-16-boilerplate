@@ -2,11 +2,12 @@
 
 ## Artifacts
 
-| File                  | Purpose                                        | Status         |
-| --------------------- | ---------------------------------------------- | -------------- |
-| `db-current-state.md` | Repository state at time of analysis           | Reference only |
-| `db-design.md`        | **Authoritative implementation specification** | Active         |
-| `plan.md`             | This file                                      | Active         |
+| File                          | Purpose                                        | Status         |
+| ----------------------------- | ---------------------------------------------- | -------------- |
+| `db-current-state.md`         | Repository state at time of analysis           | Reference only |
+| `db-design.md`                | **Authoritative implementation specification** | Active         |
+| `db-implementation-report.md` | Implementation report with validation results  | Complete       |
+| `plan.md`                     | This file                                      | Active         |
 
 ---
 
@@ -36,11 +37,9 @@ Output: `db-design.md`
 
 ---
 
-### [ ] Implementation
+### [x] Implementation
 
-**Awaiting confirmation before proceeding.**
-
-Read `db-design.md` before implementing. All decisions are there.
+Implemented all approved changes. See `db-implementation-report.md` for full details.
 
 #### Files to CREATE
 
@@ -81,7 +80,7 @@ Update all references to `drizzle.local.ts` after rename.
 
 ---
 
-### [ ] Validation
+### [x] Validation
 
 After implementation:
 
@@ -125,9 +124,12 @@ After implementation:
 
 ---
 
-### [ ] Final Check
+### [x] Final Check
 
-- Dev and test containers fully separated
-- No script cross-targets dev and test
-- PGlite, E2E, and CI workflows unchanged
-- `docs/local-db.md` accurately describes all three profiles
+- Dev and test containers fully separated ✅
+- No script cross-targets dev and test ✅
+- PGlite, E2E, and CI workflows unchanged ✅
+- `docs/local-db.md` accurately describes all three profiles ✅
+- `pnpm typecheck` passes ✅
+- `pnpm lint` passes ✅
+- All `drizzle.local.ts` references updated ✅

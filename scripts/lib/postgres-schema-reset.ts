@@ -12,6 +12,7 @@ async function main(): Promise<void> {
 
   try {
     await sql`DROP SCHEMA public CASCADE`;
+    await sql`DROP SCHEMA IF EXISTS drizzle CASCADE`;
     await sql`CREATE SCHEMA public`;
     await sql`GRANT ALL ON SCHEMA public TO postgres`;
     await sql`GRANT ALL ON SCHEMA public TO public`;

@@ -180,7 +180,7 @@ export default async function BootstrapPage({
         return <BootstrapErrorUI error="db_error" />;
       }
 
-      throw err;
+      return <BootstrapErrorUI error="db_error" />;
     }
 
     const userRepository = container.resolve<UserRepository>(

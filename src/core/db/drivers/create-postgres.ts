@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import type { DbRuntime } from '../types';
 
 export function createPostgres(url: string): DbRuntime {
-  const client = postgres(url);
+  const client = postgres(url, { connect_timeout: 10 });
   const db = drizzle(client);
 
   return {

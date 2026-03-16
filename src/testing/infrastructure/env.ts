@@ -37,7 +37,7 @@ const defaultEnv: MutableEnv = {
   LOGFLARE_SOURCE_TOKEN: undefined,
   LOGFLARE_SOURCE_NAME: undefined,
   LOG_INGEST_SECRET: undefined,
-  NEXT_PUBLIC_APP_URL: undefined,
+  NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
   NEXT_PUBLIC_LOG_LEVEL: 'info',
   NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
   NEXT_PUBLIC_CLERK_SIGN_IN_URL: '/sign-in',

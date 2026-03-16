@@ -102,7 +102,7 @@ Include:
 
 ---
 
-### [ ] Step: Implementation
+### [x] Step: Implementation
 
 Apply the fix and update tests if needed.
 

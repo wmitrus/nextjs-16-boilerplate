@@ -88,8 +88,10 @@ Drizzle config files are intentionally not in the project root.
 
 - Dev/PGLite config:
   - `src/core/db/migrations/config/drizzle.dev.ts`
-- Local Postgres config:
-  - `src/core/db/migrations/config/drizzle.local.ts`
+- Test Postgres config:
+  - `src/core/db/migrations/config/drizzle.test.ts`
+- Dev Postgres container config:
+  - `src/core/db/migrations/config/drizzle.dev.postgres.ts`
 - Prod/Postgres config:
   - `src/core/db/migrations/config/drizzle.prod.ts`
 

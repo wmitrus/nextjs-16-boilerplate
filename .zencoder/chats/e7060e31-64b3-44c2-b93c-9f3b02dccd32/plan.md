@@ -170,7 +170,7 @@ Key finding: All 225 log lines (9 distinct sessions) show ZERO errors. All boots
 
 ---
 
-### [x] Ad-hoc: Onboarding Transition Boundary Analysis
+### [x] Ad-hoc: Onboarding Transition Boundary Analysis (UPDATED)
 
 Investigation of the /users → /onboarding transition as the current primary failure boundary.
 

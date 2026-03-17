@@ -250,11 +250,13 @@ The handoff is:
 
 ### 6.2 First plausible failing point after `/users` redirected correctly
 
-The **first plausible failing point** is inside:
+The **first plausible failing point** is the onboarding route-entry boundary inside:
 
-`src/app/onboarding/layout.tsx` -> `OnboardingGuard`
+`src/app/onboarding/layout.tsx` -> `OnboardingLayout` -> `<Suspense fallback={null}>` -> `OnboardingGuard`
 
-More precisely, the earliest likely sub-boundary is:
+That is the first place where the App Router must wait for server work while rendering no visible fallback.
+
+Inside that boundary, the earliest awaited sub-step is:
 
 ```ts
 await identityProvider.getCurrentIdentity();
@@ -266,8 +268,8 @@ with the most likely deep sub-step being:
 
 Why this is the earliest plausible boundary:
 
-- the failing-window logs show Clerk auth-claim resolution repeating after the `/users` redirect
-- that is exactly the front half of `getCurrentIdentity()`
+- the failing-window logs show repeated auth-resolution activity immediately after the `/users` redirect
+- `OnboardingGuard` is the first onboarding-specific code that can consume that auth state
 - there is no evidence that onboarding reached client mount
 - there is also no evidence that `findById()` completed
 
@@ -277,7 +279,7 @@ The **second plausible point**, if identity resolution is not the stall, is:
 await userRepository.findById(identity.id);
 ```
 
-Both sit inside the same server-entry guard boundary.
+Both sit inside the same server-entry guard boundary, which is itself hidden behind a `null` suspense fallback.
 
 ---
 
@@ -285,24 +287,25 @@ Both sit inside the same server-entry guard boundary.
 
 ### 7.1 Server-entry vs route-settlement vs client-mount
 
-**Primary classification**: `server-entry related`
+**Primary classification**: `route-settlement related`
 
-**How it presents to the user**: `route-settlement hang`
+**What is driving it**: `server-entry gating inside OnboardingGuard`
 
 **Not primarily**: `client-mount related`
 
-### 7.2 Why the primary classification is server-entry
+### 7.2 Why the primary classification is route settlement, not client mount
 
 Because:
 
 - onboarding cannot mount until `OnboardingGuard` completes
 - `OnboardingGuard` performs async auth and DB work
+- `OnboardingLayout` wraps that work in `<Suspense fallback={null}>`
 - there is no onboarding UI logic on first mount that would explain the stall earlier than that
 - the prior correlation already placed the failure before stable onboarding settlement
 
-### 7.3 Why route settlement still matters
+### 7.3 Why this is not best described as a pure OnboardingGuard logic bug
 
-This is not a pure business-logic bug in onboarding state checks. It is a server-entry stall that becomes a route-settlement hang because:
+There is no obvious redirect loop or repeated mutation in `OnboardingGuard` itself. The stronger explanation is that route settlement is being held open by server checks that are not observable because:
 
 - the route is suspended
 - the fallback is `null`
@@ -311,7 +314,7 @@ This is not a pure business-logic bug in onboarding state checks. It is a server
 
 So the best wording is:
 
-> the failure is primarily in onboarding server entry, but it manifests as an App Router route-settlement hang
+> the failure is primarily at the onboarding route-settlement boundary, driven by invisible server-entry gating, not by onboarding client mount
 
 ---
 
@@ -319,12 +322,13 @@ So the best wording is:
 
 ### 8.1 Is Clerk still materially involved?
 
-**Yes, but not as the primary moving part.**
+**Yes, but no longer as the primary moving part.**
 
 Clerk is still involved in two ways:
 
-1. `ClerkRequestIdentitySource` powers `getCurrentIdentity()`
+1. `ClerkRequestIdentitySource` still feeds `getCurrentIdentity()` on server entry
 2. the shared app shell still mounts Clerk client UI such as `UserButton`
+3. `src/app/layout.tsx` also wraps the shell in `<Suspense fallback={null}>`, which can amplify blank-route perception during navigation
 
 ### 8.2 Is Clerk the most likely root cause of the onboarding-entry hang?
 
@@ -334,11 +338,11 @@ Reasons:
 
 - onboarding page code itself does not use Clerk client components
 - the form has no Clerk dependency on first mount
-- the stronger risk is the DB-backed completion of identity resolution and user lookup inside the server guard
+- the stronger risk is the invisible handoff through suspense while server identity and user checks complete
 
 ### 8.3 Practical conclusion on Clerk
 
-Clerk remains part of the auth context, but the current boundary is no longer a Clerk-led bootstrap problem. At this stage Clerk is a supporting dependency inside server entry, not the primary target.
+Clerk remains part of the auth context, but the current boundary is no longer a Clerk-led bootstrap problem. At this stage Clerk is a supporting dependency inside onboarding entry, not the primary target.
 
 ---
 
@@ -351,10 +355,13 @@ The main amplifiers are:
 1. `Suspense fallback={null}` in the onboarding layout
    - pending guard work becomes visually invisible
 
-2. global client rejection handling ignores `Failed to fetch`
+2. `Suspense fallback={null}` in the root app layout
+   - shell-level navigation can also blank while the new route is settling
+
+3. global client rejection handling ignores `Failed to fetch`
    - unhandled route-transition failures can be under-reported in local client logs
 
-3. repeated dev retries / re-entry behavior seen in previous correlation work
+4. repeated dev retries / re-entry behavior seen in previous correlation work
    - makes the route look unstable without pinpointing the exact awaited boundary
 
 This is still secondary. It amplifies the symptom. It is not the most likely first failing point.
@@ -365,16 +372,18 @@ This is still secondary. It amplifies the symptom. It is not the most likely fir
 
 **Minimum safe next fix target**:
 
-`src/app/onboarding/layout.tsx` -> `OnboardingGuard`
+`src/app/onboarding/layout.tsx` -> `OnboardingLayout` and `OnboardingGuard`
 
 Specifically, the safest next target is to instrument and narrow the two awaited server-entry steps:
 
 1. before and after `identityProvider.getCurrentIdentity()`
 2. before and after `userRepository.findById(identity.id)`
 
-And, if a product-visible mitigation is needed after confirming the boundary:
+And, in the same file, the safest user-visible mitigation is:
 
 3. replace the `null` suspense fallback with a real onboarding-entry loading state so route settlement is observable instead of appearing frozen
+
+This is safer than touching the form, Clerk client components, or bootstrap because it targets the first post-redirect boundary with the smallest blast radius.
 
 ### 10.1 What not to target first
 
@@ -392,13 +401,13 @@ Those are all downstream or already validated.
 ## 11. Final Answer
 
 1. **Exact likely failing file/function/component boundary**:
-   - `src/app/onboarding/layout.tsx` -> `OnboardingGuard`
-   - earliest likely sub-boundary: `identityProvider.getCurrentIdentity()`
-   - next likely sub-boundary: `userRepository.findById(identity.id)`
+   - `src/app/onboarding/layout.tsx` -> `OnboardingLayout` suspense boundary handing off into `OnboardingGuard`
+   - earliest likely awaited sub-boundary: `identityProvider.getCurrentIdentity()`
+   - next likely awaited sub-boundary: `userRepository.findById(identity.id)`
 
 2. **Primary classification**:
-   - primarily `server-entry related`
-   - manifested as `route-settlement` hang in App Router
+   - primarily `route-settlement related`
+   - driven by `server-entry` gating in `OnboardingGuard`
    - not primarily `client-mount related`
 
 3. **Is Clerk still materially involved?**

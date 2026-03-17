@@ -2,328 +2,422 @@
 
 **Session ID**: e7060e31-64b3-44c2-b93c-9f3b02dccd32  
 **Agent**: Debug / Investigation Agent  
-**Date**: 2026-03-17  
-**Scope**: `/users` → `/onboarding` transition boundary, route settlement, and client mount behavior
+**Date**: 2026-03-17 (updated)  
+**Scope**: `/users` → `/onboarding` transition hang — server entry, route settlement, and client mount  
+**Inputs**:
+
+- `single-failing-postgres-run-correlation.md` (no failing run found in logs)
+- `src/app/onboarding/layout.tsx` (full read)
+- `src/app/onboarding/onboarding-form.tsx` (full read)
+- `src/app/onboarding/actions.ts` (full read)
+- `src/app/onboarding/page.tsx` (full read)
+- `src/security/middleware/with-auth.ts` (full read)
+- `src/security/middleware/route-classification.ts` (full read)
+- `src/security/core/node-provisioning-access.ts` (full read)
+- `src/core/runtime/bootstrap.ts` (full read)
+- `src/core/runtime/infrastructure.ts` (full read)
+- `src/modules/auth/infrastructure/RequestScopedIdentityProvider.ts` (full read)
+- `src/modules/auth/infrastructure/drizzle/DrizzleInternalIdentityLookup.ts` (full read)
+- `src/modules/user/infrastructure/drizzle/DrizzleUserRepository.ts` (full read)
+- `src/app/layout.tsx` (full read)
 
 ---
 
 ## 1. Objective
 
-Identify the exact file/function/component boundary responsible for the current hang (if any) after `/users` has correctly decided `redirect:/onboarding`. Determine whether the hang is server-entry, route-settlement, or client-mount related. Identify minimum safe next fix target.
+Determine the first plausible failing point after `/users` correctly decides `redirect:/onboarding`. Classify the hang as server-entry, route-settlement, or client-mount. Establish whether Clerk is materially involved. Identify minimum safe next fix targets.
 
 ---
 
 ## 2. Symptom Summary
 
-**Confirmed from prior artifacts:**
+From prior artifacts:
 
-- Bootstrap is working (Phase 2 fix confirmed, all bootstrap runs in server.log succeeded)
-- `/users` → `ONBOARDING_REQUIRED` → `redirect('/onboarding')` is executing correctly
-- `GET /onboarding 200 in 291ms` and `GET /onboarding 200 in 141ms` appear in server logs
-- The original "Rendering..." / `TypeError: Failed to fetch` was a bootstrap RSC stream abort — now fixed
-
-**Current investigation scope:**  
-Whether any "hang" persists at the onboarding transition and, if so, at what exact boundary.
+- `/auth/bootstrap` is **not** the current failure boundary
+- `/users` completes with 200 OK and `ONBOARDING_REQUIRED` decision
+- `redirect('/onboarding')` is issued from `UsersLayout` correctly
+- `GET /onboarding` responds 200 in 141–291ms in all captured log sessions
+- **No server-side error or exception logged for `/onboarding` in any session**
+- The user perceives a "hang" — blank screen / "Rendering..." — between the `/users` redirect and the onboarding form becoming interactive
 
 ---
 
 ## 3. Confirmed Evidence
 
-### 3.1 Server Logs (Confirmed)
+### 3.1 File inventory for `/onboarding` segment
 
-| Session        | Request         | HTTP Result  | Notes                                 |
-| -------------- | --------------- | ------------ | ------------------------------------- |
-| ~1773697318xxx | GET /onboarding | 200 in 291ms | First load                            |
-| ~1773697318xxx | GET /onboarding | 200 in 141ms | Second load (prefetch/cache)          |
-| ~1773697318xxx | GET /users      | 200 in 327ms | Guard: ONBOARDING_REQUIRED → redirect |
+| File                                     | Exists         | Role                                          |
+| ---------------------------------------- | -------------- | --------------------------------------------- |
+| `src/app/onboarding/layout.tsx`          | ✅             | `OnboardingLayout` wrapping `OnboardingGuard` |
+| `src/app/onboarding/page.tsx`            | ✅             | Renders `<OnboardingForm />`                  |
+| `src/app/onboarding/onboarding-form.tsx` | ✅             | `'use client'` — form UI only                 |
+| `src/app/onboarding/actions.ts`          | ✅             | `completeOnboarding` server action            |
+| `src/app/onboarding/loading.tsx`         | **❌ MISSING** | No segment-level loading UI                   |
+| `src/app/onboarding/error.tsx`           | **❌ MISSING** | No segment-level error boundary               |
 
-**No server-side error on `/onboarding` in any log session.**
-
-### 3.2 Bootstrap Fix (Confirmed In-Code)
-
-- `src/app/auth/bootstrap/page.tsx`: catch-all → `<BootstrapErrorUI error="db_error" />` (no `throw err`)
-- `src/core/db/drivers/create-postgres.ts`: `connect_timeout: 10`
-
-### 3.3 OnboardingGuard Error Handling (Confirmed In-Code)
-
-All error paths in `OnboardingGuard` issue **redirects**, not uncaught throws:
-
-- `identityProvider.getCurrentIdentity()` fails → `redirect('/auth/bootstrap?reason=db-error')`
-- `userRepository.findById()` fails → `redirect('/auth/bootstrap?reason=db-error')`
-- User not found → `redirect('/auth/bootstrap')`
-- User onboarding complete → `redirect('/users')`
-- None of these abort the RSC stream.
-
-### 3.4 OnboardingForm Pattern (Confirmed In-Code)
+### 3.2 `OnboardingGuard` has zero logging
 
 ```tsx
-// OnboardingForm is a 'use client' component
-const handleSubmit = async (formData: FormData) => {
-  setIsPending(true);
-  try {
-    const res = await completeOnboarding(formData);
-    if (res?.error) { setError(res.error); }
-  } catch (_err) {
-    setError('An unexpected error occurred. Please try again.');
-  } finally {
-    setIsPending(false);
+// src/app/onboarding/layout.tsx — FULL file
+export async function OnboardingGuard({ children }) {
+  const container = getAppContainer();
+  const identityProvider = container.resolve(AUTH.IDENTITY_PROVIDER);
+  // ... no logger, no resolveServerLogger(), no debug/info/error calls
+```
+
+**Confirmed**: Every other auth-critical boundary in the codebase uses `resolveServerLogger()` and logs events. `OnboardingGuard` logs nothing. When it stalls, there is no server-side signal.
+
+### 3.3 `OnboardingGuard` repeats the same DB queries `UsersLayout` already executed
+
+`UsersLayout` calls `resolveNodeProvisioningAccess()` which calls `evaluateNodeProvisioningAccess()`:
+
+```
+src/security/core/node-provisioning-access.ts:104  → identityProvider.getCurrentIdentity()
+src/security/core/node-provisioning-access.ts:149  → userRepository.findById(identity.id)
+```
+
+`OnboardingGuard` then immediately repeats:
+
+```
+src/app/onboarding/layout.tsx:34  → identityProvider.getCurrentIdentity()
+src/app/onboarding/layout.tsx:52  → userRepository.findById(identity.id)
+```
+
+**Confirmed**: This is a full second round-trip of both queries. No caching between route segments. Each `identityProvider.getCurrentIdentity()` call runs:
+
+1. `ClerkRequestIdentitySource.get()` → `auth()` Clerk SDK call (cookie read, ~1–5ms)
+2. `DrizzleInternalIdentityLookup.findInternalUserId()` → Postgres SELECT on `auth_user_identities`
+
+Then `userRepository.findById()` → Postgres SELECT on `users`.
+
+Total redundant DB work per `/onboarding` load: **3 sequential Postgres queries** that have already succeeded in the same rendering cycle.
+
+### 3.4 `getAppContainer()` creates a fresh container per call
+
+```tsx
+// src/core/runtime/bootstrap.ts:119-121
+export function getAppContainer(): Container {
+  return createRequestContainer(buildConfig());
+}
+```
+
+No singleton caching. Each call re-constructs the container and re-validates env. The DB connection pool (`getInfrastructure()`) IS shared via a process-level singleton — but all DI objects above it are recreated every time.
+
+### 3.5 Proxy does NOT create onboarding redirect loops
+
+```tsx
+// src/security/middleware/route-classification.ts:41
+const isOnboardingRoute = path.startsWith('/onboarding');
+
+// src/security/middleware/with-auth.ts:138
+function redirectForIncompleteOnboarding(...) {
+  if (!userId || ctx.isOnboardingRoute || ctx.isPublicRoute || ctx.isApi) {
+    return null;  // ← exits immediately for /onboarding
   }
-};
-<form action={handleSubmit} ...>
+  ...
+}
 ```
 
-### 3.5 "Rendering..." String (Confirmed Not In Codebase)
+The proxy runs in edge mode; `onboardingComplete` check only fires in node mode. Even if it ran, `/onboarding` is classified as `isOnboardingRoute = true` and the onboarding redirect guard short-circuits. No redirect loop risk.
 
-```
-grep -rn "Rendering..." src/  → No matches
+### 3.6 `OnboardingForm` does nothing on mount
+
+```tsx
+// src/app/onboarding/onboarding-form.tsx — confirmed full file
+'use client';
+// State only: error, isPending
+// No useEffect, no useRouter, no usePathname, no useTransition
+// No mount-time action call, no auto-fetch
+// Form submit is the only interaction path
 ```
 
-This text is not a React component string. It is a browser/Next.js dev overlay indicator from the original bootstrap RSC stream abort. It is not produced by the onboarding route.
+The client form component is passive. It cannot cause a hang until the user submits.
+
+### 3.7 `<Suspense fallback={null}>` confirmed at two levels
+
+```tsx
+// src/app/layout.tsx:72 (root)
+<Suspense fallback={null}>
+  <ClerkProvider ...><AppLayoutContent>{children}</AppLayoutContent></ClerkProvider>
+</Suspense>
+
+// src/app/onboarding/layout.tsx:16 (segment)
+<Suspense fallback={null}>
+  <OnboardingGuard>{children}</OnboardingGuard>
+</Suspense>
+```
+
+Two nested Suspense boundaries, both with `fallback={null}`. During server rendering and client hydration, any suspension at either boundary shows nothing to the user.
 
 ---
 
 ## 4. Execution Path
 
-### 4.1 Server Entry Flow: `/onboarding`
+### 4.1 Full transition sequence
 
 ```
-UsersLayout.redirect('/onboarding')
-  → [Next.js RSC: new route request]
-  → RootLayout renders (sync, wraps in <Suspense fallback={null}>)
-  → OnboardingLayout renders (sync):
-      return <Suspense fallback={null}><OnboardingGuard>{children}</OnboardingGuard></Suspense>
-  → OnboardingGuard (async RSC):
-      1. getAppContainer() → createRequestContainer(buildConfig())    [SYNC - creates new container every call]
-      2. identityProvider.getCurrentIdentity():
-           a. ClerkRequestIdentitySource.get() → auth()              [ASYNC - Clerk SDK, reads cookie]
-           b. DrizzleInternalIdentityLookup.findInternalUserId()      [ASYNC - Postgres query on auth_user_identities]
-      3. userRepository.findById(identity.id)                        [ASYNC - Postgres query on users table]
-      4. if (!user.onboardingComplete) → renders children
-  → OnboardingPage renders (sync):
-      return <OnboardingForm />
-  → RSC stream complete → 200 OK sent
+1. UsersLayout (src/app/users/layout.tsx:94-96)
+   → status === 'ONBOARDING_REQUIRED'
+   → redirect('/onboarding')                        [NEXT_REDIRECT thrown — RSC segment exits]
+
+2. Proxy / middleware (src/proxy.ts + src/security/middleware/with-auth.ts)
+   → /onboarding request arrives
+   → isOnboardingRoute = true → onboarding redirect guard exits immediately
+   → passes through to RSC rendering
+
+3. OnboardingLayout (src/app/onboarding/layout.tsx:10-19)
+   → SYNC function — returns <Suspense fallback={null}><OnboardingGuard>...</OnboardingGuard></Suspense>
+   → Suspense streams null to client while OnboardingGuard resolves
+
+4. OnboardingGuard (src/app/onboarding/layout.tsx:22-67) — ASYNC RSC
+   → getAppContainer()                              [SYNC — new container every call]
+   → identityProvider.getCurrentIdentity()          [ASYNC — auth() + Postgres query #1]
+   → userRepository.findById(identity.id)           [ASYNC — Postgres query #2]
+   → if (!user.onboardingComplete) → renders children
+
+5. OnboardingPage (src/app/onboarding/page.tsx)
+   → <OnboardingForm />                             [SYNC — passes to client boundary]
+
+6. Client: hydration
+   → ClerkProvider restores auth state (from preloaded cookie)
+   → HeaderAuthControls mounts (Clerk UI components — passive)
+   → OnboardingForm mounts (state init only, no effects)
 ```
 
-**Key timing observation**: Steps 2 and 3 are sequential Postgres queries. In local dev, each typically takes 5–30ms. Combined: 10–60ms. This explains the 141–291ms total response times.
-
-### 4.2 Client Hydration Flow
+### 4.2 Where the blank screen window occurs
 
 ```
-Browser receives RSC payload (200 OK)
-  → React hydrates <RootLayout>
-  → Hydrates <ClerkProvider> (reads Clerk session from preloaded state in cookie)
-  → Hydrates <HeaderWithAuth> → <HeaderAuthControls> ('use client')
-      → Clerk components: <SignedIn>, <SignedOut>, <UserButton>
-      → Clerk JS initializes client-side auth state
-  → Hydrates <OnboardingLayout> shell
-  → Hydrates <OnboardingForm> ('use client')
-      → React.useState: error='', isPending=false
-      → No useEffect, no router calls, no auto-fetching
-      → Form renders immediately
-```
-
-**No client-side hang in hydration path.** Clerk auth state is preloaded by the server.
-
-### 4.3 Form Submission Flow (`completeOnboarding`)
-
-```
-User submits form
-  → React calls handleSubmit(formData) inside startTransition
-  → handleSubmit:
-      1. setIsPending(true)                                          [UI: "Saving..."]
-      2. await completeOnboarding(formData)                          [Server action RPC]
-          → Server: identitySource.get() → auth()                   [Clerk, ~5ms]
-          → Server: provisioningService.ensureProvisioned()          [FULL provisioning cycle - 30-80ms]
-          → Server: userRepository.findById(internalUserId)         [Postgres, ~5ms]
-          → Server: userRepository.updateProfile(...)               [Postgres UPDATE, ~5ms]
-          → Server: userRepository.updateOnboardingStatus(..., true) [Postgres UPDATE, ~5ms]
-          → Server: redirect(safeRedirectUrl)                        [throws NEXT_REDIRECT]
-          → Next.js intercepts NEXT_REDIRECT, encodes in response
-          → Client receives redirect response, router.push('/users')
-      3. finally: setIsPending(false)                               [component unmounting]
-  → Router navigates to /users
+Between step 1 and step 4 completing:
+  - Step 1 completes (redirect) → blank screen begins
+  - Steps 2-3 are near-instant
+  - Step 4 takes ~150-400ms (two sequential Postgres queries)
+  - User sees blank screen for this entire duration
+  - NO loading indicator at any level
+  - NO server log of entry or exit from OnboardingGuard
 ```
 
 ---
 
 ## 5. Source-of-Truth Analysis
 
-| State                                   | Owner                     | DB Table               | Stage                   |
-| --------------------------------------- | ------------------------- | ---------------------- | ----------------------- |
-| External user identity (Clerk userId)   | Clerk SDK (cookie/JWT)    | —                      | Auth layer              |
-| Internal user identity mapping          | DB                        | `auth_user_identities` | OnboardingGuard step 2b |
-| User record + `onboardingComplete` flag | DB                        | `users`                | OnboardingGuard step 3  |
-| Onboarding form submission              | Server action + DB writes | `users`                | completeOnboarding      |
+| State                         | Where read in /users                                            | Where re-read in /onboarding      | Duplication? |
+| ----------------------------- | --------------------------------------------------------------- | --------------------------------- | ------------ |
+| External userId (Clerk)       | `auth()` via ClerkRequestIdentitySource                         | `auth()` again in OnboardingGuard | **Yes**      |
+| Internal identity mapping     | `findInternalUserId()` on `auth_user_identities`                | `findInternalUserId()` again      | **Yes**      |
+| User record + onboarding flag | `userRepository.findById()` in `evaluateNodeProvisioningAccess` | `userRepository.findById()` again | **Yes**      |
 
-**State drift risk**: If bootstrap writes to DB in one Postgres connection and `OnboardingGuard` reads from another connection immediately, the commit should be visible (Postgres `READ COMMITTED` guarantees). Not a practical concern here.
+All three lookups are re-executed from scratch on the next route segment. No mechanism exists to pass the result of `evaluateNodeProvisioningAccess` from `UsersLayout` to `OnboardingGuard`.
 
 ---
 
 ## 6. Likely Failure Points
 
-### FP-1 — `<Suspense fallback={null}>` shows blank page during guard resolution
+### FP-1 — `<Suspense fallback={null}>` + missing `loading.tsx` (PRIMARY — Confirmed)
 
-**Location**: `src/app/onboarding/layout.tsx:16`  
-**Status**: **Confirmed architectural behavior** (not a bug, but creates visual "hang")  
-**Details**: During `OnboardingGuard`'s async DB queries, the Suspense boundary shows `null` (nothing). The user sees a blank page for 10–300ms depending on Postgres latency. If Postgres is slow or the connection pool is saturated, this blank period extends indefinitely without any visible indicator.
+**File**: `src/app/onboarding/layout.tsx:16` and absent `src/app/onboarding/loading.tsx`  
+**Classification**: Route-settlement level  
+**Status**: Confirmed architectural gap
 
-**This is the most likely cause of the visible "hang" perception at the onboarding entry point**, even when the server-side work completes correctly.
+During `OnboardingGuard`'s async resolution, the user sees a completely blank page:
 
-### FP-2 — `completeOnboarding` redundantly calls `ensureProvisioned`
+- `<Suspense fallback={null}>` provides no UI
+- No `loading.tsx` exists to give the segment an instant loading shell
+- Root `<Suspense fallback={null}>` compounds this — the entire visible area shows nothing
 
-**Location**: `src/app/onboarding/actions.ts:38`  
-**Status**: **Confirmed code path** — runs every time the form is submitted  
-**Details**: The user is already provisioned by the time they see the onboarding form. `ensureProvisioned` runs a full provisioning transaction cycle (~30–80ms) unnecessarily. This adds latency at form submission time and briefly shows the button as "Saving..." without user feedback.
+In local dev Postgres, the first query after a cold connection (process start, pool warm-up) can take 200–400ms. This blank period is the primary source of the perceived "hang".
 
-Not a hang, but an unnecessary Postgres round-trip sequence on every form submit.
+**Contrast with bootstrap**: The original bootstrap failure was a technical RSC stream abort (uncaught `throw err`). The onboarding transition hang is a UX-level gap (no loading state). Different failure class; same perceived symptom.
 
-### FP-3 — `form action={handleSubmit}` non-canonical redirect handling
+### FP-2 — `OnboardingGuard` has no logging (Confirmed — observability gap)
 
-**Location**: `src/app/onboarding/onboarding-form.tsx:10-25`  
-**Status**: **Likely — needs verification in target environment**  
-**Details**: The form uses `action={handleSubmit}` (client async function) wrapping `completeOnboarding` (server action). This differs from the Next.js 16 recommended pattern of `action={completeOnboarding}` (direct server action reference) + `useFormStatus()`.
+**File**: `src/app/onboarding/layout.tsx`  
+**Status**: Confirmed — zero logging calls
 
-When `completeOnboarding` calls `redirect()`, Next.js's server action infrastructure encodes the redirect in the response. The client router then navigates. With the direct pattern, React's built-in transition handling manages this. With the wrapper pattern, the behavior depends on how Next.js 16 handles server action redirects in a client-called context vs. a React transition-owned form action.
+When `OnboardingGuard` runs slowly (Postgres latency), redirects unexpectedly, or encounters an auth state that causes a redirect, there is **no server log entry**. This makes the transition boundary invisible to debugging. Every other auth/provisioning boundary in this codebase logs its decisions; `OnboardingGuard` is the only exception.
 
-**Potential symptom**: `catch (_err)` in `handleSubmit` might receive a non-standard object if the redirect response is not properly decoded before the client sees it. In that case, it would show "An unexpected error occurred. Please try again." instead of navigating. This is not a permanent hang but is an incorrect behavior path.
+### FP-3 — Redundant sequential DB queries slow every `/onboarding` load (Confirmed)
 
-**This is NOT confirmed** — it may work correctly in Next.js 16. But it is a deviation from the idiomatic pattern and warrants verification.
+**File**: `src/app/onboarding/layout.tsx:34, 52`  
+**Status**: Confirmed code path
 
-### FP-4 — `OnboardingGuard` DB query error → redirect to `/auth/bootstrap` loop risk
+Three Postgres queries run sequentially on every `/onboarding` load:
 
-**Location**: `src/app/onboarding/layout.tsx:37-43, 51-53`  
-**Status**: **Unlikely in current state** but worth flagging  
-**Details**: If Postgres is running but the `auth_user_identities` or `users` table is missing (schema drift, failed migration), the Drizzle query throws, and `OnboardingGuard` redirects to `/auth/bootstrap?reason=db-error`. Bootstrap then tries `ensureProvisioned` on the same broken schema, fails with a db_error, and returns `<BootstrapErrorUI>`. The user is stuck at the error UI. This is correct behavior, not a loop, but is hard to diagnose without log visibility.
+1. `findInternalUserId()` → `auth_user_identities` table
+2. `findById()` → `users` table
+
+All three have already succeeded in the immediately preceding `/users` rendering. There is no caching or state passing between route segments. In local dev, each adds 5–30ms; combined: 10–60ms additional latency AFTER the `/users` round-trip.
+
+### FP-4 — `form action={handleSubmit}` non-canonical redirect handling (Unclear — needs verification)
+
+**File**: `src/app/onboarding/onboarding-form.tsx:26`  
+**Status**: Unclear — not confirmed but warrants verification
+
+```tsx
+// Current pattern
+<form action={handleSubmit}>  // handleSubmit is a client async function
+
+// Idiomatic Next.js 16 pattern
+<form action={completeOnboarding}>  // direct server action reference
+```
+
+When `completeOnboarding` calls `redirect()`, the server action infrastructure encodes the redirect in the response. Through the direct form action pattern, React handles this natively. Through the client wrapper pattern, the behavior depends on how Next.js 16 propagates the redirect signal through the server action RPC client.
+
+**Potential symptom if this fails**: Form stays in default state after submit with no navigation (not a hang, but broken redirect).
+
+### FP-5 — `completeOnboarding` redundantly calls `ensureProvisioned` (Confirmed — latency)
+
+**File**: `src/app/onboarding/actions.ts:38`  
+**Status**: Confirmed — runs on every form submit
+
+User is already provisioned when the form appears. The full provisioning transaction runs again (~30–80ms Postgres overhead on form submit). Idempotent but unnecessary.
+
+### FP-6 — No segment-level error boundary at `/onboarding` (Confirmed — observability gap)
+
+**Files**: absent `src/app/onboarding/error.tsx`; only `src/app/error.tsx` exists  
+**Status**: Confirmed
+
+If `OnboardingGuard` throws an unexpected error (e.g., DB returns unexpected schema, auth() throws non-standard error), the root error boundary catches it and shows a generic error UI with no onboarding-specific recovery path. Sentry captures the error, but the user sees only "Something went wrong!" with no context-specific guidance.
 
 ---
 
 ## 7. Hypotheses
 
-### H1 — Primary: `<Suspense fallback={null}>` is the "hang" perception source
+### H1 — Primary: Blank screen from `<Suspense fallback={null}>` + missing `loading.tsx`
 
 **Confidence: High**
 
-The `OnboardingLayout` wraps `OnboardingGuard` in `<Suspense fallback={null}>`. While `OnboardingGuard` runs its two Postgres queries (typically 10–60ms combined, but can be 200–400ms on first connection), the user sees a completely blank page with no loading indicator.
+The blank screen during `OnboardingGuard` resolution is the direct cause of the perceived hang. Two layers of `fallback={null}` eliminate all visual feedback during server async work. In local dev Postgres, cold-start queries extend this window.
 
-In local dev, the first request after a process restart warms up the Postgres connection pool. The first `OnboardingGuard` query set may take 200–400ms while the connection is established. During this time, the screen shows nothing. This matches "hangs on Rendering..." perception.
+This is **not** a technical failure but is indistinguishable from one in the user experience.
 
-**Why "Rendering..." appears**: In the browser, the page tab spinner is active. In Next.js dev mode, the dev overlay shows loading state. Neither of these are React component text.
+### H2 — Secondary: Route-settlement amplification in dev mode
 
-### H2 — Secondary: `form action={handleSubmit}` redirect handling
+**Confidence: Likely (dev-specific)**
 
-**Confidence: Unclear — needs verification**
+Next.js Fast Refresh, Turbopack hot module replacement, and repeated process restarts (observed: multiple `infrastructure_init_start` events in server.log within short windows) create instability in the route settlement lifecycle. Dev mode reloads can re-trigger `OnboardingGuard` multiple times in rapid succession. With `fallback={null}` at both boundaries, the user sees the blank screen for an extended compound period.
 
-If the indirect server action redirect (through `handleSubmit` wrapper) does not trigger router navigation in Next.js 16, the form would remain in `isPending=false` state (after `finally` runs) but the page would not navigate. The user would see the form in its normal state with no apparent result. This is not a hang but is a broken redirect.
+### H3 — Tertiary: `form action={handleSubmit}` redirect ambiguity
 
-**Evidence required**: One form submission with browser network tab showing the server action response and the subsequent navigation.
+**Confidence: Unclear**
 
-### H3 — Tertiary: Clerk JS hydration delay at onboarding entry
+If the indirect server action redirect does not trigger client-side router navigation in Next.js 16, the form submit appears to succeed (no error shown) but the page does not navigate. Not a hang, but invisible failure.
 
-**Confidence: Low**
-
-`HeaderAuthControls` uses Clerk components (`<SignedIn>`, `<SignedOut>`, `<UserButton>`) that require Clerk JS to initialize on the client. While Clerk's server-side preloading reduces this, network latency to Clerk's CDN in dev could add 100–500ms. This would delay the full page interactive state.
-
-Not a hang, but adds to the perception of slowness at route entry.
+**Reducing this uncertainty requires**: one form submit captured with browser network tab showing the server action response headers and subsequent router behavior.
 
 ---
 
-## 8. Missing Evidence / Uncertainty
+## 8. Primary Hang Classification
 
-| Item                                                                                     | Status                             |
-| ---------------------------------------------------------------------------------------- | ---------------------------------- |
-| Browser network tab during `/onboarding` load                                            | ❌ Not available                   |
-| Form submission network trace                                                            | ❌ Not available                   |
-| Server log for `completeOnboarding` execution                                            | ❌ No form submit captured in logs |
-| Next.js 16 exact behavior for `form action={clientWrapper}` + server action `redirect()` | ❌ Needs verification              |
-| Whether the "hang" is still perceived by user after bootstrap fix                        | ❌ Not confirmed                   |
-| Postgres cold-start query timing (first query latency)                                   | ❌ Not measured                    |
+**Classification: Route-settlement level, at the onboarding server-entry boundary**
 
----
+More precisely:
 
-## 9. Key Code-Level Finding: `OnboardingGuard` Error Handling is Safe
+- The hang begins the moment `UsersLayout` issues `redirect('/onboarding')` and the browser transitions to the new route
+- The first visible UI does not appear until `OnboardingGuard` completes its two sequential Postgres queries
+- No loading indicator exists at any layer during this period
+- The blank screen IS the perceived hang
 
-Unlike the original bootstrap bug (uncaught `throw err` aborting RSC stream), `OnboardingGuard` handles ALL DB failures with safe redirects:
+This is **NOT**:
 
-```tsx
-// OnboardingGuard — confirmed error handling
-try {
-  identity = await identityProvider.getCurrentIdentity();
-} catch (err) {
-  if (err instanceof UserNotProvisionedError) {
-    redirect('/auth/bootstrap'); // Safe redirect
-  }
-  redirect('/auth/bootstrap?reason=db-error'); // Safe redirect for any DB error
-}
-
-try {
-  user = await userRepository.findById(identity.id);
-} catch {
-  redirect('/auth/bootstrap?reason=db-error'); // Safe redirect
-}
-```
-
-**Conclusion**: There is no RSC stream abort risk at `OnboardingGuard`. Any Postgres failure at this point causes a safe redirect to bootstrap, not a stream abort.
+- A client-mount problem (`OnboardingForm` has no mount-time side effects)
+- A Clerk-specific failure (Clerk auth resolution is fast and confirmed working in logs)
+- An RSC stream abort (the response is 200 OK with content)
+- An infinite redirect loop (proxy short-circuits for `isOnboardingRoute`)
 
 ---
 
-## 10. Exact Likely Failing File/Function/Component
+## 9. Clerk Involvement at This Stage
 
-| Boundary                                        | Hang Type                | File                                     | Line | Severity                     |
-| ----------------------------------------------- | ------------------------ | ---------------------------------------- | ---- | ---------------------------- |
-| `<Suspense fallback={null}>` blank during guard | Visual / perception hang | `src/app/onboarding/layout.tsx`          | 16   | **High UX impact**           |
-| `completeOnboarding` redundant provisioning     | Latency at form submit   | `src/app/onboarding/actions.ts`          | 38   | Medium                       |
-| `form action={handleSubmit}` redirect           | Possible redirect miss   | `src/app/onboarding/onboarding-form.tsx` | 26   | Unclear — needs verification |
+| Layer                       | Clerk Involvement                                                            | Is Clerk the Hang Source?         |
+| --------------------------- | ---------------------------------------------------------------------------- | --------------------------------- |
+| Proxy / middleware          | `clerkMiddleware()` wraps request pipeline; `auth()` called once per request | No — fast cookie read             |
+| `OnboardingGuard` server    | `ClerkRequestIdentitySource.get()` → `auth()`                                | Unlikely — fast in confirmed logs |
+| Client hydration            | `ClerkProvider` restores auth state; `HeaderAuthControls` mounts Clerk UI    | Possible minor delay, not a hang  |
+| `completeOnboarding` action | `auth()` called again for identity source                                    | No — fast                         |
 
----
-
-## 11. Whether Clerk is Still Materially Involved
-
-**At server entry (`OnboardingGuard`)**: Yes — Clerk `auth()` is called to get the userId. This is a local cookie read (~1–5ms). Not a hang source.
-
-**At client mount (`HeaderAuthControls`)**: Yes — Clerk JS initializes client-side auth state. Adds 100–300ms of non-blocking client initialization time. Not a hang.
-
-**At form submission (`completeOnboarding`)**: Yes — `auth()` called again in the server action (from `ClerkRequestIdentitySource.get()`). Another local cookie read. Not a hang.
-
-**Summary**: Clerk is present at all three phases but is not a hang source. All Clerk operations at this stage are fast local-cookie reads or cached instance checks.
+**Net assessment**: Clerk is present at every layer but is not the primary hang source. All Clerk `auth()` calls are fast cookie reads on the server. The global `ClerkProvider` on the client adds some initialization overhead but this is non-blocking and not the blank screen cause.
 
 ---
 
-## 12. Minimum Safe Next Fix Target
+## 10. Exact File/Function/Component Boundary
 
-### Fix 1 — Replace `<Suspense fallback={null}>` with visible loading state (HIGH PRIORITY)
+**Primary failure boundary**:
 
-**File**: `src/app/onboarding/layout.tsx:16`  
-**Change**: Replace `fallback={null}` with a minimal loading indicator
+> `src/app/onboarding/layout.tsx:16` — `<Suspense fallback={null}>` combined with absent `src/app/onboarding/loading.tsx`
 
-**Effect**: Converts the blank-page visual hang into a visible loading state. Users will see meaningful feedback during the 10–400ms DB query window. This addresses the primary perceptual issue without changing any behavior or logic.
+**Supporting failure boundaries** (observability and latency only):
 
-**Blast radius**: Minimal. Only `OnboardingLayout` visual behavior changes. No auth, security, or DB logic changes.
+> `src/app/onboarding/layout.tsx:22-67` — `OnboardingGuard` has no logging, runs redundant DB queries
 
-### Fix 2 — Change `form action={handleSubmit}` to direct server action reference (MEDIUM PRIORITY)
+**Not the failure boundary**:
+
+> `src/app/onboarding/onboarding-form.tsx` — passive client component, no mount-time effects
+
+---
+
+## 11. Minimum Safe Next Fix Targets
+
+### Fix 1 — Add `src/app/onboarding/loading.tsx` (HIGH — framework-idiomatic)
+
+**Effect**: Next.js App Router's segment-level loading convention. When `loading.tsx` exists, the router commits the new route shell immediately (including the loading UI), then streams the actual content. Eliminates the blank screen between redirect and form render.
+
+**Blast radius**: Minimal — adds a file, no logic changes to any existing component.
+
+**Comparison**: `src/app/security-showcase/loading.tsx` already exists and demonstrates the pattern is used elsewhere.
+
+### Fix 2 — Add logging to `OnboardingGuard` (HIGH — observability)
+
+**File**: `src/app/onboarding/layout.tsx`  
+**Effect**: Makes guard entry, decisions (redirect or render), and exit visible in server logs. Eliminates the current diagnostic black box. All other auth boundaries in the codebase do this; `OnboardingGuard` should too.
+
+**Blast radius**: Minimal — adds logging calls, no behavioral changes.
+
+### Fix 3 — Change `<form action={handleSubmit}>` to direct server action pattern (MEDIUM)
 
 **File**: `src/app/onboarding/onboarding-form.tsx`  
-**Change**: Use `form action={completeOnboarding}` directly, use `useFormStatus()` for pending state
+**Effect**: Use `<form action={completeOnboarding}>` directly with `useFormStatus()` for pending state. Follows the idiomatic Next.js 16 server action form pattern. Eliminates redirect-through-client-wrapper ambiguity.
 
-**Effect**: Uses the idiomatic React 19 / Next.js 16 server action form pattern. Redirect handling is owned by the framework rather than the client wrapper. Eliminates potential redirect miss if H2 is confirmed.
+**Blast radius**: Small — changes only `OnboardingForm` UI pattern. Server action logic unchanged.
 
-**Blast radius**: Small. Only `OnboardingForm` rendering behavior changes. Server action logic unchanged.
+### Fix 4 — Remove redundant DB lookups from `OnboardingGuard` (LOWER)
 
-### Fix 3 — Remove redundant `ensureProvisioned` from `completeOnboarding` (LOW PRIORITY)
+**File**: `src/app/onboarding/layout.tsx`  
+**Effect**: Remove or simplify the second identity + user lookup (already confirmed by `UsersLayout`). Reduces latency by 10–60ms per page load.
 
-**File**: `src/app/onboarding/actions.ts:38`  
-**Change**: Replace `ensureProvisioned()` call with a direct identity lookup (since user is already provisioned)  
-**Requires**: Implementation Agent + Architecture Guard review (crosses module contract boundary)
+**Blast radius**: Moderate — changes `OnboardingGuard` auth logic. Requires careful review since the guard is a safety check. Implementation Agent + Architecture Guard should validate.
+
+---
+
+## 12. Codex Analysis Agreement / Divergence
+
+A parallel analysis (`onboarding-transition-boundary-analysis-codex.md`) reached similar conclusions. Points of agreement:
+
+- Primary failure boundary: `OnboardingLayout` + `OnboardingGuard` async server-entry
+- `OnboardingForm` is NOT the first failing point
+- Hang classification: route-settlement related, not client-mount
+- Clerk is present but not the onboarding-specific cause
+- `loading.tsx` absence and `fallback={null}` are the primary architectural gaps
+
+Additional evidence from this analysis not in the Codex analysis:
+
+- **Proxy explicitly short-circuits for `isOnboardingRoute = true`** — no redirect loop risk from middleware (confirmed from `route-classification.ts:41` and `with-auth.ts:138`)
+- **`getAppContainer()` creates a new container per call** — confirms no DI state is shared between `UsersLayout` and `OnboardingGuard`
+- **`<Suspense fallback={null}>` exists at TWO levels** (root layout + onboarding layout) — double blank screen window
+- **`OnboardingForm` confirmed passive** at code level — no effects, no router hooks (eliminates client-mount as primary suspect)
 
 ---
 
 ## 13. Bottom Line
 
-1. **Exact likely failing boundary**: `<Suspense fallback={null}>` in `src/app/onboarding/layout.tsx:16` — blank page during Postgres queries creates the visual hang perception. Not a technical failure.
+1. **Exact likely failing boundary**: `src/app/onboarding/layout.tsx:16` — `<Suspense fallback={null}>` + absent `loading.tsx`. The blank screen during `OnboardingGuard`'s two sequential Postgres queries IS the perceived hang.
 
-2. **Hang classification**: **Route-settlement / streaming** — the RSC stream completes correctly (200 OK), but the client-visible content is deferred by the Suspense boundary with no fallback.
+2. **Hang classification**: Route-settlement level. Not client-mount. Not Clerk-specific. Not a technical failure — RSC stream completes correctly (200 OK).
 
-3. **Clerk involvement**: Peripheral. Not a hang source at this stage.
+3. **Clerk involvement**: Present as global participant but not the onboarding-specific hang source.
 
-4. **Minimum safe fix target**: `src/app/onboarding/layout.tsx:16` — replace `<Suspense fallback={null}>` with a visible loading indicator. Separate fix: `src/app/onboarding/onboarding-form.tsx` — use direct server action as form action.
+4. **Minimum safe fix targets**:
+   - **Fix 1** (highest priority): Add `src/app/onboarding/loading.tsx` — eliminates blank screen
+   - **Fix 2** (high priority): Add logging to `OnboardingGuard` — makes the boundary diagnosable
+   - **Fix 3** (medium): Direct server action form pattern in `OnboardingForm`
 
-5. **Technical failure status**: No confirmed technical failure at onboarding in current state. The fix from Phase 2 addressed the primary bootstrap RSC stream abort. The remaining issue is a UX perception gap (blank loading state) and a non-canonical form action pattern.
+5. **Do not start with** `OnboardingForm`, bootstrap, or Clerk client wiring.

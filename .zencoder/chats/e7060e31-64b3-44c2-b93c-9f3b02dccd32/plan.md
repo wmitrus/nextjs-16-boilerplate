@@ -209,5 +209,17 @@ Key findings:
 4. completeOnboarding redundantly calls ensureProvisioned() on every form submit — idempotent but unnecessary Postgres overhead.
 5. Clerk is present but not a hang source.
 6. Minimum safe fix targets:
-   - HIGH: src/app/onboarding/layout.tsx:16 — replace <Suspense fallback={null}> with visible loading indicator
-   - MEDIUM: src/app/onboarding/onboarding-form.tsx — use direct server action form action + useFormStatus
+
+---
+
+### [x] Ad-hoc: CSP Violation + Onboarding Form Non-Submission Investigation
+
+CSP violation at `normal?lang=en-us:1` reported. Dual issue: CSP eval block + onboarding form never submitting.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/csp-violation-form-submission-investigation.md
+
+Status: COMPLETE
+
+- HIGH: src/app/onboarding/layout.tsx:16 — replace <Suspense fallback={null}> with visible loading indicator
+- MEDIUM: src/app/onboarding/onboarding-form.tsx — use direct server action form action + useFormStatus

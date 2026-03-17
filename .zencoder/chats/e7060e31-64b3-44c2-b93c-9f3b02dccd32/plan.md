@@ -167,3 +167,25 @@ Output:
 Status: COMPLETE — No Failing Run Found
 
 Key finding: All 225 log lines (9 distinct sessions) show ZERO errors. All bootstrap runs with Postgres SUCCEEDED. The original failing run (TypeError: Failed to fetch) is not present in server.log — it occurred before the Phase 2 fix was applied. The fix is confirmed working. Current flow correctly navigates: sign-up → /users → /auth/bootstrap → provisioning:succeed → /onboarding. Onboarding form submission logs not captured — unknown whether end-to-end is fully working. If failure is still reported, the issue has moved to /onboarding, not /auth/bootstrap.
+
+---
+
+### [x] Ad-hoc: Onboarding Transition Boundary Analysis
+
+Investigation of the /users → /onboarding transition as the current primary failure boundary.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/onboarding-transition-boundary-analysis-zencoder.md
+
+Status: COMPLETE
+
+Key findings:
+
+1. No technical hang at OnboardingGuard server entry — all DB errors redirect to /auth/bootstrap (safe).
+2. <Suspense fallback={null}> in OnboardingLayout (layout.tsx:16) causes blank screen during Postgres queries — this is the primary visual "hang" perception source.
+3. OnboardingForm uses non-canonical form action pattern: form action={handleSubmit} (client wrapper) calls completeOnboarding server action. Direct form action={completeOnboarding} + useFormStatus() is the idiomatic Next.js 16 pattern. Redirect may not be handled identically.
+4. completeOnboarding redundantly calls ensureProvisioned() on every form submit — idempotent but unnecessary Postgres overhead.
+5. Clerk is present but not a hang source.
+6. Minimum safe fix targets:
+   - HIGH: src/app/onboarding/layout.tsx:16 — replace <Suspense fallback={null}> with visible loading indicator
+   - MEDIUM: src/app/onboarding/onboarding-form.tsx — use direct server action form action + useFormStatus

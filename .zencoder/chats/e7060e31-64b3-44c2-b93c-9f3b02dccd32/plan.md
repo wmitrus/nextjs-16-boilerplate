@@ -170,6 +170,28 @@ Key finding: All 225 log lines (9 distinct sessions) show ZERO errors. All boots
 
 ---
 
+### [x] Ad-hoc: Onboarding Entry Hardening Implementation
+
+Minimum safe onboarding-entry hardening: loading.tsx + OnboardingGuard observability.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/onboarding-hardening-implementation-report.md
+
+Status: COMPLETE — IMPLEMENTED
+
+Files changed:
+
+- src/app/onboarding/loading.tsx (CREATED) — segment-level skeleton loading UI
+- src/app/onboarding/layout.tsx (MODIFIED) — structured logging added to OnboardingGuard; no behavioral changes
+
+Deferred:
+
+- src/app/onboarding/onboarding-form.tsx — form pattern migration requires action signature change; separate pass needed
+
+Validation: typecheck PASS, lint PASS, arch:lint PASS, test 761/762 pass (1 pre-existing DB timeout failure)
+
+---
+
 ### [x] Ad-hoc: Onboarding Transition Boundary Analysis (UPDATED)
 
 Investigation of the /users → /onboarding transition as the current primary failure boundary.

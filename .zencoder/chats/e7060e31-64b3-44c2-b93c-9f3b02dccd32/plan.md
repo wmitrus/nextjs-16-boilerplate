@@ -117,7 +117,7 @@ Include:
 
 ---
 
-### [ ] Step: Validation
+### [x] Step: Validation (partial — runtime log analysis)
 
 Run repository validation commands.
 
@@ -141,3 +141,29 @@ Output:
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/bootstrap-pglite-vs-postgres-analysis.md
 
 Status: COMPLETE
+
+---
+
+### [x] Ad-hoc: Runtime Log Analysis (Postgres path post-fix)
+
+Analyzed pnpm dev runtime logs provided by user after implementation fix.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/runtime-validation-log-analysis.md
+
+Status: COMPLETE
+
+Key finding: Postgres path is functioning. User was provisioned in a prior bootstrap session (fix worked). Current session correctly identifies ONBOARDING_REQUIRED state. Onboarding form submission logs needed to confirm full end-to-end success.
+
+---
+
+### [x] Ad-hoc: Single Failing Postgres Run Correlation
+
+Strictly time-correlated investigation of one failing Postgres auth run.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/single-failing-postgres-run-correlation.md
+
+Status: COMPLETE — No Failing Run Found
+
+Key finding: All 225 log lines (9 distinct sessions) show ZERO errors. All bootstrap runs with Postgres SUCCEEDED. The original failing run (TypeError: Failed to fetch) is not present in server.log — it occurred before the Phase 2 fix was applied. The fix is confirmed working. Current flow correctly navigates: sign-up → /users → /auth/bootstrap → provisioning:succeed → /onboarding. Onboarding form submission logs not captured — unknown whether end-to-end is fully working. If failure is still reported, the issue has moved to /onboarding, not /auth/bootstrap.

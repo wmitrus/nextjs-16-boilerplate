@@ -2,11 +2,23 @@
 
 import * as React from 'react';
 
+import { getBrowserLogger } from '@/core/logger/browser';
+
 import { completeOnboarding } from './actions';
 
 export function OnboardingForm() {
   const [error, setError] = React.useState('');
   const [isPending, setIsPending] = React.useState(false);
+
+  React.useEffect(() => {
+    getBrowserLogger().info(
+      {
+        event: 'onboarding_form:mount',
+        component: 'OnboardingForm',
+      },
+      'OnboardingForm: mounted',
+    );
+  }, []);
 
   const handleSubmit = async (formData: FormData) => {
     setIsPending(true);

@@ -223,3 +223,24 @@ Status: COMPLETE
 
 - HIGH: src/app/onboarding/layout.tsx:16 — replace <Suspense fallback={null}> with visible loading indicator
 - MEDIUM: src/app/onboarding/onboarding-form.tsx — use direct server action form action + useFormStatus
+
+---
+
+### [x] Ad-hoc: Onboarding Client Probe Implementation
+
+Minimal post-guard client-side mount probe to determine whether the hang occurs before client mount, during mount, or after mount but before visible UI commit.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/onboarding-client-probe-implementation-report.md
+
+Status: COMPLETE — IMPLEMENTED
+
+Files changed:
+
+- src/app/onboarding/onboarding-client-probe.tsx (CREATED) — 'use client' probe logging mount/unmount via getBrowserLogger; renders [onboarding:hydrated] marker after hydration only
+- src/app/onboarding/page.tsx (MODIFIED) — mounts OnboardingClientProbe after OnboardingForm in a fragment
+- src/app/onboarding/onboarding-form.tsx (MODIFIED) — added useEffect mount log via getBrowserLogger; no behavioral change
+
+Validation: typecheck PASS, lint PASS, arch:lint PASS, test 762/762 pass (1 pre-existing drizzle DB timeout failure)
+
+Next action pending: user must confirm which probe scenario fires (A/B/C/D from report). If Scenario A, proceed with form submission fix: migrate OnboardingForm to form action={completeOnboarding} + useFormStatus().

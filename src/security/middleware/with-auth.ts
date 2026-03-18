@@ -290,7 +290,7 @@ export function withAuth(
 
     const onboardingComplete = isNodeMode(options)
       ? await resolveOnboardingComplete(options.userRepository, userId)
-      : true;
+      : req.cookies.get('__onboarding_pending')?.value !== '1';
 
     // 1. Redirect authenticated users away from auth routes (sign-in/sign-up)
     const authRouteRedirect = redirectAuthenticatedFromAuthRoute(
@@ -303,16 +303,14 @@ export function withAuth(
     }
 
     // 2. Enforce onboarding for private routes
-    if (isNodeMode(options)) {
-      const onboardingRedirect = redirectForIncompleteOnboarding(
-        req,
-        ctx,
-        userId,
-        onboardingComplete,
-      );
-      if (onboardingRedirect) {
-        return onboardingRedirect;
-      }
+    const onboardingRedirect = redirectForIncompleteOnboarding(
+      req,
+      ctx,
+      userId,
+      onboardingComplete,
+    );
+    if (onboardingRedirect) {
+      return onboardingRedirect;
     }
 
     // 3. Protect private routes

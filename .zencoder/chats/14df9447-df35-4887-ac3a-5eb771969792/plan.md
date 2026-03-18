@@ -70,7 +70,7 @@ Focus on:
 
 ---
 
-### [ ] Step: Architecture Impact Review
+### [x] Step: Architecture Impact Review
 
 Verify that the suspected fix does not violate architecture rules.
 
@@ -79,10 +79,11 @@ Output:
 
 Confirm:
 
-- module boundaries respected
-- DI usage correct
-- no security or auth regressions
-- runtime placement correct
+- module boundaries respected — PASS
+- DI usage correct — PASS
+- no security or auth regressions — PASS
+- runtime placement correct — PASS
+- REQUIRED follow-up: remove RouteTransitionProbe and OnboardingClientProbe before shipping
 
 ---
 
@@ -211,7 +212,7 @@ Key findings:
 
 ---
 
-### [ ] Step: Implementation — Cookie-Bridge Proxy Redirect
+### [x] Step: Implementation — Cookie-Bridge Proxy Redirect
 
 Apply the approved cookie-bridge shape from cookie-bridge-routing-remediation-shape.md.
 
@@ -229,7 +230,7 @@ Scope:
 
 ---
 
-### [ ] Step: Validation
+### [x] Step: Validation
 
 Run repository validation commands.
 

@@ -8,8 +8,6 @@ import { env } from '@/core/env';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
-import { RouteTransitionProbe } from './components/route-transition-probe';
-
 import { normalizeClerkPostAuthRedirect } from '@/modules/auth/lib/clerk-redirects';
 import { HeaderWithAuth } from '@/modules/auth/ui/HeaderWithAuth';
 
@@ -46,7 +44,6 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
     <>
       <HeaderWithAuth />
       <GlobalErrorHandlers />
-      <RouteTransitionProbe />
       {(env.VERCEL_ENV === 'production' || env.VERCEL_ENV === 'preview') && (
         <SpeedInsights />
       )}

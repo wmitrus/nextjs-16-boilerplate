@@ -2,7 +2,17 @@
 
 import { OrganizationSwitcher } from '@clerk/nextjs';
 
-export function BootstrapOrgRequired() {
+interface BootstrapOrgRequiredProps {
+  redirectUrl?: string;
+}
+
+export function BootstrapOrgRequired({
+  redirectUrl,
+}: BootstrapOrgRequiredProps) {
+  const continueUrl = redirectUrl
+    ? `/auth/bootstrap/start?redirect_url=${encodeURIComponent(redirectUrl)}`
+    : '/auth/bootstrap/start';
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="mx-auto max-w-md rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
@@ -16,8 +26,8 @@ export function BootstrapOrgRequired() {
         <OrganizationSwitcher
           hidePersonal
           createOrganizationMode="modal"
-          afterSelectOrganizationUrl="/auth/bootstrap"
-          afterCreateOrganizationUrl="/auth/bootstrap"
+          afterSelectOrganizationUrl={continueUrl}
+          afterCreateOrganizationUrl={continueUrl}
         />
       </div>
     </div>

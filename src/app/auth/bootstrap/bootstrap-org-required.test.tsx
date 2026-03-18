@@ -32,12 +32,30 @@ describe('BootstrapOrgRequired', () => {
     expect(screen.getByTestId('org-switcher')).toBeDefined();
   });
 
-  it('passes afterSelectOrganizationUrl="/auth/bootstrap" to OrganizationSwitcher', () => {
+  it('uses /auth/bootstrap/start as continuation URL when no redirectUrl provided', () => {
     render(<BootstrapOrgRequired />);
 
     expect(screen.getByTestId('org-switcher')).toHaveAttribute(
       'data-after-select',
-      '/auth/bootstrap',
+      '/auth/bootstrap/start',
+    );
+    expect(screen.getByTestId('org-switcher')).toHaveAttribute(
+      'data-after-create',
+      '/auth/bootstrap/start',
+    );
+  });
+
+  it('includes encoded redirectUrl in continuation URL when provided', () => {
+    render(<BootstrapOrgRequired redirectUrl="/users" />);
+
+    const switcher = screen.getByTestId('org-switcher');
+    expect(switcher).toHaveAttribute(
+      'data-after-select',
+      '/auth/bootstrap/start?redirect_url=%2Fusers',
+    );
+    expect(switcher).toHaveAttribute(
+      'data-after-create',
+      '/auth/bootstrap/start?redirect_url=%2Fusers',
     );
   });
 

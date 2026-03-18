@@ -155,6 +155,40 @@ Validation: typecheck PASS, lint PASS, arch:lint PASS, test 762/762 PASS (1 pre-
 
 ---
 
+### [x] Step: Architecture Review — Blocking-Route Layout Shape
+
+Reviewed root layout after Suspense removal caused "Data that blocks navigation was accessed outside of <Suspense>" error.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/blocking-route-layout-remediation-shape.md
+
+Key findings:
+
+- `cacheComponents: true` in next.config.ts enforces that `use()` call inside `ClientClerkProvider` requires a Suspense ancestor — Suspense above ClerkProvider is a framework requirement, not optional
+- The Suspense removal was architecturally incorrect; it must be restored with a visible (non-null) fallback
+- Approved shape: `<Suspense fallback={<RootLayoutShell />}>` scoped to the Clerk branch only, with a header skeleton as fallback
+- The navigation hang root cause (concurrent RSC conflict) is SEPARATE and requires a proxy.ts middleware-level redirect fix
+- Two forbidden patterns explicitly named: `fallback={null}` above ClerkProvider, and no Suspense above ClerkProvider with `cacheComponents: true`
+
+---
+
+### [ ] Step: Implementation — Layout Correction (Suspense with visible fallback)
+
+Apply the approved layout shape from blocking-route-layout-remediation-shape.md.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/layout-correction-implementation-report.md
+
+Scope:
+
+- `src/app/layout.tsx` only
+- Restore `import { Suspense } from 'react'`
+- Add `function RootLayoutShell()` local component (header skeleton shape)
+- Replace removed `<Suspense fallback={null}>` with `<Suspense fallback={<RootLayoutShell />}>` scoped to Clerk branch only
+- Validate: pnpm typecheck, pnpm lint, pnpm arch:lint, pnpm test
+
+---
+
 ### [ ] Step: Validation
 
 Run repository validation commands.

@@ -118,18 +118,40 @@ Validation: typecheck PASS, lint PASS, arch:lint PASS, test 762/762 PASS
 
 ---
 
-### [ ] Step: Implementation
+### [x] Step: Final Route Boundary Root Cause Verification
+
+Definitively identify the earliest client-side failing boundary using installed probes.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/final-route-boundary-root-cause.md
+
+Result:
+
+- Scenario B confirmed: `/users` committed client-side, `/onboarding` NEVER committed client-side
+- Root cause: Concurrent RSC navigation conflict — `UsersLayout.redirect('/onboarding')` (streaming redirect) races with Clerk's `router.refresh()` during post-SSO session finalization
+- Two concurrent RSC requests to `/onboarding` confirmed: second request arrived while first was still in-flight
+- React never commits either transition — silent failure, no errors
+- Earliest failing boundary: App Router route-commit step for `/onboarding`
+- Next fix target: move ONBOARDING_REQUIRED redirect from `UsersLayout` to middleware layer
+
+---
+
+### [x] Step: Implementation
 
 Apply the fix and update tests if needed.
 
 Output:
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/implementation-report.md
 
-Include:
+Files changed:
 
-- files changed
-- logic changes
-- tests updated
+- `src/app/layout.tsx` — MODIFIED: removed outer `<Suspense fallback={null}>` from RootLayout body; removed unused `Suspense` import
+
+Change: -3 lines (import + opening + closing Suspense tags). No logic changes.
+
+Rationale: The outer Suspense with `fallback={null}` wrapped ClerkProvider + AppLayoutContent + route children at the root, creating a catch-all that silently trapped the concurrent RSC navigation conflict during the /users → /onboarding transition. Removing it allows the App Router's own transition management to proceed without a user-managed null-fallback barrier above it.
+
+Validation: typecheck PASS, lint PASS, arch:lint PASS, test 762/762 PASS (1 pre-existing drizzle.test.ts failure unrelated)
 
 ---
 

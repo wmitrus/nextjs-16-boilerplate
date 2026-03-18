@@ -189,6 +189,46 @@ Scope:
 
 ---
 
+### [x] Step: Architecture Review — Cookie-Bridge Routing Shape
+
+Review proposed cookie-bridge design for the proxy-level onboarding redirect under Edge-runtime constraint.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/cookie-bridge-routing-remediation-shape.md
+
+Decision: APPROVED WITH MODIFICATIONS
+
+Key findings:
+
+- Raw pre-pipeline check in `proxy.ts` is REJECTED — bypasses RouteContext abstraction, duplicates path matching
+- Cookie check inside `withAuth` is APPROVED — uses existing `redirectForIncompleteOnboarding` and RouteContext
+- `bootstrap/page.tsx` sets `__onboarding_pending` cookie before redirect — APPROVED
+- `actions.ts` clears cookie after `updateOnboardingStatus(true)` — APPROVED
+- `users/layout.tsx` cookie-setting self-healing fallback — REJECTED (layer coupling)
+- `users/layout.tsx` keeps existing redirect unchanged as safety net — APPROVED
+- `proxy.ts` requires NO CHANGE — cookie check flows through withAuth
+- Cookie semantics: httpOnly=true, secure=production, sameSite=lax, path=/, maxAge=7days
+
+---
+
+### [ ] Step: Implementation — Cookie-Bridge Proxy Redirect
+
+Apply the approved cookie-bridge shape from cookie-bridge-routing-remediation-shape.md.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/cookie-bridge-implementation-report.md
+
+Scope:
+
+- `src/security/middleware/with-auth.ts` — read `__onboarding_pending` cookie in edge mode; remove `isNodeMode` gate from `redirectForIncompleteOnboarding` call
+- `src/app/auth/bootstrap/page.tsx` — set cookie before `redirect('/onboarding...')`
+- `src/app/onboarding/actions.ts` — clear cookie after `updateOnboardingStatus(true)` succeeds
+- `src/app/users/layout.tsx` — NO CHANGE
+- `src/proxy.ts` — NO CHANGE
+- Update tests: `with-auth.test.ts`, `bootstrap/page.test.tsx`, `actions.test.ts`
+
+---
+
 ### [ ] Step: Validation
 
 Run repository validation commands.

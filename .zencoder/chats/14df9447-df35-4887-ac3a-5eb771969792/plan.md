@@ -172,7 +172,7 @@ Key findings:
 
 ---
 
-### [ ] Step: Implementation — Layout Correction (Suspense with visible fallback)
+### [x] Step: Implementation — Layout Correction (Suspense with visible fallback)
 
 Apply the approved layout shape from blocking-route-layout-remediation-shape.md.
 

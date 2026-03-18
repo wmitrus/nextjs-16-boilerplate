@@ -14,6 +14,14 @@ const redirectMock = vi.hoisted(() =>
 
 const getAppContainerMock = vi.hoisted(() => vi.fn());
 
+const mockCookieDelete = vi.hoisted(() => vi.fn());
+vi.mock('next/headers', () => ({
+  cookies: vi.fn().mockResolvedValue({
+    delete: mockCookieDelete,
+    set: vi.fn(),
+  }),
+}));
+
 vi.mock('next/navigation', () => ({
   redirect: redirectMock,
 }));
@@ -127,6 +135,33 @@ describe('completeOnboarding', () => {
     const profileCallOrder =
       userRepository.updateProfile.mock.invocationCallOrder[0];
     expect(provisionCallOrder).toBeLessThan(profileCallOrder);
+  });
+
+  it('clears __onboarding_pending cookie after successful onboarding status update', async () => {
+    const formData = new FormData();
+    formData.set('displayName', 'Alice');
+
+    await expect(completeOnboarding(formData)).rejects.toThrow(
+      'REDIRECT:/users',
+    );
+
+    expect(mockCookieDelete).toHaveBeenCalledWith('__onboarding_pending');
+  });
+
+  it('does not clear cookie when updateOnboardingStatus throws', async () => {
+    userRepository.updateOnboardingStatus.mockRejectedValue(
+      new Error('db error'),
+    );
+
+    const formData = new FormData();
+    formData.set('displayName', 'Alice');
+
+    const result = await completeOnboarding(formData);
+
+    expect(result).toEqual({
+      error: 'There was an error updating your profile.',
+    });
+    expect(mockCookieDelete).not.toHaveBeenCalled();
   });
 
   it('redirects to sanitized custom redirect_url from formData on success', async () => {

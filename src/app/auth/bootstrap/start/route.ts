@@ -9,8 +9,6 @@ import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
 import { resolveBootstrapOutcome } from '../resolve-bootstrap-outcome';
 
-export const runtime = 'nodejs';
-
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'auth',

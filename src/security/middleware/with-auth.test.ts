@@ -507,6 +507,72 @@ describe('Auth Middleware', () => {
     expect(mockHandler).toHaveBeenCalled();
   });
 
+  it('should redirect to /onboarding in edge mode when __onboarding_pending cookie is set', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({
+      path: '/dashboard',
+      headers: { Cookie: '__onboarding_pending=1' },
+    });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/onboarding');
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+
+  it('should not redirect to /onboarding in edge mode when __onboarding_pending cookie is absent', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({ path: '/dashboard' });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+
+    await middleware(req, ctx);
+
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
+  it('should not redirect to /onboarding in edge mode when on onboarding route even with cookie set', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({
+      path: '/onboarding',
+      headers: { Cookie: '__onboarding_pending=1' },
+    });
+    const ctx = createMockRouteContext({
+      isPublicRoute: false,
+      isApi: false,
+      isOnboardingRoute: true,
+    });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+
+    await middleware(req, ctx);
+
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
   it('should redirect authenticated user to onboarding when tenant context is missing', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
     mockUserRepository.findById.mockResolvedValue({

@@ -102,6 +102,22 @@ Include:
 
 ---
 
+### [x] Step: Shared-Shell Transition Probe Implementation
+
+Add minimal client-side route-transition probe in shared root boundary.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/shared-shell-transition-probe-implementation-report.md
+
+Files changed:
+
+- `src/app/components/route-transition-probe.tsx` — CREATED
+- `src/app/layout.tsx` — MODIFIED (probe added to AppLayoutContent)
+
+Validation: typecheck PASS, lint PASS, arch:lint PASS, test 762/762 PASS
+
+---
+
 ### [ ] Step: Implementation
 
 Apply the fix and update tests if needed.

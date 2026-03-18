@@ -1,5 +1,6 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { AUTH, PROVISIONING } from '@/core/contracts';
@@ -165,6 +166,8 @@ export const completeOnboarding = async (formData: FormData) => {
       timezone: typeof timezone === 'string' && timezone ? timezone : undefined,
     });
     await userRepository.updateOnboardingStatus(internalUserId, true);
+    const cookieStore = await cookies();
+    cookieStore.delete('__onboarding_pending');
     logger.debug(
       { userId: internalUserId },
       'User profile and onboarding status updated successfully',

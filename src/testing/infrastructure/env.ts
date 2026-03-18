@@ -42,10 +42,14 @@ const defaultEnv: MutableEnv = {
   NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
   NEXT_PUBLIC_CLERK_SIGN_IN_URL: '/sign-in',
   NEXT_PUBLIC_CLERK_SIGN_UP_URL: '/sign-up',
-  NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: '/users',
-  NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: '/users',
-  NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL: '/users',
-  NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: '/users',
+  NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL:
+    '/auth/bootstrap/start?redirect_url=/users',
+  NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL:
+    '/auth/bootstrap/start?redirect_url=/users',
+  NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL:
+    '/auth/bootstrap/start?redirect_url=/users',
+  NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL:
+    '/auth/bootstrap/start?redirect_url=/users',
   NEXT_PUBLIC_CLERK_WAITLIST_URL: '/waitlist',
   E2E_ENABLED: false,
   AUTH_PROVIDER: 'clerk' as const,

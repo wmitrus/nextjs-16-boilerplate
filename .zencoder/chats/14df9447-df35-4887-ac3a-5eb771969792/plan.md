@@ -243,3 +243,43 @@ Commands:
 - pnpm lint
 - pnpm arch:lint
 - pnpm test
+
+---
+
+### [x] Step: Final Runtime-Legal Remediation Shape
+
+Revised cookie-bridge implementation shape after Next.js 16 runtime constraint confirmed:
+`cookies().set()` is illegal in RSC pages — only valid in Server Actions and Route Handlers.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/final-runtime-legal-onboarding-remediation-shape.md
+
+Decision: APPROVED — revised shape required
+
+Key findings:
+
+- Cookie-bridge concept remains correct — only write site must change
+- `bootstrap/page.tsx` cookies().set() is ILLEGAL (RSC page render) — must be removed
+- New Route Handler: `src/app/api/auth/onboarding-pending/route.ts` — sets cookie, legal write site
+- Bootstrap page change: redirect to `/api/auth/onboarding-pending?redirect_url=...` instead of direct `/onboarding` redirect
+- `actions.ts` cookies().delete() in Server Action — LEGAL, unchanged
+- `with-auth.ts` edge cookie read — LEGAL (req.cookies.get(), NextRequest native), unchanged
+- Route classified as isApi=true — skips redirectForIncompleteOnboarding (correct), enforces auth (correct)
+- Forbidden: cookies().set() in any RSC page/layout render
+
+### [ ] Step: Re-Implementation — Route Handler Cookie-Bridge
+
+Apply the revised final shape from final-runtime-legal-onboarding-remediation-shape.md.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/route-handler-cookie-bridge-implementation-report.md
+
+Scope:
+
+- `src/app/api/auth/onboarding-pending/route.ts` — CREATE: Route Handler sets cookie, redirects to /onboarding
+- `src/app/auth/bootstrap/page.tsx` — REVISE: remove cookies import + cookieStore.set() block; redirect to Route Handler
+- `src/security/middleware/with-auth.ts` — NO CHANGE (current impl is correct)
+- `src/app/onboarding/actions.ts` — NO CHANGE (cookie delete in Server Action is legal)
+- `src/app/users/layout.tsx` — NO CHANGE
+- `src/proxy.ts` — NO CHANGE
+- Update tests: bootstrap/page.test.tsx (redirect to route handler), new route.test.ts for onboarding-pending handler

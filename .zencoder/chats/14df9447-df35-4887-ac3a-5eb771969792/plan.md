@@ -267,7 +267,7 @@ Key findings:
 - Route classified as isApi=true — skips redirectForIncompleteOnboarding (correct), enforces auth (correct)
 - Forbidden: cookies().set() in any RSC page/layout render
 
-### [ ] Step: Re-Implementation — Route Handler Cookie-Bridge
+### [x] Step: Re-Implementation — Route Handler Cookie-Bridge
 
 Apply the revised final shape from final-runtime-legal-onboarding-remediation-shape.md.
 
@@ -276,10 +276,62 @@ Output:
 
 Scope:
 
-- `src/app/api/auth/onboarding-pending/route.ts` — CREATE: Route Handler sets cookie, redirects to /onboarding
-- `src/app/auth/bootstrap/page.tsx` — REVISE: remove cookies import + cookieStore.set() block; redirect to Route Handler
-- `src/security/middleware/with-auth.ts` — NO CHANGE (current impl is correct)
-- `src/app/onboarding/actions.ts` — NO CHANGE (cookie delete in Server Action is legal)
+- `src/app/auth/bootstrap/handoff/route.ts` — CREATED (path changed from /api/auth/onboarding-pending to /auth/bootstrap/handoff per Codex shape doc)
+- `src/app/auth/bootstrap/page.tsx` — REVISED: removed cookies import + cookieStore.set() block; redirect to /auth/bootstrap/handoff
+- `.env.example`, `.env.local` — UPDATED: Clerk redirect URLs → /auth/bootstrap?redirect_url=/users
+- Probes removed from layout.tsx, onboarding/page.tsx; probe files deleted
+- `src/security/middleware/with-auth.ts` — NO CHANGE
+- `src/app/onboarding/actions.ts` — NO CHANGE
 - `src/app/users/layout.tsx` — NO CHANGE
 - `src/proxy.ts` — NO CHANGE
-- Update tests: bootstrap/page.test.tsx (redirect to route handler), new route.test.ts for onboarding-pending handler
+- Tests updated: bootstrap/page.test.tsx, new handoff/route.test.ts
+
+Validation: typecheck PASS, lint PASS, arch:lint PASS, test 772/772 PASS
+
+Runtime result: HANG still present — app hangs at /auth/bootstrap?redirect_url=/users. Handoff route never reached.
+Root cause: same RSC redirect race relocated from /users to /auth/bootstrap. See final-post-auth-bootstrap-design-decision.md.
+
+---
+
+### [x] Step: Final Architecture Review — Post-Auth Bootstrap Design Decision
+
+Determine whether /auth/bootstrap should remain the direct Clerk post-auth landing page.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/final-post-auth-bootstrap-design-decision.md
+
+Decision: /auth/bootstrap MUST NOT remain the Clerk direct landing page.
+
+Key findings:
+
+- RSC redirect race is structural: any heavy async RSC page that uses redirect() races with Clerk's router.refresh()
+- Moving landing from /users to /auth/bootstrap relocated the race, did not fix it
+- Cookie bridge is correct for subsequent /users visits but cannot fix the first-visit race (cookie doesn't exist yet)
+- Route Handler as Clerk post-auth landing eliminates the race structurally (single HTTP response, no RSC streaming)
+- Probes were correctly removed — root cause diagnosable without them
+
+---
+
+### [x] Step: Re-Implementation — Route Handler as Clerk Post-Auth Landing
+
+Apply the final design decision from final-post-auth-bootstrap-design-decision.md.
+
+Scope:
+
+- `src/app/auth/bootstrap/start/route.ts` — CREATED: Route Handler (runtime=nodejs), identity check, provisioning, user lookup, cookie set, redirect
+- `src/app/auth/bootstrap/resolve-bootstrap-outcome.ts` — CREATED: shared server helper, typed BootstrapOutcome
+- `src/app/auth/bootstrap/page.tsx` — SIMPLIFIED: UI-only, reads ?state= and ?error=, no provisioning
+- `src/app/auth/bootstrap/bootstrap-org-required.tsx` — UPDATED: accepts redirectUrl prop, continuation → /auth/bootstrap/start
+- `src/app/auth/bootstrap/handoff/route.ts` — REMOVED (redundant)
+- `src/app/auth/bootstrap/handoff/route.test.ts` — REMOVED
+- `.env.example`, `.env.local` — UPDATED: Clerk redirect URLs → /auth/bootstrap/start?redirect_url=/users
+- `src/testing/infrastructure/env.ts` — UPDATED: fallback/force redirect defaults to match
+- `src/app/auth/bootstrap/page.test.tsx` — REWRITTEN: UI-only tests
+- `src/app/auth/bootstrap/start/route.test.ts` — CREATED: full coverage of Route Handler logic
+- `src/app/auth/bootstrap/bootstrap-org-required.test.tsx` — UPDATED: new prop + new URL assertions
+- `src/security/middleware/with-auth.ts` — NO CHANGE
+- `src/app/onboarding/actions.ts` — NO CHANGE
+- `src/app/users/layout.tsx` — NO CHANGE
+- `src/proxy.ts` — NO CHANGE
+
+Validation: typecheck PASS (source), lint PASS, arch:lint PASS, tests 773/773 PASS (drizzle DB-required test pre-existing failure excluded)

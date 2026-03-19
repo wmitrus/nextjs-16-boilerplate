@@ -40,6 +40,8 @@ Use a prompt when you want a repeatable entrypoint for a common task such as:
 - change validation
 - repository validation audit
 - debug investigation
+- task orchestration
+- browser-level validation
 
 ### Instruction
 
@@ -54,7 +56,7 @@ Use instructions to understand repository-level guardrails rather than task-spec
 
 ## Quick Start: Which File To Read First
 
-Start with one of these six guides:
+Start with one of these guides:
 
 - [01 - Architecture Guard Agent.md](./01%20-%20Architecture%20Guard%20Agent.md) → [architecture-guard.agent.md](../../../.github/agents/architecture-guard.agent.md)
 - [02 - Security & Auth Agent.md](./02%20-%20Security%20%26%20Auth%20Agent.md) → [security-auth.agent.md](../../../.github/agents/security-auth.agent.md)
@@ -63,6 +65,8 @@ Start with one of these six guides:
 - [05 - Validation Strategy Agent.md](./05%20-%20Validation%20Strategy%20Agent.md) → [validation-strategy.agent.md](../../../.github/agents/validation-strategy.agent.md)
 - [06 - Debug Investigation Agent.md](./06%20-%20Debug%20Investigation%20Agent.md) → [debug-investigation.agent.md](../../../.github/agents/debug-investigation.agent.md)
 - [07 - Playwright E2E Agent.md](./07%20-%20Playwright%20E2E%20Agent.md) → [playwright-e2e.agent.md](../../../.github/agents/playwright-e2e.agent.md)
+- [08 - Workflow Orchestrator Agent.md](./08%20-%20Workflow%20Orchestrator%20Agent.md) → [workflow-orchestrator.agent.md](../../../.github/agents/workflow-orchestrator.agent.md)
+- [09 - Task Brief Authoring.md](./09%20-%20Task%20Brief%20Authoring.md)
 
 Recommended starting points:
 
@@ -73,18 +77,36 @@ Recommended starting points:
 - implementation after constraints are known: [04 - Implementation Agents.md](./04%20-%20Implementation%20Agents.md)
 - deciding the minimum safe validation scope: [05 - Validation Strategy Agent.md](./05%20-%20Validation%20Strategy%20Agent.md)
 - real-browser verification in Playwright: [07 - Playwright E2E Agent.md](./07%20-%20Playwright%20E2E%20Agent.md)
+- multi-step coordination across specialists and artifacts: [08 - Workflow Orchestrator Agent.md](./08%20-%20Workflow%20Orchestrator%20Agent.md)
+- writing the requirements package that drives the whole workflow: [09 - Task Brief Authoring.md](./09%20-%20Task%20Brief%20Authoring.md)
 
 ## Available Slash Prompts
 
 These prompts currently exist in `.github/prompts/`:
 
 - `/Auth Flow Change Review` → [auth-flow-change-review.prompt.md](../../../.github/prompts/auth-flow-change-review.prompt.md)
-- `/Auth Flow Playwright E2E` → [auth-flow-playwright-e2e.prompt.md](../../../.github/prompts/auth-flow-playwright-e2e.prompt.md)
 - `/Change Validation` → [change-validation.prompt.md](../../../.github/prompts/change-validation.prompt.md)
 - `/Debug Investigation` → [debug-investigation.prompt.md](../../../.github/prompts/debug-investigation.prompt.md)
+- `/Playwright E2E Validation` → [playwright-e2e-validation.prompt.md](../../../.github/prompts/playwright-e2e-validation.prompt.md)
 - `/Repository Baseline Validation` → [repository-baseline-validation.prompt.md](../../../.github/prompts/repository-baseline-validation.prompt.md)
+- `/Workflow Task` → [workflow-task.prompt.md](../../../.github/prompts/workflow-task.prompt.md)
 
 Use prompts when you want a ready-made workflow instead of invoking a specialist manually.
+
+## Recommended Universal Flow
+
+For non-trivial work, keep the reusable setup generic and put the task specificity into requirement documents.
+
+Recommended operating model:
+
+1. Write a task brief or requirements doc for the specific task.
+2. Reference any scenario matrix, checklist, acceptance criteria, or supporting docs.
+3. Start `/Workflow Task` and provide the description plus the relevant files.
+4. Let the orchestrator create `.copilot/tasks/{task_id}/plan.md` and `intake.md`.
+5. Let the orchestrator route to the right specialists.
+6. If browser evidence is required, use `/Playwright E2E Validation` or let the orchestrator invoke `07 - Playwright E2E`.
+
+Keep one-off task rules in the task brief, not in a one-off prompt.
 
 ## Repository Guardrails
 

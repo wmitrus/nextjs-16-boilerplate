@@ -45,14 +45,14 @@ describe('OnboardingGuard', () => {
     });
   });
 
-  it('redirects externally-authenticated but unprovisioned users to bootstrap', async () => {
+  it('redirects externally-authenticated but unprovisioned users to bootstrap start', async () => {
     identityProvider.getCurrentIdentity.mockRejectedValue(
       new UserNotProvisionedError(),
     );
 
     await expect(
       OnboardingGuard({ children: <div>content</div> }),
-    ).rejects.toThrow('REDIRECT:/auth/bootstrap');
+    ).rejects.toThrow('REDIRECT:/auth/bootstrap/start?redirect_url=/users');
   });
 
   it('redirects to bootstrap db-error when getCurrentIdentity throws a non-UserNotProvisionedError', async () => {
@@ -82,13 +82,13 @@ describe('OnboardingGuard', () => {
     ).rejects.toThrow('REDIRECT:/sign-in');
   });
 
-  it('redirects to bootstrap when the internal user row is missing', async () => {
+  it('redirects to bootstrap start when the internal user row is missing', async () => {
     identityProvider.getCurrentIdentity.mockResolvedValue({ id: 'u-1' });
     userRepository.findById.mockResolvedValue(null);
 
     await expect(
       OnboardingGuard({ children: <div>content</div> }),
-    ).rejects.toThrow('REDIRECT:/auth/bootstrap');
+    ).rejects.toThrow('REDIRECT:/auth/bootstrap/start?redirect_url=/users');
   });
 
   it('redirects onboarded users to /users', async () => {

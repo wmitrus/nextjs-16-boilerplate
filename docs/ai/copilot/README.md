@@ -62,6 +62,7 @@ Start with one of these six guides:
 - [04 - Implementation Agents.md](./04%20-%20Implementation%20Agents.md) → [implementation-agent.agent.md](../../../.github/agents/implementation-agent.agent.md)
 - [05 - Validation Strategy Agent.md](./05%20-%20Validation%20Strategy%20Agent.md) → [validation-strategy.agent.md](../../../.github/agents/validation-strategy.agent.md)
 - [06 - Debug Investigation Agent.md](./06%20-%20Debug%20Investigation%20Agent.md) → [debug-investigation.agent.md](../../../.github/agents/debug-investigation.agent.md)
+- [07 - Playwright E2E Agent.md](./07%20-%20Playwright%20E2E%20Agent.md) → [playwright-e2e.agent.md](../../../.github/agents/playwright-e2e.agent.md)
 
 Recommended starting points:
 
@@ -71,12 +72,14 @@ Recommended starting points:
 - App Router, proxy, route handler, server action, or caching review: [03 - Next.js Runtime Agent.md](./03%20-%20Next.js%20Runtime%20Agent.md)
 - implementation after constraints are known: [04 - Implementation Agents.md](./04%20-%20Implementation%20Agents.md)
 - deciding the minimum safe validation scope: [05 - Validation Strategy Agent.md](./05%20-%20Validation%20Strategy%20Agent.md)
+- real-browser verification in Playwright: [07 - Playwright E2E Agent.md](./07%20-%20Playwright%20E2E%20Agent.md)
 
 ## Available Slash Prompts
 
 These prompts currently exist in `.github/prompts/`:
 
 - `/Auth Flow Change Review` → [auth-flow-change-review.prompt.md](../../../.github/prompts/auth-flow-change-review.prompt.md)
+- `/Auth Flow Playwright E2E` → [auth-flow-playwright-e2e.prompt.md](../../../.github/prompts/auth-flow-playwright-e2e.prompt.md)
 - `/Change Validation` → [change-validation.prompt.md](../../../.github/prompts/change-validation.prompt.md)
 - `/Debug Investigation` → [debug-investigation.prompt.md](../../../.github/prompts/debug-investigation.prompt.md)
 - `/Repository Baseline Validation` → [repository-baseline-validation.prompt.md](../../../.github/prompts/repository-baseline-validation.prompt.md)
@@ -88,6 +91,7 @@ Use prompts when you want a ready-made workflow instead of invoking a specialist
 These instructions currently shape default behavior:
 
 - `.github/instructions/agent-delegation.instructions.md`
+- `.github/instructions/agent-artifacts.instructions.md`
 - `.github/instructions/implementation-validation.instructions.md`
 
 In practice, this means:
@@ -95,6 +99,7 @@ In practice, this means:
 - ambiguous bug hunts should go to Debug Investigation first
 - non-trivial design review should go to the relevant specialist
 - broad test expansion should be reviewed by Validation Strategy first
+- non-trivial Copilot work should create a task workspace under `.copilot/tasks/`
 - auth/bootstrap/onboarding work must follow the auth-flow guidance and verification matrix
 
 ## Auth-Flow Note

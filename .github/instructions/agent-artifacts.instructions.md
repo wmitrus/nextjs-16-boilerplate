@@ -11,8 +11,10 @@ Task workspace rules:
 
 - create one directory per task
 - create `plan.md` first before specialist analysis or implementation begins
+- create `intake.md` immediately after `plan.md` to normalize the source requirements and references for the task
 - each specialist agent must save its output as a separate artifact in the same task directory
 - later steps must read earlier relevant artifacts instead of silently re-deriving them
+- keep source requirement documents in their original repository location; task artifacts should summarize and reference them rather than copy them wholesale
 
 Minimum expected files when relevant:
 
@@ -23,6 +25,7 @@ Minimum expected files when relevant:
 - `runtime-review.md`
 - `validation-strategy.md`
 - `constraints.md`
+- `implementation-plan.md`
 - `implementation-report.md`
 - `validation-report.md`
 - `playwright-e2e-report.md`

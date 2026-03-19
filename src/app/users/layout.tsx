@@ -54,10 +54,11 @@ export default async function UsersLayout({
         ? 'redirect:/onboarding'
         : access.status === 'UNAUTHENTICATED'
           ? 'redirect:/sign-in'
-          : access.status === 'BOOTSTRAP_REQUIRED' ||
-              access.status === 'TENANT_CONTEXT_REQUIRED'
-            ? 'redirect:/auth/bootstrap'
-            : 'redirect:/';
+          : access.status === 'BOOTSTRAP_REQUIRED'
+            ? 'redirect:/auth/bootstrap/start'
+            : access.status === 'TENANT_CONTEXT_REQUIRED'
+              ? 'redirect:/auth/bootstrap'
+              : 'redirect:/';
 
   logger.info(
     {
@@ -88,7 +89,7 @@ export default async function UsersLayout({
   }
 
   if (access.status === 'BOOTSTRAP_REQUIRED') {
-    redirect('/auth/bootstrap?redirect_url=/users');
+    redirect('/auth/bootstrap/start?redirect_url=/users');
   }
 
   if (access.status === 'ONBOARDING_REQUIRED') {

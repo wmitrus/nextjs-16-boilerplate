@@ -1,34 +1,38 @@
-Zrób to jak krótki, kontrolowany test regresji, nie jako luźne klikanie.
+# Title
 
-# Kolejność
+Auth Regression Tests
 
-## 1. Przygotuj czyste środowisko
+## Objective
 
-Przed serią testów:
+Do this as a short, controlled regression test, not as loose clicking around.
 
-- uruchom docelowy backend DB
-- upewnij się, że masz właściwe env dla Clerk redirectów
-- wyczyść stan testowego użytkownika albo przygotuj:
-  - jedno świeże konto
-  - jedno konto już onboardowane
-  - jedno konto nieukończone
+## Environment / Preconditions
 
-Dobrze też:
+Before the test run:
 
-- otworzyć terminal z pnpm dev
-- mieć otwarte logi aplikacji
-- mieć otwarte DevTools:
+- start the target backend DB
+- make sure you have the correct env for Clerk redirects
+- clear the test user state or prepare:
+  - one fresh account
+  - one already onboarded account
+  - one incomplete account
+
+Also good to have:
+
+- an open terminal with `pnpm dev`
+- application logs open
+- DevTools open:
   - Network
   - Console
   - Application/Cookies
 
-## 2. Wykonuj scenariusze po kolei z matrixa
+## Scenarios / Use Cases
 
-Nie wszystko naraz. Zacznij od minimum:
+Do not do everything at once. Start with the minimum:
 
 ### AF-01 / AF-02 / AF-03 / AF-04
 
-nowy user:
+new user:
 
 - sign-up
 - bootstrap/start
@@ -40,97 +44,97 @@ nowy user:
 
 returning onboarded user:
 
-- wyloguj
-- zaloguj ponownie
-- powinien wejść prosto na /users
+- log out
+- log in again
+- should go directly to /users
 
 ### AF-06 / AF-07
 
-user nieukończony:
+incomplete user:
 
-- zaloguj takim kontem
-- sprawdź czy idzie na /onboarding, nie wisi na /users
+- log in with such an account
+- check whether it goes to /onboarding and does not hang on /users
 
 ### AF-08 / AF-09
 
-ręczne wejście:
+manual entry:
 
-- /users po ukończeniu
-- /onboarding po ukończeniu
+- /users after completion
+- /onboarding after completion
 
 ### AF-12 / AF-13 / AF-14 / AF-15
 
-sygnał cookie:
+cookie signal:
 
-- sprawdź czy cookie jest ustawiane tylko tam, gdzie powinno
-- sprawdź czy znika po ukończeniu onboardingu
-- sprawdź że DB nadal jest prawdą
+- check whether the cookie is set only where it should be
+- check whether it disappears after onboarding is completed
+- check that the DB is still the source of truth
 
 ### AF-17 / AF-18 / AF-21
 
-stabilność runtime:
+runtime stability:
 
-- brak blocking-route
-- brak Rendering...
-- brak wyścigu /users -> /onboarding
+- no blocking-route
+- no Rendering...
+- no /users -> /onboarding race
 
-# Co zapisywać przy każdym scenariuszu
+## Evidence Expectations
 
-Dla każdego ID z matrixa zapisz tylko:
+For each ID from the matrix, record only:
 
 - status: PASS / FAIL / DEFERRED
-- co zrobiłeś
-- co się stało
-- najważniejszy dowód:
-  - URL końcowy
-  - 1–2 kluczowe logi
-  - ewentualnie cookie / network
+- what you did
+- what happened
+- the most important evidence:
+  - final URL
+  - 1-2 key logs
+  - optionally cookie / network
 
-Przykład wpisu:
+Example entry:
 
 ```md
 AF-03 — PASS
-Nowy user wypełnił onboarding, submit przeszedł, redirect na /users.
-Dowód:
+New user completed onboarding, submit succeeded, redirect to /users.
+Evidence:
 
 - POST /onboarding?redirect_url=%2Fusers 303
 - users_guard:decision => ALLOWED
 - onboardingComplete: true
 ```
 
-# Na co patrzeć w runtime
+## Affected Areas
 
-Podczas testów sprawdzaj zawsze te same rzeczy:
+During the tests, always check the same things:
 
 URL
 
-- czy kończysz na właściwej trasie
+- whether you end on the correct route
 
-Logi serwera
+Server logs
 
 - users_guard:decision
 - onboarding_guard:decision
 - provisioning:ensure:\*
-- błędy runtime
+- runtime errors
 
 Browser / DevTools
 
-- czy nie ma Rendering...
-- czy nie ma blocking-route
-- czy route commit wygląda poprawnie
-- czy nie ma starych probe errors
+- whether there is no Rendering...
+- whether there is no blocking-route
+- whether route commit looks correct
+- whether there are no old probe errors
 
 Cookies
 
-- czy \_\_onboarding_pending pojawia się i znika wtedy, kiedy powinno
+- whether `__onboarding_pending` appears and disappears when it should
 
-Jak to zrobić profesjonalnie organizacyjnie
+## Verification Sources
 
-Najlepiej:
+Best approach:
 
-- jeden plik AUTH_FLOW_VERIFICATION_MATRIX.md
-- dopisujesz statusy ręcznie
-- jedna sekcja na daną rundę testów, np.:
+- one AUTH_FLOW_VERIFICATION_MATRIX.md file
+- you add statuses manually
+- one section for a given test run, for example:
 
 ```md
 ## Verification Run — 2026-03-19
@@ -140,22 +144,22 @@ Branch: feat/auth-flow-fix
 Clerk redirect target: /auth/bootstrap/start?redirect_url=/users
 ```
 
-Pod tym uzupełniasz scenariusze.
+Under it, you fill in the scenarios.
 
-# Kiedy uznać flow za zweryfikowany
+## Acceptance Criteria
 
-Dopiero gdy:
+Only when:
 
-- wszystkie scenariusze minimum są PASS
-- nie ma Rendering...
-- nie ma blocking-route
-- onboarding cookie działa poprawnie
-- returning user działa poprawnie
-- ręczne wejścia na /users i /onboarding zachowują się poprawnie
+- all minimum scenarios are PASS
+- there is no Rendering...
+- there is no blocking-route
+- the onboarding cookie works correctly
+- the returning user works correctly
+- manual entry to /users and /onboarding behaves correctly
 
-# Czego nie robić
+## Constraints
 
-- nie testuj tylko jednego przypadku
-- nie opieraj się wyłącznie na “na oko działa”
-- nie zamykaj taska bez wpisania wyników do matrixa
-- nie mieszaj wielu kont i wielu stanów bez notatek
+- do not test only one case
+- do not rely only on “it seems to work”
+- do not close the task without entering the results into the matrix
+- do not mix many accounts and many states without notes

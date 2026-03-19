@@ -1,10 +1,11 @@
 ---
 applyTo: '**'
-description: 'Use when deciding whether to delegate work to the Debug Investigation, Architecture Guard, Security & Auth, Next.js Runtime, Validation Strategy, Playwright E2E, or Implementation Agent.'
+description: 'Use when deciding whether to delegate work to the Workflow Orchestrator, Debug Investigation, Architecture Guard, Security & Auth, Next.js Runtime, Validation Strategy, Playwright E2E, or Implementation Agent.'
 ---
 
 Delegate to the specialized workspace agents when the task clearly matches one of these scopes:
 
+- Use `08 - Workflow Orchestrator` when one task needs multiple specialist agents in sequence, explicit artifact management, and plan-first execution under `.copilot/tasks/{task_id}/`.
 - Use `06 - Debug Investigation` for unclear bugs, unstable flows, intermittent failures, env-driven divergence, race conditions, ordering issues, or multi-layer failures where evidence must be gathered before choosing architecture, security, runtime, validation, or implementation work.
 - Use `01 - Architecture Guard` for architecture review, modular-monolith boundaries, dependency direction, DI/composition discipline, auth-routing design shape, or docs-vs-code drift.
 - Use `02 - Security & Auth` for authentication, authorization, trust boundaries, tenant/org context, provider isolation, or sensitive-data exposure review.
@@ -16,6 +17,8 @@ Delegate to the specialized workspace agents when the task clearly matches one o
 Do not delegate by default when the task is simple, mixed, or can be handled directly without specialization.
 
 For ambiguous bug hunts, use `06 - Debug Investigation` before Architecture Guard, Security & Auth, Next.js Runtime, Validation Strategy, or Implementation Agent.
+
+For multi-step tasks that must be designed, implemented, validated, and documented through one controlled flow, use `08 - Workflow Orchestrator`.
 
 Before delegating auth/bootstrap/onboarding routing work, ensure the relevant agent reads:
 

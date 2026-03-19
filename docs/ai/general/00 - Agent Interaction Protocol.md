@@ -46,6 +46,8 @@ If the issue is classified as a runtime bug:
 
 ## Authority Domains
 
+Debug Investigation Agent — evidence gathering, flow tracing, and ambiguity reduction before specialist decisions
+
 Architecture Guard Agent — architecture and module structure
 
 Security/Auth Agent — security and trust boundaries
@@ -58,7 +60,33 @@ Implementation Agent — code implementation under constraints defined by all ab
 
 ---
 
+## Default Delegation Guidance
+
+For non-trivial work, delegate to the specialist agent whose authority best matches the active decision:
+
+- Debug Investigation Agent first for unclear bugs, unstable flows, intermittent failures, env-driven divergence, race conditions, ordering bugs, or multi-layer failures where the right specialist is not yet clear
+- Architecture Guard Agent for module boundaries, dependency direction, DI/composition shape, auth-routing design shape, or docs-vs-code drift
+- Security/Auth Agent for authentication, authorization, tenant/org trust, provider isolation, or sensitive-data exposure review
+- Next.js Runtime Agent for App Router behavior, server/client placement, route handlers, server actions, `src/proxy.ts`, caching/revalidation, or Edge vs Node runtime analysis
+- Validation Strategy Agent for repository validation posture, minimum safe validation scope, broad test-addition decisions, over-mocking review, or choosing between unit, integration, e2e, contract-style, and CI validation
+- Implementation Agent only after the relevant constraints are clear enough to execute safely
+
+Do not delegate by default when the task is simple, mixed, or can be handled directly without specialist isolation.
+
+For ambiguous bug hunts, Debug Investigation Agent should run before Architecture Guard, Security/Auth, Next.js Runtime, Validation Strategy, or Implementation Agent.
+
+---
+
 ## Agent Responsibilities
+
+### Debug Investigation Agent
+
+Final authority on:
+
+- evidence gathering for unclear failures
+- execution-path tracing across layers
+- distinguishing confirmed facts from likely hypotheses
+- reducing ambiguity before specialist review
 
 ### Architecture Guard Agent
 

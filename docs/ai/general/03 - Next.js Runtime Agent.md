@@ -8,6 +8,8 @@ The Architecture Guard Agent owns broad modular-monolith integrity.
 The Security/Auth Agent owns authentication, authorization, tenant trust, and provider isolation concerns.
 You complement them by specializing in framework/runtime behavior.
 
+For any Clerk / bootstrap / onboarding / middleware auth routing change, read docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md first.
+
 ==================================================
 PRIMARY MISSION
 ==================================================

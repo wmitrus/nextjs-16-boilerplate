@@ -77,7 +77,7 @@ describe('Auth Middleware', () => {
     mockHandler.mockClear();
   });
 
-  it('should redirect authenticated users from auth routes to bootstrap (onboarding complete)', async () => {
+  it('should redirect authenticated users from auth routes to bootstrap start (onboarding complete)', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',
     });
@@ -99,11 +99,13 @@ describe('Auth Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
+    expect(res.headers.get('location')).toBe(
+      'http://localhost/auth/bootstrap/start?redirect_url=%2Fusers',
+    );
     expect(mockHandler).not.toHaveBeenCalled();
   });
 
-  it('should redirect authenticated users from auth routes to bootstrap (onboarding incomplete)', async () => {
+  it('should redirect authenticated users from auth routes to bootstrap start (onboarding incomplete)', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',
     });
@@ -125,7 +127,9 @@ describe('Auth Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
+    expect(res.headers.get('location')).toBe(
+      'http://localhost/auth/bootstrap/start?redirect_url=%2Fusers',
+    );
     expect(mockHandler).not.toHaveBeenCalled();
   });
 
@@ -192,7 +196,7 @@ describe('Auth Middleware', () => {
     expect(mockHandler).toHaveBeenCalledTimes(1);
   });
 
-  it('should redirect authenticated users from sign-up route to bootstrap', async () => {
+  it('should redirect authenticated users from sign-up route to bootstrap start', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',
     });
@@ -214,7 +218,9 @@ describe('Auth Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
+    expect(res.headers.get('location')).toBe(
+      'http://localhost/auth/bootstrap/start?redirect_url=%2Fusers',
+    );
     expect(mockHandler).not.toHaveBeenCalled();
   });
 

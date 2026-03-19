@@ -55,13 +55,17 @@ describe('check-env-consistency', () => {
 
 describe('checkClerkRedirectUrls', () => {
   const CORRECT_ENV = {
-    NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL: '/auth/bootstrap',
-    NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: '/auth/bootstrap',
-    NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: '/auth/bootstrap',
-    NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: '/auth/bootstrap',
+    NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL:
+      '/auth/bootstrap/start?redirect_url=/users',
+    NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL:
+      '/auth/bootstrap/start?redirect_url=/users',
+    NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL:
+      '/auth/bootstrap/start?redirect_url=/users',
+    NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL:
+      '/auth/bootstrap/start?redirect_url=/users',
   };
 
-  it('returns no warnings when all 4 vars are /auth/bootstrap', () => {
+  it('returns no warnings when all 4 vars use the bootstrap start landing target', () => {
     const { warnings } = checkClerkRedirectUrls(CORRECT_ENV, 'development');
     expect(warnings).toEqual([]);
   });

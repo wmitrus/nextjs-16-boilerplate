@@ -51,6 +51,12 @@ describe('BootstrapPage', () => {
     ).toBe('');
   });
 
+  it('renders org-required UI when reason=org-required', async () => {
+    render(await BootstrapPage(makeProps({ reason: 'org-required' })));
+    expect(screen.getByTestId('bootstrap-org-required')).toBeDefined();
+    expect(screen.queryByTestId('bootstrap-error')).toBeNull();
+  });
+
   it('renders cross_provider_linking error UI', async () => {
     render(await BootstrapPage(makeProps({ error: 'cross_provider_linking' })));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent(
@@ -79,6 +85,18 @@ describe('BootstrapPage', () => {
 
   it('defaults to db_error for an unknown error param', async () => {
     render(await BootstrapPage(makeProps({ error: 'something_unexpected' })));
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
+  it('maps reason=tenant-lost to tenant_config UI', async () => {
+    render(await BootstrapPage(makeProps({ reason: 'tenant-lost' })));
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent(
+      'tenant_config',
+    );
+  });
+
+  it('maps reason=db-error to db_error UI', async () => {
+    render(await BootstrapPage(makeProps({ reason: 'db-error' })));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 

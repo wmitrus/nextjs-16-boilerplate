@@ -120,11 +120,10 @@ function redirectAuthenticatedFromAuthRoute(
     return null;
   }
 
-  const bootstrapUrl = new URL('/auth/bootstrap', req.url);
-  const existingRedirectUrl = req.nextUrl.searchParams.get('redirect_url');
-  if (existingRedirectUrl) {
-    bootstrapUrl.searchParams.set('redirect_url', existingRedirectUrl);
-  }
+  const bootstrapUrl = new URL('/auth/bootstrap/start', req.url);
+  const existingRedirectUrl =
+    req.nextUrl.searchParams.get('redirect_url') ?? '/users';
+  bootstrapUrl.searchParams.set('redirect_url', existingRedirectUrl);
 
   return NextResponse.redirect(bootstrapUrl);
 }

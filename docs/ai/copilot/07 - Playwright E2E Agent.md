@@ -4,10 +4,10 @@ Real agent file: [playwright-e2e.agent.md](../../../.github/agents/playwright-e2
 
 - Defines `07 - Playwright E2E` as a real-browser verification specialist for this repository
 - Focuses on:
-  - auth/bootstrap/onboarding browser flows
+  - task-driven browser flows defined by requirements, matrices, or checklists
   - cookies, redirects, hydration, and route transitions
   - Playwright scenario execution against real browser behavior
-  - mapping observed results back to the auth-flow verification matrix
+  - mapping observed results back to the task's verification source of truth
 - Uses `read`, `search`, and `execute`, so it can inspect the repo and run targeted Playwright commands without drifting into implementation
 - Returns browser-verification results in a stable E2E shape:
   - Objective
@@ -23,9 +23,18 @@ Real agent file: [playwright-e2e.agent.md](../../../.github/agents/playwright-e2
 ## When to use it
 
 - When unit or integration tests are not enough and browser-realistic evidence is required
+- When the task already defines browser scenarios in requirements, a matrix, or a checklist
 - When auth/bootstrap/onboarding behavior must be verified in a real browser
 - When redirects, cookies, hydration, or route-commit behavior are part of the risk
 - When Validation Strategy or Debug Investigation concludes that Playwright E2E is required
+
+## General E2E Note
+
+For any orchestrated task:
+
+- read the task's `plan.md` and `intake.md` first
+- use the task's requirement docs, checklists, or scenario matrix as the verification source of truth
+- if `implementation-plan.md` exists, use it to understand intended scenario coverage and sequencing
 
 ## Auth-Flow Note
 
@@ -38,15 +47,15 @@ For any auth/bootstrap/onboarding E2E verification:
 
 ## Example prompts to try
 
-- "Run focused Playwright E2E for the affected auth-flow scenarios."
-- "Verify the onboarding redirect flow in a real browser and map results to the matrix."
-- "Run Chromium verification for the auth bootstrap change and capture evidence."
-- "Check whether the `/users -> /onboarding` race is really gone in Playwright."
+- "Run Playwright E2E validation for this task using the attached scenario checklist."
+- "Verify the onboarding redirect flow in a real browser and map results to the provided matrix."
+- "Run Chromium verification for this workflow task and capture evidence."
+- "Check the high-risk browser scenarios from the task brief and report the gaps."
 
 ## Available slash prompt
 
-Real prompt file: [auth-flow-playwright-e2e.prompt.md](../../../.github/prompts/auth-flow-playwright-e2e.prompt.md)
+Real prompt file: [playwright-e2e-validation.prompt.md](../../../.github/prompts/playwright-e2e-validation.prompt.md)
 
 ```bash
-/Auth Flow Playwright E2E
+/Playwright E2E Validation
 ```

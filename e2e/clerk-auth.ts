@@ -220,7 +220,7 @@ export async function signInClerkIdentityE2E(
 
 export async function signInE2E(page: Page): Promise<void> {
   await signInClerkIdentityE2E(page, 'singleProvisionedUser');
-  await page.goto('/auth/bootstrap?redirect_url=/users');
+  await page.goto('/auth/bootstrap/start?redirect_url=/users');
 
   if (page.url().includes('/onboarding')) {
     await completeGenericOnboarding(page);

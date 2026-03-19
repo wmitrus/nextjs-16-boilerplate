@@ -26,7 +26,7 @@ async function waitForBootstrapNavigation(
       return false;
     }
 
-    return new URL(request.url()).pathname === '/auth/bootstrap';
+    return new URL(request.url()).pathname === '/auth/bootstrap/start';
   });
 
   await action();
@@ -66,7 +66,7 @@ test.describe('Authentication E2E', () => {
     await expect(page.getByRole('button', { name: /sign up/i })).toBeVisible();
   });
 
-  test('sign-in via /sign-in page force redirects through /auth/bootstrap', async ({
+  test('sign-in via /sign-in page force redirects through /auth/bootstrap/start', async ({
     page,
   }) => {
     test.skip(
@@ -90,7 +90,7 @@ test.describe('Authentication E2E', () => {
     });
   });
 
-  test('sign-up via /sign-up page force redirects through /auth/bootstrap', async ({
+  test('sign-up via /sign-up page force redirects through /auth/bootstrap/start', async ({
     page,
   }) => {
     const clerkUi = createPageObjects({
@@ -109,7 +109,7 @@ test.describe('Authentication E2E', () => {
     });
   });
 
-  test('sign-in via header modal force redirects through /auth/bootstrap', async ({
+  test('sign-in via header modal force redirects through /auth/bootstrap/start', async ({
     page,
   }) => {
     test.skip(
@@ -136,7 +136,7 @@ test.describe('Authentication E2E', () => {
     });
   });
 
-  test('sign-up via header modal force redirects through /auth/bootstrap', async ({
+  test('sign-up via header modal force redirects through /auth/bootstrap/start', async ({
     page,
   }) => {
     const clerkUi = createPageObjects({
@@ -158,7 +158,7 @@ test.describe('Authentication E2E', () => {
     });
   });
 
-  test('switching sign-in -> sign-up inside Clerk page UI still ends at /auth/bootstrap', async ({
+  test('switching sign-in -> sign-up inside Clerk page UI still ends at /auth/bootstrap/start', async ({
     page,
   }) => {
     const clerkUi = createPageObjects({
@@ -180,7 +180,7 @@ test.describe('Authentication E2E', () => {
     });
   });
 
-  test('switching sign-up -> sign-in inside Clerk modal UI still ends at /auth/bootstrap', async ({
+  test('switching sign-up -> sign-in inside Clerk modal UI still ends at /auth/bootstrap/start', async ({
     page,
   }) => {
     test.skip(

@@ -32,7 +32,8 @@ export function SettingsFormExample() {
       setError(`Validation failed: ${JSON.stringify(result.errors)}`);
       setStatus(null);
     } else if (result.status === 'bootstrap_required') {
-      window.location.href = '/auth/bootstrap';
+      window.location.href =
+        '/auth/bootstrap/start?redirect_url=/security-showcase';
     } else if (result.status === 'onboarding_required') {
       window.location.href = '/onboarding';
     } else {

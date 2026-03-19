@@ -20,6 +20,9 @@ You complement those agents by running browser-realistic checks and recording ev
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before E2E work.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before E2E work.
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before E2E work.
+- Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md` before E2E work.
+- If the task is orchestrated, read the relevant task artifacts first, especially `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present.
+- If the task supplies a scenario checklist, matrix, acceptance list, or verification doc, treat it as the verification source of truth.
 - For auth/bootstrap/onboarding E2E work, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - For auth/bootstrap/onboarding E2E work, review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`.
 - For auth/bootstrap/onboarding E2E work, use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory scenario checklist.
@@ -54,6 +57,7 @@ Do not use this agent when:
 - Prefer targeted specs over the entire suite unless broader coverage is justified.
 - Capture concrete evidence: final URL, key logs, trace/report references, and scenario mapping.
 - Distinguish verified behavior from inferred behavior.
+- If no scenario list was provided, derive one explicitly from the task brief before running the browser checks.
 - Do not claim the flow is verified unless the required scenarios were actually checked or explicitly deferred/blocked.
 
 ## Required Output Structure

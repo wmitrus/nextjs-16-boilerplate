@@ -32,7 +32,7 @@ const CLERK_REDIRECT_VARS = [
   'NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL',
 ];
 
-const EXPECTED_BOOTSTRAP_PATH = '/auth/bootstrap';
+const EXPECTED_BOOTSTRAP_PATH = '/auth/bootstrap/start?redirect_url=/users';
 
 export function checkClerkRedirectUrls(effectiveEnv, nodeEnv = 'development') {
   if (nodeEnv === 'production') {
@@ -83,7 +83,7 @@ function checkEnvConsistency() {
       `   Expected: ${EXPECTED_BOOTSTRAP_PATH} for all sign-in/sign-up redirect URLs.`,
     );
     console.warn(
-      '   If your .env.local overrides these, update them to /auth/bootstrap.',
+      '   If your .env.local overrides these, update them to /auth/bootstrap/start?redirect_url=/users.',
     );
   }
 }

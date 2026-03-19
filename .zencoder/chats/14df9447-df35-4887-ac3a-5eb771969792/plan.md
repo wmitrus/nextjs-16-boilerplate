@@ -335,3 +335,30 @@ Scope:
 - `src/proxy.ts` — NO CHANGE
 
 Validation: typecheck PASS (source), lint PASS, arch:lint PASS, tests 773/773 PASS (drizzle DB-required test pre-existing failure excluded)
+
+---
+
+### [x] Step: Corrective Implementation Pass — Final Route Handler-First Runtime Cleanup
+
+Apply the final corrective pass requested after signup began working end-to-end, keeping the approved Route Handler-first design while removing remaining runtime drift.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/14df9447-df35-4887-ac3a-5eb771969792/final-post-auth-bootstrap-corrective-implementation-report.md
+
+Scope:
+
+- `src/app/auth/bootstrap/page.tsx` — KEPT UI-only; added `?reason=` recovery handling; no provisioning, no cookie mutation, no normal-path redirect logic
+- `src/app/auth/bootstrap/start/route.ts` — VERIFIED legal final state; no `runtime='nodejs'` export present; cookie mutation remains here
+- `src/security/middleware/with-auth.ts` — UPDATED auth-route redirect to `/auth/bootstrap/start?redirect_url=/users`
+- `src/app/users/layout.tsx` — UPDATED `BOOTSTRAP_REQUIRED` redirect to `/auth/bootstrap/start?redirect_url=/users`
+- `src/app/onboarding/layout.tsx` — UPDATED unprovisioned/missing-user recovery to `/auth/bootstrap/start?redirect_url=/users`
+- `scripts/check-env-consistency.mjs`, `scripts/check-env-consistency.test.ts`, `scripts/e2e/env/base.env` — UPDATED to the final Clerk landing target
+- E2E helpers/specs — UPDATED to expect `/auth/bootstrap/start`
+- obsolete handoff route/tests — VERIFIED absent
+
+Validation:
+
+- `pnpm typecheck` — PASS
+- `pnpm lint` — PASS
+- `pnpm arch:lint` — PASS
+- `pnpm test` — FAIL (pre-existing `DATABASE_URL` requirement in `src/core/db/migrations/config/drizzle.test.ts`; 776 tests passed)

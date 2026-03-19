@@ -37,8 +37,9 @@ Every non-trivial task should follow this minimum lifecycle:
 
 1. create the task directory
 2. create `plan.md`
-3. add specialist artifacts as the task progresses
-4. preserve the implementation and validation evidence in the same directory
+3. create `intake.md`
+4. add specialist artifacts as the task progresses
+5. preserve the implementation and validation evidence in the same directory
 
 The first artifact must be:
 
@@ -51,6 +52,21 @@ It should describe:
 - expected specialist sequence
 - known risks or unknowns
 - artifact list for the task
+
+The second artifact should normally be:
+
+- `intake.md`
+
+It should normalize the user-provided task package:
+
+- objective
+- requirements
+- scope and non-goals
+- acceptance criteria
+- scenario or checklist sources
+- referenced repository files or docs
+- environment assumptions
+- open questions or blockers
 
 ---
 
@@ -67,6 +83,7 @@ Common files:
 - `runtime-review.md`
 - `validation-strategy.md`
 - `constraints.md`
+- `implementation-plan.md`
 - `implementation-report.md`
 - `validation-report.md`
 - `playwright-e2e-report.md`
@@ -84,10 +101,12 @@ as the content template for:
 ## Recommended Ownership
 
 - first orchestrating step: creates `plan.md`
+- orchestrating intake step: creates `intake.md`
 - Architecture Guard: `architecture-review.md`
 - Security & Auth: `security-review.md`
 - Next.js Runtime: `runtime-review.md`
 - Validation Strategy: `validation-strategy.md`
+- orchestrating planning step: creates `implementation-plan.md` when execution needs a concrete scenario-by-scenario or step-by-step plan
 - Implementation Agent: `implementation-report.md`
 - Playwright E2E: `playwright-e2e-report.md`
 - final verification step: `validation-report.md`
@@ -106,6 +125,10 @@ Each later step should:
 - document any disagreement or block explicitly
 
 Artifacts are meant to reduce ambiguity and preserve handoff quality.
+
+Keep task artifacts derived and concise.
+Do not duplicate large requirement docs into `.copilot/tasks/`.
+Instead, store the source requirements in their proper repository location and reference them from `intake.md`.
 
 ---
 
@@ -150,3 +173,18 @@ For Copilot, the best model is:
 - implementation and validation append evidence instead of replacing earlier artifacts
 
 This gives you a single per-task dossier instead of scattered chat-only state.
+
+## Universal Operating Model
+
+The reusable system should stay generic:
+
+- agents define specialist responsibilities
+- prompts define reusable entrypoints
+- task-specific requirements stay in task-specific documents or attached files
+
+In practice, that means:
+
+- do not create one-off prompts for a single feature unless the workflow is expected to repeat materially
+- prefer a universal orchestrator prompt that consumes a task brief, referenced files, and attached context
+- prefer a universal Playwright E2E prompt that consumes task-specific scenario sources such as matrices, checklists, or requirement docs
+- let `.copilot/tasks/{task_id}/intake.md` and `implementation-plan.md` adapt the generic system to the specific task

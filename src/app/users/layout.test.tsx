@@ -56,7 +56,7 @@ describe('UsersLayout node provisioning guard', () => {
     );
   });
 
-  it('redirects bootstrap-required user to /auth/bootstrap with preserved target', async () => {
+  it('redirects bootstrap-required user to /auth/bootstrap/start with preserved target', async () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'BOOTSTRAP_REQUIRED',
       code: 'BOOTSTRAP_REQUIRED',
@@ -69,7 +69,7 @@ describe('UsersLayout node provisioning guard', () => {
     });
 
     await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
-      'REDIRECT:/auth/bootstrap?redirect_url=/users',
+      'REDIRECT:/auth/bootstrap/start?redirect_url=/users',
     );
   });
 

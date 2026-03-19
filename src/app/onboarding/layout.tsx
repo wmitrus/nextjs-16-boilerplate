@@ -63,11 +63,11 @@ export async function OnboardingGuard({
           status: 'not_provisioned',
           correlationId: requestContext.correlationId,
           requestId: requestContext.requestId,
-          decision: 'redirect:/auth/bootstrap',
+          decision: 'redirect:/auth/bootstrap/start',
         },
         'OnboardingGuard: identity not provisioned, redirecting to bootstrap',
       );
-      redirect('/auth/bootstrap');
+      redirect('/auth/bootstrap/start?redirect_url=/users');
     }
     logger.error(
       {
@@ -139,11 +139,11 @@ export async function OnboardingGuard({
         correlationId: requestContext.correlationId,
         requestId: requestContext.requestId,
         internalIdentityId: identity.id,
-        decision: 'redirect:/auth/bootstrap',
+        decision: 'redirect:/auth/bootstrap/start',
       },
       'OnboardingGuard: user not found after identity lookup, redirecting to bootstrap',
     );
-    redirect('/auth/bootstrap');
+    redirect('/auth/bootstrap/start?redirect_url=/users');
   }
 
   if (user.onboardingComplete) {

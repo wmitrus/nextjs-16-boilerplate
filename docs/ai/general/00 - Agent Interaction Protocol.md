@@ -46,6 +46,8 @@ If the issue is classified as a runtime bug:
 
 ## Authority Domains
 
+Workflow Orchestrator Agent — task sequencing, artifact continuity, and specialist coordination
+
 Debug Investigation Agent — evidence gathering, flow tracing, and ambiguity reduction before specialist decisions
 
 Architecture Guard Agent — architecture and module structure
@@ -67,6 +69,7 @@ Implementation Agent — code implementation under constraints defined by all ab
 For non-trivial work, delegate to the specialist agent whose authority best matches the active decision:
 
 - Debug Investigation Agent first for unclear bugs, unstable flows, intermittent failures, env-driven divergence, race conditions, ordering bugs, or multi-layer failures where the right specialist is not yet clear
+- Workflow Orchestrator Agent when one task must be driven across multiple specialist steps with explicit artifact creation and handoff discipline
 - Architecture Guard Agent for module boundaries, dependency direction, DI/composition shape, auth-routing design shape, or docs-vs-code drift
 - Security/Auth Agent for authentication, authorization, tenant/org trust, provider isolation, or sensitive-data exposure review
 - Next.js Runtime Agent for App Router behavior, server/client placement, route handlers, server actions, `src/proxy.ts`, caching/revalidation, or Edge vs Node runtime analysis
@@ -81,6 +84,15 @@ For ambiguous bug hunts, Debug Investigation Agent should run before Architectur
 ---
 
 ## Agent Responsibilities
+
+### Workflow Orchestrator Agent
+
+Final authority on:
+
+- specialist sequencing
+- task artifact continuity
+- plan-first task setup
+- preserving workflow order across specialist steps
 
 ### Debug Investigation Agent
 

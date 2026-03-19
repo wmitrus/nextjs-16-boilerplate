@@ -160,7 +160,7 @@ describe('Middleware Integration', () => {
     expect(res.status).toBe(429);
   });
 
-  it('should redirect authenticated users away from auth routes to bootstrap', async () => {
+  it('should redirect authenticated users away from auth routes to bootstrap start', async () => {
     const pipeline = createPipeline();
 
     const req = createMockRequest({ path: '/sign-in' });
@@ -168,7 +168,9 @@ describe('Middleware Integration', () => {
     const res = await pipeline(req);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/auth/bootstrap');
+    expect(res.headers.get('location')).toBe(
+      'http://localhost/auth/bootstrap/start?redirect_url=%2Fusers',
+    );
   });
 
   it('should allow Clerk callback state to complete on auth routes', async () => {

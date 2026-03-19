@@ -72,7 +72,7 @@ async function waitForBootstrapRequest(
   const bootstrapRequest = page.waitForRequest(
     (request) =>
       request.isNavigationRequest() &&
-      getPathname(request.url()) === '/auth/bootstrap',
+      getPathname(request.url()) === '/auth/bootstrap/start',
   );
 
   await action();
@@ -149,6 +149,12 @@ async function expectBootstrapErrorUi(
     page.getByRole('heading', { name: /sign-in could not be completed/i }),
   ).toBeVisible();
   await expect(page.getByText(expectedMessage)).toBeVisible();
+}
+
+async function expectBootstrapOrgRequiredUi(page: Page): Promise<void> {
+  await expect(
+    page.getByRole('heading', { name: /select or create a workspace/i }),
+  ).toBeVisible();
 }
 
 async function setActiveTenantCookie(
@@ -275,7 +281,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInSingleNewUserE2E(page);
 
-    await page.goto('/auth/bootstrap?redirect_url=/app/dashboard');
+    await page.goto('/auth/bootstrap/start?redirect_url=/app/dashboard');
     await expect(page).toHaveURL(
       /\/onboarding\?redirect_url=%2Fapp%2Fdashboard/,
     );
@@ -301,7 +307,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInSingleNewUserE2E(page);
 
-    await page.goto('/auth/bootstrap?redirect_url=/users');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expect(page).toHaveURL(/\/users$/);
     await expect(page.getByText(/user management/i)).toBeVisible();
     await expectProvisioningReady(page, 'single');
@@ -321,7 +327,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInClerkIdentityE2E(page, 'singleProvisionedUser');
 
-    await page.goto('/auth/bootstrap');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expectBootstrapErrorUi(
       page,
       /workspace configuration is incomplete or missing/i,
@@ -344,7 +350,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInClerkIdentityE2E(page, 'linkingBlockedUnverified');
 
-    await page.goto('/auth/bootstrap');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expectBootstrapErrorUi(page, /linked to a different sign-in method/i);
     await expect(page.content()).not.toContain('auth_user_identities');
   });
@@ -363,7 +369,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInClerkIdentityE2E(page, 'singleNewUser');
 
-    await page.goto('/auth/bootstrap');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expectBootstrapErrorUi(page, /workspace has reached its user limit/i);
     await expect(page.content()).not.toContain('tenant_attributes');
   });
@@ -382,7 +388,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInClerkPersonalNewUserE2E(page);
 
-    await page.goto('/auth/bootstrap?redirect_url=/users');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
     await completeOnboarding(page);
     await expect(page).toHaveURL(/\/users$/);
@@ -403,7 +409,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInClerkPersonalNewUserE2E(page);
 
-    await page.goto('/auth/bootstrap?redirect_url=/users');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expect(page).toHaveURL(/\/users$/);
     await expectProvisioningReady(page, 'personal');
   });
@@ -426,14 +432,14 @@ test.describe('Provisioning Runtime E2E', () => {
       getClerkE2EOrganizationSlug('providerOwner'),
     );
 
-    await page.goto('/auth/bootstrap?redirect_url=/users');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
     await completeOnboarding(page);
     await expect(page).toHaveURL(/\/users$/);
     await expectProvisioningReady(page, 'org');
   });
 
-  test('org/provider mode without an active org renders controlled tenant_config UI', async ({
+  test('org/provider mode without an active org renders the workspace recovery UI', async ({
     page,
   }) => {
     test.skip(
@@ -448,11 +454,8 @@ test.describe('Provisioning Runtime E2E', () => {
     await signInClerkOrgProviderOwnerE2E(page);
     await clearActiveOrganization(page);
 
-    await page.goto('/auth/bootstrap');
-    await expectBootstrapErrorUi(
-      page,
-      /workspace configuration is incomplete or missing/i,
-    );
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
+    await expectBootstrapOrgRequiredUi(page);
   });
 
   test('org/db mode without an active tenant cookie renders controlled tenant_config UI', async ({
@@ -470,7 +473,7 @@ test.describe('Provisioning Runtime E2E', () => {
     await signInClerkOrgDbSeededMemberE2E(page);
     await clearActiveTenantCookie(page);
 
-    await page.goto('/auth/bootstrap');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expectBootstrapErrorUi(
       page,
       /workspace configuration is incomplete or missing/i,
@@ -492,7 +495,7 @@ test.describe('Provisioning Runtime E2E', () => {
     await signInClerkOrgDbSeededMemberE2E(page);
     await setActiveTenantCookie(page, SEEDED_TENANT_IDS.acme);
 
-    await page.goto('/auth/bootstrap?redirect_url=/users');
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
     await completeOnboarding(page);
     await expect(page).toHaveURL(/\/users$/);
@@ -521,7 +524,7 @@ test.describe('Provisioning Runtime E2E', () => {
     expect(body.code).toBe('TENANT_MEMBERSHIP_REQUIRED');
   });
 
-  test('OAuth sign-in entry that creates a brand-new user lands on /auth/bootstrap', async ({
+  test('OAuth sign-in entry that creates a brand-new user lands on /auth/bootstrap/start', async ({
     page,
   }) => {
     test.skip(
@@ -540,7 +543,9 @@ test.describe('Provisioning Runtime E2E', () => {
     });
   });
 
-  test('OAuth sign-up entry lands on /auth/bootstrap', async ({ page }) => {
+  test('OAuth sign-up entry lands on /auth/bootstrap/start', async ({
+    page,
+  }) => {
     test.skip(
       !runtime.oauthProvider,
       'Set E2E_CLERK_OAUTH_PROVIDER to run real OAuth redirect E2E.',

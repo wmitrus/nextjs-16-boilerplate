@@ -56,6 +56,8 @@ Next.js Runtime Agent — runtime behavior and framework semantics
 
 Validation Strategy Agent — validation scope and validation strategy
 
+Playwright E2E Agent — real-browser end-to-end verification and scenario evidence capture
+
 Implementation Agent — code implementation under constraints defined by all above agents
 
 ---
@@ -69,6 +71,7 @@ For non-trivial work, delegate to the specialist agent whose authority best matc
 - Security/Auth Agent for authentication, authorization, tenant/org trust, provider isolation, or sensitive-data exposure review
 - Next.js Runtime Agent for App Router behavior, server/client placement, route handlers, server actions, `src/proxy.ts`, caching/revalidation, or Edge vs Node runtime analysis
 - Validation Strategy Agent for repository validation posture, minimum safe validation scope, broad test-addition decisions, over-mocking review, or choosing between unit, integration, e2e, contract-style, and CI validation
+- Playwright E2E Agent when real-browser verification is required and the question cannot be closed safely with unit or integration evidence alone
 - Implementation Agent only after the relevant constraints are clear enough to execute safely
 
 Do not delegate by default when the task is simple, mixed, or can be handled directly without specialist isolation.
@@ -129,6 +132,14 @@ Final authority on:
 - identifying validation blind spots
 - over-mocking
 - false-confidence patterns
+
+### Playwright E2E Agent
+
+Final authority on:
+
+- real-browser verification evidence
+- Playwright scenario execution
+- browser-level pass/fail mapping against scenario checklists
 
 ### Implementation Agent
 

@@ -143,29 +143,48 @@ Add this block to `.env.e2e.local`:
 CLERK_SECRET_KEY=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 
+# Universal E2E backend mode switch
+# pglite    => lightweight local file-backed mode
+# container => isolated container-backed mode on test DB 5433/app_test
+E2E_BACKEND_MODE=container
+
+# Optional local container-engine override
+# DB_COMPOSE_ENGINE=podman
+
+# Optional Playwright base URL override
+# PLAYWRIGHT_TEST_BASE_URL=http://localhost:3000
+
+# Scenario A: single / returning provisioned user
 E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME=
 E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD=
 
+# Scenario A: single / first bootstrap new user
 E2E_CLERK_SINGLE_NEW_USER_USERNAME=
 E2E_CLERK_SINGLE_NEW_USER_PASSWORD=
 
+# Scenario B: personal / first bootstrap new personal user
 E2E_CLERK_PERSONAL_NEW_USER_USERNAME=
 E2E_CLERK_PERSONAL_NEW_USER_PASSWORD=
 
+# Scenario C: org/provider / owner-capable fixture in e2e-org-owner
 E2E_CLERK_ORG_PROVIDER_OWNER_USERNAME=
 E2E_CLERK_ORG_PROVIDER_OWNER_PASSWORD=
 
+# Scenario C: org/provider / member fixture in e2e-org-member
 E2E_CLERK_ORG_PROVIDER_MEMBER_USERNAME=
 E2E_CLERK_ORG_PROVIDER_MEMBER_PASSWORD=
 
+# Stable org/provider slugs expected by the suite
+E2E_CLERK_ORG_PROVIDER_OWNER_SLUG=e2e-org-owner
+E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG=e2e-org-member
+
+# Scenario D: org/db / seeded DB-linked member, must stay bob@example.com
 E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME=bob@example.com
 E2E_CLERK_ORG_DB_SEEDED_MEMBER_PASSWORD=
 
+# Cross-provider linking negative fixture, must stay alice@example.com and remain unverified
 E2E_CLERK_LINK_BLOCKED_UNVERIFIED_USERNAME=alice@example.com
 E2E_CLERK_LINK_BLOCKED_UNVERIFIED_PASSWORD=
-
-E2E_CLERK_ORG_PROVIDER_OWNER_SLUG=e2e-org-owner
-E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG=e2e-org-member
 
 # Optional. Example: google or github
 # E2E_CLERK_OAUTH_PROVIDER=google

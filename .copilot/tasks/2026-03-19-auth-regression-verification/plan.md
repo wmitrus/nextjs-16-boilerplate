@@ -2,19 +2,21 @@
 
 ## Objective
 
-Run a controlled auth regression verification task for the current branch using the repository auth-flow verification model, explicit task artifacts, and real-browser verification only where required.
+Run a controlled auth regression verification task for the current branch using the repository auth-flow verification model, explicit task artifacts, and real-browser verification only where required, after aligning the E2E runner to honor `E2E_BACKEND_MODE=pglite|container` without regressing the existing PGlite flow.
 
 ## Progress Checklist
 
-- [ ] Task workspace initialized
-- [ ] `plan.md` completed
-- [ ] `intake.md` completed
-- [ ] `constraints.md` completed
-- [ ] `implementation-plan.md` completed
+- [x] Task workspace initialized
+- [x] `plan.md` completed
+- [x] `intake.md` completed
+- [x] `constraints.md` completed
+- [x] `implementation-plan.md` completed
 - [ ] Env and fixture assumptions validated
-- [ ] Runner architecture direction confirmed
+- [x] Runner architecture direction confirmed
+- [x] Container-mode runner implementation plan confirmed
+- [x] Container-mode runner implementation completed
 - [ ] `07 - Playwright E2E` run prepared
-- [ ] `07 - Playwright E2E - Summary.md` created
+- [x] `07 - Playwright E2E - Summary.md` created
 - [ ] `validation-report.md` created
 
 ## Likely Affected Areas
@@ -24,6 +26,12 @@ Run a controlled auth regression verification task for the current branch using 
 - `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
 - `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md`
+- `scripts/e2e/run-scenario.mjs`
+- `scripts/e2e/load-env.mjs`
+- `scripts/check-e2e-auth-env.mjs`
+- `scripts/compose-db-local.mjs`
+- `scripts/db-ops.mjs`
+- `package.json`
 - `e2e/auth.spec.ts`
 - `e2e/users.spec.ts`
 - `e2e/provisioning-runtime.spec.ts`
@@ -50,16 +58,18 @@ Run a controlled auth regression verification task for the current branch using 
 1. Workflow Orchestrator kickoff and artifact creation
 2. Direct intake normalization from task documents
 3. Constraint consolidation from auth-flow documents
-4. Implementation-plan creation for scenario execution order
-5. `07 - Playwright E2E` for real-browser verification
-6. Final validation/report artifact
+4. Implementation-plan creation for runner alignment and scenario execution order
+5. `04 - Implementation Agent` to align the runner with `E2E_BACKEND_MODE=pglite|container` while preserving the current PGlite path
+6. `07 - Playwright E2E` for real-browser verification
+7. Final validation/report artifact
 
 ## Sequence Checklist
 
-- [ ] Workflow Orchestrator kickoff and artifact creation
-- [ ] Intake normalization completed
-- [ ] Constraint consolidation completed
-- [ ] Implementation-plan completed
+- [x] Workflow Orchestrator kickoff and artifact creation
+- [x] Intake normalization completed
+- [x] Constraint consolidation completed
+- [x] Implementation-plan completed
+- [x] Runner alignment implementation step completed
 - [ ] Playwright E2E step completed
 - [ ] Final validation/report artifact completed
 
@@ -71,17 +81,17 @@ Run a controlled auth regression verification task for the current branch using 
 - `03 - Next.js Runtime`: conditional only if branch evidence or observed behavior shows runtime-placement or App Router instability before execution
 - `05 - Validation Strategy`: conditional only if validation scope materially expands beyond the defined auth regression task
 - `07 - Playwright E2E`: required
-- `04 - Implementation Agent`: not required for the initial verification workflow unless a verified defect later requires code changes
+- `04 - Implementation Agent`: required before Playwright execution to align the runner with `E2E_BACKEND_MODE=pglite|container` while preserving the existing PGlite scenario path
 
 ## Specialist Checklist
 
-- [ ] `06 - Debug Investigation` decision recorded
-- [ ] `01 - Architecture Guard` decision recorded
-- [ ] `02 - Security & Auth` decision recorded
-- [ ] `03 - Next.js Runtime` decision recorded
-- [ ] `05 - Validation Strategy` decision recorded
-- [ ] `07 - Playwright E2E` decision recorded
-- [ ] `04 - Implementation Agent` decision recorded
+- [x] `06 - Debug Investigation` decision recorded
+- [x] `01 - Architecture Guard` decision recorded
+- [x] `02 - Security & Auth` decision recorded
+- [x] `03 - Next.js Runtime` decision recorded
+- [x] `05 - Validation Strategy` decision recorded
+- [x] `07 - Playwright E2E` decision recorded
+- [x] `04 - Implementation Agent` decision recorded
 
 ## Known Risks / Unknowns
 
@@ -90,6 +100,9 @@ Run a controlled auth regression verification task for the current branch using 
 - branch-to-default drift has not yet been classified as requiring pre-execution security/runtime review
 - existing runtime tests mix browser-real UI paths with helper-assisted Clerk sign-in; authoritative regression evidence for this task must prefer browser-real interactive flow
 - backend/runtime mode selection is standardized as E2E_BACKEND_MODE=pglite|container
+- current local env has Clerk keys plus single new/provisioned fixtures configured; remaining readiness depends on recording a reusable incomplete identity and documenting deterministic in-run onboarding-incomplete setup for the returning-incomplete scenarios
+- the container mode should reuse the repository test DB/container lifecycle (`db:test:*`, `compose-db-local.mjs`, guarded test DB URL) instead of introducing a second parallel container flow
+- the current implementation plan must preserve one scenario model with backend-specific setup branching, not fork the auth regression workflow into separate task-specific scripts
 
 ## Planned Artifacts
 
@@ -97,14 +110,27 @@ Run a controlled auth regression verification task for the current branch using 
 - `intake.md`
 - `constraints.md`
 - `implementation-plan.md`
+- `04 - Implementation Agent - Summary.md`
 - `07 - Playwright E2E - Summary.md`
 - `validation-report.md`
 
 ## Artifact Checklist
 
-- [ ] `plan.md`
-- [ ] `intake.md`
-- [ ] `constraints.md`
-- [ ] `implementation-plan.md`
-- [ ] `07 - Playwright E2E - Summary.md`
+- [x] `plan.md`
+- [x] `intake.md`
+- [x] `constraints.md`
+- [x] `implementation-plan.md`
+- [x] `04 - Implementation Agent - Summary.md`
+- [x] `07 - Playwright E2E - Summary.md`
 - [ ] `validation-report.md`
+
+## Current Status Note
+
+- Phase 0 readiness review started on 2026-03-20.
+- Verified from repository evidence and local env checks: Clerk keys are configured, `single` new/provisioned Clerk fixtures are configured, and local `.env.e2e.local` selects `E2E_BACKEND_MODE=container`.
+- Runner alignment step is now complete: the universal scenario runner preserves the current PGlite setup path and adds a container-backed setup path using the repository test DB lifecycle, selected only by `E2E_BACKEND_MODE`.
+- Focused validation confirmed both branches via the same scenario entrypoint with Playwright `--list`: PGlite still resets and seeds the file-backed scenario DB, and container mode starts `test-db`, resets `5433/app_test`, seeds it, and reaches the same Playwright scenario list.
+- Reusable incomplete identity is now recorded via the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`.
+- AF-06 / AF-07 rerunnable flow is now implemented in `e2e/provisioning-runtime.spec.ts` using `signInClerkIncompleteUserE2E()` and in-test recreation of onboarding-incomplete app state.
+- Remaining blocker: full Phase 0 readiness still depends on runtime availability, server-log visibility, and execution preparation for the browser run; the incomplete-user setup itself is no longer undefined.
+- Consequence: browser-real auth regression execution is still blocked in Phase 0, but the blocker is now rerunnable scenario setup readiness rather than runner backend-mode support.

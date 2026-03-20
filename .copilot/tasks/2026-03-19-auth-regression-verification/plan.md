@@ -4,6 +4,19 @@
 
 Run a controlled auth regression verification task for the current branch using the repository auth-flow verification model, explicit task artifacts, and real-browser verification only where required.
 
+## Progress Checklist
+
+- [ ] Task workspace initialized
+- [ ] `plan.md` completed
+- [ ] `intake.md` completed
+- [ ] `constraints.md` completed
+- [ ] `implementation-plan.md` completed
+- [ ] Env and fixture assumptions validated
+- [ ] Runner architecture direction confirmed
+- [ ] `07 - Playwright E2E` run prepared
+- [ ] `07 - Playwright E2E - Summary.md` created
+- [ ] `validation-report.md` created
+
 ## Likely Affected Areas
 
 - `docs/feature-desings/02 - Auth Regression Tests.md`
@@ -41,6 +54,15 @@ Run a controlled auth regression verification task for the current branch using 
 5. `07 - Playwright E2E` for real-browser verification
 6. Final validation/report artifact
 
+## Sequence Checklist
+
+- [ ] Workflow Orchestrator kickoff and artifact creation
+- [ ] Intake normalization completed
+- [ ] Constraint consolidation completed
+- [ ] Implementation-plan completed
+- [ ] Playwright E2E step completed
+- [ ] Final validation/report artifact completed
+
 ## Specialist Status
 
 - `06 - Debug Investigation`: skipped for kickoff unless repository evidence becomes too ambiguous to run safely
@@ -50,6 +72,16 @@ Run a controlled auth regression verification task for the current branch using 
 - `05 - Validation Strategy`: conditional only if validation scope materially expands beyond the defined auth regression task
 - `07 - Playwright E2E`: required
 - `04 - Implementation Agent`: not required for the initial verification workflow unless a verified defect later requires code changes
+
+## Specialist Checklist
+
+- [ ] `06 - Debug Investigation` decision recorded
+- [ ] `01 - Architecture Guard` decision recorded
+- [ ] `02 - Security & Auth` decision recorded
+- [ ] `03 - Next.js Runtime` decision recorded
+- [ ] `05 - Validation Strategy` decision recorded
+- [ ] `07 - Playwright E2E` decision recorded
+- [ ] `04 - Implementation Agent` decision recorded
 
 ## Known Risks / Unknowns
 
@@ -65,5 +97,14 @@ Run a controlled auth regression verification task for the current branch using 
 - `intake.md`
 - `constraints.md`
 - `implementation-plan.md`
-- `playwright-e2e-report.md`
+- `07 - Playwright E2E - Summary.md`
 - `validation-report.md`
+
+## Artifact Checklist
+
+- [ ] `plan.md`
+- [ ] `intake.md`
+- [ ] `constraints.md`
+- [ ] `implementation-plan.md`
+- [ ] `07 - Playwright E2E - Summary.md`
+- [ ] `validation-report.md`

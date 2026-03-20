@@ -4,6 +4,20 @@
 
 Run the controlled auth regression task described in `docs/feature-desings/02 - Auth Regression Tests.md`.
 
+## Readiness Checklist
+
+- [ ] Objective is confirmed
+- [ ] Requirements sources are confirmed
+- [ ] Repository context is confirmed
+- [ ] Scope is confirmed
+- [ ] Non-goals are confirmed
+- [ ] Scenario sources are confirmed
+- [ ] Minimum scenario set for this run is confirmed
+- [ ] Acceptance criteria are confirmed
+- [ ] Environment assumptions are confirmed
+- [ ] Evidence expectations are confirmed
+- [ ] Open questions and blockers are recorded
+
 ## Requirements Sources
 
 - `docs/feature-desings/02 - Auth Regression Tests.md`

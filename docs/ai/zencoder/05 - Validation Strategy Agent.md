@@ -1,0 +1,30 @@
+## What it does
+
+Prompt source used by Zencoder: [docs/ai/general/05 - Validation Strategy Agent.md](../general/05%20-%20Validation%20Strategy%20Agent.md)
+
+Zencoder keeps its agent registration outside the repository. This guide points to the repo-hosted prompt source that backs the role.
+
+- Defines `05 - Validation Strategy` as the specialist for repository-wide validation posture and minimum safe validation planning
+- Focuses on test quality, over-mocking, false confidence, and choosing the right level between unit, integration, e2e, contract-style, and CI validation
+- Produces the validation plan or validation posture assessment that guides later execution
+
+## When to use it
+
+- When you need the minimum safe validation scope for a change
+- When you want a repository-wide validation posture review
+- When the main question is validation level, over-mocking, or false confidence rather than design or implementation
+- When broad new tests are being considered and need risk-based justification
+
+## Auth-Flow Note
+
+For any auth/bootstrap/onboarding change:
+
+- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first
+- review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
+- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
+
+## Related ZenFlow workflows
+
+- [feature-development.md](../../../.zenflow/workflows/feature-development.md)
+- [safe-refactor.md](../../../.zenflow/workflows/safe-refactor.md)
+- [security-incident-workflow.md](../../../.zenflow/workflows/security-incident-workflow.md)

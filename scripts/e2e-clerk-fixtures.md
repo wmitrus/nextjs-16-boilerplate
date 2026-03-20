@@ -23,14 +23,18 @@ Before creating fixtures in Clerk Dashboard:
    that forces email-code verification or other second-factor verification for
    these users.
 5. Do not require MFA for the dedicated E2E password users.
-6. Enable Organizations only for the `org/provider` and `org/db` scenarios.
+6. If you want to exercise the hosted Clerk sign-up verification UI in E2E,
+   enable the relevant first-factor verification method on the Clerk test
+   instance. For the current AF-01 browser path, that means email-code
+   verification must be enabled for sign-up.
+7. Enable Organizations only for the `org/provider` and `org/db` scenarios.
    They are not required for `single` or `personal`.
-7. Set both sign-in and sign-up force redirect URLs to `/auth/bootstrap`.
-8. Ensure the Clerk session token exposes a real email claim to `auth()`.
+8. Set both sign-in and sign-up force redirect URLs to `/auth/bootstrap`.
+9. Ensure the Clerk session token exposes a real email claim to `auth()`.
    Supported contracts in this boilerplate are:
    - preferred explicit custom session claim: `email`
    - supported backward-compatible custom session claim: `primaryEmail`
-9. Store local Clerk fixture secrets in `.env.e2e.local` or `.env.e2e`.
+10. Store local Clerk fixture secrets in `.env.e2e.local` or `.env.e2e`.
 
 Recommended custom session token snippet:
 
@@ -55,6 +59,23 @@ Important runtime contract:
 - If the app provisions users with `external+clerk-...@local.invalid`, the
   session token did not expose a usable email claim. That is a contract/config
   problem, not a valid steady-state for production.
+
+Verification-code contract for hosted Clerk E2E:
+
+- Clerk test emails are deterministic when the email contains `+clerk_test`.
+- The current `e2e/auth.spec.ts` sign-up helper already creates emails in that
+  pattern.
+- For Clerk-hosted email verification using test emails, the expected code is
+  `424242`.
+- This rule is suitable for the narrow interactive Clerk verification slice,
+  not as a replacement for the repo's main password-fixture strategy.
+- No separate CI-only Clerk toggle is required for that code itself. The
+  important prerequisites are: use a Clerk test instance, enable the relevant
+  first-factor verification method, and keep dedicated password fixtures free
+  of extra Client Trust / MFA challenges.
+- If Clerk verification still introduces new-device, second-factor, or other
+  non-first-factor challenges, treat that as unsupported for the current
+  Playwright helper flow rather than trying to bypass it in the app.
 
 ## 2. Required Organizations
 
@@ -130,6 +151,23 @@ For each identity above:
    - `bob@example.com` for `clerk_org_db_seeded_member`
    - `alice@example.com` for `clerk_link_blocked_unverified`
 5. Store the email/username and password in `.env.e2e.local` or `.env.e2e`.
+
+### 4.2a Hosted verification test-emails
+
+Use this only for interactive hosted sign-up / verification coverage such as
+AF-01.
+
+Rules:
+
+1. Generate a throwaway email containing `+clerk_test`.
+2. Complete Clerk's hosted verify-email step with code `424242`.
+3. Do not reuse this pattern for the stable password-fixture identities above.
+4. If Clerk reports that `email_code` is not enabled, enable email-code
+   verification on the Clerk test instance before treating the flow as an app
+   regression.
+5. If the instance adds MFA, Client Trust, or other extra verification on top
+   of the first-factor email-code step, do not classify that as app-routing
+   failure. It is a Clerk-instance policy issue for this harness.
 
 ### 4.3 Assign organization memberships
 
@@ -255,7 +293,28 @@ Under the hood the runner:
    - `container`: starts the isolated test DB and resets `5433/app_test`
 7. migrates, seeds, validates env, then runs Playwright
 
-## 7. DB State Notes
+## 7. Verification-Code Design Notes
+
+Current repo design:
+
+- primary stable path: dedicated Clerk password fixtures sign in through the
+  Playwright Clerk helper and then enter app-owned bootstrap/onboarding flows
+- narrow hosted verification path: AF-01 style interactive Clerk sign-up uses a
+  generated `+clerk_test` email and should complete Clerk email verification
+  with `424242`
+
+Operational guidance:
+
+- do not require any extra env var for the hosted verification code; it is a
+  fixed Clerk testing rule, not a repository secret
+- do not create a stored `.env` variable for `424242`
+- if CI/local runs need hosted sign-up verification, ensure the same Clerk test
+  instance configuration is used in both environments
+- if the hosted verification path remains unstable, record it as a harness-side
+  Clerk verification issue rather than weakening the password-based runtime
+  fixture strategy
+
+## 8. DB State Notes
 
 Clerk is persistent. The scenario runner resets the local DB per scenario.
 

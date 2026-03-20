@@ -85,6 +85,19 @@ For ambiguous bug hunts, Debug Investigation Agent should run before Architectur
 
 ## Agent Responsibilities
 
+## Task Artifact Synchronization Rule
+
+When a task uses `.copilot/tasks/{task_id}/` artifacts:
+
+- all participating agents must treat `plan.md`, `intake.md`, and `implementation-plan.md` as live workflow control documents
+- before handing off or moving to the next major step, the active agent must update any relevant checklist or status markers in those files
+- completion of a larger milestone is not considered finished until the artifact state is synchronized
+- if work is blocked, skipped, deferred, or only partially complete, the agent must record that explicitly instead of leaving stale checklist state
+- agents must not implement "straight through" while ignoring artifact state updates
+- each non-orchestrator specialist agent must create or update one persistent summary artifact for the task, named with the agent number and agent name plus ` - Summary.md`
+- when the same specialist agent runs again for the same task, it must update its existing summary artifact instead of creating a second file
+- the specialist should structure that file from the matching template in `docs/ai/templates/specialist-summaries/`
+
 ### Workflow Orchestrator Agent
 
 Final authority on:

@@ -41,6 +41,8 @@ Every non-trivial task should follow this minimum lifecycle:
 4. add specialist artifacts as the task progresses
 5. preserve the implementation and validation evidence in the same directory
 
+The task artifacts above are live workflow controls. They must be updated as work progresses rather than left as initial planning snapshots.
+
 The first artifact must be:
 
 - `plan.md`
@@ -52,6 +54,8 @@ It should describe:
 - expected specialist sequence
 - known risks or unknowns
 - artifact list for the task
+
+When the task is substantial, multi-step, or likely to be executed over time, `plan.md` should also include actionable checklist items so the artifact works as a live execution tracker rather than only a static summary.
 
 The second artifact should normally be:
 
@@ -68,6 +72,8 @@ It should normalize the user-provided task package:
 - environment assumptions
 - open questions or blockers
 
+When task execution depends on prerequisites, readiness, or phased entry conditions, `intake.md` should also include a readiness checklist. After a larger milestone is finished, agents should update `intake.md` together with `plan.md` so the task state stays aligned.
+
 ---
 
 ## Recommended File Set
@@ -78,15 +84,37 @@ Common files:
 
 - `plan.md`
 - `intake.md`
-- `architecture-review.md`
-- `security-review.md`
-- `runtime-review.md`
-- `validation-strategy.md`
+- `01 - Architecture Guard - Summary.md`
+- `02 - Security & Auth - Summary.md`
+- `03 - Next.js Runtime - Summary.md`
+- `05 - Validation Strategy - Summary.md`
+- `06 - Debug Investigation - Summary.md`
+- `07 - Playwright E2E - Summary.md`
+- `04 - Implementation Agent - Summary.md`
 - `constraints.md`
 - `implementation-plan.md`
-- `implementation-report.md`
 - `validation-report.md`
-- `playwright-e2e-report.md`
+
+Specialist artifact rule:
+
+- each non-orchestrator specialist keeps one persistent per-task summary file
+- the filename must use the pattern `NN - Agent Name - Summary.md`
+- later runs by the same specialist update the existing file instead of creating another one
+- the file should summarize scope handled, actions performed, findings, decisions, blockers, and handoff notes
+- use the corresponding template from `docs/ai/templates/specialist-summaries/`
+
+For substantial phase-based work, prefer making `implementation-plan.md` executable as a checklist:
+
+- top-level progress checklist
+- phase-level checklists
+- scenario-level checkboxes when the task is scenario-driven
+
+Checklist synchronization rule:
+
+- after completing a meaningful step, phase, or specialist handoff, update the relevant checkbox state before moving on
+- keep `plan.md`, `intake.md`, and `implementation-plan.md` consistent with one another when they describe the same milestone
+- if something is blocked, deferred, skipped, or only partially complete, record that state explicitly instead of leaving stale checklist state behind
+- do not treat a major workflow step as complete while the control artifacts still show outdated status
 
 For auth-flow real-browser verification, prefer also using:
 
@@ -94,7 +122,7 @@ For auth-flow real-browser verification, prefer also using:
 
 as the content template for:
 
-- `playwright-e2e-report.md`
+- `07 - Playwright E2E - Summary.md`
 
 ---
 
@@ -102,14 +130,17 @@ as the content template for:
 
 - first orchestrating step: creates `plan.md`
 - orchestrating intake step: creates `intake.md`
-- Architecture Guard: `architecture-review.md`
-- Security & Auth: `security-review.md`
-- Next.js Runtime: `runtime-review.md`
-- Validation Strategy: `validation-strategy.md`
+- Architecture Guard: `01 - Architecture Guard - Summary.md`
+- Security & Auth: `02 - Security & Auth - Summary.md`
+- Next.js Runtime: `03 - Next.js Runtime - Summary.md`
+- Validation Strategy: `05 - Validation Strategy - Summary.md`
+- Debug Investigation: `06 - Debug Investigation - Summary.md`
 - orchestrating planning step: creates `implementation-plan.md` when execution needs a concrete scenario-by-scenario or step-by-step plan
-- Implementation Agent: `implementation-report.md`
-- Playwright E2E: `playwright-e2e-report.md`
+- Implementation Agent: `04 - Implementation Agent - Summary.md`
+- Playwright E2E: `07 - Playwright E2E - Summary.md`
 - final verification step: `validation-report.md`
+
+The Workflow Orchestrator is intentionally excluded from the per-agent summary-file rule because it already owns the control artifacts.
 
 If a specialist is skipped, record the reason in `plan.md`.
 
@@ -123,12 +154,14 @@ Each later step should:
 - preserve constraints already established
 - avoid silently re-deciding a question already settled earlier
 - document any disagreement or block explicitly
+- update the control artifacts to reflect new status before handing off to the next agent or phase
 
 Artifacts are meant to reduce ambiguity and preserve handoff quality.
 
 Keep task artifacts derived and concise.
 Do not duplicate large requirement docs into `.copilot/tasks/`.
 Instead, store the source requirements in their proper repository location and reference them from `intake.md`.
+When practical, make execution-oriented artifacts actively usable during delivery by adding checkboxes rather than leaving them as prose only.
 
 ---
 

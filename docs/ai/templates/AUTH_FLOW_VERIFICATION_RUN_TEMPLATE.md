@@ -46,8 +46,8 @@
 
 - Purpose: returning user forced to `/onboarding`
 - Email / identifier:
-- Expected initial state:
-- Notes:
+- Expected initial state: reusable Clerk identity only; app-side onboarding-incomplete state is created during this run
+- Notes: do not rely on a permanently preserved incomplete DB state across runs
 
 ---
 
@@ -111,7 +111,7 @@
 - Actual result:
 - Final URL:
 - Key evidence:
-- Notes:
+- Notes: if rerunnable, document how the incomplete state was created in-run before the returning sign-in check
 
 ### AF-07 — Direct visit to `/users` before onboarding completion
 

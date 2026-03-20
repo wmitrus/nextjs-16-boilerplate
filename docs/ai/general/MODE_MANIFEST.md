@@ -288,6 +288,120 @@ Required outputs:
 
 ---
 
+### Mode: `playwright-e2e-validation`
+
+Purpose:
+
+- execute real-browser verification for task-driven flows that require browser evidence
+
+Use when:
+
+- redirects, cookies, hydration, route transitions, or browser/runtime behavior are part of the risk
+- task requirements already define browser scenarios, matrices, or checklists
+- auth/bootstrap/onboarding behavior must be proven in a real browser
+- narrower validation cannot close the risk safely
+
+Primary authority:
+
+- Playwright E2E Agent
+
+Required governing files:
+
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/ARTIFACTS_GUIDE.md`
+- `docs/ai/general/COPILOT_TASK_ARTIFACTS.md`
+- `docs/ai/general/07 - Playwright E2E Agent.md`
+
+Required outputs:
+
+- objective
+- scenarios under test
+- preconditions
+- commands run
+- observed results
+- scenario status mapping
+- evidence collected
+- gaps / deferred checks
+- recommended next action
+
+---
+
+### Mode: `workflow-task`
+
+Purpose:
+
+- run a non-trivial task through plan-first orchestration with explicit artifacts and specialist sequencing
+
+Use when:
+
+- the task needs multiple specialist steps
+- the task should preserve handoffs and artifacts under `.copilot/tasks/{task_id}/`
+- requirements come from a brief, referenced docs, or attachments and need controlled execution
+- implementation must not begin until constraints are explicit
+
+Primary authority:
+
+- Workflow Orchestrator Agent
+
+Required governing files:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/COPILOT_TASK_ARTIFACTS.md`
+- `docs/ai/general/08 - Workflow Orchestrator Agent.md`
+
+Required outputs:
+
+- objective
+- input sources
+- task classification
+- planned specialist sequence
+- artifacts to be produced
+- current status
+- recommended next action
+
+---
+
+### Mode: `task-brief-authoring`
+
+Purpose:
+
+- prepare a workflow-ready requirements package before orchestration begins
+
+Use when:
+
+- a non-trivial task needs a proper brief
+- requirements are spread across multiple sources and need normalization
+- orchestration quality depends on explicit scenarios, constraints, and evidence expectations
+- the user needs a reusable task brief rather than a one-off prompt
+
+Primary authority:
+
+- Task Brief / Intake Authoring guidance
+
+Required governing files:
+
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/09 - Task Brief Authoring.md`
+- `docs/ai/templates/COPILOT_TASK_BRIEF_TEMPLATE.md`
+
+Required outputs:
+
+- objective
+- problem statement
+- scope
+- non-goals
+- requirements package
+- verification sources
+- constraints / assumptions
+- open questions
+- recommended next action
+
+---
+
 ### Mode: `safe-feature-workflow`
 
 Purpose:

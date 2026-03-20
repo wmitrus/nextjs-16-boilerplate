@@ -8,6 +8,10 @@ Real agent file: [workflow-orchestrator.agent.md](../../../.github/agents/workfl
   - intake normalization from requirements and attached files
   - specialist sequencing
   - detailed implementation-plan creation when needed
+  - actionable task artifacts with trackable checklists for substantial work
+  - synchronizing checklist state across `plan.md`, `intake.md`, and `implementation-plan.md` before each major handoff
+  - enforcing one persistent per-task summary artifact for each non-orchestrator specialist agent
+  - requiring specialist summary artifacts to follow the matching template under `docs/ai/templates/specialist-summaries/`
   - per-task artifact continuity
   - keeping design, implementation, validation, and documentation in the right order
 - Uses `read`, `search`, `edit`, `todo`, and `agent`

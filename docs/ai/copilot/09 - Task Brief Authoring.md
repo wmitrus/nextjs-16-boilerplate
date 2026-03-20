@@ -66,7 +66,7 @@ For a well-described task, the orchestrator should normally produce:
 
 - `plan.md`
 - `intake.md`
-- specialist review artifacts when needed
+- specialist review artifacts when needed, with one persistent file per non-orchestrator specialist
 - `constraints.md`
 - `implementation-plan.md` when the task is scenario-heavy, multi-step, or implementation-complex
 - implementation and validation artifacts
@@ -81,6 +81,7 @@ It should include, when relevant:
 - trust-boundary and runtime constraints already established
 - validation mapping for each scenario or change group
 - blocked or deferred work
+- checklists or checkbox sections when the task is meant to be executed and tracked phase by phase
 
 # Example Operator Pattern
 
@@ -116,6 +117,8 @@ The reusable system should provide:
 - universal prompts
 - stable artifact names
 - stable specialist responsibilities
+- one persistent summary artifact per specialist agent under the task directory
+- specialist summary templates under `docs/ai/templates/specialist-summaries/`
 
 The task brief should provide:
 

@@ -61,7 +61,8 @@ Run a controlled auth regression verification task for the current branch using 
 4. Implementation-plan creation for runner alignment and scenario execution order
 5. `04 - Implementation Agent` to align the runner with `E2E_BACKEND_MODE=pglite|container` while preserving the current PGlite path
 6. `07 - Playwright E2E` for real-browser verification
-7. Final validation/report artifact
+7. `06 - Debug Investigation` for Phase 1 failure triage before continuing breadth-first execution
+8. Final validation/report artifact
 
 ## Sequence Checklist
 
@@ -71,11 +72,12 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] Implementation-plan completed
 - [x] Runner alignment implementation step completed
 - [ ] Playwright E2E step completed
+- [x] Debug investigation step completed
 - [ ] Final validation/report artifact completed
 
 ## Specialist Status
 
-- `06 - Debug Investigation`: skipped for kickoff unless repository evidence becomes too ambiguous to run safely
+- `06 - Debug Investigation`: now required for Phase 1 failure triage on AF-01 and the redirect-preservation mismatch before deciding whether to continue breadth-first execution
 - `01 - Architecture Guard`: skipped for kickoff because this is a verification workflow, not a design task
 - `02 - Security & Auth`: conditional only if branch evidence or observed behavior shows trust-boundary concerns before execution
 - `03 - Next.js Runtime`: conditional only if branch evidence or observed behavior shows runtime-placement or App Router instability before execution
@@ -111,6 +113,7 @@ Run a controlled auth regression verification task for the current branch using 
 - `constraints.md`
 - `implementation-plan.md`
 - `04 - Implementation Agent - Summary.md`
+- `06 - Debug Investigation - Summary.md`
 - `07 - Playwright E2E - Summary.md`
 - `validation-report.md`
 
@@ -121,6 +124,7 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] `constraints.md`
 - [x] `implementation-plan.md`
 - [x] `04 - Implementation Agent - Summary.md`
+- [x] `06 - Debug Investigation - Summary.md`
 - [x] `07 - Playwright E2E - Summary.md`
 - [ ] `validation-report.md`
 
@@ -138,3 +142,12 @@ Run a controlled auth regression verification task for the current branch using 
 - Current Playwright config suppresses web-server stdout and stderr, so server-log visibility is still not satisfied for this verification workflow.
 - Remaining note: server-log visibility is still limited by Playwright web-server config, but the browser-real execution path itself is now operational.
 - Consequence: the task is ready to proceed from readiness checks into browser-real auth regression execution.
+- Phase 1 execution has started.
+- `AF-01` failed in the real browser run: interactive `/sign-up` did not reach `/auth/bootstrap/start` and remained on Clerk email verification until timeout.
+- `AF-02` / `AF-03` / `AF-04` were executed in the fresh-user provisioning flow. The browser reached onboarding and then landed on `/users`, which satisfies the matrix expectation for onboarding completion and post-onboarding landing.
+- Additional mismatch uncovered during the `AF-02` / `AF-03` / `AF-04` run: the existing repo spec expected the preserved redirect target `/app/dashboard`, but the observed final URL after onboarding was `/users`.
+- Debug investigation is now complete.
+- AF-01 is currently classified as likely harness-side Clerk verification instability rather than confirmed app bootstrap regression.
+- The `/app/dashboard` post-onboarding expectation has now been explicitly rejected by user decision; `/users` is the authoritative landing contract for this workflow.
+- Additional code drift was confirmed: the onboarding server action can honor `redirect_url`, but the browser onboarding form does not submit that field, so arbitrary redirect preservation is not implemented end to end today.
+- Consequence: contract clarification is complete for post-onboarding landing. The immediate next action is to rerun the corrected fresh-user provisioning test and then decide whether AF-01 should be stabilized now or carried as a harness-side blocked item while later phases proceed.

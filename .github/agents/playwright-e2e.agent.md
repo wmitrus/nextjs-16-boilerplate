@@ -1,7 +1,7 @@
 ---
 description: 'Use when real-browser Playwright verification is required for auth flows, onboarding, browser/runtime regressions, route transitions, or end-to-end checks that cannot be trusted to unit or integration tests alone. Pick this agent over the default agent for focused Playwright E2E execution and evidence capture rather than design or implementation.'
 name: '07 - Playwright E2E'
-tools: [read, search, execute]
+tools: [read, search, execute, edit]
 user-invocable: true
 agents: []
 ---

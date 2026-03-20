@@ -12,10 +12,16 @@ Before the test run:
 
 - start the target backend DB
 - make sure you have the correct env for Clerk redirects
-- clear the test user state or prepare:
+- clear the test user state or prepare reusable identities for:
   - one fresh account
   - one already onboarded account
-  - one incomplete account
+  - one reusable incomplete identity
+
+Important:
+
+- for rerunnable runs, the incomplete case must not depend on a permanently preserved app DB state
+- the reusable incomplete identity is only the Clerk identity used for the incomplete-user path
+- the app-side incomplete state must be created during the run by reaching `/onboarding` and intentionally not submitting onboarding before the returning-user checks
 
 Also good to have:
 
@@ -52,7 +58,11 @@ returning onboarded user:
 
 incomplete user:
 
-- log in with such an account
+- use the reusable incomplete identity
+- let bootstrap create the internal user and reach `/onboarding`
+- do not submit onboarding
+- sign out if the scenario requires a returning-user re-entry check
+- log in again with the same identity
 - check whether it goes to /onboarding and does not hang on /users
 
 ### AF-08 / AF-09

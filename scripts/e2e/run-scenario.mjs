@@ -2,9 +2,12 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { TEST_DEFAULT_URL } from '../lib/db-guard.mjs';
+
 import {
   applyEnv,
   loadScenarioEnv,
+  resolveE2EBackendMode,
   resolveScenarioDatabasePath,
   resolveScenarioDatabaseUrl,
   SCENARIO_NAMES,
@@ -74,6 +77,48 @@ function run(command, args, env) {
   }
 }
 
+function applySharedRuntimeEnv(env, scenario, variant) {
+  const backendMode = resolveE2EBackendMode(env);
+
+  env.E2E_BACKEND_MODE = backendMode;
+  env.DB_PROVIDER = 'drizzle';
+  env.E2E_ENABLED = 'true';
+  env.NEXT_PUBLIC_E2E_ENABLED = 'true';
+  env.PLAYWRIGHT_REUSE_EXISTING_SERVER = 'false';
+  env.PLAYWRIGHT_TEST_BASE_URL =
+    env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+
+  if (backendMode === 'container') {
+    env.DATABASE_URL = TEST_DEFAULT_URL;
+    env.DB_DRIVER = 'postgres';
+    return backendMode;
+  }
+
+  env.DATABASE_URL =
+    process.env.DATABASE_URL ??
+    resolveScenarioDatabaseUrl({
+      scenario,
+      variant,
+    });
+  env.DB_DRIVER = 'pglite';
+
+  return backendMode;
+}
+
+function preparePgliteDatabase(env, scenario, variant) {
+  const databasePath = resolveScenarioDatabasePath({ scenario, variant });
+  fs.rmSync(databasePath, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+
+  run('pnpm', ['db:migrate:dev'], env);
+  run('pnpm', ['db:seed'], env);
+}
+
+function prepareContainerDatabase(env) {
+  run('pnpm', ['db:test:up'], env);
+  run('node', ['scripts/db-ops.mjs', 'test', 'reset', '--force'], env);
+}
+
 function main() {
   const { scenario, variant, withOauth, playwrightArgs } = parseArgs(
     process.argv.slice(2),
@@ -90,25 +135,9 @@ function main() {
     ...process.env,
   };
 
-  env.DATABASE_URL =
-    process.env.DATABASE_URL ??
-    resolveScenarioDatabaseUrl({
-      scenario,
-      variant,
-    });
-  env.DB_PROVIDER = process.env.DB_PROVIDER ?? env.DB_PROVIDER ?? 'drizzle';
-  env.DB_DRIVER = process.env.DB_DRIVER ?? env.DB_DRIVER ?? 'pglite';
-  env.E2E_ENABLED = 'true';
-  env.NEXT_PUBLIC_E2E_ENABLED = 'true';
-  env.PLAYWRIGHT_REUSE_EXISTING_SERVER = 'false';
-  env.PLAYWRIGHT_TEST_BASE_URL =
-    process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+  const backendMode = applySharedRuntimeEnv(env, scenario, variant);
 
   applyEnv(env);
-
-  const databasePath = resolveScenarioDatabasePath({ scenario, variant });
-  fs.rmSync(databasePath, { recursive: true, force: true });
-  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
   const checkArgs = ['scripts/check-e2e-auth-env.mjs', '--scenario', scenario];
   if (variant) {
@@ -119,8 +148,13 @@ function main() {
   }
 
   run('node', checkArgs, env);
-  run('pnpm', ['db:migrate:dev'], env);
-  run('pnpm', ['db:seed'], env);
+
+  if (backendMode === 'container') {
+    prepareContainerDatabase(env);
+  } else {
+    preparePgliteDatabase(env, scenario, variant);
+  }
+
   run('pnpm', ['exec', 'playwright', 'test', ...playwrightArgs], env);
 }
 

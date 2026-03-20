@@ -4,39 +4,39 @@
 
 - Task ID: `2026-03-19-auth-regression-verification`
 - Task Objective: run the controlled auth regression verification for the current branch after aligning the universal runner with `E2E_BACKEND_MODE=pglite|container`
-- Current Run Scope: Phase 0a runner alignment plus AF-06 / AF-07 rerunnable incomplete-user flow implementation
+- Current Run Scope: Phase 0a runner alignment, AF-06 / AF-07 rerunnable incomplete-user flow implementation, and AF-01 hosted Clerk verification harness fix
 - Status: COMPLETED
 - Last Updated: 2026-03-20
 - Related Control Artifacts: `plan.md`, `intake.md`, `constraints.md`, `implementation-plan.md`, `07 - Playwright E2E - Summary.md`
 
 ## Scope Handled
 
-- modules / files changed: `scripts/e2e/load-env.mjs`, `scripts/e2e/run-scenario.mjs`, `e2e/clerk-auth.ts`, `e2e/provisioning-runtime.spec.ts`, supporting docs, task control artifacts, and this summary artifact
-- implementation goals in scope: preserve the existing PGlite scenario flow, add container-backed setup using the repository test DB lifecycle, keep the same scenario entrypoint and Playwright args, switch only by `E2E_BACKEND_MODE`, and implement rerunnable AF-06 / AF-07 flows using the incomplete-user helper
+- modules / files changed: `scripts/e2e/load-env.mjs`, `scripts/e2e/run-scenario.mjs`, `e2e/clerk-auth.ts`, `e2e/provisioning-runtime.spec.ts`, `e2e/auth.spec.ts`, supporting docs, task control artifacts, and this summary artifact
+- implementation goals in scope: preserve the existing PGlite scenario flow, add container-backed setup using the repository test DB lifecycle, keep the same scenario entrypoint and Playwright args, switch only by `E2E_BACKEND_MODE`, implement rerunnable AF-06 / AF-07 flows using the incomplete-user helper, and make AF-01 hosted Clerk sign-up verification deterministic
 - constraints applied: keep one universal runner, reuse existing DB lifecycle commands, do not fork scenario naming or Playwright command shape, and keep container mode on the isolated test DB profile only
 
 ## Inputs Reviewed
 
-- code paths reviewed: `scripts/e2e/run-scenario.mjs`, `scripts/e2e/load-env.mjs`, `scripts/compose-db-local.mjs`, `scripts/db-ops.mjs`, `scripts/lib/db-guard.mjs`, `package.json`, `scripts/e2e/env/base.env`, `e2e/clerk-auth.ts`, `e2e/provisioning-runtime.spec.ts`
+- code paths reviewed: `scripts/e2e/run-scenario.mjs`, `scripts/e2e/load-env.mjs`, `scripts/compose-db-local.mjs`, `scripts/db-ops.mjs`, `scripts/lib/db-guard.mjs`, `package.json`, `scripts/e2e/env/base.env`, `e2e/clerk-auth.ts`, `e2e/provisioning-runtime.spec.ts`, `e2e/auth.spec.ts`, and Clerk testing helper typings/runtime under `node_modules/@clerk/testing`
 - upstream specialist artifacts reviewed: `07 - Playwright E2E - Summary.md`
 - earlier implementation notes reviewed: `implementation-plan.md`, `constraints.md`
 
 ## Actions Performed
 
-- code changes made: added backend-mode validation in `load-env.mjs`; updated `run-scenario.mjs` to branch setup by `E2E_BACKEND_MODE`, preserve the existing PGlite file-backed flow, and use `db:test:up` plus `node scripts/db-ops.mjs test reset --force` for container mode while keeping Playwright invocation unchanged; added optional incomplete-user helper support in `e2e/clerk-auth.ts`; implemented rerunnable AF-06 / AF-07 single-mode flows in `e2e/provisioning-runtime.spec.ts`
+- code changes made: added backend-mode validation in `load-env.mjs`; updated `run-scenario.mjs` to branch setup by `E2E_BACKEND_MODE`, preserve the existing PGlite file-backed flow, and use `db:test:up` plus `node scripts/db-ops.mjs test reset --force` for container mode while keeping Playwright invocation unchanged; added optional incomplete-user helper support in `e2e/clerk-auth.ts`; implemented rerunnable AF-06 / AF-07 single-mode flows in `e2e/provisioning-runtime.spec.ts`; updated `e2e/auth.spec.ts` so hosted sign-up waits deterministically for either Clerk verify-email or bootstrap and no longer assumes the bootstrap request must be flagged as a navigation request
 - tests or supporting files updated: none
 - focused validation executed: syntax checks, backend-mode helper validation, env validation, `--list` runner validation for both backend modes, Playwright spec listing after the AF-06 / AF-07 additions, and cleanup of the temporary test DB container
 
 ## Files Changed
 
-- production files: `scripts/e2e/load-env.mjs`, `scripts/e2e/run-scenario.mjs`, `e2e/clerk-auth.ts`, `e2e/provisioning-runtime.spec.ts`
+- production files: `scripts/e2e/load-env.mjs`, `scripts/e2e/run-scenario.mjs`, `e2e/clerk-auth.ts`, `e2e/provisioning-runtime.spec.ts`, `e2e/auth.spec.ts`
 - test files: none
 - docs / artifact files: `.env.example`, `scripts/e2e-clerk-fixtures.md`, `plan.md`, `intake.md`, `implementation-plan.md`, `04 - Implementation Agent - Summary.md`
 
 ## Behavior Change Summary
 
 - previous behavior: the universal scenario runner always executed the PGlite reset/migrate/seed path regardless of `E2E_BACKEND_MODE`
-- new behavior: the universal scenario runner now preserves the PGlite branch for `pglite` and uses the repository test DB lifecycle for `container`, while keeping scenario selection and Playwright args shared; the provisioning runtime spec now includes rerunnable single-mode incomplete-user flows that create onboarding-incomplete app state inside the test run
+- new behavior: the universal scenario runner now preserves the PGlite branch for `pglite` and uses the repository test DB lifecycle for `container`, while keeping scenario selection and Playwright args shared; the provisioning runtime spec now includes rerunnable single-mode incomplete-user flows that create onboarding-incomplete app state inside the test run; the auth E2E harness now handles hosted Clerk verification deterministically for `+clerk_test` sign-up emails and detects bootstrap requests reliably
 - intentional non-changes: no separate container-specific scenario scripts were added and no persistent incomplete DB fixture was introduced
 
 ## Implementation Decisions / Constraints
@@ -47,8 +47,8 @@
 
 ## Validation Performed
 
-- commands run: `node --check scripts/e2e/load-env.mjs`; `node --check scripts/e2e/run-scenario.mjs`; `node --check scripts/check-e2e-auth-env.mjs`; `node scripts/check-e2e-auth-env.mjs --scenario single`; `E2E_BACKEND_MODE=pglite node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `E2E_BACKEND_MODE=pglite node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `pnpm db:test:down`
-- results: backend-mode validation still passes, and the updated provisioning runtime spec now lists the new single-mode incomplete-user tests for rerunnable AF-06 / AF-07 flow coverage
+- commands run: `node --check scripts/e2e/load-env.mjs`; `node --check scripts/e2e/run-scenario.mjs`; `node --check scripts/check-e2e-auth-env.mjs`; `node scripts/check-e2e-auth-env.mjs --scenario single`; `E2E_BACKEND_MODE=pglite node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `E2E_BACKEND_MODE=pglite node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `pnpm db:test:down`; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium --reporter=line --grep 'sign-up via /sign-up page force redirects through /auth/bootstrap/start'`
+- results: backend-mode validation still passes, the updated provisioning runtime spec now lists the new single-mode incomplete-user tests for rerunnable AF-06 / AF-07 flow coverage, and the targeted AF-01 hosted sign-up path now passes in Chromium after the harness fix
 - follow-up readiness evidence: non-secret env checks confirmed fresh, provisioned, and incomplete-user identities are populated; a targeted container-mode browser smoke run validated `db:test:up` plus reset/migrate/seed against `127.0.0.1:5433/app_test`, then failed at Playwright Chromium launch because the Linux host is missing `libnspr4.so`
 - follow-up readiness resolution: after the user ran `npx playwright install --with-deps`, rerunning the same targeted container-mode smoke check succeeded end to end, confirming the browser-host dependency issue is cleared for Playwright Chromium on this machine
 - validation not run: no successful full Playwright browser execution of the new AF-06 / AF-07 tests was performed yet; only the targeted auth smoke check was rerun
@@ -81,3 +81,10 @@
 - Trigger: Phase 0a follow-up plus AF-06 / AF-07 implementation
 - Summary of change: aligned the universal E2E runner with `E2E_BACKEND_MODE=pglite|container`, wired the incomplete-user identity into the helper layer, implemented rerunnable AF-06 / AF-07 test flows, then recorded Phase 0 follow-up evidence showing container DB readiness is validated and the prior Chromium host dependency blocker is now cleared after `npx playwright install --with-deps`
 - Sections refreshed: all
+
+### Update Entry
+
+- Date: 2026-03-20
+- Trigger: AF-01 hosted Clerk verification implementation
+- Summary of change: updated the auth E2E harness so hosted Clerk sign-up waits for either verify-email or bootstrap, uses the documented test OTP path deterministically, accepts bootstrap requests not marked as navigation, and validated the fix with a focused Chromium rerun that passed
+- Sections refreshed: task context, scope handled, inputs reviewed, actions performed, files changed, behavior change summary, validation performed

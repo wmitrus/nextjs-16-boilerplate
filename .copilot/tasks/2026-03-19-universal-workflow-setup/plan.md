@@ -39,5 +39,5 @@ Refactor the Copilot workflow setup so prompts and task-start flow are universal
 ## Planned Artifacts
 
 - `plan.md`
-- `implementation-report.md`
+- `04 - Implementation Agent - Summary.md`
 - `validation-report.md`

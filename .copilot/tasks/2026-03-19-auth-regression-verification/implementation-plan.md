@@ -6,6 +6,7 @@ Translate the auth regression requirements into an execution-ready verification 
 
 ## Progress Checklist
 
+- [x] Phase 0a completed
 - [ ] Phase 0 completed
 - [ ] Phase 1 completed
 - [ ] Phase 2 completed
@@ -25,24 +26,95 @@ Translate the auth regression requirements into an execution-ready verification 
 - prefer interactive browser flow that matches manual clicking for the main regression evidence
 - build the runner so it remains universal and reusable beyond this task
 - use E2E_BACKEND_MODE=pglite|container to choose the execution backend/runtime profile
+- preserve the current separated scenario behavior for PGlite and add the same separated scenario behavior for container rather than inventing a different scenario model per backend
 
 ## Execution Phases
+
+### Phase 0a — Runner Alignment Before Browser Verification
+
+Checklist:
+
+- [x] Runner branching for `E2E_BACKEND_MODE=pglite|container` is designed
+- [x] Existing PGlite scenario flow is explicitly preserved
+- [x] Container scenario flow uses the same scenario entrypoint and Playwright arguments as PGlite
+- [x] Container mode startup reuses repository DB lifecycle commands instead of ad hoc shell logic
+- [x] Container mode targets only the test DB profile (`5433/app_test`)
+- [x] Mode-specific migrate / seed / reset behavior is defined
+- [x] Mode-specific cleanup behavior is defined
+- [x] Validation plan for runner alignment is recorded
+
+Implementation intent:
+
+- keep `scripts/e2e/run-scenario.mjs` as the universal scenario entrypoint
+- branch setup behavior by `E2E_BACKEND_MODE`
+- keep the current PGlite file-backed reset flow for `pglite`
+- add a container-backed setup path that reuses repository test DB/container commands and guards
+- keep scenario selection, env loading, and Playwright argument forwarding identical across backend modes
+
+Expected affected areas:
+
+- `scripts/e2e/run-scenario.mjs`
+- `scripts/e2e/load-env.mjs`
+- `scripts/check-e2e-auth-env.mjs`
+- `scripts/compose-db-local.mjs`
+- `scripts/db-ops.mjs`
+- `package.json`
+
+Validation intent:
+
+- confirm `pglite` mode still resolves a file-backed DB and existing scenario setup
+- confirm `container` mode starts the test DB lifecycle, targets only `5433/app_test`, and avoids the dev DB path
+- confirm the same scenario command shape works for both modes with only `E2E_BACKEND_MODE` changed
+
+Implementation result:
+
+- `scripts/e2e/run-scenario.mjs` remains the single scenario entrypoint
+- `scripts/e2e/load-env.mjs` now validates backend mode through `resolveE2EBackendMode`
+- `pglite` mode still clears the scenario file DB, then runs `db:migrate:dev` and `db:seed`
+- `container` mode now runs `db:test:up` and `node scripts/db-ops.mjs test reset --force`, targeting the isolated test DB profile
+- Playwright invocation stays unchanged apart from env-driven backend setup
+
+Focused validation completed:
+
+- `node --check scripts/e2e/load-env.mjs`
+- `node --check scripts/e2e/run-scenario.mjs`
+- `node --input-type=module -e "import { resolveE2EBackendMode } from './scripts/e2e/load-env.mjs'; ..."`
+- `node scripts/check-e2e-auth-env.mjs --scenario single`
+- `E2E_BACKEND_MODE=pglite node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`
+- `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`
+- `pnpm db:test:down`
 
 ### Phase 0 — Environment And Account Readiness
 
 Checklist:
 
-- [ ] Selected runner mode is confirmed
+- [x] Selected runner mode is confirmed
 - [ ] If `E2E_BACKEND_MODE=container`, container-backed test DB startup is automated and validated
 - [ ] Container mode targets only `5433/app_test`
 - [ ] Clerk redirect env is confirmed
 - [ ] App runtime is available
 - [ ] Server logs are visible
 - [ ] Browser tools are available
-- [ ] Prepared accounts are confirmed for fresh user, onboarded returning user, and incomplete user
+- [ ] Prepared identities are confirmed for fresh user, onboarded returning user, and reusable incomplete-user flow
+- [x] In-run setup for the onboarding-incomplete app state is defined for AF-06 / AF-07
 - [ ] Run metadata is captured
 - [ ] Environment notes are captured
 - [ ] Account-state notes are captured
+
+Current readiness findings:
+
+- Local env selects `E2E_BACKEND_MODE=container`.
+- Clerk keys are configured.
+- Existing `single` fixtures for provisioned and new users are configured and pass the repository env validator for the `single` scenario.
+- Rerunnable auth-regression guidance now treats the incomplete case as a reusable Clerk identity plus in-run app-state setup, not as a permanently preserved DB state.
+- The reusable incomplete identity now uses the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`.
+- AF-06 / AF-07 test flow now uses `signInClerkIncompleteUserE2E()` and recreates onboarding-incomplete app state in `e2e/provisioning-runtime.spec.ts` by signing in, reaching `/onboarding`, and intentionally not submitting before the returning-user assertions.
+- Runner alignment is complete: the current scenario runner now honors `E2E_BACKEND_MODE=pglite|container` while preserving the existing PGlite flow.
+- User direction for remediation is now explicit: preserve the current PGlite scenario flow and add the same scenario flow for container behind the env switch.
+
+Current Phase 0 status:
+
+- BLOCKED pending the remaining non-code Phase 0 readiness checks before the browser-real run.
 
 Preconditions:
 
@@ -54,9 +126,11 @@ Preconditions:
 - server logs are visible
 - browser tools are available
 - prepared accounts exist for:
+- prepared identities exist for:
   - fresh user
   - onboarded returning user
-  - incomplete user
+  - reusable incomplete identity
+- the onboarding-incomplete app state for AF-06 / AF-07 is recreated during the run after DB reset by reaching `/onboarding` and intentionally not submitting onboarding before the returning-user assertions
 
 Expected evidence:
 
@@ -136,7 +210,7 @@ Scenarios:
 Execution intent:
 
 - verify completed user returns directly to `/users`
-- verify incomplete user is routed to `/onboarding`
+- verify the reusable incomplete identity can recreate onboarding-incomplete app state during the run and is then routed to `/onboarding`
 - verify direct route entry behaves correctly before and after onboarding completion
 
 Real-browser evidence required:
@@ -148,6 +222,7 @@ Expected evidence:
 - final URLs
 - route-decision logs
 - no hang on `/users`
+- notes showing how the onboarding-incomplete app state was created during the run
 
 ### Phase 3 — Cookie And Source-Of-Truth Checks
 
@@ -246,6 +321,7 @@ Checklist:
 - comments/descriptions may be aligned with this workflow, but variable names should not be duplicated or renamed unless a broader refactor is explicitly approved
 - current Playwright config starts the app automatically, but current scenario runner uses PGlite and does not automatically start the Podman-backed Postgres test DB
 - repository already has container lifecycle scripts and DB guards; implementation should reuse them instead of inventing a parallel container runner
+- repository already exposes test DB lifecycle and guardrails through `db:test:up`, `db:test:down`, `db:test:migrate`, `db:test:seed`, `db:test:reset`, `compose-db-local.mjs`, and `db-ops.mjs`; runner alignment should compose these instead of re-implementing them
 
 ## Runner Architecture Direction
 
@@ -256,6 +332,9 @@ Checklist:
 - the active mode should be selected by E2E_BACKEND_MODE during execution
 - local container mode should be designed so the same flow can later be adapted to CI/CD without introducing extra manual setup steps
 - container mode should use the repository test DB isolation model, not the dev DB profile
+- preserve the current separated scenario flow and Playwright selection semantics for PGlite
+- implement the same separated scenario flow for container rather than introducing backend-specific scenario names or duplicated task scripts
+- only backend setup, reset, migrate, seed, and optional cleanup behavior should differ by mode; scenario env loading and test selection should remain shared
 
 ## Deferred / Blocked Handling
 

@@ -20,6 +20,7 @@ You complement them by specializing in framework and runtime behavior.
 
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before runtime analysis.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before runtime analysis.
+- If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `03 - Next.js Runtime - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, then review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md` and use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios.
 - Treat repository code as the source of truth.
@@ -241,5 +242,7 @@ Within that structure:
 - No unsupported claims
 - No implementation unless asked
 - No generic framework advice detached from the live repository
+
+When the task is artifact-backed, your persistent per-task summary artifact must be the single file `03 - Next.js Runtime - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Your job is to protect runtime correctness, framework boundary discipline, and deployment-safe Next.js behavior without drifting into broad architecture or security-policy review.

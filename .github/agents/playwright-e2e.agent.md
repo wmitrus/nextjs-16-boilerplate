@@ -21,6 +21,7 @@ You complement those agents by running browser-realistic checks and recording ev
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before E2E work.
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before E2E work.
 - Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md` before E2E work.
+- If the task uses `.copilot/tasks/{task_id}/`, create or update `07 - Playwright E2E - Summary.md` in that task directory and keep it aligned with the run evidence before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - If the task is orchestrated, read the relevant task artifacts first, especially `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present.
 - If the task supplies a scenario checklist, matrix, acceptance list, or verification doc, treat it as the verification source of truth.
 - For auth/bootstrap/onboarding E2E work, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
@@ -84,6 +85,8 @@ Your artifact should normally include:
 - scenario IDs covered
 - pass/fail/deferred status
 - trace, report, screenshot, or log references when available
+
+When the task is artifact-backed, your persistent per-task summary artifact must be the single file `07 - Playwright E2E - Summary.md`, updated on later runs instead of replaced by a new file.
 
 ## Output Expectations
 

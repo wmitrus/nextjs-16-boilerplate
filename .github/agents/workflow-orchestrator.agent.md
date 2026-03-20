@@ -58,6 +58,13 @@ For non-trivial tasks:
 7. Run validation at the right level
 8. Ensure final artifacts and residual risks are documented
 
+At every major transition:
+
+- update `plan.md`, `intake.md`, and `implementation-plan.md` so their status stays synchronized
+- require specialists to reflect completed, blocked, skipped, or deferred work in the relevant checklists before handing off
+- require each non-orchestrator specialist to create or update its own persistent task summary artifact before handoff
+- do not advance to the next major workflow step while the control artifacts still show stale status
+
 ## Specialist Selection Rules
 
 - Use `06 - Debug Investigation` first for unclear, intermittent, env-driven, or multi-layer bugs.
@@ -74,21 +81,28 @@ You must ensure the task directory contains, when relevant:
 
 - `plan.md`
 - `intake.md`
-- `architecture-review.md`
-- `security-review.md`
-- `runtime-review.md`
-- `validation-strategy.md`
+- `01 - Architecture Guard - Summary.md`
+- `02 - Security & Auth - Summary.md`
+- `03 - Next.js Runtime - Summary.md`
+- `05 - Validation Strategy - Summary.md`
+- `06 - Debug Investigation - Summary.md`
+- `07 - Playwright E2E - Summary.md`
+- `04 - Implementation Agent - Summary.md`
 - `constraints.md`
 - `implementation-plan.md`
-- `implementation-report.md`
-- `playwright-e2e-report.md`
 - `validation-report.md`
 
 If a step is skipped, record why.
 If a step is blocked, record what is missing.
 
 `intake.md` should normalize the source inputs rather than duplicate them verbatim.
+`plan.md` should be actionable, not only descriptive, and should include checklist items when the task benefits from explicit progress tracking.
+`intake.md` should include a readiness checklist when task execution depends on prerequisites, scenario setup, or phased entry criteria.
 `implementation-plan.md` should translate the stabilized constraints into an execution-ready plan, including scenarios, affected areas, sequencing, and validation mapping when relevant.
+`implementation-plan.md` should include actionable checklists or checkbox sections when the task is phase-based, scenario-driven, or intended to be executed step by step.
+These artifacts must be kept synchronized during execution. When a larger milestone is completed, the orchestrator must ensure the corresponding checklist state is updated in both `plan.md` and `intake.md`, plus `implementation-plan.md` when execution tracking is affected.
+Each non-orchestrator specialist must also maintain exactly one persistent summary artifact under the task directory, named with the agent number and agent name plus ` - Summary.md`, and update that same file on subsequent runs rather than creating duplicates.
+Each specialist summary should be structured from the corresponding template in `docs/ai/templates/specialist-summaries/`.
 
 ## Output Expectations
 

@@ -20,6 +20,7 @@ You complement those agents by producing evidence-driven investigation output th
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before investigation.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before investigation.
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before investigation.
+- If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `06 - Debug Investigation - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - Treat repository code as the primary source of truth.
 - Treat logs, diagnostics, Sentry data, task artifacts, and observed runtime behavior as supporting evidence.
@@ -195,5 +196,7 @@ Within that structure:
 - no unsupported claims
 - no implementation unless asked
 - no vague “could be anything” summaries
+
+When the task is artifact-backed, your persistent per-task summary artifact must be the single file `06 - Debug Investigation - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Your job is to trace complex failures precisely and leave the next specialist with a materially smaller uncertainty set.

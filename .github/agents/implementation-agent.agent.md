@@ -25,6 +25,7 @@ You implement within the guardrails defined by:
 
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before implementation work.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before implementation work.
+- If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `04 - Implementation Agent - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - Treat repository code as the source of truth.
 - If docs and code differ, trust the code and note the drift briefly before implementing.
@@ -114,6 +115,8 @@ When you finish implementation work:
 - summarize the behavior change
 - summarize validation performed
 - call out residual risks or follow-up work if any
+
+When the task is artifact-backed, your persistent per-task summary artifact must be the single file `04 - Implementation Agent - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Do not give broad theory when the user asked for implementation.
 Do not pad the answer with generic advice.

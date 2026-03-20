@@ -49,8 +49,10 @@
 
 - commands run: `node --check scripts/e2e/load-env.mjs`; `node --check scripts/e2e/run-scenario.mjs`; `node --check scripts/check-e2e-auth-env.mjs`; `node scripts/check-e2e-auth-env.mjs --scenario single`; `E2E_BACKEND_MODE=pglite node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `E2E_BACKEND_MODE=pglite node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --list`; `pnpm db:test:down`
 - results: backend-mode validation still passes, and the updated provisioning runtime spec now lists the new single-mode incomplete-user tests for rerunnable AF-06 / AF-07 flow coverage
-- validation not run: no full Playwright browser execution of the new AF-06 / AF-07 tests was run in this step
-- residual risk from validation gaps: runtime correctness for the actual auth regression scenarios still depends on the remaining Phase 0 fixture readiness and later browser execution
+- follow-up readiness evidence: non-secret env checks confirmed fresh, provisioned, and incomplete-user identities are populated; a targeted container-mode browser smoke run validated `db:test:up` plus reset/migrate/seed against `127.0.0.1:5433/app_test`, then failed at Playwright Chromium launch because the Linux host is missing `libnspr4.so`
+- follow-up readiness resolution: after the user ran `npx playwright install --with-deps`, rerunning the same targeted container-mode smoke check succeeded end to end, confirming the browser-host dependency issue is cleared for Playwright Chromium on this machine
+- validation not run: no successful full Playwright browser execution of the new AF-06 / AF-07 tests was performed yet; only the targeted auth smoke check was rerun
+- residual risk from validation gaps: runtime correctness for the full auth regression matrix still depends on executing the planned browser scenarios, even though the host browser dependency blocker is now cleared
 
 ## Artifact Synchronization
 
@@ -62,8 +64,8 @@
 ## Open Questions / Blockers
 
 - unresolved questions: none at the helper/test-flow level for AF-06 / AF-07
-- blockers: Phase 0 remains blocked on the remaining non-code execution-readiness checks, not on runner support or incomplete-user test-flow design
-- follow-up needed: proceed to the remaining Phase 0 readiness work, then hand back to Playwright E2E for scenario execution
+- blockers: Phase 0 is no longer blocked on runner support, incomplete-user test-flow design, or Chromium host dependencies; only optional server-log visibility remains as a workflow/observability concern
+- follow-up needed: hand back to Playwright E2E for scenario execution
 
 ## Handoff Notes
 
@@ -77,5 +79,5 @@
 
 - Date: 2026-03-20
 - Trigger: Phase 0a follow-up plus AF-06 / AF-07 implementation
-- Summary of change: aligned the universal E2E runner with `E2E_BACKEND_MODE=pglite|container`, wired the incomplete-user identity into the helper layer, implemented rerunnable AF-06 / AF-07 test flows, and synchronized the task artifacts
+- Summary of change: aligned the universal E2E runner with `E2E_BACKEND_MODE=pglite|container`, wired the incomplete-user identity into the helper layer, implemented rerunnable AF-06 / AF-07 test flows, then recorded Phase 0 follow-up evidence showing container DB readiness is validated and the prior Chromium host dependency blocker is now cleared after `npx playwright install --with-deps`
 - Sections refreshed: all

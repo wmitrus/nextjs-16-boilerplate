@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 export type ClerkE2EIdentity =
   | 'singleNewUser'
   | 'singleProvisionedUser'
+  | 'incompleteUser'
   | 'personalNewUser'
   | 'orgProviderOwner'
   | 'orgProviderMember'
@@ -37,6 +38,10 @@ const IDENTITY_ENV: Record<ClerkE2EIdentity, EnvAliasPair> = {
       'E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD',
       'E2E_CLERK_USER_PASSWORD',
     ],
+  },
+  incompleteUser: {
+    username: ['E2E_CLERK_INCOMPLETE_USER_USERNAME'],
+    password: ['E2E_CLERK_INCOMPLETE_USER_PASSWORD'],
   },
   personalNewUser: {
     username: ['E2E_CLERK_PERSONAL_NEW_USER_USERNAME'],
@@ -255,6 +260,14 @@ export async function signInSingleProvisionedUserE2E(
   page: Page,
 ): Promise<void> {
   await signInClerkIdentityE2E(page, 'singleProvisionedUser');
+}
+
+export function hasClerkIncompleteUserE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('incompleteUser');
+}
+
+export async function signInClerkIncompleteUserE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'incompleteUser');
 }
 
 export function hasClerkPersonalNewUserE2ECredentials(): boolean {

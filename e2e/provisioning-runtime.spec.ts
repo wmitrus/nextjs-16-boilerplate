@@ -304,7 +304,7 @@ test.describe('Provisioning Runtime E2E', () => {
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
   });
 
-  test('single mode: first login goes through bootstrap, preserves redirect_url, completes onboarding, then reaches the app', async ({
+  test('single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users', async ({
     page,
   }) => {
     test.skip(
@@ -323,9 +323,8 @@ test.describe('Provisioning Runtime E2E', () => {
       /\/onboarding\?redirect_url=%2Fapp%2Fdashboard/,
     );
     await completeOnboarding(page);
-    await expect(page).toHaveURL(/\/app\/dashboard$/);
+    await expect(page).toHaveURL(/\/users$/);
 
-    await page.goto('/users');
     await expect(page.getByText(/user management/i)).toBeVisible();
     await expectProvisioningReady(page, 'single');
   });

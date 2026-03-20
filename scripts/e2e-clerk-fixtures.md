@@ -86,6 +86,19 @@ Create these Clerk users with email + password credentials:
 | `clerk_org_db_seeded_member`    | `org/db` seeded membership path                      | yes            | none required                                          | `E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME`, `E2E_CLERK_ORG_DB_SEEDED_MEMBER_PASSWORD`       |
 | `clerk_link_blocked_unverified` | cross-provider linking negative path                 | no             | none                                                   | `E2E_CLERK_LINK_BLOCKED_UNVERIFIED_USERNAME`, `E2E_CLERK_LINK_BLOCKED_UNVERIFIED_PASSWORD` |
 
+Optional auth-regression identity for rerunnable incomplete-user checks:
+
+| Identity                | Purpose                                                              | Email verified | Clerk org membership | Canonical env vars                                                         |
+| ----------------------- | -------------------------------------------------------------------- | -------------- | -------------------- | -------------------------------------------------------------------------- |
+| `clerk_incomplete_user` | reusable Clerk identity for the auth-regression incomplete-user flow | yes            | none                 | `E2E_CLERK_INCOMPLETE_USER_USERNAME`, `E2E_CLERK_INCOMPLETE_USER_PASSWORD` |
+
+Important contract for this identity:
+
+- this identity is reusable, but the incomplete app state is not a permanent fixture
+- for rerunnable runs, the test or operator must recreate the onboarding-incomplete app state during the run after DB reset
+- do not treat this identity as a permanently preserved incomplete internal user across runs
+- do not assign organizations for the `single` incomplete-user flow
+
 Seed-coupled fixture constraints:
 
 - `E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME` must currently be `bob@example.com`
@@ -162,6 +175,11 @@ E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD=
 E2E_CLERK_SINGLE_NEW_USER_USERNAME=
 E2E_CLERK_SINGLE_NEW_USER_PASSWORD=
 
+# Optional auth-regression reusable identity for the single incomplete-user path
+# This is only the Clerk identity. The onboarding-incomplete app state should be recreated during the run.
+E2E_CLERK_INCOMPLETE_USER_USERNAME=
+E2E_CLERK_INCOMPLETE_USER_PASSWORD=
+
 # Scenario B: personal / first bootstrap new personal user
 E2E_CLERK_PERSONAL_NEW_USER_USERNAME=
 E2E_CLERK_PERSONAL_NEW_USER_PASSWORD=
@@ -232,7 +250,9 @@ Under the hood the runner:
 3. loads `scripts/e2e/env/base.env`
 4. loads the selected scenario env and optional variant env
 5. loads `.env.e2e.local` as the highest-precedence local overlay
-6. resets the scenario-specific PGlite DB
+6. prepares the selected backend mode:
+   - `pglite`: resets the scenario-specific PGlite DB
+   - `container`: starts the isolated test DB and resets `5433/app_test`
 7. migrates, seeds, validates env, then runs Playwright
 
 ## 7. DB State Notes
@@ -254,6 +274,8 @@ Use these rules:
 5. `clerk_link_blocked_unverified` must remain aligned with the seeded DB user
    email (`alice@example.com`) until the cross-provider-linking negative path
    gets a dedicated DB fixture loader.
+6. `clerk_incomplete_user`, when used, should be treated as a reusable Clerk identity only.
+   The onboarding-incomplete app state must be created inside the run after DB reset by reaching `/onboarding` and intentionally not submitting onboarding before the returning-user assertions.
 
 ## 8. OAuth Setup
 

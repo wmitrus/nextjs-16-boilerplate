@@ -22,6 +22,9 @@ Important:
 - for rerunnable runs, the incomplete case must not depend on a permanently preserved app DB state
 - the reusable incomplete identity is only the Clerk identity used for the incomplete-user path
 - the app-side incomplete state must be created during the run by reaching `/onboarding` and intentionally not submitting onboarding before the returning-user checks
+- for the interactive Clerk sign-up verification slice, use a throwaway Clerk test email containing `+clerk_test`; Clerk's test verification code is `424242`
+- that verification-code rule is only for the narrow hosted Clerk sign-up path, not for the main password-fixture runtime flows
+- no special CI-only Clerk setting is required for the `424242` code itself, but the Clerk test instance must have the relevant first-factor verification method enabled and must not add MFA / Client Trust challenges to the dedicated password fixtures
 
 Also good to have:
 
@@ -41,6 +44,7 @@ Do not do everything at once. Start with the minimum:
 new user:
 
 - sign-up
+- if Clerk verify-email appears during the hosted sign-up step, complete it with the Clerk test code `424242`
 - bootstrap/start
 - onboarding
 - submit

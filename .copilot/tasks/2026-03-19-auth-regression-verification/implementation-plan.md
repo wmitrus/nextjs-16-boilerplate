@@ -153,10 +153,10 @@ Scenarios supported:
 
 Checklist:
 
-- [ ] `AF-01` executed and classified
-- [ ] `AF-02` executed and classified
-- [ ] `AF-03` executed and classified
-- [ ] `AF-04` executed and classified
+- [x] `AF-01` executed and classified
+- [x] `AF-02` executed and classified
+- [x] `AF-03` executed and classified
+- [x] `AF-04` executed and classified
 - [ ] Final URLs captured
 - [ ] Key route-decision logs captured
 - [ ] Submit evidence captured
@@ -191,6 +191,31 @@ Expected evidence:
 - key route-decision logs
 - submit evidence
 - route-commit behavior
+
+Phase 1 execution notes:
+
+- `AF-01` was executed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium --grep 'sign-up via /sign-up page force redirects through /auth/bootstrap/start'`.
+- Result for `AF-01`: FAIL. The browser reached Clerk's `Verify your email` step and timed out after 30s waiting for a navigation request to `/auth/bootstrap/start`.
+- Key evidence for `AF-01`: Playwright failure at `e2e/auth.spec.ts:103`; error context shows the Clerk verify-email UI still visible with the generated test address and no observed bootstrap redirect.
+- `AF-02` / `AF-03` / `AF-04` were executed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep 'single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users'`.
+- Result for `AF-02`: PASS. The run reached `/onboarding?redirect_url=%2Fapp%2Fdashboard`, showing the fresh user was routed into onboarding after bootstrap.
+- Result for `AF-03`: PASS against the matrix expectation. After onboarding submission, the browser left onboarding and ended at `/users`.
+- Result for `AF-04`: PASS against the matrix expectation. The error snapshot after onboarding shows `/users` content rendered with the `User Management` heading and authenticated user menu visible.
+- Contract clarification on 2026-03-20: `/users` is the confirmed authoritative post-onboarding landing for this workflow. The earlier `/app/dashboard` expectation was stale and has been removed from the Phase 1 interpretation.
+- Phase 1 remains open because AF-01 still needs harness-side resolution and the run artifact still needs richer route-decision/log evidence.
+
+Debug triage gate before Phase 2:
+
+- determine whether `AF-01` failure is caused by unstable Clerk email-verification handling in the interactive sign-up harness or by a real app-side bootstrap redirect regression
+- determine whether post-onboarding landing on `/users` is intended product behavior or a stale/over-strong test contract relative to the auth-flow matrix
+- do not continue to Phase 2 until those two questions are explicitly classified or intentionally deferred
+
+Debug triage result:
+
+- `AF-01` is currently classified as likely harness issue because the failure boundary remained inside Clerk verify-email and no app-owned bootstrap request was observed
+- the post-onboarding `/app/dashboard` expectation was confirmed stale by user decision because the auth-flow docs and matrix expect stable landing on `/users`
+- separate code drift was identified: `src/app/onboarding/actions.ts` supports `redirect_url`, but `src/app/onboarding/onboarding-form.tsx` does not submit it in the browser flow
+- workflow recommendation after debug triage: contract clarification is complete for post-onboarding landing; remaining decision is whether to stabilize AF-01 now or continue breadth-first with AF-01 recorded as harness-side blocked
 
 ### Phase 2 — Returning User Routing
 

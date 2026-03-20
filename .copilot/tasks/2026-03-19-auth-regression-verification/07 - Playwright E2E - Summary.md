@@ -4,7 +4,7 @@
 
 - Task ID: `2026-03-19-auth-regression-verification`
 - Task Objective: run the controlled auth regression verification for the current branch using the repository auth-flow verification model and real-browser evidence where required
-- Current Run Scope: Phase 0 readiness plus Phase 1 fresh-user execution
+- Current Run Scope: Phase 0 readiness plus Phase 1 fresh-user execution, including a focused rerun of the corrected AF-02/AF-03/AF-04 fresh-user provisioning case
 - Status: IN PROGRESS
 - Last Updated: 2026-03-20
 - Related Control Artifacts: `plan.md`, `intake.md`, `constraints.md`, `implementation-plan.md`
@@ -23,9 +23,9 @@
 
 ## Actions Performed
 
-- browser checks executed: readiness smoke plus targeted Phase 1 fresh-user scenarios on Playwright `chromium`
-- commands run: `node scripts/check-e2e-auth-env.mjs --scenario single`; non-secret env presence checks for the three required single-mode identities; readiness smoke on `e2e/auth.spec.ts`; `npx playwright install --with-deps`; rerun of the readiness smoke; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium --grep "sign-up via /sign-up page force redirects through /auth/bootstrap/start"`; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep "single mode: first login goes through bootstrap, preserves redirect_url, completes onboarding, then reaches the app"`
-- evidence captured: local env reports Clerk keys set; fresh, provisioned, and incomplete-user single-mode identities are all configured; readiness smoke passed; the AF-01 run timed out on Clerk verify-email instead of reaching `/auth/bootstrap/start`; the AF-02/03/04 run reached onboarding and then landed on `/users` after submission, which is now confirmed as the intended contract for this workflow
+- browser checks executed: readiness smoke plus targeted Phase 1 fresh-user scenarios on Playwright `chromium`, followed by a focused rerun of the corrected fresh-user provisioning case
+- commands run: `node scripts/check-e2e-auth-env.mjs --scenario single`; non-secret env presence checks for the three required single-mode identities; readiness smoke on `e2e/auth.spec.ts`; `npx playwright install --with-deps`; rerun of the readiness smoke; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium --grep "sign-up via /sign-up page force redirects through /auth/bootstrap/start"`; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep "single mode: first login goes through bootstrap, preserves redirect_url, completes onboarding, then reaches the app"`; `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep "single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users"`
+- evidence captured: local env reports Clerk keys set; fresh, provisioned, and incomplete-user single-mode identities are all configured; readiness smoke passed; the AF-01 run timed out on Clerk verify-email instead of reaching `/auth/bootstrap/start`; the original AF-02/03/04 run reached onboarding and then landed on `/users` after submission, which is now confirmed as the intended contract for this workflow; the corrected fresh-user rerun passed end to end in 14.4s and reconfirmed the onboarding-to-users landing behavior
 - retries or setup steps performed: retried the readiness smoke after one terminal session closed unexpectedly; installed Playwright dependencies to clear the host browser blocker before Phase 1 execution
 
 ## Preconditions
@@ -44,8 +44,8 @@
 
 ## Observed Results
 
-- final URLs: readiness smoke completed successfully; AF-02 reached `/onboarding?redirect_url=%2Fapp%2Fdashboard`; after onboarding submit the fresh-user flow ended on `/users`; AF-01 never produced the expected bootstrap URL because the browser remained on Clerk verify-email UI
-- key route or UI observations: Chromium launched successfully; AF-01 stalled on the Clerk `Verify your email` screen; AF-02/03/04 flow displayed onboarding first, then rendered the `/users` page with the `User Management` heading and authenticated user menu visible
+- final URLs: readiness smoke completed successfully; the corrected fresh-user Phase 1 case navigated from `/auth/bootstrap/start?redirect_url=/app/dashboard` to `/onboarding?redirect_url=%2Fapp%2Fdashboard`, then after onboarding submission ended on `/users`; AF-01 never produced the expected bootstrap URL because the browser remained on Clerk verify-email UI
+- key route or UI observations: Chromium launched successfully; AF-01 stalled on the Clerk `Verify your email` screen; the corrected AF-02/03/04 flow displayed onboarding first, then rendered the `/users` page with the `User Management` heading and authenticated user menu visible
 - network / cookie observations: none captured in Phase 1 so far
 - runtime log correlation: DB lifecycle logs were captured from the runner (`db:test:up`, `db-ops` reset/migrate/seed), but app-server logs are still not visible through current Playwright config
 
@@ -54,15 +54,15 @@
 - trace references: none
 - report references: Playwright HTML report server started locally after the failed smoke run
 - report references: Playwright reported the successful rerun and last HTML report remains available via `pnpm exec playwright show-report`
-- report references: Playwright error contexts captured for the AF-01 and AF-02/03/04 targeted runs under `test-results/`
+- report references: Playwright error contexts captured for the AF-01 and earlier AF-02/03/04 targeted runs under `test-results/`; the latest focused rerun finished with `test-results/.last-run.json` status `passed`
 - screenshot references: none
-- log references: env validator confirmed the configured `single` fixture set; non-secret env checks confirmed the incomplete-user contract is populated; runner logs confirmed `db:test:up`, target `127.0.0.1:5433/app_test`, successful reset/migrations/seed for each Phase 1 run; AF-01 failed at `page.waitForRequest` for `/auth/bootstrap/start`; AF-02/03/04 landing on `/users` is now treated as expected contract behavior
+- log references: env validator confirmed the configured `single` fixture set; non-secret env checks confirmed the incomplete-user contract is populated; runner logs confirmed `db:test:up`, target `127.0.0.1:5433/app_test`, successful reset/migrations/seed for each Phase 1 run; AF-01 failed at `page.waitForRequest` for `/auth/bootstrap/start`; the focused corrected rerun completed with `Running 1 test using 1 worker` and `1 passed (14.4s)`; AF-02/03/04 landing on `/users` is now treated as expected contract behavior
 
 ## Artifact Synchronization
 
-- `plan.md` updates: recorded that Phase 1 execution started and captured the initial fresh-user findings
-- `implementation-plan.md` updates: marked `AF-01` through `AF-04` executed/classified and recorded the observed outcomes plus remaining evidence gaps
-- specialist artifact updates: refreshed this summary artifact with Phase 1 execution outcomes
+- `plan.md` updates: recorded that the focused rerun of the corrected fresh-user provisioning case completed and confirmed the route sequence ending on `/users`
+- `implementation-plan.md` updates: added the focused rerun command and the verified route sequence for the corrected fresh-user case
+- specialist artifact updates: refreshed this summary artifact with the focused rerun result and the current route evidence
 
 ## Gaps / Blockers
 
@@ -91,3 +91,10 @@
 - Trigger: Phase 1 fresh-user scenario execution
 - Summary of change: executed `AF-01` through `AF-04` in targeted Chromium runs; observed a likely harness-side failure on the interactive `/sign-up` path before bootstrap, while the fresh-user bootstrap/onboarding flow reached onboarding and then settled on `/users`, which is now confirmed as the intended contract for this workflow
 - Sections refreshed: task context, scope handled, actions performed, scenario status mapping, observed results, evidence collected, gaps/blockers, handoff notes
+
+### Update Entry
+
+- Date: 2026-03-20
+- Trigger: Focused rerun of the corrected fresh-user Phase 1 provisioning case
+- Summary of change: reran only `single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users` in container mode on Chromium; the run passed in 14.4s and reconfirmed the route sequence from bootstrap start to onboarding to final `/users` landing
+- Sections refreshed: task context, actions performed, observed results, evidence collected, artifact synchronization

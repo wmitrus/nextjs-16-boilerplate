@@ -13,7 +13,7 @@ Translate the auth regression requirements into an execution-ready verification 
 - [ ] Phase 3 completed
 - [ ] Phase 4 completed
 - [ ] Validation mapping recorded in the matrix/run artifact
-- [ ] `07 - Playwright E2E - Summary.md` created
+- [x] `07 - Playwright E2E - Summary.md` created
 - [ ] Final validation report created
 
 ## Execution Model
@@ -89,17 +89,17 @@ Focused validation completed:
 Checklist:
 
 - [x] Selected runner mode is confirmed
-- [ ] If `E2E_BACKEND_MODE=container`, container-backed test DB startup is automated and validated
-- [ ] Container mode targets only `5433/app_test`
+- [x] If `E2E_BACKEND_MODE=container`, container-backed test DB startup is automated and validated
+- [x] Container mode targets only `5433/app_test`
 - [ ] Clerk redirect env is confirmed
-- [ ] App runtime is available
+- [x] App runtime is available
 - [ ] Server logs are visible
-- [ ] Browser tools are available
-- [ ] Prepared identities are confirmed for fresh user, onboarded returning user, and reusable incomplete-user flow
+- [x] Browser tools are available
+- [x] Prepared identities are confirmed for fresh user, onboarded returning user, and reusable incomplete-user flow
 - [x] In-run setup for the onboarding-incomplete app state is defined for AF-06 / AF-07
-- [ ] Run metadata is captured
-- [ ] Environment notes are captured
-- [ ] Account-state notes are captured
+- [x] Run metadata is captured
+- [x] Environment notes are captured
+- [x] Account-state notes are captured
 
 Current readiness findings:
 
@@ -108,13 +108,17 @@ Current readiness findings:
 - Existing `single` fixtures for provisioned and new users are configured and pass the repository env validator for the `single` scenario.
 - Rerunnable auth-regression guidance now treats the incomplete case as a reusable Clerk identity plus in-run app-state setup, not as a permanently preserved DB state.
 - The reusable incomplete identity now uses the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`.
+- Non-secret local env checks confirm all six single-mode identity vars are set for fresh, onboarded, and incomplete-user flows.
 - AF-06 / AF-07 test flow now uses `signInClerkIncompleteUserE2E()` and recreates onboarding-incomplete app state in `e2e/provisioning-runtime.spec.ts` by signing in, reaching `/onboarding`, and intentionally not submitting before the returning-user assertions.
 - Runner alignment is complete: the current scenario runner now honors `E2E_BACKEND_MODE=pglite|container` while preserving the existing PGlite flow.
 - User direction for remediation is now explicit: preserve the current PGlite scenario flow and add the same scenario flow for container behind the env switch.
+- A container-mode real-browser smoke run reached repository DB lifecycle execution successfully: `db:test:up` reused or started `nextjs16_test_db`, `node scripts/db-ops.mjs test reset --force` targeted `127.0.0.1:5433/app_test`, migrations applied, and seed completed.
+- After `npx playwright install --with-deps`, rerunning the same container-mode smoke check succeeded: the browser launched, the app runtime came up, and `e2e/auth.spec.ts` passed the signed-out home-page smoke assertion in 5.3s.
+- The current Playwright config still sets `webServer.stdout='ignore'` and `webServer.stderr='ignore'`, so server-log visibility is not currently satisfied for this task workflow.
 
 Current Phase 0 status:
 
-- BLOCKED pending the remaining non-code Phase 0 readiness checks before the browser-real run.
+- READY FOR BROWSER EXECUTION, with server-log visibility still limited by current Playwright config.
 
 Preconditions:
 
@@ -138,6 +142,8 @@ Expected evidence:
 - environment notes
 - account-state notes
 - selected runner mode
+- container DB lifecycle evidence
+- browser-launch blocker evidence when readiness cannot be completed
 
 Scenarios supported:
 

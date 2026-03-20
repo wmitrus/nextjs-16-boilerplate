@@ -15,7 +15,7 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] Runner architecture direction confirmed
 - [x] Container-mode runner implementation plan confirmed
 - [x] Container-mode runner implementation completed
-- [ ] `07 - Playwright E2E` run prepared
+- [x] `07 - Playwright E2E` run prepared
 - [x] `07 - Playwright E2E - Summary.md` created
 - [ ] `validation-report.md` created
 
@@ -151,3 +151,4 @@ Run a controlled auth regression verification task for the current branch using 
 - The `/app/dashboard` post-onboarding expectation has now been explicitly rejected by user decision; `/users` is the authoritative landing contract for this workflow.
 - Additional code drift was confirmed: the onboarding server action can honor `redirect_url`, but the browser onboarding form does not submit that field, so arbitrary redirect preservation is not implemented end to end today.
 - Consequence: contract clarification is complete for post-onboarding landing. The immediate next action is to rerun the corrected fresh-user provisioning test and then decide whether AF-01 should be stabilized now or carried as a harness-side blocked item while later phases proceed.
+- Focused rerun completed on 2026-03-20 for the corrected fresh-user Phase 1 case in container mode. The targeted Playwright case passed and confirmed the route sequence `/auth/bootstrap/start?redirect_url=/app/dashboard` -> `/onboarding?redirect_url=%2Fapp%2Fdashboard` -> `/users`.

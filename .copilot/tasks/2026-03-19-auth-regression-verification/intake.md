@@ -125,4 +125,6 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 - container-mode smoke execution now confirms automated DB startup/reset/seed against `127.0.0.1:5433/app_test`
 - after `npx playwright install --with-deps`, the same container-mode Chromium smoke execution now passes, confirming browser-host readiness for the real run
 - remaining readiness note: current Playwright web-server config still suppresses stdout/stderr needed for visible server logs
+- current execution blocker is no longer environment readiness; it is interpretation of Phase 1 failures, specifically AF-01 sign-up verification versus bootstrap handoff and the post-onboarding redirect contract mismatch (`/users` observed, `/app/dashboard` expected by spec)
+- debug triage classification on 2026-03-20: AF-01 is likely harness-side Clerk verification instability; user decision confirmed `/users` as the authoritative post-onboarding landing, so the earlier `/app/dashboard` expectation is stale; a separate code drift exists because the onboarding browser form does not submit `redirect_url` even though the server action can honor it
 - implementation direction confirmed with the user: keep the current separated scenario flow for PGlite, add the same separated scenario flow for container, and let the user choose the backend through `E2E_BACKEND_MODE`

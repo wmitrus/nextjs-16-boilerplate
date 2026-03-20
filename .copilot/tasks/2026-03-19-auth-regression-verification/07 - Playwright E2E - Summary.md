@@ -38,14 +38,14 @@
 ## Scenario Status Mapping
 
 - scenario IDs executed: `AF-01`, `AF-02`, `AF-03`, `AF-04`
-- PASS results: `AF-02`, `AF-03`, `AF-04`
-- FAIL results: `AF-01`
+- PASS results: `AF-01`, `AF-02`, `AF-03`, `AF-04`
+- FAIL results: none in Phase 1 after the AF-01 harness fix
 - DEFERRED / BLOCKED results: `AF-05`, `AF-06`, `AF-07`, `AF-08`, `AF-09`, `AF-12`, `AF-13`, `AF-14`, `AF-15`, `AF-17`, `AF-18`, `AF-21` not run yet
 
 ## Observed Results
 
-- final URLs: readiness smoke completed successfully; the corrected fresh-user Phase 1 case navigated from `/auth/bootstrap/start?redirect_url=/app/dashboard` to `/onboarding?redirect_url=%2Fapp%2Fdashboard`, then after onboarding submission ended on `/users`; AF-01 never produced the expected bootstrap URL because the browser remained on Clerk verify-email UI
-- key route or UI observations: Chromium launched successfully; AF-01 stalled on the Clerk `Verify your email` screen; the corrected AF-02/03/04 flow displayed onboarding first, then rendered the `/users` page with the `User Management` heading and authenticated user menu visible
+- final URLs: readiness smoke completed successfully; AF-01 now reaches the app-owned bootstrap path after hosted Clerk verification; the corrected fresh-user Phase 1 case navigated from `/auth/bootstrap/start?redirect_url=/app/dashboard` to `/onboarding?redirect_url=%2Fapp%2Fdashboard`, then after onboarding submission ended on `/users`
+- key route or UI observations: Chromium launched successfully; AF-01 now completes Clerk verify-email and reaches bootstrap; the corrected AF-02/03/04 flow displayed onboarding first, then rendered the `/users` page with the `User Management` heading and authenticated user menu visible
 - network / cookie observations: none captured in Phase 1 so far
 - runtime log correlation: DB lifecycle logs were captured from the runner (`db:test:up`, `db-ops` reset/migrate/seed), but app-server logs are still not visible through current Playwright config
 
@@ -56,7 +56,7 @@
 - report references: Playwright reported the successful rerun and last HTML report remains available via `pnpm exec playwright show-report`
 - report references: Playwright error contexts captured for the AF-01 and earlier AF-02/03/04 targeted runs under `test-results/`; the latest focused rerun finished with `test-results/.last-run.json` status `passed`
 - screenshot references: none
-- log references: env validator confirmed the configured `single` fixture set; non-secret env checks confirmed the incomplete-user contract is populated; runner logs confirmed `db:test:up`, target `127.0.0.1:5433/app_test`, successful reset/migrations/seed for each Phase 1 run; AF-01 failed at `page.waitForRequest` for `/auth/bootstrap/start`; the focused corrected rerun completed with `Running 1 test using 1 worker` and `1 passed (14.4s)`; AF-02/03/04 landing on `/users` is now treated as expected contract behavior
+- log references: env validator confirmed the configured `single` fixture set; non-secret env checks confirmed the incomplete-user contract is populated; runner logs confirmed `db:test:up`, target `127.0.0.1:5433/app_test`, successful reset/migrations/seed for each Phase 1 run; AF-01 passed after the hosted sign-up helper was updated to wait deterministically for Clerk verify-email or bootstrap and to accept bootstrap requests not marked as navigation; the focused corrected rerun completed with `Running 1 test using 1 worker` and `1 passed (14.4s)`; AF-02/03/04 landing on `/users` is now treated as expected contract behavior
 
 ## Artifact Synchronization
 
@@ -67,14 +67,14 @@
 ## Gaps / Blockers
 
 - scenarios not run: `AF-05`, `AF-06`, `AF-07`, `AF-08`, `AF-09`, `AF-12`, `AF-13`, `AF-14`, `AF-15`, `AF-17`, `AF-18`, `AF-21`
-- blockers: no infrastructure blocker currently prevents browser execution, but `AF-01` remains a likely harness-side failure on Clerk verify-email before bootstrap
+- blockers: no infrastructure blocker currently prevents browser execution for Phase 1
 - evidence limitations: app-server logs remain suppressed, and Phase 1 still lacks explicit route-decision/network capture beyond Playwright assertions and error contexts
 
 ## Handoff Notes
 
 - what the next agent should rely on: the universal runner now honors `E2E_BACKEND_MODE=container`, container DB lifecycle is validated against `5433/app_test`, and the single-mode incomplete-user identity contract is populated locally
-- what remains unverified: the remaining matrix scenarios after Phase 1, plus whether AF-01 should be reworked as a supported sign-up verification path or left blocked as harness-side instability
-- recommended next specialist or step: rerun the corrected AF-02/03/04 test to close the stale assertion, then decide whether to stabilize AF-01 now or continue breadth-first with AF-01 explicitly recorded as harness-blocked
+- what remains unverified: the remaining matrix scenarios after Phase 1
+- recommended next specialist or step: continue with the next planned auth-regression phase when ready
 
 ## Update Log
 

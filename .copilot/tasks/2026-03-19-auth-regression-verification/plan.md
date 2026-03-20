@@ -132,5 +132,9 @@ Run a controlled auth regression verification task for the current branch using 
 - Focused validation confirmed both branches via the same scenario entrypoint with Playwright `--list`: PGlite still resets and seeds the file-backed scenario DB, and container mode starts `test-db`, resets `5433/app_test`, seeds it, and reaches the same Playwright scenario list.
 - Reusable incomplete identity is now recorded via the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`.
 - AF-06 / AF-07 rerunnable flow is now implemented in `e2e/provisioning-runtime.spec.ts` using `signInClerkIncompleteUserE2E()` and in-test recreation of onboarding-incomplete app state.
-- Remaining blocker: full Phase 0 readiness still depends on runtime availability, server-log visibility, and execution preparation for the browser run; the incomplete-user setup itself is no longer undefined.
-- Consequence: browser-real auth regression execution is still blocked in Phase 0, but the blocker is now rerunnable scenario setup readiness rather than runner backend-mode support.
+- Non-secret local env checks confirm fresh, onboarded, and incomplete-user identities are all populated.
+- A container-mode smoke run confirmed automated test DB startup/reset/seed on `127.0.0.1:5433/app_test`, but the actual Playwright Chromium launch failed on the host because `libnspr4.so` is missing.
+- After `npx playwright install --with-deps`, rerunning that same smoke command succeeded end to end: the browser launched, the app runtime served the page, and the targeted Chromium smoke test passed.
+- Current Playwright config suppresses web-server stdout and stderr, so server-log visibility is still not satisfied for this verification workflow.
+- Remaining note: server-log visibility is still limited by Playwright web-server config, but the browser-real execution path itself is now operational.
+- Consequence: the task is ready to proceed from readiness checks into browser-real auth regression execution.

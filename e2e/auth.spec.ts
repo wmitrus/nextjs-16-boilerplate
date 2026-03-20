@@ -1,5 +1,5 @@
 import { createPageObjects } from '@clerk/testing/playwright/unstable';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Request } from '@playwright/test';
 
 import {
   getClerkE2ECredentials,
@@ -17,34 +17,32 @@ function getBaseUrl(): string {
   return process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
 }
 
+function isBootstrapNavigationRequest(request: Request): boolean {
+  return new URL(request.url()).pathname === '/auth/bootstrap/start';
+}
+
 async function waitForBootstrapNavigation(
   page: Page,
   action: () => Promise<void>,
 ): Promise<void> {
-  const bootstrapRequest = page.waitForRequest((request) => {
-    if (!request.isNavigationRequest()) {
-      return false;
-    }
-
-    return new URL(request.url()).pathname === '/auth/bootstrap/start';
-  });
+  const bootstrapRequest = page.waitForRequest(isBootstrapNavigationRequest);
 
   await action();
   await bootstrapRequest;
 }
 
-async function maybeCompleteEmailVerification(
+async function completeHostedSignUpVerificationIfNeeded(
   page: Page,
   signUp: ReturnType<typeof createPageObjects>['signUp'],
 ): Promise<void> {
-  const verifyHeading = page.getByRole('heading', {
-    name: /verify your email/i,
-  });
-  const verificationVisible = await verifyHeading
-    .isVisible({ timeout: 3_000 })
-    .catch(() => false);
+  const nextStep = await Promise.race<'bootstrap' | 'verify-email'>([
+    page
+      .waitForRequest(isBootstrapNavigationRequest)
+      .then(() => 'bootstrap' as const),
+    signUp.waitForEmailVerificationScreen().then(() => 'verify-email' as const),
+  ]);
 
-  if (verificationVisible) {
+  if (nextStep === 'verify-email') {
     await signUp.enterTestOtpCode();
   }
 }
@@ -105,7 +103,7 @@ test.describe('Authentication E2E', () => {
         email,
         password: SIGN_UP_PASSWORD,
       });
-      await maybeCompleteEmailVerification(page, clerkUi.signUp);
+      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
     });
   });
 
@@ -154,7 +152,7 @@ test.describe('Authentication E2E', () => {
         email,
         password: SIGN_UP_PASSWORD,
       });
-      await maybeCompleteEmailVerification(page, clerkUi.signUp);
+      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
     });
   });
 
@@ -176,7 +174,7 @@ test.describe('Authentication E2E', () => {
         email,
         password: SIGN_UP_PASSWORD,
       });
-      await maybeCompleteEmailVerification(page, clerkUi.signUp);
+      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
     });
   });
 

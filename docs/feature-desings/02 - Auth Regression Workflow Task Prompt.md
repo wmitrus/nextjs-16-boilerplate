@@ -79,10 +79,11 @@ Scenario minimum to account for in implementation-plan.md:
 - AF-17 / AF-18 / AF-21
 
 Environment and preparation expectations:
-- require a clean and explicit description of prepared accounts:
+- require a clean and explicit description of prepared identities:
   - fresh user
   - onboarded returning user
-  - incomplete user
+  - reusable incomplete identity
+- require the implementation plan or run notes to explain how the onboarding-incomplete app state is recreated during the run for AF-06 / AF-07
 - require the target environment notes
 - require the Clerk redirect target when relevant
 - require the operator to confirm runtime availability for the app, DB, and any auth dependencies needed for the run

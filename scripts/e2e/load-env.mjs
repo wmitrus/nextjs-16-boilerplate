@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const SCENARIO_NAMES = ['single', 'personal', 'org-provider', 'org-db'];
+export const E2E_BACKEND_MODES = ['pglite', 'container'];
 
 export const VARIANT_NAMES = [
   'single-missing-default-tenant',
@@ -92,6 +93,18 @@ export function applyEnv(envMap, target = process.env) {
   }
 
   return target;
+}
+
+export function resolveE2EBackendMode(source = process.env) {
+  const rawMode = source.E2E_BACKEND_MODE?.trim() || 'pglite';
+
+  if (!E2E_BACKEND_MODES.includes(rawMode)) {
+    throw new Error(
+      `Unsupported E2E_BACKEND_MODE="${rawMode}". Expected one of: ${E2E_BACKEND_MODES.join(', ')}`,
+    );
+  }
+
+  return rawMode;
 }
 
 export function resolveScenarioDatabaseUrl({ scenario, variant } = {}) {

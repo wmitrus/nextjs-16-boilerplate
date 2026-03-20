@@ -17,6 +17,9 @@
 - do not treat the task as complete without explicit scenario mapping and status reporting
 - runners must stay reusable and not be hardcoded only for this auth regression task
 - existing canonical Clerk fixture env names must remain the source of truth unless an explicit repo-wide refactor is approved
+- preserve the current PGlite scenario flow while adding container-backed execution behind the same universal runner entrypoint
+- do not create a second task-specific scenario command tree when backend branching inside the universal runner is sufficient
+- for rerunnable auth-regression execution, do not depend on a permanently preserved onboarding-incomplete DB state across runs; prefer reusable identity plus deterministic in-run setup
 
 ## Validation Constraints
 
@@ -29,6 +32,7 @@
 - local execution should use an automated container-backed backend when the selected runner mode requires a real containerized database
 - switching between runner backends/modes should be controlled by E2E_BACKEND_MODE=pglite|container, not by duplicating scripts per task
 - when `E2E_BACKEND_MODE=container`, the E2E workflow must stay fully separated from dev runtime and use only the test DB profile (`5433/app_test`)
+- runner alignment validation must confirm both modes: `pglite` remains intact and `container` uses the isolated test DB lifecycle
 
 ## Runtime And Evidence Constraints
 

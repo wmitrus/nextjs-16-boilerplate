@@ -3,7 +3,9 @@ import { test, expect, type Page } from '@playwright/test';
 
 import {
   getClerkE2EOrganizationSlug,
+  hasClerkIncompleteUserE2ECredentials,
   hasClerkIdentityE2ECredentials,
+  signInClerkIncompleteUserE2E,
   signInClerkIdentityE2E,
   signInClerkOrgDbSeededMemberE2E,
   signInClerkOrgProviderOwnerE2E,
@@ -51,6 +53,7 @@ type BrowserClerk = {
     id: string;
   };
   user?: BrowserClerkUser;
+  signOut?: () => Promise<void>;
   setActive: (params: {
     session?: string;
     organization?: string | null;
@@ -87,6 +90,40 @@ async function completeOnboarding(page: Page): Promise<void> {
   await page.getByLabel(/language/i).selectOption('en-US');
   await page.getByLabel(/timezone/i).selectOption('Europe/Warsaw');
   await page.getByRole('button', { name: /get started/i }).click();
+}
+
+async function expectOnboardingIncomplete(page: Page): Promise<void> {
+  const probe = await browserJsonRequest(page, '/api/me/provisioning-status');
+  expect(probe.status).toBe(409);
+
+  const probeBody = probe.body as {
+    code: string;
+    user?: {
+      onboardingComplete?: boolean;
+    };
+  };
+
+  expect(probeBody.code).toBe('ONBOARDING_INCOMPLETE');
+  expect(probeBody.user?.onboardingComplete).toBe(false);
+}
+
+async function signOutClerkSession(page: Page): Promise<void> {
+  await page.waitForFunction(() => Boolean(window.Clerk?.loaded));
+  await page.evaluate(async () => {
+    const clerk = (window as typeof window & { Clerk?: BrowserClerk }).Clerk;
+    await clerk?.signOut?.();
+  });
+  await page.waitForFunction(
+    () => Boolean(window.Clerk?.loaded) && !window.Clerk?.session,
+  );
+}
+
+async function createIncompleteSingleUserState(page: Page): Promise<void> {
+  await signInClerkIncompleteUserE2E(page);
+
+  await page.goto('/auth/bootstrap/start?redirect_url=/users');
+  await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
+  await expectOnboardingIncomplete(page);
 }
 
 async function expectProvisioningReady(
@@ -311,6 +348,53 @@ test.describe('Provisioning Runtime E2E', () => {
     await expect(page).toHaveURL(/\/users$/);
     await expect(page.getByText(/user management/i)).toBeVisible();
     await expectProvisioningReady(page, 'single');
+  });
+
+  test('single mode: returning incomplete user sign-in routes back to onboarding before /users settles', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
+
+    await createIncompleteSingleUserState(page);
+    await signOutClerkSession(page);
+
+    await signInClerkIncompleteUserE2E(page);
+
+    await waitForBootstrapRequest(page, async () => {
+      await page.goto('/users');
+    });
+
+    await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
+    await expectOnboardingIncomplete(page);
+  });
+
+  test('single mode: direct visit to /users after recreating incomplete state redirects away from /users', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
+
+    await createIncompleteSingleUserState(page);
+
+    await waitForBootstrapRequest(page, async () => {
+      await page.goto('/users');
+    });
+
+    await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
+    await expectOnboardingIncomplete(page);
   });
 
   test('single mode with missing default tenant renders controlled bootstrap error UI', async ({

@@ -121,5 +121,8 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 - runner alignment completed on 2026-03-20: `scripts/e2e/run-scenario.mjs` now preserves the PGlite scenario path and uses the repository test DB lifecycle for `E2E_BACKEND_MODE=container`
 - current local auth fixtures include Clerk keys plus `single` provisioned/new users, and the reusable incomplete identity now uses the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`
 - AF-06 / AF-07 now recreate onboarding-incomplete app state directly in `e2e/provisioning-runtime.spec.ts` using the incomplete-user helper and a sign-in -> bootstrap -> stop-at-onboarding flow
-- remaining readiness question: finish the non-code Phase 0 checks needed before the browser-real run
+- non-secret local env checks confirm the required fresh, onboarded, and incomplete-user identity vars are set
+- container-mode smoke execution now confirms automated DB startup/reset/seed against `127.0.0.1:5433/app_test`
+- after `npx playwright install --with-deps`, the same container-mode Chromium smoke execution now passes, confirming browser-host readiness for the real run
+- remaining readiness note: current Playwright web-server config still suppresses stdout/stderr needed for visible server logs
 - implementation direction confirmed with the user: keep the current separated scenario flow for PGlite, add the same separated scenario flow for container, and let the user choose the backend through `E2E_BACKEND_MODE`

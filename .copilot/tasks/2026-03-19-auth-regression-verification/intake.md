@@ -6,17 +6,17 @@ Run the controlled auth regression task described in `docs/feature-desings/02 - 
 
 ## Readiness Checklist
 
-- [ ] Objective is confirmed
-- [ ] Requirements sources are confirmed
-- [ ] Repository context is confirmed
-- [ ] Scope is confirmed
-- [ ] Non-goals are confirmed
-- [ ] Scenario sources are confirmed
-- [ ] Minimum scenario set for this run is confirmed
-- [ ] Acceptance criteria are confirmed
-- [ ] Environment assumptions are confirmed
-- [ ] Evidence expectations are confirmed
-- [ ] Open questions and blockers are recorded
+- [x] Objective is confirmed
+- [x] Requirements sources are confirmed
+- [x] Repository context is confirmed
+- [x] Scope is confirmed
+- [x] Non-goals are confirmed
+- [x] Scenario sources are confirmed
+- [x] Minimum scenario set for this run is confirmed
+- [x] Acceptance criteria are confirmed
+- [x] Environment assumptions are confirmed
+- [x] Evidence expectations are confirmed
+- [x] Open questions and blockers are recorded
 
 ## Requirements Sources
 
@@ -42,6 +42,7 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 ## Scope
 
 - controlled auth regression verification
+- runner alignment so the same scenario flow works for both `pglite` and `container` backends
 - scenario mapping for the affected auth-flow cases
 - task artifact creation under `.copilot/tasks/{task_id}/`
 - detailed execution planning for scenario coverage and execution order
@@ -59,6 +60,7 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 - broad refactors
 - speculative architecture redesign
 - unnecessary full-suite validation outside the affected auth-flow scenarios
+- creating separate task-specific runner scripts for container mode when an env-driven branch in the universal runner is sufficient
 
 ## Scenario Sources
 
@@ -83,6 +85,9 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 - final validation state summarizes PASS / FAIL / DEFERRED / BLOCKED outcomes
 - runner design is compatible with local automation and later CI/CD automation
 - runner design does not require duplicating scenario-specific env naming already in use
+- the current PGlite scenario flow continues to work
+- the same scenario runner can select container-backed execution via `E2E_BACKEND_MODE=container`
+- container mode reuses the repository test DB lifecycle and isolation model instead of inventing a parallel ad hoc path
 
 ## Environment Assumptions
 
@@ -91,9 +96,11 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 - target backend DB/container should be started automatically by the runner when the selected mode requires it
 - when `E2E_BACKEND_MODE=container`, E2E must use the isolated test database profile: `5433/app_test`
 - correct Clerk redirect env is configured
-- prepared accounts are available for fresh, onboarded, and incomplete states
+- prepared identities are available for fresh, onboarded, and incomplete-user flows
+- the incomplete-user flow uses a reusable Clerk identity, while the onboarding-incomplete app state is recreated during the run after DB reset
 - app runtime, DB, and auth dependencies are available for the run
 - browser tools and server logs are available during execution
+- the selected backend mode must drive setup behavior, database URL selection, and any required container lifecycle without changing scenario intent
 
 ## Evidence Expectations
 
@@ -106,7 +113,13 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 
 ## Open Questions / Blockers
 
-- which exact prepared accounts should be used for the run
+- which exact prepared identities should be used for the run
 - which environment will be treated as the authoritative execution target
 - whether current branch behavior requires pre-execution Security & Auth or Next.js Runtime review
 - backend mode selection is fixed as E2E_BACKEND_MODE=pglite|container
+- local `.env.e2e.local` currently selects `E2E_BACKEND_MODE=container`
+- runner alignment completed on 2026-03-20: `scripts/e2e/run-scenario.mjs` now preserves the PGlite scenario path and uses the repository test DB lifecycle for `E2E_BACKEND_MODE=container`
+- current local auth fixtures include Clerk keys plus `single` provisioned/new users, and the reusable incomplete identity now uses the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`
+- AF-06 / AF-07 now recreate onboarding-incomplete app state directly in `e2e/provisioning-runtime.spec.ts` using the incomplete-user helper and a sign-in -> bootstrap -> stop-at-onboarding flow
+- remaining readiness question: finish the non-code Phase 0 checks needed before the browser-real run
+- implementation direction confirmed with the user: keep the current separated scenario flow for PGlite, add the same separated scenario flow for container, and let the user choose the backend through `E2E_BACKEND_MODE`

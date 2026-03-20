@@ -31,4 +31,4 @@ Add one orchestrating agent that can drive multi-step repository work across spe
 ## Planned Artifacts
 
 - `plan.md`
-- `implementation-report.md`
+- `04 - Implementation Agent - Summary.md`

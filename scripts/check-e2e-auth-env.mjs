@@ -198,6 +198,23 @@ function validateSeededEmailAssumptions({ scenario, variant }, missing) {
   }
 }
 
+function collectOptionalWarnings() {
+  const warnings = [];
+  const incompleteUsername = getEnvValue('E2E_CLERK_INCOMPLETE_USER_USERNAME');
+  const incompletePassword = getEnvValue('E2E_CLERK_INCOMPLETE_USER_PASSWORD');
+
+  if (
+    (incompleteUsername && !incompletePassword) ||
+    (!incompleteUsername && incompletePassword)
+  ) {
+    warnings.push(
+      'optional incomplete-user identity is only partially configured; set both E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD when using AF-06 / AF-07 rerunnable auth-regression checks',
+    );
+  }
+
+  return warnings;
+}
+
 function main() {
   const { scenario, variant, withOauth } = parseArgs(process.argv.slice(2));
 
@@ -213,6 +230,7 @@ function main() {
 
   const missing = [];
   const aliasWarnings = [];
+  const optionalWarnings = collectOptionalWarnings();
 
   for (const requirement of BASE_REQUIREMENTS) {
     if (!getEnvValue(requirement.key)) {
@@ -279,6 +297,12 @@ function main() {
   if (aliasWarnings.length > 0) {
     console.warn(
       `⚠️ Legacy Clerk E2E aliases detected:\n- ${aliasWarnings.join('\n- ')}`,
+    );
+  }
+
+  if (optionalWarnings.length > 0) {
+    console.warn(
+      `⚠️ Optional Clerk E2E setup notes:\n- ${optionalWarnings.join('\n- ')}`,
     );
   }
 

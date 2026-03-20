@@ -194,15 +194,18 @@ Expected evidence:
 
 Phase 1 execution notes:
 
-- `AF-01` was executed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium --grep 'sign-up via /sign-up page force redirects through /auth/bootstrap/start'`.
-- Result for `AF-01`: FAIL. The browser reached Clerk's `Verify your email` step and timed out after 30s waiting for a navigation request to `/auth/bootstrap/start`.
-- Key evidence for `AF-01`: Playwright failure at `e2e/auth.spec.ts:103`; error context shows the Clerk verify-email UI still visible with the generated test address and no observed bootstrap redirect.
+- `AF-01` was first executed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium --grep 'sign-up via /sign-up page force redirects through /auth/bootstrap/start'` and initially failed while the sign-up harness still handled Clerk verify-email opportunistically and only accepted bootstrap requests tagged by Playwright as navigation requests.
+- Implementation follow-up updated `e2e/auth.spec.ts` so hosted Clerk sign-up now waits deterministically for either Clerk verify-email or bootstrap, completes Clerk's fixed test OTP path through `enterTestOtpCode()`, and accepts `/auth/bootstrap/start` requests even when Playwright does not classify them as navigation requests.
+- Focused rerun for `AF-01` then passed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium --reporter=line --grep 'sign-up via /sign-up page force redirects through /auth/bootstrap/start'`.
+- Result for `AF-01`: PASS after the harness fix.
 - `AF-02` / `AF-03` / `AF-04` were executed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep 'single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users'`.
 - Result for `AF-02`: PASS. The run reached `/onboarding?redirect_url=%2Fapp%2Fdashboard`, showing the fresh user was routed into onboarding after bootstrap.
 - Result for `AF-03`: PASS against the matrix expectation. After onboarding submission, the browser left onboarding and ended at `/users`.
 - Result for `AF-04`: PASS against the matrix expectation. The error snapshot after onboarding shows `/users` content rendered with the `User Management` heading and authenticated user menu visible.
 - Contract clarification on 2026-03-20: `/users` is the confirmed authoritative post-onboarding landing for this workflow. The earlier `/app/dashboard` expectation was stale and has been removed from the Phase 1 interpretation.
-- Phase 1 remains open because AF-01 still needs harness-side resolution and the run artifact still needs richer route-decision/log evidence.
+- Phase 1 remains open only because the run artifact still needs richer route-decision/log evidence.
+- Focused rerun on 2026-03-20 for the corrected fresh-user provisioning case passed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep 'single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users'`.
+- Verified route sequence for that focused rerun: `/auth/bootstrap/start?redirect_url=/app/dashboard` -> `/onboarding?redirect_url=%2Fapp%2Fdashboard` -> `/users`.
 
 Debug triage gate before Phase 2:
 
@@ -212,10 +215,11 @@ Debug triage gate before Phase 2:
 
 Debug triage result:
 
-- `AF-01` is currently classified as likely harness issue because the failure boundary remained inside Clerk verify-email and no app-owned bootstrap request was observed
+- `AF-01` harness issue was resolved in implementation: hosted Clerk sign-up now waits deterministically for Clerk verify-email or bootstrap and no longer requires the bootstrap request to be flagged as a navigation request
 - the post-onboarding `/app/dashboard` expectation was confirmed stale by user decision because the auth-flow docs and matrix expect stable landing on `/users`
 - separate code drift was identified: `src/app/onboarding/actions.ts` supports `redirect_url`, but `src/app/onboarding/onboarding-form.tsx` does not submit it in the browser flow
-- workflow recommendation after debug triage: contract clarification is complete for post-onboarding landing; remaining decision is whether to stabilize AF-01 now or continue breadth-first with AF-01 recorded as harness-side blocked
+- verification-code design clarification: Clerk test emails containing `+clerk_test` should use fixed code `424242`; no separate CI-only Clerk setting is required for that code itself, but the Clerk test instance must have the relevant first-factor verification method enabled and must not add unsupported extra verification to the dedicated password fixtures
+- workflow recommendation after implementation: contract clarification is complete for post-onboarding landing and AF-01 no longer needs to be carried as harness-side blocked
 
 ### Phase 2 — Returning User Routing
 

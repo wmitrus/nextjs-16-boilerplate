@@ -13,6 +13,7 @@ Translate the auth regression requirements into an execution-ready verification 
 - [x] Phase 3 completed
 - [x] Phase 4 completed
 - [x] Phase 5 completed
+- [x] Phase 6 completed
 - [x] Validation mapping recorded in the matrix/run artifact
 - [x] `07 - Playwright E2E - Summary.md` created
 - [x] Final validation report created
@@ -413,6 +414,75 @@ Execution result:
 - targeted Phase 5 Chromium run passed with `3 passed (26.9s)`
 - package-level `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix` passed with Phase 1 `2 passed (9.5s)`, Phase 2 returning-state `3 passed (23.5s)`, Phase 2 direct-entry `2 passed (13.7s)`, Phase 3 `5 passed (25.7s)`, Phase 4 `3 passed (21.3s)`, and Phase 5 `3 passed (24.6s)`
 - browser evidence recorded stable post-signout re-authentication to `/users`, stable `/users` reload for completed state, and stable `/onboarding` reload for incomplete state with no matched `blocking-route` / `Rendering...` runtime signals
+
+### Phase 6 — Redirect And Route-Access Safety
+
+Checklist:
+
+- [x] `AF-25` executed and classified
+- [x] `AF-26` executed and classified
+- [x] `AF-27` executed and classified
+- [x] Redirect sanitization evidence recorded
+- [x] Signed-out private-route outcome recorded
+- [x] Signed-in auth-route outcome recorded
+
+Scenarios:
+
+- `AF-25`
+- `AF-26`
+- `AF-27`
+
+Execution intent:
+
+- verify hostile `redirect_url` values are sanitized server-side
+- verify signed-out access to `/users` is redirected to sign-in without entering the protected flow
+- verify signed-in users are redirected away from `/sign-in` and `/sign-up`
+
+Real-browser evidence required:
+
+- yes
+
+Expected evidence:
+
+- browser-observed final URL
+- redirect/request evidence for bootstrap and sign-in flows
+- explicit note that hostile redirect targets are not followed
+
+Execution result:
+
+- PASS for `AF-25`, `AF-26`, and `AF-27`
+- targeted Phase 6 Chromium run passed with `3 passed (18.3s)`
+- package-level `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix` passed with Phase 1 `2 passed (9.1s)`, Phase 2 returning-state `3 passed (23.8s)`, Phase 2 direct-entry `2 passed (13.4s)`, Phase 3 `5 passed (25.4s)`, Phase 4 `3 passed (21.1s)`, Phase 5 `3 passed (26.9s)`, and Phase 6 `3 passed (17.3s)`
+- browser evidence recorded a hostile bootstrap redirect sanitized to `/users`, signed-out `/users` access settling on `/sign-in?redirect_url=%2Fusers`, and signed-in `/sign-in` plus `/sign-up` access redirecting through bootstrap back to `/users`
+
+### Confidence Gate Before A Stronger "Yes"
+
+Checklist:
+
+- [x] AF-01 through AF-27 have passing browser evidence in the current scoped run
+- [ ] AF-28 log observability is executed and classified
+- [ ] Server-side decision logs are visible enough to correlate the exercised auth flows end to end
+- [ ] Route-commit and return-path evidence can be matched back to server-side decision points
+- [ ] Unexpected runtime errors for the exercised auth flows are either absent or clearly attributable
+
+Required interpretation:
+
+- a stronger "yes" for this task means: the auth/bootstrap/onboarding slice is behaving coherently, is protected at the exercised route/redirect boundaries, and is observable enough to classify failures without guesswork
+- it does not mean: the entire application architecture or security posture is proven complete by E2E alone
+
+AF-28 evidence required:
+
+- `users_guard:decision`
+- `onboarding_guard:decision`
+- `bootstrap_start:entry` and `bootstrap_start:decision`
+- provisioning-related success or failure logs for exercised flows
+- cookie set/clear evidence where applicable
+- correlation between final browser URL and server-side decision logs
+- explicit note on whether any unexpected errors were emitted during the exercised flows
+
+Current blocker to stronger statement:
+
+- Playwright web-server stdout/stderr is currently suppressed, so AF-28 cannot yet be marked PASS from the existing evidence set alone
 
 ## Validation Mapping
 

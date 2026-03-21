@@ -2,14 +2,14 @@
 
 ## Objective
 
-Record the final validation state for the current minimum auth regression run on this branch.
+Record the final validation state for the current expanded auth regression run on this branch.
 
 ## Scope
 
 - backend mode: `container`
 - browser/project: `chromium`
 - package entrypoint: `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
-- minimum scenarios covered: `AF-01` / `AF-02` / `AF-03` / `AF-04` / `AF-05` / `AF-06` / `AF-07` / `AF-08` / `AF-09` / `AF-12` / `AF-13` / `AF-14` / `AF-15` / `AF-17` / `AF-18` / `AF-21` / `AF-22` / `AF-23` / `AF-24` / `AF-25` / `AF-26` / `AF-27`
+- minimum scenarios covered: `AF-01` / `AF-02` / `AF-03` / `AF-04` / `AF-05` / `AF-06` / `AF-07` / `AF-08` / `AF-09` / `AF-12` / `AF-13` / `AF-14` / `AF-15` / `AF-17` / `AF-18` / `AF-21` / `AF-22` / `AF-23` / `AF-24` / `AF-25` / `AF-26` / `AF-27` / `AF-28`
 
 ## Commands Run
 
@@ -21,6 +21,9 @@ Record the final validation state for the current minimum auth regression run on
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase6 -- --list`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase6`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase7 -- --list`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase7`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
 
 ## Final Results
@@ -47,16 +50,24 @@ Record the final validation state for the current minimum auth regression run on
 - `AF-25`: PASS
 - `AF-26`: PASS
 - `AF-27`: PASS
+- `AF-28`: PASS
 
 ## Phase Summary
 
-- Phase 1: `2 passed (9.7s)`
-- Phase 2 returning-state: `3 passed (23.8s)`
-- Phase 2 direct-entry: `2 passed (13.2s)`
-- Phase 3: `5 passed (24.3s)`
-- Phase 4: `3 passed (21.9s)`
-- Phase 5: `3 passed (24.6s)`
-- Phase 6: `3 passed (17.3s)`
+- Phase 1: `2 passed (9.2s)`
+- Phase 2 returning-state: `3 passed (23.4s)`
+- Phase 2 direct-entry: `2 passed (13.5s)`
+- Phase 3: `5 passed (25.5s)`
+- Phase 4: `3 passed (22.4s)`
+- Phase 5: `3 passed (24.8s)`
+- Phase 6: `3 passed (18.3s)`
+- Phase 7: `1 passed (10.3s)`
+
+## Observability Evidence
+
+- `AF-28`: logged-mode Phase 7 captured `bootstrap_start:entry` with `redirectUrl=/users?af28=1`, `bootstrap_start:decision` with `outcome=onboarding_required`, `onboarding_guard:decision` with `decision=render:onboarding`, `provisioning:ensure` with `status=success`, and `users_guard:decision` with `decision=stay:/users` in `logs/auth-matrix-phase7/server.log`
+- `AF-28`: browser evidence recorded onboarding subtree mount, committed transition from onboarding to `/users`, `__onboarding_pending=1` before submit, and cookie absence after completion
+- `AF-28`: no unexpected page errors, console-error matches, or non-aborted same-origin network failures were observed in the targeted observability run
 
 ## Runtime-Stability Evidence
 
@@ -80,6 +91,7 @@ Record the final validation state for the current minimum auth regression run on
 
 - the first Phase 4 attempt exposed a test-harness issue, not a product regression: `networkidle` was too strict for the signed-in app because background traffic can remain active
 - the Phase 4 helper was corrected to use document readiness plus a short stabilization delay, after which the targeted run passed cleanly
-- app-server stdout/stderr remains suppressed by the current Playwright web-server configuration, so runtime evidence is based on browser route settlement and targeted runtime-signal capture
+- app-server stdout/stderr remains suppressed by the current Playwright web-server configuration, but AF-28 used the existing file logger with `LOG_TO_FILE_DEV=true` and `LOG_DIR=logs/auth-matrix-phase7` to capture the required server-side route and provisioning events
 - the Phase 5 slice reused the same runtime-signal recorder and completed without further harness changes
 - the first AF-27 attempt exposed a test-evidence issue, not a product failure; request-level bootstrap evidence was more reliable than framenavigation capture for that route pair
+- AF-28 still relies on browser-observed cookie state for set and clear classification because the app does not yet emit a dedicated cookie-specific server log event

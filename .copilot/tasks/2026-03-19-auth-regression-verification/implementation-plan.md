@@ -14,6 +14,7 @@ Translate the auth regression requirements into an execution-ready verification 
 - [x] Phase 4 completed
 - [x] Phase 5 completed
 - [x] Phase 6 completed
+- [x] Phase 7 completed
 - [x] Validation mapping recorded in the matrix/run artifact
 - [x] `07 - Playwright E2E - Summary.md` created
 - [x] Final validation report created
@@ -455,15 +456,55 @@ Execution result:
 - package-level `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix` passed with Phase 1 `2 passed (9.1s)`, Phase 2 returning-state `3 passed (23.8s)`, Phase 2 direct-entry `2 passed (13.4s)`, Phase 3 `5 passed (25.4s)`, Phase 4 `3 passed (21.1s)`, Phase 5 `3 passed (26.9s)`, and Phase 6 `3 passed (17.3s)`
 - browser evidence recorded a hostile bootstrap redirect sanitized to `/users`, signed-out `/users` access settling on `/sign-in?redirect_url=%2Fusers`, and signed-in `/sign-in` plus `/sign-up` access redirecting through bootstrap back to `/users`
 
+### Phase 7 — Observability And Runtime Classification
+
+Checklist:
+
+- [x] `AF-28` executed and classified
+- [x] Server-side decision logs captured for the exercised flow
+- [x] Browser-side subtree mount evidence captured
+- [x] Final committed pathname and return path recorded
+- [x] Unexpected runtime failures checked during the logged run
+
+Scenarios:
+
+- `AF-28`
+
+Execution intent:
+
+- verify the exercised auth/bootstrap/onboarding flow is observable enough to classify route decision, route commit, subtree mount, submit success, return path, cookie behavior, and unexpected runtime noise without guessing
+
+Real-browser evidence required:
+
+- yes
+
+Expected evidence:
+
+- `bootstrap_start:entry` and `bootstrap_start:decision`
+- `onboarding_guard:decision`
+- `provisioning:ensure` success evidence
+- `users_guard:decision`
+- browser-side mount evidence for onboarding
+- final committed route and cookie-state observations
+
+Execution result:
+
+- PASS for `AF-28`
+- `pnpm e2e:auth-matrix:phase7 -- --list` reported the single tagged Chromium observability case
+- targeted Phase 7 Chromium run passed with `1 passed (10.3s)`
+- package-level `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix` passed with Phase 1 `2 passed (9.2s)`, Phase 2 returning-state `3 passed (23.4s)`, Phase 2 direct-entry `2 passed (13.5s)`, Phase 3 `5 passed (25.5s)`, Phase 4 `3 passed (22.4s)`, Phase 5 `3 passed (24.8s)`, Phase 6 `3 passed (18.3s)`, and Phase 7 `1 passed (10.3s)`
+- server log evidence recorded `bootstrap_start:entry` with `redirectUrl=/users?af28=1`, `bootstrap_start:decision` with `outcome=onboarding_required`, `onboarding_guard:decision` with `decision=render:onboarding`, `provisioning:ensure` with `status=success`, and `users_guard:decision` with `decision=stay:/users`
+- browser evidence recorded `onboarding_form:mount`, a committed transition from onboarding to `/users`, `__onboarding_pending=1` before submit, and cookie absence after onboarding completion
+
 ### Confidence Gate Before A Stronger "Yes"
 
 Checklist:
 
 - [x] AF-01 through AF-27 have passing browser evidence in the current scoped run
-- [ ] AF-28 log observability is executed and classified
-- [ ] Server-side decision logs are visible enough to correlate the exercised auth flows end to end
-- [ ] Route-commit and return-path evidence can be matched back to server-side decision points
-- [ ] Unexpected runtime errors for the exercised auth flows are either absent or clearly attributable
+- [x] AF-28 log observability is executed and classified
+- [x] Server-side decision logs are visible enough to correlate the exercised auth flows end to end
+- [x] Route-commit and return-path evidence can be matched back to server-side decision points
+- [x] Unexpected runtime errors for the exercised auth flows are either absent or clearly attributable
 
 Required interpretation:
 
@@ -482,7 +523,7 @@ AF-28 evidence required:
 
 Current blocker to stronger statement:
 
-- Playwright web-server stdout/stderr is currently suppressed, so AF-28 cannot yet be marked PASS from the existing evidence set alone
+- none for the scoped auth/bootstrap/onboarding slice; AF-28 is now satisfied through the logged phase-7 run that writes server events to `logs/auth-matrix-phase7/server.log`
 
 ## Validation Mapping
 

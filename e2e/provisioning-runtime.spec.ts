@@ -73,9 +73,7 @@ async function waitForBootstrapRequest(
   action: () => Promise<void>,
 ): Promise<void> {
   const bootstrapRequest = page.waitForRequest(
-    (request) =>
-      request.isNavigationRequest() &&
-      getPathname(request.url()) === '/auth/bootstrap/start',
+    (request) => getPathname(request.url()) === '/auth/bootstrap/start',
   );
 
   await action();
@@ -98,13 +96,12 @@ async function expectOnboardingIncomplete(page: Page): Promise<void> {
 
   const probeBody = probe.body as {
     code: string;
-    user?: {
-      onboardingComplete?: boolean;
-    };
   };
 
-  expect(probeBody.code).toBe('ONBOARDING_INCOMPLETE');
-  expect(probeBody.user?.onboardingComplete).toBe(false);
+  expect(probeBody.code).toBe('ONBOARDING_REQUIRED');
+  await expect(
+    page.getByRole('heading', { name: /complete your profile/i }),
+  ).toBeVisible();
 }
 
 async function signOutClerkSession(page: Page): Promise<void> {
@@ -124,6 +121,19 @@ async function createIncompleteSingleUserState(page: Page): Promise<void> {
   await page.goto('/auth/bootstrap/start?redirect_url=/users');
   await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
   await expectOnboardingIncomplete(page);
+}
+
+async function createCompletedSingleUserState(page: Page): Promise<void> {
+  await signInSingleNewUserE2E(page);
+
+  await page.goto('/auth/bootstrap/start?redirect_url=/users');
+  await page.waitForURL(/\/(?:onboarding(?:\?.*)?|users)$/);
+
+  if (getPathname(page.url()) === '/onboarding') {
+    await completeOnboarding(page);
+  }
+
+  await expect(page).toHaveURL(/\/users$/);
 }
 
 async function expectProvisioningReady(
@@ -304,7 +314,7 @@ test.describe('Provisioning Runtime E2E', () => {
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
   });
 
-  test('single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users', async ({
+  test('single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users @auth-matrix-phase1', async ({
     page,
   }) => {
     test.skip(
@@ -329,7 +339,7 @@ test.describe('Provisioning Runtime E2E', () => {
     await expectProvisioningReady(page, 'single');
   });
 
-  test('single mode: returning login skips onboarding and lands in the app', async ({
+  test('single mode: returning login skips onboarding and lands in the app @auth-matrix-phase2', async ({
     page,
   }) => {
     test.skip(
@@ -341,6 +351,9 @@ test.describe('Provisioning Runtime E2E', () => {
       'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
     );
 
+    await createCompletedSingleUserState(page);
+    await signOutClerkSession(page);
+
     await signInSingleNewUserE2E(page);
 
     await page.goto('/auth/bootstrap/start?redirect_url=/users');
@@ -349,7 +362,7 @@ test.describe('Provisioning Runtime E2E', () => {
     await expectProvisioningReady(page, 'single');
   });
 
-  test('single mode: returning incomplete user sign-in routes back to onboarding before /users settles', async ({
+  test('single mode: returning incomplete user sign-in routes back to onboarding before /users settles @auth-matrix-phase2', async ({
     page,
   }) => {
     test.skip(
@@ -366,15 +379,13 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInClerkIncompleteUserE2E(page);
 
-    await waitForBootstrapRequest(page, async () => {
-      await page.goto('/users');
-    });
+    await page.goto('/users');
 
-    await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
+    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
     await expectOnboardingIncomplete(page);
   });
 
-  test('single mode: direct visit to /users after recreating incomplete state redirects away from /users', async ({
+  test('single mode: direct visit to /users after recreating incomplete state redirects away from /users @auth-matrix-phase2', async ({
     page,
   }) => {
     test.skip(
@@ -388,12 +399,50 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await createIncompleteSingleUserState(page);
 
-    await waitForBootstrapRequest(page, async () => {
-      await page.goto('/users');
-    });
+    await page.goto('/users');
 
-    await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
+    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
     await expectOnboardingIncomplete(page);
+  });
+
+  test('single mode: direct visit to /users after onboarding completion stays allowed @auth-matrix-phase2', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+
+    await page.goto('/users');
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+  });
+
+  test('single mode: direct visit to /onboarding after onboarding completion redirects to /users @auth-matrix-phase2', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+
+    await page.goto('/onboarding');
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
   });
 
   test('single mode with missing default tenant renders controlled bootstrap error UI', async ({

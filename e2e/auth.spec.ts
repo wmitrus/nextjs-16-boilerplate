@@ -88,7 +88,7 @@ test.describe('Authentication E2E', () => {
     });
   });
 
-  test('sign-up via /sign-up page force redirects through /auth/bootstrap/start', async ({
+  test('sign-up via /sign-up page force redirects through /auth/bootstrap/start @auth-matrix-phase1', async ({
     page,
   }) => {
     const clerkUi = createPageObjects({

@@ -1,5 +1,5 @@
 import { createPageObjects } from '@clerk/testing/playwright/unstable';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Response } from '@playwright/test';
 
 import {
   getClerkE2EOrganizationSlug,
@@ -23,6 +23,7 @@ import {
 } from './runtime-profile';
 
 const runtime = getRuntimeProfile();
+const ONBOARDING_PENDING_COOKIE = '__onboarding_pending';
 
 type BrowserOrganizationMembership = {
   organization?: {
@@ -66,6 +67,21 @@ function getBaseUrl(): string {
 
 function getPathname(url: string): string {
   return new URL(url).pathname;
+}
+
+async function waitForPathResponse(
+  page: Page,
+  pathname: string,
+  action: () => Promise<void>,
+  predicate: (response: Response) => boolean = () => true,
+): Promise<Response> {
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      getPathname(response.url()) === pathname && predicate(response),
+  );
+
+  await action();
+  return responsePromise;
 }
 
 async function waitForBootstrapRequest(
@@ -113,6 +129,47 @@ async function signOutClerkSession(page: Page): Promise<void> {
   await page.waitForFunction(
     () => Boolean(window.Clerk?.loaded) && !window.Clerk?.session,
   );
+}
+
+async function getCookieValue(
+  page: Page,
+  name: string,
+): Promise<string | undefined> {
+  const cookies = await page.context().cookies([getBaseUrl()]);
+  return cookies.find((cookie) => cookie.name === name)?.value;
+}
+
+async function expectCookieValue(
+  page: Page,
+  name: string,
+  expectedValue: string,
+): Promise<void> {
+  expect(await getCookieValue(page, name)).toBe(expectedValue);
+}
+
+async function expectCookieAbsent(page: Page, name: string): Promise<void> {
+  expect(await getCookieValue(page, name)).toBeUndefined();
+}
+
+async function setOnboardingPendingCookie(page: Page): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: ONBOARDING_PENDING_COOKIE,
+      value: '1',
+      url: getBaseUrl(),
+    },
+  ]);
+}
+
+async function clearOnboardingPendingCookie(page: Page): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: ONBOARDING_PENDING_COOKIE,
+      value: '',
+      url: getBaseUrl(),
+      expires: 0,
+    },
+  ]);
 }
 
 async function createIncompleteSingleUserState(page: Page): Promise<void> {
@@ -443,6 +500,142 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await expect(page).toHaveURL(/\/users$/);
     await expect(page.getByText(/user management/i)).toBeVisible();
+  });
+
+  test('single mode: bootstrap start sets onboarding cookie in the route handler before redirecting to onboarding @auth-matrix-phase3', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
+
+    await signInClerkIncompleteUserE2E(page);
+
+    const bootstrapResponse = await waitForPathResponse(
+      page,
+      '/auth/bootstrap/start',
+      async () => {
+        await page.goto('/auth/bootstrap/start?redirect_url=/users');
+      },
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.request().resourceType() === 'document' &&
+        response.status() >= 300 &&
+        response.status() < 400,
+    );
+
+    const bootstrapSetCookie =
+      (await bootstrapResponse.headerValue('set-cookie')) ??
+      bootstrapResponse.headers()['set-cookie'] ??
+      '';
+
+    expect(bootstrapSetCookie).toContain(`${ONBOARDING_PENDING_COOKIE}=1`);
+    await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
+    await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
+    await expectOnboardingIncomplete(page);
+  });
+
+  test('single mode: middleware reads onboarding cookie and redirects a general private route to /onboarding @auth-matrix-phase3', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
+
+    await createIncompleteSingleUserState(page);
+    await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
+
+    await page.goto('/dashboard');
+
+    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectOnboardingIncomplete(page);
+  });
+
+  test('single mode: DB incomplete state still routes to onboarding when the onboarding cookie is absent @auth-matrix-phase3', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
+
+    await createIncompleteSingleUserState(page);
+    await clearOnboardingPendingCookie(page);
+    await expectCookieAbsent(page, ONBOARDING_PENDING_COOKIE);
+
+    await page.goto('/users');
+
+    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectOnboardingIncomplete(page);
+  });
+
+  test('single mode: onboarding completion clears the onboarding cookie from a legal server boundary @auth-matrix-phase3', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
+
+    await signInClerkIncompleteUserE2E(page);
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
+    await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
+    await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
+
+    const submitResponse = await waitForPathResponse(
+      page,
+      '/onboarding',
+      () => completeOnboarding(page),
+      (response) => response.request().method() === 'POST',
+    );
+
+    expect(submitResponse.request().method()).toBe('POST');
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expectCookieAbsent(page, ONBOARDING_PENDING_COOKIE);
+    await expectProvisioningReady(page, 'single');
+  });
+
+  test('single mode: DB complete state remains authoritative even if the onboarding cookie is stale @auth-matrix-phase3', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+    await expectProvisioningReady(page, 'single');
+    await setOnboardingPendingCookie(page);
+    await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
+
+    await page.goto('/users');
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+    await expectProvisioningReady(page, 'single');
   });
 
   test('single mode with missing default tenant renders controlled bootstrap error UI', async ({

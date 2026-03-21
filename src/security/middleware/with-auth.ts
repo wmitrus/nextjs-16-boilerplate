@@ -138,6 +138,16 @@ function redirectForIncompleteOnboarding(
     return null;
   }
 
+  const isUsersRoute =
+    req.nextUrl.pathname === '/users' ||
+    req.nextUrl.pathname.startsWith('/users/');
+
+  // Keep the edge cookie as a routing hint for general private routes, but
+  // let the DB-backed users layout remain authoritative for /users.
+  if (isUsersRoute) {
+    return null;
+  }
+
   if (!onboardingComplete) {
     return NextResponse.redirect(new URL('/onboarding', req.url));
   }

@@ -1,5 +1,6 @@
 import type { NextRequest, NextResponse } from 'next/server';
 
+import { env } from '@/core/env';
 import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
@@ -29,7 +30,7 @@ export function withRateLimit(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
 ) {
   return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
-    if (!ctx.isApi || ctx.isWebhook) {
+    if (!ctx.isApi || ctx.isWebhook || env.E2E_ENABLED) {
       return handler(req, ctx);
     }
 

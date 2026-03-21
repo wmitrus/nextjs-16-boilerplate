@@ -7,14 +7,14 @@ Translate the auth regression requirements into an execution-ready verification 
 ## Progress Checklist
 
 - [x] Phase 0a completed
-- [ ] Phase 0 completed
+- [x] Phase 0 completed
 - [x] Phase 1 completed
 - [x] Phase 2 completed
 - [x] Phase 3 completed
-- [ ] Phase 4 completed
-- [ ] Validation mapping recorded in the matrix/run artifact
+- [x] Phase 4 completed
+- [x] Validation mapping recorded in the matrix/run artifact
 - [x] `07 - Playwright E2E - Summary.md` created
-- [ ] Final validation report created
+- [x] Final validation report created
 
 ## Execution Model
 
@@ -336,12 +336,12 @@ Phase 3 execution notes:
 
 Checklist:
 
-- [ ] `AF-17` executed and classified
-- [ ] `AF-18` executed and classified
-- [ ] `AF-21` executed and classified
-- [ ] Browser-observed route settlement recorded
-- [ ] Relevant logs captured
-- [ ] Explicit race absence or reproduction note recorded
+- [x] `AF-17` executed and classified
+- [x] `AF-18` executed and classified
+- [x] `AF-21` executed and classified
+- [x] Browser-observed route settlement recorded
+- [x] Relevant logs captured
+- [x] Explicit race absence or reproduction note recorded
 
 Scenarios:
 
@@ -366,13 +366,20 @@ Expected evidence:
 - relevant logs
 - explicit note on race absence or reproduction
 
+Execution result:
+
+- PASS for `AF-17`, `AF-18`, and `AF-21`
+- targeted Phase 4 Chromium run passed with `3 passed (22.4s)` after replacing a brittle `networkidle` wait with document-readiness settling
+- package-level `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix` passed with Phase 1 `2 passed (9.7s)`, Phase 2 returning-state `3 passed (23.8s)`, Phase 2 direct-entry `2 passed (13.2s)`, Phase 3 `5 passed (24.3s)`, and Phase 4 `3 passed (21.9s)`
+- browser evidence recorded stable `/` and `/users` settlement, no matched `blocking-route` / `Rendering...` runtime signals, and no observed `/users -> /onboarding` transition for the returning completed-user bootstrap path
+
 ## Validation Mapping
 
 Checklist:
 
-- [ ] All executed phases are mapped back to `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
-- [ ] PASS / FAIL / DEFERRED / BLOCKED is recorded per scenario or scenario group
-- [ ] Run artifact is structured using `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md`
+- [x] All executed phases are mapped back to `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
+- [x] PASS / FAIL / DEFERRED / BLOCKED is recorded per scenario or scenario group
+- [x] Run artifact is structured using `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md`
 
 - record all phase outcomes against `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
 - use PASS / FAIL / DEFERRED / BLOCKED per scenario or scenario group

@@ -12,6 +12,7 @@ Translate the auth regression requirements into an execution-ready verification 
 - [x] Phase 2 completed
 - [x] Phase 3 completed
 - [x] Phase 4 completed
+- [x] Phase 5 completed
 - [x] Validation mapping recorded in the matrix/run artifact
 - [x] `07 - Playwright E2E - Summary.md` created
 - [x] Final validation report created
@@ -372,6 +373,46 @@ Execution result:
 - targeted Phase 4 Chromium run passed with `3 passed (22.4s)` after replacing a brittle `networkidle` wait with document-readiness settling
 - package-level `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix` passed with Phase 1 `2 passed (9.7s)`, Phase 2 returning-state `3 passed (23.8s)`, Phase 2 direct-entry `2 passed (13.2s)`, Phase 3 `5 passed (24.3s)`, and Phase 4 `3 passed (21.9s)`
 - browser evidence recorded stable `/` and `/users` settlement, no matched `blocking-route` / `Rendering...` runtime signals, and no observed `/users -> /onboarding` transition for the returning completed-user bootstrap path
+
+### Phase 5 — Re-Auth And Refresh Stability
+
+Checklist:
+
+- [x] `AF-22` executed and classified
+- [x] `AF-23` executed and classified
+- [x] `AF-24` executed and classified
+- [x] Re-authenticated route settlement recorded
+- [x] Refresh-route outcomes recorded
+- [x] Relevant logs captured
+
+Scenarios:
+
+- `AF-22`
+- `AF-23`
+- `AF-24`
+
+Execution intent:
+
+- verify sign-out then sign-in again respects completed onboarding state
+- verify manual refresh on `/users` does not regress completed users into bootstrap or onboarding
+- verify manual refresh on `/onboarding` keeps incomplete users on a working onboarding route without route hang
+
+Real-browser evidence required:
+
+- yes
+
+Expected evidence:
+
+- browser-observed route settlement
+- relevant logs
+- explicit note on whether refresh changes the route unexpectedly
+
+Execution result:
+
+- PASS for `AF-22`, `AF-23`, and `AF-24`
+- targeted Phase 5 Chromium run passed with `3 passed (26.9s)`
+- package-level `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix` passed with Phase 1 `2 passed (9.5s)`, Phase 2 returning-state `3 passed (23.5s)`, Phase 2 direct-entry `2 passed (13.7s)`, Phase 3 `5 passed (25.7s)`, Phase 4 `3 passed (21.3s)`, and Phase 5 `3 passed (24.6s)`
+- browser evidence recorded stable post-signout re-authentication to `/users`, stable `/users` reload for completed state, and stable `/onboarding` reload for incomplete state with no matched `blocking-route` / `Rendering...` runtime signals
 
 ## Validation Mapping
 

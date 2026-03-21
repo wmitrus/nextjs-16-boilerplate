@@ -9,7 +9,7 @@ Record the final validation state for the current minimum auth regression run on
 - backend mode: `container`
 - browser/project: `chromium`
 - package entrypoint: `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
-- minimum scenarios covered: `AF-01` / `AF-02` / `AF-03` / `AF-04` / `AF-05` / `AF-06` / `AF-07` / `AF-08` / `AF-09` / `AF-12` / `AF-13` / `AF-14` / `AF-15` / `AF-17` / `AF-18` / `AF-21` / `AF-22` / `AF-23` / `AF-24`
+- minimum scenarios covered: `AF-01` / `AF-02` / `AF-03` / `AF-04` / `AF-05` / `AF-06` / `AF-07` / `AF-08` / `AF-09` / `AF-12` / `AF-13` / `AF-14` / `AF-15` / `AF-17` / `AF-18` / `AF-21` / `AF-22` / `AF-23` / `AF-24` / `AF-25` / `AF-26` / `AF-27`
 
 ## Commands Run
 
@@ -18,6 +18,9 @@ Record the final validation state for the current minimum auth regression run on
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase5 -- --list`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase5`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase6 -- --list`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase6`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
 
 ## Final Results
@@ -41,6 +44,9 @@ Record the final validation state for the current minimum auth regression run on
 - `AF-22`: PASS
 - `AF-23`: PASS
 - `AF-24`: PASS
+- `AF-25`: PASS
+- `AF-26`: PASS
+- `AF-27`: PASS
 
 ## Phase Summary
 
@@ -50,6 +56,7 @@ Record the final validation state for the current minimum auth regression run on
 - Phase 3: `5 passed (24.3s)`
 - Phase 4: `3 passed (21.9s)`
 - Phase 5: `3 passed (24.6s)`
+- Phase 6: `3 passed (17.3s)`
 
 ## Runtime-Stability Evidence
 
@@ -63,9 +70,16 @@ Record the final validation state for the current minimum auth regression run on
 - `AF-23`: completed user reloaded `/users` and remained on `/users` with `User Management` visible
 - `AF-24`: incomplete user reloaded `/onboarding` and remained on `/onboarding` with the onboarding UI visible and `__onboarding_pending=1` still present
 
+## Redirect And Route-Access Evidence
+
+- `AF-25`: hostile `redirect_url=https://evil.example/steal` was sanitized by `/auth/bootstrap/start` and redirected to `/users` instead of leaving the app origin
+- `AF-26`: signed-out `/users` access settled on `/sign-in?redirect_url=/users` and did not render `User Management`
+- `AF-27`: signed-in access to `/sign-in` and `/sign-up` triggered bootstrap requests and settled back on `/users`
+
 ## Notes
 
 - the first Phase 4 attempt exposed a test-harness issue, not a product regression: `networkidle` was too strict for the signed-in app because background traffic can remain active
 - the Phase 4 helper was corrected to use document readiness plus a short stabilization delay, after which the targeted run passed cleanly
 - app-server stdout/stderr remains suppressed by the current Playwright web-server configuration, so runtime evidence is based on browser route settlement and targeted runtime-signal capture
 - the Phase 5 slice reused the same runtime-signal recorder and completed without further harness changes
+- the first AF-27 attempt exposed a test-evidence issue, not a product failure; request-level bootstrap evidence was more reliable than framenavigation capture for that route pair

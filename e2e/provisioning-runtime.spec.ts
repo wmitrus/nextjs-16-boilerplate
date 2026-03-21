@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
 import { createPageObjects } from '@clerk/testing/playwright/unstable';
 import {
   test,
@@ -68,6 +71,32 @@ type BrowserClerk = {
   }) => Promise<void>;
 };
 
+type ServerLogEntry = {
+  level?: number;
+  time?: number;
+  event?: string;
+  status?: string;
+  decision?: string;
+  outcome?: string;
+  pathname?: string;
+  redirectUrl?: string;
+  safeTarget?: string;
+};
+
+type BrowserConsoleEntry = {
+  type: string;
+  text: string;
+  payloads: unknown[];
+};
+
+type BrowserObservabilityRecorder = {
+  readonly consoleEntries: BrowserConsoleEntry[];
+  readonly pageErrors: string[];
+  readonly networkAnomalies: string[];
+  flushConsoleEntries: () => Promise<void>;
+  assertNoUnexpectedFailures: () => void;
+};
+
 function getBaseUrl(): string {
   return process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
 }
@@ -135,6 +164,156 @@ function createRuntimeSignalRecorder(page: Page): RuntimeSignalRecorder {
       expect(matchedConsoleErrors).toEqual([]);
     },
   };
+}
+
+function createBrowserObservabilityRecorder(
+  page: Page,
+): BrowserObservabilityRecorder {
+  const consoleEntries: BrowserConsoleEntry[] = [];
+  const pageErrors: string[] = [];
+  const networkAnomalies: string[] = [];
+  const pendingConsoleEntries: Promise<void>[] = [];
+  const sameOrigin = new URL(getBaseUrl()).origin;
+
+  page.on('console', (message) => {
+    const entry: BrowserConsoleEntry = {
+      type: message.type(),
+      text: message.text(),
+      payloads: [],
+    };
+
+    consoleEntries.push(entry);
+    pendingConsoleEntries.push(
+      Promise.all(
+        message.args().map(async (arg) => {
+          try {
+            return await arg.jsonValue();
+          } catch {
+            return arg.toString();
+          }
+        }),
+      ).then((payloads) => {
+        entry.payloads = payloads;
+      }),
+    );
+  });
+
+  page.on('pageerror', (error) => {
+    pageErrors.push(error.message);
+  });
+
+  page.on('requestfailed', (request) => {
+    const requestUrl = new URL(request.url());
+    const failureText = request.failure()?.errorText ?? 'unknown error';
+
+    if (requestUrl.origin !== sameOrigin) {
+      return;
+    }
+
+    if (failureText === 'net::ERR_ABORTED') {
+      return;
+    }
+
+    networkAnomalies.push(
+      `${request.method()} ${getPathWithSearch(request.url())} failed: ${failureText}`,
+    );
+  });
+
+  page.on('response', (response) => {
+    const responseUrl = new URL(response.url());
+    if (responseUrl.origin !== sameOrigin || response.status() < 500) {
+      return;
+    }
+
+    networkAnomalies.push(
+      `${response.status()} ${getPathWithSearch(response.url())}`,
+    );
+  });
+
+  return {
+    consoleEntries,
+    pageErrors,
+    networkAnomalies,
+    flushConsoleEntries: async () => {
+      await Promise.allSettled(pendingConsoleEntries);
+    },
+    assertNoUnexpectedFailures: () => {
+      expect(pageErrors).toEqual([]);
+      expect(networkAnomalies).toEqual([]);
+    },
+  };
+}
+
+function getServerLogFilePath(): string {
+  return path.join(process.cwd(), process.env.LOG_DIR ?? 'logs', 'server.log');
+}
+
+async function readServerLogEntries(): Promise<ServerLogEntry[]> {
+  try {
+    const fileContents = await readFile(getServerLogFilePath(), 'utf8');
+
+    return fileContents
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line) as ServerLogEntry];
+        } catch {
+          return [];
+        }
+      });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+function matchesConsoleEvent(
+  consoleEntries: BrowserConsoleEntry[],
+  expectedEvent: string,
+): boolean {
+  return consoleEntries.some((entry) => {
+    if (entry.text.includes(expectedEvent)) {
+      return true;
+    }
+
+    return entry.payloads.some(
+      (payload) =>
+        typeof payload === 'object' &&
+        payload !== null &&
+        'event' in payload &&
+        payload.event === expectedEvent,
+    );
+  });
+}
+
+async function waitForServerLogEvidence(
+  startedAt: number,
+  predicate: (entries: ServerLogEntry[]) => boolean,
+  timeoutMs = 10_000,
+): Promise<ServerLogEntry[]> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const entries = (await readServerLogEntries()).filter(
+      (entry) =>
+        typeof entry.time !== 'number' || entry.time >= startedAt - 1_000,
+    );
+
+    if (predicate(entries)) {
+      return entries;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error(
+    `Timed out waiting for expected server log evidence in ${getServerLogFilePath()}`,
+  );
 }
 
 async function waitForPathResponse(
@@ -1004,6 +1183,98 @@ test.describe('Provisioning Runtime E2E', () => {
     await assertNoVisibleRenderingHang(page);
     runtimeSignals.assertNoPhase4Failures();
     await expectProvisioningReady(page, 'single');
+  });
+
+  test('single mode: fresh-user onboarding emits enough observability signals for flow classification @auth-matrix-phase7', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+    const browserObservability = createBrowserObservabilityRecorder(page);
+    const redirectTarget = '/users?af28=1';
+    const startedAt = Date.now();
+
+    await signInSingleNewUserE2E(page);
+
+    await page.goto(
+      `/auth/bootstrap/start?redirect_url=${encodeURIComponent(redirectTarget)}`,
+    );
+
+    await expect(page).toHaveURL(
+      /\/onboarding\?redirect_url=%2Fusers%3Faf28%3D1/,
+    );
+    await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
+    await expectOnboardingIncomplete(page);
+    await expect
+      .poll(async () => {
+        await browserObservability.flushConsoleEntries();
+        return matchesConsoleEvent(
+          browserObservability.consoleEntries,
+          'onboarding_form:mount',
+        );
+      })
+      .toBe(true);
+
+    await completeOnboarding(page);
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+    await expectCookieAbsent(page, ONBOARDING_PENDING_COOKIE);
+    await waitForRouteToSettle(page);
+    await expectProvisioningReady(page, 'single');
+
+    expect(
+      runtimeSignals.transitions.some((transition) =>
+        transition.startsWith('/onboarding?redirect_url=%2Fusers%3Faf28%3D1'),
+      ),
+    ).toBe(true);
+    expect(runtimeSignals.transitions.at(-1)).toBe('/users');
+    runtimeSignals.assertNoPhase4Failures();
+    browserObservability.assertNoUnexpectedFailures();
+
+    const serverLogEntries = await waitForServerLogEvidence(
+      startedAt,
+      (entries) =>
+        entries.some(
+          (entry) =>
+            entry.event === 'bootstrap_start:entry' &&
+            entry.redirectUrl === redirectTarget,
+        ) &&
+        entries.some(
+          (entry) =>
+            entry.event === 'bootstrap_start:decision' &&
+            entry.outcome === 'onboarding_required' &&
+            entry.safeTarget === redirectTarget,
+        ) &&
+        entries.some(
+          (entry) =>
+            entry.event === 'onboarding_guard:decision' &&
+            entry.status === 'onboarding_required' &&
+            entry.decision === 'render:onboarding',
+        ) &&
+        entries.some(
+          (entry) =>
+            entry.event === 'provisioning:ensure' && entry.status === 'success',
+        ) &&
+        entries.some(
+          (entry) =>
+            entry.event === 'users_guard:decision' &&
+            entry.status === 'ALLOWED' &&
+            entry.decision === 'stay:/users',
+        ),
+    );
+
+    expect(
+      serverLogEntries.filter((entry) => (entry.level ?? 0) >= 50),
+    ).toEqual([]);
   });
 
   test('single mode with missing default tenant renders controlled bootstrap error UI', async ({

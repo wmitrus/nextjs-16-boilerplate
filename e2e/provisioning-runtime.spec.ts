@@ -323,6 +323,16 @@ async function waitForRouteToSettle(page: Page): Promise<void> {
   await page.waitForTimeout(1_500);
 }
 
+function getLocationPathname(
+  location: string | null | undefined,
+): string | null {
+  if (!location) {
+    return null;
+  }
+
+  return new URL(location, getBaseUrl()).pathname;
+}
+
 async function expectBootstrapErrorUi(
   page: Page,
   expectedMessage: RegExp,
@@ -894,6 +904,106 @@ test.describe('Provisioning Runtime E2E', () => {
       runtimeSignals.transitions.some((transition) => transition === '/users'),
     ).toBe(false);
     runtimeSignals.assertNoPhase4Failures();
+  });
+
+  test('single mode: hostile redirect_url is sanitized server-side before bootstrap completes @auth-matrix-phase6', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+
+    const bootstrapResponse = await waitForPathResponse(
+      page,
+      '/auth/bootstrap/start',
+      async () => {
+        await page.goto(
+          '/auth/bootstrap/start?redirect_url=https%3A%2F%2Fevil.example%2Fsteal',
+        );
+      },
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.request().resourceType() === 'document' &&
+        response.status() >= 300 &&
+        response.status() < 400,
+    );
+
+    const redirectLocation =
+      (await bootstrapResponse.headerValue('location')) ??
+      bootstrapResponse.headers()['location'];
+
+    expect(getLocationPathname(redirectLocation)).toBe('/users');
+    expect(redirectLocation ?? '').not.toContain('evil.example');
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+    await expectProvisioningReady(page, 'single');
+  });
+
+  test('single mode: unauthenticated access to /users redirects to sign-in without entering the protected flow @auth-matrix-phase6', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await page.goto('/users');
+
+    await expect(page).toHaveURL(/\/sign-in(?:\?.*redirect_url=%2Fusers.*)?$/);
+    await expect(page.getByText(/sign in/i).first()).toBeVisible();
+    await expect(page.getByText(/user management/i)).not.toBeVisible();
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    expect(
+      runtimeSignals.transitions.some(
+        (transition) =>
+          transition.startsWith('/auth/bootstrap/start') ||
+          transition.startsWith('/onboarding'),
+      ),
+    ).toBe(false);
+    runtimeSignals.assertNoPhase4Failures();
+  });
+
+  test('single mode: signed-in user is redirected away from sign-in and sign-up routes @auth-matrix-phase6', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await waitForBootstrapRequest(page, async () => {
+      await page.goto('/sign-in');
+    });
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+
+    await waitForBootstrapRequest(page, async () => {
+      await page.goto('/sign-up');
+    });
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    runtimeSignals.assertNoPhase4Failures();
+    await expectProvisioningReady(page, 'single');
   });
 
   test('single mode with missing default tenant renders controlled bootstrap error UI', async ({

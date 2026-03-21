@@ -17,7 +17,7 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] Container-mode runner implementation completed
 - [x] `07 - Playwright E2E` run prepared
 - [x] `07 - Playwright E2E - Summary.md` created
-- [ ] `validation-report.md` created
+- [x] `validation-report.md` created
 
 ## Likely Affected Areas
 
@@ -71,9 +71,9 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] Constraint consolidation completed
 - [x] Implementation-plan completed
 - [x] Runner alignment implementation step completed
-- [ ] Playwright E2E step completed
+- [x] Playwright E2E step completed
 - [x] Debug investigation step completed
-- [ ] Final validation/report artifact completed
+- [x] Final validation/report artifact completed
 
 ## Specialist Status
 
@@ -126,7 +126,7 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] `04 - Implementation Agent - Summary.md`
 - [x] `06 - Debug Investigation - Summary.md`
 - [x] `07 - Playwright E2E - Summary.md`
-- [ ] `validation-report.md`
+- [x] `validation-report.md`
 
 ## Current Status Note
 
@@ -134,6 +134,7 @@ Run a controlled auth regression verification task for the current branch using 
 - Verified from repository evidence and local env checks: Clerk keys are configured, `single` new/provisioned Clerk fixtures are configured, and local `.env.e2e.local` selects `E2E_BACKEND_MODE=container`.
 - Runner alignment step is now complete: the universal scenario runner preserves the current PGlite setup path and adds a container-backed setup path using the repository test DB lifecycle, selected only by `E2E_BACKEND_MODE`.
 - Focused validation confirmed both branches via the same scenario entrypoint with Playwright `--list`: PGlite still resets and seeds the file-backed scenario DB, and container mode starts `test-db`, resets `5433/app_test`, seeds it, and reaches the same Playwright scenario list.
+- The minimum regression scope is now complete: Phase 1, Phase 2, Phase 3, and Phase 4 all passed in Chromium with the container-backed package entrypoint, and the final validation state is recorded in `validation-report.md`.
 - Reusable incomplete identity is now recorded via the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`.
 - AF-06 / AF-07 rerunnable flow is now implemented in `e2e/provisioning-runtime.spec.ts` using `signInClerkIncompleteUserE2E()` and in-test recreation of onboarding-incomplete app state.
 - Non-secret local env checks confirm fresh, onboarded, and incomplete-user identities are all populated.

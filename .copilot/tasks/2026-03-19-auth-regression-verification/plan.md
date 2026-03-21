@@ -11,7 +11,7 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] `intake.md` completed
 - [x] `constraints.md` completed
 - [x] `implementation-plan.md` completed
-- [ ] Env and fixture assumptions validated
+- [x] Env and fixture assumptions validated
 - [x] Runner architecture direction confirmed
 - [x] Container-mode runner implementation plan confirmed
 - [x] Container-mode runner implementation completed
@@ -161,3 +161,7 @@ Run a controlled auth regression verification task for the current branch using 
 - A broad five-scenario AF-05 through AF-09 rerun later hit an intermittent `429` on AF-05's deeper protected-API probe, but a targeted AF-05 rerun still passed: `1 passed (12.5s)`. Current Phase 2 status remains PASS on targeted browser evidence.
 - Package-level auth-matrix scripts are now implemented in `package.json` using Playwright title tags instead of brittle full test-name grep. The new entrypoints are `e2e:auth-matrix`, `e2e:auth-matrix:phase1`, `e2e:auth-matrix:phase2`, and `e2e:auth-matrix:ci`.
 - Validation of the new scripts confirmed that the phase-1 script executes the two tagged Phase 1 cases and the phase-2 script executes the five tagged Phase 2 cases successfully through the existing universal runner.
+- Follow-up stabilization on 2026-03-21 fixed two package-level auth-matrix root causes before Phase 3: local Playwright runs could inherit a stale repo-local `next dev` process tree plus `.next/dev/lock`, and E2E auth-matrix API probes were still subject to rate limiting, which produced the intermittent `429` seen in the returning-state slice.
+- `scripts/e2e/run-scenario.mjs` now preserves true Playwright list mode through the wrapper, defaults local runs to reusing a healthy existing server unless overridden, and cleans up stale repo-local Next.js dev processes plus `.next/dev/lock` when the configured base URL is unreachable.
+- `src/security/middleware/with-rate-limit.ts` now bypasses rate limiting when `E2E_ENABLED` is true so real-browser auth verification does not fail on test-generated provisioning-status probes.
+- Final package-level verification now passes end to end with `pnpm e2e:auth-matrix`: Phase 1 passed with `2 passed (10.2s)`, Phase 2 returning-state passed with `3 passed (23.4s)`, and Phase 2 direct-entry passed with `2 passed (13.8s)`.

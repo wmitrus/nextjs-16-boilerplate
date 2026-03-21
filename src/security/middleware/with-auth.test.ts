@@ -579,6 +579,27 @@ describe('Auth Middleware', () => {
     expect(mockHandler).toHaveBeenCalled();
   });
 
+  it('should not redirect /users in edge mode when __onboarding_pending cookie is set', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({
+      path: '/users',
+      headers: { Cookie: '__onboarding_pending=1' },
+    });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+
+    await middleware(req, ctx);
+
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
   it('should redirect authenticated user to onboarding when tenant context is missing', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });
     mockUserRepository.findById.mockResolvedValue({

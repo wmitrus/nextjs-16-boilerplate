@@ -1,5 +1,11 @@
 import { createPageObjects } from '@clerk/testing/playwright/unstable';
-import { test, expect, type Page, type Response } from '@playwright/test';
+import {
+  test,
+  expect,
+  type ConsoleMessage,
+  type Page,
+  type Response,
+} from '@playwright/test';
 
 import {
   getClerkE2EOrganizationSlug,
@@ -52,6 +58,7 @@ type BrowserClerk = {
   loaded?: boolean;
   session?: {
     id: string;
+    getToken?: () => Promise<string | null>;
   };
   user?: BrowserClerkUser;
   signOut?: () => Promise<void>;
@@ -67,6 +74,67 @@ function getBaseUrl(): string {
 
 function getPathname(url: string): string {
   return new URL(url).pathname;
+}
+
+function getPathWithSearch(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}`;
+}
+
+const PHASE4_FAILURE_PATTERN =
+  /blocking-route|Rendering\.\.\.|outside of <Suspense>|Data that blocks navigation/i;
+
+type RuntimeSignalRecorder = {
+  readonly pageErrors: string[];
+  readonly matchedConsoleErrors: string[];
+  readonly transitions: string[];
+  assertNoPhase4Failures: () => void;
+};
+
+function createRuntimeSignalRecorder(page: Page): RuntimeSignalRecorder {
+  const pageErrors: string[] = [];
+  const matchedConsoleErrors: string[] = [];
+  const transitions: string[] = [];
+
+  const recordTransition = (url: string) => {
+    if (!url || url === 'about:blank') {
+      return;
+    }
+
+    transitions.push(getPathWithSearch(url));
+  };
+
+  const handleConsole = (message: ConsoleMessage) => {
+    if (
+      message.type() === 'error' &&
+      PHASE4_FAILURE_PATTERN.test(message.text())
+    ) {
+      matchedConsoleErrors.push(message.text());
+    }
+  };
+
+  recordTransition(page.url());
+  page.on('pageerror', (error) => {
+    pageErrors.push(error.message);
+  });
+  page.on('console', handleConsole);
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) {
+      recordTransition(frame.url());
+    }
+  });
+
+  return {
+    pageErrors,
+    matchedConsoleErrors,
+    transitions,
+    assertNoPhase4Failures: () => {
+      expect(
+        pageErrors.filter((message) => PHASE4_FAILURE_PATTERN.test(message)),
+      ).toEqual([]);
+      expect(matchedConsoleErrors).toEqual([]);
+    },
+  };
 }
 
 async function waitForPathResponse(
@@ -243,6 +311,16 @@ async function browserJsonRequest(
       body,
     };
   }, pathname);
+}
+
+async function assertNoVisibleRenderingHang(page: Page): Promise<void> {
+  await expect(page.locator('body')).not.toContainText(/Rendering\.\.\./i);
+}
+
+async function waitForRouteToSettle(page: Page): Promise<void> {
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => document.readyState === 'complete');
+  await page.waitForTimeout(1_500);
 }
 
 async function expectBootstrapErrorUi(
@@ -635,6 +713,87 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await expect(page).toHaveURL(/\/users$/);
     await expect(page.getByText(/user management/i)).toBeVisible();
+    await expectProvisioningReady(page, 'single');
+  });
+
+  test('single mode: root layout stays stable on the public home route under Clerk provider shell @auth-matrix-phase4', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await page.goto('/');
+
+    await expect(page).toHaveTitle(
+      /Next\.js 16 Boilerplate \| Build Your Next Idea Faster/i,
+    );
+    await expect(
+      page.getByRole('link', { name: /documentation/i }),
+    ).toBeVisible();
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    runtimeSignals.assertNoPhase4Failures();
+  });
+
+  test('single mode: completed-user /users load stays stable in the Clerk provider branch @auth-matrix-phase4', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await page.goto('/users');
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    runtimeSignals.assertNoPhase4Failures();
+  });
+
+  test('single mode: returning completed user does not race from /users back to /onboarding after bootstrap redirect @auth-matrix-phase4', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+    await signOutClerkSession(page);
+
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await signInSingleNewUserE2E(page);
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    expect(
+      runtimeSignals.transitions.some((transition) =>
+        transition.startsWith('/onboarding'),
+      ),
+    ).toBe(false);
+    runtimeSignals.assertNoPhase4Failures();
     await expectProvisioningReady(page, 'single');
   });
 

@@ -797,6 +797,105 @@ test.describe('Provisioning Runtime E2E', () => {
     await expectProvisioningReady(page, 'single');
   });
 
+  test('single mode: sign-out then sign-in again stays stable for a completed user @auth-matrix-phase5', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+    await expect(page).toHaveURL(/\/users$/);
+    await signOutClerkSession(page);
+
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await signInSingleNewUserE2E(page);
+    await page.goto('/auth/bootstrap/start?redirect_url=/users');
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    expect(
+      runtimeSignals.transitions.some((transition) =>
+        transition.startsWith('/onboarding'),
+      ),
+    ).toBe(false);
+    runtimeSignals.assertNoPhase4Failures();
+    await expectProvisioningReady(page, 'single');
+  });
+
+  test('single mode: refresh on /users keeps a completed user on the app route @auth-matrix-phase5', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
+
+    await createCompletedSingleUserState(page);
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await page.goto('/users');
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+
+    await page.reload();
+
+    await expect(page).toHaveURL(/\/users$/);
+    await expect(page.getByText(/user management/i)).toBeVisible();
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    expect(
+      runtimeSignals.transitions.some(
+        (transition) =>
+          transition.startsWith('/onboarding') ||
+          transition.startsWith('/auth/bootstrap/start'),
+      ),
+    ).toBe(false);
+    runtimeSignals.assertNoPhase4Failures();
+    await expectProvisioningReady(page, 'single');
+  });
+
+  test('single mode: refresh on /onboarding keeps an incomplete user on a working onboarding route @auth-matrix-phase5', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
+
+    await createIncompleteSingleUserState(page);
+    const runtimeSignals = createRuntimeSignalRecorder(page);
+
+    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await page.reload();
+
+    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectOnboardingIncomplete(page);
+    await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
+    await waitForRouteToSettle(page);
+    await assertNoVisibleRenderingHang(page);
+    expect(
+      runtimeSignals.transitions.some((transition) => transition === '/users'),
+    ).toBe(false);
+    runtimeSignals.assertNoPhase4Failures();
+  });
+
   test('single mode with missing default tenant renders controlled bootstrap error UI', async ({
     page,
   }) => {

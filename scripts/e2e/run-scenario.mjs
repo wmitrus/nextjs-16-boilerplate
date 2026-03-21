@@ -85,6 +85,175 @@ function run(command, args, env) {
   }
 }
 
+function getRepoRoot() {
+  return process.cwd();
+}
+
+function findRepoNextDevProcesses(repoRoot) {
+  const result = spawnSync('ps', ['-eo', 'pid=,ppid=,args='], {
+    encoding: 'utf8',
+  });
+
+  if (result.status !== 0) {
+    return [];
+  }
+
+  return result.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(\d+)\s+(\d+)\s+(.*)$/);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        pid: Number(match[1]),
+        ppid: Number(match[2]),
+        args: match[3],
+      };
+    })
+    .filter(Boolean)
+    .filter(
+      (entry) =>
+        entry.args.includes(repoRoot) &&
+        entry.args.includes('next/dist/bin/next dev'),
+    );
+}
+
+function buildChildProcessMap() {
+  const result = spawnSync('ps', ['-eo', 'pid=,ppid='], {
+    encoding: 'utf8',
+  });
+
+  if (result.status !== 0) {
+    return new Map();
+  }
+
+  const childrenByParent = new Map();
+
+  for (const line of result.stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const match = trimmed.match(/^(\d+)\s+(\d+)$/);
+    if (!match) {
+      continue;
+    }
+
+    const pid = Number(match[1]);
+    const ppid = Number(match[2]);
+    const existing = childrenByParent.get(ppid) ?? [];
+    existing.push(pid);
+    childrenByParent.set(ppid, existing);
+  }
+
+  return childrenByParent;
+}
+
+function collectDescendants(childrenByParent, rootPid, collected = new Set()) {
+  const children = childrenByParent.get(rootPid) ?? [];
+
+  for (const childPid of children) {
+    if (collected.has(childPid)) {
+      continue;
+    }
+
+    collected.add(childPid);
+    collectDescendants(childrenByParent, childPid, collected);
+  }
+
+  return collected;
+}
+
+function processExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function terminateProcesses(pids) {
+  for (const pid of pids) {
+    if (!processExists(pid)) {
+      continue;
+    }
+
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      // Ignore already-exited processes.
+    }
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  for (const pid of pids) {
+    if (!processExists(pid)) {
+      continue;
+    }
+
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Ignore already-exited processes.
+    }
+  }
+}
+
+async function isBaseUrlReachable(baseUrl) {
+  try {
+    const response = await fetch(baseUrl, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(3000),
+    });
+    return response.status > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function cleanupStaleLocalNextDevState(env, listMode) {
+  if (listMode || env.CI) {
+    return;
+  }
+
+  const baseUrl = env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+  const baseUrlReachable = await isBaseUrlReachable(baseUrl);
+
+  if (baseUrlReachable) {
+    return;
+  }
+
+  const repoRoot = getRepoRoot();
+  const repoNextDevProcesses = findRepoNextDevProcesses(repoRoot);
+
+  if (repoNextDevProcesses.length === 0) {
+    return;
+  }
+
+  const childrenByParent = buildChildProcessMap();
+  const processesToTerminate = new Set();
+
+  for (const entry of repoNextDevProcesses) {
+    processesToTerminate.add(entry.pid);
+
+    for (const childPid of collectDescendants(childrenByParent, entry.pid)) {
+      processesToTerminate.add(childPid);
+    }
+  }
+
+  await terminateProcesses([...processesToTerminate]);
+
+  const nextDevLockPath = path.join(repoRoot, '.next', 'dev', 'lock');
+  fs.rmSync(nextDevLockPath, { force: true });
+}
+
 function applySharedRuntimeEnv(env, scenario, variant) {
   const backendMode = resolveE2EBackendMode(env);
 
@@ -128,7 +297,7 @@ function prepareContainerDatabase(env) {
   run('node', ['scripts/db-ops.mjs', 'test', 'reset', '--force'], env);
 }
 
-function main() {
+async function main() {
   const { scenario, variant, withOauth, playwrightArgs } = parseArgs(
     process.argv.slice(2),
   );
@@ -172,7 +341,9 @@ function main() {
     }
   }
 
+  await cleanupStaleLocalNextDevState(env, listMode);
+
   run('pnpm', ['exec', 'playwright', 'test', ...normalizedPlaywrightArgs], env);
 }
 
-main();
+await main();

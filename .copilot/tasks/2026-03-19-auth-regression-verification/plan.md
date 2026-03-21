@@ -136,6 +136,7 @@ Run a controlled auth regression verification task for the current branch using 
 - Focused validation confirmed both branches via the same scenario entrypoint with Playwright `--list`: PGlite still resets and seeds the file-backed scenario DB, and container mode starts `test-db`, resets `5433/app_test`, seeds it, and reaches the same Playwright scenario list.
 - The minimum regression scope is now complete: Phase 1, Phase 2, Phase 3, and Phase 4 all passed in Chromium with the container-backed package entrypoint, and the final validation state is recorded in `validation-report.md`.
 - The expanded regression scope is now complete through Phase 5: AF-22, AF-23, and AF-24 passed in targeted Chromium runs, and the container-backed package entrypoint remained green with Phase 5 included.
+- The expanded regression scope is now complete through Phase 6: AF-25, AF-26, and AF-27 passed in targeted Chromium runs, and the container-backed package entrypoint remained green with Phase 6 included.
 - Reusable incomplete identity is now recorded via the canonical env contract `E2E_CLERK_INCOMPLETE_USER_USERNAME` / `E2E_CLERK_INCOMPLETE_USER_PASSWORD`.
 - AF-06 / AF-07 rerunnable flow is now implemented in `e2e/provisioning-runtime.spec.ts` using `signInClerkIncompleteUserE2E()` and in-test recreation of onboarding-incomplete app state.
 - Non-secret local env checks confirm fresh, onboarded, and incomplete-user identities are all populated.
@@ -143,6 +144,9 @@ Run a controlled auth regression verification task for the current branch using 
 - After `npx playwright install --with-deps`, rerunning that same smoke command succeeded end to end: the browser launched, the app runtime served the page, and the targeted Chromium smoke test passed.
 - Current Playwright config suppresses web-server stdout and stderr, so server-log visibility is still not satisfied for this verification workflow.
 - Remaining note: server-log visibility is still limited by Playwright web-server config, but the browser-real execution path itself is now operational.
+- Current confidence limit: AF-25 / AF-26 / AF-27 confirm redirect safety and route-access protection for the exercised auth/bootstrap/onboarding paths, but they do not yet justify a broad "the app is well designed and protected" conclusion on their own.
+- Stronger-yes evidence bar for this task: keep AF-01 through AF-27 green, then complete AF-28 with log evidence that can classify route decision, route commit, subtree mount, submit success, return path, cookie set/clear behavior, and unexpected errors across the exercised auth/bootstrap/onboarding flows.
+- AF-28 is the remaining evidence gate before a stronger repo-scoped statement can be made about this auth/bootstrap/onboarding slice; even then, that statement should stay scoped to this slice rather than to the entire application security posture.
 - Consequence: the task is ready to proceed from readiness checks into browser-real auth regression execution.
 - Phase 1 execution has started.
 - `AF-01` failed in the real browser run: interactive `/sign-up` did not reach `/auth/bootstrap/start` and remained on Clerk email verification until timeout.

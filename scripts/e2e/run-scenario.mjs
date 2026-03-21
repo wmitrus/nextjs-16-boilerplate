@@ -66,6 +66,14 @@ function parseArgs(argv) {
   };
 }
 
+function normalizePlaywrightArgs(args) {
+  return args.filter((value) => value !== '--');
+}
+
+function isPlaywrightListMode(args) {
+  return args.includes('--list');
+}
+
 function run(command, args, env) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
@@ -84,7 +92,8 @@ function applySharedRuntimeEnv(env, scenario, variant) {
   env.DB_PROVIDER = 'drizzle';
   env.E2E_ENABLED = 'true';
   env.NEXT_PUBLIC_E2E_ENABLED = 'true';
-  env.PLAYWRIGHT_REUSE_EXISTING_SERVER = 'false';
+  env.PLAYWRIGHT_REUSE_EXISTING_SERVER =
+    env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? (env.CI ? 'false' : 'true');
   env.PLAYWRIGHT_TEST_BASE_URL =
     env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
 
@@ -123,6 +132,8 @@ function main() {
   const { scenario, variant, withOauth, playwrightArgs } = parseArgs(
     process.argv.slice(2),
   );
+  const normalizedPlaywrightArgs = normalizePlaywrightArgs(playwrightArgs);
+  const listMode = isPlaywrightListMode(normalizedPlaywrightArgs);
 
   const envMap = loadScenarioEnv({
     scenario,
@@ -139,23 +150,29 @@ function main() {
 
   applyEnv(env);
 
-  const checkArgs = ['scripts/check-e2e-auth-env.mjs', '--scenario', scenario];
-  if (variant) {
-    checkArgs.push('--variant', variant);
-  }
-  if (withOauth) {
-    checkArgs.push('--with-oauth');
+  if (!listMode) {
+    const checkArgs = [
+      'scripts/check-e2e-auth-env.mjs',
+      '--scenario',
+      scenario,
+    ];
+    if (variant) {
+      checkArgs.push('--variant', variant);
+    }
+    if (withOauth) {
+      checkArgs.push('--with-oauth');
+    }
+
+    run('node', checkArgs, env);
+
+    if (backendMode === 'container') {
+      prepareContainerDatabase(env);
+    } else {
+      preparePgliteDatabase(env, scenario, variant);
+    }
   }
 
-  run('node', checkArgs, env);
-
-  if (backendMode === 'container') {
-    prepareContainerDatabase(env);
-  } else {
-    preparePgliteDatabase(env, scenario, variant);
-  }
-
-  run('pnpm', ['exec', 'playwright', 'test', ...playwrightArgs], env);
+  run('pnpm', ['exec', 'playwright', 'test', ...normalizedPlaywrightArgs], env);
 }
 
 main();

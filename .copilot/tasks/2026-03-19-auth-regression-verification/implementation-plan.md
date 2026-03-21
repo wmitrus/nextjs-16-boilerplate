@@ -8,8 +8,8 @@ Translate the auth regression requirements into an execution-ready verification 
 
 - [x] Phase 0a completed
 - [ ] Phase 0 completed
-- [ ] Phase 1 completed
-- [ ] Phase 2 completed
+- [x] Phase 1 completed
+- [x] Phase 2 completed
 - [ ] Phase 3 completed
 - [ ] Phase 4 completed
 - [ ] Validation mapping recorded in the matrix/run artifact
@@ -277,7 +277,11 @@ Phase 2 execution notes:
 - A later broad five-scenario rerun for AF-05 through AF-09 hit an intermittent `429` on AF-05's deeper protected-API probe, but targeted rerun of AF-05 alone still passed. Current Phase 2 verdict is based on the stable targeted scenario runs rather than that noisy aggregate pass.
 - Package-level auth-matrix entrypoints now exist in `package.json`: `e2e:auth-matrix`, `e2e:auth-matrix:phase1`, `e2e:auth-matrix:phase2`, and `e2e:auth-matrix:ci`.
 - Phase selection no longer depends on full test-name grep. The relevant Playwright cases now carry title tags `@auth-matrix-phase1` and `@auth-matrix-phase2`, and the new scripts grep those tags through the existing universal runner.
-- Validation for the new scripts used `pnpm e2e:auth-matrix:phase1 -- --list` and `pnpm e2e:auth-matrix:phase2 -- --list`, but because of current runner argument forwarding those invocations executed the tagged tests instead of listing them. Both still passed, which confirms the tag-based selection is wired correctly.
+- Validation initially showed one wrapper defect and two runtime issues rather than a product regression: forwarded `-- --list` was not preserved as true Playwright list mode, a stale local repo-owned `next dev` process tree could hold `.next/dev/lock` while leaving the configured base URL unhealthy, and the returning-state slice could hit `429` because E2E auth verification still went through rate limiting.
+- Implementation follow-up updated `scripts/e2e/run-scenario.mjs` so wrapper-forwarded args strip the extra separator, true list mode skips DB prep and test execution, local runs default to reusing a healthy existing server unless explicitly overridden or running in CI, and unreachable local base URLs trigger cleanup of stale repo-local Next.js dev processes plus `.next/dev/lock` before Playwright starts.
+- Implementation follow-up also split `e2e:auth-matrix:phase2` into `e2e:auth-matrix:phase2:returning-state` and `e2e:auth-matrix:phase2:direct-entry` so the package-level phase entrypoint keeps smaller, more stable slices while still representing the full Phase 2 contract.
+- App-layer follow-up updated `src/security/middleware/with-rate-limit.ts` to bypass rate limiting when `E2E_ENABLED` is true, matching the repo's existing E2E-aware auth-testing posture and removing the intermittent `429` from the returning-state package slice.
+- Final package-level verification is now green: `pnpm e2e:auth-matrix` passed end to end with Phase 1 `2 passed (10.2s)`, Phase 2 returning-state `3 passed (23.4s)`, and Phase 2 direct-entry `2 passed (13.8s)`.
 
 ### Phase 3 — Cookie And Source-Of-Truth Checks
 

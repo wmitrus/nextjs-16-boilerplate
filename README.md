@@ -39,6 +39,8 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - `pnpm test:integration`: Run integration tests.
 - `pnpm test:all`: Run all Vitest suites.
 - `pnpm e2e`: Run Playwright E2E tests.
+- `pnpm e2e:auth-matrix:ci`: Build the app and run the auth/bootstrap/onboarding Playwright matrix in CI mode.
+- `pnpm e2e:ci`: Build the app and run the broader Playwright scenario matrix in CI mode.
 - `pnpm lint`: Run ESLint.
 - `pnpm typecheck`: Run full TypeScript typecheck.
 
@@ -61,7 +63,14 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 CI equivalents:
 
 - DB tests in CI (Testcontainers): `pnpm test:db:ci`
-- E2E in CI: `pnpm e2e:ci`
+- Auth-matrix E2E in CI: `pnpm e2e:auth-matrix:ci`
+- Full scenario-matrix E2E in CI: `pnpm e2e:ci`
+
+GitHub Actions E2E entrypoints:
+
+- Auth-matrix workflow: PR label `run-e2e` or manual dispatch in the Actions tab.
+- Broad matrix workflow: PR label `run-e2e-matrix` or manual dispatch in the Actions tab.
+- Workflow reference: [./.github/workflows/README.md](./.github/workflows/README.md)
 
 For the full testing matrix, config mapping, CI flow, and troubleshooting, see:
 

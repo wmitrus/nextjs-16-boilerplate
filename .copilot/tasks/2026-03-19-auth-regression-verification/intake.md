@@ -74,6 +74,7 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 - `AF-06 / AF-07`
 - `AF-08 / AF-09`
 - `AF-12 / AF-13 / AF-14 / AF-15`
+- `AF-16`
 - `AF-17 / AF-18 / AF-21`
 
 ## Acceptance Criteria
@@ -130,3 +131,5 @@ The task must verify onboarding, post-auth routing, cookie signal behavior, and 
 - implementation direction confirmed with the user: keep the current separated scenario flow for PGlite, add the same separated scenario flow for container, and let the user choose the backend through `E2E_BACKEND_MODE`
 - Phase 2 implementation and rerun findings on 2026-03-20: AF-05 is now modeled as a rerunnable returning-user scenario by creating completed single-user state inside the run before re-authentication; AF-06 and AF-07 now assert the repository API contract and route outcome directly; the final container-mode Chromium rerun passed AF-05 / AF-06 / AF-07
 - Additional Phase 2 findings on 2026-03-21: AF-08 and AF-09 now have explicit targeted Playwright coverage and pass in container-mode Chromium; a later broad AF-05 through AF-09 batch produced an intermittent `429` on AF-05's deeper protected-API probe, but targeted AF-05 rerun still passed, so current verification remains anchored to the targeted scenario runs
+- Closure review on 2026-03-21: AF-16 has been added back into the recorded minimum scenario set because the canonical matrix requires it for auth-flow changes even though the earlier task-local minimum list omitted it.
+- Follow-up hardening on 2026-03-21: `scripts/check-e2e-auth-env.mjs` now validates Clerk redirect env values explicitly against `/auth/bootstrap/start?redirect_url=/users`; the current local `single` scenario passes this check, so redirect-env confirmation is no longer a purely manual readiness step.

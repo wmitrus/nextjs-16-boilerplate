@@ -63,7 +63,7 @@ Validation results:
 
 ---
 
-### [ ] Step: Validation Report
+### [x] Step: Validation Report
 
 Output:
 /home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/d7fbaba9-1170-4052-aa3b-e8144a7b5541/validation-report.md
@@ -146,12 +146,14 @@ Next action: Verify H1 by changing all four Clerk redirect URLs to absolute in .
 
 ---
 
-### [ ] Step: Clerk Redirect URL Fix (pending confirmation)
+### [x] Step: Clerk Redirect URL Fix
 
-Status: BLOCKED — awaiting user confirmation that H1 is correct (test in .env.local first).
+Status: IMPLEMENTED — `normalizeClerkPostAuthRedirect` implemented in `src/modules/auth/lib/clerk-redirects.ts`.
 
-Proposed changes if H1 confirmed:
+Changes applied:
 
-1. Remove hardcoded defaults for NEXT*PUBLIC_CLERK_SIGN*\*\_FORCE_REDIRECT_URL in env.ts (must be explicitly configured per-environment)
-2. Update .env.example to use absolute URL format
-3. Add NEXT_PUBLIC_APP_URL usage or document absolute URL requirement
+1. `src/modules/auth/lib/clerk-redirects.ts` — normalizes relative paths to absolute URLs using `NEXT_PUBLIC_APP_URL`, rejects cross-origin redirects
+2. `src/app/layout.tsx` — uses `normalizeClerkPostAuthRedirect` for all four Clerk redirect props
+3. `src/modules/auth/ui/HeaderAuthControls.tsx` — same pattern applied
+4. `src/core/env.ts` — `NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL` are optional (no hardcoded relative-path defaults)
+5. Tests: `src/modules/auth/lib/clerk-redirects.test.ts`

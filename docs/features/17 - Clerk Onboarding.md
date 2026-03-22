@@ -6,7 +6,7 @@ This document describes onboarding flow after the provisioning refactor.
 
 Onboarding is not just profile capture. It explicitly provisions internal records before saving profile fields.
 
-`completeOnboarding()` flow (`src/modules/auth/ui/onboarding-actions.ts`):
+`completeOnboarding()` flow (`src/app/onboarding/actions.ts`):
 
 1. Read raw external identity from `AUTH.IDENTITY_SOURCE`.
 2. Call `PROVISIONING.SERVICE.ensureProvisioned(...)` with:

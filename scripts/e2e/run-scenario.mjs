@@ -254,15 +254,44 @@ async function cleanupStaleLocalNextDevState(env, listMode) {
   fs.rmSync(nextDevLockPath, { force: true });
 }
 
+function cleanupExplicitServerLogDir(env, listMode) {
+  if (listMode) {
+    return;
+  }
+
+  const logDir =
+    typeof env.PLAYWRIGHT_SERVER_LOG_DIR === 'string'
+      ? env.PLAYWRIGHT_SERVER_LOG_DIR.trim()
+      : '';
+
+  if (!logDir) {
+    return;
+  }
+
+  fs.rmSync(path.join(getRepoRoot(), logDir), {
+    recursive: true,
+    force: true,
+  });
+}
+
 function applySharedRuntimeEnv(env, scenario, variant) {
   const backendMode = resolveE2EBackendMode(env);
+  const hasExplicitServerLogDir =
+    typeof env.PLAYWRIGHT_SERVER_LOG_DIR === 'string' &&
+    env.PLAYWRIGHT_SERVER_LOG_DIR.trim().length > 0;
 
   env.E2E_BACKEND_MODE = backendMode;
   env.DB_PROVIDER = 'drizzle';
   env.E2E_ENABLED = 'true';
   env.NEXT_PUBLIC_E2E_ENABLED = 'true';
   env.PLAYWRIGHT_REUSE_EXISTING_SERVER =
-    env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? (env.CI ? 'false' : 'true');
+    env.PLAYWRIGHT_REUSE_EXISTING_SERVER ??
+    (env.CI || hasExplicitServerLogDir ? 'false' : 'true');
+
+  if (hasExplicitServerLogDir) {
+    env.LOG_DIR = env.PLAYWRIGHT_SERVER_LOG_DIR;
+  }
+
   env.PLAYWRIGHT_TEST_BASE_URL =
     env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
 
@@ -342,6 +371,7 @@ async function main() {
   }
 
   await cleanupStaleLocalNextDevState(env, listMode);
+  cleanupExplicitServerLogDir(env, listMode);
 
   run('pnpm', ['exec', 'playwright', 'test', ...normalizedPlaywrightArgs], env);
 }

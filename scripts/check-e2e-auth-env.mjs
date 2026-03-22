@@ -1,3 +1,4 @@
+import { checkClerkRedirectUrls } from './check-env-consistency.mjs';
 import {
   applyEnv,
   loadScenarioEnv,
@@ -215,6 +216,18 @@ function collectOptionalWarnings() {
   return warnings;
 }
 
+export function validateClerkRedirectEnv(
+  effectiveEnv,
+  nodeEnv = 'development',
+) {
+  const { warnings } = checkClerkRedirectUrls(effectiveEnv, nodeEnv);
+
+  return warnings.map(
+    (warning) =>
+      `Clerk redirect env drift detected: ${warning.trim()}. Expected all sign-in/sign-up redirect URLs to use /auth/bootstrap/start?redirect_url=/users for auth-matrix runs.`,
+  );
+}
+
 function main() {
   const { scenario, variant, withOauth } = parseArgs(process.argv.slice(2));
 
@@ -231,6 +244,10 @@ function main() {
   const missing = [];
   const aliasWarnings = [];
   const optionalWarnings = collectOptionalWarnings();
+  const redirectEnvErrors = validateClerkRedirectEnv(
+    process.env,
+    process.env.NODE_ENV,
+  );
 
   for (const requirement of BASE_REQUIREMENTS) {
     if (!getEnvValue(requirement.key)) {
@@ -284,6 +301,10 @@ function main() {
   }
 
   validateSeededEmailAssumptions({ scenario, variant }, missing);
+
+  if (redirectEnvErrors.length > 0) {
+    missing.push(...redirectEnvErrors);
+  }
 
   if (missing.length > 0) {
     console.error(

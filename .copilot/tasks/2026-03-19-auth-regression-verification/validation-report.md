@@ -9,7 +9,7 @@ Record the final validation state for the current expanded auth regression run o
 - backend mode: `container`
 - browser/project: `chromium`
 - package entrypoint: `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
-- minimum scenarios covered: `AF-01` / `AF-02` / `AF-03` / `AF-04` / `AF-05` / `AF-06` / `AF-07` / `AF-08` / `AF-09` / `AF-12` / `AF-13` / `AF-14` / `AF-15` / `AF-17` / `AF-18` / `AF-21` / `AF-22` / `AF-23` / `AF-24` / `AF-25` / `AF-26` / `AF-27` / `AF-28`
+- minimum scenarios covered: `AF-01` / `AF-02` / `AF-03` / `AF-04` / `AF-05` / `AF-06` / `AF-07` / `AF-08` / `AF-09` / `AF-12` / `AF-13` / `AF-14` / `AF-15` / `AF-16` / `AF-17` / `AF-18` / `AF-21` / `AF-22` / `AF-23` / `AF-24` / `AF-25` / `AF-26` / `AF-27` / `AF-28`
 
 ## Commands Run
 
@@ -24,6 +24,8 @@ Record the final validation state for the current expanded auth regression run o
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase7 -- --list`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase7`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase2:logged`
+- `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase3:logged`
 - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix`
 
 ## Final Results
@@ -41,6 +43,7 @@ Record the final validation state for the current expanded auth regression run o
 - `AF-13`: PASS
 - `AF-14`: PASS
 - `AF-15`: PASS
+- `AF-16`: PASS
 - `AF-17`: PASS
 - `AF-18`: PASS
 - `AF-21`: PASS
@@ -65,12 +68,15 @@ Record the final validation state for the current expanded auth regression run o
 
 ## Observability Evidence
 
-- `AF-28`: logged-mode Phase 7 captured `bootstrap_start:entry` with `redirectUrl=/users?af28=1`, `bootstrap_start:decision` with `outcome=onboarding_required`, `onboarding_guard:decision` with `decision=render:onboarding`, `provisioning:ensure` with `status=success`, and `users_guard:decision` with `decision=stay:/users` in `logs/auth-matrix-phase7/server.log`
+- Phase 2 logged evidence: `logs/playwright/auth-matrix-phase2/server.log` from `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase2:logged` captured `bootstrap_start:decision` with both `outcome=onboarding_required` and `outcome=ready`, `onboarding_guard:decision` with `decision=render:onboarding`, and `users_guard:decision` with both `decision=redirect:/onboarding` and `decision=stay:/users` for the exercised returning-user paths
+- Phase 3 logged evidence: `logs/playwright/auth-matrix-phase3/server.log` from `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase3:logged` captured adjacent provisioning lifecycle and auth-routing signals, including `provisioning:ensure:start` through `provisioning:ensure:complete`, `bootstrap_start:decision`, `onboarding_guard:decision`, `users_guard:decision`, and `with-node-provisioning` denials on `/api/me/provisioning-status`
+- `AF-28`: logged-mode Phase 7 captured `bootstrap_start:entry` with `redirectUrl=/users?af28=1`, `bootstrap_start:decision` with `outcome=onboarding_required`, `onboarding_guard:decision` with `decision=render:onboarding`, `provisioning:ensure` with `status=success`, and `users_guard:decision` with `decision=stay:/users` in `logs/playwright/auth-matrix-phase7/server.log`
 - `AF-28`: browser evidence recorded onboarding subtree mount, committed transition from onboarding to `/users`, `__onboarding_pending=1` before submit, and cookie absence after completion
 - `AF-28`: no unexpected page errors, console-error matches, or non-aborted same-origin network failures were observed in the targeted observability run
 
 ## Runtime-Stability Evidence
 
+- `AF-16`: `UsersLayout` remains the DB-backed fallback for `/users` while edge middleware no longer redirects `/users` based only on the onboarding cookie hint; this classification is backed by the current `with-auth.ts` and `src/app/users/layout.tsx` behavior plus the green stale-cookie and `/users` access runs
 - `AF-17`: public home route settled on `/` with the expected title and no matched `blocking-route`, `Rendering...`, or Suspense-shape runtime signals
 - `AF-18`: completed-user authenticated route settled on `/users` with `User Management` visible and no matched root-layout or Clerk-branch runtime failures
 - `AF-21`: returning completed-user bootstrap path settled on `/users` without any observed `/onboarding` transition in the main-frame route history
@@ -91,7 +97,8 @@ Record the final validation state for the current expanded auth regression run o
 
 - the first Phase 4 attempt exposed a test-harness issue, not a product regression: `networkidle` was too strict for the signed-in app because background traffic can remain active
 - the Phase 4 helper was corrected to use document readiness plus a short stabilization delay, after which the targeted run passed cleanly
-- app-server stdout/stderr remains suppressed by the current Playwright web-server configuration, but AF-28 used the existing file logger with `LOG_TO_FILE_DEV=true` and `LOG_DIR=logs/auth-matrix-phase7` to capture the required server-side route and provisioning events
+- app-server stdout/stderr remains suppressed by the current Playwright web-server configuration, but the universal runner now injects an explicit per-run `PLAYWRIGHT_SERVER_LOG_DIR` that overrides env-file `LOG_DIR=logs`, so the same file-logged server evidence path is produced locally and in CI uploads
+- the dedicated logged Phase 2 and Phase 3 reruns now close the earlier artifact gap for route-decision and runtime-log-correlation evidence without changing the unresolved stdout/stderr visibility limitation
 - the Phase 5 slice reused the same runtime-signal recorder and completed without further harness changes
 - the first AF-27 attempt exposed a test-evidence issue, not a product failure; request-level bootstrap evidence was more reliable than framenavigation capture for that route pair
 - AF-28 still relies on browser-observed cookie state for set and clear classification because the app does not yet emit a dedicated cookie-specific server log event

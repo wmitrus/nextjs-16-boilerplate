@@ -11,7 +11,11 @@ export default defineConfig({
     hookTimeout: 30_000,
     setupFiles: ['./tests/setup.tsx', './tests/polyfills.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx}'],
-    exclude: ['src/**/*.integration.test.{ts,tsx}', 'src/stories/**'],
+    exclude: [
+      'src/**/*.integration.test.{ts,tsx}',
+      'src/stories/**',
+      'src/core/db/migrations/**',
+    ],
     coverage: {
       enabled: true,
       provider: 'v8',

@@ -7,16 +7,66 @@ It consolidates test commands, Vitest config intent, local/CI DB workflows, and 
 
 ## Testing Matrix
 
-| Scope                        | Command                 | Config                         | Notes                                                            |
-| ---------------------------- | ----------------------- | ------------------------------ | ---------------------------------------------------------------- |
-| Unit                         | `pnpm test`             | `vitest.unit.config.ts`        | JSDOM, setup files, coverage in `coverage/unit`                  |
-| Unit watch                   | `pnpm test:watch`       | `vitest.unit.config.ts`        | Fast local feedback                                              |
-| Integration                  | `pnpm test:integration` | `vitest.integration.config.ts` | JSDOM + integration includes, coverage in `coverage/integration` |
-| DB (PGLite)                  | `pnpm test:db`          | `vitest.db.config.ts`          | In-memory `memory://`, migrations per test DB instance           |
-| DB (CI/Testcontainers)       | `pnpm test:db:ci`       | `vitest.db.ci.config.ts`       | Postgres from Testcontainers via `globalSetup`                   |
-| DB (Local external Postgres) | `pnpm test:db:local`    | `vitest.db.local.config.ts`    | Uses `TEST_DATABASE_URL`, no `globalSetup`                       |
-| E2E                          | `pnpm e2e`              | `playwright.config.ts`         | Dev-server driven full browser tests                             |
-| E2E CI                       | `pnpm e2e:ci`           | `playwright.config.ts`         | Build + Playwright run                                           |
+| Scope                        | Command                   | Config                         | Notes                                                            |
+| ---------------------------- | ------------------------- | ------------------------------ | ---------------------------------------------------------------- |
+| Unit                         | `pnpm test`               | `vitest.unit.config.ts`        | JSDOM, setup files, coverage in `coverage/unit`                  |
+| Unit watch                   | `pnpm test:watch`         | `vitest.unit.config.ts`        | Fast local feedback                                              |
+| Integration                  | `pnpm test:integration`   | `vitest.integration.config.ts` | JSDOM + integration includes, coverage in `coverage/integration` |
+| DB (PGLite)                  | `pnpm test:db`            | `vitest.db.config.ts`          | In-memory `memory://`, migrations per test DB instance           |
+| DB (CI/Testcontainers)       | `pnpm test:db:ci`         | `vitest.db.ci.config.ts`       | Postgres from Testcontainers via `globalSetup`                   |
+| DB (Local external Postgres) | `pnpm test:db:local`      | `vitest.db.local.config.ts`    | Uses `TEST_DATABASE_URL`, no `globalSetup`                       |
+| E2E                          | `pnpm e2e`                | `playwright.config.ts`         | Dev-server driven full browser tests                             |
+| E2E Auth Matrix CI           | `pnpm e2e:auth-matrix:ci` | `playwright.config.ts`         | Build + auth/bootstrap/onboarding matrix against container DB    |
+| E2E Scenario Matrix CI       | `pnpm e2e:ci`             | `playwright.config.ts`         | Build + broader scenario matrix                                  |
+
+## Playwright E2E Command Topology
+
+### Local / developer-facing commands
+
+- `pnpm e2e`
+  - Alias for the default single-scenario runner.
+- `pnpm e2e:auth`
+  - Focused auth spec run.
+- `pnpm e2e:auth-matrix`
+  - Full auth/bootstrap/onboarding matrix across phases 1-7.
+- `pnpm e2e:scenario:single`
+- `pnpm e2e:scenario:personal`
+- `pnpm e2e:scenario:org-provider`
+- `pnpm e2e:scenario:org-db`
+  - Broader scenario matrix across supported tenancy profiles.
+
+### CI-oriented commands
+
+- `pnpm e2e:auth-matrix:ci`
+  - Runs `pnpm build` first, then executes the auth matrix with `E2E_BACKEND_MODE=container`.
+  - Intended for auth-regression evidence collection and server-log artifacts.
+- `pnpm e2e:ci`
+  - Runs `pnpm build` first, then executes `pnpm e2e:matrix`.
+  - Intended for broader non-auth scenario coverage.
+
+## GitHub Actions E2E Topology
+
+- Auth-matrix workflow: [../../.github/workflows/e2e-label.yml](../../.github/workflows/e2e-label.yml)
+  - Triggered by PR label `run-e2e`
+  - Also supports manual dispatch
+  - Runs `pnpm e2e:auth-matrix:ci`
+- Broad matrix workflow: [../../.github/workflows/e2e-matrix.yml](../../.github/workflows/e2e-matrix.yml)
+  - Triggered by PR label `run-e2e-matrix`
+  - Also supports manual dispatch
+  - Runs `pnpm e2e:ci`
+
+This split keeps auth-evidence collection separate from the wider scenario matrix so both can run independently in CI.
+
+## Playwright Runtime And Artifact Behavior
+
+- Local Playwright runs start `pnpm dev`.
+- CI Playwright runs start `pnpm start`, so CI entrypoints must build first.
+- Auth evidence runs can set `PLAYWRIGHT_SERVER_LOG_DIR` to capture server-side route decisions into a stable per-run artifact root.
+- The repository standard path for these server logs is `logs/playwright/...`.
+- CI workflows upload:
+  - `logs/playwright/`
+  - `playwright-report/`
+  - `test-results/`
 
 ## Vitest Config Roles
 

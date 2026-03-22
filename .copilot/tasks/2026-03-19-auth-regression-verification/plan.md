@@ -15,6 +15,7 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] Runner architecture direction confirmed
 - [x] Container-mode runner implementation plan confirmed
 - [x] Container-mode runner implementation completed
+- [x] `05 - Validation Strategy - Summary.md` created
 - [x] `07 - Playwright E2E` run prepared
 - [x] `07 - Playwright E2E - Summary.md` created
 - [x] `validation-report.md` created
@@ -112,6 +113,7 @@ Run a controlled auth regression verification task for the current branch using 
 - `intake.md`
 - `constraints.md`
 - `implementation-plan.md`
+- `05 - Validation Strategy - Summary.md`
 - `04 - Implementation Agent - Summary.md`
 - `06 - Debug Investigation - Summary.md`
 - `07 - Playwright E2E - Summary.md`
@@ -123,6 +125,7 @@ Run a controlled auth regression verification task for the current branch using 
 - [x] `intake.md`
 - [x] `constraints.md`
 - [x] `implementation-plan.md`
+- [x] `05 - Validation Strategy - Summary.md`
 - [x] `04 - Implementation Agent - Summary.md`
 - [x] `06 - Debug Investigation - Summary.md`
 - [x] `07 - Playwright E2E - Summary.md`
@@ -143,7 +146,7 @@ Run a controlled auth regression verification task for the current branch using 
 - Non-secret local env checks confirm fresh, onboarded, and incomplete-user identities are all populated.
 - A container-mode smoke run confirmed automated test DB startup/reset/seed on `127.0.0.1:5433/app_test`, but the actual Playwright Chromium launch failed on the host because `libnspr4.so` is missing.
 - After `npx playwright install --with-deps`, rerunning that same smoke command succeeded end to end: the browser launched, the app runtime served the page, and the targeted Chromium smoke test passed.
-- Current Playwright config still suppresses managed web-server stdout and stderr, but AF-28 is now satisfied by running the phase in logged mode with `LOG_TO_FILE_DEV=true` and `LOG_DIR=logs/auth-matrix-phase7`.
+- Current Playwright config still suppresses managed web-server stdout and stderr, but AF-28 is now satisfied by the universal per-run file logger rooted at `logs/playwright/...`, and the runner now forces an explicit `PLAYWRIGHT_SERVER_LOG_DIR` to override env-file `LOG_DIR=logs` so the same evidence path works locally and in CI uploads.
 - Remaining note: dedicated cookie set and clear log events still do not exist, so cookie behavior for AF-28 is classified through browser state plus adjacent server decisions rather than through a dedicated cookie-specific server event.
 - Current confidence limit: the stronger statement can now be made only for this auth/bootstrap/onboarding slice. AF-01 through AF-28 are green, route and provisioning decisions are observable enough to classify the exercised flows, and the exercised redirect and route-access boundaries behaved coherently.
 - Stronger-yes evidence bar for this task is now met for the scoped slice: route decision, route commit, subtree mount, submit success, return path, cookie behavior, and unexpected runtime noise were all classifiable in the AF-28 logged run.
@@ -175,3 +178,6 @@ Run a controlled auth regression verification task for the current branch using 
 - Phase 3 execution started on 2026-03-21 with dedicated `@auth-matrix-phase3` Playwright coverage and package script `e2e:auth-matrix:phase3`; `e2e:auth-matrix` now includes Phase 3.
 - A stale-cookie AF-15 regression was exposed during the first Phase 3 pass, then fixed by narrowing edge cookie-hint redirects so `/users` remains DB-authoritative while general private routes still honor the onboarding cookie hint.
 - Final validation after the fix is green: the focused stale-cookie AF-15 rerun passed in `11.3s`, the full Phase 3 slice passed with `5 passed (24.6s)`, and the package-level `pnpm e2e:auth-matrix` entrypoint is green again with Phase 1 `2 passed (9.5s)`, Phase 2 returning-state `3 passed (23.3s)`, Phase 2 direct-entry `2 passed (13.5s)`, and Phase 3 `5 passed (25.0s)`.
+- Closure review on 2026-03-21 synchronized the canonical auth-flow matrix with the verified run, added explicit deferred reasons for AF-10, AF-11, AF-19, and AF-20, and recorded AF-16 as PASS from the current `/users` middleware-plus-layout evidence.
+- Closure review on 2026-03-21 also added the missing `05 - Validation Strategy - Summary.md` artifact so the task directory now matches the repository artifact requirements.
+- Follow-up hardening on 2026-03-21 wired explicit Clerk redirect-target validation into `scripts/check-e2e-auth-env.mjs`; the current local `single` scenario now passes that check, so the redirect-env blocker is no longer manual-only.

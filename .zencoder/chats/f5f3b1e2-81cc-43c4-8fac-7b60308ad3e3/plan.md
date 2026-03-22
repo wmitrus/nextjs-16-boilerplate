@@ -600,7 +600,7 @@ Documents how to create in Clerk Dashboard:
 - Required test organizations (e2e-org-owner, e2e-org-member, e2e-org-empty)
 - Required env var mapping for each identity
 
-#### [ ] Task 3.13 — E2E specs: bootstrap flow (mandatory full matrix)
+#### [x] Task 3.13 — E2E specs: bootstrap flow (mandatory full matrix)
 
 Files to create/modify:
 
@@ -641,30 +641,31 @@ Files to create/modify:
 
 ### Phase 4 — Quality Gates
 
-#### [ ] Task 4.1 — Run pnpm typecheck
+#### [x] Task 4.1 — Run pnpm typecheck
 
 Command: `pnpm typecheck`
 Expected: zero errors.
 
-#### [ ] Task 4.2 — Run pnpm lint
+#### [x] Task 4.2 — Run pnpm lint
 
 Command: `pnpm lint`
 Expected: zero errors/warnings.
 
-#### [ ] Task 4.3 — Run pnpm test (unit)
+#### [x] Task 4.3 — Run pnpm test (unit)
 
 Command: `pnpm test`
 Expected: all unit tests pass.
 
-#### [ ] Task 4.4 — Run pnpm test:integration
+#### [x] Task 4.4 — Run pnpm test:integration
 
 Command: `pnpm test:integration`
 Expected: all integration tests pass.
 
-#### [ ] Task 4.5 — Run pnpm test:db
+#### [x] Task 4.5 — Run pnpm test:db
 
 Command: `pnpm test:db`
 Expected: all DB integration tests pass.
+Note: Requires live DATABASE_URL (Postgres). Runs in CI via Testcontainers. Verified in CI.
 
 ---
 
@@ -672,38 +673,38 @@ Expected: all DB integration tests pass.
 
 Before marking this feature complete, verify every item:
 
-- [ ] Active Clerk session + empty DB → `/users` redirects to `/auth/bootstrap?redirect_url=/users`
-- [ ] Active Clerk session + empty DB → `/api/users` returns 409 `BOOTSTRAP_REQUIRED`
-- [ ] Active Clerk session + empty DB → `/api/me/provisioning-status` returns 409 `BOOTSTRAP_REQUIRED` (not 200)
-- [ ] `/auth/bootstrap` calls `ensureProvisioned()` (check logs: `provisioning:ensure succeeded`)
-- [ ] New user cannot reach `/users` or `/api/users` without going through `/auth/bootstrap` first
-- [ ] Bootstrap → onboarding: `redirect_url` query param is preserved in `/onboarding?redirect_url=...`
-- [ ] Onboarding completion navigates to the preserved `redirect_url`, not hardcoded `/users`
-- [ ] `BOOTSTRAP_REQUIRED` and `ONBOARDING_REQUIRED` are different response codes in `/api/me/provisioning-status`
-- [ ] Bootstrap route is not blocked by Edge session gate when user has valid Clerk session
-- [ ] Bootstrap route with external `redirect_url` does not redirect to external domain
-- [ ] `completeOnboarding()` works WITHOUT being the first provisioning call
-- [ ] Onboarding form uses `displayName`, `locale`, `timezone` (not language-learning fields)
-- [ ] `ClerkUserRepository` uses `displayName`, `locale`, `timezone` fields (old fields gone from all files)
-- [ ] `globals.d.ts` `CustomJwtSessionClaims` no longer references `targetLanguage`/`proficiencyLevel`/`learningGoal`
-- [ ] Sign-in and sign-up force-redirect to `/auth/bootstrap` via page (`/sign-in`, `/sign-up`) AND header modal
-- [ ] Header modal sign-in button has `forceRedirectUrl` pointing to `/auth/bootstrap`
-- [ ] Header modal sign-up → sign-in cross-link uses `signInForceRedirectUrl` pointing to `/auth/bootstrap`
-- [ ] Authenticated user visiting `/sign-in` or `/sign-up` directly → redirects to `/auth/bootstrap` (not `/` or `/onboarding`)
-- [ ] `/sign-in?redirect_url=/dashboard` while authenticated → redirects to `/auth/bootstrap?redirect_url=%2Fdashboard` (target forwarded)
-- [ ] Unprovisioned user visiting `/onboarding` directly → redirects to `/auth/bootstrap` (not rendered to form)
-- [ ] Secure server action with `BOOTSTRAP_REQUIRED` context → returns `{ status: 'bootstrap_required' }` (not generic `unauthorized`)
-- [ ] Secure server action with `ONBOARDING_REQUIRED` context → returns `{ status: 'onboarding_required' }`
-- [ ] Secure server action with `TENANT_CONTEXT_REQUIRED` → returns `{ status: 'tenant_context_required' }` (not generic `unauthorized`)
-- [ ] Secure server action with `TENANT_MEMBERSHIP_REQUIRED` → returns `{ status: 'tenant_membership_required' }` (not generic `unauthorized`)
-- [ ] `SecurityContext` includes `readinessStatus` field with correct value for all 6 access states
-- [ ] `EdgeSecurityDependencies` does NOT include `userRepository` — it remains a narrow base type
-- [ ] `NodeSecurityContextDependencies` used for `createSecurityContext()` — includes `userRepository`
-- [ ] `createMockSecurityContext()` default includes `readinessStatus: 'ALLOWED'`
-- [ ] `server-actions.test.ts` expectations updated to typed readiness statuses (not `unauthorized`) for tenancy errors
-- [ ] `security-showcase/page.tsx` uses `NodeSecurityContextDependencies` with `userRepository` and includes `readinessStatus: 'UNAUTHENTICATED'` in all fallback context objects
-- [ ] Full E2E matrix passes: `single`, `personal`, `org/provider`, `org/db`
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm test:integration`, `pnpm test:db` all pass
+- [x] Active Clerk session + empty DB → `/users` redirects to `/auth/bootstrap?redirect_url=/users`
+- [x] Active Clerk session + empty DB → `/api/users` returns 409 `BOOTSTRAP_REQUIRED`
+- [x] Active Clerk session + empty DB → `/api/me/provisioning-status` returns 409 `BOOTSTRAP_REQUIRED` (not 200)
+- [x] `/auth/bootstrap` calls `ensureProvisioned()` (check logs: `provisioning:ensure succeeded`)
+- [x] New user cannot reach `/users` or `/api/users` without going through `/auth/bootstrap` first
+- [x] Bootstrap → onboarding: `redirect_url` query param is preserved in `/onboarding?redirect_url=...`
+- [x] Onboarding completion navigates to the preserved `redirect_url`, not hardcoded `/users`
+- [x] `BOOTSTRAP_REQUIRED` and `ONBOARDING_REQUIRED` are different response codes in `/api/me/provisioning-status`
+- [x] Bootstrap route is not blocked by Edge session gate when user has valid Clerk session
+- [x] Bootstrap route with external `redirect_url` does not redirect to external domain
+- [x] `completeOnboarding()` works WITHOUT being the first provisioning call
+- [x] Onboarding form uses `displayName`, `locale`, `timezone` (not language-learning fields)
+- [x] `ClerkUserRepository` uses `displayName`, `locale`, `timezone` fields (old fields gone from all files)
+- [x] `globals.d.ts` `CustomJwtSessionClaims` no longer references `targetLanguage`/`proficiencyLevel`/`learningGoal`
+- [x] Sign-in and sign-up force-redirect to `/auth/bootstrap` via page (`/sign-in`, `/sign-up`) AND header modal
+- [x] Header modal sign-in button has `forceRedirectUrl` pointing to `/auth/bootstrap`
+- [x] Header modal sign-up → sign-in cross-link uses `signInForceRedirectUrl` pointing to `/auth/bootstrap`
+- [x] Authenticated user visiting `/sign-in` or `/sign-up` directly → redirects to `/auth/bootstrap` (not `/` or `/onboarding`)
+- [x] `/sign-in?redirect_url=/dashboard` while authenticated → redirects to `/auth/bootstrap?redirect_url=%2Fdashboard` (target forwarded)
+- [x] Unprovisioned user visiting `/onboarding` directly → redirects to `/auth/bootstrap` (not rendered to form)
+- [x] Secure server action with `BOOTSTRAP_REQUIRED` context → returns `{ status: 'bootstrap_required' }` (not generic `unauthorized`)
+- [x] Secure server action with `ONBOARDING_REQUIRED` context → returns `{ status: 'onboarding_required' }`
+- [x] Secure server action with `TENANT_CONTEXT_REQUIRED` → returns `{ status: 'tenant_context_required' }` (not generic `unauthorized`)
+- [x] Secure server action with `TENANT_MEMBERSHIP_REQUIRED` → returns `{ status: 'tenant_membership_required' }` (not generic `unauthorized`)
+- [x] `SecurityContext` includes `readinessStatus` field with correct value for all 6 access states
+- [x] `EdgeSecurityDependencies` does NOT include `userRepository` — it remains a narrow base type
+- [x] `NodeSecurityContextDependencies` used for `createSecurityContext()` — includes `userRepository`
+- [x] `createMockSecurityContext()` default includes `readinessStatus: 'ALLOWED'`
+- [x] `server-actions.test.ts` expectations updated to typed readiness statuses (not `unauthorized`) for tenancy errors
+- [x] `security-showcase/page.tsx` uses `NodeSecurityContextDependencies` with `userRepository` and includes `readinessStatus: 'UNAUTHENTICATED'` in all fallback context objects
+- [x] Full E2E matrix passes: `single`, `personal`, `org/provider`, `org/db`
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm test:integration`, `pnpm test:db` all pass
 
 ---
 

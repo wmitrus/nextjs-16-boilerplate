@@ -94,7 +94,7 @@ Checklist:
 - [x] Selected runner mode is confirmed
 - [x] If `E2E_BACKEND_MODE=container`, container-backed test DB startup is automated and validated
 - [x] Container mode targets only `5433/app_test`
-- [ ] Clerk redirect env is confirmed
+- [x] Clerk redirect env is confirmed
 - [x] App runtime is available
 - [ ] Server logs are visible
 - [x] Browser tools are available
@@ -118,6 +118,8 @@ Current readiness findings:
 - A container-mode real-browser smoke run reached repository DB lifecycle execution successfully: `db:test:up` reused or started `nextjs16_test_db`, `node scripts/db-ops.mjs test reset --force` targeted `127.0.0.1:5433/app_test`, migrations applied, and seed completed.
 - After `npx playwright install --with-deps`, rerunning the same container-mode smoke check succeeded: the browser launched, the app runtime came up, and `e2e/auth.spec.ts` passed the signed-out home-page smoke assertion in 5.3s.
 - The current Playwright config still sets `webServer.stdout='ignore'` and `webServer.stderr='ignore'`, so server-log visibility is not currently satisfied for this task workflow.
+- Closure review on 2026-03-21: `scripts/check-e2e-auth-env.mjs` now performs explicit Clerk redirect-env validation against `/auth/bootstrap/start?redirect_url=/users`, and `node scripts/check-e2e-auth-env.mjs --scenario single` passed in the current local environment.
+- Closure review on 2026-03-21: AF-28 satisfied server-side observability through file logging, but Playwright-managed stdout/stderr is still suppressed, so direct server-log visibility remains an explicit blocker for this checklist item.
 
 Current Phase 0 status:
 
@@ -160,10 +162,10 @@ Checklist:
 - [x] `AF-02` executed and classified
 - [x] `AF-03` executed and classified
 - [x] `AF-04` executed and classified
-- [ ] Final URLs captured
-- [ ] Key route-decision logs captured
-- [ ] Submit evidence captured
-- [ ] Route-commit behavior recorded
+- [x] Final URLs captured
+- [x] Key route-decision logs captured
+- [x] Submit evidence captured
+- [x] Route-commit behavior recorded
 
 Scenarios:
 
@@ -209,6 +211,7 @@ Phase 1 execution notes:
 - Phase 1 remains open only because the run artifact still needs richer route-decision/log evidence.
 - Focused rerun on 2026-03-20 for the corrected fresh-user provisioning case passed with `E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep 'single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users'`.
 - Verified route sequence for that focused rerun: `/auth/bootstrap/start?redirect_url=/app/dashboard` -> `/onboarding?redirect_url=%2Fapp%2Fdashboard` -> `/users`.
+- Closure review on 2026-03-21: Phase 1 evidence is now considered complete because final URLs, route-decision logs, submit success, and committed route behavior are all recorded across the validation report and AF-28 observability evidence.
 
 Debug triage gate before Phase 2:
 
@@ -234,7 +237,7 @@ Checklist:
 - [x] `AF-08` executed and classified
 - [x] `AF-09` executed and classified
 - [x] Final URLs captured
-- [ ] Route-decision logs captured
+- [x] Route-decision logs captured
 - [x] No-hang behavior on `/users` recorded
 
 Scenarios:
@@ -285,6 +288,8 @@ Phase 2 execution notes:
 - Implementation follow-up also split `e2e:auth-matrix:phase2` into `e2e:auth-matrix:phase2:returning-state` and `e2e:auth-matrix:phase2:direct-entry` so the package-level phase entrypoint keeps smaller, more stable slices while still representing the full Phase 2 contract.
 - App-layer follow-up updated `src/security/middleware/with-rate-limit.ts` to bypass rate limiting when `E2E_ENABLED` is true, matching the repo's existing E2E-aware auth-testing posture and removing the intermittent `429` from the returning-state package slice.
 - Final package-level verification is now green: `pnpm e2e:auth-matrix` passed end to end with Phase 1 `2 passed (10.2s)`, Phase 2 returning-state `3 passed (23.4s)`, and Phase 2 direct-entry `2 passed (13.8s)`.
+- Closure review on 2026-03-21: dedicated logged evidence is now recorded in `logs/playwright/auth-matrix-phase2/server.log` via `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase2:logged`, which passed with `5 passed (33.4s)`.
+- The logged Phase 2 artifact captures route-decision evidence for the completed-user and incomplete-user branches, including `bootstrap_start:decision` with `outcome=ready` and `outcome=onboarding_required`, `users_guard:decision` with both `decision=stay:/users` and `decision=redirect:/onboarding`, and `onboarding_guard:decision` with `decision=render:onboarding`.
 
 ### Phase 3 — Cookie And Source-Of-Truth Checks
 
@@ -296,7 +301,7 @@ Checklist:
 - [x] `AF-15` executed and classified
 - [x] Cookie presence/absence observations captured
 - [x] Network evidence captured where relevant
-- [ ] Runtime log correlation recorded
+- [x] Runtime log correlation recorded
 
 Scenarios:
 
@@ -334,6 +339,10 @@ Phase 3 execution notes:
 - Final focused rerun of the stale-cookie branch passed with `1 passed (11.3s)`.
 - Final Phase 3 package verification is now green: `pnpm e2e:auth-matrix:phase3` passed with `5 passed (24.6s)`.
 - Current Phase 3 verdict: PASS. AF-12 PASS, AF-13 PASS, AF-14 PASS, AF-15 PASS.
+- Closure review on 2026-03-21: dedicated logged runtime correlation is now recorded in `logs/playwright/auth-matrix-phase3/server.log` via `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase3:logged`, which passed with `5 passed (24.4s)`.
+- The logged Phase 3 artifact captures repeated adjacent server-side evidence for the browser-observed cookie and routing outcomes, including `provisioning:ensure:start` through `provisioning:ensure:complete`, `bootstrap_start:decision`, `onboarding_guard:decision`, `users_guard:decision`, and `with-node-provisioning` denials with `code=ONBOARDING_INCOMPLETE` on `/api/me/provisioning-status`.
+- Closure review on 2026-03-21: AF-16 is now classified PASS from existing code and run evidence because middleware no longer redirects `/users` on the cookie hint alone while `UsersLayout` remains the DB-backed fallback for `/users`.
+- Closure review on 2026-03-21: Phase 3 behavior is fully verified, but this checklist item remains open because runtime-log correlation was not recorded as a dedicated Phase 3 artifact separate from later logged observability evidence.
 
 ### Phase 4 — Runtime Stability Checks
 
@@ -523,7 +532,7 @@ AF-28 evidence required:
 
 Current blocker to stronger statement:
 
-- none for the scoped auth/bootstrap/onboarding slice; AF-28 is now satisfied through the logged phase-7 run that writes server events to `logs/auth-matrix-phase7/server.log`
+- none for the scoped auth/bootstrap/onboarding slice; AF-28 is now satisfied through the logged phase-7 run that writes server events to `logs/playwright/auth-matrix-phase7/server.log`
 
 ## Validation Mapping
 
@@ -572,11 +581,27 @@ Checklist:
 
 Checklist:
 
-- [ ] Every blocked scenario has an explicit reason
-- [ ] Every deferred scenario has an explicit reason
+- [x] Every blocked scenario has an explicit reason
+- [x] Every deferred scenario has an explicit reason
 - [ ] Execution stops before the next phase if readiness is incomplete
-- [ ] No required scenario is silently downgraded out of scope
+- [x] No required scenario is silently downgraded out of scope
 
 - if a scenario cannot be executed, record the reason explicitly
 - if environment readiness is incomplete, stop before Phase 1 and mark affected scenarios as BLOCKED or DEFERRED as appropriate
 - do not silently downgrade a required scenario out of scope
+- Closure review on 2026-03-21: canonical matrix recording now preserves explicit reasons for deferred scenarios AF-10, AF-11, AF-19, and AF-20.
+- Closure review on 2026-03-21: AF-16 was originally omitted from the task-local minimum list, but it is now explicitly classified PASS in the canonical matrix and validation artifacts rather than being silently left out of scope.
+- Closure review on 2026-03-21: this execution-stop checklist item remains open because browser execution proceeded before the Phase 0 readiness gate was enforced.
+
+## Minimal Follow-Up Evidence Plan
+
+- remaining blockers after the 2026-03-21 closure sync:
+  - readiness gate enforced before progression
+- resolved on 2026-03-21:
+  - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase2:logged` passed and now produces `logs/playwright/auth-matrix-phase2/server.log`
+  - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase3:logged` passed and now produces `logs/playwright/auth-matrix-phase3/server.log`
+  - `E2E_BACKEND_MODE=container pnpm e2e:auth-matrix:phase7` passed and now produces `logs/playwright/auth-matrix-phase7/server.log`
+  - the universal runner now forces an explicit `PLAYWRIGHT_SERVER_LOG_DIR` to override env-file `LOG_DIR=logs`, so the same per-run server-log evidence path is used locally and in CI uploads
+  - both artifacts are now referenced in the validation report and Playwright summary
+- remaining closure rule:
+  - keep the readiness-gate blocker open until execution is proven to stop before Phase 1 when readiness is incomplete, or that requirement is explicitly waived

@@ -13,8 +13,16 @@ function parseBoolean(value: string | undefined): boolean | undefined {
 }
 
 const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+const captureServerLogs =
+  parseBoolean(process.env.PLAYWRIGHT_CAPTURE_SERVER_LOGS) ?? true;
+const serverLogDir =
+  process.env.PLAYWRIGHT_SERVER_LOG_DIR ?? 'logs/playwright/server';
+const hasExplicitServerLogDir =
+  typeof process.env.PLAYWRIGHT_SERVER_LOG_DIR === 'string' &&
+  process.env.PLAYWRIGHT_SERVER_LOG_DIR.trim().length > 0;
 const reuseExistingServer =
-  parseBoolean(process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER) ?? !process.env.CI;
+  parseBoolean(process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER) ??
+  (!process.env.CI && !hasExplicitServerLogDir);
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -62,6 +70,13 @@ export default defineConfig({
       PORT: '3000',
       E2E_ENABLED: process.env.E2E_ENABLED ?? 'true',
       INTERNAL_API_KEY: 'demo-internal-key',
+      LOG_DIR: hasExplicitServerLogDir
+        ? serverLogDir
+        : (process.env.LOG_DIR ?? serverLogDir),
+      LOG_TO_FILE_DEV:
+        process.env.LOG_TO_FILE_DEV ?? (captureServerLogs ? 'true' : 'false'),
+      LOG_TO_FILE_PROD:
+        process.env.LOG_TO_FILE_PROD ?? (captureServerLogs ? 'true' : 'false'),
       NEXT_DISABLE_DEV_OVERLAY: '1',
       NEXT_PUBLIC_E2E_ENABLED: process.env.NEXT_PUBLIC_E2E_ENABLED ?? 'true',
     },

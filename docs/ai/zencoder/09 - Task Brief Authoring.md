@@ -65,6 +65,14 @@ Recommended flow:
 5. Route to the correct specialist prompt sources from `docs/ai/general/01-09`.
 6. If the task needs an execution-ready delivery plan, require that planning artifact before implementation begins.
 
+## Example use cases
+
+- "Help me write a task brief for this feature so the workflow can execute it cleanly."
+- "Normalize these scattered requirements into a structured brief with scope, criteria, and scenarios."
+- "I have a feature request in rough notes — shape it into a proper requirements package."
+- "Create the task brief that feeds the incident-investigation workflow for this regression."
+- "Review my draft brief and call out missing acceptance criteria, unclear scope, or open questions."
+
 ## Recommended ZenFlow Workflow Entry Points
 
 Common starting points:

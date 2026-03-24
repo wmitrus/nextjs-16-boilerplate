@@ -23,6 +23,14 @@ For any Clerk/bootstrap/onboarding or middleware auth-routing review:
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 
+## Example use cases
+
+- "Is this component placed on the server or client correctly for this use case?"
+- "Review this route handler for caching assumptions that could leak user data."
+- "Analyze `src/proxy.ts` to verify our request interception and redirect logic is runtime-safe."
+- "Assess whether this server action could be accidentally executed from an Edge runtime."
+- "Check whether this revalidation strategy could produce stale or cross-tenant responses."
+
 ## Related ZenFlow workflows
 
 - [feature-development.md](../../../.zenflow/workflows/feature-development.md)

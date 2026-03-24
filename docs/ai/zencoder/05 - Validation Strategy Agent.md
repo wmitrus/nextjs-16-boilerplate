@@ -23,6 +23,14 @@ For any auth/bootstrap/onboarding change:
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 
+## Example use cases
+
+- "What is the minimum safe validation plan for this feature change?"
+- "Is the current test suite sufficient to protect this module, or are there coverage blind spots?"
+- "Should I add integration tests or is a focused unit test enough here?"
+- "Review this proposed broad test expansion — is it justified or wasteful?"
+- "Audit the repository validation posture: are the CI quality gates production-grade?"
+
 ## Related ZenFlow workflows
 
 - [feature-development.md](../../../.zenflow/workflows/feature-development.md)

@@ -32,6 +32,14 @@ For any auth/bootstrap/onboarding E2E verification:
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 - use `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md` to structure the run artifact when relevant
 
+## Example use cases
+
+- "Run the auth-flow verification matrix against the current build in a real browser."
+- "Verify that the onboarding redirect sequence is correct after the bootstrap routing change."
+- "Confirm that cookies and session state persist correctly across route transitions."
+- "Capture browser evidence that the unauthorized access scenario correctly redirects to the sign-in page."
+- "Validate that hydration errors do not occur on the protected layout after this server component change."
+
 ## Related ZenFlow workflows
 
 - any workflow under `.zenflow/workflows/` when browser evidence is required for that task

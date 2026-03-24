@@ -23,6 +23,14 @@ For any auth/bootstrap/onboarding investigation:
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 
+## Example use cases
+
+- "This auth redirect is behaving differently in production vs dev — investigate the divergence."
+- "The onboarding flow intermittently skips a step; gather evidence before we guess at a fix."
+- "Trace the execution path for this failing route and tell me where it diverges from expected behavior."
+- "I don't know which layer owns this failure — investigate and recommend the right specialist."
+- "This race condition appears only under load — map the execution path and surface the timing window."
+
 ## Related ZenFlow workflows
 
 - [incident-investigation.md](../../../.zenflow/workflows/incident-investigation.md)

@@ -23,6 +23,14 @@ For any Clerk/bootstrap/onboarding or middleware auth-routing review:
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 
+## Example use cases
+
+- "Review this server action for authorization gaps before implementation."
+- "Verify that this Clerk integration change preserves provider isolation in the domain."
+- "Assess whether this route handler enforces the correct trust boundaries."
+- "Review this tenant-context change for potential data leakage risks."
+- "Check whether this permission check is server-side and cannot be bypassed from the client."
+
 ## Related ZenFlow workflows
 
 - [feature-development.md](../../../.zenflow/workflows/feature-development.md)

@@ -23,6 +23,14 @@ For any Clerk/bootstrap/onboarding or middleware auth-routing review:
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 
+## Example use cases
+
+- "Review this change for module boundary violations before I implement it."
+- "Does this refactor preserve the DI/composition discipline, or does it drift?"
+- "Compare the auth-routing design in docs vs what is actually in the code."
+- "Assess whether this new shared utility violates dependency direction rules."
+- "Call out any architectural risks in this PR before we merge."
+
 ## Related ZenFlow workflows
 
 - [feature-development.md](../../../.zenflow/workflows/feature-development.md)

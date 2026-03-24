@@ -24,6 +24,14 @@ For any auth/bootstrap/onboarding orchestration:
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 - use `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md` for the final Playwright run artifact when relevant
 
+## Example use cases
+
+- "Start the feature-development workflow for this task brief and set up the artifact workspace."
+- "Run a multi-step investigation: gather evidence, review runtime behavior, produce a remediation plan, then implement."
+- "Normalize these requirements and coordinate all specialist agents in the right order before touching any code."
+- "Orchestrate a safe refactor: Architecture Guard first, then Implementation under constraints."
+- "Drive this security incident through the full workflow — Security/Auth first, then remediation, then validation."
+
 ## Related ZenFlow workflows
 
 - [feature-development.md](../../../.zenflow/workflows/feature-development.md)

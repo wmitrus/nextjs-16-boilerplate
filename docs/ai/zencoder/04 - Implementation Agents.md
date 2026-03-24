@@ -23,6 +23,14 @@ For any change touching Clerk auth, bootstrap routing, onboarding redirects, aut
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 - do not mark the task complete until the affected scenarios are explicitly checked or clearly marked as deferred or blocked
 
+## Example use cases
+
+- "Apply this fix under the architecture and security constraints already established by earlier agents."
+- "Update this module to implement the approved design — the constraints are documented in `constraints.md`."
+- "Make the smallest safe change to fix this bug without redesigning the surrounding structure."
+- "Update the affected tests to cover this behavior change without widening the test surface unnecessarily."
+- "Implement this feature exactly as scoped — stop and report if anything requires a design decision."
+
 ## Related ZenFlow workflows
 
 - [feature-development.md](../../../.zenflow/workflows/feature-development.md)

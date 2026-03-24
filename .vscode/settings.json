@@ -180,20 +180,32 @@
   "playwright.testConfigPath": "playwright.vscode.config.ts",
   "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
     {
-      "text": "Always generate a structured pull request description using the following sections: Summary, Key Changes, Motivation, Testing, and Additional Notes."
+      "text": "Generate the PR description from the actual current branch diff and commit history. Do not use generic claims like 'improves maintainability', 'refactors components', or 'updates dependencies' unless you name the concrete modules, routes, configs, or workflows changed."
     },
     {
-      "text": "Always format Key Changes as a bullet list with at least 3-6 specific items."
+      "text": "Use exactly these sections in this order: Summary, Key Changes, Motivation, Testing, Additional Notes."
     },
     {
-      "text": "Always write in a professional, concise, engineering-focused tone. Avoid marketing language such as 'robust', 'seamless', 'enhanced', or 'improved'."
+      "text": "Summary must be 2-4 sentences and identify the main architectural outcome, the primary subsystems touched, and any intentional limitations or stubs."
     },
     {
-      "text": "Always explain why the change was made, not just what changed."
+      "text": "Key Changes must be 4-8 bullets. Each bullet must mention a concrete area and the reason or impact of the change."
     },
     {
-      "text": "Always include testing instructions describing how reviewers can verify the changes."
+      "text": "Motivation must explain the problem or architectural gap being addressed. Never use vague goals such as 'improve code quality' or 'enhance user experience' without evidence from the diff."
     },
-    { "text": "Never collapse the entire description into a single paragraph." }
+    {
+      "text": "Testing must be split into Ran, Not Run, and Reviewer Checks. Only list commands that were actually run or are clearly expected for this branch."
+    },
+    {
+      "text": "Additional Notes must call out new environment variables, migration or rollout considerations, intentionally incomplete areas, and operational risks. If any provider or service is stubbed, say so explicitly."
+    },
+    {
+      "text": "If the PR is large or spans multiple subsystems, include a short reviewer guide inside Additional Notes that suggests a review order by area."
+    },
+    {
+      "text": "Write in a concise engineering tone. Avoid filler such as 'This pull request introduces several enhancements and fixes' and avoid marketing words such as 'robust', 'seamless', 'enhanced', or 'improved'."
+    },
+    { "text": "Never collapse the description into a single paragraph." }
   ]
 }

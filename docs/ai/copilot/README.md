@@ -87,8 +87,11 @@ These prompts currently exist in `.github/prompts/`:
 - `/Auth Flow Change Review` → [auth-flow-change-review.prompt.md](../../../.github/prompts/auth-flow-change-review.prompt.md)
 - `/Change Validation` → [change-validation.prompt.md](../../../.github/prompts/change-validation.prompt.md)
 - `/Debug Investigation` → [debug-investigation.prompt.md](../../../.github/prompts/debug-investigation.prompt.md)
+- `/Incident Investigation` → [incident-investigation.prompt.md](../../../.github/prompts/incident-investigation.prompt.md)
 - `/Playwright E2E Validation` → [playwright-e2e-validation.prompt.md](../../../.github/prompts/playwright-e2e-validation.prompt.md)
 - `/Repository Baseline Validation` → [repository-baseline-validation.prompt.md](../../../.github/prompts/repository-baseline-validation.prompt.md)
+- `/Safe Refactor` → [safe-refactor.prompt.md](../../../.github/prompts/safe-refactor.prompt.md)
+- `/Security Incident` → [security-incident.prompt.md](../../../.github/prompts/security-incident.prompt.md)
 - `/Workflow Task` → [workflow-task.prompt.md](../../../.github/prompts/workflow-task.prompt.md)
 
 Use prompts when you want a ready-made workflow instead of invoking a specialist manually.

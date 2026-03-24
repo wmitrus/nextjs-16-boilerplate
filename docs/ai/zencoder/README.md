@@ -49,8 +49,13 @@ Repository-neutral workflow specs currently live in:
 - `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md`
 - `docs/ai/general/Workflow 03 - Security Incident Workflow.md`
 - `docs/ai/general/Workflow 04 - Incident Investigation Workflow.md`
+- `docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md`
+- `docs/ai/general/Workflow 06 - Playwright E2E Validation Workflow.md`
+- `docs/ai/general/Workflow 07 - Change Validation Workflow.md`
+- `docs/ai/general/Workflow 08 - Repository Baseline Validation Workflow.md`
+- `docs/ai/general/Workflow 09 - Architecture Lint Workflow.md`
 
-Treat `docs/ai/general/Workflow 01-04` as the neutral workflow design layer and `.zenflow/workflows/` as the Zencoder-oriented execution layer.
+Treat `docs/ai/general/Workflow 01-09` as the neutral workflow design layer and `.zenflow/workflows/` as the Zencoder-oriented execution layer.
 
 ### Task Artifacts
 
@@ -98,6 +103,11 @@ Recommended starting points:
 - behavior-preserving refactor work: [safe-refactor.md](../../../.zenflow/workflows/safe-refactor.md)
 - general incident debugging (full orchestrated flow): [incident-investigation.md](../../../.zenflow/workflows/incident-investigation.md)
 - security-sensitive incident remediation: [security-incident-workflow.md](../../../.zenflow/workflows/security-incident-workflow.md)
+- auth/bootstrap/onboarding change review (matrix sign-off required): [auth-flow-change-review.md](../../../.zenflow/workflows/auth-flow-change-review.md)
+- real-browser Playwright verification: [playwright-e2e-validation.md](../../../.zenflow/workflows/playwright-e2e-validation.md)
+- minimum safe validation scope for a specific change: [change-validation.md](../../../.zenflow/workflows/change-validation.md)
+- repository-wide validation posture audit: [repository-baseline-validation.md](../../../.zenflow/workflows/repository-baseline-validation.md)
+- read-only architecture boundary lint: [architecture-lint.md](../../../.zenflow/workflows/architecture-lint.md)
 
 Use workflows when you want repeatable task sequencing instead of manually invoking each specialist.
 
@@ -125,3 +135,7 @@ For any Clerk, bootstrap, onboarding, middleware auth-routing, or `/users` acces
 - `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
 
 Treat the verification matrix as the mandatory checklist for affected auth-flow scenarios.
+
+For a structured multi-step auth change review with matrix sign-off, use the dedicated workflow:
+
+- [auth-flow-change-review.md](../../../.zenflow/workflows/auth-flow-change-review.md)

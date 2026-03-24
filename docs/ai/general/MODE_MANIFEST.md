@@ -327,6 +327,60 @@ Required outputs:
 
 ---
 
+### Mode: `auth-flow-change-review`
+
+Purpose:
+
+- review auth/bootstrap/onboarding changes against anti-patterns and the verification matrix before implementation or sign-off
+
+Use when:
+
+- a change touches Clerk auth, bootstrap routing, onboarding redirects, auth middleware, root auth layout boundaries, or `/users` access control
+- auth-routing behavior may change
+- trust-boundary or redirect-flow risks are present in the changed path
+- the matrix sign-off is required before the change is considered safe
+
+Primary authority:
+
+- Security/Auth Agent
+
+Primary workflow file:
+
+- `docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md`
+
+Required governing files:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
+- `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
+- `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
+- `docs/ai/general/02 - Security & Auth Agent.md`
+- `docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md`
+
+Specialist sequence:
+
+- Security/Auth Agent first — map the change to matrix scenarios and identify trust-boundary risks
+- Next.js Runtime Agent when routing, server/client placement, or caching is involved in the auth path
+- Architecture Guard Agent when the change touches module boundaries or DI/composition
+- Playwright E2E Agent when browser-level verification evidence is required
+
+Required outputs:
+
+- changed files considered
+- trust-boundary assessment
+- affected matrix scenario IDs with reasons
+- required verification before sign-off
+- conditional runtime summary (if Next.js Runtime ran)
+- conditional architecture summary (if Architecture Guard ran)
+- matrix verification sign-off (Verified / Deferred / Blocked per scenario)
+- conditional Playwright evidence (if Playwright E2E ran)
+- risks
+- recommended next action
+
+---
+
 ### Mode: `workflow-task`
 
 Purpose:
@@ -701,16 +755,17 @@ Choose exactly one primary mode first.
 
 Selection order:
 
-1. If the task is a vulnerability, auth bug, trust-boundary issue, cache leak, or sensitive-data incident, use `security-incident-workflow`.
-2. If the task is a confirmed production failure or regression requiring full specialist sequencing, use `incident-investigation`.
-3. If the task is an unclear, ambiguous, or intermittent bug where the correct specialist is not yet known, use `debug-investigation` first.
-4. If the task is a behavior-preserving cleanup/refactor, use `safe-refactor-workflow`.
-5. If the task is a new feature or non-trivial behavior change, use `safe-feature-workflow`.
-6. If the task is a repository-wide audit of testing, CI checks, or validation sufficiency, use `repository-baseline-validation`.
-7. If the task is to determine the minimum sensible validation plan for a specific change, use `change-validation`.
-8. If the task is a read-only audit of the AI package itself, use `prompt-system-validation`.
-9. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
-10. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
+1. If the task is a change to Clerk auth, bootstrap routing, onboarding, auth middleware, root auth layout, or `/users` access control, use `auth-flow-change-review`.
+2. If the task is a vulnerability, auth bug, trust-boundary issue, cache leak, or sensitive-data incident, use `security-incident-workflow`.
+3. If the task is a confirmed production failure or regression requiring full specialist sequencing, use `incident-investigation`.
+4. If the task is an unclear, ambiguous, or intermittent bug where the correct specialist is not yet known, use `debug-investigation` first.
+5. If the task is a behavior-preserving cleanup/refactor, use `safe-refactor-workflow`.
+6. If the task is a new feature or non-trivial behavior change, use `safe-feature-workflow`.
+7. If the task is a repository-wide audit of testing, CI checks, or validation sufficiency, use `repository-baseline-validation`.
+8. If the task is to determine the minimum sensible validation plan for a specific change, use `change-validation`.
+9. If the task is a read-only audit of the AI package itself, use `prompt-system-validation`.
+10. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
+11. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
 
 Do not start in `implementation` if architecture, security, or runtime constraints are unresolved.
 

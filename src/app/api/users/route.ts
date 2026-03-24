@@ -11,6 +11,9 @@ const logger = resolveServerLogger().child({
   module: 'users-route',
 });
 
+// This route is intentionally a node-gated provisioning/runtime probe backed by
+// sample data. It proves the caller is authenticated and internally ready, but
+// it is not the application's canonical example of resource-level RBAC/ABAC.
 const sampleUsers = [
   { id: '1', name: 'Ada Lovelace', email: 'ada@sample.dev' },
   { id: '2', name: 'Alan Turing', email: 'alan@sample.dev' },
@@ -25,7 +28,7 @@ export const GET = withErrorHandler(
         userId: access.identity.id,
         tenantId: access.tenant.tenantId,
       },
-      'Serving sample users',
+      'Serving sample users after provisioning gate',
     );
 
     return createSuccessResponse(sampleUsers);

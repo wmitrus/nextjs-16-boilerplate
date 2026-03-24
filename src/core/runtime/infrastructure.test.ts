@@ -10,6 +10,7 @@ vi.mock('@/core/db/create-db', () => ({
 
 describe('runtime infrastructure process scope', () => {
   beforeEach(() => {
+    vi.resetModules();
     createDbMock.mockReset();
   });
 
@@ -77,5 +78,38 @@ describe('runtime infrastructure process scope', () => {
     expect(first.dbRuntime).toBe(firstRuntime);
     expect(second.dbRuntime).toBe(secondRuntime);
     expect(createDbMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses cached infrastructure across module reloads', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const runtime: DbRuntime = {
+      db: { kind: 'db' } as never,
+      close,
+    };
+    createDbMock.mockReturnValue(runtime);
+
+    const firstModule = await import('./infrastructure');
+
+    const config = {
+      db: {
+        provider: 'drizzle' as const,
+        driver: 'pglite' as const,
+        url: 'file:./data/pglite',
+      },
+    };
+
+    const first = firstModule.getInfrastructure(config);
+
+    vi.resetModules();
+
+    const secondModule = await import('./infrastructure');
+    const second = secondModule.getInfrastructure(config);
+
+    expect(second).toBe(first);
+    expect(second.dbRuntime).toBe(runtime);
+    expect(createDbMock).toHaveBeenCalledTimes(1);
+
+    await secondModule.closeInfrastructure();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

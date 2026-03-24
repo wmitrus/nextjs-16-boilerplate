@@ -336,7 +336,7 @@ Purpose:
 Use when:
 
 - the task needs multiple specialist steps
-- the task should preserve handoffs and artifacts under `.copilot/tasks/{task_id}/`
+- the task should preserve handoffs and artifacts under `.copilot/tasks/{task_id}/` (GitHub Copilot) or `.zencoder/chats/{chat_id}/` (Zencoder — managed automatically by the active chat session) depending on the active tool
 - requirements come from a brief, referenced docs, or attachments and need controlled execution
 - implementation must not begin until constraints are explicit
 
@@ -612,6 +612,89 @@ Forbidden in this mode:
 
 ---
 
+### Mode: `debug-investigation`
+
+Purpose:
+
+- gather evidence, trace execution paths, reduce ambiguity, and identify the right specialist before committing to a fix
+
+Use when:
+
+- the bug is unclear, intermittent, or multi-layer
+- the correct specialist (architecture, security, runtime) is not yet obvious
+- env-driven divergence, race conditions, ordering bugs, or non-deterministic failures are suspected
+- the user cannot reproduce reliably or does not know which layer owns the problem
+
+Primary authority:
+
+- Debug Investigation Agent
+
+Required governing files:
+
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/06 - Debug Investigation Agent.md`
+
+Required outputs:
+
+- symptom summary
+- execution path trace
+- evidence gathered
+- hypotheses ranked by likelihood
+- recommended next specialist or action
+
+Note:
+
+This mode does NOT produce a remediation plan or implementation.
+Its output feeds `incident-investigation`, `architecture-review`, `security-review`, `runtime-review`, or `implementation` depending on findings.
+
+---
+
+### Mode: `incident-investigation`
+
+Purpose:
+
+- investigate and remediate production incidents, unclear bugs, and multi-layer failures through a controlled specialist sequence
+
+Use when:
+
+- there is a production failure, regression, or reproducible bug requiring full investigation
+- the failure is confirmed but root cause or safe fix scope is unclear
+- the fix may touch architecture, runtime, or security concerns
+- a controlled specialist handoff sequence is needed rather than ad hoc debugging
+
+Primary workflow file:
+
+- `docs/ai/general/Workflow 04 - Incident Investigation Workflow.md`
+
+Required governing files:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/Workflow 04 - Incident Investigation Workflow.md`
+- `docs/ai/general/06 - Debug Investigation Agent.md`
+
+Specialist sequence:
+
+- Debug Investigation Agent first — always, for ambiguous or multi-layer failures
+- Next.js Runtime Agent when runtime behavior (routing, caching, server/client placement) is involved
+- Architecture Guard Agent when the proposed fix risks architectural regression
+- Implementation Agent only after the remediation scope is explicit and constraints are clear
+
+Required outputs:
+
+- incident intake and symptom summary
+- execution path trace and evidence
+- conditional runtime behavior review
+- conditional architecture impact review
+- remediation plan (smallest safe fix scope)
+- implementation result
+- validation result
+- residual risks / follow-ups
+
+---
+
 ## Mode selection rules
 
 Choose exactly one primary mode first.
@@ -619,13 +702,15 @@ Choose exactly one primary mode first.
 Selection order:
 
 1. If the task is a vulnerability, auth bug, trust-boundary issue, cache leak, or sensitive-data incident, use `security-incident-workflow`.
-2. If the task is a behavior-preserving cleanup/refactor, use `safe-refactor-workflow`.
-3. If the task is a new feature or non-trivial behavior change, use `safe-feature-workflow`.
-4. If the task is a repository-wide audit of testing, CI checks, or validation sufficiency, use `repository-baseline-validation`.
-5. If the task is to determine the minimum sensible validation plan for a specific change, use `change-validation`.
-6. If the task is a read-only audit of the AI package itself, use `prompt-system-validation`.
-7. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
-8. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
+2. If the task is a confirmed production failure or regression requiring full specialist sequencing, use `incident-investigation`.
+3. If the task is an unclear, ambiguous, or intermittent bug where the correct specialist is not yet known, use `debug-investigation` first.
+4. If the task is a behavior-preserving cleanup/refactor, use `safe-refactor-workflow`.
+5. If the task is a new feature or non-trivial behavior change, use `safe-feature-workflow`.
+6. If the task is a repository-wide audit of testing, CI checks, or validation sufficiency, use `repository-baseline-validation`.
+7. If the task is to determine the minimum sensible validation plan for a specific change, use `change-validation`.
+8. If the task is a read-only audit of the AI package itself, use `prompt-system-validation`.
+9. If the task is a read-only architecture audit/lint request, use `architecture-lint` or `architecture-review` depending on whether lint/rules are the main framing.
+10. If the task is already tightly constrained and no workflow is needed, use the narrowest specialist review mode required, or `implementation` if specialist conclusions already exist.
 
 Do not start in `implementation` if architecture, security, or runtime constraints are unresolved.
 

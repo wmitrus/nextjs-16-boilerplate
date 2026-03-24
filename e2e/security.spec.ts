@@ -18,7 +18,7 @@ function resolveInternalApiKey(): string {
     }
   }
 
-  return 'demo-internal-key';
+  return 'test-internal-api-key';
 }
 
 test.describe('Security Architecture E2E', () => {

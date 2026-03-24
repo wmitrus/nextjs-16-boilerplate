@@ -2,7 +2,19 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `docs/workflows/{task_id}`
+- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+
+---
+
+## Artifact Execution Rule
+
+For every workflow step:
+
+- the file shown under `Output:` is mandatory
+- the active agent must create or overwrite that markdown file
+- the artifact file must contain the full result for the step
+- the agent must not respond only in chat without writing the artifact
+- after writing the artifact, the agent should give only a short completion summary in chat
 
 ---
 
@@ -21,18 +33,6 @@ Include:
 - environment
 - reproduction steps
 - logs or screenshots
-
----
-
-## Artifact Execution Rule
-
-For every workflow step:
-
-- the file shown under `Output:` is mandatory
-- the active agent must create or overwrite that markdown file
-- the artifact file must contain the full result for the step
-- the agent must not respond only in chat without writing the artifact
-- after writing the artifact, the agent should give only a short completion summary in chat
 
 ---
 

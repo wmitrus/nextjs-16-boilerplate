@@ -69,7 +69,7 @@ export default defineConfig({
       ...process.env,
       PORT: '3000',
       E2E_ENABLED: process.env.E2E_ENABLED ?? 'true',
-      INTERNAL_API_KEY: 'demo-internal-key',
+      INTERNAL_API_KEY: process.env.INTERNAL_API_KEY ?? 'test-internal-api-key',
       LOG_DIR: hasExplicitServerLogDir
         ? serverLogDir
         : (process.env.LOG_DIR ?? serverLogDir),

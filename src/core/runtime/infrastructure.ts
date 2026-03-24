@@ -13,6 +13,17 @@ interface InfrastructureConfig {
   db: DbConfig;
 }
 
+interface ProcessInfrastructureState {
+  cachedInfrastructure: ProcessInfrastructure | null;
+  shutdownHooksRegistered: boolean;
+}
+
+declare global {
+  var __NEXTJS16_BOILERPLATE_PROCESS_INFRASTRUCTURE__:
+    | ProcessInfrastructureState
+    | undefined;
+}
+
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'db',
@@ -23,19 +34,29 @@ const logger = resolveServerLogger().child({
 // - dbRuntime is initialized once per process
 // - shared across request containers
 // - reset only via closeInfrastructure() (or process shutdown hooks)
-let cachedInfrastructure: ProcessInfrastructure | null = null;
-let shutdownHooksRegistered = false;
+function getProcessInfrastructureState(): ProcessInfrastructureState {
+  if (!globalThis.__NEXTJS16_BOILERPLATE_PROCESS_INFRASTRUCTURE__) {
+    globalThis.__NEXTJS16_BOILERPLATE_PROCESS_INFRASTRUCTURE__ = {
+      cachedInfrastructure: null,
+      shutdownHooksRegistered: false,
+    };
+  }
+
+  return globalThis.__NEXTJS16_BOILERPLATE_PROCESS_INFRASTRUCTURE__;
+}
 
 async function shutdownInfrastructure(): Promise<void> {
   await closeInfrastructure();
 }
 
 function registerShutdownHooks(): void {
-  if (shutdownHooksRegistered) {
+  const state = getProcessInfrastructureState();
+
+  if (state.shutdownHooksRegistered) {
     return;
   }
 
-  shutdownHooksRegistered = true;
+  state.shutdownHooksRegistered = true;
 
   if (typeof process === 'undefined') {
     return;
@@ -65,12 +86,13 @@ export function getInfrastructure(
   registerShutdownHooks();
 
   const diagnostics = getRuntimeDiagnosticState();
+  const state = getProcessInfrastructureState();
   const storagePath =
     config.db.driver === 'pglite'
       ? resolvePglitePath(config.db.url)
       : undefined;
 
-  if (cachedInfrastructure) {
+  if (state.cachedInfrastructure) {
     diagnostics.infrastructureReuses += 1;
     logger.debug(
       {
@@ -94,7 +116,7 @@ export function getInfrastructure(
       );
     }
 
-    return cachedInfrastructure;
+    return state.cachedInfrastructure;
   }
 
   diagnostics.infrastructureInitializations += 1;
@@ -131,7 +153,7 @@ export function getInfrastructure(
     throw err;
   }
 
-  cachedInfrastructure = {
+  state.cachedInfrastructure = {
     dbRuntime,
   };
 
@@ -147,13 +169,14 @@ export function getInfrastructure(
     'Process-scoped infrastructure initialized',
   );
 
-  return cachedInfrastructure;
+  return state.cachedInfrastructure;
 }
 
 export async function closeInfrastructure(): Promise<void> {
   // Explicit reset point for tests and graceful shutdown paths.
-  const activeInfrastructure = cachedInfrastructure;
-  cachedInfrastructure = null;
+  const state = getProcessInfrastructureState();
+  const activeInfrastructure = state.cachedInfrastructure;
+  state.cachedInfrastructure = null;
 
   await activeInfrastructure?.dbRuntime.close?.();
 }

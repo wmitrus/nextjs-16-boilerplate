@@ -4,6 +4,19 @@
 
 - **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
 
+## Before Running
+
+Before starting this workflow, read:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+
+Repository note:
+In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
+Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+Do not treat the absence of `middleware.ts` as a finding.
+
 ## Workflow Steps
 
 ### [ ] Step: Incident Intake

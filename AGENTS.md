@@ -698,3 +698,132 @@ Managed via `src/core/env.ts` (T3-Env + Zod). Groups:
 - **Rate Limiting**: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `API_RATE_LIMIT_*`
 - **Security**: `INTERNAL_API_KEY`, `SECURITY_AUDIT_LOG_ENABLED`, `SECURITY_ALLOWED_OUTBOUND_HOSTS`, CSP allowlists
 - **E2E**: `E2E_ENABLED`, `E2E_CLERK_USER_USERNAME`, `E2E_CLERK_USER_PASSWORD`
+
+---
+
+description: How to create and maintain task artifacts during Zencoder ZenFlow workflow sessions. Use during non-trivial work to create a per-task artifact folder with a plan and specialist outputs.
+alwaysApply: true
+
+---
+
+For non-trivial work, Zencoder automatically manages a per-chat workspace under:
+
+- `.zencoder/chats/{chat_id}/`
+
+This path is resolved automatically by Zencoder from the active chat session. Do not invent or hardcode this path — use the active chat directory.
+
+Task workspace rules:
+
+- create `plan.md` first before specialist analysis or implementation begins
+- create `intake.md` immediately after `plan.md` to normalize the source requirements and references for the task
+- each specialist agent must save its output as a separate artifact in the same task directory
+- each non-orchestrator specialist agent must maintain exactly one persistent summary artifact for the task and update that same file on later runs instead of creating duplicates
+- the specialist summary artifact filename must start with the agent number and agent name
+- the specialist summary artifact should capture scope handled, actions performed, findings, decisions, blockers, and handoff-relevant summary notes
+- use the corresponding template from `docs/ai/templates/specialist-summaries/` when creating or refreshing a specialist summary artifact
+- later steps must read earlier relevant artifacts instead of silently re-deriving them
+- `plan.md`, `intake.md`, and `implementation-plan.md` are live control documents, not static notes
+- when these files contain checklists or status markers, every agent touching the task must update them as work progresses
+- after finishing a meaningful step, phase, or specialist handoff, update the relevant checklist items in the task artifacts before moving to the next step
+- do not treat progression to the next major step as complete until the corresponding artifact state is synchronized
+- if a step is blocked, partially complete, skipped, or deferred, record that status explicitly in the relevant artifact instead of leaving stale unchecked or checked items
+- keep source requirement documents in their original repository location; task artifacts should summarize and reference them rather than copy them wholesale
+- when a task is substantial or phase-based, prefer actionable checklist sections in `plan.md` and `implementation-plan.md` so progress can be tracked directly in the artifact
+- when a task is substantial or phase-based, `intake.md` should also include a readiness checklist that is kept in sync with `plan.md` and `implementation-plan.md`
+
+Minimum expected files when relevant:
+
+- `plan.md`
+- `intake.md`
+- `01 - Architecture Guard - Summary.md`
+- `02 - Security & Auth - Summary.md`
+- `03 - Next.js Runtime - Summary.md`
+- `05 - Validation Strategy - Summary.md`
+- `06 - Debug Investigation - Summary.md`
+- `07 - Playwright E2E - Summary.md`
+- `04 - Implementation Agent - Summary.md`
+- `constraints.md`
+- `implementation-plan.md`
+- `validation-report.md`
+
+For auth/bootstrap/onboarding work that uses Playwright, prefer structuring the E2E artifact with:
+
+- `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md`
+
+If a step is skipped, record that explicitly in `plan.md` or the relevant artifact rather than omitting it silently.
+
+Preferred specialist summary artifact mapping:
+
+- `01 - Architecture Guard - Summary.md`
+- `02 - Security & Auth - Summary.md`
+- `03 - Next.js Runtime - Summary.md`
+- `05 - Validation Strategy - Summary.md`
+- `06 - Debug Investigation - Summary.md`
+- `07 - Playwright E2E - Summary.md`
+- `04 - Implementation Agent - Summary.md`
+
+The Workflow Orchestrator is excluded from this per-agent summary-file requirement because it owns the primary control artifacts such as `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md`.
+
+Use `docs/ai/general/ARTIFACTS_GUIDE.md` to understand the artifact authority model rather than inventing per-task conventions ad hoc.
+
+---
+
+description: When and how to delegate work to specialist agents in Zencoder sessions. Use when deciding whether to route to Workflow Orchestrator, Debug Investigation, Architecture Guard, Security & Auth, Next.js Runtime, Validation Strategy, Playwright E2E, or Implementation Agent.
+alwaysApply: true
+
+---
+
+Delegate to specialized agents when the task clearly matches one of these scopes:
+
+- Use `08 - Workflow Orchestrator` when one task needs multiple specialist agents in sequence, explicit artifact management, and plan-first execution. Zencoder automatically manages the active chat artifact workspace under `.zencoder/chats/{chat_id}/`. Start the appropriate ZenFlow workflow from `.zenflow/workflows/`.
+- Use `06 - Debug Investigation` for unclear bugs, unstable flows, intermittent failures, env-driven divergence, race conditions, ordering issues, or multi-layer failures where evidence must be gathered before choosing architecture, security, runtime, validation, or implementation work.
+- Use `01 - Architecture Guard` for architecture review, modular-monolith boundaries, dependency direction, DI/composition discipline, auth-routing design shape, or docs-vs-code drift.
+- Use `02 - Security & Auth` for authentication, authorization, trust boundaries, tenant/org context, provider isolation, or sensitive-data exposure review.
+- Use `03 - Next.js Runtime` for App Router behavior, server vs client placement, route handlers, server actions, `src/proxy.ts`, caching/revalidation, or Edge vs Node runtime analysis.
+- Use `05 - Validation Strategy` for repository validation posture, minimum safe validation scope, broad test-addition decisions, over-mocking review, or deciding between unit, integration, e2e, contract, and CI validation.
+- Use `07 - Playwright E2E` when real-browser Playwright verification is required for auth flows, onboarding, route transitions, cookies, hydration, or browser/runtime regressions that should be proven in a real browser.
+- Use `04 - Implementation Agent` when the design constraints are already clear and the task is to make focused code changes, update tests, and validate the implementation.
+
+Do not delegate by default when the task is simple, mixed, or can be handled directly without specialization.
+
+For ambiguous bug hunts, use `06 - Debug Investigation` before Architecture Guard, Security & Auth, Next.js Runtime, Validation Strategy, or Implementation Agent.
+
+For multi-step tasks that must be designed, implemented, validated, and documented through one controlled flow, use `08 - Workflow Orchestrator` and start the matching ZenFlow workflow.
+
+Before delegating auth/bootstrap/onboarding routing work, ensure the relevant agent reads:
+
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
+
+---
+
+description: Validation focus discipline during implementation work. Use to keep validation focused and require Validation Strategy review before broad test additions.
+alwaysApply: true
+
+---
+
+During implementation work, prefer focused validation over broad test expansion.
+
+For any change touching Clerk auth, bootstrap routing, onboarding redirects, auth middleware, root auth layout boundaries, or `/users` access control:
+
+- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first
+- review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
+- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
+
+Do not mark the task complete until the affected auth-flow scenarios are explicitly checked or clearly marked as deferred/blocked.
+
+If you are about to add broad new tests, widen an existing suite substantially, or recommend multiple new validation layers beyond the smallest obvious change-level checks, request a `05 - Validation Strategy` review first.
+
+Treat `05 - Validation Strategy` as the authority for:
+
+- whether broader validation is justified
+- which validation level is appropriate
+- whether proposed tests reduce real risk or only add cost
+- whether the change needs unit, integration, e2e, contract-style, or CI-level validation
+
+Do not add wide test surface area by default just because behavior changed.
+
+When a focused implementation patch only needs obvious local validation, proceed directly and report what was run.
+
+When validation scope is unclear or seems likely to expand materially, delegate before adding tests.

@@ -2,7 +2,7 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zenflow/tasks/{task_id}`
+- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
 
 ## Workflow Steps
 

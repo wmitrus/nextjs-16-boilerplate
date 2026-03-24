@@ -232,6 +232,204 @@ Within Group 4:
 
 ---
 
+---
+
+## Phase 2 — Full Workflow Set Expansion
+
+> ⚠️ **Dual-tool safety reminder**: Tasks marked `[SHARED]` touch `docs/ai/general/` affecting BOTH tools. Tasks marked `[ZENCODER ONLY]` touch `.zenflow/` or `.zencoder/` — not referenced by `.github/`. Tasks marked `[COPILOT NOTE]` require verifying no `.github/` file is broken.
+
+---
+
+### Group 5 — Fixes to Existing ZenFlow Workflows
+
+#### [x] Task 5.1 — Add preamble "Before Running" to all 4 ZenFlow workflows `[ZENCODER ONLY]`
+
+**Files**:
+
+- `.zenflow/workflows/feature-development.md`
+- `.zenflow/workflows/safe-refactor.md`
+- `.zenflow/workflows/security-incident-workflow.md`
+- `.zenflow/workflows/incident-investigation.md`
+
+**Action**: After `## Configuration`, before `## Artifact Execution Rule` (or `## Workflow Steps`), insert a `## Before Running` section with standard 3 governing files + proxy note  
+**⚠️ Copilot safety**: `.zenflow/` not referenced by `.github/`. Fully safe.  
+**Verification**: All 4 files have the preamble section; existing steps are unchanged
+
+---
+
+#### [x] Task 5.2 — Add Validation Strategy step to `incident-investigation.md` `[ZENCODER ONLY]`
+
+**File**: `.zenflow/workflows/incident-investigation.md`  
+**Action**: Insert new `[ ] Step: Validation Strategy` between `Remediation Plan` step and `Implementation` step  
+**Output file**: `{@artifacts_path}/validation-strategy.md`  
+**⚠️ Copilot safety**: ZenFlow only. Safe.  
+**Verification**: `incident-investigation.md` has 7 steps total (was 6); Validation Strategy is step 5
+
+---
+
+### Group 6 — New General Workflow Specs (shared, both tools)
+
+Tasks 6.1–6.5 can run in parallel.
+
+#### [x] Task 6.1 — Create `Workflow 05 - Auth Flow Change Review Workflow.md` `[SHARED]`
+
+**File**: `docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md`  
+**Mode ID**: `auth-flow-change-review`  
+**Model**: Follow structure of `Workflow 01 - Safe Feature Workflow.md`  
+**Additional "Before running" files**: `AUTH_FLOW_ANTI_PATTERNS.md`, `AUTH_FLOW_MATRIX_HOW_TO_USE.md`, `AUTH_FLOW_VERIFICATION_MATRIX.md`  
+**Steps**: Change Intake → Auth Surface Analysis → Runtime Review (conditional) → Architecture Review (conditional) → Matrix Verification Sign-Off → Playwright E2E Verification (conditional)  
+**Key constraint**: Cannot mark complete without matrix scenario Verified/Deferred/Blocked for each affected scenario  
+**⚠️ Copilot safety**: New file. Cannot break existing Copilot references.  
+**Verification**: File exists; has all standard sections; references auth-flow matrix docs
+
+---
+
+#### [x] Task 6.2 — Create `Workflow 06 - Playwright E2E Validation Workflow.md` `[SHARED]`
+
+**File**: `docs/ai/general/Workflow 06 - Playwright E2E Validation Workflow.md`  
+**Mode ID**: `playwright-e2e-validation`  
+**Model**: Follow structure of `Workflow 01`  
+**Steps**: Verification Intake → Scenario Scope Definition → Precondition Check → Playwright Execution → Evidence Collection → Gap Report  
+**⚠️ Copilot safety**: New file. Safe.  
+**Verification**: File exists; has all standard sections; evidence capture requirement is explicit
+
+---
+
+#### [x] Task 6.3 — Create `Workflow 07 - Change Validation Workflow.md` `[SHARED]`
+
+**File**: `docs/ai/general/Workflow 07 - Change Validation Workflow.md`  
+**Mode ID**: `change-validation`  
+**Model**: Follow structure of `Workflow 01`  
+**Steps**: Change Intake → Validation Risk Assessment → Scope Definition → Validation Execution → Result Report  
+**⚠️ Copilot safety**: New file. Safe.  
+**Verification**: File exists; scope definition explicitly separates minimum / optional / not-required validation
+
+---
+
+#### [x] Task 6.4 — Create `Workflow 08 - Repository Baseline Validation Workflow.md` `[SHARED]`
+
+**File**: `docs/ai/general/Workflow 08 - Repository Baseline Validation Workflow.md`  
+**Mode ID**: `repository-baseline-validation`  
+**Model**: Follow structure of `Workflow 01`  
+**Steps**: Baseline Intake → Validation Posture Audit → Architecture Boundary Audit → Risk and Gap Assessment → Recommendations → Output Report  
+**⚠️ Copilot safety**: New file. Safe.  
+**Verification**: File exists; uses both Validation Strategy Agent and Architecture Guard Agent
+
+---
+
+#### [x] Task 6.5 — Create `Workflow 09 - Architecture Lint Workflow.md` `[SHARED]`
+
+**File**: `docs/ai/general/Workflow 09 - Architecture Lint Workflow.md`  
+**Mode ID**: `architecture-lint`  
+**Model**: Follow structure of `Workflow 01`  
+**Steps**: Lint Intake → Structure Inspection → Contract and Provider Audit → Findings Classification → Docs vs Code Drift Check → Output Report  
+**Key constraint**: Read-only mode — implementation of fixes is explicitly FORBIDDEN in this workflow  
+**⚠️ Copilot safety**: New file. Safe.  
+**Verification**: File exists; read-only constraint is explicitly stated; findings classified as CRITICAL/MAJOR/MINOR/INFORMATIONAL
+
+---
+
+### Group 7 — New ZenFlow Execution Files
+
+Tasks 7.1–7.5 can run in parallel.
+
+#### [x] Task 7.1 — Create `.zenflow/workflows/auth-flow-change-review.md` `[ZENCODER ONLY]`
+
+**File**: `.zenflow/workflows/auth-flow-change-review.md`  
+**Model**: `.zenflow/workflows/security-incident-workflow.md`  
+**Steps and output files**: per spec P2-TaskH  
+**⚠️ Copilot safety**: ZenFlow only. Safe.  
+**Verification**: Uses `{@artifacts_path} → .zencoder/chats/{chat_id}`; includes auth-flow doc preamble; has Before Running section; has Artifact Execution Rule before steps
+
+---
+
+#### [x] Task 7.2 — Create `.zenflow/workflows/playwright-e2e-validation.md` `[ZENCODER ONLY]`
+
+**File**: `.zenflow/workflows/playwright-e2e-validation.md`  
+**Model**: `.zenflow/workflows/feature-development.md`  
+**Steps and output files**: per spec P2-TaskI  
+**⚠️ Copilot safety**: ZenFlow only. Safe.  
+**Verification**: Uses `{@artifacts_path} → .zencoder/chats/{chat_id}`; evidence-report.md is an explicit output file
+
+---
+
+#### [x] Task 7.3 — Create `.zenflow/workflows/change-validation.md` `[ZENCODER ONLY]`
+
+**File**: `.zenflow/workflows/change-validation.md`  
+**Model**: `.zenflow/workflows/feature-development.md`  
+**Steps and output files**: per spec P2-TaskJ  
+**⚠️ Copilot safety**: ZenFlow only. Safe.  
+**Verification**: Uses `{@artifacts_path} → .zencoder/chats/{chat_id}`; 5 steps
+
+---
+
+#### [x] Task 7.4 — Create `.zenflow/workflows/repository-baseline-validation.md` `[ZENCODER ONLY]`
+
+**File**: `.zenflow/workflows/repository-baseline-validation.md`  
+**Model**: `.zenflow/workflows/feature-development.md`  
+**Steps and output files**: per spec P2-TaskK  
+**⚠️ Copilot safety**: ZenFlow only. Safe.  
+**Verification**: Uses `{@artifacts_path} → .zencoder/chats/{chat_id}`; 6 steps
+
+---
+
+#### [x] Task 7.5 — Create `.zenflow/workflows/architecture-lint.md` `[ZENCODER ONLY]`
+
+**File**: `.zenflow/workflows/architecture-lint.md`  
+**Model**: `.zenflow/workflows/feature-development.md`  
+**Steps and output files**: per spec P2-TaskL  
+**⚠️ Copilot safety**: ZenFlow only. Safe.  
+**Verification**: Uses `{@artifacts_path} → .zencoder/chats/{chat_id}`; 6 steps; read-only constraint stated
+
+---
+
+### Group 8 — MODE_MANIFEST and Documentation Updates
+
+#### [x] Task 8.1 — Add `auth-flow-change-review` mode to `MODE_MANIFEST.md` `[SHARED]`
+
+**File**: `docs/ai/general/MODE_MANIFEST.md`  
+**Action**: Insert new mode section between `playwright-e2e-validation` and `workflow-task` modes; update Mode selection rules adding rule #1 (auth-flow-change-review) and renumbering 1–10 to 2–11  
+**⚠️ Copilot safety**: Additive insertion. No existing modes removed or renamed. Mode IDs not referenced by `.github/` frontmatter. Safe.  
+**Verification**: Mode exists with all required fields; selection rules have 11 items; auth-flow-change-review is rule #1
+
+---
+
+#### [x] Task 8.2 — Update `docs/ai/zencoder/README.md` `[ZENCODER ONLY]`
+
+**File**: `docs/ai/zencoder/README.md`  
+**Action**: Add 5 new workflow entries to Available ZenFlow Workflows section; add Workflows 05–09 to Neutral Workflow Spec section; update Auth-Flow Note to mention auth-flow-change-review workflow  
+**⚠️ Copilot safety**: Not referenced by `.github/`. Safe.  
+**Verification**: README lists all 9 ZenFlow workflows; lists Workflows 01–09 neutral specs
+
+---
+
+## Phase 2 Execution Order
+
+```
+Group 5 (fix existing ZenFlow) → then Groups 6+7 can run in parallel → Group 8 depends on Groups 6+7
+```
+
+- Tasks 5.1 and 5.2 can run in parallel
+- Tasks 6.1–6.5 can all run in parallel (after Group 5)
+- Tasks 7.1–7.5 can all run in parallel (after Group 5)
+- Task 8.1 depends on Task 6.1 (Workflow 05 must exist first)
+- Task 8.2 depends on Tasks 6.1–6.5 and 7.1–7.5
+
+---
+
+## Phase 2 Post-Implementation Verification
+
+1. Run: `ls .zenflow/workflows/` — must show 9 files
+2. Run: `ls docs/ai/general/Workflow*` — must show Workflow 01 through 09
+3. Verify MODE_MANIFEST selection rules has 11 numbered items
+4. Verify MODE_MANIFEST has `auth-flow-change-review` mode
+5. Verify `docs/ai/zencoder/README.md` lists all 9 workflows
+6. Run Copilot isolation check: no `.zencoder/chats/` references in `.github/` files
+7. Verify all new ZenFlow files use `{@artifacts_path} → .zencoder/chats/{chat_id}`
+8. Verify all new general specs have the standard proxy note
+
+---
+
 ## Post-Implementation Verification
 
 After all groups complete:

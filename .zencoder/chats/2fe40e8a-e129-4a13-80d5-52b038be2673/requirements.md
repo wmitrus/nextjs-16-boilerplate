@@ -250,3 +250,140 @@ These tool capability differences are NOT fixable by configuration — they are 
 ## 8. Open Questions
 
 None — scope is clear enough to proceed to planning.
+
+---
+
+---
+
+# Phase 2 — Full Workflow Set Expansion
+
+_Added after Phase 1 completion. Goal: bring Zencoder to 100% readiness for all stages of this project._
+
+---
+
+## P2.1 Audit Findings
+
+### Existing workflow quality assessment
+
+| Workflow               | General Spec   | ZenFlow File                     | Quality    | Issues                                                                |
+| ---------------------- | -------------- | -------------------------------- | ---------- | --------------------------------------------------------------------- |
+| Safe Feature           | Workflow 01 ✅ | feature-development.md ✅        | Production | None                                                                  |
+| Safe Refactor          | Workflow 02 ✅ | safe-refactor.md ✅              | Production | None                                                                  |
+| Security Incident      | Workflow 03 ✅ | security-incident-workflow.md ✅ | Production | None                                                                  |
+| Incident Investigation | Workflow 04 ✅ | incident-investigation.md ⚠️     | Good       | Missing Validation Strategy step; no preamble "Before running, read:" |
+
+### Missing workflows (no ZenFlow file AND no general spec)
+
+| Workflow                       | MODE_MANIFEST mode | Copilot prompt | Gap                                                              |
+| ------------------------------ | ------------------ | -------------- | ---------------------------------------------------------------- |
+| Auth Flow Change Review        | ❌ missing         | ✅ exists      | Both general spec AND ZenFlow file missing; mode not in manifest |
+| Playwright E2E Validation      | ✅ exists          | ✅ exists      | ZenFlow file missing; general spec missing                       |
+| Change Validation              | ✅ exists          | ✅ exists      | ZenFlow file missing; general spec missing                       |
+| Repository Baseline Validation | ✅ exists          | ✅ exists      | ZenFlow file missing; general spec missing                       |
+| Architecture Lint              | ✅ exists          | ❌ missing     | ZenFlow file missing; general spec missing                       |
+
+### Structural consistency issues (all ZenFlow workflows)
+
+All 4 existing ZenFlow workflow files lack a "Before running this workflow, read:" preamble section that the general specs have. This means Zencoder agents starting a workflow do not get context about what governance files to load first.
+
+---
+
+## P2.2 Workflow Design Decisions
+
+### Which workflows need a FULL general spec + ZenFlow file?
+
+A full workflow pair is warranted when the task:
+
+- has multiple ordered steps with artifact handoffs
+- involves more than one specialist agent
+- produces meaningful artifacts per step
+- is repeated frequently in real engineering work
+
+| Candidate                       | Full workflow? | Reason                                                                                                                                |
+| ------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth Flow Change Review         | **YES**        | Critical project risk; multi-agent (Security/Auth + Architecture Guard + Next.js Runtime + Playwright E2E); unique matrix requirement |
+| Playwright E2E Validation       | **YES**        | Standalone browser verification; structured evidence capture; clear step sequence                                                     |
+| Change Validation               | **YES**        | Structured validation planning with artifact output; reused frequently                                                                |
+| Repository Baseline Validation  | **YES**        | Multi-step audit; Architecture Guard + Validation Strategy; produces recommendations                                                  |
+| Architecture Lint               | **YES**        | Structured boundary audit; read-only but well-defined steps; frequent pre/post-change use                                             |
+| Debug Investigation standalone  | **NO**         | Single specialist, single pass; MODE entry is sufficient                                                                              |
+| Task Brief Authoring standalone | **NO**         | Single specialist; agent guide is sufficient                                                                                          |
+
+### Auth Flow Change Review — special requirements
+
+This workflow is unique because:
+
+- Auth routing bugs are the highest-risk failure mode in this project
+- Requires reading `AUTH_FLOW_ANTI_PATTERNS.md`, `AUTH_FLOW_MATRIX_HOW_TO_USE.md`, `AUTH_FLOW_VERIFICATION_MATRIX.md` as mandatory context
+- Must map the change to specific matrix scenario IDs
+- Must produce a verification sign-off against the matrix
+- Optionally ends with Playwright E2E verification
+
+---
+
+## P2.3 Scope
+
+### Fix existing (structural consistency)
+
+1. Fix `incident-investigation.md` ZenFlow — add Validation Strategy step between Remediation Plan and Implementation
+2. Add "Before running, read:" preamble to all 4 existing ZenFlow workflow files (parity with general specs)
+
+### New general specs (shared, both tools)
+
+3. Create `docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md`
+4. Create `docs/ai/general/Workflow 06 - Playwright E2E Validation Workflow.md`
+5. Create `docs/ai/general/Workflow 07 - Change Validation Workflow.md`
+6. Create `docs/ai/general/Workflow 08 - Repository Baseline Validation Workflow.md`
+7. Create `docs/ai/general/Workflow 09 - Architecture Lint Workflow.md`
+
+### New ZenFlow execution files (Zencoder only)
+
+8. Create `.zenflow/workflows/auth-flow-change-review.md`
+9. Create `.zenflow/workflows/playwright-e2e-validation.md`
+10. Create `.zenflow/workflows/change-validation.md`
+11. Create `.zenflow/workflows/repository-baseline-validation.md`
+12. Create `.zenflow/workflows/architecture-lint.md`
+
+### MODE_MANIFEST updates (shared)
+
+13. Add `auth-flow-change-review` mode to `MODE_MANIFEST.md`
+14. Update mode selection rules to include auth-flow-change-review
+
+### Documentation updates
+
+15. Update `docs/ai/zencoder/README.md` — list all 9 workflows (4 existing + 5 new)
+16. Update `docs/ai/copilot/README.md` — add Copilot prompt links for architecture-lint (new) and note auth-flow-change-review already has a prompt
+
+---
+
+## P2.4 Acceptance Criteria (Phase 2)
+
+| #      | Criterion                                                                                            |
+| ------ | ---------------------------------------------------------------------------------------------------- |
+| P2AC1  | `incident-investigation.md` has Validation Strategy step between Remediation Plan and Implementation |
+| P2AC2  | All 4 existing ZenFlow workflows have "Before running, read:" preamble                               |
+| P2AC3  | `Workflow 05 - Auth Flow Change Review Workflow.md` exists with matrix verification steps            |
+| P2AC4  | `Workflow 06 - Playwright E2E Validation Workflow.md` exists with evidence capture structure         |
+| P2AC5  | `Workflow 07 - Change Validation Workflow.md` exists                                                 |
+| P2AC6  | `Workflow 08 - Repository Baseline Validation Workflow.md` exists                                    |
+| P2AC7  | `Workflow 09 - Architecture Lint Workflow.md` exists                                                 |
+| P2AC8  | `.zenflow/workflows/auth-flow-change-review.md` exists with matrix verification steps                |
+| P2AC9  | `.zenflow/workflows/playwright-e2e-validation.md` exists                                             |
+| P2AC10 | `.zenflow/workflows/change-validation.md` exists                                                     |
+| P2AC11 | `.zenflow/workflows/repository-baseline-validation.md` exists                                        |
+| P2AC12 | `.zenflow/workflows/architecture-lint.md` exists                                                     |
+| P2AC13 | MODE_MANIFEST has `auth-flow-change-review` mode with correct specialist sequence                    |
+| P2AC14 | `docs/ai/zencoder/README.md` lists all 9 workflows                                                   |
+| P2AC15 | All new ZenFlow workflows use `{@artifacts_path} → .zencoder/chats/{chat_id}`                        |
+| P2AC16 | All new general specs follow the structural pattern of Workflow 01-03                                |
+
+---
+
+## P2.5 Safety Rules (Phase 2)
+
+- New general specs are additive files — cannot break existing Copilot references
+- New ZenFlow files are isolated in `.zenflow/workflows/` — not referenced by `.github/`
+- MODE_MANIFEST additions are additive — existing mode IDs are not changed
+- Fixes to existing ZenFlow files must not break the existing step structure
+- All new ZenFlow workflows must use `{@artifacts_path} → .zencoder/chats/{chat_id}`
+- All new general specs must include the standard Repository Note about `src/proxy.ts`

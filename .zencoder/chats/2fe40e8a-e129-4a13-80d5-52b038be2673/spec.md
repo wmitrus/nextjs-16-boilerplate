@@ -379,3 +379,380 @@ After all primary phases, verify:
 
 - `git diff --name-only` shows no changes in `.github/agents/`, `.github/instructions/`, `.github/prompts/` (for primary scope)
 - No `.github/` file references were added or removed from any shared file
+
+---
+
+---
+
+# Phase 2 — Full Workflow Set Expansion: Technical Specification
+
+_Added after Phase 1 completion._
+
+---
+
+## P2.1 Technical Context
+
+**Files affected**: Markdown only — no TypeScript or application source changes  
+**Tools affected**: Both (shared general spec files); Zencoder only (ZenFlow files)  
+**Build impact**: None  
+**Test impact**: None
+
+### New file reference model
+
+All new files must follow the pattern of an existing peer in the same directory:
+
+| New file                                               | Model file                                               |
+| ------------------------------------------------------ | -------------------------------------------------------- |
+| `docs/ai/general/Workflow 05–09`                       | `docs/ai/general/Workflow 01 - Safe Feature Workflow.md` |
+| `.zenflow/workflows/auth-flow-change-review.md`        | `.zenflow/workflows/security-incident-workflow.md`       |
+| `.zenflow/workflows/playwright-e2e-validation.md`      | `.zenflow/workflows/feature-development.md`              |
+| `.zenflow/workflows/change-validation.md`              | `.zenflow/workflows/feature-development.md`              |
+| `.zenflow/workflows/repository-baseline-validation.md` | `.zenflow/workflows/feature-development.md`              |
+| `.zenflow/workflows/architecture-lint.md`              | `.zenflow/workflows/feature-development.md`              |
+
+---
+
+## P2.2 Fixes to Existing ZenFlow Workflows
+
+### P2-TaskA: Add preamble to all 4 existing ZenFlow workflows
+
+**Files**:
+
+- `.zenflow/workflows/feature-development.md`
+- `.zenflow/workflows/safe-refactor.md`
+- `.zenflow/workflows/security-incident-workflow.md`
+- `.zenflow/workflows/incident-investigation.md`
+
+**Change**: After the `## Configuration` block and before `## Workflow Steps` (or `## Artifact Execution Rule`), add:
+
+```markdown
+## Before Running
+
+Before starting this workflow, read:
+
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+
+Repository note:
+In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
+Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+Do not treat the absence of `middleware.ts` as a finding.
+```
+
+**⚠️ Copilot safety**: `.zenflow/` files not referenced by `.github/`. Safe.
+
+### P2-TaskB: Add Validation Strategy step to `incident-investigation.md`
+
+**File**: `.zenflow/workflows/incident-investigation.md`
+
+**Change**: Add a new step between `Remediation Plan` and `Implementation`:
+
+```markdown
+### [ ] Step: Validation Strategy
+
+Run **Validation Strategy Agent** to determine the minimum safe validation scope for the remediation.
+
+Output:
+{@artifacts_path}/validation-strategy.md
+
+Include:
+
+- change risk classification
+- minimum required validation
+- optional additional validation
+- validation not required
+- validation commands or checks
+```
+
+**⚠️ Copilot safety**: Safe (ZenFlow only).
+
+---
+
+## P2.3 New General Workflow Specs (shared, both tools)
+
+All new specs must include these standard sections matching Workflow 01–04:
+
+- Workflow Name, Purpose, Mode ID, Available agents
+- Before running: 3 standard governing files
+- Repository Note about `src/proxy.ts`
+- Workflow Goal
+- Workflow Principles
+- When to use / When NOT to use
+- Expected user input
+- Ordered workflow steps with conditional branching
+- Outputs produced
+- Success criteria
+
+### P2-TaskC: `Workflow 05 - Auth Flow Change Review Workflow.md`
+
+**Mode ID**: `auth-flow-change-review`
+
+**Available agents**: Security/Auth Agent, Architecture Guard Agent, Next.js Runtime Agent, Playwright E2E Agent
+
+**Additional "Before running" files** (beyond the standard 3):
+
+- `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
+- `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
+- `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
+
+**Ordered workflow steps**:
+
+1. **Change Intake** — collect changed file set, symptoms, risks, affected auth/bootstrap/onboarding paths
+2. **Auth Surface Analysis** — Security/Auth Agent maps the change to matrix scenarios; identifies trust-boundary, redirect-flow, runtime-sensitive risks
+3. **Runtime Behavior Review** _(conditional)_ — Next.js Runtime Agent when routing, server/client placement, or caching is involved in the auth path
+4. **Architecture Impact Review** _(conditional)_ — Architecture Guard when the change touches module boundaries, DI, or composition
+5. **Matrix Verification Sign-Off** — explicitly check each affected matrix scenario; state Verified / Deferred / Blocked per scenario
+6. **Playwright E2E Verification** _(conditional)_ — run browser verification against affected matrix scenarios when evidence is required
+
+**Key constraint**: Do not mark complete unless all affected matrix scenarios are either verified or explicitly deferred/blocked.
+
+### P2-TaskD: `Workflow 06 - Playwright E2E Validation Workflow.md`
+
+**Mode ID**: `playwright-e2e-validation`
+
+**Available agents**: Playwright E2E Agent
+
+**Ordered workflow steps**:
+
+1. **Verification Intake** — collect task context, scenario checklist, affected paths, environment notes; read task artifacts from active chat workspace
+2. **Scenario Scope Definition** — identify the smallest Playwright scope that covers the risk; explicitly list scenarios to test, defer, or skip
+3. **Precondition Check** — confirm environment is ready (dev server, auth credentials, test user state)
+4. **Playwright Execution** — run the identified scenarios; capture commands, URLs, logs, reports, traces, screenshots
+5. **Evidence Collection** — produce structured evidence: scenario status mapping (Pass/Fail/Blocked), commands run, and artifact links
+6. **Gap Report** — explicitly state scenarios deferred or blocked with reason
+
+**Key constraint**: Do not mark verified unless required scenarios are actually checked or explicitly deferred/blocked.
+
+### P2-TaskE: `Workflow 07 - Change Validation Workflow.md`
+
+**Mode ID**: `change-validation`
+
+**Available agents**: Validation Strategy Agent
+
+**Ordered workflow steps**:
+
+1. **Change Intake** — determine changed file set from working tree; collect any user-provided risk notes or context
+2. **Validation Risk Assessment** — Validation Strategy Agent classifies the change risk and identifies affected test layers
+3. **Scope Definition** — produce minimum required, optional, and not-required validation lists
+4. **Validation Execution** — run the minimum required validation commands; capture output
+5. **Result Report** — state pass/fail/blocked per validation check; list any gaps
+
+**Key constraint**: If validation scope depends on unresolved architecture or security decisions, state the block explicitly before execution.
+
+### P2-TaskF: `Workflow 08 - Repository Baseline Validation Workflow.md`
+
+**Mode ID**: `repository-baseline-validation`
+
+**Available agents**: Validation Strategy Agent, Architecture Guard Agent
+
+**Ordered workflow steps**:
+
+1. **Baseline Intake** — collect scope: full repo audit vs targeted modules; any known concerns or prior issues
+2. **Validation Posture Audit** — Validation Strategy Agent reviews the full validation stack: test layers, CI checks, coverage, and command inventory
+3. **Architecture Boundary Audit** — Architecture Guard Agent performs a boundary lint pass to identify gaps that validation should cover
+4. **Risk and Gap Assessment** — combine validation and architecture findings into a prioritized gap list
+5. **Recommendations** — produce actionable recommendations: validation improvements, CI enhancements, coverage gaps
+6. **Output Report** — validation posture summary, risk assessment, recommendations, and next action
+
+### P2-TaskG: `Workflow 09 - Architecture Lint Workflow.md`
+
+**Mode ID**: `architecture-lint`
+
+**Available agents**: Architecture Guard Agent
+
+**Ordered workflow steps**:
+
+1. **Lint Intake** — define lint scope: full repo, specific modules, or post-change boundary check; collect any prior findings
+2. **Structure Inspection** — Architecture Guard inspects module boundaries, dependency direction, import patterns, and DI/composition discipline
+3. **Contract and Provider Audit** — inspect core contracts, composition root, auth provider isolation, and security placement
+4. **Findings Classification** — classify all findings as CRITICAL / MAJOR / MINOR / INFORMATIONAL
+5. **Docs vs Code Drift Check** — compare documentation claims against live code
+6. **Output Report** — lint results, confirmed violations, suspicious patterns, acceptable exceptions, recommended next action
+
+**Key constraint**: This is a read-only lint mode. Implementation of fixes is NOT part of this workflow.
+
+---
+
+## P2.4 New ZenFlow Execution Files
+
+Each ZenFlow file must follow this structure:
+
+```
+## Configuration
+- Artifacts Path: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+
+## Before Running
+[standard preamble + any workflow-specific files]
+
+## Artifact Execution Rule
+[standard artifact writing requirement]
+
+## Workflow Steps
+[step checkboxes with Output: and Include: per step]
+```
+
+### P2-TaskH: `.zenflow/workflows/auth-flow-change-review.md`
+
+This is the most critical new ZenFlow workflow. It mirrors Workflow 05 with Zencoder-specific execution format.
+
+**Additional preamble files** (beyond standard 3):
+
+```
+- `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
+- `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
+- `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
+```
+
+**Steps and their output files**:
+
+1. Change Intake → `{@artifacts_path}/auth-change-intake.md`
+2. Auth Surface Analysis → `{@artifacts_path}/auth-surface-analysis.md`
+3. Runtime Behavior Review _(conditional)_ → `{@artifacts_path}/runtime-review.md`
+4. Architecture Impact Review _(conditional)_ → `{@artifacts_path}/architecture-review.md`
+5. Matrix Verification Sign-Off → `{@artifacts_path}/matrix-verification.md`
+6. Playwright E2E Verification _(conditional)_ → `{@artifacts_path}/playwright-verification.md`
+
+### P2-TaskI: `.zenflow/workflows/playwright-e2e-validation.md`
+
+**Steps and their output files**:
+
+1. Verification Intake → `{@artifacts_path}/verification-intake.md`
+2. Scenario Scope Definition → `{@artifacts_path}/scenario-scope.md`
+3. Precondition Check → `{@artifacts_path}/preconditions.md`
+4. Playwright Execution → `{@artifacts_path}/playwright-execution.md`
+5. Evidence Collection → `{@artifacts_path}/evidence-report.md`
+6. Gap Report → `{@artifacts_path}/gap-report.md`
+
+### P2-TaskJ: `.zenflow/workflows/change-validation.md`
+
+**Steps and their output files**:
+
+1. Change Intake → `{@artifacts_path}/change-intake.md`
+2. Validation Risk Assessment → `{@artifacts_path}/validation-risk.md`
+3. Scope Definition → `{@artifacts_path}/validation-scope.md`
+4. Validation Execution → `{@artifacts_path}/validation-execution.md`
+5. Result Report → `{@artifacts_path}/validation-report.md`
+
+### P2-TaskK: `.zenflow/workflows/repository-baseline-validation.md`
+
+**Steps and their output files**:
+
+1. Baseline Intake → `{@artifacts_path}/baseline-intake.md`
+2. Validation Posture Audit → `{@artifacts_path}/validation-posture.md`
+3. Architecture Boundary Audit → `{@artifacts_path}/architecture-audit.md`
+4. Risk and Gap Assessment → `{@artifacts_path}/risk-assessment.md`
+5. Recommendations → `{@artifacts_path}/recommendations.md`
+6. Output Report → `{@artifacts_path}/baseline-report.md`
+
+### P2-TaskL: `.zenflow/workflows/architecture-lint.md`
+
+**Steps and their output files**:
+
+1. Lint Intake → `{@artifacts_path}/lint-intake.md`
+2. Structure Inspection → `{@artifacts_path}/structure-inspection.md`
+3. Contract and Provider Audit → `{@artifacts_path}/contract-audit.md`
+4. Findings Classification → `{@artifacts_path}/findings.md`
+5. Docs vs Code Drift Check → `{@artifacts_path}/drift-report.md`
+6. Output Report → `{@artifacts_path}/architecture-lint-report.md`
+
+---
+
+## P2.5 MODE_MANIFEST Addition
+
+### P2-TaskM: Add `auth-flow-change-review` mode
+
+**File**: `docs/ai/general/MODE_MANIFEST.md`
+
+**Placement**: Insert between `playwright-e2e-validation` mode and `workflow-task` mode.
+
+**Content** (following existing mode structure):
+
+```
+### Mode: `auth-flow-change-review`
+
+Purpose:
+- review auth/bootstrap/onboarding changes against anti-patterns and the verification matrix before implementation or sign-off
+
+Use when:
+- a change touches Clerk auth, bootstrap routing, onboarding redirects, auth middleware, root auth layout boundaries, or /users access control
+- auth-routing behavior may change
+- trust-boundary or redirect-flow risks are present in the changed path
+- the matrix sign-off is required before the change is considered safe
+
+Primary authority:
+- Security/Auth Agent
+
+Required governing files:
+- docs/ai/general/MODE_MANIFEST.md
+- docs/ai/general/00 - Agent Interaction Protocol.md
+- docs/ai/general/REPOSITORY_AI_CONTEXT.md
+- docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md
+- docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md
+- docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md
+- docs/ai/general/02 - Security & Auth Agent.md
+- docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md
+
+Specialist sequence:
+- Security/Auth Agent first — map the change to matrix scenarios and identify trust-boundary risks
+- Next.js Runtime Agent when routing, server/client placement, or caching is involved
+- Architecture Guard Agent when the change touches module boundaries or DI
+- Playwright E2E Agent when browser-level verification evidence is required
+
+Required outputs:
+- changed files considered
+- trust-boundary assessment
+- affected matrix scenarios (with scenario IDs)
+- required verification before sign-off
+- conditional runtime and architecture summaries
+- matrix verification sign-off (Verified / Deferred / Blocked per scenario)
+- risks
+- recommended next action
+```
+
+**Also update Mode selection rules**: Insert `auth-flow-change-review` as rule #1 (before `security-incident-workflow`):
+
+```
+1. If the task is a change to Clerk auth, bootstrap routing, onboarding, auth middleware, root auth layout, or /users access control, use `auth-flow-change-review`.
+```
+
+Renumber existing rules 1–10 to 2–11.
+
+---
+
+## P2.6 Documentation Updates
+
+### P2-TaskN: Update `docs/ai/zencoder/README.md`
+
+Add 5 new workflow entries to the ZenFlow Workflows section:
+
+- auth-flow change review → `auth-flow-change-review.md`
+- playwright E2E validation → `playwright-e2e-validation.md`
+- change validation → `change-validation.md`
+- repository baseline validation → `repository-baseline-validation.md`
+- architecture lint → `architecture-lint.md`
+
+Add 5 new neutral spec entries to the Neutral Workflow Spec section (Workflows 05–09).
+
+Update the Recommended Universal Flow to mention `auth-flow-change-review` for Clerk/auth changes.
+
+---
+
+## P2.7 Verification Approach
+
+### Cross-reference checks (run after all P2 tasks)
+
+1. All 9 ZenFlow files use `{@artifacts_path} → .zencoder/chats/{chat_id}`
+2. All 9 general spec files exist in `docs/ai/general/`
+3. MODE_MANIFEST has `auth-flow-change-review` mode with correct position in selection rules
+4. MODE_MANIFEST selection rules count is 11 (10 existing → +1 auth-flow-change-review as rule #1)
+5. No `.github/` file references added to shared files
+6. No `.github/agents/`, `.github/instructions/`, `.github/prompts/` files modified
+7. `docs/ai/zencoder/README.md` lists all 9 workflows correctly
+
+### Quality checks
+
+- Each new general spec has the standard proxy note and 3 governing files in Before Running
+- Auth Flow Change Review (Workflow 05 + ZenFlow) explicitly references all 3 auth-flow docs
+- Architecture Lint workflow explicitly forbids implementation
+- Playwright E2E workflow explicitly requires evidence capture

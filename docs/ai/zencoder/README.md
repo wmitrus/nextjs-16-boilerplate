@@ -48,17 +48,19 @@ Repository-neutral workflow specs currently live in:
 - `docs/ai/general/Workflow 01 - Safe Feature Workflow.md`
 - `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md`
 - `docs/ai/general/Workflow 03 - Security Incident Workflow.md`
+- `docs/ai/general/Workflow 04 - Incident Investigation Workflow.md`
 
-Treat `docs/ai/general/Workflow 01-03` as the neutral workflow design layer and `.zenflow/workflows/` as the Zencoder-oriented execution layer.
+Treat `docs/ai/general/Workflow 01-04` as the neutral workflow design layer and `.zenflow/workflows/` as the Zencoder-oriented execution layer.
 
 ### Task Artifacts
 
 Task artifacts are produced by the active workflow.
 
-Current practical locations:
+All ZenFlow workflows write artifacts to the active Zencoder chat directory:
 
-- most ZenFlow workflows target `.zenflow/tasks/{task_id}/`
-- `incident-investigation.md` currently points to `docs/workflows/{task_id}`
+- `.zencoder/chats/{chat_id}/`
+
+Zencoder resolves this path automatically from the active chat session. The `{@artifacts_path}` template variable in ZenFlow workflows expands to this location.
 
 Default scripts used by ZenFlow are documented in:
 
@@ -94,7 +96,7 @@ Recommended starting points:
 
 - feature work: [feature-development.md](../../../.zenflow/workflows/feature-development.md)
 - behavior-preserving refactor work: [safe-refactor.md](../../../.zenflow/workflows/safe-refactor.md)
-- general incident debugging: [incident-investigation.md](../../../.zenflow/workflows/incident-investigation.md)
+- general incident debugging (full orchestrated flow): [incident-investigation.md](../../../.zenflow/workflows/incident-investigation.md)
 - security-sensitive incident remediation: [security-incident-workflow.md](../../../.zenflow/workflows/security-incident-workflow.md)
 
 Use workflows when you want repeatable task sequencing instead of manually invoking each specialist.

@@ -3,13 +3,14 @@ description: How to create and maintain task artifacts during Zencoder ZenFlow w
 alwaysApply: true
 ---
 
-For non-trivial work, create a task workspace under:
+For non-trivial work, Zencoder automatically manages a per-chat workspace under:
 
-- `.zenflow/tasks/{task_id}/`
+- `.zencoder/chats/{chat_id}/`
+
+This path is resolved automatically by Zencoder from the active chat session. Do not invent or hardcode this path — use the active chat directory.
 
 Task workspace rules:
 
-- create one directory per task
 - create `plan.md` first before specialist analysis or implementation begins
 - create `intake.md` immediately after `plan.md` to normalize the source requirements and references for the task
 - each specialist agent must save its output as a separate artifact in the same task directory

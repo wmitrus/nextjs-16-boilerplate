@@ -1,8 +1,8 @@
-# ZenFlow Artifacts Guide
+# Task Artifacts Guide
 
 ## Purpose
 
-This document defines the artifacts generated during ZenFlow workflows
+This document defines the artifacts generated during AI-assisted workflows
 and explains their meaning, authority level, and how agents must use them.
 
 Artifacts provide a structured handoff between workflow steps and ensure
@@ -10,9 +10,13 @@ that decisions made in earlier stages are preserved during later stages.
 
 Artifacts are generated inside the task workspace.
 
-Default location:
+Default location depends on the active AI tool:
 
-.copilot/tasks/{task_id}/
+- **GitHub Copilot**: `.copilot/tasks/{task_id}/`
+- **Zencoder**: `.zencoder/chats/{chat_id}/` — resolved automatically by Zencoder from the active chat session
+
+Each tool uses its own artifact path. Do not mix paths between tools.
+For Copilot, create the task directory explicitly. For Zencoder, the chat workspace is managed automatically — write artifacts into the active chat directory.
 
 ## Artifact Authority Model
 

@@ -33,7 +33,7 @@ Create a detailed implementation plan. Documented below.
 
 ### Group 1 — Shared File Fixes (Both Tools)
 
-#### [ ] Task 1.1 — Fill `security-review-template.md` `[SHARED]`
+#### [x] Task 1.1 — Fill `security-review-template.md` `[SHARED]`
 
 **File**: `docs/ai/templates/security-review-template.md`  
 **Action**: Add full template content (currently empty/0 bytes)  
@@ -44,7 +44,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 1.2 — Fix `ARTIFACTS_GUIDE.md` — tool-agnostic title and path `[SHARED]`
+#### [x] Task 1.2 — Fix `ARTIFACTS_GUIDE.md` — tool-agnostic title and path `[SHARED]`
 
 **File**: `docs/ai/general/ARTIFACTS_GUIDE.md`  
 **Action**: Update title from "ZenFlow Artifacts Guide" to "Task Artifacts Guide"; update default location section to clearly document both `.copilot/tasks/{task_id}/` (Copilot) and `.zenflow/tasks/{task_id}/` (Zencoder)  
@@ -53,7 +53,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 1.3 — Add modes to `MODE_MANIFEST.md` `[SHARED]`
+#### [x] Task 1.3 — Add modes to `MODE_MANIFEST.md` `[SHARED]`
 
 **File**: `docs/ai/general/MODE_MANIFEST.md`  
 **Action**: Three additive changes in a single task:
@@ -68,7 +68,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 1.4 — Create `Workflow 04 - Incident Investigation Workflow.md` `[SHARED]`
+#### [x] Task 1.4 — Create `Workflow 04 - Incident Investigation Workflow.md` `[SHARED]`
 
 **File**: `docs/ai/general/Workflow 04 - Incident Investigation Workflow.md`  
 **Action**: Create new neutral platform-agnostic workflow spec  
@@ -83,7 +83,7 @@ Create a detailed implementation plan. Documented below.
 
 ### Group 2 — Zencoder-Only Fixes
 
-#### [ ] Task 2.1 — Fix `incident-investigation.md` — path + structure `[ZENCODER ONLY]`
+#### [x] Task 2.1 — Fix `incident-investigation.md` — path + structure `[ZENCODER ONLY]`
 
 **File**: `.zenflow/workflows/incident-investigation.md`  
 **Action**: Two fixes in one task:
@@ -96,7 +96,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 2.2 — Add three new `.zencoder/rules/` files `[ZENCODER ONLY]`
+#### [x] Task 2.2 — Add three new `.zencoder/rules/` files `[ZENCODER ONLY]`
 
 **Files**:
 
@@ -118,7 +118,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 2.3 — Update `.zencoder/rules/repo.md` title `[ZENCODER ONLY]`
+#### [x] Task 2.3 — Update `.zencoder/rules/repo.md` title `[ZENCODER ONLY]`
 
 **File**: `.zencoder/rules/repo.md`  
 **Action**: Update the `# temp-nextjs-scaffold Information` title to reflect the actual production boilerplate identity (e.g., `# Next.js 16 Modular Monolith Boilerplate`)  
@@ -127,7 +127,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 2.4 — Update `docs/ai/zencoder/README.md` `[ZENCODER ONLY]`
+#### [x] Task 2.4 — Update `docs/ai/zencoder/README.md` `[ZENCODER ONLY]`
 
 **File**: `docs/ai/zencoder/README.md`  
 **Action**:
@@ -143,7 +143,7 @@ Create a detailed implementation plan. Documented below.
 
 ### Group 3 — Optional A: Copilot Prompt Parity
 
-#### [ ] Task 3.1 — Create `safe-refactor.prompt.md` `[COPILOT ONLY]`
+#### [x] Task 3.1 — Create `safe-refactor.prompt.md` `[COPILOT ONLY]`
 
 **File**: `.github/prompts/safe-refactor.prompt.md`  
 **Action**: Create new Copilot slash prompt for safe refactor tasks  
@@ -156,7 +156,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 3.2 — Create `security-incident.prompt.md` `[COPILOT ONLY]`
+#### [x] Task 3.2 — Create `security-incident.prompt.md` `[COPILOT ONLY]`
 
 **File**: `.github/prompts/security-incident.prompt.md`  
 **Action**: Create new Copilot slash prompt for security incident remediation  
@@ -169,7 +169,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 3.3 — Create `incident-investigation.prompt.md` `[COPILOT ONLY]`
+#### [x] Task 3.3 — Create `incident-investigation.prompt.md` `[COPILOT ONLY]`
 
 **File**: `.github/prompts/incident-investigation.prompt.md`  
 **Action**: Create new Copilot slash prompt for general incident investigation  
@@ -182,7 +182,7 @@ Create a detailed implementation plan. Documented below.
 
 ---
 
-#### [ ] Task 3.4 — Update `docs/ai/copilot/README.md` `[COPILOT ONLY]`
+#### [x] Task 3.4 — Update `docs/ai/copilot/README.md` `[COPILOT ONLY]`
 
 **File**: `docs/ai/copilot/README.md`  
 **Action**: Add the three new prompts to the "Available Slash Prompts" section with descriptions and links  
@@ -193,7 +193,7 @@ Create a detailed implementation plan. Documented below.
 
 ### Group 4 — Optional B: Thin Guide Enrichment
 
-#### [ ] Task 4.1 — Add "Example use cases" to `docs/ai/zencoder/01–09` `[ZENCODER ONLY]`
+#### [x] Task 4.1 — Add "Example use cases" to `docs/ai/zencoder/01–09` `[ZENCODER ONLY]`
 
 **Files**: `docs/ai/zencoder/01 - Architecture Guard Agent.md` through `09 - Task Brief Authoring.md`  
 **Action**: Add a short "Example use cases" section to each file with 3–5 concrete bullet examples of when to use that agent  
@@ -237,10 +237,28 @@ Within Group 4:
 After all groups complete:
 
 1. Run cross-reference check: no broken paths in any changed file
-2. Run Copilot isolation check: no `.zenflow/tasks/` references in `.github/` files
+2. Run Copilot isolation check: no `.zencoder/chats/` references in `.github/` files
 3. Run Zencoder isolation check: no `.copilot/tasks/` references in `.zencoder/` or `.zenflow/` files
 4. Confirm MODE_MANIFEST has 4 named workflow modes (safe-feature, safe-refactor, security-incident, incident-investigation)
-5. Confirm all 4 ZenFlow workflows use `.zenflow/tasks/{task_id}/`
+5. Confirm all 4 ZenFlow workflows use `.zencoder/chats/{chat_id}/` (Zencoder native path, auto-resolved)
 6. Confirm all 3 Zencoder rule files exist with `alwaysApply: true`
-7. Confirm `ARTIFACTS_GUIDE.md` documents both tool paths
+7. Confirm `ARTIFACTS_GUIDE.md` documents both tool paths correctly
 8. Confirm `security-review-template.md` is non-empty
+
+## Path Correction Log
+
+**Post-completion correction applied**: All references to `.zenflow/tasks/{task_id}` in Zencoder-specific files were incorrect.
+
+Zencoder's native artifact path is `.zencoder/chats/{chat_id}/` — resolved automatically from the active chat session.
+
+Files corrected:
+
+- `.zenflow/workflows/feature-development.md`
+- `.zenflow/workflows/safe-refactor.md`
+- `.zenflow/workflows/security-incident-workflow.md`
+- `.zenflow/workflows/incident-investigation.md`
+- `.zencoder/rules/agent-artifacts.md`
+- `.zencoder/rules/agent-delegation.md`
+- `docs/ai/general/ARTIFACTS_GUIDE.md`
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/zencoder/README.md`

@@ -56,4 +56,35 @@ describe('Action Audit', () => {
       expect.stringContaining('failed'),
     );
   });
+
+  it('should redact sensitive input fields on failure', async () => {
+    await logActionAudit({
+      actionName: 'testAction',
+      input: {
+        displayName: 'Ada',
+        _replayToken: 'ts|nonce',
+        password: 'super-secret',
+        nested: {
+          apiKey: 'abc123',
+        },
+      },
+      result: 'failure',
+      error: 'validation failed',
+      context: mockCtx,
+    });
+
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          displayName: 'Ada',
+          _replayToken: '[REDACTED]',
+          password: '[REDACTED]',
+          nested: {
+            apiKey: '[REDACTED]',
+          },
+        },
+      }),
+      expect.stringContaining('failed'),
+    );
+  });
 });

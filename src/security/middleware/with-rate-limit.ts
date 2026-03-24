@@ -14,6 +14,12 @@ let _logger:
   | ReturnType<ReturnType<typeof resolveEdgeLogger>['child']>
   | undefined;
 
+const E2E_RATE_LIMIT_BYPASS_API_PREFIXES = [
+  '/api/users',
+  '/api/me/provisioning-status',
+  '/api/logs',
+] as const;
+
 function getLogger() {
   if (_logger) return _logger;
   _logger = resolveEdgeLogger().child({
@@ -23,6 +29,12 @@ function getLogger() {
   });
   return _logger;
 }
+
+function isE2eRateLimitBypassRoute(pathname: string): boolean {
+  return E2E_RATE_LIMIT_BYPASS_API_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 /**
  * Enforces rate limiting on API routes.
  */
@@ -30,7 +42,10 @@ export function withRateLimit(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
 ) {
   return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
-    if (!ctx.isApi || ctx.isWebhook || env.E2E_ENABLED) {
+    const isE2eBypassRoute =
+      env.E2E_ENABLED && isE2eRateLimitBypassRoute(req.nextUrl.pathname);
+
+    if (!ctx.isApi || ctx.isWebhook || isE2eBypassRoute) {
       return handler(req, ctx);
     }
 

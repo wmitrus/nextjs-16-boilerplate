@@ -39,7 +39,7 @@
     "e2e:auth-matrix:phase6": "node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep @auth-matrix-phase6",
     "e2e:auth-matrix:phase7": "PLAYWRIGHT_SERVER_LOG_DIR=logs/playwright/auth-matrix-phase7 node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep @auth-matrix-phase7",
     "e2e:auth-matrix:ci": "pnpm build && E2E_BACKEND_MODE=container pnpm e2e:auth-matrix",
-    "e2e:scenario:single": "node scripts/e2e/run-scenario.mjs single",
+    "e2e:scenario:single": "node scripts/e2e/run-scenario.mjs single -- e2e/provisioning-runtime.spec.ts --project=chromium --grep-invert @auth-matrix",
     "e2e:scenario:personal": "node scripts/e2e/run-scenario.mjs personal",
     "e2e:scenario:org-provider": "node scripts/e2e/run-scenario.mjs org-provider",
     "e2e:scenario:org-db": "node scripts/e2e/run-scenario.mjs org-db",

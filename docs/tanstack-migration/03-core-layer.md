@@ -84,7 +84,7 @@ export const env = createEnv({
     SENTRY_ORG: z.string().optional(),
     SENTRY_PROJECT: z.string().optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
-    INTERNAL_API_KEY: z.string().min(1).default('demo-internal-key'),
+    INTERNAL_API_KEY: z.string().min(1).optional(),
     SECURITY_AUDIT_LOG_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(true),

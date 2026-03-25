@@ -245,7 +245,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Validation
+### [x] Step: Validation
 
 Run the validation plan defined in:
 
@@ -265,7 +265,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Final Security Check
+### [x] Step: Final Security Check
 
 <!-- agent: security-auth-agent -->
 

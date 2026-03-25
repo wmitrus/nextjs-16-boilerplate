@@ -2,7 +2,14 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `architecture-guard-agent`
+  - `security-auth-agent`
+  - `nextjs-runtime-agent`
+  - `validation-strategy-agent`
+  - `implementation-agent`
 
 ## Before Running
 
@@ -37,6 +44,8 @@ Output file:
 
 ### [ ] Step: Architecture Design
 
+<!-- agent: architecture-guard-agent -->
+
 Run **Architecture Guard Agent**.
 
 Use this template as the output structure guide:
@@ -59,6 +68,8 @@ Output file:
 {@artifacts_path}/architecture-review.md
 
 ### [ ] Step: Security Review (Conditional)
+
+<!-- agent: security-auth-agent -->
 
 If the feature touches:
 
@@ -91,6 +102,8 @@ Output file:
 {@artifacts_path}/security-review.md
 
 ### [ ] Step: Runtime Review (Conditional)
+
+<!-- agent: nextjs-runtime-agent -->
 
 If the feature touches:
 
@@ -148,6 +161,8 @@ Output file:
 
 ### [ ] Step: Validation Strategy
 
+<!-- agent: validation-strategy-agent -->
+
 Run **Validation Strategy Agent**.
 
 Use template:
@@ -167,6 +182,8 @@ Output file:
 {@artifacts_path}/validation-strategy.md
 
 ### [ ] Step: Implementation
+
+<!-- agent: implementation-agent -->
 
 Run **Implementation Agent**.
 
@@ -210,6 +227,8 @@ Output file:
 {@artifacts_path}/validation-report.md
 
 ### [ ] Step: Final Architecture Check
+
+<!-- agent: architecture-guard-agent -->
 
 Run **Architecture Guard Agent** again.
 

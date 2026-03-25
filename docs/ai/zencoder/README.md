@@ -50,6 +50,12 @@ ZenFlow workflows currently live in:
 
 Use workflows when you want step-by-step execution, artifact creation, and sequencing rules rather than a single specialist pass.
 
+Important execution note:
+
+- workflow steps may still run sequentially inside one active session when the tool does not support true UI-level agent switching
+- visible UI agent changes are tool-dependent, not guaranteed by artifact filenames alone
+- if you want to review each specialist output and switch agents manually between steps, state `Execution Control: manual-handoff` in the task brief or workflow input
+
 ### Neutral Workflow Spec
 
 Repository-neutral workflow specs currently live in:

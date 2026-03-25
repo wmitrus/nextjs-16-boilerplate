@@ -15,7 +15,7 @@ The logger is designed for:
 - environment-based log levels
 - redaction of sensitive fields on server
 - optional Logflare shipping per runtime
-- shared client payload builder for browser/edge
+- shared client payload builder and ingest transport for browser/edge
 
 ## Runtime behavior
 
@@ -31,11 +31,18 @@ Sensitive fields are redacted on the server logger.
 
 ### Edge
 
-Edge uses `pino` in browser mode with a custom transmit that forwards logs to the ingest endpoint.
+Edge uses an explicit edge-safe adapter:
+
+- writes structured logs to the local runtime console
+- forwards structured events to `POST /api/logs` when edge forwarding is enabled
+- avoids recursive forwarding for middleware activity on `/api/logs`
 
 ### Browser
 
-Browser uses `pino` in browser mode with a custom transmit that forwards logs to the ingest endpoint.
+Browser uses `pino` in browser mode:
+
+- keeps logs visible in the browser console
+- optionally forwards structured events to `POST /api/logs`
 
 ## Usage
 
@@ -74,12 +81,12 @@ Client:
 ### Routing matrix
 
 - **Server logs → Logflare** when `LOGFLARE_SERVER_ENABLED=true`.
-- **Edge logs → /api/logs → Logflare** when `LOGFLARE_EDGE_ENABLED=true`.
-- **Browser logs → /api/logs → Logflare** when `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED=true`.
+- **Edge logs → local console + `/api/logs` → server logger sinks** when `LOGFLARE_EDGE_ENABLED=true`.
+- **Browser logs → browser console + `/api/logs` → server logger sinks** when `NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED=true`.
 
-The ingest endpoint (`src/app/api/logs/route.ts`) validates payloads with Zod and ships to Logflare using server credentials.
-It returns 400 for invalid payloads and warns once when credentials are missing while the runtime flag is enabled.
-If `LOG_INGEST_SECRET` is set, edge logs must include the `x-log-ingest-secret` header.
+The ingest endpoint (`src/app/api/logs/route.ts`) validates payloads with Zod, sanitizes context, and re-emits accepted events through the server logger using server-side credentials and sink configuration.
+If `LOG_INGEST_SECRET` is set, edge logs must include the `x-log-ingest-secret` header to retain trusted edge classification.
+Logflare shipping for ingested browser and edge events still depends on the server sink being enabled with valid Logflare credentials.
 
 ## Ingest endpoint
 
@@ -91,7 +98,7 @@ If `LOG_INGEST_SECRET` is set, edge logs must include the `x-log-ingest-secret` 
 - `context`: object
 - `source`: `browser|edge`
 
-If Logflare is disabled for the specific source, the endpoint returns 204 without forwarding.
+Accepted ingest events are promoted into the server logger. The server logger then decides whether they go to console, file, Logflare, or any combination of those sinks.
 
 ## Recommended with Sentry
 
@@ -106,4 +113,5 @@ When Sentry is integrated for error management, keep Logflare focused on:
 
 - HTTP request logging is not automatic yet; add a wrapper or middleware if needed.
 - Client logging uses `sendBeacon` with a `fetch` fallback to avoid blocking navigation.
+- Edge and browser logs share the same ingest payload contract, but only the server logger owns persistent sink delivery.
 - Ingest protection (rate limiting/auth) should be added before production deployment.

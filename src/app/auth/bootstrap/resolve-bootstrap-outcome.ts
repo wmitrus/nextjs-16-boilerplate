@@ -1,7 +1,6 @@
 import { AUTH, PROVISIONING } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { UserRepository } from '@/core/contracts/user';
-import { PGliteWasmAbortError } from '@/core/db/drivers/create-pglite';
 import { env } from '@/core/env';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -71,18 +70,6 @@ export async function resolveBootstrapOutcome(
 
     if (err instanceof TenantContextRequiredError) {
       return { type: 'error', error: 'tenant_config' };
-    }
-
-    if (
-      err instanceof PGliteWasmAbortError ||
-      (err instanceof Error &&
-        (err.constructor?.name === 'RuntimeError' ||
-          /aborted\(\)/i.test(err.message) ||
-          (err as NodeJS.ErrnoException).code === 'ENOENT' ||
-          (err as NodeJS.ErrnoException).code === 'EPERM' ||
-          (err as NodeJS.ErrnoException).code === 'EACCES'))
-    ) {
-      return { type: 'error', error: 'db_error' };
     }
 
     return { type: 'error', error: 'db_error' };

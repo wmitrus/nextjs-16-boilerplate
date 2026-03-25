@@ -2,7 +2,10 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `architecture-guard-agent`
 
 ## Before Running
 
@@ -37,6 +40,8 @@ For every workflow step:
 
 ### [ ] Step: Lint Intake
 
+<!-- agent: architecture-guard-agent -->
+
 Define the lint scope and inspection plan.
 
 Output:
@@ -52,6 +57,8 @@ Include:
 ---
 
 ### [ ] Step: Structure Inspection
+
+<!-- agent: architecture-guard-agent -->
 
 Run **Architecture Guard Agent** in read-only mode.
 
@@ -72,6 +79,8 @@ Check for:
 ---
 
 ### [ ] Step: Contract and Provider Audit
+
+<!-- agent: architecture-guard-agent -->
 
 Inspect core contracts, DI/composition, auth provider isolation, and security placement.
 
@@ -94,6 +103,8 @@ Check for:
 ---
 
 ### [ ] Step: Findings Classification
+
+<!-- agent: architecture-guard-agent -->
 
 Classify all findings from Structure Inspection and Contract Audit.
 
@@ -137,6 +148,8 @@ Include for each finding:
 
 ### [ ] Step: Docs vs Code Drift Check
 
+<!-- agent: architecture-guard-agent -->
+
 Compare documentation claims against live code.
 
 Output:
@@ -157,6 +170,8 @@ Classify each drift as:
 ---
 
 ### [ ] Step: Output Report
+
+<!-- agent: architecture-guard-agent -->
 
 Consolidate all findings into a single architecture lint report.
 

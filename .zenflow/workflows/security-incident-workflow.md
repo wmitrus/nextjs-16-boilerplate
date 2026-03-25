@@ -2,7 +2,14 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `security-auth-agent`
+  - `nextjs-runtime-agent`
+  - `architecture-guard-agent`
+  - `validation-strategy-agent`
+  - `implementation-agent`
 
 ## Before Running
 
@@ -16,6 +23,18 @@ Repository note:
 In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
 Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
 Do not treat the absence of `middleware.ts` as a finding.
+
+## Execution Control
+
+This workflow supports two execution modes:
+
+- `straight-through` — continue through the required specialist roles in one session when the active tool does not support true UI-level agent switching
+- `manual-handoff` — stop after each specialist artifact or major phase and wait for operator confirmation or manual agent change before continuing
+
+Use `manual-handoff` when the operator explicitly wants visible agent changes or per-step approval in the UI.
+
+Artifact filenames prove that a workflow step produced an output.
+They do not, by themselves, prove that the tool visibly switched the active agent in the UI.
 
 ## Workflow Steps
 
@@ -36,13 +55,17 @@ Output file:
 
 {@artifacts_path}/incident-intake.md
 
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
 ### [ ] Step: Security Review
+
+<!-- agent: security-auth-agent -->
 
 Run **Security/Auth Agent**.
 
 Use this template as the output structure guide:
 
-`docs/ai/templates/security-review-template.md`
+`docs/ai/templates/specialist-summaries/02 - Security & Auth - Summary Template.md`
 
 The agent must assess:
 
@@ -58,9 +81,13 @@ The agent must assess:
 
 Output file:
 
-{@artifacts_path}/security-review.md
+{@artifacts_path}/02 - Security & Auth - Summary.md
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Runtime Review (Conditional)
+
+<!-- agent: nextjs-runtime-agent -->
 
 If the incident touches or may affect:
 
@@ -77,7 +104,7 @@ Run **Next.js Runtime Agent**.
 
 Use this template as the output structure guide:
 
-`docs/ai/templates/runtime-review-template.md`
+`docs/ai/templates/specialist-summaries/03 - Next.js Runtime - Summary Template.md`
 
 The agent must assess:
 
@@ -94,9 +121,13 @@ The agent must assess:
 
 Output file:
 
-{@artifacts_path}/runtime-review.md
+{@artifacts_path}/03 - Next.js Runtime - Summary.md
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Architecture Review (Conditional)
+
+<!-- agent: architecture-guard-agent -->
 
 If the proposed remediation may affect:
 
@@ -111,7 +142,7 @@ Run **Architecture Guard Agent**.
 
 Use this template as the output structure guide:
 
-`docs/ai/templates/architecture-review-template.md`
+`docs/ai/templates/specialist-summaries/01 - Architecture Guard - Summary Template.md`
 
 The agent must assess:
 
@@ -128,7 +159,9 @@ The agent must assess:
 
 Output file:
 
-{@artifacts_path}/architecture-review.md
+{@artifacts_path}/01 - Architecture Guard - Summary.md
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Constraints Summary
 
@@ -153,13 +186,17 @@ Output file:
 
 {@artifacts_path}/constraints.md
 
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
 ### [ ] Step: Validation Strategy
+
+<!-- agent: validation-strategy-agent -->
 
 Run **Validation Strategy Agent**.
 
 Use this template as the output structure guide:
 
-`docs/ai/templates/validation-template.md`
+`docs/ai/templates/specialist-summaries/05 - Validation Strategy - Summary Template.md`
 
 The agent must determine:
 
@@ -171,20 +208,28 @@ The agent must determine:
 
 Output file:
 
-{@artifacts_path}/validation-strategy.md
+{@artifacts_path}/05 - Validation Strategy - Summary.md
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Implementation
 
+<!-- agent: implementation-agent -->
+
 Run **Implementation Agent**.
+
+Use this template as the output structure guide:
+
+`docs/ai/templates/specialist-summaries/04 - Implementation Agent - Summary Template.md`
 
 Inputs to use:
 
 - `{@artifacts_path}/incident-intake.md`
-- `{@artifacts_path}/security-review.md`
-- `{@artifacts_path}/runtime-review.md` (if present)
-- `{@artifacts_path}/architecture-review.md` (if present)
+- `{@artifacts_path}/02 - Security & Auth - Summary.md`
+- `{@artifacts_path}/03 - Next.js Runtime - Summary.md` (if present)
+- `{@artifacts_path}/01 - Architecture Guard - Summary.md` (if present)
 - `{@artifacts_path}/constraints.md`
-- `{@artifacts_path}/validation-strategy.md`
+- `{@artifacts_path}/05 - Validation Strategy - Summary.md`
 
 The agent must:
 
@@ -196,13 +241,15 @@ The agent must:
 
 Output file:
 
-{@artifacts_path}/implementation-report.md
+{@artifacts_path}/04 - Implementation Agent - Summary.md
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Validation
 
 Run the validation plan defined in:
 
-`{@artifacts_path}/validation-strategy.md`
+`{@artifacts_path}/05 - Validation Strategy - Summary.md`
 
 Document:
 
@@ -216,7 +263,11 @@ Output file:
 
 {@artifacts_path}/validation-report.md
 
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
 ### [ ] Step: Final Security Check
+
+<!-- agent: security-auth-agent -->
 
 Run **Security/Auth Agent** again if the fix touched:
 
@@ -232,6 +283,10 @@ The agent should confirm:
 - no obvious new auth/security regression was introduced
 - residual risks are explicitly named
 
-Output file:
+Artifact to update:
 
-{@artifacts_path}/security-final.md
+`{@artifacts_path}/02 - Security & Auth - Summary.md`
+
+Do not create a second security-specific artifact for this recheck.
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.

@@ -1,5 +1,14 @@
 # Zencoder Agent Quick Start
 
+> **IMPORTANT — THIS DIRECTORY CONTAINS DESCRIPTION GUIDES, NOT AGENT PROMPTS.**
+>
+> The files in `docs/ai/zencoder/` explain what each agent does and when to use it.
+> They do NOT control agent behavior.
+>
+> **The real Zencoder prompt sources are in `docs/ai/general/`.**
+> All rule changes, security rules, and behavioral updates MUST be applied to the `docs/ai/general/*.md` files.
+> Changes made only to `docs/ai/zencoder/` files have NO effect on how agents behave.
+
 This directory is the quick-start guide for the repository's Zencoder setup.
 
 Use it when you want to understand which repo-hosted prompt source or ZenFlow workflow to use before working in the repo.

@@ -2,7 +2,10 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `playwright-e2e-agent`
 
 ## Before Running
 
@@ -41,6 +44,8 @@ For every workflow step:
 
 ### [ ] Step: Verification Intake
 
+<!-- agent: playwright-e2e-agent -->
+
 Collect task context, scenario checklist, affected paths, and environment notes.
 
 If an active task workspace exists, read: `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present.
@@ -61,6 +66,8 @@ Include:
 
 ### [ ] Step: Scenario Scope Definition
 
+<!-- agent: playwright-e2e-agent -->
+
 Identify the smallest Playwright scope that covers the risk.
 
 Output:
@@ -75,6 +82,8 @@ Include:
 ---
 
 ### [ ] Step: Precondition Check
+
+<!-- agent: playwright-e2e-agent -->
 
 Confirm the environment is ready.
 
@@ -95,6 +104,8 @@ If Blocked: stop the workflow and report the block. Do not proceed to Playwright
 
 ### [ ] Step: Playwright Execution
 
+<!-- agent: playwright-e2e-agent -->
+
 Run the identified scenarios using the minimum effective Playwright scope.
 
 Output:
@@ -112,6 +123,8 @@ Include:
 
 ### [ ] Step: Evidence Collection
 
+<!-- agent: playwright-e2e-agent -->
+
 Produce a structured evidence artifact.
 
 Output:
@@ -126,6 +139,8 @@ Include:
 ---
 
 ### [ ] Step: Gap Report
+
+<!-- agent: playwright-e2e-agent -->
 
 Explicitly state all deferred or blocked scenarios.
 

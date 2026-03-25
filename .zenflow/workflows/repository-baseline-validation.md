@@ -2,7 +2,11 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `validation-strategy-agent`
+  - `architecture-guard-agent`
 
 ## Before Running
 
@@ -53,6 +57,8 @@ Include:
 
 ### [ ] Step: Validation Posture Audit
 
+<!-- agent: validation-strategy-agent -->
+
 Run **Validation Strategy Agent** to review the full validation stack.
 
 Output:
@@ -70,6 +76,8 @@ Include tier-by-tier assessment:
 ---
 
 ### [ ] Step: Architecture Boundary Audit
+
+<!-- agent: architecture-guard-agent -->
 
 Run **Architecture Guard Agent** in read-only lint mode to identify areas lacking validation coverage.
 

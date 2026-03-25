@@ -1,5 +1,24 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import path from 'node:path';
+
+function assertPathWithinBase(resolvedPath, baseDir) {
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  const expectedPrefix = normalizedBase.endsWith(path.sep)
+    ? normalizedBase
+    : normalizedBase + path.sep;
+  if (
+    normalizedPath !== normalizedBase &&
+    !normalizedPath.startsWith(expectedPrefix)
+  ) {
+    throw new Error(
+      `Security: file path escapes the allowed directory.\n` +
+        `  Allowed base : ${normalizedBase}\n` +
+        `  Resolved path: ${normalizedPath}\n`,
+    );
+  }
+}
 
 const PODMAN_CANDIDATES = [
   { bin: 'podman-compose', prefix: [] },
@@ -65,6 +84,8 @@ function pickComposeCommand() {
 function pickComposeFile() {
   const explicitFile = process.env.DB_COMPOSE_FILE?.trim();
   if (explicitFile) {
+    assertPathWithinBase(path.resolve(explicitFile), process.cwd());
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path validated by assertPathWithinBase above
     if (!existsSync(explicitFile)) {
       throw new Error(
         `[compose-db-local] DB_COMPOSE_FILE points to a missing file: ${explicitFile}`,
@@ -73,9 +94,11 @@ function pickComposeFile() {
     return explicitFile;
   }
 
+  /* eslint-disable security/detect-non-literal-fs-filename -- candidate values are statically typed to three hardcoded literal strings in COMPOSE_FILE_CANDIDATES */
   const detectedFile = COMPOSE_FILE_CANDIDATES.find((candidate) =>
     existsSync(candidate),
   );
+  /* eslint-enable security/detect-non-literal-fs-filename */
 
   if (!detectedFile) {
     throw new Error(

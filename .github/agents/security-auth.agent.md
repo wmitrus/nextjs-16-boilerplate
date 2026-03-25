@@ -116,6 +116,8 @@ Always flag these if present:
 - secrets exposed to client bundles
 - logs containing tokens, session identifiers, or unnecessary private user data
 - provider SDK usage inside domain or core contracts
+- dynamically constructed file paths used in `fs` operations without `path.resolve()` and base-directory confinement check (CWE-22 — path traversal)
+- environment-variable-sourced or user-controlled URLs passed directly to `fetch()` or any HTTP client without protocol and hostname allowlist validation (CWE-918 — SSRF)
 
 ## Hard Security Rules
 
@@ -131,6 +133,77 @@ Never approve a design that relies on:
 - route handlers returning tenant- or user-sensitive data without explicit checks
 - cache behavior that could leak user- or tenant-scoped data
 - logs or telemetry that expose secrets, tokens, or unnecessary private data
+- upstream allowlist validation of CLI args or config values as a substitute for point-of-use guards in file path construction or HTTP calls
+
+## Script and Tooling Security Rules
+
+Security rules apply to `scripts/` and tooling code in addition to application code.
+
+When reviewing or writing Node.js scripts (e2e runners, db scripts, setup scripts, any files in `scripts/`):
+
+**File system safety (CWE-22 — Path Traversal):**
+
+- never accept `fs.readFileSync`, `fs.writeFileSync`, `fs.existsSync`, `fs.mkdirSync`, `fs.rmSync`, or equivalent called with a dynamically constructed path that has not been canonicalized and confined
+- always resolve with `path.resolve()` first
+- always assert the resolved path starts with the expected base directory using a `path.sep`-aware prefix check
+- confinement checks must be at the point of file access — not only at the upstream caller
+- throw an explicit error on confinement failure; never silently return
+
+Canonical path confinement guard pattern:
+
+```javascript
+function assertPathWithinBase(resolvedPath, baseDir) {
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  const expectedPrefix = normalizedBase.endsWith(path.sep)
+    ? normalizedBase
+    : normalizedBase + path.sep;
+  if (
+    normalizedPath !== normalizedBase &&
+    !normalizedPath.startsWith(expectedPrefix)
+  ) {
+    throw new Error(
+      `Security: file path escapes the allowed directory.\n` +
+        `  Allowed base : ${normalizedBase}\n` +
+        `  Resolved path: ${normalizedPath}\n`,
+    );
+  }
+}
+```
+
+**HTTP/fetch safety (CWE-918 — SSRF):**
+
+- never pass an environment-variable-sourced or user-controlled URL directly to `fetch()`, `axios`, or any HTTP client without validation
+- always parse with `new URL()` and validate both protocol and hostname before making the request
+- for E2E and dev scripts targeting local servers, restrict hostname to `localhost`, `127.0.0.1`, `::1`
+- throw an explicit error on validation failure; never silently skip the check
+
+Canonical SSRF guard pattern for E2E/local scripts:
+
+```javascript
+const ALLOWED_LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+function assertSafeLocalUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Security: invalid URL: ${url}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Security: URL must use http or https protocol: ${url}`);
+  }
+  if (!ALLOWED_LOCAL_HOSTNAMES.has(parsed.hostname)) {
+    throw new Error(
+      `Security: URL must target localhost only.\n` +
+        `  Received: ${parsed.hostname}\n` +
+        `  Allowed : ${[...ALLOWED_LOCAL_HOSTNAMES].join(', ')}\n`,
+    );
+  }
+}
+```
+
+**General principle:** upstream allowlist validation of CLI args or env vars does not substitute for point-of-use guards in path construction or HTTP calls. Defense in depth requires guards at both the intake point and the point of file/network access.
 
 ## Runtime Responsibilities
 

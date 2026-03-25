@@ -32,10 +32,13 @@ const ROOT_DIR = process.cwd();
 const ENV_DIR = path.resolve(ROOT_DIR, 'scripts/e2e/env');
 
 function parseEnvFile(filePath) {
+  assertPathWithinBase(filePath, ROOT_DIR);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   if (!fs.existsSync(filePath)) {
     return {};
   }
 
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const content = fs.readFileSync(filePath, 'utf8');
   const env = {};
 
@@ -56,6 +59,11 @@ function parseEnvFile(filePath) {
       .trim()
       .replace(/^['"]|['"]$/g, '');
 
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
+
+    // eslint-disable-next-line security/detect-object-injection
     env[key] = value;
   }
 
@@ -110,6 +118,10 @@ export function loadScenarioEnv({
 export function applyEnv(envMap, target = process.env) {
   for (const [key, value] of Object.entries(envMap)) {
     if (value !== undefined) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        continue;
+      }
+      // eslint-disable-next-line security/detect-object-injection
       target[key] = value;
     }
   }

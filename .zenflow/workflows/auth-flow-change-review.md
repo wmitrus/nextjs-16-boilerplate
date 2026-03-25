@@ -2,7 +2,13 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `security-auth-agent`
+  - `nextjs-runtime-agent`
+  - `architecture-guard-agent`
+  - `playwright-e2e-agent`
 
 ## Before Running
 
@@ -54,6 +60,8 @@ Include:
 
 ### [ ] Step: Auth Surface Analysis
 
+<!-- agent: security-auth-agent -->
+
 Run **Security/Auth Agent**.
 
 Read before analysis:
@@ -77,6 +85,8 @@ Include:
 ---
 
 ### [ ] Step: Runtime Behavior Review (Conditional)
+
+<!-- agent: nextjs-runtime-agent -->
 
 Run this step only if the change touches:
 
@@ -104,6 +114,8 @@ Include:
 ---
 
 ### [ ] Step: Architecture Impact Review (Conditional)
+
+<!-- agent: architecture-guard-agent -->
 
 Run this step only if the change may affect:
 
@@ -154,6 +166,8 @@ Include:
 ---
 
 ### [ ] Step: Playwright E2E Verification (Conditional)
+
+<!-- agent: playwright-e2e-agent -->
 
 Run this step only if browser-level evidence is required to verify matrix scenarios that cannot be confirmed through code review alone.
 

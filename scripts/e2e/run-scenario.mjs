@@ -89,6 +89,29 @@ function getRepoRoot() {
   return process.cwd();
 }
 
+const ALLOWED_E2E_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+function assertSafeLocalUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Security: invalid URL for E2E reachability check: ${url}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(
+      `Security: URL must use http or https protocol for E2E reachability check: ${url}`,
+    );
+  }
+  if (!ALLOWED_E2E_HOSTNAMES.has(parsed.hostname)) {
+    throw new Error(
+      `Security: URL must target localhost only for E2E reachability checks.\n` +
+        `  Received: ${parsed.hostname}\n` +
+        `  Allowed : ${[...ALLOWED_E2E_HOSTNAMES].join(', ')}\n`,
+    );
+  }
+}
+
 function findRepoNextDevProcesses(repoRoot) {
   const result = spawnSync('ps', ['-eo', 'pid=,ppid=,args='], {
     encoding: 'utf8',
@@ -207,6 +230,7 @@ async function terminateProcesses(pids) {
 }
 
 async function isBaseUrlReachable(baseUrl) {
+  assertSafeLocalUrl(baseUrl);
   try {
     const response = await fetch(baseUrl, {
       redirect: 'manual',

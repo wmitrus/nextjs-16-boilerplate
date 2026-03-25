@@ -652,6 +652,22 @@ export class DrizzleProvisioningService implements ProvisioningService {
   }
 }
 
+function assertCrossProviderLinkingAllowed(
+  crossProviderEmailLinking: 'disabled' | 'verified-only',
+  emailVerified: boolean | undefined,
+): void {
+  if (crossProviderEmailLinking === 'disabled') {
+    throw new CrossProviderLinkingNotAllowedError(
+      'CROSS_PROVIDER_EMAIL_LINKING=disabled. Cannot auto-link account via email.',
+    );
+  }
+  if (emailVerified !== true) {
+    throw new CrossProviderLinkingNotAllowedError(
+      'Cross-provider account linking requires emailVerified=true from the auth provider.',
+    );
+  }
+}
+
 /**
  * Resolves or creates a user record with explicit cross-provider linking policy enforcement.
  *
@@ -774,16 +790,10 @@ async function resolveOrCreateUser(
     if (isRealEmail) {
       // Cross-provider linking scenario: a real email already owned by another account.
       // Apply explicit policy gate — only link when email is verified and policy allows it.
-      if (crossProviderEmailLinking === 'disabled') {
-        throw new CrossProviderLinkingNotAllowedError(
-          'CROSS_PROVIDER_EMAIL_LINKING=disabled. Cannot auto-link account via email.',
-        );
-      }
-      if (emailVerified !== true) {
-        throw new CrossProviderLinkingNotAllowedError(
-          'Cross-provider account linking requires emailVerified=true from the auth provider.',
-        );
-      }
+      assertCrossProviderLinkingAllowed(
+        crossProviderEmailLinking,
+        emailVerified,
+      );
     }
     // Either linking is allowed (real email, verified) or it is a concurrent
     // provisioning call for the same user via the fallback email path.
@@ -815,16 +825,10 @@ async function resolveOrCreateUser(
     // We must apply the same policy gate here — the check in the if-branch above
     // did not run because our SELECT saw no existing user at that point.
     if (resolved[0].id !== candidateId && isRealEmail) {
-      if (crossProviderEmailLinking === 'disabled') {
-        throw new CrossProviderLinkingNotAllowedError(
-          'CROSS_PROVIDER_EMAIL_LINKING=disabled. Cannot auto-link account via email.',
-        );
-      }
-      if (emailVerified !== true) {
-        throw new CrossProviderLinkingNotAllowedError(
-          'Cross-provider account linking requires emailVerified=true from the auth provider.',
-        );
-      }
+      assertCrossProviderLinkingAllowed(
+        crossProviderEmailLinking,
+        emailVerified,
+      );
     }
 
     internalUserId = resolved[0].id;

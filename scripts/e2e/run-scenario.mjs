@@ -28,6 +28,7 @@ function parseArgs(argv) {
   const forwarded = [];
 
   for (let index = 0; index < rest.length; index += 1) {
+    // eslint-disable-next-line security/detect-object-injection -- numeric index into a bounded rest array
     const value = rest[index];
 
     if (value === '--variant') {
@@ -209,8 +210,8 @@ async function terminateProcesses(pids) {
 
     try {
       process.kill(pid, 'SIGTERM');
-    } catch {
-      // Ignore already-exited processes.
+    } catch (_e) {
+      // Ignore EPERM/ESRCH for already-exited processes.
     }
   }
 
@@ -223,8 +224,8 @@ async function terminateProcesses(pids) {
 
     try {
       process.kill(pid, 'SIGKILL');
-    } catch {
-      // Ignore already-exited processes.
+    } catch (_e) {
+      // Ignore EPERM/ESRCH for already-exited processes.
     }
   }
 }
@@ -337,8 +338,10 @@ function applySharedRuntimeEnv(env, scenario, variant) {
 }
 
 function preparePgliteDatabase(env, scenario, variant) {
+  // databasePath is validated by resolveScenarioDatabasePath → assertPathWithinBase(path, data/e2e/)
   const databasePath = resolveScenarioDatabasePath({ scenario, variant });
   fs.rmSync(databasePath, { recursive: true, force: true });
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path pre-validated by resolveScenarioDatabasePath above
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
   run('pnpm', ['db:migrate:dev'], env);

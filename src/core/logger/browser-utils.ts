@@ -3,6 +3,7 @@ import type { Level, LogEvent } from 'pino';
 import { env } from '@/core/env';
 
 import { buildClientLogPayload } from './client-transport';
+import { postClientLogPayload } from './ingest-transport';
 
 /**
  * Browser-safe transport that forwards logs to the app ingest endpoint.
@@ -22,28 +23,10 @@ export function createLogflareBrowserTransport() {
             defaultMessage: 'browser log',
           });
 
-          const body = JSON.stringify(payload);
-
-          if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-            try {
-              const blob = new Blob([body], { type: 'application/json' });
-              navigator.sendBeacon('/api/logs', blob);
-            } catch (_err) {
-              // sendBeacon errors are non-critical
-            }
-            return;
-          }
-
-          if (typeof fetch !== 'undefined') {
-            void fetch('/api/logs', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body,
-              keepalive: true,
-            }).catch(() => {
-              // Silently ignore logging failures in the browser
-            });
-          }
+          postClientLogPayload(payload, {
+            endpoint: '/api/logs',
+            preferBeacon: true,
+          });
         } catch (_err) {
           // Prevent any errors in logging from breaking the app
         }

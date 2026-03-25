@@ -41,6 +41,7 @@ export function checkClerkRedirectUrls(effectiveEnv, nodeEnv = 'development') {
 
   const warnings = [];
   for (const key of CLERK_REDIRECT_VARS) {
+    // eslint-disable-next-line security/detect-object-injection -- key iterates over CLERK_REDIRECT_VARS, a hardcoded const array of known strings
     const value = effectiveEnv[key];
     if (value !== undefined && value !== EXPECTED_BOOTSTRAP_PATH) {
       warnings.push(`  ${key}=${value} (expected ${EXPECTED_BOOTSTRAP_PATH})`);

@@ -338,6 +338,16 @@ Hard rules:
 - do not log sensitive tokens, secrets, or private user data
 - do not assume internal routes are safe without checks
 - do not expose detailed internal errors to users unless explicitly intended
+- do not use dynamically constructed file paths in `fs` operations without first resolving with `path.resolve()` and asserting the path is within an expected base directory (CWE-22 — path traversal)
+- do not pass environment-variable-sourced or user-controlled URLs to `fetch()` or any HTTP client without parsing with `new URL()` and validating protocol and hostname (CWE-918 — SSRF)
+- upstream allowlist validation of CLI args or config values does not substitute for point-of-use guards in file path construction or HTTP calls
+
+Script and tooling security:
+
+- security rules apply to `scripts/` and tooling code, not just application code
+- for Node.js scripts that read files at dynamic paths: use `assertPathWithinBase(resolvedPath, baseDir)` — resolve both paths, check `normalizedPath.startsWith(normalizedBase + path.sep)`, throw on violation
+- for Node.js scripts that make HTTP requests to configurable URLs: use `assertSafeLocalUrl(url)` — parse with `new URL()`, require `http:` or `https:`, restrict hostname to `localhost`/`127.0.0.1`/`::1`, throw on violation
+- see canonical patterns in `docs/ai/general/02 - Security & Auth Agent.md` SCRIPT AND TOOLING SECURITY RULES section
 
 If you see a security smell:
 

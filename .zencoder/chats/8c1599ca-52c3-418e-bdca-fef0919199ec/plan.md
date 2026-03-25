@@ -212,7 +212,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Implementation
+### [x] Step: Implementation
 
 <!-- agent: implementation-agent -->
 

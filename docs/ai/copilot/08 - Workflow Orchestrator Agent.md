@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT.**
+> The real Copilot agent that controls actual behavior is:
+> **`.github/agents/workflow-orchestrator.agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Copilot agent behaves.
+
 ## What it does
 
-Real agent file: [workflow-orchestrator.agent.md](../../../.github/agents/workflow-orchestrator.agent.md)
+Real agent file: [`.github/agents/workflow-orchestrator.agent.md`](../../../.github/agents/workflow-orchestrator.agent.md)
 
 - Defines `08 - Workflow Orchestrator` as the process owner for multi-step Copilot tasks
 - Focuses on:

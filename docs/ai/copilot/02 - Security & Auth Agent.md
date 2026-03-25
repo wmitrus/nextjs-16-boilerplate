@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT.**
+> The real Copilot agent that controls actual behavior is:
+> **`.github/agents/security-auth.agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Copilot agent behaves.
+
 ## What it does
 
-Real agent file: [security-auth.agent.md](../../../.github/agents/security-auth.agent.md)
+Real agent file: [`.github/agents/security-auth.agent.md`](../../../.github/agents/security-auth.agent.md)
 
 - Specializes in auth and security review for this repository
 - Focuses on:

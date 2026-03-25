@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT.**
+> The real Copilot agent that controls actual behavior is:
+> **`.github/agents/nextjs-runtime.agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Copilot agent behaves.
+
 ## What it does
 
-Real agent file: [nextjs-runtime.agent.md](../../../.github/agents/nextjs-runtime.agent.md)
+Real agent file: [`.github/agents/nextjs-runtime.agent.md`](../../../.github/agents/nextjs-runtime.agent.md)
 
 - Specializes in Next.js runtime correctness for this repository
 - Focuses on:

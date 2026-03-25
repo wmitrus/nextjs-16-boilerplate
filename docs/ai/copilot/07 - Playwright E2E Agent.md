@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT.**
+> The real Copilot agent that controls actual behavior is:
+> **`.github/agents/playwright-e2e.agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Copilot agent behaves.
+
 ## What it does
 
-Real agent file: [playwright-e2e.agent.md](../../../.github/agents/playwright-e2e.agent.md)
+Real agent file: [`.github/agents/playwright-e2e.agent.md`](../../../.github/agents/playwright-e2e.agent.md)
 
 - Defines `07 - Playwright E2E` as a real-browser verification specialist for this repository
 - Focuses on:

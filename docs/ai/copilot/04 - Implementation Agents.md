@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT.**
+> The real Copilot agent that controls actual behavior is:
+> **`.github/agents/implementation-agent.agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Copilot agent behaves.
+
 ## What it does
 
-Real agent file: [implementation-agent.agent.md](../../../.github/agents/implementation-agent.agent.md)
+Real agent file: [`.github/agents/implementation-agent.agent.md`](../../../.github/agents/implementation-agent.agent.md)
 
 - Specializes in making code changes after the design constraints are already known
 - Focuses on:
@@ -20,6 +26,15 @@ Real agent file: [implementation-agent.agent.md](../../../.github/agents/impleme
 - When the architecture, security, runtime, and validation constraints are already clear
 - When the task is to make the smallest safe patch rather than re-decide the design
 - When code and tests need to be updated under already-approved guardrails
+
+## Script and Tooling Security
+
+When implementing or modifying any `scripts/` file:
+
+- never use dynamically constructed file paths in `fs` operations without `path.resolve()` + base-directory confinement check (CWE-22)
+- never pass env-var-sourced URLs to `fetch()` without protocol + hostname validation (CWE-918)
+- upstream CLI arg allowlist validation does not replace point-of-use guards
+- see canonical patterns in `docs/ai/general/02 - Security & Auth Agent.md` SCRIPT AND TOOLING SECURITY RULES
 
 ## Auth-Flow Note
 

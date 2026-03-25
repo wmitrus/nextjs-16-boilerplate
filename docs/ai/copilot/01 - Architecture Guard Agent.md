@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT.**
+> The real Copilot agent that controls actual behavior is:
+> **`.github/agents/architecture-guard.agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Copilot agent behaves.
+
 ## What it does
 
-Real agent file: [architecture-guard.agent.md](../../../.github/agents/architecture-guard.agent.md)
+Real agent file: [`.github/agents/architecture-guard.agent.md`](../../../.github/agents/architecture-guard.agent.md)
 
 - Acts as the strict architecture reviewer for this repository
 - Focuses on modular-monolith boundaries, dependency direction, DI discipline, security placement, runtime-boundary correctness, and docs-vs-code drift

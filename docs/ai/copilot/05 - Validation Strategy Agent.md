@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT.**
+> The real Copilot agent that controls actual behavior is:
+> **`.github/agents/validation-strategy.agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Copilot agent behaves.
+
 ## What it does
 
-Real agent file: [validation-strategy.agent.md](../../../.github/agents/validation-strategy.agent.md)
+Real agent file: [`.github/agents/validation-strategy.agent.md`](../../../.github/agents/validation-strategy.agent.md)
 
 - Defines `05 - Validation Strategy` as a read-only specialist for:
   - repository-wide validation posture reviews

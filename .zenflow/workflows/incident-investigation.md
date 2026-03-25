@@ -2,7 +2,14 @@
 
 ## Configuration
 
-- **Artifacts Path**: {@artifacts_path} → `.zencoder/chats/{chat_id}`
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `debug-investigation-agent`
+  - `nextjs-runtime-agent`
+  - `architecture-guard-agent`
+  - `validation-strategy-agent`
+  - `implementation-agent`
 
 ---
 
@@ -37,6 +44,8 @@ For every workflow step:
 
 ### [ ] Step: Incident Intake
 
+<!-- agent: debug-investigation-agent -->
+
 Collect the initial report and environment details.
 
 Output:
@@ -52,6 +61,8 @@ Include:
 ---
 
 ### [ ] Step: Flow Trace Investigation
+
+<!-- agent: debug-investigation-agent -->
 
 Trace the execution path through the system.
 
@@ -70,6 +81,8 @@ Include:
 
 ### [ ] Step: Runtime Behavior Review
 
+<!-- agent: nextjs-runtime-agent -->
+
 Analyze runtime behavior and framework interaction.
 
 Output:
@@ -87,6 +100,8 @@ Focus on:
 
 ### [ ] Step: Architecture Impact Review
 
+<!-- agent: architecture-guard-agent -->
+
 Verify that the suspected fix does not violate architecture rules.
 
 Output:
@@ -102,6 +117,8 @@ Confirm:
 ---
 
 ### [ ] Step: Remediation Plan
+
+<!-- agent: debug-investigation-agent -->
 
 Define the smallest safe fix.
 
@@ -119,6 +136,8 @@ Include:
 
 ### [ ] Step: Validation Strategy
 
+<!-- agent: validation-strategy-agent -->
+
 Run **Validation Strategy Agent** to determine the minimum safe validation scope for the remediation.
 
 Output:
@@ -135,6 +154,8 @@ Include:
 ---
 
 ### [ ] Step: Implementation
+
+<!-- agent: implementation-agent -->
 
 Apply the fix and update tests if needed.
 

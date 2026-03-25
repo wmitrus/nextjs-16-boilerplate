@@ -72,6 +72,7 @@ A strong task brief should contain, when relevant:
 - verification sources
 - affected areas
 - constraints
+- execution control / handoff mode when operator-visible pauses are required
 - environment assumptions or preconditions
 - evidence expectations
 - open questions or blockers
@@ -103,6 +104,20 @@ Expected handoff result:
 - a stable requirements package
 - referenced source docs and files
 - enough specificity for `plan.md` and `intake.md` to be created without guesswork
+
+Important clarification:
+
+- this mode does not perform orchestration
+- this mode does not choose the active specialist prompt on its own
+- this mode does not guarantee that the tool UI will visibly switch agents between workflow steps
+
+UI-level agent switching depends on the active tool/runtime.
+
+If the operator wants to review each specialist result and change agents manually before the next step, the brief must say so explicitly, for example:
+
+- `Execution Control: manual-handoff`
+
+That means the workflow/orchestrator must stop after each specialist artifact or major phase and wait for operator confirmation before continuing.
 
 This mode does not replace orchestration; it makes orchestration safe and predictable.
 

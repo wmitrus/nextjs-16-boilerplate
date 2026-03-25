@@ -30,18 +30,18 @@ jobs:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
         with:
           version: 10
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: 24
           cache: 'pnpm'
@@ -50,7 +50,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Chromatic
-        uses: chromaui/action@v15
+        uses: chromaui/action@eea1606238fd97a70b5af723d103953d1f40967b # v15
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}

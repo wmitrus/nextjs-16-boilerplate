@@ -4,6 +4,24 @@ import path from 'node:path';
 export const SCENARIO_NAMES = ['single', 'personal', 'org-provider', 'org-db'];
 export const E2E_BACKEND_MODES = ['pglite', 'container'];
 
+function assertPathWithinBase(resolvedPath, baseDir) {
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  const expectedPrefix = normalizedBase.endsWith(path.sep)
+    ? normalizedBase
+    : normalizedBase + path.sep;
+  if (
+    normalizedPath !== normalizedBase &&
+    !normalizedPath.startsWith(expectedPrefix)
+  ) {
+    throw new Error(
+      `Security: file path escapes the allowed directory.\n` +
+        `  Allowed base : ${normalizedBase}\n` +
+        `  Resolved path: ${normalizedPath}\n`,
+    );
+  }
+}
+
 export const VARIANT_NAMES = [
   'single-missing-default-tenant',
   'single-linking-disabled',
@@ -49,11 +67,15 @@ function loadFileIfExists(filePath) {
 }
 
 export function getScenarioEnvPath(scenario) {
-  return path.join(ENV_DIR, `${scenario}.env`);
+  const filePath = path.join(ENV_DIR, `${scenario}.env`);
+  assertPathWithinBase(filePath, ENV_DIR);
+  return filePath;
 }
 
 export function getVariantEnvPath(variant) {
-  return path.join(ENV_DIR, `${variant}.env`);
+  const filePath = path.join(ENV_DIR, `${variant}.env`);
+  assertPathWithinBase(filePath, ENV_DIR);
+  return filePath;
 }
 
 export function loadScenarioEnv({
@@ -114,5 +136,10 @@ export function resolveScenarioDatabaseUrl({ scenario, variant } = {}) {
 
 export function resolveScenarioDatabasePath({ scenario, variant } = {}) {
   const databaseUrl = resolveScenarioDatabaseUrl({ scenario, variant });
-  return path.resolve(ROOT_DIR, databaseUrl.replace(/^file:\.?\/?/, ''));
+  const resolvedPath = path.resolve(
+    ROOT_DIR,
+    databaseUrl.replace(/^file:\.?\/?/, ''),
+  );
+  assertPathWithinBase(resolvedPath, path.resolve(ROOT_DIR, 'data/e2e'));
+  return resolvedPath;
 }

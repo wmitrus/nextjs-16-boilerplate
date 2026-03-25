@@ -80,3 +80,65 @@ Fix the four identified review findings with the smallest safe blast radius:
 - `pnpm lint` ✅
 - `pnpm test` ✅
 - `pnpm test:integration` ✅
+
+## Follow-Up Phase: Logging Topology
+
+Date: 2026-03-25
+Goal: Make security and browser logs consistently visible in local file logs and Logflare while preserving full console visibility in development.
+
+### Current Findings
+
+- Browser logs already reach `POST /api/logs` and are written to `logs/server.log` as `type: "browser-ingest"`.
+- Security middleware logs are visible in local console output, but they are not taking the same persisted sink path as server logs.
+- The current edge logger relies on Pino `browser.transmit`, which is a browser-only model and is not a dependable edge/server transport path.
+- The development experience must remain `console + ingest`, not `console or ingest`.
+
+### Constraints
+
+- Keep all existing console output in development for server, edge/security, and browser-originated logs.
+- Preserve the current server logger as the owner of file and Logflare sinks.
+- Do not ship Logflare credentials to the browser or edge runtimes.
+- Keep the blast radius focused to the logging pipeline; avoid unrelated auth or middleware refactors.
+
+### Task List
+
+- [x] Refactor the edge logger to an explicit edge-safe adapter that logs locally to console/stdout and separately forwards structured events to `/api/logs`.
+- [x] Extract a shared ingest helper so browser and edge forwarding use one payload contract and one transport policy.
+- [x] Keep direct file and Logflare writes owned by the server logger only; `/api/logs` should remain the canonical promotion point for non-Node runtimes.
+- [x] Update ingest forwarding only where needed to preserve runtime classification (`browser` vs `edge`) and prevent recursive `/api/logs` re-ingest loops.
+- [x] Add or update focused tests for the edge logger path, shared ingest helper behavior, and `/api/logs` classification.
+- [ ] Revalidate that browser logs still appear in browser devtools console and continue landing in `logs/server.log`.
+- [x] Revalidate that security middleware logs still appear in dev console and now also land in `logs/server.log`.
+- [x] Capture the remaining Logflare verification gap explicitly while local sink parity is confirmed.
+- [x] Update logging documentation so the documented routing matches the actual runtime behavior.
+
+### Validation Checklist
+
+- [ ] Trigger a unique browser log message and confirm it appears in browser devtools, `logs/server.log`, and Logflare.
+- [ ] Trigger a unique middleware/security log and confirm it appears in terminal console, `logs/server.log`, and Logflare.
+- [ ] Confirm ordinary server logs still appear in terminal console, `logs/server.log`, and Logflare.
+- [x] Run focused logger tests after the refactor.
+
+### Validation Notes
+
+- Focused logger tests passed:
+  - `src/core/logger/ingest-transport.test.ts`
+  - `src/core/logger/browser-utils.test.ts`
+  - `src/core/logger/edge-utils.test.ts`
+  - `src/core/logger/edge.test.ts`
+  - `src/app/api/logs/route.test.ts`
+- `pnpm typecheck` ✅
+- `pnpm exec vitest run --config vitest.integration.config.ts src/testing/integration/logger.integration.test.ts --coverage.enabled=false` ✅
+- Fresh runtime smoke checks on 2026-03-25:
+  - Browser-ingest probe `browser-ingest-smoke-1774398258744` was persisted to `logs/server.log`.
+  - Security middleware probe `/logging-smoke-1774398368431` appeared in the dev console and was persisted to `logs/server.log`.
+  - Recursive `/api/logs` edge re-ingest was prevented by skipping forwarding when the edge event path is `/api/logs`.
+- Direct browser-devtools verification remains deferred in this environment because browser automation was unavailable locally.
+- Direct Logflare UI verification remains deferred in this environment. With the new topology, browser and edge events now traverse the same server logger sink path as server logs, so any remaining absence in Logflare is likely a sink-delivery issue or a Logflare source/query visibility issue rather than a browser/edge routing gap.
+
+### Exit Criteria For This Phase
+
+- Security middleware logs are visible in dev console and persisted through the server sink path.
+- Browser logs remain visible in the browser console and persisted through the server sink path.
+- File logging and Logflare shipping are owned by one canonical server-side sink pipeline.
+- The documentation no longer claims behavior that the implementation does not actually provide.

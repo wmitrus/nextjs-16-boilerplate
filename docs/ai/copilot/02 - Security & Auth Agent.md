@@ -27,6 +27,17 @@ Real agent file: [security-auth.agent.md](../../../.github/agents/security-auth.
 - When route handlers or server actions may expose sensitive behavior
 - When you need to verify provider isolation and server-side enforcement points
 
+## Script and Tooling Security
+
+Security rules apply to `scripts/` and tooling in addition to application code.
+
+Always flag:
+
+- dynamically constructed file paths used in `fs` operations without `path.resolve()` and base-directory confinement check (CWE-22 — path traversal)
+- env-var-sourced or user-controlled URLs passed to `fetch()` or HTTP clients without protocol + hostname validation (CWE-918 — SSRF)
+
+Canonical guard patterns live in `docs/ai/general/02 - Security & Auth Agent.md` under SCRIPT AND TOOLING SECURITY RULES.
+
 ## Auth-Flow Note
 
 For any Clerk/bootstrap/onboarding or middleware auth-routing review:

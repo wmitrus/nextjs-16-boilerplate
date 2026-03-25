@@ -51,6 +51,15 @@ List the likely modules, routes, components, tests, configs, or documents involv
 
 List architecture, runtime, security, tenancy, validation, or delivery constraints.
 
+## Execution Control
+
+State how the workflow should advance:
+
+- `straight-through` — the workflow may continue through the required specialist roles in one session when the tool does not support true UI-level agent switching
+- `manual-handoff` — the workflow must stop after each specialist artifact or major phase so the operator can review the output and switch agents manually before continuing
+
+If omitted, the workflow may use straight-through execution.
+
 ## Environment / Preconditions
 
 List accounts, feature flags, local services, env vars, seeded data, or branch context required.

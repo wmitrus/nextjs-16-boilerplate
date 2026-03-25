@@ -240,6 +240,31 @@ Never do any of the following unless explicitly requested:
 - weaken validation, authorization, or runtime safeguards to make implementation easier
 - replace explicit code with indirection that reduces clarity
 - make broad naming or structural changes unrelated to the requested task
+- use dynamically constructed file paths in `fs` operations without a path canonicalization and base-directory confinement guard (CWE-22 — path traversal)
+- pass environment-variable-sourced or user-controlled URLs directly to `fetch()` or any HTTP client without URL parsing and hostname allowlist validation (CWE-918 — SSRF)
+
+==================================================
+SCRIPT AND TOOLING SECURITY RULES
+==================================================
+
+Security rules apply equally to scripts and tooling as to application code.
+
+When implementing Node.js scripts (e2e runners, db scripts, setup scripts, any `scripts/` files):
+
+File system safety (CWE-22 — Path Traversal):
+
+- never write `fs.readFileSync(filePath)`, `fs.writeFileSync(filePath)`, `fs.existsSync(filePath)`, `fs.mkdirSync(dir)`, `fs.rmSync(path)` with a dynamically constructed path unless you have first resolved it with `path.resolve()` and asserted it starts within the expected base directory
+- upstream allowlist validation (e.g., checking CLI args against a list of valid values) is not sufficient — you must also guard at the point of file access
+- use `assertPathWithinBase(resolvedPath, baseDir)` pattern: resolve both, check `normalizedPath.startsWith(normalizedBase + path.sep)`
+- throw on violation — never silently return an empty result
+
+HTTP/fetch safety (CWE-918 — SSRF):
+
+- never pass an env-var-sourced URL to `fetch()` without first parsing it with `new URL()` and validating both protocol and hostname
+- for scripts targeting local dev servers, restrict to `localhost`, `127.0.0.1`, `::1`
+- throw on violation — never silently skip the fetch
+
+Reference the canonical guard patterns in `docs/ai/general/02 - Security & Auth Agent.md` under the SCRIPT AND TOOLING SECURITY RULES section.
 
 ==================================================
 UNCERTAINTY HANDLING

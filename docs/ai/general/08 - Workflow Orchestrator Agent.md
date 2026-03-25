@@ -65,6 +65,25 @@ Do not use this agent when:
 - the user asks only for a simple read-only explanation that does not need workflow control
 
 ==================================================
+EXECUTION CONTROL
+==================================================
+
+For workflow-driven runs, the orchestrator must declare one of:
+
+- `straight-through` — continue through the required specialist roles in one session when the active tool does not support true UI-level agent switching
+- `manual-handoff` — stop after each specialist artifact or major phase and wait for operator confirmation or manual agent change before continuing
+
+If the operator explicitly wants to switch agents manually in the UI, the orchestrator must use `manual-handoff`.
+
+The chosen execution control must be recorded in `plan.md` and `intake.md`.
+
+In `manual-handoff` mode:
+
+- do not continue automatically after writing the current step artifact
+- do not pre-mark later steps as complete
+- do not treat artifact names alone as proof that the tool visibly switched agents
+
+==================================================
 REQUIRED WORKFLOW DISCIPLINE
 ==================================================
 

@@ -12,6 +12,7 @@ function parseArgs(argv) {
   let withOauth = false;
 
   for (let index = 0; index < argv.length; index += 1) {
+    // eslint-disable-next-line security/detect-object-injection -- numeric index into a bounded argv array
     const value = argv[index];
 
     if (value === '--scenario') {
@@ -51,6 +52,7 @@ function parseArgs(argv) {
 }
 
 function getEnvValue(key) {
+  // eslint-disable-next-line security/detect-object-injection -- key comes from BASE_REQUIREMENTS or CLERK_REDIRECT_VARS, both hardcoded const arrays
   const value = process.env[key];
   return value && value.trim().length > 0 ? value : undefined;
 }
@@ -262,6 +264,7 @@ function main() {
   });
 
   for (const groupName of groups) {
+    // eslint-disable-next-line security/detect-object-injection -- groupName iterates over a Set populated exclusively with hardcoded string literals from collectRequirements
     const group = REQUIRED_GROUPS[groupName];
     const username = resolveAlias(group.username);
     const password = resolveAlias(group.password);
@@ -294,6 +297,7 @@ function main() {
       continue;
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- orgName iterates over a Set populated exclusively with hardcoded string literals from collectRequirements
     const organization = REQUIRED_ORGS[orgName];
     if (!getEnvValue(organization.key)) {
       missing.push(`${organization.label}: ${organization.key}`);

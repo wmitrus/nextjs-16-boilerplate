@@ -1,5 +1,14 @@
 # Copilot Agent Quick Start
 
+> **IMPORTANT — THIS DIRECTORY CONTAINS DESCRIPTION GUIDES, NOT AGENTS.**
+>
+> The files in `docs/ai/copilot/` explain what each agent does and when to use it.
+> They do NOT control agent behavior.
+>
+> **The real Copilot agents are in `.github/agents/`.**
+> All rule changes, security rules, and behavioral updates MUST be applied to the `.github/agents/*.agent.md` files.
+> Changes made only to `docs/ai/copilot/` files have NO effect on how agents behave.
+
 This directory is the quick-start guide for the repository's Copilot specialist setup.
 
 Use it when you want to understand which specialist to pick before working in the repo.

@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT PROMPT.**
+> The real Zencoder prompt source that controls actual behavior is:
+> **`docs/ai/general/02 - Security & Auth Agent.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Zencoder agent behaves.
+
 ## What it does
 
-Prompt source used by Zencoder: [docs/ai/general/02 - Security & Auth Agent.md](../general/02%20-%20Security%20%26%20Auth%20Agent.md)
+Prompt source used by Zencoder: [**`docs/ai/general/02 - Security & Auth Agent.md`**](../general/02%20-%20Security%20%26%20Auth%20Agent.md)
 
 Zencoder keeps its agent registration outside the repository. This guide points to the repo-hosted prompt source that backs the role.
 

@@ -1,6 +1,12 @@
+> **THIS FILE IS A DESCRIPTION GUIDE — NOT THE AGENT PROMPT.**
+> The real Zencoder prompt source that controls actual behavior is:
+> **`docs/ai/general/04 - Implementation Agents.md`**
+> All rule changes, security rules, and behavioral updates MUST be applied to that file.
+> Content added here does NOT affect how the Zencoder agent behaves.
+
 ## What it does
 
-Prompt source used by Zencoder: [docs/ai/general/04 - Implementation Agents.md](../general/04%20-%20Implementation%20Agents.md)
+Prompt source used by Zencoder: [**`docs/ai/general/04 - Implementation Agents.md`**](../general/04%20-%20Implementation%20Agents.md)
 
 Zencoder keeps its agent registration outside the repository. This guide points to the repo-hosted prompt source that backs the role.
 
@@ -13,6 +19,15 @@ Zencoder keeps its agent registration outside the repository. This guide points 
 - When the architecture, security, runtime, and validation constraints are already clear
 - When the task is to make the smallest safe patch rather than re-decide the design
 - When code and tests need to be updated under already-approved guardrails
+
+## Script and Tooling Security
+
+When implementing or modifying any `scripts/` file:
+
+- never use dynamically constructed file paths in `fs` operations without `path.resolve()` + base-directory confinement check (CWE-22)
+- never pass env-var-sourced URLs to `fetch()` without protocol + hostname validation (CWE-918)
+- upstream CLI arg allowlist validation does not replace point-of-use guards
+- see canonical patterns in `docs/ai/general/02 - Security & Auth Agent.md` SCRIPT AND TOOLING SECURITY RULES
 
 ## Auth-Flow Note
 

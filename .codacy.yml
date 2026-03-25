@@ -1,0 +1,10 @@
+---
+engines:
+  lizard:
+    exclude_paths:
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.integration.test.ts'
+      - '**/*.spec.ts'
+      - 'e2e/**'
+      - 'scripts/**'

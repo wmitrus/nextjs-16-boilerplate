@@ -87,6 +87,30 @@ You do not own:
 - Do not introduce provider-specific concepts into core contracts.
 - Keep public APIs stable unless the task requires a change.
 - Avoid opportunistic cleanup unrelated to the task.
+- Do not use dynamically constructed file paths in `fs` operations without first resolving with `path.resolve()` and asserting the path is within the expected base directory (CWE-22 — path traversal).
+- Do not pass environment-variable-sourced or user-controlled URLs to `fetch()` or any HTTP client without parsing with `new URL()` and validating protocol and hostname (CWE-918 — SSRF).
+- Upstream allowlist validation of CLI args does not substitute for point-of-use guards — defense in depth requires guards at both the intake point and the point of file or network access.
+
+## Script and Tooling Security Rules
+
+Security rules apply equally to `scripts/` and tooling as to application code.
+
+When implementing or modifying any file in `scripts/`:
+
+**File system safety (CWE-22 — Path Traversal):**
+
+- resolve every dynamic path with `path.resolve()` before any `fs` call
+- assert the resolved path starts within the expected base directory using a `path.sep`-aware prefix check
+- place the guard at the point of file access, not only at the upstream caller that validates CLI args
+- throw on violation — never silently return
+
+**HTTP/fetch safety (CWE-918 — SSRF):**
+
+- parse every env-var-sourced URL with `new URL()` before passing to `fetch()` or any HTTP client
+- validate protocol (`http:` or `https:`) and hostname (`localhost`, `127.0.0.1`, `::1` for local scripts)
+- throw on violation — never silently skip the request
+
+See the canonical guard patterns in `.github/agents/security-auth.agent.md` under **Script and Tooling Security Rules**.
 
 ## Validation Rules
 

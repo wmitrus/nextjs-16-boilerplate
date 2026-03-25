@@ -12,8 +12,8 @@ exports
 !.yarn/releases
 !.yarn/versions
 
-# logs
-/logs/*
+# generated runtime logs and Playwright server evidence
+/logs/
 
 /bin/*
 !/bin/git-branch-origin

@@ -18,6 +18,7 @@ function readStringClaim(
   claimNames: readonly string[],
 ): string | undefined {
   for (const claimName of claimNames) {
+    // eslint-disable-next-line security/detect-object-injection -- read-only; claimNames is a readonly literal array, not user input
     const value = sessionClaims?.[claimName];
     if (typeof value === 'string' && value.length > 0) {
       return value;

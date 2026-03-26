@@ -13,6 +13,8 @@ import {
 import type { UserRepository } from '@/core/contracts/user';
 import { env } from '@/core/env';
 
+import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
+
 import {
   AuthorizationFacade,
   AuthorizationError,
@@ -121,9 +123,12 @@ function redirectAuthenticatedFromAuthRoute(
   }
 
   const bootstrapUrl = new URL('/auth/bootstrap/start', req.url);
-  const existingRedirectUrl =
+  const rawRedirectUrl =
     req.nextUrl.searchParams.get('redirect_url') ?? '/users';
-  bootstrapUrl.searchParams.set('redirect_url', existingRedirectUrl);
+  bootstrapUrl.searchParams.set(
+    'redirect_url',
+    sanitizeRedirectUrl(rawRedirectUrl, '/users'),
+  );
 
   return NextResponse.redirect(bootstrapUrl);
 }

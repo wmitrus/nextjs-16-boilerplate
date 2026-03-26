@@ -77,17 +77,18 @@ Update ALL locations below that apply to the rule's scope.
 
 ### ZenFlow Workflow Files
 
-| Workflow                       | File                                                   |
-| ------------------------------ | ------------------------------------------------------ |
-| Feature development            | `.zenflow/workflows/feature-development.md`            |
-| Safe refactor                  | `.zenflow/workflows/safe-refactor.md`                  |
-| Incident investigation         | `.zenflow/workflows/incident-investigation.md`         |
-| Security incident              | `.zenflow/workflows/security-incident-workflow.md`     |
-| Auth flow change review        | `.zenflow/workflows/auth-flow-change-review.md`        |
-| Change validation              | `.zenflow/workflows/change-validation.md`              |
-| Repository baseline validation | `.zenflow/workflows/repository-baseline-validation.md` |
-| Playwright E2E validation      | `.zenflow/workflows/playwright-e2e-validation.md`      |
-| Architecture lint              | `.zenflow/workflows/architecture-lint.md`              |
+| Workflow                       | File                                                                                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Feature development            | `.zenflow/workflows/feature-development.md`                                                                                                                              |
+| Safe refactor                  | `.zenflow/workflows/safe-refactor.md`                                                                                                                                    |
+| Incident investigation         | `.zenflow/workflows/incident-investigation.md`                                                                                                                           |
+| Security incident              | `.zenflow/workflows/security-incident-workflow.md`                                                                                                                       |
+| Codacy PR security review      | `.zenflow/workflows/codacy-security-review.md` · `docs/ai/general/Workflow 10 - Codacy Security Review Workflow.md` · `.github/prompts/codacy-security-review.prompt.md` |
+| Auth flow change review        | `.zenflow/workflows/auth-flow-change-review.md`                                                                                                                          |
+| Change validation              | `.zenflow/workflows/change-validation.md`                                                                                                                                |
+| Repository baseline validation | `.zenflow/workflows/repository-baseline-validation.md`                                                                                                                   |
+| Playwright E2E validation      | `.zenflow/workflows/playwright-e2e-validation.md`                                                                                                                        |
+| Architecture lint              | `.zenflow/workflows/architecture-lint.md`                                                                                                                                |
 
 ---
 

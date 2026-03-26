@@ -106,6 +106,7 @@ function createLogEvent(
     bindings,
     level: {
       label: level,
+      // eslint-disable-next-line security/detect-object-injection -- level is typed as Level (finite union); LEVEL_VALUES is Record<Level, number>
       value: LEVEL_VALUES[level],
     },
     ts: timestamp,
@@ -113,6 +114,7 @@ function createLogEvent(
 }
 
 function isLevelEnabled(level: Level): boolean {
+  // eslint-disable-next-line security/detect-object-injection -- both lookups use finite typed union keys (Level / LOG_LEVEL enum)
   return LEVEL_VALUES[level] >= LOG_LEVEL_THRESHOLDS[env.LOG_LEVEL];
 }
 
@@ -122,6 +124,7 @@ function writeConsoleLog(
   timestamp: number,
 ): void {
   const record = {
+    // eslint-disable-next-line security/detect-object-injection -- level is typed as Level (finite union)
     level: LEVEL_VALUES[level],
     time: timestamp,
     env:
@@ -138,6 +141,7 @@ function writeConsoleLog(
 
   const line = JSON.stringify(record);
 
+  // eslint-disable-next-line security/detect-object-injection -- level is typed as Level (finite union); CONSOLE_METHOD_BY_LEVEL is Record<Level, keyof Console>
   switch (CONSOLE_METHOD_BY_LEVEL[level]) {
     case 'debug':
       console.debug(line);

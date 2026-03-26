@@ -17,8 +17,10 @@ const loadEnv = async () => {
 const setEnv = (vars: Record<string, string | boolean | undefined>) => {
   for (const [key, value] of Object.entries(vars)) {
     if (value === undefined) {
+      // eslint-disable-next-line security/detect-object-injection -- test helper; key is always a known env var name from the test cases
       delete process.env[key];
     } else {
+      // eslint-disable-next-line security/detect-object-injection -- test helper; key is always a known env var name from the test cases
       process.env[key] = String(value);
     }
   }

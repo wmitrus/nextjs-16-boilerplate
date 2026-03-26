@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import { checkClerkRedirectUrls } from './check-env-consistency.mjs';
 import {
   applyEnv,

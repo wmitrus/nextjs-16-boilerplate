@@ -135,7 +135,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const logger = resolveServerLogger().child(childBindings);
   const level = validation.data.level;
-  logger[level]({ ...logContext, ip }, validation.data.message);
+  const logDispatch: Record<
+    (typeof LOG_LEVELS)[number],
+    (ctx: Record<string, unknown>, msg: string) => void
+  > = {
+    fatal: (ctx, msg) => logger.fatal(ctx, msg),
+    error: (ctx, msg) => logger.error(ctx, msg),
+    warn: (ctx, msg) => logger.warn(ctx, msg),
+    info: (ctx, msg) => logger.info(ctx, msg),
+    debug: (ctx, msg) => logger.debug(ctx, msg),
+    trace: (ctx, msg) => logger.trace(ctx, msg),
+  };
+  logDispatch[level]({ ...logContext, ip }, validation.data.message);
 
   return new NextResponse(null, { status: 204 });
 }

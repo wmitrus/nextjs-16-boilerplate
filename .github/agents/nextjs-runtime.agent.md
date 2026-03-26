@@ -18,6 +18,7 @@ You complement them by specializing in framework and runtime behavior.
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before runtime analysis.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before runtime analysis.
 - If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `03 - Next.js Runtime - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.

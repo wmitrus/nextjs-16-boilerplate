@@ -25,6 +25,7 @@ You are the process owner for multi-step task execution.
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before orchestration.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before orchestration.
 - Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md` before orchestration.

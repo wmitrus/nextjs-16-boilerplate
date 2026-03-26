@@ -76,6 +76,9 @@ next-env.d.ts
 # Zencoder MCP local configuration (can include secrets)
 .zencoder/mcp.local.json
 
+# Local recovery and forensic workspace
+.recovery/
+
 /data/*
 !/data/.gitkeep
 

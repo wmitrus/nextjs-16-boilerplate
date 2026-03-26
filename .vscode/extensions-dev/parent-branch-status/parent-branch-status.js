@@ -16,6 +16,7 @@ function runAsync(cmd) {
       return;
     }
 
+    // eslint-disable-next-line security/detect-child-process -- local VS Code extension; cmd is always a hardcoded git command string from internal callers, never user input
     cp.exec(cmd, { encoding: 'utf8', cwd }, (error, stdout) => {
       if (error) {
         resolve('');

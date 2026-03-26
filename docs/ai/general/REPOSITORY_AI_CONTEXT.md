@@ -2,13 +2,30 @@
 
 Repository-specific context every agent must know before starting work.
 
-Read this file at the start of every session. Do not rely on generic framework assumptions when this file says otherwise.
+Read this file at the start of every non-trivial session. Do not rely on generic framework assumptions when this file says otherwise.
 
 ---
 
 ## Repository Identity
 
-Production-grade **Next.js 16** boilerplate implementing a **Modular Monolith** architecture.
+This repository is a production-grade **Next.js 16 TypeScript boilerplate** designed as a **modular monolith** for long-term reuse across multiple applications.
+
+It is not demo code and must not be treated as a rapid-prototype repository.
+
+Primary goals:
+
+- preserve modular monolith boundaries
+- maintain contract-first design
+- keep DI and composition-root discipline
+- isolate provider-specific integrations
+- centralize security-sensitive enforcement
+- remain ready for future tenancy and organizations
+- remain ready for RBAC and ABAC evolution
+- remain ready for feature flags
+- remain compatible with Vercel-hosted App Router deployments
+- maintain production-grade observability and low-blast-radius evolution
+
+Current practical stack:
 
 - **Language**: TypeScript strict mode
 - **Runtime**: Node.js 24
@@ -22,6 +39,8 @@ Production-grade **Next.js 16** boilerplate implementing a **Modular Monolith** 
 In this repository, middleware-style request interception lives in **`src/proxy.ts`** — not `middleware.ts`.
 
 Do not search for `middleware.ts`. Do not treat its absence as a finding. Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+
+When a task concerns middleware-like behavior, inspect `src/proxy.ts` first.
 
 ---
 
@@ -38,7 +57,33 @@ Do not search for `middleware.ts`. Do not treat its absence as a finding. Analyz
 | Testing                  | `src/testing/`  | MSW, test factories, integration helpers          |
 | E2E                      | `e2e/`          | Playwright specs                                  |
 
-Dependency direction: `app → features/modules/security/shared/core`
+Expected dependency direction:
+
+- `app -> features/modules/security/shared/core`
+- `features -> modules/security/shared/core`
+- `modules -> shared/core`
+- `security -> shared/core`
+- `shared -> core`
+- `core` must not depend on `app/features/security/modules`
+
+Approved exception:
+
+- composition root and container registration in `src/core/container/*`
+
+---
+
+## Source of Truth Rule
+
+The live repository code is the source of truth.
+
+Docs, diagrams, reports, and AI summaries are secondary and may drift.
+
+If code and docs disagree:
+
+- trust the code
+- explicitly report the drift
+- do not silently reconcile the difference
+- do not present doc claims as facts unless verified in code
 
 ---
 
@@ -47,7 +92,7 @@ Dependency direction: `app → features/modules/security/shared/core`
 This is the authoritative map of every place agent rules must be propagated.
 
 **When you add, change, or remove a coding rule, security pattern, or behavioral constraint:**
-Update ALL locations below that apply to the rule's scope.
+Update all locations below that apply to the rule's scope.
 
 | Location                                      | Purpose                                | Consumer            | Format                                                       |
 | --------------------------------------------- | -------------------------------------- | ------------------- | ------------------------------------------------------------ |
@@ -92,13 +137,75 @@ Update ALL locations below that apply to the rule's scope.
 
 ---
 
+## Architectural Non-Negotiables
+
+Never approve or introduce:
+
+- business logic inside `shared/*`
+- reverse dependency from `core` to higher layers outside approved composition-root exceptions
+- provider SDK leakage into domain or core contracts
+- authorization enforced only in UI
+- ad hoc role or tenant logic scattered across unrelated files
+- security-critical logic moved to client components without necessity
+- middleware as the sole protection for sensitive mutations
+- cache behavior that can leak user-specific or tenant-specific data
+- hidden service-locator patterns in request-sensitive flows
+- broad refactors without clear architectural justification
+
+---
+
+## Security and Trust Model
+
+Important assumptions:
+
+- authentication, authorization, and tenancy are separate concerns
+- trust boundaries must be explicit
+- server-side enforcement is mandatory for sensitive behavior
+- tenant or org context must come from trustworthy server-side derivation
+- provider-specific concerns must stay isolated in adapters and framework boundaries
+- sensitive data must not leak through logs, telemetry, responses, or client bundles
+
+---
+
+## Runtime Model
+
+Agents must reason explicitly about:
+
+- App Router boundaries
+- server vs client components
+- server actions
+- route handlers
+- proxy responsibilities
+- Edge vs Node runtime behavior
+- request-time vs build-time behavior
+- caching and revalidation
+- Vercel deployment implications
+- public vs non-public env exposure
+
+---
+
+## Future Extensibility Expectations
+
+The repository should evolve safely toward:
+
+- stronger RBAC
+- ABAC
+- tenant-aware and organization-aware behavior
+- per-tenant feature flags
+- request-scoped caching
+- worker and background runtime entrypoints
+
+Agents should judge whether current boundaries make those futures easier or harder.
+
+---
+
 ## Security Coding Patterns — Process Ownership
 
 **`docs/ai/general/SECURITY_CODING_PATTERNS.md`** is the living catalogue of security patterns.
 
 ### When it must be updated
 
-- After every structured security review (scanner triage, pentest, manual review)
+- After every structured security review
 - After any security fix that reveals a new pattern or confirms a false positive
 - After a security incident workflow run
 - When a new anti-pattern is identified during implementation or refactoring
@@ -110,10 +217,10 @@ Update ALL locations below that apply to the rule's scope.
 After any security finding or fix, this agent must:
 
 1. Classify each finding: real risk, latent risk, or false positive
-2. Add or update the relevant SEC-XX entry in `SECURITY_CODING_PATTERNS.md`
+2. Add or update the relevant `SEC-XX` entry in `SECURITY_CODING_PATTERNS.md`
 3. Propagate mandatory rules to the agent location map above
 
-The Workflow Orchestrator (08) must include a SECURITY_CODING_PATTERNS.md update step in any security-related workflow plan.
+The Workflow Orchestrator must include a `SECURITY_CODING_PATTERNS.md` update step in any security-related workflow plan.
 
 ---
 
@@ -122,7 +229,7 @@ The Workflow Orchestrator (08) must include a SECURITY_CODING_PATTERNS.md update
 | File                                      | Purpose                                                         |
 | ----------------------------------------- | --------------------------------------------------------------- |
 | `src/core/env.ts`                         | T3-Env schema — single source of truth for all env vars         |
-| `src/proxy.ts`                            | Request interception / middleware equivalent                    |
+| `src/proxy.ts`                            | Request interception and middleware equivalent                  |
 | `src/security/middleware/with-auth.ts`    | Auth guard middleware                                           |
 | `src/shared/lib/routing/safe-redirect.ts` | `sanitizeRedirectUrl()` — use for all forwarded redirect params |
 | `next.config.ts`                          | Next.js configuration with Sentry                               |
@@ -152,7 +259,7 @@ The Workflow Orchestrator (08) must include a SECURITY_CODING_PATTERNS.md update
 | Storybook   | `vitest.config.ts`             | `.stories.{ts,tsx}`                  | `pnpm test:storybook`   |
 | E2E         | `playwright.config.ts`         | `e2e/**/*.spec.ts`                   | `pnpm e2e`              |
 
-Unit tests are co-located with source files (e.g. `src/core/env.ts` → `src/core/env.test.ts`).
+Unit tests are co-located with source files.
 
 ---
 
@@ -167,4 +274,23 @@ Unit tests are co-located with source files (e.g. `src/core/env.ts` → `src/cor
 | Unused dep check   | `pnpm depcheck`         |
 | Env consistency    | `pnpm env:check`        |
 
-Pre-push hook runs: typecheck → skott → depcheck → madge.
+Pre-push hook runs: typecheck -> skott -> depcheck -> madge.
+
+---
+
+## AI Governance Files
+
+Before performing architectural, security, or runtime analysis, agents should read:
+
+- `AGENTS.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+- `docs/ai/general/MODE_MANIFEST.md`
+
+These files define:
+
+- mode-selection rules
+- repository identity
+- non-negotiable rules
+- agent authority boundaries
+- conflict resolution model

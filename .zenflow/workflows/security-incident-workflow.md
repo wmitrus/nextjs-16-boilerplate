@@ -2,12 +2,14 @@
 
 ## Configuration
 
-- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
-- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
-- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+- **Artifacts Path**: `{@artifacts_path}` -> `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses ZenFlow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**:
   - `security-auth-agent`
-  - `implementation-agent`
+  - `nextjs-runtime-agent`
+  - `architecture-guard-agent`
   - `validation-strategy-agent`
+  - `implementation-agent`
 
 ---
 
@@ -15,7 +17,7 @@
 
 Before starting this workflow, read:
 
-- `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` deprecated April 20, 2026.
+- `AGENTS.md`
 - `docs/ai/general/MODE_MANIFEST.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
@@ -29,9 +31,10 @@ This workflow is used for:
 - post-incident hardening
 
 Repository note:
-In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
-Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
-Do not treat the absence of `middleware.ts` as a finding.
+
+- In Next.js 16, `src/proxy.ts` is the middleware-equivalent file.
+- Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+- Do not treat the absence of `middleware.ts` as a finding.
 
 ---
 
@@ -39,140 +42,267 @@ Do not treat the absence of `middleware.ts` as a finding.
 
 For every workflow step:
 
-- the file shown under `Output:` is mandatory
-- the active agent must create or overwrite that markdown file
-- the artifact file must contain the full result for the step
-- the agent must not respond only in chat without writing the artifact
-- after writing the artifact, the agent should give only a short completion summary in chat
+- the file shown under `Output file:` is mandatory
+- the active agent must create or overwrite that markdown artifact
+- the artifact must contain the full result for the step
+- the agent should not respond only in chat without writing the artifact first
+
+---
+
+## Execution Control
+
+This workflow supports two execution modes:
+
+- `straight-through` - continue through the required specialist roles in one session when the active tool does not support true UI-level agent switching
+- `manual-handoff` - stop after each specialist artifact or major phase and wait for operator confirmation or manual agent change before continuing
+
+Use `manual-handoff` when the operator explicitly wants visible agent changes or per-step approval in the UI.
+
+Artifact filenames prove that a workflow step produced an output.
+They do not, by themselves, prove that the tool visibly switched the active agent in the UI.
 
 ---
 
 ## Workflow Steps
 
-### [ ] Step: Security Intake
+### [ ] Step: Incident Intake
+
+Understand the incident before remediation.
+
+Document:
+
+- incident description
+- suspected severity
+- affected surface
+- known symptoms
+- known constraints
+- initial unknowns
+- source of findings if a scanner or report triggered the workflow
+
+Output file:
+
+`{@artifacts_path}/incident-intake.md`
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
+### [ ] Step: Security Review
 
 <!-- agent: security-auth-agent -->
 
-Collect the security findings, scanner output, or incident report.
+Run **Security/Auth Agent**.
 
-Output:
-{@artifacts_path}/security-intake.md
+Use this template as the output structure guide:
 
-Include:
+`docs/ai/templates/specialist-summaries/02 - Security & Auth - Summary Template.md`
 
-- source of findings (scanner name/version, manual review, incident report)
-- full finding list with file paths, line numbers, rule IDs, and finding text
-- environment context (production, test, CI)
-- initial severity assessment per finding
+The agent must assess:
 
----
+- incident classification
+- trust boundaries
+- auth and authorization surface
+- tenancy and organization isolation
+- provider isolation
+- sensitive data handling
+- cache and runtime security risks
+- security constraints
+- recommended safe remediation direction
+- whether findings match existing entries in `docs/ai/general/SECURITY_CODING_PATTERNS.md`
 
-### [ ] Step: Finding Classification
+Output file:
 
-<!-- agent: security-auth-agent -->
+`{@artifacts_path}/02 - Security & Auth - Summary.md`
 
-Classify each finding as: **Real Risk** / **Latent Risk** / **False Positive**.
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-Output:
-{@artifacts_path}/finding-classification.md
+### [ ] Step: Runtime Review (Conditional)
 
-For each finding:
+<!-- agent: nextjs-runtime-agent -->
 
-- finding ID and text
-- context (what code is doing at that line)
-- classification: Real Risk / Latent Risk / False Positive
-- rationale for classification
-- whether it matches a known pattern in `docs/ai/general/SECURITY_CODING_PATTERNS.md`
-- action required: Fix / Suppress with comment / Document only
+If the incident touches or may affect:
 
-Cross-reference `docs/ai/general/SECURITY_CODING_PATTERNS.md` — if the finding matches an existing SEC-XX entry, reference it.
+- route handlers
+- server actions
+- middleware or proxy
+- App Router runtime behavior
+- server/client boundaries
+- caching or revalidation
+- Edge vs Node runtime
+- env exposure
 
----
+Run **Next.js Runtime Agent**.
 
-### [ ] Step: Remediation Plan
+Use this template as the output structure guide:
 
-<!-- agent: security-auth-agent -->
+`docs/ai/templates/specialist-summaries/03 - Next.js Runtime - Summary Template.md`
 
-Produce the minimum safe remediation plan for findings classified as Real Risk or Latent Risk.
+The agent must assess:
 
-Output:
-{@artifacts_path}/remediation-plan.md
+- runtime classification
+- affected runtime surfaces
+- server vs client placement
+- route handlers and server actions
+- middleware or proxy behavior
+- caching and revalidation
+- Edge vs Node runtime
+- environment exposure
+- runtime constraints
+- recommended safe runtime direction
 
-Include:
+Output file:
 
-- findings to fix and findings to suppress
-- for each fix: affected file, affected lines, minimum safe change, test impact
-- for each suppression: suppression comment rationale
-- findings safe to mark ignored in the scanner UI with rationale
+`{@artifacts_path}/03 - Next.js Runtime - Summary.md`
 
----
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
+### [ ] Step: Architecture Review (Conditional)
+
+<!-- agent: architecture-guard-agent -->
+
+If the proposed remediation may affect:
+
+- module boundaries
+- dependency direction
+- DI or composition
+- contracts
+- provider isolation shape
+- structural layering
+
+Run **Architecture Guard Agent**.
+
+Use this template as the output structure guide:
+
+`docs/ai/templates/specialist-summaries/01 - Architecture Guard - Summary Template.md`
+
+The agent must assess:
+
+- architecture fit
+- affected layers
+- affected modules
+- boundary impact
+- dependency direction
+- provider isolation
+- structural risks
+- documentation drift
+- architecture constraints
+- recommendation
+
+Output file:
+
+`{@artifacts_path}/01 - Architecture Guard - Summary.md`
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
+### [ ] Step: Constraints Summary
+
+Consolidate prior specialist outputs into one implementation-ready constraint brief.
+
+Use this template as the output structure guide:
+
+`docs/ai/templates/constraints-template.md`
+
+The summary must include:
+
+- architecture constraints
+- security and auth constraints
+- runtime constraints
+- validation constraints
+- explicitly allowed changes
+- explicitly forbidden changes
+- protected invariants
+- open questions or blocks
+
+Output file:
+
+`{@artifacts_path}/constraints.md`
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Validation Strategy
 
 <!-- agent: validation-strategy-agent -->
 
-Determine the minimum safe validation scope for the planned remediations.
+Run **Validation Strategy Agent**.
 
-Output:
-{@artifacts_path}/validation-strategy.md
+Use this template as the output structure guide:
 
-Include:
+`docs/ai/templates/specialist-summaries/05 - Validation Strategy - Summary Template.md`
 
-- change risk classification per fix
-- minimum required validation
+The agent must determine:
+
+- the minimum required validation for this incident
 - optional additional validation
 - validation not required
-- validation commands
+- commands or checks to run
+- validation gaps that remain
 
----
+Output file:
+
+`{@artifacts_path}/05 - Validation Strategy - Summary.md`
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Implementation
 
 <!-- agent: implementation-agent -->
 
-Apply fixes and suppressions per the remediation plan.
+Run **Implementation Agent**.
 
-Output:
-{@artifacts_path}/implementation-report.md
+Use this template as the output structure guide:
 
-Include:
+`docs/ai/templates/specialist-summaries/04 - Implementation Agent - Summary Template.md`
 
-- files changed
-- logic changes made
-- tests added or updated
-- suppression comments added with rationale
+Inputs to use:
 
----
+- `{@artifacts_path}/incident-intake.md`
+- `{@artifacts_path}/02 - Security & Auth - Summary.md`
+- `{@artifacts_path}/03 - Next.js Runtime - Summary.md` if present
+- `{@artifacts_path}/01 - Architecture Guard - Summary.md` if present
+- `{@artifacts_path}/constraints.md`
+- `{@artifacts_path}/05 - Validation Strategy - Summary.md`
+
+The agent must:
+
+- make the minimum effective safe fix
+- avoid unrelated refactors
+- preserve trust-boundary clarity
+- respect constraints from prior steps
+- update or add tests when needed
+
+Output file:
+
+`{@artifacts_path}/04 - Implementation Agent - Summary.md`
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Validation
 
-Run repository validation commands.
+Run the validation plan defined in:
 
-Output:
-{@artifacts_path}/validation-report.md
+`{@artifacts_path}/05 - Validation Strategy - Summary.md`
 
-Commands:
+Document:
 
-- pnpm typecheck
-- pnpm lint
-- pnpm test
+- commands or checks executed
+- whether the incident path was tested
+- whether the issue is fully fixed or only mitigated
+- residual risks
+- validation evidence
 
-Include:
+Output file:
 
-- command output summary
-- pass/fail status per command
-- any failures with details
+`{@artifacts_path}/validation-report.md`
 
----
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Scanner Ignore Report
 
 <!-- agent: security-auth-agent -->
 
-Produce a structured ignore report for the online scanner UI.
+Produce a structured ignore report for any scanner UI or finding-management tool used in this incident.
 
-Output:
-{@artifacts_path}/scanner-ignore-report.md
+Output file:
+
+`{@artifacts_path}/scanner-ignore-report.md`
 
 Include a table with columns:
 
@@ -180,42 +310,50 @@ Include a table with columns:
 
 For every finding in this session:
 
-- findings classified as False Positive → recommend "Ignore / False Positive"
-- findings that were fixed → recommend "Resolved / Fixed"
-- findings classified as Real Risk but deferred → recommend "Accepted Risk" with note
+- findings classified as false positive -> recommend ignore with rationale
+- findings that were fixed -> recommend resolved or fixed
+- findings classified as real risk but deferred -> recommend accepted risk with explanation
 
----
+### [ ] Step: Final Security Check
+
+<!-- agent: security-auth-agent -->
+
+Run **Security/Auth Agent** again if the fix touched:
+
+- auth logic
+- authorization enforcement
+- tenancy or organization logic
+- provider integration
+- cache-sensitive protected data flows
+
+The agent should confirm:
+
+- the trust-boundary issue is closed or mitigated
+- no obvious new auth or security regression was introduced
+- residual risks are explicitly named
+
+Artifact to update:
+
+`{@artifacts_path}/02 - Security & Auth - Summary.md`
+
+Do not create a second security-specific artifact for this recheck.
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 ### [ ] Step: Security Patterns Update
 
 <!-- agent: security-auth-agent -->
 
-**MANDATORY — do not skip this step.**
+Mandatory if the session confirmed a new security pattern, clarified a false positive, or produced a new mandatory rule.
 
-Update `docs/ai/general/SECURITY_CODING_PATTERNS.md` with any new patterns identified in this session.
+Update:
 
-Output:
-{@artifacts_path}/patterns-update-report.md
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+- `AGENTS.md` if a new always-on rule is required
+- matching `docs/ai/general/*.md`, `.github/agents/*.agent.md`, and `.zenflow/workflows/*.md` files when propagation is required
 
-For each new or updated pattern:
+Output file:
 
-1. Assign or confirm SEC-XX ID
-2. Add to `SECURITY_CODING_PATTERNS.md`:
-   - scanner finding text
-   - context
-   - classification rationale
-   - dangerous pattern (code example)
-   - correct pattern (code example)
-   - mandatory rule for agents
-3. Update the rule table in `.zencoder/rules/repo.md`
-4. Verify `.github/agents/security-auth.agent.md` and `docs/ai/general/02 - Security & Auth Agent.md` reflect new mandatory rules
-5. Verify `.github/agents/implementation-agent.agent.md` and `docs/ai/general/04 - Implementation Agents.md` reflect new mandatory rules if SEC-01 / SEC-03 / SEC-04 / SEC-06 category
+`{@artifacts_path}/patterns-update-report.md`
 
-In the output artifact, state:
-
-- which patterns were added or updated
-- which agent files were updated
-- whether the rule table in `repo.md` was updated
-- any patterns found in this session that match existing entries (reference the existing SEC-XX)
-
-This step is the final gate. The workflow is not complete until `SECURITY_CODING_PATTERNS.md` is current.
+This workflow is not complete until the security-pattern catalogue and its propagated rule locations are current.

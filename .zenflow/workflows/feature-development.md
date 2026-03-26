@@ -2,9 +2,9 @@
 
 ## Configuration
 
-- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
-- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
-- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+- **Artifacts Path**: `{@artifacts_path}` -> `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses ZenFlow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**:
   - `architecture-guard-agent`
   - `security-auth-agent`
   - `nextjs-runtime-agent`
@@ -18,21 +18,23 @@
 
 Before starting this workflow, read:
 
-- `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` deprecated April 20, 2026.
+- `AGENTS.md`
 - `docs/ai/general/MODE_MANIFEST.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md`
 
-For auth/bootstrap/onboarding work, also read:
+For auth, bootstrap, or onboarding work, also read:
 
 - `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
 - `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
 
 Repository note:
-In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
-Do not treat the absence of `middleware.ts` as a finding.
+
+- In Next.js 16, `src/proxy.ts` is the middleware-equivalent file.
+- Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+- Do not treat the absence of `middleware.ts` as a finding.
 
 ---
 
@@ -40,11 +42,10 @@ Do not treat the absence of `middleware.ts` as a finding.
 
 For every workflow step:
 
-- the file shown under `Output:` is mandatory
-- the active agent must create or overwrite that markdown file
-- the artifact file must contain the full result for the step
-- the agent must not respond only in chat without writing the artifact
-- after writing the artifact, the agent should give only a short completion summary in chat
+- the file shown under `Output file:` is mandatory
+- the active agent must create or overwrite that markdown artifact
+- the artifact must contain the full result for the step
+- the agent should not respond only in chat without writing the artifact first
 
 ---
 
@@ -52,136 +53,216 @@ For every workflow step:
 
 ### [ ] Step: Feature Intake
 
-Collect the feature requirements and identify the affected surfaces.
+Understand the requested feature before any design or implementation.
 
-Output:
-{@artifacts_path}/feature-intake.md
+Document:
 
-Include:
+- feature description
+- expected user-visible behavior
+- affected modules or features
+- assumptions and unknowns
+- initial scope boundaries
+- auth or security impact
+- runtime placement requirements
 
-- feature objective
-- acceptance criteria
-- affected modules and files (preliminary estimate)
-- auth/security impact (yes/no + reason)
-- runtime placement requirements (server/client/edge)
-- open questions or blockers
+Output file:
 
----
+`{@artifacts_path}/feature-intake.md`
 
-### [ ] Step: Architecture Review
+### [ ] Step: Architecture Design
 
 <!-- agent: architecture-guard-agent -->
 
-Review the planned feature design for modular-monolith boundary compliance.
+Run **Architecture Guard Agent**.
 
-Output:
-{@artifacts_path}/architecture-review.md
+Use this template as the output structure guide:
 
-Confirm:
+`docs/ai/templates/architecture-review-template.md`
 
-- dependency direction preserved
-- module boundaries not crossed
-- DI and composition-root discipline maintained
-- no provider SDK leakage outside adapters
-- contract-first design followed
+The agent must determine:
 
----
+- architectural fit of the feature
+- affected layers and modules
+- dependency direction impact
+- required new contracts or services
+- boundary risks
+- provider isolation implications
+- architectural constraints
 
-### [ ] Step: Security Review
+Output file:
+
+`{@artifacts_path}/architecture-review.md`
+
+### [ ] Step: Security Review (Conditional)
 
 <!-- agent: security-auth-agent -->
 
-Review the feature for auth, authorization, and trust boundary impact.
+If the feature touches:
 
-Output:
-{@artifacts_path}/security-review.md
+- authentication
+- authorization
+- tenancy or organization logic
+- provider integrations
+- sensitive data handling
+- trust boundaries
+- internal APIs
 
-Confirm:
+Run **Security/Auth Agent**.
 
-- authentication boundaries respected
-- authorization enforced server-side
-- no untrusted input forwarded to sensitive operations
-- no violations of `docs/ai/general/SECURITY_CODING_PATTERNS.md` rules
+Use template:
 
----
+`docs/ai/templates/security-review-template.md`
 
-### [ ] Step: Runtime Review
+The agent must assess:
+
+- auth surface
+- authorization enforcement
+- tenant isolation risks
+- provider isolation
+- sensitive data handling
+- trust boundaries
+- security constraints
+- applicable rules from `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+
+Output file:
+
+`{@artifacts_path}/security-review.md`
+
+### [ ] Step: Runtime Review (Conditional)
 
 <!-- agent: nextjs-runtime-agent -->
 
-Review server/client placement and App Router correctness.
+If the feature touches:
 
-Output:
-{@artifacts_path}/runtime-review.md
+- `src/app/*`
+- server actions
+- route handlers
+- middleware or proxy
+- caching or revalidation
+- server/client placement
+- Edge vs Node runtime
+- environment variables
 
-Confirm:
+Run **Next.js Runtime Agent**.
 
-- correct server vs client component placement
-- no server-only code in client bundles
-- route handlers and server actions behave correctly
-- no caching or revalidation hazards
+Use template:
 
----
+`docs/ai/templates/runtime-review-template.md`
+
+The agent must assess:
+
+- runtime surfaces affected
+- server vs client placement
+- route handler and server action behavior
+- middleware implications
+- caching and revalidation behavior
+- Edge vs Node runtime
+- env exposure risks
+- runtime constraints
+
+Output file:
+
+`{@artifacts_path}/runtime-review.md`
+
+### [ ] Step: Feature Constraints
+
+Consolidate specialist findings into one implementation brief.
+
+Use template:
+
+`docs/ai/templates/constraints-template.md`
+
+The summary must include:
+
+- architecture constraints
+- security constraints
+- runtime constraints
+- validation constraints
+- explicitly allowed changes
+- explicitly forbidden changes
+- protected invariants
+
+Output file:
+
+`{@artifacts_path}/constraints.md`
 
 ### [ ] Step: Validation Strategy
 
 <!-- agent: validation-strategy-agent -->
 
-Determine the minimum safe validation scope for this feature.
+Run **Validation Strategy Agent**.
 
-Output:
-{@artifacts_path}/validation-strategy.md
+Use template:
 
-Include:
+`docs/ai/templates/validation-template.md`
 
-- change risk classification
-- minimum required validation
+The agent must determine:
+
+- the minimum validation required
 - optional additional validation
 - validation not required
+- validation commands to run
+- validation gaps
 
----
+Output file:
+
+`{@artifacts_path}/validation-strategy.md`
 
 ### [ ] Step: Implementation
 
 <!-- agent: implementation-agent -->
 
-Implement the feature within the established constraints.
+Run **Implementation Agent**.
 
-Output:
-{@artifacts_path}/implementation-report.md
+The agent must read these artifacts before implementation:
 
-Include:
+- `{@artifacts_path}/feature-intake.md`
+- `{@artifacts_path}/architecture-review.md`
+- `{@artifacts_path}/security-review.md` if present
+- `{@artifacts_path}/runtime-review.md` if present
+- `{@artifacts_path}/constraints.md`
+- `{@artifacts_path}/validation-strategy.md`
 
-- files changed
-- logic added or modified
-- tests added or updated
-- security coding rules followed (reference SECURITY_CODING_PATTERNS.md entries applied)
+The implementation must:
 
----
+- follow `constraints.md`
+- preserve architecture boundaries
+- avoid introducing cross-module coupling
+- implement the feature with minimal blast radius
+- update tests when required
+- follow applicable `SECURITY_CODING_PATTERNS.md` rules
+
+Output file:
+
+`{@artifacts_path}/implementation-report.md`
 
 ### [ ] Step: Validation
 
-Run repository validation commands.
+Run validation defined in:
 
-Output:
-{@artifacts_path}/validation-report.md
+`{@artifacts_path}/validation-strategy.md`
 
-Commands:
+Document:
 
-- pnpm typecheck
-- pnpm lint
-- pnpm test
+- commands executed
+- test results
+- typecheck and lint results
+- architecture lint results if used
+- verification of expected feature behavior
 
----
+Output file:
 
-### [ ] Step: E2E Verification (when required)
+`{@artifacts_path}/validation-report.md`
+
+### [ ] Step: E2E Verification (When Required)
 
 <!-- agent: playwright-e2e-agent -->
 
-Run Playwright verification when the feature includes auth flows, routing, or browser-realistic behavior.
+Run Playwright verification when the feature includes auth flows, routing, or browser-realistic behavior that cannot be closed safely with lower-level validation alone.
 
-Output:
-{@artifacts_path}/e2e-report.md
+Output file:
+
+`{@artifacts_path}/e2e-report.md`
 
 Include:
 
@@ -189,3 +270,20 @@ Include:
 - commands run
 - pass/fail per scenario
 - evidence summary
+
+### [ ] Step: Final Architecture Check
+
+<!-- agent: architecture-guard-agent -->
+
+Run **Architecture Guard Agent** again.
+
+Confirm:
+
+- module boundaries remain intact
+- dependency direction rules remain respected
+- provider isolation is preserved
+- no structural drift occurred
+
+Output file:
+
+`{@artifacts_path}/architecture-final.md`

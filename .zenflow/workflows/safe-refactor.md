@@ -2,11 +2,12 @@
 
 ## Configuration
 
-- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
-- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
-- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+- **Artifacts Path**: `{@artifacts_path}` -> `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses ZenFlow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**:
   - `architecture-guard-agent`
   - `security-auth-agent`
+  - `nextjs-runtime-agent`
   - `validation-strategy-agent`
   - `implementation-agent`
 
@@ -16,15 +17,17 @@
 
 Before starting this workflow, read:
 
-- `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` deprecated April 20, 2026.
+- `AGENTS.md`
 - `docs/ai/general/MODE_MANIFEST.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md`
 
 Repository note:
-In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
-Do not treat the absence of `middleware.ts` as a finding.
+
+- In Next.js 16, `src/proxy.ts` is the middleware-equivalent file.
+- Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+- Do not treat the absence of `middleware.ts` as a finding.
 
 ---
 
@@ -32,11 +35,10 @@ Do not treat the absence of `middleware.ts` as a finding.
 
 For every workflow step:
 
-- the file shown under `Output:` is mandatory
-- the active agent must create or overwrite that markdown file
-- the artifact file must contain the full result for the step
-- the agent must not respond only in chat without writing the artifact
-- after writing the artifact, the agent should give only a short completion summary in chat
+- the file shown under `Output file:` is mandatory
+- the active agent must create or overwrite that markdown artifact
+- the artifact must contain the full result for the step
+- the agent should not respond only in chat without writing the artifact first
 
 ---
 
@@ -44,127 +46,227 @@ For every workflow step:
 
 ### [ ] Step: Refactor Intake
 
-Collect the refactor scope and the behavior-preservation guarantee.
+Understand the refactor goal and define invariants.
 
-Output:
-{@artifacts_path}/refactor-intake.md
+Document:
 
-Include:
+- refactor classification
+- expected unchanged behavior
+- affected modules
+- known architecture smells
+- constraints or assumptions
+- security-sensitive code touched
 
-- refactor objective and motivation
-- affected files and modules
-- behavior contract being preserved (what must not change)
-- security-sensitive code touched (yes/no + which patterns from `SECURITY_CODING_PATTERNS.md` apply)
-- open questions or blockers
+Output file:
 
----
+`{@artifacts_path}/refactor-intake.md`
 
-### [ ] Step: Architecture Safety Check
+### [ ] Step: Architecture Review
 
 <!-- agent: architecture-guard-agent -->
 
-Confirm the refactor preserves modular-monolith boundaries and dependency direction.
+Run **Architecture Guard Agent**.
 
-Output:
-{@artifacts_path}/architecture-safety.md
+Use this template as the output structure guide:
 
-Confirm:
+`docs/ai/templates/architecture-review-template.md`
 
-- no module boundary regressions
-- dependency direction unchanged
-- DI and composition-root discipline maintained
-- no blast radius expansion beyond stated scope
+The agent must determine:
 
----
+- architecture fit
+- affected layers
+- affected modules
+- dependency direction impact
+- boundary risks
+- provider isolation risks
+- architecture constraints
 
-### [ ] Step: Security Safety Check
+Output file:
+
+`{@artifacts_path}/architecture-review.md`
+
+### [ ] Step: Security Review (Conditional)
 
 <!-- agent: security-auth-agent -->
 
-Confirm the refactor does not weaken auth, authorization, or security-sensitive code paths.
+If the refactor touches:
 
-Output:
-{@artifacts_path}/security-safety.md
+- auth flows
+- authorization
+- tenancy or organization logic
+- provider integrations
+- sensitive data handling
+- trust boundaries
 
-Confirm:
+Run **Security/Auth Agent**.
 
-- no trust boundary weakening
-- no removal of input validation or sanitization
-- no violations of `docs/ai/general/SECURITY_CODING_PATTERNS.md` rules introduced
-- redirect handling, logger dispatch, and DI mock patterns follow SEC-01 through SEC-06
+Use template:
 
-If any new code introduced by the refactor creates scanner-flaggeable patterns not in `SECURITY_CODING_PATTERNS.md`, flag for patterns doc update.
+`docs/ai/templates/security-review-template.md`
 
----
+The agent must assess:
+
+- auth surface impact
+- authorization risks
+- tenancy safety
+- provider isolation
+- sensitive data handling
+- security constraints
+- applicable `SECURITY_CODING_PATTERNS.md` rules
+
+Output file:
+
+`{@artifacts_path}/security-review.md`
+
+### [ ] Step: Runtime Review (Conditional)
+
+<!-- agent: nextjs-runtime-agent -->
+
+If the refactor touches:
+
+- `src/app/*`
+- server actions
+- route handlers
+- middleware or proxy
+- caching or revalidation
+- server/client placement
+- Edge vs Node runtime
+
+Run **Next.js Runtime Agent**.
+
+Use template:
+
+`docs/ai/templates/runtime-review-template.md`
+
+The agent must assess:
+
+- runtime surfaces affected
+- server vs client placement
+- caching risks
+- middleware behavior
+- runtime constraints
+
+Output file:
+
+`{@artifacts_path}/runtime-review.md`
+
+### [ ] Step: Refactor Constraints
+
+Consolidate specialist findings into one implementation brief.
+
+Use template:
+
+`docs/ai/templates/constraints-template.md`
+
+The summary must include:
+
+- architecture constraints
+- security constraints
+- runtime constraints
+- validation constraints
+- explicitly allowed changes
+- explicitly forbidden changes
+- protected invariants
+
+Output file:
+
+`{@artifacts_path}/constraints.md`
 
 ### [ ] Step: Validation Strategy
 
 <!-- agent: validation-strategy-agent -->
 
-Determine the minimum safe validation scope to confirm behavior is preserved.
+Run **Validation Strategy Agent**.
 
-Output:
-{@artifacts_path}/validation-strategy.md
+Use template:
 
-Include:
+`docs/ai/templates/validation-template.md`
 
-- minimum required validation
+The agent must determine:
+
+- minimum validation required
 - optional additional validation
 - validation not required
-- validation commands
+- validation commands to run
+- validation gaps
 
----
+Output file:
+
+`{@artifacts_path}/validation-strategy.md`
 
 ### [ ] Step: Implementation
 
 <!-- agent: implementation-agent -->
 
-Execute the refactor within the established constraints.
+Run **Implementation Agent**.
 
-Output:
-{@artifacts_path}/implementation-report.md
+Inputs:
 
-Include:
+- `{@artifacts_path}/refactor-intake.md`
+- `{@artifacts_path}/architecture-review.md`
+- `{@artifacts_path}/security-review.md` if present
+- `{@artifacts_path}/runtime-review.md` if present
+- `{@artifacts_path}/constraints.md`
+- `{@artifacts_path}/validation-strategy.md`
 
-- files changed
-- behavior preserved (how verified)
-- tests updated if needed
-- security coding rules followed
+The agent must:
 
----
+- apply the minimum safe refactor
+- preserve behavior
+- avoid opportunistic redesign
+- update tests if required
+- follow applicable `SECURITY_CODING_PATTERNS.md` rules
+
+Output file:
+
+`{@artifacts_path}/implementation-report.md`
 
 ### [ ] Step: Validation
 
-Run repository validation commands.
+Run validation defined in:
 
-Output:
-{@artifacts_path}/validation-report.md
+`{@artifacts_path}/validation-strategy.md`
 
-Commands:
+Document:
 
-- pnpm typecheck
-- pnpm lint
-- pnpm test
+- commands executed
+- test results
+- typecheck and lint results
+- architecture lint result if used
+- whether behavior is preserved
 
-Include pass/fail per command and any failures with details.
+Output file:
 
----
+`{@artifacts_path}/validation-report.md`
 
-### [ ] Step: Security Patterns Update (conditional)
+### [ ] Step: Final Architecture Check
+
+<!-- agent: architecture-guard-agent -->
+
+Run **Architecture Guard Agent** again.
+
+Confirm:
+
+- no dependency drift
+- boundaries still respected
+- architecture constraints preserved
+
+Output file:
+
+`{@artifacts_path}/architecture-final.md`
+
+### [ ] Step: Security Patterns Update (Conditional)
 
 <!-- agent: security-auth-agent -->
 
-**Run this step only if the refactor touched security-sensitive patterns or introduced new patterns not yet in `SECURITY_CODING_PATTERNS.md`.**
+Run this step only if the refactor touched security-sensitive patterns or introduced a new pattern not already covered in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
-Output:
-{@artifacts_path}/patterns-update-report.md
+Update:
 
-Update `docs/ai/general/SECURITY_CODING_PATTERNS.md` with any new or updated patterns discovered during this refactor.
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+- `AGENTS.md` if a new always-on rule is required
+- matching `docs/ai/general/*.md`, `.github/agents/*.agent.md`, and `.zenflow/workflows/*.md` files when propagation is required
 
-Propagate to:
+Output file:
 
-- `.zencoder/rules/repo.md`
-- `.github/agents/security-auth.agent.md`
-- `.github/agents/implementation-agent.agent.md`
-- `docs/ai/general/02 - Security & Auth Agent.md`
-- `docs/ai/general/04 - Implementation Agents.md`
+`{@artifacts_path}/patterns-update-report.md`

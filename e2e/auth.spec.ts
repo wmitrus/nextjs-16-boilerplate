@@ -9,6 +9,8 @@ import {
 const SIGN_UP_PASSWORD = 'E2E-Password-123!';
 
 function createUniqueClerkTestEmail(prefix: string): string {
+  // Math.random() is intentional — this generates a non-secret test email suffix for
+  // uniqueness across E2E runs only. No cryptographic purpose; CSPRNG is not required here.
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return `e2e+clerk_test-${prefix}-${suffix}@example.com`;
 }

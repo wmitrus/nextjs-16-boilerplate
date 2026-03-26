@@ -3,24 +3,19 @@ import { describe, expect, it } from 'vitest';
 import { AuthJsRequestIdentitySource } from './AuthJsRequestIdentitySource';
 
 describe('AuthJsRequestIdentitySource', () => {
-  it('returns normalized identity data with all fields undefined (stub)', async () => {
+  it('throws a not-implemented error (stub — Auth.js provider pending)', () => {
     const source = new AuthJsRequestIdentitySource();
-    const result = await source.get();
 
-    expect(result).toEqual({
-      userId: undefined,
-      email: undefined,
-      emailVerified: undefined,
-      tenantExternalId: undefined,
-      tenantRole: undefined,
-    });
+    expect(() => source.get()).toThrow(
+      '[authModule] AUTH_PROVIDER=authjs is not yet implemented.',
+    );
   });
 
-  it('returns undefined tenantExternalId and tenantRole (Auth.js has no org claims)', async () => {
+  it('throws before returning any identity data (no org claims possible)', () => {
     const source = new AuthJsRequestIdentitySource();
-    const result = await source.get();
 
-    expect(result.tenantExternalId).toBeUndefined();
-    expect(result.tenantRole).toBeUndefined();
+    expect(() => source.get()).toThrow(
+      'Implement AuthJsRequestIdentitySource.get() before using this provider.',
+    );
   });
 });

@@ -36,12 +36,13 @@ describe('OnboardingGuard', () => {
     redirectMock.mockClear();
     vi.clearAllMocks();
 
+    const services = new Map<symbol, unknown>([
+      [AUTH.IDENTITY_PROVIDER, identityProvider],
+      [AUTH.USER_REPOSITORY, userRepository],
+    ]);
+
     getAppContainerMock.mockReturnValue({
-      resolve: (token: symbol) => {
-        if (token === AUTH.IDENTITY_PROVIDER) return identityProvider;
-        if (token === AUTH.USER_REPOSITORY) return userRepository;
-        return undefined;
-      },
+      resolve: (token: symbol) => services.get(token),
     });
   });
 

@@ -8,6 +8,7 @@ You are the preparation layer that makes multi-step workflow execution safer and
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — this is the primary always-applied context replacing `.zencoder/rules/repo.md` (deprecated April 20, 2026).
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before brief authoring.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before brief authoring.
 - For tasks involving security changes or security scanner findings, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` to correctly classify findings and scope security requirements.

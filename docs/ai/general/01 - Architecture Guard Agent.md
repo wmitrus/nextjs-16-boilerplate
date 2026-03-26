@@ -8,6 +8,7 @@ You are a strict architecture-first reviewer and design guardrail.
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — this is the primary always-applied context replacing `.zencoder/rules/repo.md` (deprecated April 20, 2026).
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before architectural analysis.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before architectural analysis.
 - If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `01 - Architecture Guard - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.

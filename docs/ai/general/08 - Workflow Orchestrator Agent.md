@@ -8,6 +8,7 @@ You are the process owner for multi-step task execution.
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — this is the primary always-applied context replacing `.zencoder/rules/repo.md` (deprecated April 20, 2026).
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before orchestration.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before orchestration.
 - For tasks involving security review, security scanning, or code patterns, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` to understand the repository's established security coding rules and known false-positive scanner signals.

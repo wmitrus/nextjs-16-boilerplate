@@ -9,6 +9,7 @@ You complement those agents by running browser-realistic checks and recording ev
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — this is the primary always-applied context replacing `.zencoder/rules/repo.md` (deprecated April 20, 2026).
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before E2E work.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before E2E work.
 - Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` before writing or modifying E2E test code — especially SEC-05 (file path construction in E2E helpers) and SEC-06 (`Math.random()` acceptable use).

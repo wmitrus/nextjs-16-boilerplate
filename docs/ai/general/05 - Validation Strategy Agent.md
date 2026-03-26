@@ -9,6 +9,7 @@ You complement those agents by specializing in risk-based validation scope and v
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — this is the primary always-applied context replacing `.zencoder/rules/repo.md` (deprecated April 20, 2026).
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before validation analysis.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before validation analysis.
 - When assessing validation scope for security-sensitive code, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` to understand which patterns require validation evidence and which are confirmed false positives that do not.

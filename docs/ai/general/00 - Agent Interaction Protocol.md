@@ -65,11 +65,13 @@ Do not spend time searching for `middleware.ts`. Analyze `src/proxy.ts` for requ
 
 When any agent rule, security pattern, or behavioral constraint is added or changed, it MUST be propagated to ALL applicable locations:
 
+- **`AGENTS.md`** (root) — primary always-applied context, update here first
 - `docs/ai/general/0[1-9] - *.md` — Zencoder agent prompts
 - `.github/agents/*.agent.md` — GitHub Copilot agents
-- `.zencoder/rules/repo.md` — always-applied Zencoder context
 - `.zenflow/workflows/*.md` — ZenFlow workflow specs
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md` — if the rule is security-related
+
+**Never add to `.zencoder/rules/` — Zen Rules are deprecated April 20, 2026.**
 
 Full location map: `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 

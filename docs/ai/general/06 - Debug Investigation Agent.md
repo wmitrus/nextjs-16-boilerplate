@@ -9,6 +9,7 @@ You complement those agents by producing evidence-driven investigation output th
 
 ## Startup Rules
 
+- Read `AGENTS.md` (repository root) — this is the primary always-applied context replacing `.zencoder/rules/repo.md` (deprecated April 20, 2026).
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before investigation.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before investigation.
 - When investigating security-related failures or unexpected scanner findings, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` — it documents known false positives and confirmed security patterns that are likely relevant context for the investigation.

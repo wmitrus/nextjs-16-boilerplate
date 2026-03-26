@@ -24,8 +24,9 @@ export function sanitizeData<T>(
   for (const key of Object.keys(source)) {
     if (blacklistedKeys.some((b) => key.toLowerCase().includes(b))) {
       continue;
+      // eslint-disable-next-line security/detect-object-injection -- key is from Object.keys(source) (own props); source is a user-supplied object but keys are enumerated safely; blacklisted keys already skipped
     } else if (typeof source[key] === 'object' && source[key] !== null) {
-      // eslint-disable-next-line security/detect-object-injection -- key is from Object.keys(source) (own props); sanitized uses Object.create(null); blacklisted keys already skipped
+      // eslint-disable-next-line security/detect-object-injection -- same as above; sanitized uses Object.create(null)
       sanitized[key] = sanitizeData(source[key], blacklistedKeys);
     } else {
       // eslint-disable-next-line security/detect-object-injection -- same as above

@@ -32,6 +32,7 @@ function resolveBootstrapError(
   }
 
   if (reason && reason in ERROR_BY_REASON) {
+    // eslint-disable-next-line security/detect-object-injection -- guarded by `in` check above; ERROR_BY_REASON has only static string keys
     return ERROR_BY_REASON[reason];
   }
 

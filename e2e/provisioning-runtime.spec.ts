@@ -1,3 +1,5 @@
+/* eslint-disable security/detect-unsafe-regex -- E2E test URL matchers; patterns are static Playwright assertions, no user-controlled input, no production exposure */
+/* eslint-disable security/detect-non-literal-fs-filename -- filePath is always path.join(process.cwd(), static-literal); no user input, E2E test only (SEC-05) */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 

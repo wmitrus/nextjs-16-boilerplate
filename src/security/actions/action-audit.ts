@@ -56,8 +56,9 @@ function redactAuditInput(
   }
 
   if (typeof FormData !== 'undefined' && value instanceof FormData) {
-    const entries: Record<string, unknown> = {};
+    const entries = Object.create(null) as Record<string, unknown>;
     for (const [key, entryValue] of value.entries()) {
+      // eslint-disable-next-line security/detect-object-injection -- entries uses Object.create(null); key is a FormData field name, sensitive fields are redacted by isSensitiveAuditField
       entries[key] = isSensitiveAuditField(key)
         ? REDACTED_AUDIT_VALUE
         : typeof entryValue === 'string'
@@ -93,8 +94,9 @@ function redactAuditInput(
 
   seen.add(value);
 
-  const redacted: Record<string, unknown> = {};
+  const redacted = Object.create(null) as Record<string, unknown>;
   for (const [key, entryValue] of Object.entries(value)) {
+    // eslint-disable-next-line security/detect-object-injection -- redacted uses Object.create(null); key is from Object.entries (own props only), sensitive fields are redacted
     redacted[key] = isSensitiveAuditField(key)
       ? REDACTED_AUDIT_VALUE
       : redactAuditInput(entryValue, seen);

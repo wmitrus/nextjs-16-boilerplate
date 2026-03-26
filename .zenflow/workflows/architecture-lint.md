@@ -11,6 +11,7 @@
 
 Before starting this workflow, read:
 
+- `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` deprecated April 20, 2026.
 - `docs/ai/general/MODE_MANIFEST.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`

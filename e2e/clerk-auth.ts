@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-object-injection -- E2E test file; all lookups use typed const Record keys or controlled env var names, no user input */
 import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright';
 import type { Page } from '@playwright/test';
 

@@ -5,6 +5,7 @@ export const mockToDTO = vi.fn(
   (data: Record<string, unknown>, fields: string[]) => {
     const dto: Record<string, unknown> = {};
     fields.forEach((f) => {
+      // eslint-disable-next-line security/detect-object-injection -- test mock; f is a field name from the controlled fields array passed by test callers
       dto[f] = data[f];
     });
     return dto;
@@ -18,6 +19,7 @@ export function resetDataSanitizerMocks() {
   mockToDTO.mockImplementation((data, fields) => {
     const dto: Record<string, unknown> = {};
     fields.forEach((f) => {
+      // eslint-disable-next-line security/detect-object-injection -- test mock; f is a field name from the controlled fields array passed by test callers
       dto[f] = data[f];
     });
     return dto;

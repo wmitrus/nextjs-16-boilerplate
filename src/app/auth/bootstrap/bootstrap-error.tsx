@@ -55,6 +55,7 @@ export function BootstrapErrorUI({ error }: BootstrapErrorUIProps) {
         <h1 className="mb-2 text-xl font-semibold text-gray-900">
           Sign-in could not be completed
         </h1>
+        {/* eslint-disable-next-line security/detect-object-injection -- error is typed as a finite union; ERROR_MESSAGES keys match exactly */}
         <p className="mb-6 text-sm text-gray-600">{ERROR_MESSAGES[error]}</p>
         <div className="flex gap-3">
           <button

@@ -146,6 +146,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     debug: (ctx, msg) => logger.debug(ctx, msg),
     trace: (ctx, msg) => logger.trace(ctx, msg),
   };
+  // eslint-disable-next-line security/detect-object-injection -- level is Zod-validated against LOG_LEVELS enum; logDispatch is a static Record<LogLevel, fn>
   logDispatch[level]({ ...logContext, ip }, validation.data.message);
 
   return new NextResponse(null, { status: 204 });

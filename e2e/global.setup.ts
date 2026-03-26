@@ -26,6 +26,7 @@ function readEnvFile(filePath: string): Record<string, string> {
     const key = line.slice(0, equalsIndex).trim();
     const value = line.slice(equalsIndex + 1).trim();
 
+    // eslint-disable-next-line security/detect-object-injection -- key is parsed from a local .env file line (not user request input); env is a fresh {} accumulator
     env[key] = value.replace(/^['"]|['"]$/g, '');
   }
 

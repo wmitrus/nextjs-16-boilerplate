@@ -18,7 +18,7 @@ export function sanitizeLogContext(
 ): Record<string, unknown> {
   if (depth >= MAX_CONTEXT_DEPTH) return {};
 
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = Object.create(null);
 
   for (const [key, value] of Object.entries(obj)) {
     if (depth === 0 && key === 'source') continue;
@@ -26,6 +26,7 @@ export function sanitizeLogContext(
     if (SECRET_KEY_PATTERN.test(key)) continue;
 
     if (typeof value === 'string') {
+      // eslint-disable-next-line security/detect-object-injection -- result uses Object.create(null); key is from Object.entries (own props only); secret keys already filtered above
       result[key] =
         value.length > MAX_STRING_LENGTH
           ? `${value.slice(0, MAX_STRING_LENGTH)}[truncated]`
@@ -35,18 +36,21 @@ export function sanitizeLogContext(
       typeof value === 'boolean' ||
       value === null
     ) {
+      // eslint-disable-next-line security/detect-object-injection -- same as above
       result[key] = value;
     } else if (
       typeof value === 'object' &&
       value !== null &&
       !Array.isArray(value)
     ) {
+      // eslint-disable-next-line security/detect-object-injection -- same as above
       result[key] = sanitizeLogContext(
         value as Record<string, unknown>,
         depth + 1,
         trusted,
       );
     } else if (Array.isArray(value)) {
+      // eslint-disable-next-line security/detect-object-injection -- same as above
       result[key] = value
         .slice(0, 10)
         .map((v) =>

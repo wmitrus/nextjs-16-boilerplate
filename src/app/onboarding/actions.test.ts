@@ -74,13 +74,14 @@ describe('completeOnboarding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    const services = new Map<symbol, unknown>([
+      [AUTH.IDENTITY_SOURCE, identitySource],
+      [PROVISIONING.SERVICE, provisioningService],
+      [AUTH.USER_REPOSITORY, userRepository],
+    ]);
+
     getAppContainerMock.mockReturnValue({
-      resolve: (token: symbol) => {
-        if (token === AUTH.IDENTITY_SOURCE) return identitySource;
-        if (token === PROVISIONING.SERVICE) return provisioningService;
-        if (token === AUTH.USER_REPOSITORY) return userRepository;
-        return undefined;
-      },
+      resolve: (token: symbol) => services.get(token),
     });
 
     identitySource.get.mockResolvedValue({

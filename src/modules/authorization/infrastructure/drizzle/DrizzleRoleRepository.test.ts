@@ -11,6 +11,7 @@ function createMockDb(result: unknown[] = []) {
     Promise.resolve(result).then(resolve);
 
   ['from', 'where', 'limit', 'innerJoin', 'orderBy'].forEach((m) => {
+    // eslint-disable-next-line security/detect-object-injection -- test mock; m is always a known method name from a static literal array
     chain[m] = vi.fn().mockReturnValue(chain);
   });
 

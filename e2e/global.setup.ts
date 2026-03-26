@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- filePath is always path.resolve(process.cwd(), static-literal); no user input, E2E setup only (SEC-05) */
 import fs from 'node:fs';
 import path from 'node:path';
 

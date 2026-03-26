@@ -4,8 +4,11 @@ import { CookieActiveTenantSource } from './CookieActiveTenantSource';
 
 function makeCookies(entries: Record<string, string>) {
   return {
-    get: (name: string) =>
-      entries[name] ? { value: entries[name] } : undefined,
+    get: (name: string) => {
+      // eslint-disable-next-line security/detect-object-injection -- test helper; name is a controlled cookie key from test cases, not user input
+      const entry = entries[name];
+      return entry ? { value: entry } : undefined;
+    },
   };
 }
 

@@ -49,16 +49,17 @@ This is the authoritative map of every place agent rules must be propagated.
 **When you add, change, or remove a coding rule, security pattern, or behavioral constraint:**
 Update ALL locations below that apply to the rule's scope.
 
-| Location                                      | Purpose                                | Consumer                 | Format                      |
-| --------------------------------------------- | -------------------------------------- | ------------------------ | --------------------------- |
-| `docs/ai/general/0[1-9] - *.md`               | Agent prompt source                    | Zencoder extension       | Plain markdown prompt       |
-| `.github/agents/*.agent.md`                   | Agent prompt source                    | GitHub Copilot           | YAML frontmatter + markdown |
-| `.zencoder/rules/repo.md`                     | Always-applied context                 | Zencoder (every session) | `alwaysApply: true`         |
-| `.zenflow/workflows/*.md`                     | Workflow execution specs               | ZenFlow extension        | Step-based markdown         |
-| `docs/ai/general/SECURITY_CODING_PATTERNS.md` | Living security rule catalogue         | All agents + humans      | Indexed pattern entries     |
-| `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`  | Auth-specific anti-patterns            | Auth/security work       | Anti-pattern list           |
-| `docs/ai/zencoder/*.md`                       | Description guides (non-authoritative) | Humans                   | Points to `general/`        |
-| `docs/ai/copilot/*.md`                        | Description guides (non-authoritative) | Humans                   | Points to `.github/agents/` |
+| Location                                      | Purpose                                | Consumer            | Format                                                       |
+| --------------------------------------------- | -------------------------------------- | ------------------- | ------------------------------------------------------------ |
+| **`AGENTS.md`** (root)                        | **Primary always-applied context**     | **All AI agents**   | Plain markdown — **update here first**                       |
+| `docs/ai/general/0[1-9] - *.md`               | Agent prompt source                    | Zencoder extension  | Plain markdown prompt                                        |
+| `.github/agents/*.agent.md`                   | Agent prompt source                    | GitHub Copilot      | YAML frontmatter + markdown                                  |
+| `.zenflow/workflows/*.md`                     | Workflow execution specs               | ZenFlow extension   | Step-based markdown                                          |
+| `docs/ai/general/SECURITY_CODING_PATTERNS.md` | Living security rule catalogue         | All agents + humans | Indexed pattern entries                                      |
+| `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`  | Auth-specific anti-patterns            | Auth/security work  | Anti-pattern list                                            |
+| `docs/ai/zencoder/*.md`                       | Description guides (non-authoritative) | Humans              | Points to `general/`                                         |
+| `docs/ai/copilot/*.md`                        | Description guides (non-authoritative) | Humans              | Points to `.github/agents/`                                  |
+| ~~`.zencoder/rules/repo.md`~~                 | ~~Always-applied context~~             | ~~Zencoder~~        | **DEPRECATED — April 20, 2026. Never use. See `AGENTS.md`.** |
 
 ### Agent Numbering and File Correspondence
 

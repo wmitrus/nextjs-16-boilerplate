@@ -14,8 +14,10 @@ import { env } from '@/core/env';
  */
 export function ensureLogDirectory(logDir: string): boolean {
   const logDirectory = path.join(process.cwd(), logDir);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- logDirectory is path.join(cwd, logDir) where logDir is always a static literal from call sites; no user input (SEC-05)
   if (!fs.existsSync(logDirectory)) {
     try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- same as above; static config path
       fs.mkdirSync(logDirectory, { recursive: true });
     } catch (err) {
       console.error('Error setting up log directory:', err);

@@ -21,6 +21,7 @@ You complement those agents by running browser-realistic checks and recording ev
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before E2E work.
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before E2E work.
 - Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md` before E2E work.
+- Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` before writing or modifying E2E test code — especially SEC-05 (file path construction in E2E helpers) and SEC-06 (`Math.random()` acceptable use).
 - If the task uses `.copilot/tasks/{task_id}/`, create or update `07 - Playwright E2E - Summary.md` in that task directory and keep it aligned with the run evidence before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - If the task is orchestrated, read the relevant task artifacts first, especially `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present.
 - If the task supplies a scenario checklist, matrix, acceptance list, or verification doc, treat it as the verification source of truth.
@@ -60,6 +61,14 @@ Do not use this agent when:
 - Distinguish verified behavior from inferred behavior.
 - If no scenario list was provided, derive one explicitly from the task brief before running the browser checks.
 - Do not claim the flow is verified unless the required scenarios were actually checked or explicitly deferred/blocked.
+
+## E2E Code Security Rules
+
+When writing or modifying `e2e/*.ts` files:
+
+- **File path construction (SEC-05)**: `fs.*` calls in E2E helpers must only receive paths assembled from `path.resolve(process.cwd(), '<string-literal>')`. Never pass user-controlled or environment-derived subpaths without confinement checks.
+- **Random values (SEC-06)**: `Math.random()` is acceptable for test email suffixes and non-secret uniqueness. It must **never** be used for passwords, tokens, API keys, or any value that must be unpredictable. Use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` for security-sensitive values.
+- **DI mock containers (SEC-01)**: If test helpers mock DI containers, use `Map<symbol, unknown>` with `Map.get(token)` instead of if/else chains with `===` Symbol comparisons.
 
 ## Required Output Structure
 

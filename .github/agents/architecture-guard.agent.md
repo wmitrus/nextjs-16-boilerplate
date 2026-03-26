@@ -21,6 +21,7 @@ You are a strict architecture-first reviewer and design guardrail.
 - If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `01 - Architecture Guard - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, then review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md` and use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios.
+- When reviewing code with security implications — especially middleware, redirect handling, logging, or file access — read `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 - Treat repository code as the final source of truth.
 - If docs, ADRs, reports, or prompts disagree with code, trust the code and report the drift.
 

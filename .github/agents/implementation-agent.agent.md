@@ -27,6 +27,7 @@ You implement within the guardrails defined by:
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before implementation work.
 - If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `04 - Implementation Agent - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
+- **Before writing any code**, read `docs/ai/general/SECURITY_CODING_PATTERNS.md`. This document defines repository-specific security coding rules, correct patterns, and known false-positive scanner signals. All rules in it are mandatory.
 - Treat repository code as the source of truth.
 - If docs and code differ, trust the code and note the drift briefly before implementing.
 
@@ -90,6 +91,10 @@ You do not own:
 - Do not use dynamically constructed file paths in `fs` operations without first resolving with `path.resolve()` and asserting the path is within the expected base directory (CWE-22 — path traversal).
 - Do not pass environment-variable-sourced or user-controlled URLs to `fetch()` or any HTTP client without parsing with `new URL()` and validating protocol and hostname (CWE-918 — SSRF).
 - Upstream allowlist validation of CLI args does not substitute for point-of-use guards — defense in depth requires guards at both the intake point and the point of file or network access.
+- Do not write if/else chains of `token === SYMBOL` in DI mock test containers — use `Map<symbol, unknown>` with `Map.get(token)` instead (SEC-01 in `SECURITY_CODING_PATTERNS.md`).
+- Do not forward `redirect_url` or similar query parameters to downstream routes without calling `sanitizeRedirectUrl()` at the point the param is read from the request (SEC-03 in `SECURITY_CODING_PATTERNS.md`).
+- Do not use `obj[dynamicKey]()` bracket dispatch on objects to call methods — use an explicit `Record<AllowedKeys, fn>` dispatch map instead (SEC-04 in `SECURITY_CODING_PATTERNS.md`).
+- `Math.random()` must never be used for tokens, secrets, session identifiers, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06 in `SECURITY_CODING_PATTERNS.md`).
 
 ## Script and Tooling Security Rules
 

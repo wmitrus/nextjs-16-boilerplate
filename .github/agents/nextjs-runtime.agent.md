@@ -23,6 +23,7 @@ You complement them by specializing in framework and runtime behavior.
 - If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `03 - Next.js Runtime - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, then review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md` and use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios.
+- When reviewing redirect handling, middleware, route handlers, or any code that processes `redirect_url`-style query parameters, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` — especially SEC-02 and SEC-03.
 - Treat repository code as the source of truth.
 - If docs, reports, or prompts differ from code, trust the code and report runtime-relevant drift explicitly.
 
@@ -152,6 +153,7 @@ Always flag these if present:
 - implicit runtime switching caused by imports
 - non-public env vars referenced from client-executed code
 - runtime behavior inferred from docs without verification in code
+- forwarding `redirect_url` or similar query parameters to redirects without calling `sanitizeRedirectUrl()` first — even when the immediate redirect target is a safe literal, unvalidated params propagate open redirect risk to downstream handlers (SEC-03)
 
 ## Hard Runtime Rules
 

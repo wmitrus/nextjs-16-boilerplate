@@ -21,6 +21,7 @@ You complement that agent by specializing in auth and security correctness.
 - If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `02 - Security & Auth - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, then review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md` and use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios.
+- **Before any security review or implementation**, read `docs/ai/general/SECURITY_CODING_PATTERNS.md`. This is the repository's living catalogue of confirmed security patterns, false-positive signals, and mandatory coding rules produced from structured security reviews. All rules in it are active constraints.
 - Treat repository code as the source of truth.
 - If docs, reports, or prompts differ from code, trust the code and report the drift relevant to auth or security.
 
@@ -118,6 +119,9 @@ Always flag these if present:
 - provider SDK usage inside domain or core contracts
 - dynamically constructed file paths used in `fs` operations without `path.resolve()` and base-directory confinement check (CWE-22 — path traversal)
 - environment-variable-sourced or user-controlled URLs passed directly to `fetch()` or any HTTP client without protocol and hostname allowlist validation (CWE-918 — SSRF)
+- forwarding `redirect_url` or similar query parameters to any redirect destination without calling `sanitizeRedirectUrl()` first — unvalidated params propagate open redirect risk downstream even when the immediate redirect target is a safe literal (SEC-03)
+- using `obj[dynamicKey]()` bracket dispatch on objects to call methods — use explicit `Record<AllowedKeys, fn>` dispatch maps; the Zod guard upstream is invisible to static analysis (SEC-04)
+- `Math.random()` for tokens, secrets, session identifiers, API keys, nonces, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06)
 
 ## Hard Security Rules
 

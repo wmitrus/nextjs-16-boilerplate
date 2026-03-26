@@ -139,6 +139,31 @@ pnpm release          # Semantic release
 - **`security-scan.yml`**: Security scanning.
 - **`e2e-label.yml`**: E2E test label automation.
 
+## Security Coding Patterns
+
+Repository-specific security coding rules are maintained in:
+
+**`docs/ai/general/SECURITY_CODING_PATTERNS.md`**
+
+This document is the living, authoritative catalogue of:
+
+- security patterns to avoid and their correct alternatives
+- confirmed false-positive scanner signals and why they are safe
+- mandatory coding rules produced from structured security reviews
+
+**All agents that write or review code MUST read this document.**
+
+Key rules currently in effect:
+
+| ID     | Rule                                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------------------- |
+| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL` |
+| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                    |
+| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                |
+| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                    |
+| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                   |
+| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                      |
+
 ## Environment Variables (Key Groups)
 
 Managed via `src/core/env.ts` (T3-Env + Zod). Groups:

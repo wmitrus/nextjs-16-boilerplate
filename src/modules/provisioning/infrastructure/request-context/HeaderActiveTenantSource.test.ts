@@ -4,6 +4,7 @@ import { HeaderActiveTenantSource } from './HeaderActiveTenantSource';
 
 function makeHeaders(entries: Record<string, string>): Headers {
   return {
+    // eslint-disable-next-line security/detect-object-injection -- test helper; name is a controlled header key passed from test cases
     get: (name: string) => entries[name] ?? null,
   } as unknown as Headers;
 }

@@ -16,22 +16,22 @@ vi.mock('./bootstrap-org-required', () => ({
   ),
 }));
 
-import BootstrapPage from './page';
+import { BootstrapPageContent } from './page';
 
-describe('BootstrapPage', () => {
+describe('BootstrapPageContent', () => {
   const makeProps = (params: Record<string, string> = {}) => ({
     searchParams: Promise.resolve(params),
   });
 
   it('renders org-required UI when state=org-required', async () => {
-    render(await BootstrapPage(makeProps({ state: 'org-required' })));
+    render(await BootstrapPageContent(makeProps({ state: 'org-required' })));
     expect(screen.getByTestId('bootstrap-org-required')).toBeDefined();
     expect(screen.queryByTestId('bootstrap-error')).toBeNull();
   });
 
   it('passes redirect_url to BootstrapOrgRequired', async () => {
     render(
-      await BootstrapPage(
+      await BootstrapPageContent(
         makeProps({ state: 'org-required', redirect_url: '/users' }),
       ),
     );
@@ -43,7 +43,7 @@ describe('BootstrapPage', () => {
   });
 
   it('passes undefined redirect_url to BootstrapOrgRequired when absent', async () => {
-    render(await BootstrapPage(makeProps({ state: 'org-required' })));
+    render(await BootstrapPageContent(makeProps({ state: 'org-required' })));
     expect(
       screen
         .getByTestId('bootstrap-org-required')
@@ -52,56 +52,62 @@ describe('BootstrapPage', () => {
   });
 
   it('renders org-required UI when reason=org-required', async () => {
-    render(await BootstrapPage(makeProps({ reason: 'org-required' })));
+    render(await BootstrapPageContent(makeProps({ reason: 'org-required' })));
     expect(screen.getByTestId('bootstrap-org-required')).toBeDefined();
     expect(screen.queryByTestId('bootstrap-error')).toBeNull();
   });
 
   it('renders cross_provider_linking error UI', async () => {
-    render(await BootstrapPage(makeProps({ error: 'cross_provider_linking' })));
+    render(
+      await BootstrapPageContent(
+        makeProps({ error: 'cross_provider_linking' }),
+      ),
+    );
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent(
       'cross_provider_linking',
     );
   });
 
   it('renders quota_exceeded error UI', async () => {
-    render(await BootstrapPage(makeProps({ error: 'quota_exceeded' })));
+    render(await BootstrapPageContent(makeProps({ error: 'quota_exceeded' })));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent(
       'quota_exceeded',
     );
   });
 
   it('renders tenant_config error UI', async () => {
-    render(await BootstrapPage(makeProps({ error: 'tenant_config' })));
+    render(await BootstrapPageContent(makeProps({ error: 'tenant_config' })));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent(
       'tenant_config',
     );
   });
 
   it('renders db_error error UI', async () => {
-    render(await BootstrapPage(makeProps({ error: 'db_error' })));
+    render(await BootstrapPageContent(makeProps({ error: 'db_error' })));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 
   it('defaults to db_error for an unknown error param', async () => {
-    render(await BootstrapPage(makeProps({ error: 'something_unexpected' })));
+    render(
+      await BootstrapPageContent(makeProps({ error: 'something_unexpected' })),
+    );
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 
   it('maps reason=tenant-lost to tenant_config UI', async () => {
-    render(await BootstrapPage(makeProps({ reason: 'tenant-lost' })));
+    render(await BootstrapPageContent(makeProps({ reason: 'tenant-lost' })));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent(
       'tenant_config',
     );
   });
 
   it('maps reason=db-error to db_error UI', async () => {
-    render(await BootstrapPage(makeProps({ reason: 'db-error' })));
+    render(await BootstrapPageContent(makeProps({ reason: 'db-error' })));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 
   it('defaults to db_error when no params are provided', async () => {
-    render(await BootstrapPage(makeProps()));
+    render(await BootstrapPageContent(makeProps()));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 });

@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+
 import { BootstrapErrorUI } from './bootstrap-error';
 import { BootstrapOrgRequired } from './bootstrap-org-required';
 
@@ -9,6 +11,12 @@ const KNOWN_ERRORS = [
 ] as const;
 
 type BootstrapPageError = (typeof KNOWN_ERRORS)[number];
+type BootstrapSearchParams = Promise<{
+  state?: string;
+  error?: string;
+  reason?: string;
+  redirect_url?: string;
+}>;
 
 const KNOWN_ERROR_SET = new Set<string>(KNOWN_ERRORS);
 const ERROR_BY_REASON: Record<string, BootstrapPageError> = {
@@ -39,15 +47,34 @@ function resolveBootstrapError(
   return 'db_error';
 }
 
-export default async function BootstrapPage({
+function BootstrapPageFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="mx-auto w-full max-w-md rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="h-6 w-48 animate-pulse rounded bg-gray-200" />
+        <div className="mt-4 h-4 w-full animate-pulse rounded bg-gray-100" />
+        <div className="mt-2 h-4 w-5/6 animate-pulse rounded bg-gray-100" />
+      </div>
+    </div>
+  );
+}
+
+export default function BootstrapPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    state?: string;
-    error?: string;
-    reason?: string;
-    redirect_url?: string;
-  }>;
+  searchParams: BootstrapSearchParams;
+}) {
+  return (
+    <Suspense fallback={<BootstrapPageFallback />}>
+      <BootstrapPageContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+export async function BootstrapPageContent({
+  searchParams,
+}: {
+  searchParams: BootstrapSearchParams;
 }) {
   const { state, error, reason, redirect_url } = await searchParams;
 

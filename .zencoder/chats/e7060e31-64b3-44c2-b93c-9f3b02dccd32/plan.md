@@ -244,3 +244,43 @@ Files changed:
 Validation: typecheck PASS, lint PASS, arch:lint PASS, test 762/762 pass (1 pre-existing drizzle DB timeout failure)
 
 Next action pending: user must confirm which probe scenario fires (A/B/C/D from report). If Scenario A, proceed with form submission fix: migrate OnboardingForm to form action={completeOnboarding} + useFormStatus().
+
+---
+
+### [x] Ad-hoc: Preview Deploy Suspense Failure Investigation
+
+Build failing: "Uncached data was accessed outside of <Suspense>" on /sign-in/[[...sign-in]] route.
+
+Output:
+/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/e7060e31-64b3-44c2-b93c-9f3b02dccd32/preview-deploy-suspense-failure-investigation.md
+
+Status: INVESTIGATION COMPLETE — READY FOR IMPLEMENTATION
+
+Root cause (Confirmed):
+
+- src/app/sign-in/[[...sign-in]]/page.tsx and src/app/sign-up/[[...sign-up]]/page.tsx both call `await connection()` at the top level of the exported Page function
+- Next.js 16 with cacheComponents: true requires connection() to be called from a CHILD component wrapped in <Suspense> at the page level — ancestor layout Suspense is not sufficient
+- Next.js 16.1.7 (upgraded from 16.1.6 via lockfile update in commit dee127c) tightened enforcement, surfacing this latent violation as a hard build error
+
+Fix: Extract page body into async child component, wrap in <Suspense fallback={null}> at page level.
+Files: sign-in/[[...sign-in]]/page.tsx, sign-up/[[...sign-up]]/page.tsx
+Blast radius: Low — local to 2 page files.
+
+---
+
+### [x] Ad-hoc: Preview Deploy Suspense Fix — Implementation
+
+Fix build failure: extract connection() into child component + page-level Suspense for sign-in and sign-up.
+
+Output: (inline — no separate artifact; changes are in source files)
+
+Status: COMPLETE — IMPLEMENTED
+
+Files changed:
+
+- src/app/sign-in/[[...sign-in]]/page.tsx — extracted Page body to SignInPageContent (named export), wrapped in <Suspense fallback={null}>
+- src/app/sign-in/[[...sign-in]]/page.test.tsx — updated to import and test SignInPageContent instead of default Page
+- src/app/sign-up/[[...sign-up]]/page.tsx — extracted SignUpPage body to SignUpPageContent (named export), wrapped in <Suspense fallback={null}>
+- src/app/sign-up/[[...sign-up]]/page.test.tsx — updated to import and test SignUpPageContent instead of default SignUpPage
+
+Validation: typecheck PASS, lint PASS, test 787/787 pass (all tests green including sign-in and sign-up tests)

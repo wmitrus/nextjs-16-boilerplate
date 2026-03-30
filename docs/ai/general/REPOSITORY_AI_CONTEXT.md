@@ -268,11 +268,13 @@ Unit tests are co-located with source files.
 | Gate               | Command                 |
 | ------------------ | ----------------------- |
 | Type check         | `pnpm typecheck`        |
-| Lint               | `pnpm lint`             |
+| Lint (with fix)    | `pnpm lint --fix`       |
 | Unit tests         | `pnpm test`             |
 | Circular dep check | `pnpm skott:check:only` |
 | Unused dep check   | `pnpm depcheck`         |
 | Env consistency    | `pnpm env:check`        |
+
+**Lint rule**: Always run `pnpm lint --fix`, never plain `pnpm lint`. The linter auto-fixes import ordering and formatting issues on save; running without `--fix` only reports fixable errors and wastes tokens. If unfixable errors remain after `--fix`, report them.
 
 Pre-push hook runs: typecheck -> skott -> depcheck -> madge.
 

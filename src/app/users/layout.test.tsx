@@ -21,7 +21,7 @@ vi.mock('@/security/core/node-provisioning-runtime', () => ({
   resolveNodeProvisioningAccess: resolveNodeProvisioningAccessMock,
 }));
 
-import UsersLayout from './layout';
+import { UsersLayoutGuard } from './layout';
 
 const diagnostics = {
   tenancyMode: 'personal' as const,
@@ -51,9 +51,9 @@ describe('UsersLayout node provisioning guard', () => {
       },
     });
 
-    await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
-      'REDIRECT:/sign-in?redirect_url=/users',
-    );
+    await expect(
+      UsersLayoutGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/sign-in?redirect_url=/users');
   });
 
   it('redirects bootstrap-required user to /auth/bootstrap/start with preserved target', async () => {
@@ -68,9 +68,9 @@ describe('UsersLayout node provisioning guard', () => {
       },
     });
 
-    await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
-      'REDIRECT:/auth/bootstrap/start?redirect_url=/users',
-    );
+    await expect(
+      UsersLayoutGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/auth/bootstrap/start?redirect_url=/users');
   });
 
   it('redirects onboarding-required user to onboarding', async () => {
@@ -87,9 +87,9 @@ describe('UsersLayout node provisioning guard', () => {
       },
     });
 
-    await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
-      'REDIRECT:/onboarding',
-    );
+    await expect(
+      UsersLayoutGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/onboarding');
   });
 
   it('redirects tenant-context-required user to bootstrap recovery route', async () => {
@@ -107,9 +107,9 @@ describe('UsersLayout node provisioning guard', () => {
       },
     });
 
-    await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
-      'REDIRECT:/auth/bootstrap?reason=tenant-lost',
-    );
+    await expect(
+      UsersLayoutGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/auth/bootstrap?reason=tenant-lost');
   });
 
   it('redirects to bootstrap db-error when resolveNodeProvisioningAccess throws', async () => {
@@ -117,9 +117,9 @@ describe('UsersLayout node provisioning guard', () => {
       new Error('DB connection lost'),
     );
 
-    await expect(UsersLayout({ children: <div>content</div> })).rejects.toThrow(
-      'REDIRECT:/auth/bootstrap?reason=db-error',
-    );
+    await expect(
+      UsersLayoutGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/auth/bootstrap?reason=db-error');
   });
 
   it('returns children when access is ALLOWED', async () => {
@@ -144,7 +144,7 @@ describe('UsersLayout node provisioning guard', () => {
       },
     });
 
-    const result = await UsersLayout({ children: <div>content</div> });
+    const result = await UsersLayoutGuard({ children: <div>content</div> });
 
     expect(result).toBeDefined();
     expect(redirectMock).not.toHaveBeenCalled();

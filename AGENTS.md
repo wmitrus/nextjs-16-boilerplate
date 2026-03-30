@@ -318,6 +318,7 @@ Always:
 - distinguish must-fix risks from follow-up debt
 - keep risky behavioral changes separate from unrelated cleanup when possible
 - document residual risk if a task is only partially complete or intentionally deferred
+- **run `pnpm lint --fix`, never plain `pnpm lint`** — the linter auto-fixes import order and formatting; running without `--fix` only reports fixable errors and wastes tokens
 
 Never:
 

@@ -3,41 +3,33 @@ import type { Level, LogEvent } from 'pino';
 import { env } from '@/core/env';
 
 import { buildClientLogPayload } from './client-transport';
+import { postClientLogPayload } from './ingest-transport';
 
 /**
- * Edge-safe transport that forwards logs to the app ingest endpoint.
+ * Edge-safe forwarding to the app ingest endpoint.
  */
-export function createLogflareEdgeTransport() {
-  const baseUrl = env.NEXT_PUBLIC_APP_URL;
+export function forwardEdgeLogEvent(level: Level, logEvent: LogEvent): void {
+  if (!env.LOGFLARE_EDGE_ENABLED || !env.NEXT_PUBLIC_APP_URL) {
+    return;
+  }
 
-  return {
-    transmit: {
-      level: env.LOG_LEVEL,
-      send: (level: Level, logEvent: LogEvent) => {
-        if (!baseUrl) {
-          return;
-        }
+  const payload = buildClientLogPayload({
+    level,
+    logEvent,
+    source: 'edge',
+    defaultMessage: 'edge log',
+  });
 
-        const payload = buildClientLogPayload({
-          level,
-          logEvent,
-          source: 'edge',
-          defaultMessage: 'edge log',
-        });
+  // Prevent recursive ingest loops when middleware logs the ingest endpoint
+  // itself and would otherwise forward `/api/logs` activity back into `/api/logs`.
+  if (payload.context.path === '/api/logs') {
+    return;
+  }
 
-        const secret = env.LOG_INGEST_SECRET;
-        const headers = secret ? { 'x-log-ingest-secret': secret } : undefined;
+  const secret = env.LOG_INGEST_SECRET;
 
-        void fetch(`${baseUrl}/api/logs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(headers ?? {}),
-          },
-          body: JSON.stringify(payload),
-          keepalive: true,
-        });
-      },
-    },
-  };
+  postClientLogPayload(payload, {
+    endpoint: `${env.NEXT_PUBLIC_APP_URL}/api/logs`,
+    headers: secret ? { 'x-log-ingest-secret': secret } : undefined,
+  });
 }

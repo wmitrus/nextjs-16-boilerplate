@@ -1,0 +1,113 @@
+# Extending App Safely - Edge vs Node Authorization
+
+## Audience
+
+Developers adding new features, routes, middleware behavior, or security checks.
+
+Use this as an implementation playbook. For architecture rationale, see:
+
+- `docs/architecture/15 - Edge vs Node Composition Root Boundary.md`
+
+## Quick decision tree
+
+Before coding, classify the change:
+
+1. Does it need DB-backed policy/role/tenant attribute evaluation?
+   - Yes -> implement in Node flow (server action or route handler).
+   - No -> continue.
+2. Is it only request gate logic (auth gate, redirects, headers, rate limit, internal key)?
+   - Yes -> middleware/Edge is valid.
+   - No/unclear -> default to Node.
+
+## Where to place code
+
+### Edge (middleware-safe)
+
+- `src/proxy.ts`
+- `src/security/middleware/*`
+
+Allowed examples:
+
+- unauthenticated redirect to sign-in
+- API key guard for internal routes
+- rate-limit response and security headers
+
+Not allowed in Edge:
+
+- resolving `AUTHORIZATION.SERVICE`
+- calling DB-backed policy checks
+- using `getAppContainer()`
+
+### Node (authorization-safe)
+
+- server actions (`createSecureAction` flows)
+- route handlers and server-side orchestration
+
+Required for:
+
+- provisioning/onboarding readiness (internal user + tenant + membership)
+- RBAC/ABAC resource-level checks
+- policy engine decisions
+- tenant attribute-based authorization
+
+## Composition APIs to use
+
+- Edge: `createEdgeRequestContainer(config)`
+- Node:
+  - `getAppContainer()` for default env-driven setup
+  - `createRequestContainer(config)` for tests and explicit runtime profiles
+
+If you need to choose one and are unsure, choose Node context with explicit `createRequestContainer(config)` and keep middleware minimal.
+
+## withAuth usage contract
+
+- Edge middleware must call `withAuth(..., { enforceResourceAuthorization: false })`.
+- Edge middleware must not assume onboarding/provisioning completeness.
+- Node flows keep resource authorization enabled by default.
+- Route authorization helper telemetry must pass runtime explicitly (`'edge' | 'node'`) into request-scoped context.
+- Current middleware path passes `'edge'`; if helper reuse is introduced in Node enforcement, pass `'node'` explicitly.
+
+## External auth provider mapping (implementation note)
+
+For provider integrations (Clerk/AuthJS/Supabase):
+
+- map external IDs to internal UUIDs in Node runtime (`provider + external id -> internal id`)
+- keep adapter contracts segregated:
+  - identity provider adapter consumes only user mapping method
+  - tenant resolver adapter consumes only tenant mapping method
+- middleware/Edge must not run DB-backed resolve/create mapping
+
+Do not couple adapters to a full mapper surface if they only use one capability.
+
+## Minimal implementation examples
+
+### Add middleware gate (Edge-safe)
+
+1. Add route classification or guard in `src/security/middleware/*`.
+2. Wire into `src/proxy.ts` pipeline.
+3. Do not resolve authorization service.
+
+### Add protected business action (Node-safe)
+
+1. Build dependencies from `getAppContainer()`.
+2. Use `createSecureAction`.
+3. Keep policy enforcement in node/server path.
+
+## Tests to add when extending
+
+- Middleware behavior:
+  - extend `src/proxy.test.ts`
+  - extend `src/testing/integration/proxy-runtime.integration.test.ts`
+- Authorization behavior (Node path):
+  - extend server-action or route-handler integration tests
+- Boundary regression guard:
+  - keep `src/proxy.edge-composition.test.ts` green
+
+## PR checklist for contributors
+
+- [ ] I chose runtime placement using the decision tree.
+- [ ] Middleware code does not resolve DB-backed authorization.
+- [ ] Node path contains resource-level authorization.
+- [ ] `createEdgeRequestContainer(config)` is used only for Edge middleware composition.
+- [ ] `getAppContainer()`/`createRequestContainer(config)` are used only in Node/server flows.
+- [ ] Relevant proxy/middleware/integration tests were updated.

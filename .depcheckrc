@@ -32,6 +32,8 @@
     "ts-node",
     "tsc-files",
     "tsx",
-    "undici"
+    "undici",
+    "drizzle-kit",
+    "postgres"
   ]
 }

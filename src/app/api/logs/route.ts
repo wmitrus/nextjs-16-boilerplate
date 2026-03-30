@@ -1,0 +1,153 @@
+import { Ratelimit } from '@upstash/ratelimit';
+import type { Duration } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
+
+import { env } from '@/core/env';
+import { resolveServerLogger } from '@/core/logger/di';
+
+import { getIP } from '@/shared/lib/network/get-ip';
+import { localRateLimit } from '@/shared/lib/rate-limit/rate-limit-local';
+import { sanitizeLogContext } from '@/shared/lib/security/sanitize-log-context';
+
+const BODY_SIZE_LIMIT = 8 * 1024;
+const LOG_INGEST_RATE_LIMIT = 60;
+const LOG_INGEST_RATE_WINDOW = '60 s' as Duration;
+const redis =
+  env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url: env.UPSTASH_REDIS_REST_URL,
+        token: env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : undefined;
+
+const logIngestRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(
+        LOG_INGEST_RATE_LIMIT,
+        LOG_INGEST_RATE_WINDOW,
+      ),
+      analytics: false,
+      prefix: 'ratelimit:log-ingest',
+    })
+  : undefined;
+
+const LOG_LEVELS = [
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+] as const;
+
+const clientLogSchema = z.object({
+  level: z.enum(LOG_LEVELS),
+  message: z.string().max(500),
+  context: z.record(z.string(), z.unknown()).default({}),
+  source: z.enum(['browser', 'edge']),
+});
+
+async function checkIngestRateLimit(ip: string): Promise<{ success: boolean }> {
+  if (logIngestRateLimit) {
+    try {
+      const result = await logIngestRateLimit.limit(ip);
+      return { success: result.success };
+    } catch {
+      // Fall through to local on Upstash failure
+    }
+  }
+  const result = await localRateLimit(ip, LOG_INGEST_RATE_LIMIT, 60 * 1000);
+  return { success: result.success };
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const ingestSecret = request.headers.get('x-log-ingest-secret');
+  const isEdge =
+    !!env.LOG_INGEST_SECRET && ingestSecret === env.LOG_INGEST_SECRET;
+
+  const ip = await getIP(request.headers);
+
+  if (!isEdge) {
+    const rateLimitResult = await checkIngestRateLimit(ip);
+    if (!rateLimitResult.success) {
+      return new NextResponse(null, { status: 429 });
+    }
+  }
+
+  const contentLength = request.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > BODY_SIZE_LIMIT) {
+    return new NextResponse(null, { status: 413 });
+  }
+
+  let body: string;
+  try {
+    body = await request.text();
+  } catch {
+    return new NextResponse(null, { status: 400 });
+  }
+
+  if (body.length > BODY_SIZE_LIMIT) {
+    return new NextResponse(null, { status: 413 });
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return new NextResponse(null, { status: 400 });
+  }
+
+  const validation = clientLogSchema.safeParse(parsed);
+  if (!validation.success) {
+    return new NextResponse(null, { status: 400 });
+  }
+
+  const sanitizedContext = sanitizeLogContext(
+    validation.data.context,
+    0,
+    isEdge,
+  );
+
+  let childBindings: Record<string, unknown>;
+  let logContext: Record<string, unknown>;
+
+  if (isEdge) {
+    const { type, category, module: mod, ...rest } = sanitizedContext;
+    childBindings = {
+      type: (type as string | undefined) ?? 'edge-ingest',
+      category: (category as string | undefined) ?? 'edge',
+      module: (mod as string | undefined) ?? 'log-ingest-route',
+      source: 'edge',
+    };
+    logContext = rest;
+  } else {
+    childBindings = {
+      type: 'browser-ingest',
+      category: 'browser',
+      module: 'log-ingest-route',
+      source: 'browser',
+    };
+    logContext = sanitizedContext;
+  }
+
+  const logger = resolveServerLogger().child(childBindings);
+  const level = validation.data.level;
+  const logDispatch: Record<
+    (typeof LOG_LEVELS)[number],
+    (ctx: Record<string, unknown>, msg: string) => void
+  > = {
+    fatal: (ctx, msg) => logger.fatal(ctx, msg),
+    error: (ctx, msg) => logger.error(ctx, msg),
+    warn: (ctx, msg) => logger.warn(ctx, msg),
+    info: (ctx, msg) => logger.info(ctx, msg),
+    debug: (ctx, msg) => logger.debug(ctx, msg),
+    trace: (ctx, msg) => logger.trace(ctx, msg),
+  };
+  // eslint-disable-next-line security/detect-object-injection -- level is Zod-validated against LOG_LEVELS enum; logDispatch is a static Record<LogLevel, fn>
+  logDispatch[level]({ ...logContext, ip }, validation.data.message);
+
+  return new NextResponse(null, { status: 204 });
+}

@@ -53,6 +53,7 @@ describe('Headers Middleware', () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self'");
     expect(csp).toContain('upgrade-insecure-requests');
+    expect(csp).toContain('https://challenges.cloudflare.com');
   });
 
   it('should not include upgrade-insecure-requests outside Vercel production', () => {
@@ -82,6 +83,7 @@ describe('Headers Middleware', () => {
     const csp = res.headers.get('Content-Security-Policy');
     expect(csp).toContain('https://vercel.live');
     expect(csp).toContain('https://*.clerk.accounts.dev');
+    expect(csp).toContain('wss://*.clerk.accounts.dev');
   });
 
   it('should include development-specific CSP rules', () => {
@@ -92,6 +94,7 @@ describe('Headers Middleware', () => {
     withHeaders(req, res);
     const csp = res.headers.get('Content-Security-Policy');
     expect(csp).toContain('https://*.clerk.accounts.dev');
+    expect(csp).toContain('wss://*.clerk.accounts.dev');
   });
 
   it('should include extra domains from environment', () => {

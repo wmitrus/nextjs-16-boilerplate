@@ -7,15 +7,21 @@ import { env } from '@/core/env';
 
 import { getLogStreams } from './streams';
 
-vi.mock('@/core/env', () => ({
-  env: {
-    NODE_ENV: 'development',
-    LOG_DIR: 'logs',
-    LOG_TO_FILE_DEV: false,
-    LOG_TO_FILE_PROD: false,
-    LOGFLARE_SERVER_ENABLED: false,
-  },
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      NODE_ENV: 'development',
+      LOG_DIR: 'logs',
+      LOG_TO_FILE_DEV: false,
+      LOG_TO_FILE_PROD: false,
+      LOGFLARE_SERVER_ENABLED: false,
+    },
+  };
+});
 
 vi.mock('./utils', () => ({
   createConsoleStream: vi.fn(() => ({ type: 'console' })),
@@ -45,7 +51,8 @@ describe('getLogStreams', () => {
 
     const streams = getLogStreams();
     expect(streams).toHaveLength(1);
-    expect(streams[0] as unknown as MockStream).toEqual({ type: 'console' });
+    expect(streams[0]?.level).toBe('trace');
+    expect((streams[0]?.stream as unknown as MockStream).type).toBe('console');
   });
 
   it('should include file stream if enabled in development', () => {
@@ -56,7 +63,7 @@ describe('getLogStreams', () => {
     const streams = getLogStreams();
     expect(streams).toHaveLength(2);
     expect(
-      streams.some((s) => (s as unknown as MockStream).type === 'file'),
+      streams.some((s) => (s.stream as unknown as MockStream).type === 'file'),
     ).toBe(true);
   });
 
@@ -67,7 +74,9 @@ describe('getLogStreams', () => {
 
     const streams = getLogStreams();
     expect(
-      streams.some((s) => (s as unknown as MockStream).type === 'logflare'),
+      streams.some(
+        (s) => (s.stream as unknown as MockStream).type === 'logflare',
+      ),
     ).toBe(true);
   });
 
@@ -79,7 +88,7 @@ describe('getLogStreams', () => {
 
     const streams = getLogStreams();
     expect(
-      streams.some((s) => (s as unknown as MockStream).type === 'file'),
+      streams.some((s) => (s.stream as unknown as MockStream).type === 'file'),
     ).toBe(true);
   });
 
@@ -89,7 +98,9 @@ describe('getLogStreams', () => {
 
     const streams = getLogStreams();
     expect(
-      streams.some((s) => (s as unknown as MockStream).type === 'console'),
+      streams.some(
+        (s) => (s.stream as unknown as MockStream).type === 'console',
+      ),
     ).toBe(false);
   });
 

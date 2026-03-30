@@ -55,6 +55,13 @@ describe('Route Classification', () => {
     expect(ctx.isOnboardingRoute).toBe(true);
   });
 
+  it('should classify /auth/bootstrap as bootstrap-only route', () => {
+    const ctx = classifyRequest(createMockRequest({ path: '/auth/bootstrap' }));
+    expect(ctx.isBootstrapRoute).toBe(true);
+    expect(ctx.isAuthRoute).toBe(false);
+    expect(ctx.isPublicRoute).toBe(false);
+  });
+
   it('should classify private routes as non-public', () => {
     const ctx = classifyRequest(createMockRequest({ path: '/dashboard' }));
     expect(ctx.isPublicRoute).toBe(false);

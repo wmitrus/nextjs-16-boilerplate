@@ -3,6 +3,10 @@ import { clerkClient } from '@clerk/nextjs/server';
 import type { SubjectId } from '@/core/contracts/primitives';
 import type { User, UserRepository } from '@/core/contracts/user';
 
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? { ...value } : {};
+}
+
 export class ClerkUserRepository implements UserRepository {
   async findById(userId: SubjectId): Promise<User | null> {
     try {
@@ -13,9 +17,9 @@ export class ClerkUserRepository implements UserRepository {
         id: user.id,
         email: user.emailAddresses[0]?.emailAddress,
         onboardingComplete: Boolean(user.publicMetadata?.onboardingComplete),
-        targetLanguage: user.publicMetadata?.targetLanguage as string,
-        proficiencyLevel: user.publicMetadata?.proficiencyLevel as string,
-        learningGoal: user.publicMetadata?.learningGoal as string,
+        displayName: user.publicMetadata?.displayName as string | undefined,
+        locale: user.publicMetadata?.locale as string | undefined,
+        timezone: user.publicMetadata?.timezone as string | undefined,
       };
     } catch (_error) {
       // In a real app, we should handle specific Clerk error codes
@@ -26,14 +30,19 @@ export class ClerkUserRepository implements UserRepository {
   async updateProfile(
     userId: SubjectId,
     profile: {
-      readonly targetLanguage?: string;
-      readonly proficiencyLevel?: string;
-      readonly learningGoal?: string;
+      readonly displayName?: string;
+      readonly locale?: string;
+      readonly timezone?: string;
     },
   ): Promise<void> {
     const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+
     await client.users.updateUser(userId, {
-      publicMetadata: profile,
+      publicMetadata: {
+        ...toRecord(user.publicMetadata),
+        ...profile,
+      },
     });
   }
 
@@ -42,8 +51,11 @@ export class ClerkUserRepository implements UserRepository {
     complete: boolean,
   ): Promise<void> {
     const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+
     await client.users.updateUser(userId, {
       publicMetadata: {
+        ...toRecord(user.publicMetadata),
         onboardingComplete: complete,
       },
     });

@@ -1,18 +1,22 @@
-# ZenFlow Artifacts Guide
+# Task Artifacts Guide
 
 ## Purpose
 
-This document defines the artifacts generated during ZenFlow workflows
+This document defines the artifacts generated during AI-assisted workflows
 and explains their meaning, authority level, and how agents must use them.
 
 Artifacts provide a structured handoff between workflow steps and ensure
 that decisions made in earlier stages are preserved during later stages.
 
-Artifacts are generated inside the ZenFlow task workspace.
+Artifacts are generated inside the task workspace.
 
-Default location:
+Default location depends on the active AI tool:
 
-.zenflow/tasks/{task_id}/
+- **GitHub Copilot**: `.copilot/tasks/{task_id}/`
+- **Zencoder**: `.zencoder/chats/{chat_id}/` — resolved automatically by Zencoder from the active chat session
+
+Each tool uses its own artifact path. Do not mix paths between tools.
+For Copilot, create the task directory explicitly. For Zencoder, the chat workspace is managed automatically — write artifacts into the active chat directory.
 
 ## Artifact Authority Model
 
@@ -31,7 +35,7 @@ Agents must:
 Examples:
 
 constraints.md  
-validation-strategy.md
+05 - Validation Strategy - Summary.md
 
 ### Analytical Artifacts
 
@@ -47,9 +51,9 @@ Agents should:
 
 Examples:
 
-architecture-review.md  
-security-review.md  
-runtime-review.md
+01 - Architecture Guard - Summary.md  
+02 - Security & Auth - Summary.md  
+03 - Next.js Runtime - Summary.md
 
 ### Informational Artifacts
 
@@ -59,9 +63,9 @@ They provide traceability but usually do not impose constraints.
 
 Examples:
 
-refactor-intake.md  
-incident-intake.md  
-implementation-report.md  
+plan.md  
+intake.md  
+04 - Implementation Agent - Summary.md  
 validation-report.md
 
 ## Standard Artifact Set
@@ -100,7 +104,7 @@ Typical contents:
 Authority:
 Informational.
 
-### architecture-review.md
+### 01 - Architecture Guard - Summary.md
 
 Produced by:
 Architecture Guard Agent.
@@ -119,7 +123,7 @@ Typical contents:
 Authority:
 Analytical.
 
-### security-review.md
+### 02 - Security & Auth - Summary.md
 
 Produced by:
 Security/Auth Agent.
@@ -139,7 +143,7 @@ Typical contents:
 Authority:
 Analytical.
 
-### runtime-review.md
+### 03 - Next.js Runtime - Summary.md
 
 Produced by:
 Next.js Runtime Agent.
@@ -183,7 +187,7 @@ Binding.
 
 All implementation must respect this file.
 
-### validation-strategy.md
+### 05 - Validation Strategy - Summary.md
 
 Produced by:
 Validation Strategy Agent.
@@ -201,7 +205,7 @@ Typical contents:
 Authority:
 Binding.
 
-### implementation-report.md
+### 04 - Implementation Agent - Summary.md
 
 Produced by:
 Implementation Agent.
@@ -244,17 +248,17 @@ Typical dependency flow:
 
 refactor-intake.md  
 ↓  
-architecture-review.md  
+01 - Architecture Guard - Summary.md  
 ↓  
-security-review.md  
+02 - Security & Auth - Summary.md  
 ↓  
-runtime-review.md  
+03 - Next.js Runtime - Summary.md  
 ↓  
 constraints.md  
 ↓  
-validation-strategy.md  
+05 - Validation Strategy - Summary.md  
 ↓  
-implementation-report.md  
+04 - Implementation Agent - Summary.md  
 ↓  
 validation-report.md
 
@@ -267,6 +271,9 @@ Agents must:
 - reference artifacts when producing reasoning
 - avoid ignoring earlier analysis
 - escalate conflicts instead of silently overriding decisions
+- update task control artifacts when milestone status changes
+- keep one persistent per-task summary artifact per non-orchestrator specialist instead of creating duplicates
+- follow the matching template from `docs/ai/templates/specialist-summaries/` when creating or refreshing a specialist summary artifact
 
 ## Conflict Handling
 

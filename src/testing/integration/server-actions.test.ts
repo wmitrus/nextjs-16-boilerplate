@@ -1,18 +1,24 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
-import { container } from '@/core/container';
+import type { Container } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import {
+  MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
+} from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { createSecureAction } from '@/security/actions/secure-action';
 import {
   getSecurityContext,
-  type SecurityContextDependencies,
   type SecurityContext,
 } from '@/security/core/security-context';
+import type { NodeSecurityContextDependencies } from '@/security/core/security-dependencies';
 import { resetClerkMocks } from '@/testing/infrastructure/clerk';
 import { resetEnvMocks } from '@/testing/infrastructure/env';
 import {
@@ -25,8 +31,11 @@ import {
 } from '@/testing/infrastructure/next-headers';
 
 describe('Server Actions Integration', () => {
+  let container: Container;
   let identityProvider: IdentityProvider;
   let authorizationService: AuthorizationService;
+  let tenantResolver: TenantResolver;
+  let userRepository: UserRepository;
 
   const schema = z.object({
     name: z.string().min(3),
@@ -43,27 +52,40 @@ describe('Server Actions Integration', () => {
   };
 
   beforeEach(() => {
+    container = getAppContainer();
+
     identityProvider = container.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
     );
     authorizationService = container.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
+    tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
+    userRepository = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
     resetClerkMocks();
     resetNextHeadersMocks();
     resetLoggerMocks();
     resetEnvMocks();
     vi.clearAllMocks();
 
+    // Default: user is provisioned and onboarded
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+      onboardingComplete: true,
+    });
+
     // Default headers
     mockHeaders.set('x-forwarded-for', '127.0.0.1');
     mockHeaders.set('user-agent', 'test-agent');
   });
 
-  const getSecurityContextDependencies = (): SecurityContextDependencies => ({
-    identityProvider,
-    tenantResolver: container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER),
-  });
+  const getSecurityContextDependencies =
+    (): NodeSecurityContextDependencies => ({
+      identityProvider,
+      tenantResolver,
+      userRepository,
+    });
 
   const getSecureActionDependencies = () => ({
     getSecurityContext: () =>
@@ -223,5 +245,65 @@ describe('Server Actions Integration', () => {
     const result = await action({ name: 'Zencoder' });
 
     expect(result.status).toBe('unauthorized');
+  });
+
+  it('should return tenant_context_required when org context is missing (MissingTenantContextError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new MissingTenantContextError(),
+    );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getSecureActionDependencies(),
+      handler: testHandler,
+    });
+
+    const result = await action({ name: 'Zencoder' });
+
+    expect(result.status).toBe('tenant_context_required');
+  });
+
+  it('should return tenant_context_required when tenant not provisioned (TenantNotProvisionedError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantNotProvisionedError(),
+    );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getSecureActionDependencies(),
+      handler: testHandler,
+    });
+
+    const result = await action({ name: 'Zencoder' });
+
+    expect(result.status).toBe('tenant_context_required');
+  });
+
+  it('should return tenant_membership_required when user has no tenant membership (TenantMembershipRequiredError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantMembershipRequiredError(),
+    );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getSecureActionDependencies(),
+      handler: testHandler,
+    });
+
+    const result = await action({ name: 'Zencoder' });
+
+    expect(result.status).toBe('tenant_membership_required');
   });
 });

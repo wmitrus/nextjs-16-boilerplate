@@ -1,215 +1,122 @@
-# Clerk Onboarding Integration
+# Clerk Onboarding
 
-This document provides a comprehensive guide to the custom onboarding flow implemented using **Clerk Authentication** and **Next.js 16**.
+This document describes onboarding flow after the provisioning refactor.
 
-## 1. Prerequisites & Configuration
+## 1. What Onboarding Does Now
 
-### Environment Variables
+Onboarding is not just profile capture. It explicitly provisions internal records before saving profile fields.
 
-Configure your Clerk keys and redirect paths in [./.env.local](@/.env.local).
+`completeOnboarding()` flow (`src/app/onboarding/actions.ts`):
 
-```bash
-# Clerk Keys
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
+1. Read raw external identity from `AUTH.IDENTITY_SOURCE`.
+2. Call `PROVISIONING.SERVICE.ensureProvisioned(...)` with:
+   - `provider`
+   - `externalUserId`
+   - `email` + `emailVerified`
+   - `tenantExternalId` + `tenantRole`
+   - `activeTenantId` (for `single` or `org/db` modes)
+   - `tenancyMode` + `tenantContextSource`
+3. Verify the provisioned internal user exists via `AUTH.USER_REPOSITORY.findById(internalUserId)`.
+4. Persist onboarding profile in `AUTH.USER_REPOSITORY` using the canonical `internalUserId` returned by provisioning.
 
-# Custom Routes
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+## 2. Persisted User Profile Fields
 
-# Redirect Logic
-NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/
-NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/
-NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL=/onboarding
-```
+Onboarding writes these fields:
 
-### Env Schema
+- `onboardingComplete` (boolean)
+- `displayName`
+- `locale`
+- `timezone`
 
-Ensure these are mapped in [./src/core/env.ts](@/core/env.ts) for type-safe access.
+These fields are used by Node-side readiness checks through `UserRepository`.
 
-```typescript
-client: {
-  NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
-  NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/sign-up'),
-  NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: z.string().default('/onboarding'),
-  // ... other variables
-}
-```
+## 3. Tenant Context Resolution During Onboarding
 
-## 2. Global Type Safety
+`resolveActiveTenantIdForProvisioning()` behavior:
 
-To access custom metadata via `sessionClaims` in Middleware and Server Components, define the `CustomJwtSessionClaims` interface in [./src/types/globals.d.ts](@/types/globals.d.ts).
+1. `TENANCY_MODE=single` -> uses `DEFAULT_TENANT_ID`.
+2. `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=db` -> reads header `TENANT_CONTEXT_HEADER`, fallback cookie `TENANT_CONTEXT_COOKIE`.
+3. Other modes -> no explicit `activeTenantId` is passed.
 
-```typescript
-export {};
+## 4. Access Behavior Before Provisioning
 
-declare global {
-  interface CustomJwtSessionClaims {
-    metadata: {
-      onboardingComplete?: boolean;
-      targetLanguage?: string;
-      proficiencyLevel?: string;
-      learningGoal?: string;
-    };
-  }
-}
-```
+`src/app/onboarding/layout.tsx` does not bootstrap users directly:
 
-> **Important**: You must also go to the **Clerk Dashboard > Sessions > Customize session token** and add:
->
-> ```json
-> { "metadata": "{{user.public_metadata}}" }
-> ```
+- catches `UserNotProvisionedError`
+- redirects to `/auth/bootstrap`
+- if internal identity exists but user row is missing, also redirects to `/auth/bootstrap`
 
-## 3. Middleware (Proxy) Redirection
+This is intentional: bootstrap is the primary provisioning write path. Onboarding only completes profile data after bootstrap succeeds.
 
-The [./src/proxy.ts](@/proxy.ts) manages access control and the onboarding redirection loop. To solve "read your writes" staleness after metadata updates, the middleware falls back to `clerkClient` if the JWT is incomplete.
+After hardening:
 
-```typescript
-export default clerkMiddleware(async (auth, request) => {
-  const { userId, sessionClaims } = await auth();
+- protected pages and APIs are gated in Node runtime,
+- active Clerk session without internal provisioning returns controlled denial (`BOOTSTRAP_REQUIRED`),
+- runtime probe endpoint `/api/me/provisioning-status` is the authoritative way to verify internal provisioning state.
 
-  // 1. Redirect signed-in users away from auth pages
-  if (userId && isAuthRoute(request)) {
-    let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-    if (!onboardingComplete) {
-      const client = await clerkClient();
-      const user = await client.users.getUser(userId);
-      onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
-    }
-    // ... redirect logic
-  }
+## 5. Clerk Claims Used by Provisioning
 
-  // 2. Catch users who do not have `onboardingComplete: true`
-  if (userId && !isOnboardingRoute(request)) {
-    let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-    if (!onboardingComplete) {
-      const client = await clerkClient();
-      const user = await client.users.getUser(userId);
-      onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
-    }
-    if (!onboardingComplete) {
-      return NextResponse.redirect(new URL('/onboarding', request.url));
-    }
-  }
-});
-```
+For Clerk mode, onboarding relies on these mapped claims:
 
-## 4. Next.js 16 Root Layout & Suspense
+- `userId`
+- `email`
+- `emailVerified`
+- `tenantExternalId` (org)
+- `tenantRole` (org role)
 
-Next.js 16 requires dynamic APIs (like `auth()`) to be handled asynchronously. We use nested `<Suspense>` boundaries to satisfy "Blocking Route" requirements.
+Email contract:
 
-```tsx
-// src/app/layout.tsx
-<Suspense fallback={null}>
-  <ClerkProvider ...>
-    <Header />
-    <Suspense fallback={null}>{children}</Suspense>
-  </ClerkProvider>
-</Suspense>
-```
+- preferred/default: Clerk Session Token v2 `email` claim
+- supported custom alternative: `primaryEmail`
+- if neither is present, provisioning falls back to a synthetic
+  `external+clerk-...@local.invalid` address to preserve identity uniqueness
+  and bootstrap continuity, but that is not a valid production steady-state
+- if a user was previously provisioned with that synthetic address and a real
+  email claim becomes available later, bootstrap now repairs the internal
+  `users.email` value automatically when it is safe to do so
 
-## 5. Custom Auth Pages
+If required tenant context is missing for the selected mode, provisioning fails with controlled domain errors.
 
-Custom pages must include the `path` prop and be wrapped in `<Suspense>` for stability.
+## 6. Role Outcome on First Provisioning
 
-```tsx
-// src/app/sign-in/[[...sign-in]]/page.tsx
-export default function Page() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Suspense fallback={<div className="animate-pulse" />}>
-        <SignIn path="/sign-in" />
-      </Suspense>
-    </div>
-  );
-}
-```
+Provisioning role assignment (new membership):
 
-## 6. Onboarding Feature
+1. `TENANCY_MODE=single` -> `member`
+2. `TENANCY_MODE=personal` -> `owner`
+3. `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=provider`:
+   - Clerk role containing `admin` or `owner` -> `owner`
+   - otherwise -> `member`
+4. `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=db`:
+   - no auto-membership creation path
+   - existing membership is required
 
-### Onboarding Layout
+## 7. Cross-Provider Email Linking Guard
 
-Prevents users from revisiting onboarding once complete. It uses a `clerkClient` fallback to ensure the redirect happens immediately after the metadata update.
+Onboarding provisioning enforces `CROSS_PROVIDER_EMAIL_LINKING` policy:
 
-```tsx
-// src/app/onboarding/layout.tsx
-export default async function OnboardingLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const { userId, sessionClaims } = await auth();
+- `verified-only` (default): link only if `emailVerified === true`
+- `disabled`: never auto-link by email
 
-  let onboardingComplete = sessionClaims?.metadata?.onboardingComplete;
-  if (!onboardingComplete && userId) {
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    onboardingComplete = user.publicMetadata?.onboardingComplete as boolean;
-  }
+This prevents unsafe account linking when email ownership is not verified.
 
-  if (onboardingComplete === true) {
-    redirect('/');
-  }
-  return <div className="container">{children}</div>;
-}
-```
+## 8. Clerk Setup Checklist for Onboarding Tests
 
-### Server Action
+1. Set `AUTH_PROVIDER=clerk` with valid keys.
+2. Set desired tenancy vars (`TENANCY_MODE`, `TENANT_CONTEXT_SOURCE`, `DEFAULT_TENANT_ID` when needed).
+3. Run DB migrations and seed.
+4. Ensure both Clerk sign-in and sign-up redirect to `/auth/bootstrap`.
+5. Sign in via Clerk.
+6. Complete onboarding form once if bootstrap redirects to `/onboarding`.
+7. Confirm redirect behavior:
+   - authenticated + onboarding complete -> no onboarding loop
+   - unauthenticated -> redirect to sign-in
+8. Optional verification after DB reset:
+   - you may still have active Clerk session cookie,
+   - `/api/me/provisioning-status` must return controlled `409 BOOTSTRAP_REQUIRED` until `/auth/bootstrap` re-provisions internal state,
+   - after bootstrap, incomplete profile state redirects to `/onboarding`.
 
-Securely updates the User object via the Backend API.
+## 9. Related Docs
 
-```typescript
-// src/app/onboarding/_actions.ts
-export const completeOnboarding = async (formData: FormData) => {
-  const { userId } = await auth();
-  const client = await clerkClient();
-
-  await client.users.updateUser(userId, {
-    publicMetadata: {
-      onboardingComplete: true,
-      targetLanguage: formData.get('targetLanguage'),
-      // ... fields
-    },
-  });
-  return { message: 'Onboarding completed' };
-};
-```
-
-### Onboarding Page
-
-Handles form submission and forces a client-side session refresh.
-
-```tsx
-// src/app/onboarding/page.tsx
-const handleSubmit = async (formData: FormData) => {
-  const res = await completeOnboarding(formData);
-  if (res?.message) {
-    await user?.reload(); // CRITICAL: Refreshes sessionClaims in the browser
-    router.push('/');
-  }
-};
-```
-
-## 7. Hydration & Error Handling
-
-### Header Component
-
-To prevent hydration errors in the Header (where `SignedIn`/`SignedOut` buttons render), use an `isMounted` state.
-
-```tsx
-const [isMounted, setIsMounted] = React.useState(false);
-React.useEffect(() => setIsMounted(true), []);
-
-if (!isMounted) return null; // Or skeleton
-```
-
-### Global Error Suppression
-
-Clerk logs a development-only "no-op" warning if a user is already signed in. We suppress this in [./src/shared/components/error/global-error-handlers.tsx](@/shared/components/error/global-error-handlers.tsx).
-
-```typescript
-if (message.includes('cannot_render_single_session_enabled')) {
-  return;
-}
-```
+- `docs/features/15 - Clerk Authentication.md`
+- `docs/features/ENV-requirements.md`
+- `docs/getting-started/03 - Tenancy, Organizations, Roles and Onboarding - Runtime Matrix.md`

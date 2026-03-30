@@ -5,6 +5,7 @@ import { GlobalErrorHandlers } from './global-error-handlers';
 
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
+  warn: vi.fn(),
 }));
 
 const mockSentry = vi.hoisted(() => ({
@@ -272,7 +273,106 @@ describe('GlobalErrorHandlers', () => {
       'unhandledrejection',
       expect.any(Function),
     );
+    expect(removeEventListenerSpy).toHaveBeenCalledWith(
+      'securitypolicyviolation',
+      expect.any(Function),
+    );
 
     removeEventListenerSpy.mockRestore();
+  });
+
+  describe('CSP violation handling', () => {
+    function dispatchCspViolation(
+      overrides: Partial<{
+        violatedDirective: string;
+        effectiveDirective: string;
+        blockedURI: string;
+        documentURI: string;
+        disposition: string;
+        statusCode: number;
+        originalPolicy: string;
+        referrer: string;
+      }> = {},
+    ) {
+      const init = {
+        violatedDirective: 'script-src',
+        effectiveDirective: 'script-src',
+        blockedURI: 'https://evil.com/script.js',
+        documentURI: 'https://app.example.com/dashboard',
+        disposition: 'enforce',
+        statusCode: 200,
+        originalPolicy: "default-src 'self'; script-src 'self'",
+        referrer: 'https://external.com',
+        ...overrides,
+      };
+      const event = new Event(
+        'securitypolicyviolation',
+      ) as SecurityPolicyViolationEvent;
+      Object.assign(event, init);
+      window.dispatchEvent(event);
+    }
+
+    it('logs CSP violations at warn level', () => {
+      render(<GlobalErrorHandlers />);
+      dispatchCspViolation();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ violatedDirective: 'script-src' }),
+        'CSP Violation',
+      );
+    });
+
+    it('strips query params from documentURI', () => {
+      render(<GlobalErrorHandlers />);
+      dispatchCspViolation({
+        documentURI: 'https://app.example.com/page?token=secret&user=123',
+      });
+      const logCall = mockLogger.warn.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(logCall?.['documentURI']).toBe('https://app.example.com/page');
+      expect(logCall?.['documentURI']).not.toContain('token');
+    });
+
+    it('strips query params from blockedURI', () => {
+      render(<GlobalErrorHandlers />);
+      dispatchCspViolation({
+        blockedURI: 'https://evil.com/script.js?key=abc',
+      });
+      const logCall = mockLogger.warn.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(logCall?.['blockedURI']).toBe('https://evil.com/script.js');
+    });
+
+    it('does not log originalPolicy', () => {
+      render(<GlobalErrorHandlers />);
+      dispatchCspViolation({ originalPolicy: "default-src 'self'" });
+      const logCall = mockLogger.warn.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(logCall).not.toHaveProperty('originalPolicy');
+    });
+
+    it('does not log referrer', () => {
+      render(<GlobalErrorHandlers />);
+      dispatchCspViolation({ referrer: 'https://external.com/page' });
+      const logCall = mockLogger.warn.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(logCall).not.toHaveProperty('referrer');
+    });
+
+    it('handles malformed documentURI gracefully', () => {
+      render(<GlobalErrorHandlers />);
+      dispatchCspViolation({ documentURI: 'not-a-url?with=query' });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ documentURI: 'not-a-url' }),
+        'CSP Violation',
+      );
+    });
   });
 });

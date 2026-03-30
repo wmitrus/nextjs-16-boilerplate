@@ -1,13 +1,19 @@
-import { authModule } from '@/modules/auth';
-import { authorizationModule } from '@/modules/authorization';
-
 export type RegistryKey = string | symbol;
 export type ServiceFactory<T> = (container: Container) => T;
 
 interface FactoryRegistration<T> {
   factory: ServiceFactory<T>;
   singleton: boolean;
+  hasInstance?: boolean;
   instance?: T;
+}
+
+interface RegistrationOptions {
+  override?: boolean;
+}
+
+interface FactoryOptions extends RegistrationOptions {
+  singleton?: boolean;
 }
 
 type ServiceRegistration =
@@ -27,12 +33,33 @@ export interface Module {
 export class Container {
   private services = new Map<RegistryKey, ServiceRegistration>();
 
-  constructor(
-    private onResolveMissing?: (container: Container) => void,
-    private parent?: Container,
-  ) {}
+  constructor(private parent?: Container) {}
 
-  register<T>(key: RegistryKey, implementation: T): void {
+  has(key: RegistryKey): boolean {
+    if (this.services.has(key)) {
+      return true;
+    }
+
+    return this.parent?.has(key) ?? false;
+  }
+
+  private assertCanRegister(key: RegistryKey, options?: RegistrationOptions) {
+    if (options?.override || !this.has(key)) {
+      return;
+    }
+
+    throw new Error(
+      `Service already registered for key: ${String(key)}. Pass { override: true } to replace it.`,
+    );
+  }
+
+  register<T>(
+    key: RegistryKey,
+    implementation: T,
+    options?: RegistrationOptions,
+  ): void {
+    this.assertCanRegister(key, options);
+
     this.services.set(key, {
       kind: 'value',
       value: implementation,
@@ -42,10 +69,10 @@ export class Container {
   registerFactory<T>(
     key: RegistryKey,
     factory: ServiceFactory<T>,
-    options?: {
-      singleton?: boolean;
-    },
+    options?: FactoryOptions,
   ): void {
+    this.assertCanRegister(key, options);
+
     this.services.set(key, {
       kind: 'factory',
       factory: {
@@ -65,35 +92,15 @@ export class Container {
 
       const { factory } = service;
       if (factory.singleton) {
-        if (factory.instance === undefined) {
+        if (!factory.hasInstance) {
           factory.instance = factory.factory(this);
+          factory.hasInstance = true;
         }
 
         return factory.instance as T;
       }
 
       return factory.factory(this) as T;
-    }
-
-    if (this.onResolveMissing) {
-      this.onResolveMissing(this);
-      const resolvedAfterHook = this.services.get(key);
-      if (resolvedAfterHook) {
-        if (resolvedAfterHook.kind === 'value') {
-          return resolvedAfterHook.value as T;
-        }
-
-        const { factory } = resolvedAfterHook;
-        if (factory.singleton) {
-          if (factory.instance === undefined) {
-            factory.instance = factory.factory(this);
-          }
-
-          return factory.instance as T;
-        }
-
-        return factory.factory(this) as T;
-      }
     }
 
     if (this.parent) {
@@ -108,24 +115,10 @@ export class Container {
   }
 
   createChild(): Container {
-    return new Container(undefined, this);
+    return new Container(this);
   }
 }
 
 export function createContainer(): Container {
-  const target = new Container();
-  registerCoreModules(target);
-  return target;
-}
-
-function registerCoreModules(target: Container): void {
-  target.registerModule(authModule);
-  target.registerModule(authorizationModule);
-}
-
-export const container = new Container(registerCoreModules);
-
-export function bootstrap() {
-  registerCoreModules(container);
-  return container;
+  return new Container();
 }

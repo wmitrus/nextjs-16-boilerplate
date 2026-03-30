@@ -2,17 +2,16 @@
 
 import { z } from 'zod';
 
-import { createContainer } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { createSecureAction } from '@/security/actions/secure-action';
-import {
-  createSecurityContext,
-  type SecurityContextDependencies,
-} from '@/security/core/security-context';
+import { createSecurityContext } from '@/security/core/security-context';
+import type { NodeSecurityContextDependencies } from '@/security/core/security-dependencies';
 
 const updateSettingsSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
@@ -21,13 +20,16 @@ const updateSettingsSchema = z.object({
 });
 
 function createSecurityDependencies() {
-  const requestContainer = createContainer();
-  const securityContextDependencies: SecurityContextDependencies = {
+  const requestContainer = getAppContainer().createChild();
+  const securityContextDependencies: NodeSecurityContextDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
     ),
     tenantResolver: requestContainer.resolve<TenantResolver>(
       AUTH.TENANT_RESOLVER,
+    ),
+    userRepository: requestContainer.resolve<UserRepository>(
+      AUTH.USER_REPOSITORY,
     ),
   };
 
@@ -40,10 +42,6 @@ function createSecurityDependencies() {
   };
 }
 
-/**
- * Example of a Secure Server Action.
- * Demonstrates: Zod validation, Auth requirement, Mutation Logging, and Replay Protection.
- */
 export const updateSecuritySettings = createSecureAction({
   schema: updateSettingsSchema,
   dependencies: createSecurityDependencies,

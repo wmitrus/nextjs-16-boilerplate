@@ -1,3 +1,7 @@
+export const INFRASTRUCTURE = {
+  DB: Symbol('Database'),
+};
+
 export const AUTH = {
   IDENTITY_SOURCE: Symbol('IdentitySource'),
   IDENTITY_PROVIDER: Symbol('IdentityProvider'),
@@ -13,7 +17,15 @@ export const AUTHORIZATION = {
   TENANT_ATTRIBUTES_REPOSITORY: Symbol('TenantAttributesRepository'),
 };
 
+export const FEATURE_FLAGS = {
+  SERVICE: Symbol('FeatureFlagService'),
+};
+
 export const LOGGER = {
   SERVER: Symbol('ServerLogger'),
   EDGE: Symbol('EdgeLogger'),
+};
+
+export const PROVISIONING = {
+  SERVICE: Symbol('ProvisioningService'),
 };

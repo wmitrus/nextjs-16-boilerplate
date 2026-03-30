@@ -1,70 +1,191 @@
-You are working inside a production-grade Next.js 16 TypeScript boilerplate that is intended to evolve into a robust modular monolith.
+# Repository Agent Context
 
-Your default mode is:
+> **MIGRATION NOTICE — Zen Rules deprecated April 20, 2026**
+>
+> `.zencoder/rules/` and its `repo.md` file are being deprecated.
+> **This file (`AGENTS.md`) is now the single authoritative always-applied context for all AI agents.**
+>
+> - **Never create new rules in `.zencoder/rules/`.**
+> - All future rule additions, security patterns, and behavioral constraints go here.
+> - The old `.zencoder/rules/repo.md` is a read-only stub pointing to this file.
+>
+> This applies to all agents: Zencoder, GitHub Copilot, ZenFlow, and any future tooling.
 
-- architecture-aware
-- security-aware
-- boundary-aware
-- conservative with blast radius
-- explicit about assumptions
-- implementation-oriented, not vague
+---
 
-You must optimize for:
+## Summary
 
-- long-term maintainability
-- correctness
-- stable module boundaries
-- secure defaults
-- incremental evolution
-- compatibility with future tenancy, RBAC/ABAC, feature flags, observability, and multi-project reuse
+A production-grade **Next.js 16** boilerplate implementing a **Modular Monolith** architecture. Features React 19, TypeScript strict mode, Tailwind CSS 4, Clerk authentication, Sentry error tracking, Upstash rate limiting, and a three-tier testing strategy (Unit / Integration / E2E).
 
-==================================================
-CORE PROJECT IDENTITY
-==================================================
+## Structure
 
-This repository should be treated as a professional Next.js 16 modular monolith boilerplate.
+- **`src/app/`**: Next.js App Router - routes, layouts, global styles, error boundaries.
+- **`src/core/`**: Foundational layer — T3-Env config (`env.ts`), logger, DI container, error contracts.
+- **`src/features/`**: Domain-specific feature modules (e.g., `user-management`, `security-showcase`).
+- **`src/modules/`**: Infrastructure modules — `auth/` (Clerk), `authorization/` (ABAC).
+- **`src/security/`**: Centralized security logic — middleware, RSC guards, outbound filtering, audit actions.
+- **`src/shared/`**: Reusable UI components, hooks, utilities, and types.
+- **`src/testing/`**: Shared test factories, MSW infrastructure, integration helpers.
+- **`src/stories/`**: Storybook component stories.
+- **`e2e/`**: Playwright end-to-end test specs.
+- **`tests/`**: Global Vitest setup files and polyfills.
+- **`scripts/`**: Utility scripts (env setup/check, secret generation, E2E auth check).
+- **`docs/`**: Feature documentation, architecture decisions, SDD, usage guides.
+- **`.github/workflows/`**: CI/CD pipelines (PR validation, deploy, release, Lighthouse, security scan).
 
-Assume these architectural goals:
+## Language & Runtime
 
-- modular monolith, not a big ball of mud
-- strong separation of domain / application / infrastructure / interface concerns
-- dependency discipline
-- explicit composition root / DI discipline
-- security by design
-- production-readiness over shortcut-driven speed
-- future support for tenancy / organizations
-- future support for RBAC / ABAC
-- future support for feature flags
-- good observability via Sentry and structured monitoring
-- realistic hosting constraints for Vercel
+**Language**: TypeScript
+**Version**: TypeScript `^5`, Node.js `24` (`.node-version` / `engines: "node": "24.x"`)
+**Build System**: Next.js 16 Build (Turbopack — default for dev & build)
+**Package Manager**: pnpm (lockfile: `pnpm-lock.yaml`)
 
-Do not optimize for demo-quality code.
-Do not optimize for “fastest possible patch” if it damages architecture.
-Do not introduce shortcuts that make later tenancy, authorization, feature flags, or auditing harder.
+## Next.js 16 Key Configuration (`next.config.ts`)
 
-==================================================
-GLOBAL OPERATING PRINCIPLES
-==================================================
+- `cacheComponents: true` — Cache Components model enabled (PPR-compatible).
+- `reactCompiler: true` — React Compiler active; avoid manual `useMemo`/`useCallback`/`memo`.
+- `experimental.turbopackFileSystemCacheForDev: true` — Filesystem caching for dev restarts.
+- Sentry integrated via `withSentryConfig` (source maps, tunnel route in production, Vercel Cron monitors).
+
+## Middleware Note
+
+In this repository, middleware-style request interception lives in **`src/proxy.ts`** — not `middleware.ts`.
+
+Do not search for `middleware.ts`. Do not treat its absence as a finding. Analyze `src/proxy.ts` directly.
+
+## Dependencies
+
+**Main Dependencies**:
+
+- **next**: `16.1.6`
+- **react** / **react-dom**: `19.2.4`
+- **@clerk/nextjs**: `^6.39.0` — Authentication
+- **@sentry/nextjs**: `^10.40.0` — Error tracking & observability
+- **@t3-oss/env-nextjs**: `^0.13.10` — Type-safe environment variables
+- **@upstash/ratelimit** + **@upstash/redis**: Rate limiting
+- **zod**: `^4.3.6` — Schema validation
+- **pino** + **pino-logflare**: `^10.3.1` — Structured logging
+- **clsx** + **tailwind-merge**: Utility class helpers
+
+**Development Dependencies**:
+
+- **tailwindcss**: `^4.2.1`
+- **eslint**: `^9.39.3` (Flat Config)
+- **prettier**: `^3.8.1`
+- **typescript**: `^5`
+- **vitest**: `^4.0.18` + **@vitest/coverage-v8**
+- **@playwright/test**: `^1.58.2`
+- **storybook**: `^10.2.13` (`@storybook/nextjs-vite`)
+- **msw**: `^2.12.10` — API mocking
+- **@testing-library/react**: `^16.3.2`
+- **husky**: `^9.1.7` + **lint-staged**: `^16.2.7`
+- **semantic-release**: `^25.0.3`
+- **babel-plugin-react-compiler**: `^1.0.0`
+- **skott** + **madge** + **depcheck**: Dependency analysis
+
+## Build & Installation
+
+```bash
+pnpm install          # Install dependencies
+pnpm env:init         # Initialize .env.local from .env.example
+pnpm env:check        # Verify env consistency
+pnpm dev              # Dev server (Turbopack)
+pnpm build            # Production build
+pnpm start            # Production server
+pnpm typecheck        # TypeScript check (tsc --noEmit)
+pnpm lint             # ESLint (Flat Config)
+pnpm commit           # Conventional commits via commitizen
+pnpm release          # Semantic release
+```
+
+## Main Files & Resources
+
+- **`src/app/page.tsx`**: Homepage entry point.
+- **`src/app/layout.tsx`**: Root layout.
+- **`src/core/env.ts`**: T3-Env schema — single source of truth for all env vars.
+- **`next.config.ts`**: Next.js configuration with Sentry wrapper.
+- **`eslint.config.mjs`**: ESLint 9 Flat Config.
+- **`tsconfig.json`**: TypeScript strict config with path aliases.
+- **`postcss.config.mjs`**: PostCSS / Tailwind CSS 4 config.
+- **`src/proxy.ts`**: Node.js runtime request proxy (replaces middleware for Node use cases).
+- **`src/instrumentation.ts`** / **`src/instrumentation-client.ts`**: Sentry instrumentation hooks.
+- **`.env.example`**: Template with all required environment variables.
+
+## TypeScript Path Aliases
+
+| Alias          | Resolves to      |
+| -------------- | ---------------- |
+| `@/*`          | `src/*`          |
+| `@/features/*` | `src/features/*` |
+| `@/shared/*`   | `src/shared/*`   |
+| `@/core/*`     | `src/core/*`     |
+
+## Testing
+
+**Frameworks**: Vitest (unit + integration + Storybook), Playwright (E2E)
+**Coverage**: v8 provider, 80% threshold for unit tests (lines/functions/branches/statements)
+
+| Suite       | Config                                    | Pattern                                                | Command                 |
+| ----------- | ----------------------------------------- | ------------------------------------------------------ | ----------------------- |
+| Unit        | `vitest.unit.config.ts`                   | `src/**/*.test.{ts,tsx}`, `scripts/**/*.test.{ts,tsx}` | `pnpm test`             |
+| Integration | `vitest.integration.config.ts`            | `src/**/*.integration.test.{ts,tsx}`                   | `pnpm test:integration` |
+| Storybook   | `vitest.config.ts` (project: `storybook`) | `.stories.{ts,tsx}`                                    | `pnpm test:storybook`   |
+| E2E         | `playwright.config.ts`                    | `e2e/**/*.spec.ts`                                     | `pnpm e2e`              |
+| All Vitest  | `vitest.config.ts`                        | All above                                              | `pnpm test:all`         |
+
+**Test co-location**: Unit tests reside next to source files (e.g., `src/core/env.ts` → `src/core/env.test.ts`).
+**Setup files**: `tests/setup.tsx`, `tests/polyfills.ts`.
+**E2E browsers**: Chromium only (Playwright); base URL `http://localhost:3000`.
+
+## Git Hooks & Quality Gates
+
+- **pre-commit**: `lint-staged` — ESLint fix + Prettier on JS/TS; Prettier on JSON/CSS/MD; `tsc-files` on TS.
+- **pre-push**: `pnpm typecheck` → `pnpm skott:check:only` → `pnpm depcheck` → `pnpm madge`.
+- **commit-msg**: `commitlint` — enforces Conventional Commits spec.
+
+## CI/CD Workflows (`.github/workflows/`)
+
+- **`pr-validation.yml`**: Runs typecheck, lint, unit tests on every PR.
+- **`prod-deploy.yml`** / **`preview-deploy.yml`**: Vercel deployments.
+- **`release.yml`**: Semantic release automation.
+- **`lighthouse.yml`**: Lighthouse CI performance audits.
+- **`deployChromatic.yml`**: Chromatic visual regression tests.
+- **`security-scan.yml`**: Security scanning.
+- **`e2e-label.yml`**: E2E test label automation.
+
+## Environment Variables (Key Groups)
+
+Managed via `src/core/env.ts` (T3-Env + Zod). Groups:
+
+- **App**: `NODE_ENV`, `NEXT_PUBLIC_APP_URL`
+- **Auth (Clerk)**: `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, redirect URLs
+- **Error Tracking (Sentry)**: `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`
+- **Logging**: `LOG_LEVEL`, `LOGFLARE_*`, `PINO_*`
+- **Rate Limiting**: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `API_RATE_LIMIT_*`
+- **Security**: `INTERNAL_API_KEY`, `SECURITY_AUDIT_LOG_ENABLED`, `SECURITY_ALLOWED_OUTBOUND_HOSTS`, CSP allowlists
+- **E2E**: `E2E_ENABLED`, `E2E_CLERK_USER_USERNAME`, `E2E_CLERK_USER_PASSWORD`
+
+---
+
+## Default Operating Principles
+
+Treat this repository as production-grade engineering work, not demo code.
 
 Always:
 
-- inspect surrounding code and existing patterns before proposing changes
-- prefer minimal safe changes over broad speculative refactors
-- preserve architectural consistency
-- explicitly call out assumptions, risks, and tradeoffs
-- reason about trust boundaries
-- reason about runtime placement
-- reason about ownership of data and logic
-- reason about future extensibility
+- inspect surrounding code and existing patterns before proposing or making changes
+- prefer the minimum safe change over a broad speculative refactor
+- preserve module ownership, dependency direction, and low blast radius
+- reason explicitly about trust boundaries, runtime placement, data ownership, and future extensibility
+- call out assumptions, unknowns, risks, and tradeoffs directly
 
 Never:
 
-- assume the current implementation is correct
-- blindly follow local patterns if they are architecturally wrong
-- introduce hidden coupling
-- introduce “temporary” hacks without labeling them as debt
-- over-centralize unrelated logic into shared helpers or god services
-- recommend large refactors unless they are necessary and justified
+- assume the current implementation is correct without checking the code
+- introduce hidden coupling, service-locator behavior, or accidental cross-module knowledge
+- move sensitive logic into client code for convenience
+- treat middleware or proxy logic as a substitute for server-side authorization
+- recommend broad refactors without naming the risk they solve
 
 If a requested solution conflicts with sound architecture, security, or runtime constraints:
 
@@ -72,123 +193,69 @@ If a requested solution conflicts with sound architecture, security, or runtime 
 - explain why
 - propose the minimum safe alternative
 
-==================================================
-NEXT.JS 16 RULES
-==================================================
+---
+
+## Source Of Truth
+
+Repository code is authoritative.
+
+Docs, prompts, ADRs, reports, and summaries are supporting evidence and may drift.
+
+If documentation and code disagree:
+
+- trust the code
+- report the drift explicitly
+- do not silently reconcile the difference
+- do not present doc claims as facts unless they were verified in code
+
+---
+
+## Required Reading Sequence
+
+For any non-trivial task:
+
+1. Read this file (`AGENTS.md`).
+2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
+3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
+4. Read the relevant specialist prompt or workflow file for the task.
+5. Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` when the task touches redirects, logging, file access, auth, route handlers, scripts, or any security-sensitive path.
+
+For middleware-style behavior, inspect `src/proxy.ts` first.
+
+---
+
+## Architecture And Runtime Non-Negotiables
 
 Always reason explicitly about:
 
 - App Router boundaries
-- server vs client components
-- route handlers
-- server actions
-- edge vs node runtime
+- server vs client placement
+- route handlers and server actions
+- Edge vs Node runtime behavior
 - caching and revalidation
-- request-time vs build-time behavior
-- environment variable exposure
-- middleware/proxy responsibilities
-- streaming / suspense implications when relevant
-- deployment behavior on Vercel when relevant
+- environment-variable exposure
+- module boundaries and dependency direction
+- DI and composition-root discipline
+- provider isolation
 
 Hard rules:
 
-- do not move logic to client components unless there is a clear reason
-- do not place sensitive logic in client-side code
-- do not assume middleware is a substitute for server-side authorization
+- do not move business logic into `src/shared/*` or UI delivery code
+- do not bypass module boundaries because it is convenient
 - do not mix server-only code into client bundles
-- do not create runtime confusion between edge-safe and node-only code
-- do not ignore caching behavior when returning user-, tenant-, or auth-sensitive data
+- do not create runtime confusion between Edge-safe and Node-only code paths
+- do not ignore cache behavior when data is user-sensitive, tenant-sensitive, or auth-sensitive
+- do not introduce provider-specific concepts into core contracts
 
-When proposing a solution, always determine:
+---
 
-- what must run on the server
-- what may run on the client
-- what runtime it requires
-- what cache policy is safe
-- where validation belongs
-
-==================================================
-MODULAR MONOLITH RULES
-==================================================
-
-This repository must preserve modular monolith integrity.
-
-Treat modules as explicit boundaries with owned responsibilities.
-
-Always inspect for:
-
-- forbidden cross-module imports
-- bypassing public contracts
-- leaking infrastructure into domain
-- leaking domain logic into UI
-- leaking authorization into presentation only
-- excessive shared utilities
-- cross-module knowledge that should be hidden behind contracts
-- implicit coupling through helpers, context, or database assumptions
-
-Hard rules:
-
-- do not bypass module boundaries “because it is easier”
-- do not import internals of another module if a public contract should exist
-- do not place business rules in pages, components, or view models
-- do not create shared folders that become dumping grounds
-- do not centralize unrelated logic into a single service
-- do not let convenience override ownership
-
-Prefer:
-
-- explicit contracts
-- narrow interfaces
-- stable boundaries
-- module-local ownership
-- low blast radius changes
-
-Whenever reviewing or designing, assess:
-
-- what this module owns
-- what it is allowed to know
-- what it may expose
-- what it must not depend on directly
-
-==================================================
-DEPENDENCY INJECTION / COMPOSITION ROOT RULES
-==================================================
-
-This project values DI discipline and explicit composition.
-
-Always preserve:
-
-- clear composition root boundaries
-- explicit dependency wiring
-- separation between contracts and implementations
-- replaceable infrastructure
-- testability without hidden globals where possible
-
-Hard rules:
-
-- do not instantiate infrastructure deep inside business logic unless that is already the explicit project pattern and is justified
-- do not hide dependencies behind vague global imports if DI or explicit composition is the intended architecture
-- do not mix contract definition with infrastructure implementation
-- do not create service locators accidentally
-
-When reviewing DI/composition:
-
-- identify where composition happens
-- identify whether dependencies cross module boundaries correctly
-- identify whether abstractions are meaningful or fake
-- identify whether a simpler design would be more correct
-
-==================================================
-AUTHENTICATION / AUTHORIZATION RULES
-==================================================
-
-Treat auth as a first-class architectural concern.
+## Auth, Tenancy, And Security Non-Negotiables
 
 Always distinguish:
 
 - authentication
 - authorization
-- tenant/org context
+- tenant or organization context
 - session context
 - feature entitlement
 - UI visibility
@@ -197,251 +264,140 @@ Hard rules:
 
 - authentication checks in UI are never sufficient
 - authorization must be enforced server-side
-- role checks must not be scattered ad hoc across the codebase
-- do not couple business authorization to presentation logic
-- do not assume one auth provider permanently defines the architecture
-- do not leak privileged data across boundaries
+- do not trust client input for tenant, org, or permission authority
+- do not scatter raw role checks across unrelated layers
+- do not forward redirect-style query parameters without safe sanitization
+- do not log secrets, tokens, or sensitive private data
+- do not use dynamic file paths or configurable URLs in scripts without point-of-use guards
 
-Whenever auth is involved, reason about:
+When auth, org, role, permission, policy, or tenant logic is involved, increase scrutiny and identify:
 
 - where identity is established
 - where authorization is enforced
-- where tenant/org context is derived
+- where tenant context is derived and validated
 - whether claims are trustworthy
-- whether server actions / route handlers validate permissions
-- whether failure paths are safe and explicit
+- whether failure paths are explicit and safe
 
-If a change touches auth, session, organizations, roles, permissions, or policies:
+---
 
-- elevate scrutiny
-- call out missing controls
-- identify enforcement points
-- identify trust boundary risks
+## Forward-Compatibility Constraints
 
-==================================================
-TENANCY / ORGANIZATIONS RULES
-==================================================
+This boilerplate must remain compatible with stronger tenancy, authorization, and release-control models over time.
 
-This boilerplate is expected to remain compatible with future or partial multi-tenant / organization-aware evolution.
+Design with future support for:
 
-Always design with tenancy readiness in mind.
+- tenant and organization isolation
+- RBAC and ABAC-style policy enforcement
+- provider replacement behind stable contracts
+- feature flags with explicit ownership and removal paths
 
 Hard rules:
 
-- do not bake single-tenant assumptions deep into domain logic without clearly labeling them
-- do not spread tenant resolution logic chaotically across the app
-- do not rely on UI-selected tenant state as an authority
-- do not allow data access patterns that could later cause tenant leakage
+- do not bake single-tenant assumptions deep into core business logic unless they are clearly labeled
+- do not scatter raw role comparisons or policy decisions across unrelated UI and utility layers
+- do not make feature flags a substitute for authorization
+- do not couple business rules permanently to Clerk-specific shapes when a local contract should exist
+- do not design APIs that would make future policy enforcement or tenant isolation painful to add
 
-Whenever relevant, assess:
+When these concerns are relevant, assess:
 
-- where tenant context is created
-- where tenant context is validated
-- where tenant context is enforced
-- which data is tenant-scoped vs global
-- whether module boundaries preserve tenant isolation
-- whether caches or queries could leak across tenants
+- where enforcement belongs
+- how tenant or org context is established and propagated
+- whether the design keeps provider-specific details isolated
+- whether the change leaves a safe cleanup path for future flag removal or policy hardening
 
-Prefer architectures where tenancy can be introduced or strengthened with minimal churn.
+---
 
-==================================================
-RBAC / ABAC RULES
-==================================================
+## Validation And Change Discipline
 
-This project should remain compatible with strong authorization models.
+Prefer focused validation with strong signal over broad validation with weak justification.
 
-Always think ahead for:
+Always:
 
-- RBAC
-- ABAC
-- policy-based checks
-- enforcement points
-- auditability
+- validate at the right level for the risk
+- distinguish must-fix risks from follow-up debt
+- keep risky behavioral changes separate from unrelated cleanup when possible
+- document residual risk if a task is only partially complete or intentionally deferred
+- **run `pnpm lint --fix`, never plain `pnpm lint`** — the linter auto-fixes import order and formatting; running without `--fix` only reports fixable errors and wastes tokens
 
-Hard rules:
+Never:
 
-- do not scatter raw role comparisons everywhere
-- do not hardcode authorization in random components
-- do not bury policy decisions inside infrastructure or UI
-- do not design APIs that cannot later enforce richer policy rules
+- rely on shallow happy-path testing for security-sensitive or auth-sensitive changes
+- use client-only assertions as the only proof of authorization behavior
+- widen test surface area substantially without naming the risk it mitigates
 
-Prefer:
+---
 
-- centralized policy concepts
-- explicit authorization boundaries
-- composable checks
-- readable enforcement points
-- testable permission behavior
-
-When reviewing code, identify:
-
-- where authorization is decided
-- whether decision logic is reusable and testable
-- whether future ABAC would be painful to add
-- whether ownership and policy scope are aligned
-
-==================================================
-FEATURE FLAGS RULES
-==================================================
-
-The repository should remain compatible with disciplined feature-flag usage.
-
-Hard rules:
-
-- do not scatter flag checks chaotically across the UI
-- do not make flags a substitute for authorization
-- do not create unclear ownership of flag evaluation
-- do not create stale flag debt without noting cleanup expectations
-
-When feature flags are relevant, reason about:
-
-- who owns the flag
-- where it should be evaluated
-- whether evaluation belongs on server or client
-- whether the fallback path is safe
-- whether the code can be cleaned up later
-
-Prefer:
-
-- explicit evaluation points
-- minimal surface area
-- safe fallback behavior
-- easy removal paths
-
-==================================================
-SECURITY RULES
-==================================================
-
-Security is not optional.
-
-Always inspect for:
-
-- input validation failures
-- SSRF
-- XSS
-- CSRF
-- injection risks
-- auth bypass
-- insecure server actions
-- unsafe route handlers
-- data overexposure
-- secrets leakage
-- logging sensitive data
-- insecure redirects
-- trust boundary confusion
-
-Hard rules:
-
-- validate all untrusted input at trust boundaries
-- do not trust client input
-- do not expose secrets to the client
-- do not log sensitive tokens, secrets, or private user data
-- do not assume internal routes are safe without checks
-- do not expose detailed internal errors to users unless explicitly intended
-
-If you see a security smell:
-
-- call it out directly
-- classify severity when possible
-- propose a safer design, not just a patch
-
-==================================================
-DATA / DATABASE / REPOSITORY RULES
-==================================================
-
-Always reason about data ownership.
-
-Hard rules:
-
-- do not allow repositories to become generic dumping grounds
-- do not mix business orchestration with low-level persistence carelessly
-- do not bypass ownership boundaries just because data lives in the same database
-- do not design queries that violate module ownership silently
-
-Always assess:
-
-- who owns the data
-- which layer should shape the query
-- whether transaction boundaries are explicit enough
-- whether idempotency matters
-- whether consistency expectations are documented
-- whether tenancy/auth constraints are enforced in data access
-
-==================================================
-OBSERVABILITY / SENTRY RULES
-==================================================
-
-The project is expected to support strong observability.
-
-When relevant, reason about:
-
-- Sentry coverage
-- error boundaries
-- structured logs
-- tracing
-- useful tags and context
-- tenant-safe telemetry
-- auth-related diagnostics
-- production debugging needs
-
-Hard rules:
-
-- do not swallow errors silently
-- do not emit telemetry that leaks secrets or sensitive data
-- do not add noisy monitoring without signal
-- do not ignore failure visibility for critical flows
-
-Prefer:
-
-- meaningful error handling
-- actionable telemetry
-- stable tagging conventions
-- enough context to debug production incidents
-
-==================================================
-TESTING RULES
-==================================================
+## Testing Expectations
 
 Treat testing as part of design, not an afterthought.
 
 Always reason about:
 
-- unit tests
-- integration tests
-- e2e tests
-- contract tests where useful
-- auth tests
-- tenant isolation tests
-- regression risks
-
-Hard rules:
-
-- do not suggest only shallow happy-path testing
-- do not over-mock core behavior in a way that hides architectural mistakes
-- do not ignore critical security or authorization scenarios
-- do not skip edge cases when the feature is security-, auth-, or money-related
+- unit, integration, and E2E coverage at the right level
+- failure paths and regression risks
+- auth, redirect, tenant-isolation, and policy-sensitive scenarios when relevant
+- whether mocks are hiding architectural mistakes or trust-boundary mistakes
 
 Prefer:
 
-- testing at the right level
-- explicit critical scenarios
-- coverage of invariants and failure modes
-- minimal but meaningful regression safety
+- focused validation with strong signal
+- explicit coverage of invariants and failure modes
+- realistic integration coverage for security-sensitive behavior
 
-==================================================
-DOCUMENTATION / ADR RULES
-==================================================
+---
+
+## Data And Persistence Discipline
+
+Always reason about data ownership and enforcement boundaries.
+
+Hard rules:
+
+- do not allow repositories to become generic dumping grounds
+- do not bypass module ownership just because data lives in the same database
+- do not silently violate tenant, auth, or policy constraints in data access
+- do not mix business orchestration with low-level persistence carelessly
+
+When persistence is involved, assess:
+
+- who owns the data
+- where queries should be shaped
+- whether transaction boundaries are explicit enough
+- whether idempotency or ordering matters
+- whether tenant-sensitive or auth-sensitive data could leak through caching or overly broad queries
+
+---
+
+## Observability And Error Handling
+
+Always preserve actionable, tenant-safe observability.
+
+Hard rules:
+
+- do not swallow meaningful errors silently
+- do not emit telemetry that leaks secrets, tokens, or sensitive user data
+- do not add noisy monitoring without signal
+- do not ignore failure visibility for auth, provisioning, sync, or security-critical flows
+
+Prefer:
+
+- meaningful error handling
+- actionable logs and tags
+- enough context to debug production failures
+- stable telemetry conventions across related flows
+
+---
+
+## Documentation And ADR Discipline
 
 Prefer durable engineering artifacts over transient chat output.
 
-When a decision is important, propose creating or updating:
+When a decision materially affects architecture, security, runtime behavior, or workflow expectations, update or create the relevant:
 
-- specs
-- architecture docs
-- ADRs
-- testing plans
-- threat models
-- rollout plans
+- spec, runbook, or workflow document
+- ADR or architecture note
+- security pattern entry
+- verification checklist or validation artifact
 
 Important decisions should capture:
 
@@ -449,97 +405,128 @@ Important decisions should capture:
 - decision
 - alternatives considered
 - consequences
-- migration notes
-- rollback considerations
+- migration notes or cleanup expectations
+- rollback or containment considerations
 
-==================================================
-CHANGE MANAGEMENT RULES
-==================================================
+---
 
-Default to incremental, reviewable, low-blast-radius changes.
+## Change Management
+
+Default to incremental, reviewable, low-blast-radius change sets.
 
 Always assess:
 
-- affected modules
+- affected modules and ownership boundaries
 - migration risk
 - rollback options
-- runtime impact
-- operational impact
-- test impact
-- security impact
+- runtime, operational, and validation impact
+- whether a cleanup can be separated from behavioral risk
 
-Hard rules:
+Never:
 
-- do not recommend broad refactors without clear justification
-- do not merge conceptual cleanup with risky behavioral changes unless necessary
-- do not hide architectural changes inside “small” edits
-- do not change public contracts casually
+- hide architectural changes inside “small” edits
+- mix unrelated cleanup with risky behavioral changes without saying so
+- change public contracts casually
 
-==================================================
-RESPONSE QUALITY RULES
-==================================================
+---
+
+## Response Quality
 
 Do not produce AI fluff.
-Do not praise weak designs.
-Do not hand-wave difficult parts.
-Do not answer with generic blog-post advice.
 
 Be:
 
 - specific
 - critical when needed
-- implementation-oriented
-- explicit about tradeoffs
-- explicit about unknowns
-- precise about risks
-
-Unless the user explicitly asks otherwise, structure substantial responses using this shape:
-
-1. Objective
-2. Current-State Findings
-3. Architectural Assessment
-4. Proposed Design / Recommendation
-5. Risks and Tradeoffs
-6. Implementation Notes
-7. Validation / Verification
-8. Recommended Next Action
+- explicit about tradeoffs and unknowns
+- precise about risks and evidence
 
 If asked to review:
 
 - return findings by severity
-- separate must-fix from should-fix
-- distinguish architectural issues from style comments
+- separate must-fix issues from lower-priority follow-up
+- distinguish architectural, security, runtime, and validation issues instead of blending them together
 
-If asked to design:
+If asked to design or implement:
 
-- start with boundaries, ownership, trust, runtime, and constraints before code
+- start with boundaries, trust, runtime, and constraints before code
+- prefer low-blast-radius recommendations unless larger change is clearly justified
 
-If asked to implement:
+---
 
-- first identify affected files/modules and validate architecture fit
-- avoid broad refactors unless required
+## Artifact-Backed Work
 
-==================================================
-FINAL DEFAULT BEHAVIOR
-==================================================
+If a task uses `.copilot/tasks/{task_id}/` artifacts or workflow-managed task artifacts:
 
-Be a strict, production-grade, architecture-aware engineering assistant for a Next.js 16 modular monolith boilerplate.
+- treat `plan.md`, `intake.md`, and `implementation-plan.md` as live control documents
+- keep checklist state synchronized as work progresses
+- record blocked, skipped, deferred, and partial states explicitly
+- require each non-orchestrator specialist to maintain exactly one persistent summary artifact for the task
+- use the corresponding templates in `docs/ai/templates/` and `docs/ai/templates/specialist-summaries/`
 
-Protect:
+Reference guides:
 
-- boundaries
-- security
-- DI discipline
-- runtime correctness
-- future tenancy
-- future RBAC/ABAC
-- feature-flag discipline
-- observability quality
-- maintainability
+- `docs/ai/general/ARTIFACTS_GUIDE.md`
+- `docs/ai/general/COPILOT_TASK_ARTIFACTS.md`
+- `docs/ai/general/09 - Task Brief Authoring.md`
 
-When in doubt:
+---
 
-- choose the safer architecture
-- choose the lower blast radius change
-- make assumptions explicit
-- surface risks early
+## Agent Infrastructure — Where to Propagate Rules
+
+> **IMPORTANT**: When any coding rule, security pattern, or behavioral constraint is added or changed,
+> update **ALL** applicable locations below. Never add to `.zencoder/rules/` — it is deprecated.
+
+| Location                                      | Consumer            | Notes                                                  |
+| --------------------------------------------- | ------------------- | ------------------------------------------------------ |
+| **`AGENTS.md`** (this file)                   | All AI agents       | **Primary always-applied context — update here first** |
+| `docs/ai/general/0[1-9] - *.md`               | Zencoder extension  | Plain markdown prompt files                            |
+| `.github/agents/*.agent.md`                   | GitHub Copilot      | YAML frontmatter + markdown                            |
+| `.zenflow/workflows/*.md`                     | ZenFlow extension   | Step-based workflow files                              |
+| `docs/ai/general/SECURITY_CODING_PATTERNS.md` | All agents + humans | Living security catalogue                              |
+| ~~`.zencoder/rules/repo.md`~~                 | ~~Zencoder~~        | **DEPRECATED — April 20, 2026. Do not use.**           |
+
+Full correspondence table and process ownership rules: `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+
+### Agent Numbering and File Correspondence
+
+| #   | Role                  | Zencoder Prompt                                       | GitHub Copilot Agent                            | ZenFlow Preset              |
+| --- | --------------------- | ----------------------------------------------------- | ----------------------------------------------- | --------------------------- |
+| 01  | Architecture Guard    | `docs/ai/general/01 - Architecture Guard Agent.md`    | `.github/agents/architecture-guard.agent.md`    | `architecture-guard-agent`  |
+| 02  | Security & Auth       | `docs/ai/general/02 - Security & Auth Agent.md`       | `.github/agents/security-auth.agent.md`         | `security-auth-agent`       |
+| 03  | Next.js Runtime       | `docs/ai/general/03 - Next.js Runtime Agent.md`       | `.github/agents/nextjs-runtime.agent.md`        | `nextjs-runtime-agent`      |
+| 04  | Implementation        | `docs/ai/general/04 - Implementation Agents.md`       | `.github/agents/implementation-agent.agent.md`  | `implementation-agent`      |
+| 05  | Validation Strategy   | `docs/ai/general/05 - Validation Strategy Agent.md`   | `.github/agents/validation-strategy.agent.md`   | `validation-strategy-agent` |
+| 06  | Debug Investigation   | `docs/ai/general/06 - Debug Investigation Agent.md`   | `.github/agents/debug-investigation.agent.md`   | `debug-investigation-agent` |
+| 07  | Playwright E2E        | `docs/ai/general/07 - Playwright E2E Agent.md`        | `.github/agents/playwright-e2e.agent.md`        | `playwright-e2e-agent`      |
+| 08  | Workflow Orchestrator | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | `.github/agents/workflow-orchestrator.agent.md` | —                           |
+| 09  | Task Brief Authoring  | `docs/ai/general/09 - Task Brief Authoring.md`        | —                                               | —                           |
+
+---
+
+## Security Coding Patterns
+
+Repository-specific security coding rules are maintained in:
+
+**`docs/ai/general/SECURITY_CODING_PATTERNS.md`**
+
+This document is the living, authoritative catalogue of:
+
+- security patterns to avoid and their correct alternatives
+- confirmed false-positive scanner signals and why they are safe
+- mandatory coding rules produced from structured security reviews
+
+**All agents that write or review code MUST read this document.**
+
+Key rules currently in effect:
+
+| ID     | Rule                                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------------------- |
+| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL` |
+| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                    |
+| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                |
+| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                    |
+| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                   |
+| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                      |
+
+**`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.

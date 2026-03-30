@@ -24,7 +24,9 @@ lighthouse performance pipeline
 
 security-scan pipeline
 
-optional label-triggered e2e
+optional label-triggered auth-matrix e2e
+
+optional label-triggered broad matrix e2e
 
 Constraints:
 

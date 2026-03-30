@@ -1,10 +1,16 @@
-/** @vitest-environment node */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { container } from '@/core/container';
 import { AUTH } from '@/core/contracts';
+import { UserNotProvisionedError } from '@/core/contracts/identity';
 import type { IdentityProvider } from '@/core/contracts/identity';
+import {
+  MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
+} from '@/core/contracts/tenancy';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getSecurityContext } from './security-context';
 
@@ -17,19 +23,30 @@ import {
 describe('Security Context', () => {
   let identityProvider: IdentityProvider;
   let tenantResolver: TenantResolver;
+  let userRepository: UserRepository;
 
   const getDependencies = () => ({
     identityProvider,
     tenantResolver,
+    userRepository,
   });
 
   beforeEach(() => {
+    const container = getAppContainer();
+
     identityProvider = container.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
     );
     tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
+    userRepository = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
     resetAllInfrastructureMocks();
     vi.clearAllMocks();
+
+    vi.mocked(userRepository.findById).mockImplementation(async (id) => ({
+      id,
+      email: `${id}@example.com`,
+      onboardingComplete: true,
+    }));
   });
 
   it('should return guest context when not authenticated', async () => {
@@ -40,8 +57,22 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('UNAUTHENTICATED');
     expect(context.ip).toBe('127.0.0.1');
     expect(context.correlationId).toBeDefined();
+  });
+
+  it('should return BOOTSTRAP_REQUIRED when identityProvider throws UserNotProvisionedError', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockRejectedValue(
+      new UserNotProvisionedError(),
+    );
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('BOOTSTRAP_REQUIRED');
   });
 
   it('should return user context when authenticated', async () => {
@@ -69,6 +100,7 @@ describe('Security Context', () => {
       id: 'user_123',
       tenantId: 'tenant_123',
     });
+    expect(context.readinessStatus).toBe('ALLOWED');
     expect(context.ip).toBe('1.1.1.1');
     expect(context.userAgent).toBe('test-agent');
     expect(context.correlationId).toBe('test-correlation');
@@ -114,8 +146,27 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('UNAUTHENTICATED');
     expect(context.correlationId).toBeDefined();
     expect(context.requestId).toBeDefined();
+  });
+
+  it('should return ONBOARDING_REQUIRED when user exists but onboarding is incomplete', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_incomplete',
+    });
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_incomplete',
+      email: 'user_incomplete@example.com',
+      onboardingComplete: false,
+    });
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('ONBOARDING_REQUIRED');
   });
 
   it('should use tenant from tenantResolver', async () => {
@@ -133,5 +184,56 @@ describe('Security Context', () => {
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user?.tenantId).toBe('org_abc');
+  });
+
+  it('should return user=undefined when tenant context is missing (MissingTenantContextError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_without_org',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new MissingTenantContextError(),
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_CONTEXT_REQUIRED');
+  });
+
+  it('should return user=undefined when tenant is not provisioned (TenantNotProvisionedError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_no_tenant',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantNotProvisionedError(),
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_CONTEXT_REQUIRED');
+  });
+
+  it('should return user=undefined when tenant membership is required (TenantMembershipRequiredError)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_not_member',
+    });
+    vi.mocked(tenantResolver.resolve).mockRejectedValue(
+      new TenantMembershipRequiredError(),
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('TENANT_MEMBERSHIP_REQUIRED');
   });
 });

@@ -19,13 +19,14 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    logger.error(
-      {
-        err: error,
-        digest: error.digest,
-      },
-      'Global Error caught',
-    );
+    const errorPayload = {
+      errorName: error.name,
+      errorMessage: error.message,
+      digest: error.digest,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    };
+
+    logger.error(errorPayload, 'Global Error caught');
 
     if (error instanceof Error) {
       Sentry.captureException(error, {

@@ -16,8 +16,11 @@ export function createMockRouteContext(
     isInternalApi: false,
     isAuthRoute: false,
     isOnboardingRoute: false,
+    isBootstrapRoute: false,
     isPublicRoute: false,
     isStaticFile: false,
+    correlationId: 'test-correlation-id',
+    requestId: 'test-request-id',
     ...overrides,
   };
 }

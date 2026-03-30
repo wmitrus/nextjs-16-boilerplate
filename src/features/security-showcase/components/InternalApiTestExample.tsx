@@ -10,18 +10,11 @@ export function InternalApiTestExample() {
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const testInternalApi = async (useKey: boolean) => {
+  const testInternalApiWithoutKey = async () => {
     setLoading(true);
     setResult(null);
     try {
-      const headers: Record<string, string> = {};
-      if (useKey) {
-        // In a real app, this key would never be exposed to the client!
-        // This is purely for demonstration of the middleware guard.
-        headers['x-internal-key'] = 'demo-internal-key';
-      }
-
-      const response = await fetch('/api/internal/health', { headers });
+      const response = await fetch('/api/internal/health');
 
       const contentType = response.headers.get('content-type');
       let data;
@@ -52,23 +45,20 @@ export function InternalApiTestExample() {
         Endpoints under <code>/api/internal/*</code> are protected at the
         middleware level.
       </p>
+      <p className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        This public page only verifies the deny path. Successful calls must use
+        a trusted server-to-server client with a configured internal API key and
+        must never expose that key in browser code.
+      </p>
 
       <div className="flex gap-4">
         <button
           type="button"
-          onClick={() => testInternalApi(false)}
+          onClick={testInternalApiWithoutKey}
           disabled={loading}
           className="flex-1 rounded border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
         >
           Test without Key (403)
-        </button>
-        <button
-          type="button"
-          onClick={() => testInternalApi(true)}
-          disabled={loading}
-          className="flex-1 rounded bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
-        >
-          Test with Key (Success)
         </button>
       </div>
 

@@ -14,7 +14,28 @@ Available agents:
 - Architecture Guard Agent
 - Security/Auth Agent
 - Next.js Runtime Agent
+- Validation Strategy Agent
 - Implementation Agent
+
+Repository note:
+
+In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
+Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+Do not treat the absence of `middleware.ts` as a finding.
+
+==================================================
+EXECUTION CONTROL
+==================================================
+
+This workflow supports two execution modes:
+
+- `straight-through` — the required specialist roles may run sequentially in one session if the tool does not support true UI-level agent switching
+- `manual-handoff` — stop after each specialist artifact or major phase so the operator can review the output and switch agents manually before continuing
+
+Use `manual-handoff` when the operator explicitly wants visible agent changes or per-step approval in the UI.
+
+Artifact names prove that a workflow step produced an output.
+They do not, by themselves, prove that the tool visibly switched to a different active agent.
 
 ==================================================
 WORKFLOW GOAL
@@ -202,9 +223,15 @@ Output from this step:
 - initial severity/urgency framing
 - likely specialist involvement
 
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
 Step 2. Security/Auth Review (always first)
 
 - Always run Security/Auth Agent first.
+- Persist or update the specialist artifact:
+  - `02 - Security & Auth - Summary.md`
+- Use the matching specialist summary template:
+  - `docs/ai/templates/specialist-summaries/02 - Security & Auth - Summary Template.md`
 - Ask it to:
   - identify the trust boundary
   - identify the likely enforcement failure
@@ -220,6 +247,8 @@ Required output:
 - sensitive-data / tenant implications
 - stop/go recommendation from security perspective
 
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
 Step 3. Conditional Next.js Runtime Review
 Run Next.js Runtime Agent if the incident touches or may affect:
 
@@ -231,6 +260,11 @@ Run Next.js Runtime Agent if the incident touches or may affect:
 - edge vs node runtime
 - env exposure
 - App Router rendering/runtime assumptions
+
+- Persist or update the specialist artifact:
+  - `03 - Next.js Runtime - Summary.md`
+- Use the matching specialist summary template:
+  - `docs/ai/templates/specialist-summaries/03 - Next.js Runtime - Summary Template.md`
 
 Ask it to:
 
@@ -245,6 +279,8 @@ Required output:
 - runtime constraints for remediation
 - stop/go recommendation
 
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
 Step 4. Conditional Architecture Guard Review
 Run Architecture Guard Agent if the proposed remediation may affect:
 
@@ -254,6 +290,11 @@ Run Architecture Guard Agent if the proposed remediation may affect:
 - contracts
 - provider isolation shape
 - structural layering
+
+- Persist or update the specialist artifact:
+  - `01 - Architecture Guard - Summary.md`
+- Use the matching specialist summary template:
+  - `docs/ai/templates/specialist-summaries/01 - Architecture Guard - Summary Template.md`
 
 Ask it to:
 
@@ -267,6 +308,8 @@ Required output:
 - architecture constraints
 - approved/remediation-safe structure
 - stop/go recommendation
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
 Step 5. Security Remediation Constraint Summary
 
@@ -289,7 +332,33 @@ If unresolved issues remain:
 - do not implement
 - report what is blocking safe remediation
 
-Step 6. Implementation
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
+Step 6. Validation Strategy
+
+- Run Validation Strategy Agent after the remediation constraints are consolidated.
+- Persist or update the specialist artifact:
+  - `05 - Validation Strategy - Summary.md`
+- Use the matching specialist summary template:
+  - `docs/ai/templates/specialist-summaries/05 - Validation Strategy - Summary Template.md`
+- Ask it to:
+  - define the minimum required validation for the incident path
+  - identify optional additional validation justified by blast radius
+  - identify validation explicitly not required
+  - recommend concrete commands/checks and expected evidence
+  - state whether implementation is blocked by unresolved validation preconditions
+
+Required output:
+
+- minimum required validation scope
+- optional additional validation
+- validation explicitly not required
+- commands/checks to run
+- validation gaps or blockers
+
+If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
+
+Step 7. Implementation
 
 - Invoke Implementation Agent with:
   - incident/fix objective
@@ -298,14 +367,23 @@ Step 6. Implementation
   - explicit security requirements
   - explicit runtime requirements if any
   - explicit architecture requirements if any
+- Persist or update the specialist artifact:
+  - `04 - Implementation Agent - Summary.md`
+- Use the matching specialist summary template:
+  - `docs/ai/templates/specialist-summaries/04 - Implementation Agent - Summary Template.md`
 - Require it to:
   - make the minimum effective safe fix
   - avoid unrelated refactors
   - preserve trust-boundary clarity
   - update/add tests where feasible
-  - report uncertainty instead of guessing
+- report uncertainty instead of guessing
 
-Step 7. Validation and Security Close-Out
+If execution control is `manual-handoff`, stop after writing the implementation artifact and wait for operator confirmation before continuing.
+
+Step 8. Validation and Security Close-Out
+
+- Validation guidance must come from:
+  - `05 - Validation Strategy - Summary.md`
 
 - Require validation proportional to risk, prioritizing:
   - targeted tests for the incident path
@@ -325,7 +403,9 @@ Validation must also include, where feasible:
 - the expected secure behavior after the fix
 - whether the issue is fully closed or only mitigated
 
-Optional Step 8. Post-Fix Specialist Recheck
+If execution control is `manual-handoff`, stop after writing the validation artifact and wait for operator confirmation before continuing.
+
+Optional Step 9. Post-Fix Specialist Recheck
 If the fix touched:
 
 - auth/authorization logic
@@ -334,6 +414,21 @@ If the fix touched:
 - architecture boundaries
 
 then re-run the relevant specialist agent(s) for focused confirmation.
+
+When Security/Auth re-runs for close-out:
+
+- update the existing `02 - Security & Auth - Summary.md`
+- do not create a second security-specific artifact such as `security-final.md`
+
+If execution control is `manual-handoff`, stop after writing any post-fix specialist artifact and wait for operator confirmation before continuing.
+
+If any validation check fails, the agent must document whether the failure is:
+
+- newly introduced
+- confirmed pre-existing
+- uncertain origin
+
+The agent must not classify a failure as pre-existing without evidence.
 
 ==================================================
 DECISION / BRANCHING RULES
@@ -377,6 +472,14 @@ The workflow must produce:
 7. Implementation result
 8. Validation result
 9. Residual risks / follow-ups
+
+Canonical specialist artifacts for this workflow are:
+
+- `01 - Architecture Guard - Summary.md` when architecture review runs
+- `02 - Security & Auth - Summary.md` for initial security review and any post-fix security recheck
+- `03 - Next.js Runtime - Summary.md` when runtime review runs
+- `04 - Implementation Agent - Summary.md` for implementation
+- `05 - Validation Strategy - Summary.md` for validation-scope guidance
 
 ==================================================
 FAILURE / BLOCK CONDITIONS

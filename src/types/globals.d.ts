@@ -2,11 +2,13 @@ export {};
 
 declare global {
   interface CustomJwtSessionClaims {
+    email?: string;
+    primaryEmail?: string;
     metadata: {
       onboardingComplete?: boolean;
-      targetLanguage?: string;
-      proficiencyLevel?: string;
-      learningGoal?: string;
+      displayName?: string;
+      locale?: string;
+      timezone?: string;
     };
   }
 }

@@ -13,7 +13,7 @@ exports
 !.yarn/versions
 
 # logs
-logs
+/logs/*
 
 /bin/*
 !/bin/git-branch-origin
@@ -68,5 +68,20 @@ next-env.d.ts
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
 
+# PGlite local development database
+.pglite/
+/data/*
+!/data/.gitkeep
+
 # Zencoder MCP local configuration (can include secrets)
 .zencoder/mcp.local.json
+
+# Local recovery and forensic workspace
+.recovery/
+
+/data/*
+!/data/.gitkeep
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

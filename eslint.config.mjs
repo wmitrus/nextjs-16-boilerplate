@@ -6,6 +6,7 @@ import nextTs from 'eslint-config-next/typescript';
 import prettier from 'eslint-config-prettier';
 import jsoncPlugin from 'eslint-plugin-jsonc';
 import prettierPlugin from 'eslint-plugin-prettier';
+import security from 'eslint-plugin-security';
 import storybook from 'eslint-plugin-storybook';
 import * as jsoncParser from 'jsonc-eslint-parser';
 import tseslint from 'typescript-eslint';
@@ -199,6 +200,7 @@ const eslintConfig = defineConfig([
       'prettier/prettier': 'error',
     },
   },
+  security.configs.recommended,
   globalIgnores([
     '.git/**',
     '.next/**',

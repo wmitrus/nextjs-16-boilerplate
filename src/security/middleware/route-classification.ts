@@ -12,8 +12,11 @@ export interface RouteContext {
   isInternalApi: boolean;
   isAuthRoute: boolean;
   isOnboardingRoute: boolean;
+  isBootstrapRoute: boolean;
   isPublicRoute: boolean;
   isStaticFile: boolean;
+  correlationId: string;
+  requestId: string;
 }
 
 /**
@@ -21,6 +24,9 @@ export interface RouteContext {
  */
 export function classifyRequest(req: NextRequest): RouteContext {
   const path = req.nextUrl.pathname;
+  const correlationId =
+    req.headers.get('x-correlation-id') ?? crypto.randomUUID();
+  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID();
 
   const isStaticFile =
     /\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)$/.test(
@@ -33,6 +39,8 @@ export function classifyRequest(req: NextRequest): RouteContext {
 
   const isAuthRoute = matchesAnyRoutePrefix(path, AUTH_ROUTE_PREFIXES);
   const isOnboardingRoute = path.startsWith('/onboarding');
+  const isBootstrapRoute =
+    path === '/auth/bootstrap' || path.startsWith('/auth/bootstrap/');
 
   const isPublicRoute =
     matchesAnyRoutePrefix(path, PUBLIC_ROUTE_PREFIXES) || isAuthRoute;
@@ -43,7 +51,10 @@ export function classifyRequest(req: NextRequest): RouteContext {
     isInternalApi,
     isAuthRoute,
     isOnboardingRoute,
+    isBootstrapRoute,
     isPublicRoute,
     isStaticFile,
+    correlationId,
+    requestId,
   };
 }

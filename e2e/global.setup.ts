@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- filePath is always path.resolve(process.cwd(), static-literal); no user input, E2E setup only (SEC-05) */
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -25,6 +26,7 @@ function readEnvFile(filePath: string): Record<string, string> {
     const key = line.slice(0, equalsIndex).trim();
     const value = line.slice(equalsIndex + 1).trim();
 
+    // eslint-disable-next-line security/detect-object-injection -- key is parsed from a local .env file line (not user request input); env is a fresh {} accumulator
     env[key] = value.replace(/^['"]|['"]$/g, '');
   }
 
@@ -32,15 +34,25 @@ function readEnvFile(filePath: string): Record<string, string> {
 }
 
 function ensureClerkTestingEnv(): void {
+  const envE2ELocal = readEnvFile(
+    path.resolve(process.cwd(), '.env.e2e.local'),
+  );
+  const envE2E = readEnvFile(path.resolve(process.cwd(), '.env.e2e'));
   const envLocal = readEnvFile(path.resolve(process.cwd(), '.env.local'));
   const envExample = readEnvFile(path.resolve(process.cwd(), '.env.example'));
 
   process.env.CLERK_SECRET_KEY =
-    process.env.CLERK_SECRET_KEY ?? envLocal.CLERK_SECRET_KEY ?? '';
+    process.env.CLERK_SECRET_KEY ??
+    envE2ELocal.CLERK_SECRET_KEY ??
+    envE2E.CLERK_SECRET_KEY ??
+    envLocal.CLERK_SECRET_KEY ??
+    '';
 
   process.env.CLERK_PUBLISHABLE_KEY =
     process.env.CLERK_PUBLISHABLE_KEY ??
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+    envE2ELocal.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+    envE2E.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     envLocal.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     envExample.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     '';

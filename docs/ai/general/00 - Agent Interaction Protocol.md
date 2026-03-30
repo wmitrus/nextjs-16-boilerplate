@@ -1,72 +1,147 @@
-AGENT INTERACTION PROTOCOL
+# Agent Interaction Protocol
 
-Agents in this repository operate under a layered responsibility model.
+Rules that govern how all agents in this repository must behave.
 
-Canonical mode routing and mode-selection rules live in:
+Every agent must read this file before beginning any non-trivial task.
 
-- `docs/ai/general/MODE_MANIFEST.md`
+---
 
-Canonical self-audit validation harness lives in:
+## Source of Truth
 
-- `docs/ai/general/PROMPT_SYSTEM_VALIDATION.md`
+Repository code is the source of truth.
 
-Authority order:
+Docs, comments, ADRs, and summaries are useful context but are secondary.
 
-1. Architecture Guard Agent
-2. Security/Auth Agent
-3. Next.js Runtime Agent
-4. Validation Strategy Agent
-5. Implementation Agent
+If docs and code differ:
 
-Rules:
+- trust the code
+- note the drift if it is relevant to the task
+- do not "fix" architecture by assumption
 
-Architecture Guard Agent
+---
 
-- final authority on architecture
-- dependency direction
-- DI composition
-- module boundaries
-- repository structure
+## Agent Authority Boundaries
 
-Security/Auth Agent
+Each agent has a defined authority domain. Agents must not silently override each other.
 
-- final authority on:
-  - authentication
-  - authorization
-  - tenant context
-  - trust boundaries
-  - sensitive data exposure
+| Agent                    | Owns                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| 01 Architecture Guard    | Module boundaries, dependency direction, DI/composition, architectural drift        |
+| 02 Security & Auth       | Authentication, authorization, tenant trust, provider isolation, sensitive data     |
+| 03 Next.js Runtime       | App Router, server/client placement, route handlers, server actions, proxy, caching |
+| 04 Implementation        | Code execution within established constraints                                       |
+| 05 Validation Strategy   | Minimum safe validation scope, validation quality                                   |
+| 06 Debug Investigation   | Evidence gathering, execution path tracing, ambiguity reduction                     |
+| 07 Playwright E2E        | Real-browser verification, runtime evidence capture                                 |
+| 08 Workflow Orchestrator | Multi-step sequencing, artifact management, specialist routing                      |
+| 09 Task Brief Authoring  | Requirements normalization, task input preparation                                  |
 
-Next.js Runtime Agent
+When a task depends on an unresolved decision owned by another agent:
 
-- final authority on:
-  - App Router behavior
-  - server vs client placement
-  - route handlers
-  - server actions
-  - caching behavior
-  - Vercel runtime constraints
+- do not proceed as if the decision was already made
+- state explicitly which agent's decision is blocking progress
 
-Validation Strategy Agent
+---
 
-- final authority on:
-  - minimum sensible validation scope
-  - validation level selection
-  - repository validation strategy sufficiency
-  - identifying validation blind spots, over-mocking, and false-confidence patterns
+## Startup Sequence
 
-Implementation Agent
+Before any non-trivial task, agents must read:
 
-- must follow constraints from all above agents
-- must not invent new architecture
+1. This file (`00 - Agent Interaction Protocol.md`)
+2. `AGENTS.md`
+3. `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+4. Domain-specific reference files listed in their own Startup Rules
 
-Conflict resolution:
+---
 
-If agents disagree:
+## Repository Middleware Note
 
-Architecture Guard decides structure.
-Security/Auth decides enforcement.
-Next.js Runtime decides runtime placement.
-Validation Strategy decides validation scope once risk and constraints are known.
+In this repository, middleware-style request interception lives in **`src/proxy.ts`** — not `middleware.ts`.
 
-Implementation agent must defer to them.
+Do not spend time searching for `middleware.ts`. Analyze `src/proxy.ts` for request interception, redirect, auth pre-processing, and security headers.
+
+---
+
+## Runtime Bug Constraint
+
+If the issue is classified as a runtime bug:
+
+- Architecture Guard must not propose architecture redesign as the first move
+- Architecture Guard may verify that the proposed fix respects existing constraints and module boundaries
+- Debug Investigation or Next.js Runtime should lead until the failure path is clear
+
+---
+
+## Default Delegation Guidance
+
+For non-trivial work, route to the specialist whose authority best matches the active decision:
+
+- Debug Investigation first for unclear bugs, unstable flows, env-driven divergence, race conditions, ordering bugs, or multi-layer failures where the right specialist is not yet clear
+- Workflow Orchestrator when one task must be driven across multiple specialist steps with explicit artifact creation and handoff discipline
+- Architecture Guard for module boundaries, dependency direction, DI/composition shape, auth-routing design shape, or docs-vs-code drift
+- Security & Auth for authentication, authorization, tenant/org trust, provider isolation, or sensitive-data exposure review
+- Next.js Runtime for App Router behavior, server/client placement, route handlers, server actions, `src/proxy.ts`, caching/revalidation, or Edge vs Node runtime analysis
+- Validation Strategy for repository validation posture, minimum safe validation scope, broad test-addition decisions, over-mocking review, or choosing between unit, integration, e2e, contract-style, and CI validation
+- Playwright E2E when real-browser verification is required and the question cannot be closed safely with unit or integration evidence alone
+- Implementation only after the relevant constraints are clear enough to execute safely
+
+Do not delegate by default when the task is simple, mixed, or can be handled directly without specialist isolation.
+
+---
+
+## Agent Infrastructure — Propagation Requirement
+
+When any agent rule, security pattern, or behavioral constraint is added or changed, it MUST be propagated to all applicable locations:
+
+- **`AGENTS.md`** (root) — primary always-applied context, update here first
+- `docs/ai/general/0[1-9] - *.md` — Zencoder agent prompts
+- `.github/agents/*.agent.md` — GitHub Copilot agents
+- `.zenflow/workflows/*.md` — ZenFlow workflow specs
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md` — if the rule is security-related
+
+**Never add to `.zencoder/rules/` — Zen Rules are deprecated April 20, 2026.**
+
+Full location map: `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+
+---
+
+## Security Coding Patterns
+
+`docs/ai/general/SECURITY_CODING_PATTERNS.md` is the living security rule catalogue.
+
+All agents that write or review code must read it.
+
+**02 - Security & Auth owns this document.** After any security review or fix, that agent must update it.
+
+---
+
+## Behavior Constraints — All Agents
+
+Always:
+
+- inspect affected files before editing
+- identify the owning module or layer before changing code
+- preserve existing contracts unless change is explicitly intended
+- prefer narrow edits over broad refactors
+- call out uncertainty instead of guessing
+
+Never:
+
+- introduce broad refactors without being asked
+- cross module boundaries for convenience
+- silently change public behavior without naming it
+- assume docs are correct if code says otherwise
+- weaken validation, authorization, or runtime safeguards to make implementation easier
+
+---
+
+## Conflict Resolution
+
+If specialist guidance conflicts:
+
+- Architecture Guard decides structure
+- Security & Auth decides enforcement
+- Next.js Runtime decides runtime placement
+- Validation Strategy decides validation scope once risk and constraints are known
+
+Implementation must defer to those decisions rather than inventing a compromise.

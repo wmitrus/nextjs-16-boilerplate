@@ -10,6 +10,18 @@ The security model is built on three main pillars:
 2.  **Layered Middleware Pipeline**: A composable request filtering system.
 3.  **Secure Action Wrapper**: A hardened interface for all server-side mutations.
 
+### 1.1 Runtime Boundary (Required Reading)
+
+Before extending middleware, auth flow, or authorization wiring, read these two documents:
+
+- Architecture source of truth: `docs/architecture/15 - Edge vs Node Composition Root Boundary.md`
+- Developer implementation playbook: `docs/usage/04 - Extending App Safely - Edge vs Node Authorization.md`
+
+This split is mandatory:
+
+- **Edge middleware** (`src/proxy.ts`) handles request-gate concerns only.
+- **Node runtime** handles DB-backed RBAC/ABAC authorization.
+
 ---
 
 ## 2. Security Context & Authorization
@@ -18,28 +30,40 @@ The `SecurityContext` provides a unified view of the current request, user, and 
 
 ### 2.1 Security Context Helper
 
-Use `getSecurityContext()` in **Server Components**, **Server Actions**, or **Route Handlers** to retrieve authenticated user data and request metadata.
+Use `getSecurityContext()` in **Server Components**, **Server Actions**, or **Route Handlers** to retrieve identity and request metadata.
 
 ```typescript
 import { getSecurityContext } from '@/security/core/security-context';
 
-const context = await getSecurityContext();
-console.log(context.user.role); // 'admin' | 'user' | 'guest'
+const context = await getSecurityContext(dependencies);
+// context.user contains: { id, tenantId, attributes? }
+// context.readinessStatus: 'ALLOWED' | 'BOOTSTRAP_REQUIRED' | 'ONBOARDING_REQUIRED' | ...
+// context.ip, context.correlationId, context.runtime, context.environment
 ```
+
+`SecurityContext` does **not** contain role information. Roles are resolved through the authorization domain. Identity context (`user.id`, `user.tenantId`) is the only user data available here.
 
 ### 2.2 RBAC & Tenant Isolation
 
-The authorization engine enforces access control based on roles and tenant ownership.
+The authorization engine enforces access control based on roles and tenant ownership through the `AuthorizationFacade` and `AuthorizationService`.
 
 ```typescript
-import { authorize, enforceTenant } from '@/security/core/authorization';
+import { AuthorizationFacade } from '@/security/core/authorization-facade';
+import type { AuthorizationService } from '@/core/contracts/authorization';
 
-// Minimum role requirement
-authorize(context, 'admin');
+const facade = new AuthorizationFacade(authorizationService);
 
-// Cross-tenant protection
-enforceTenant(context, 'tenant_abc_123');
+// Throws AuthorizationError if the policy denies access
+await facade.authorize({
+  tenant: { tenantId: context.user.tenantId },
+  subject: { id: context.user.id },
+  resource: { type: 'settings', id: resourceId },
+  action: 'update',
+  environment: { ip: context.ip, time: new Date() },
+});
 ```
+
+In practice, authorization is handled automatically by `createSecureAction` — direct facade usage is only needed in Route Handlers or Server Components that perform their own policy checks.
 
 ---
 
@@ -77,22 +101,64 @@ To prevent the most common Next.js security pitfalls, all mutations must use the
 
 ```typescript
 // features/example/actions.ts
+'use server';
+
 import { z } from 'zod';
+
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { AuthorizationService } from '@/core/contracts/authorization';
+import type { IdentityProvider } from '@/core/contracts/identity';
+import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
+import { getAppContainer } from '@/core/runtime/bootstrap';
+
 import { createSecureAction } from '@/security/actions/secure-action';
+import { createSecurityContext } from '@/security/core/security-context';
+import type { NodeSecurityContextDependencies } from '@/security/core/security-dependencies';
 
 const schema = z.object({
   title: z.string().min(5),
 });
 
+function createSecurityDependencies() {
+  const requestContainer = getAppContainer().createChild();
+  const securityContextDependencies: NodeSecurityContextDependencies = {
+    identityProvider: requestContainer.resolve<IdentityProvider>(
+      AUTH.IDENTITY_PROVIDER,
+    ),
+    tenantResolver: requestContainer.resolve<TenantResolver>(
+      AUTH.TENANT_RESOLVER,
+    ),
+    userRepository: requestContainer.resolve<UserRepository>(
+      AUTH.USER_REPOSITORY,
+    ),
+  };
+  return {
+    getSecurityContext: () =>
+      createSecurityContext(securityContextDependencies),
+    authorizationService: requestContainer.resolve<AuthorizationService>(
+      AUTHORIZATION.SERVICE,
+    ),
+  };
+}
+
 export const updateSettings = createSecureAction({
   schema,
-  role: 'admin', // Optional, defaults to 'user'
+  resource: { type: 'settings' }, // Optional: scopes policy evaluation to this resource type
+  dependencies: createSecurityDependencies, // Required: resolved per-request via DI
   handler: async ({ input, context }) => {
-    // context.user.id is derived from Clerk, not the client!
-    return await db.settings.update(context.user.id, input);
+    // context.user.id is derived from the session, never from client input
+    return await db.settings.update(context.user!.id, input);
   },
 });
 ```
+
+Key points:
+
+- `dependencies` is **required** — it wires `getSecurityContext` and `authorizationService` via the DI container
+- `resource` and `action` are optional; omitting them applies a default system-level policy check
+- There is no `role` field — authorization is policy-based, not role-based at the action level
+- `context.user` may be `undefined` if unauthenticated; the wrapper returns `{ status: 'unauthorized' }` before reaching the handler
 
 ---
 

@@ -32,6 +32,7 @@ export function hasAttribute(
   key: string,
   value: unknown,
 ): boolean {
+  // eslint-disable-next-line security/detect-object-injection -- read-only lookup; key is a controlled ABAC attribute name, not user input
   return ctx.subject.attributes?.[key] === value;
 }
 

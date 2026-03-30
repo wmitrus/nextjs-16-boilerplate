@@ -1,4 +1,5 @@
 export * from './factories/request';
+export * from './factories/provisioning';
 export * from './factories/security';
 export * from './infrastructure/clerk';
 export * from './infrastructure/next-headers';

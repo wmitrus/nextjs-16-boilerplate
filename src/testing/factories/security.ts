@@ -1,7 +1,6 @@
 import {
   mockAuthorizationAuthorize,
   mockAuthorizationCan,
-  mockAuthorizationEnsureRequiredRole,
   resetAuthorizationFacadeMocks,
 } from '@/security/core/authorization-facade.mock';
 import {
@@ -29,7 +28,6 @@ export {
 export {
   mockAuthorizationAuthorize,
   mockAuthorizationCan,
-  mockAuthorizationEnsureRequiredRole,
   resetAuthorizationFacadeMocks,
 };
 

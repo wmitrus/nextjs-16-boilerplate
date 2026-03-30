@@ -35,9 +35,9 @@ export const env = createEnv({
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),
     LOG_INGEST_SECRET: z.string().optional(),
     SENTRY_DSN: z.url().optional(),
-    CLERK_SECRET_KEY: z.string().min(1),
+    CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
-    INTERNAL_API_KEY: z.string().min(1).default('demo-internal-key'),
+    INTERNAL_API_KEY: z.string().min(1).optional(),
     SECURITY_AUDIT_LOG_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(true),
@@ -49,6 +49,19 @@ export const env = createEnv({
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
+    AUTH_PROVIDER: z.enum(['clerk', 'authjs', 'supabase']).default('clerk'),
+    DB_PROVIDER: z.enum(['drizzle', 'prisma']).default('drizzle'),
+    DATABASE_URL: z.string().optional(),
+    DB_DRIVER: z.enum(['pglite', 'postgres']).optional(),
+    TENANCY_MODE: z.enum(['single', 'personal', 'org']).default('single'),
+    DEFAULT_TENANT_ID: z.uuid().optional(),
+    TENANT_CONTEXT_SOURCE: z.enum(['provider', 'db']).optional(),
+    TENANT_CONTEXT_HEADER: z.string().default('x-tenant-id'),
+    TENANT_CONTEXT_COOKIE: z.string().default('active_tenant_id'),
+    FREE_TIER_MAX_USERS: z.coerce.number().int().positive().default(5),
+    CROSS_PROVIDER_EMAIL_LINKING: z
+      .enum(['disabled', 'verified-only'])
+      .default('verified-only'),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -65,14 +78,15 @@ export const env = createEnv({
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
     NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
     NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/sign-up'),
-    NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: z.string().default('/'),
-    NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: z.string().default('/'),
-    NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: z
-      .string()
-      .default('/onboarding'),
+    // Post-auth landings should point to a stable app route. Bootstrap remains
+    // a server-owned secondary provisioning route reached via guards.
+    NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: z.string().optional(),
+    NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: z.string().optional(),
+    NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL: z.string().optional(),
+    NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL: z.string().optional(),
     NEXT_PUBLIC_CLERK_WAITLIST_URL: z.string().default('/waitlist'),
     // CSP Configuration
     NEXT_PUBLIC_CSP_SCRIPT_EXTRA: z.string().default(''),
@@ -113,6 +127,17 @@ export const env = createEnv({
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
     E2E_ENABLED: process.env.E2E_ENABLED,
+    AUTH_PROVIDER: process.env.AUTH_PROVIDER,
+    DB_PROVIDER: process.env.DB_PROVIDER,
+    DATABASE_URL: process.env.DATABASE_URL,
+    DB_DRIVER: process.env.DB_DRIVER,
+    TENANCY_MODE: process.env.TENANCY_MODE,
+    DEFAULT_TENANT_ID: process.env.DEFAULT_TENANT_ID,
+    TENANT_CONTEXT_SOURCE: process.env.TENANT_CONTEXT_SOURCE,
+    TENANT_CONTEXT_HEADER: process.env.TENANT_CONTEXT_HEADER,
+    TENANT_CONTEXT_COOKIE: process.env.TENANT_CONTEXT_COOKIE,
+    FREE_TIER_MAX_USERS: process.env.FREE_TIER_MAX_USERS,
+    CROSS_PROVIDER_EMAIL_LINKING: process.env.CROSS_PROVIDER_EMAIL_LINKING,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:
@@ -126,6 +151,8 @@ export const env = createEnv({
       process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
     NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL:
       process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL,
+    NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL:
+      process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL,
     NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL:
       process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL,
     NEXT_PUBLIC_CLERK_WAITLIST_URL: process.env.NEXT_PUBLIC_CLERK_WAITLIST_URL,
@@ -149,3 +176,83 @@ export const env = createEnv({
    */
   emptyStringAsUndefined: true,
 });
+
+/**
+ * Cross-field tenancy configuration validation against explicit values.
+ * Decoupled from global `env` — accepts values from any source (config object, env, test fixtures).
+ *
+ * Rules:
+ * - TENANCY_MODE=single requires DEFAULT_TENANT_ID
+ * - TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE (provider|db)
+ */
+export function validateTenancyConfigValues(
+  tenancyMode: string | undefined,
+  defaultTenantId: string | undefined,
+  tenantContextSource: string | undefined,
+): void {
+  if (tenancyMode === 'single' && !defaultTenantId) {
+    throw new Error(
+      '[env] TENANCY_MODE=single requires DEFAULT_TENANT_ID to be set (must be a valid UUID). ' +
+        'Set DEFAULT_TENANT_ID=<uuid> in your environment variables.',
+    );
+  }
+
+  if (tenancyMode === 'org' && !tenantContextSource) {
+    throw new Error(
+      '[env] TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE to be set (provider|db). ' +
+        'Set TENANT_CONTEXT_SOURCE=provider for Clerk Organizations, or TENANT_CONTEXT_SOURCE=db for app-level tenant selection.',
+    );
+  }
+}
+
+/**
+ * Cross-field auth provider configuration validation against explicit values.
+ *
+ * Rules:
+ * - AUTH_PROVIDER=clerk requires CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ */
+export function validateAuthProviderConfigValues(
+  authProvider: string | undefined,
+  clerkSecretKey: string | undefined,
+  clerkPublishableKey: string | undefined,
+): void {
+  if (authProvider !== 'clerk') {
+    return;
+  }
+
+  if (!clerkSecretKey) {
+    throw new Error(
+      '[env] AUTH_PROVIDER=clerk requires CLERK_SECRET_KEY to be set.',
+    );
+  }
+
+  if (!clerkPublishableKey) {
+    throw new Error(
+      '[env] AUTH_PROVIDER=clerk requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to be set.',
+    );
+  }
+}
+
+/**
+ * Cross-field auth provider configuration validation from global env.
+ * Convenience wrapper around validateAuthProviderConfigValues for bootstrap/startup.
+ */
+export function validateAuthProviderConfig(): void {
+  validateAuthProviderConfigValues(
+    env.AUTH_PROVIDER,
+    env.CLERK_SECRET_KEY,
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  );
+}
+
+/**
+ * Cross-field tenancy configuration validation from global env.
+ * Convenience wrapper around validateTenancyConfigValues for bootstrap/startup.
+ */
+export function validateTenancyConfig(): void {
+  validateTenancyConfigValues(
+    env.TENANCY_MODE,
+    env.DEFAULT_TENANT_ID,
+    env.TENANT_CONTEXT_SOURCE,
+  );
+}

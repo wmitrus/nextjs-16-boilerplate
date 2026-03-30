@@ -1,6 +1,7 @@
 import type { NextRequest, NextResponse } from 'next/server';
 
-import { resolveEdgeLogger } from '@/core/logger/di';
+import { env } from '@/core/env';
+import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
@@ -9,11 +10,31 @@ import type { RateLimitResult } from '@/shared/lib/rate-limit/rate-limit-local';
 
 import type { RouteContext } from './route-classification';
 
-const logger = resolveEdgeLogger().child({
-  type: 'Security',
-  category: 'rate-limit',
-  module: 'with-rate-limit',
-});
+let _logger:
+  | ReturnType<ReturnType<typeof resolveEdgeLogger>['child']>
+  | undefined;
+
+const E2E_RATE_LIMIT_BYPASS_API_PREFIXES = [
+  '/api/users',
+  '/api/me/provisioning-status',
+  '/api/logs',
+] as const;
+
+function getLogger() {
+  if (_logger) return _logger;
+  _logger = resolveEdgeLogger().child({
+    type: 'Security',
+    category: 'rate-limit',
+    module: 'with-rate-limit',
+  });
+  return _logger;
+}
+
+function isE2eRateLimitBypassRoute(pathname: string): boolean {
+  return E2E_RATE_LIMIT_BYPASS_API_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 /**
  * Enforces rate limiting on API routes.
  */
@@ -21,7 +42,10 @@ export function withRateLimit(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
 ) {
   return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
-    if (!ctx.isApi || ctx.isWebhook) {
+    const isE2eBypassRoute =
+      env.E2E_ENABLED && isE2eRateLimitBypassRoute(req.nextUrl.pathname);
+
+    if (!ctx.isApi || ctx.isWebhook || isE2eBypassRoute) {
       return handler(req, ctx);
     }
 
@@ -29,15 +53,12 @@ export function withRateLimit(
     const result: RateLimitResult = await checkRateLimit(ip);
 
     if (!result.success) {
-      const correlationId =
-        req.headers.get('x-correlation-id') || crypto.randomUUID();
-
-      logger.warn(
+      getLogger().warn(
         {
           type: 'SECURITY_AUDIT',
           category: 'rate-limit',
           ip,
-          correlationId,
+          correlationId: ctx.correlationId,
           path: req.nextUrl.pathname,
           limit: result.limit,
           reset: result.reset,

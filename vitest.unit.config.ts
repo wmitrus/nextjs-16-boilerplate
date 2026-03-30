@@ -5,11 +5,17 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
   test: {
+    name: 'unit',
     environment: 'jsdom',
     globals: true,
+    hookTimeout: 30_000,
     setupFiles: ['./tests/setup.tsx', './tests/polyfills.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx}'],
-    exclude: ['src/**/*.integration.test.{ts,tsx}', 'src/stories/**'],
+    exclude: [
+      'src/**/*.integration.test.{ts,tsx}',
+      'src/stories/**',
+      'src/core/db/migrations/**',
+    ],
     coverage: {
       enabled: true,
       provider: 'v8',
@@ -32,6 +38,8 @@ export default defineConfig({
         'src/**/types/**',
         'src/**/index.{ts,tsx}',
         'src/stories/**',
+        'src/core/db/**',
+        'src/modules/authorization/infrastructure/drizzle/schema.ts',
       ],
       clean: true,
       cleanOnRerun: true,

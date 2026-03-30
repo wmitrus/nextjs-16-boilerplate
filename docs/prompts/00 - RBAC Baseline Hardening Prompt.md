@@ -18,7 +18,7 @@ Read and follow:
 
 - `docs/architecture/12 - Implementation Guardrails & AI Prompt Contract.md`
 - `docs/architecture/11 - Development Commitment & Extension Contract.md`
-- `docs/architecture/03 - Authorization Flow.mmd`
+- `docs/architecture/05 – Authorization Flow.md`
 - `docs/architecture/08 - Modular Monolith - File Catalog.md`
 
 ### 1) Objective

@@ -9,7 +9,7 @@ import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 
-import type { SecurityDependencies } from '@/security/core/security-dependencies';
+import type { NodeSecurityDependencies } from '@/security/core/security-dependencies';
 import { withAuth } from '@/security/middleware/with-auth';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
@@ -38,7 +38,7 @@ describe('Middleware Integration', () => {
     can: vi.fn(),
   } as unknown as Mocked<AuthorizationService>;
 
-  const securityDependencies: SecurityDependencies = {
+  const securityDependencies: NodeSecurityDependencies = {
     identityProvider: mockIdentityProvider,
     tenantResolver: mockTenantResolver,
     authorizationService: mockAuthorizationService,
@@ -160,7 +160,7 @@ describe('Middleware Integration', () => {
     expect(res.status).toBe(429);
   });
 
-  it('should redirect authenticated users away from auth routes to home', async () => {
+  it('should redirect authenticated users away from auth routes to bootstrap start', async () => {
     const pipeline = createPipeline();
 
     const req = createMockRequest({ path: '/sign-in' });
@@ -168,7 +168,22 @@ describe('Middleware Integration', () => {
     const res = await pipeline(req);
 
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(res.headers.get('location')).toBe(
+      'http://localhost/auth/bootstrap/start?redirect_url=%2Fusers',
+    );
+  });
+
+  it('should allow Clerk callback state to complete on auth routes', async () => {
+    const pipeline = createPipeline();
+
+    const req = createMockRequest({
+      path: '/sign-up?__clerk_db_jwt=test-token&redirect_url=%2Fusers',
+    });
+
+    const res = await pipeline(req);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
   });
 
   it('should redirect authenticated users to onboarding if not complete', async () => {

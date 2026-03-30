@@ -1,9 +1,11 @@
 import { headers } from 'next/headers';
+import { Suspense } from 'react';
 
-import { createContainer } from '@/core/container';
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
+import type { UserRepository } from '@/core/contracts/user';
+import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { AdminOnlyExample } from '@/features/security-showcase/components/AdminOnlyExample';
 import { EnvDiagnosticsExample } from '@/features/security-showcase/components/EnvDiagnosticsExample';
@@ -12,25 +14,34 @@ import { InternalApiTestExample } from '@/features/security-showcase/components/
 import { ProfileExample } from '@/features/security-showcase/components/ProfileExample';
 import { SettingsFormExample } from '@/features/security-showcase/components/SettingsFormExample';
 
-import {
-  createSecurityContext,
-  type SecurityContextDependencies,
-} from '@/security/core/security-context';
+import { createSecurityContext } from '@/security/core/security-context';
+import type { NodeSecurityContextDependencies } from '@/security/core/security-dependencies';
 
-export default async function SecurityShowcasePage() {
+export default function SecurityShowcasePage() {
+  return (
+    <Suspense fallback={null}>
+      <SecurityShowcasePageContent />
+    </Suspense>
+  );
+}
+
+export async function SecurityShowcasePageContent() {
   const headerList = await headers();
   const cookieHeader = headerList.get('cookie') ?? '';
   const hasClerkSessionCookie =
     cookieHeader.includes('__session=') ||
     cookieHeader.includes('__client_uat=');
 
-  const requestContainer = createContainer();
-  const securityContextDependencies: SecurityContextDependencies = {
+  const requestContainer = getAppContainer().createChild();
+  const securityContextDependencies: NodeSecurityContextDependencies = {
     identityProvider: requestContainer.resolve<IdentityProvider>(
       AUTH.IDENTITY_PROVIDER,
     ),
     tenantResolver: requestContainer.resolve<TenantResolver>(
       AUTH.TENANT_RESOLVER,
+    ),
+    userRepository: requestContainer.resolve<UserRepository>(
+      AUTH.USER_REPOSITORY,
     ),
   };
 
@@ -46,6 +57,7 @@ export default async function SecurityShowcasePage() {
       runtime: 'node',
       environment: 'development',
       requestId: crypto.randomUUID(),
+      readinessStatus: 'UNAUTHENTICATED',
     };
     contextError = 'No active Clerk session; using guest context.';
   } else {
@@ -68,6 +80,7 @@ export default async function SecurityShowcasePage() {
         runtime: 'node',
         environment: 'development',
         requestId: crypto.randomUUID(),
+        readinessStatus: 'UNAUTHENTICATED',
       };
     }
   }

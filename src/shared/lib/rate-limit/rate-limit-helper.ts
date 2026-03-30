@@ -1,12 +1,19 @@
 import { env } from '@/core/env';
-import { resolveEdgeLogger } from '@/core/logger/di';
+import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import { apiRateLimit, checkUpstashRateLimit } from './rate-limit';
 import { localRateLimit } from './rate-limit-local';
 import type { RateLimitResult } from './rate-limit-local';
 
 export const UPSTASH_RATE_LIMIT_TIMEOUT_MS = 1500;
-const logger = resolveEdgeLogger();
+
+let _logger: ReturnType<typeof resolveEdgeLogger> | undefined;
+
+function getLogger() {
+  if (_logger) return _logger;
+  _logger = resolveEdgeLogger();
+  return _logger;
+}
 
 async function withTimeout<T>(
   operation: Promise<T>,
@@ -86,7 +93,7 @@ export async function checkRateLimit(
         UPSTASH_RATE_LIMIT_TIMEOUT_MS,
       );
     } catch (error) {
-      logger.warn(
+      getLogger().warn(
         {
           provider: 'upstash',
           identifier,

@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_attributes" ADD COLUMN "policy_template_version" integer DEFAULT 0 NOT NULL;

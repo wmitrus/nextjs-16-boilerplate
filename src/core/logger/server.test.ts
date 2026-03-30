@@ -103,7 +103,7 @@ describe('server logger', () => {
 
   it('uses multistream when streams are provided', () => {
     const mockStream = { write: vi.fn() };
-    const streams = [mockStream];
+    const streams = [{ level: 'debug', stream: mockStream }];
     mockGetLogStreams.mockReturnValue(streams);
 
     getServerLogger();

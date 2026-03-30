@@ -27,6 +27,7 @@ export interface EnvDiagnostics {
 }
 
 function getEnv(name: string): EnvValue {
+  // eslint-disable-next-line security/detect-object-injection -- name is always a hardcoded env var key from the call sites in this file
   const value = process.env[name];
   if (!value) {
     return undefined;

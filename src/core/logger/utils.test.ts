@@ -1,5 +1,6 @@
 import fs from 'fs';
 
+import { createWriteStream as mockCreateWriteStream } from 'pino-logflare';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { env } from '@/core/env';
@@ -30,13 +31,19 @@ vi.mock('pino-logflare', () => ({
   createWriteStream: vi.fn(() => ({ on: vi.fn() })),
 }));
 
-vi.mock('@/core/env', () => ({
-  env: {
-    LOGFLARE_API_KEY: 'test-key',
-    LOGFLARE_SOURCE_TOKEN: 'test-token',
-    LOG_LEVEL: 'info',
-  },
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      LOGFLARE_API_KEY: 'test-key',
+      LOGFLARE_SOURCE_TOKEN: 'test-token',
+      LOG_LEVEL: 'info',
+    },
+  };
+});
 
 describe('logger utils', () => {
   beforeEach(() => {
@@ -147,40 +154,81 @@ describe('logger utils', () => {
         originalApiKey;
     });
 
-    it('should return null in preview environment', () => {
-      process.env.VERCEL_ENV = 'preview';
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      const stream = createLogflareWriteStream();
-      expect(stream).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Logflare stream disabled in',
-        'preview',
-        'environment',
-      );
-      consoleSpy.mockRestore();
-    });
-
-    it('should return null in production environment', () => {
-      process.env.VERCEL_ENV = 'production';
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      const stream = createLogflareWriteStream();
-      expect(stream).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Logflare stream disabled in',
-        'production',
-        'environment',
-      );
-      consoleSpy.mockRestore();
-    });
-
-    it('should return a write stream when env vars are set and in development', () => {
-      process.env.VERCEL_ENV = 'development';
+    it('should return a write stream when env vars are set', () => {
       const stream = createLogflareWriteStream();
       expect(stream).toBeDefined();
     });
 
+    it('should return a write stream in preview environment when credentials are set', () => {
+      process.env.VERCEL_ENV = 'preview';
+      const stream = createLogflareWriteStream();
+      expect(stream).toBeDefined();
+    });
+
+    it('should return a write stream in production environment when credentials are set', () => {
+      process.env.VERCEL_ENV = 'production';
+      const stream = createLogflareWriteStream();
+      expect(stream).toBeDefined();
+    });
+
+    it('should pass only sourceToken when both sourceToken and sourceName are set', () => {
+      (
+        env as unknown as Record<string, string | undefined>
+      ).LOGFLARE_SOURCE_NAME = 'my-source';
+      createLogflareWriteStream();
+      expect(vi.mocked(mockCreateWriteStream)).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceToken: 'test-token' }),
+      );
+      expect(vi.mocked(mockCreateWriteStream)).toHaveBeenCalledWith(
+        expect.not.objectContaining({ sourceName: expect.anything() }),
+      );
+      (
+        env as unknown as Record<string, string | undefined>
+      ).LOGFLARE_SOURCE_NAME = undefined;
+    });
+
+    it('should pass sourceName when sourceToken is not set', () => {
+      const originalToken = (
+        env as unknown as Record<string, string | undefined>
+      ).LOGFLARE_SOURCE_TOKEN;
+      (
+        env as unknown as Record<string, string | undefined>
+      ).LOGFLARE_SOURCE_TOKEN = undefined;
+      (
+        env as unknown as Record<string, string | undefined>
+      ).LOGFLARE_SOURCE_NAME = 'my-source';
+      createLogflareWriteStream();
+      expect(vi.mocked(mockCreateWriteStream)).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceName: 'my-source' }),
+      );
+      expect(vi.mocked(mockCreateWriteStream)).toHaveBeenCalledWith(
+        expect.not.objectContaining({ sourceToken: expect.anything() }),
+      );
+      (
+        env as unknown as Record<string, string | undefined>
+      ).LOGFLARE_SOURCE_TOKEN = originalToken;
+      (
+        env as unknown as Record<string, string | undefined>
+      ).LOGFLARE_SOURCE_NAME = undefined;
+    });
+
+    it('should log the actual string when createWriteStream throws a non-Error', () => {
+      vi.mocked(mockCreateWriteStream).mockImplementationOnce(() => {
+        throw 'Only one of sourceName or sourceToken can be set.';
+      });
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const stream = createLogflareWriteStream();
+      expect(stream).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to initialize Logflare stream:',
+        'Only one of sourceName or sourceToken can be set.',
+      );
+      consoleSpy.mockRestore();
+    });
+
     it('should handle stream error gracefully', () => {
-      process.env.VERCEL_ENV = 'development';
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});

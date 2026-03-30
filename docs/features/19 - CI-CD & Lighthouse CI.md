@@ -12,7 +12,7 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 - Release automation via semantic-release.
 - Security scanning (dependency audit + secret scanning).
 - Visual regression testing via Chromatic.
-- Optional E2E execution triggered by a PR label.
+- Optional auth-only and broad-matrix E2E execution triggered independently by PR labels or manual dispatch.
 - PR labeling and auto-assignment for workflow hygiene.
 
 ## Workflow Inventory
@@ -24,7 +24,8 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 - Security scan: [dependency + secrets scan](.github/workflows/security-scan.yml).
 - Lighthouse schedule: [scheduled production audit](.github/workflows/lighthouse.yml).
 - Chromatic: [visual regression on Storybook](.github/workflows/deployChromatic.yml).
-- Label-triggered E2E: [run Playwright on label](.github/workflows/e2e-label.yml).
+- Label-triggered auth-matrix E2E: [run auth matrix on label or manual dispatch](.github/workflows/e2e-label.yml).
+- Label-triggered or manually dispatched broad E2E matrix: [run full E2E matrix](.github/workflows/e2e-matrix.yml).
 - PR labeling: [apply labels on PR events](.github/workflows/label.yml).
 - PR auto-assign: [assign reviewers/assignees](.github/workflows/auto-assign.yml).
 
@@ -37,7 +38,8 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 - **Security Scan** runs on `main`, PRs, and weekly schedules.
 - **Lighthouse Schedule** runs weekly (and manually) against a configured production URL.
 - **Chromatic** runs on changes to Storybook and UI code; auto-accepts changes on `main`.
-- **E2E Label** runs when a PR is labeled `run-e2e`.
+- **Auth Matrix E2E** runs when a PR is labeled `run-e2e`, or when manually dispatched from the Actions tab.
+- **Matrix E2E** runs when a PR is labeled `run-e2e-matrix`, or when manually dispatched from the Actions tab.
 
 ## Required Secrets and Variables
 

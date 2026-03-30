@@ -1,0 +1,139 @@
+# Change Validation Workflow
+
+## Configuration
+
+- **Artifacts Path**: `{@artifacts_path}` → `.zenflow/tasks/{task_id}`
+- **Step Agent Presets**: this workflow uses Zenflow's documented `<!-- agent: preset-name -->` step binding pattern.
+- **Required Saved Presets**: create matching presets in Zenflow Settings → Agents, or rename the inline `agent:` comments below to match your actual preset names:
+  - `validation-strategy-agent`
+
+## Before Running
+
+Before starting this workflow, read:
+
+- `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` deprecated April 20, 2026.
+- `docs/ai/general/MODE_MANIFEST.md`
+- `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+
+For auth/bootstrap/onboarding changes, also read:
+
+- `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
+- `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
+- `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
+
+Repository note:
+In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
+Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.
+Do not treat the absence of `middleware.ts` as a finding.
+
+---
+
+## Artifact Execution Rule
+
+For every workflow step:
+
+- the file shown under `Output:` is mandatory
+- the active agent must create or overwrite that markdown file
+- the artifact file must contain the full result for the step
+- the agent must not respond only in chat without writing the artifact
+- after writing the artifact, the agent should give only a short completion summary in chat
+
+---
+
+## Workflow Steps
+
+### [ ] Step: Change Intake
+
+Determine the changed file set and identify affected validation surfaces.
+
+Output:
+{@artifacts_path}/change-intake.md
+
+Include:
+
+- changed file set (from working tree or provided diff)
+- affected tests, configs, workflows, and validation tooling
+- any user-provided risk notes or context
+- for auth changes: reference to AUTH_FLOW_VERIFICATION_MATRIX.md
+
+---
+
+### [ ] Step: Validation Risk Assessment
+
+<!-- agent: validation-strategy-agent -->
+
+Run **Validation Strategy Agent** to classify the change risk.
+
+Output:
+{@artifacts_path}/validation-risk.md
+
+Include:
+
+- change risk classification
+- risk dimensions:
+  - does the change affect auth, trust boundaries, or tenancy? (elevated)
+  - does the change affect module boundaries or DI/composition? (architecture risk)
+  - does the change affect server/client placement, routing, or caching? (runtime risk)
+  - does the change have existing test coverage? (coverage gap risk)
+
+---
+
+### [ ] Step: Scope Definition
+
+Produce three explicit validation tier lists.
+
+Output:
+{@artifacts_path}/validation-scope.md
+
+Include:
+
+**Minimum required validation** (must pass before change is considered safe):
+
+- specific test commands
+- specific scenarios to verify
+- typecheck and lint if applicable
+
+**Optional additional validation** (recommended but not blocking):
+
+- broader tests justified by risk level
+- integration or E2E tests when warranted
+
+**Validation not required** (explicitly excluded):
+
+- test layers that do not touch the changed surface
+- checks already confirmed safe in the current session
+
+---
+
+### [ ] Step: Validation Execution
+
+Run the minimum required validation commands.
+
+Output:
+{@artifacts_path}/validation-execution.md
+
+Include:
+
+- commands run (full command strings)
+- exit code per command
+- relevant output lines (pass/fail indicators, error messages)
+- per-command status: Pass / Fail / Blocked
+
+If a command fails: state the failure explicitly. Do not mark validation complete.
+
+---
+
+### [ ] Step: Result Report
+
+Consolidate validation results.
+
+Output:
+{@artifacts_path}/validation-report.md
+
+Include:
+
+- overall validation status: Pass / Fail / Blocked
+- failing or blocked checks with details
+- open validation gaps
+- recommended next action

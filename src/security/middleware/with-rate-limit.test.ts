@@ -16,6 +16,7 @@ import {
   mockCheckRateLimit,
   resetAllInfrastructureMocks,
 } from '@/testing';
+import { mockEnv } from '@/testing/infrastructure/env';
 
 describe('Rate Limit Middleware', () => {
   const mockHandler = vi
@@ -65,6 +66,43 @@ describe('Rate Limit Middleware', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('X-RateLimit-Limit')).toBe('100');
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('99');
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
+  it('should bypass rate limiting only for approved E2E probe routes', async () => {
+    mockEnv.E2E_ENABLED = true;
+
+    const req = createMockRequest({ path: '/api/users' });
+    const ctx = createMockRouteContext({ isApi: true });
+
+    const middleware = withRateLimit(mockHandler);
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(mockGetIP).not.toHaveBeenCalled();
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
+  it('should still rate limit unrelated API routes in E2E mode', async () => {
+    mockEnv.E2E_ENABLED = true;
+    mockGetIP.mockResolvedValue('127.0.0.1');
+    mockCheckRateLimit.mockResolvedValue({
+      success: true,
+      limit: 100,
+      remaining: 99,
+      reset: new Date(),
+    });
+
+    const req = createMockRequest({ path: '/api/data' });
+    const ctx = createMockRouteContext({ isApi: true });
+
+    const middleware = withRateLimit(mockHandler);
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(mockGetIP).toHaveBeenCalled();
+    expect(mockCheckRateLimit).toHaveBeenCalled();
     expect(mockHandler).toHaveBeenCalled();
   });
 

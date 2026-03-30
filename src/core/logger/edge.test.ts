@@ -11,71 +11,105 @@ describe('edge logger', () => {
   afterEach(() => {
     process.env = { ...originalEnv };
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it('sets transmit when logflare integration is enabled', async () => {
-    const transmit = { send: vi.fn() };
+  it('writes structured logs to console and forwards to ingest', async () => {
+    const consoleDebug = vi.fn();
+    const consoleLog = vi.fn();
+    const consoleWarn = vi.fn();
+    const consoleError = vi.fn();
 
-    vi.stubGlobal('window', undefined);
+    vi.stubGlobal('console', {
+      ...console,
+      debug: consoleDebug,
+      log: consoleLog,
+      warn: consoleWarn,
+      error: consoleError,
+    });
 
     vi.doMock('@/core/env', () => ({
       env: {
         LOG_LEVEL: 'debug',
-        NEXT_PUBLIC_LOG_LEVEL: 'info',
         LOGFLARE_EDGE_ENABLED: true,
         NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
-        NODE_ENV: 'production',
+        NODE_ENV: 'development',
       },
     }));
 
     vi.doMock('./edge-utils', () => ({
-      createLogflareEdgeTransport: vi.fn(() => ({ transmit })),
+      forwardEdgeLogEvent: vi.fn(),
     }));
 
-    vi.doMock('pino', () => {
-      const pino = vi.fn(() => ({ info: vi.fn() }));
-      return { default: pino };
-    });
-
-    const pinoModule = await import('pino');
     const { getEdgeLogger } = await import('./edge');
-    getEdgeLogger();
+    const edgeUtils = await import('./edge-utils');
 
-    const pinoMock = vi.mocked(pinoModule.default);
-    expect(pinoMock).toHaveBeenCalledTimes(1);
-    const options = pinoMock.mock.calls[0]?.[0];
-    expect(options?.level).toBe('debug');
-    expect(options?.browser?.transmit).toBe(transmit);
+    getEdgeLogger()
+      .child({ type: 'Security', category: 'middleware' })
+      .debug({ path: '/users' }, 'Security Middleware Processing');
+
+    expect(consoleDebug).toHaveBeenCalledTimes(1);
+    expect(consoleDebug).toHaveBeenCalledWith(
+      expect.stringContaining('"type":"Security"'),
+    );
+    expect(consoleDebug).toHaveBeenCalledWith(
+      expect.stringContaining('"msg":"Security Middleware Processing"'),
+    );
+    expect(vi.mocked(edgeUtils.forwardEdgeLogEvent)).toHaveBeenCalledTimes(1);
   });
 
-  it('reuses cached logger instance', async () => {
-    vi.stubGlobal('window', undefined);
+  it('still logs to console when ingest forwarding is disabled', async () => {
+    const consoleLog = vi.fn();
+
+    vi.stubGlobal('console', {
+      ...console,
+      debug: vi.fn(),
+      log: consoleLog,
+      warn: vi.fn(),
+      error: vi.fn(),
+    });
+
     vi.doMock('@/core/env', () => ({
       env: {
         LOG_LEVEL: 'info',
-        NEXT_PUBLIC_LOG_LEVEL: 'info',
         LOGFLARE_EDGE_ENABLED: false,
         NEXT_PUBLIC_APP_URL: undefined,
-        NODE_ENV: 'production',
+        NODE_ENV: 'development',
       },
     }));
 
     vi.doMock('./edge-utils', () => ({
-      createLogflareEdgeTransport: vi.fn(),
+      forwardEdgeLogEvent: vi.fn(),
     }));
 
-    vi.doMock('pino', () => {
-      const pino = vi.fn(() => ({ info: vi.fn() }));
-      return { default: pino };
-    });
+    const { getEdgeLogger } = await import('./edge');
+    const edgeUtils = await import('./edge-utils');
 
-    const pinoModule = await import('pino');
+    getEdgeLogger().info({ path: '/' }, 'edge log');
+
+    expect(consoleLog).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(edgeUtils.forwardEdgeLogEvent)).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses cached logger instance', async () => {
+    vi.doMock('@/core/env', () => ({
+      env: {
+        LOG_LEVEL: 'info',
+        LOGFLARE_EDGE_ENABLED: false,
+        NEXT_PUBLIC_APP_URL: undefined,
+        NODE_ENV: 'development',
+      },
+    }));
+
+    vi.doMock('./edge-utils', () => ({
+      forwardEdgeLogEvent: vi.fn(),
+    }));
+
     const { getEdgeLogger } = await import('./edge');
 
     const first = getEdgeLogger();
     const second = getEdgeLogger();
 
     expect(first).toBe(second);
-    expect(vi.mocked(pinoModule.default)).toHaveBeenCalledTimes(1);
   });
 });

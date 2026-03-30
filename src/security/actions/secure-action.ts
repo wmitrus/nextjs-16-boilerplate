@@ -6,6 +6,11 @@ import {
   type AuthorizationService,
   type ResourceContext,
 } from '@/core/contracts/authorization';
+import {
+  MissingTenantContextError,
+  TenantMembershipRequiredError,
+  TenantNotProvisionedError,
+} from '@/core/contracts/tenancy';
 
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
@@ -44,6 +49,14 @@ export interface TreeifiedError {
   properties: Record<string, { errors: string[] }>;
 }
 
+function toUserFriendlyErrorMessage(message: string): string {
+  if (message.includes('Failed query:')) {
+    return 'Authentication sync is temporarily unavailable. Please try again.';
+  }
+
+  return message;
+}
+
 export function createSecureAction<TSchema extends z.ZodType, TResult>({
   schema,
   resource,
@@ -60,14 +73,13 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         errors: TreeifiedError;
       }
     | { status: 'unauthorized'; error: string }
+    | { status: 'bootstrap_required' }
+    | { status: 'onboarding_required' }
+    | { status: 'tenant_context_required' }
+    | { status: 'tenant_membership_required' }
     | { status: 'error'; error: string }
   > => {
-    const resolvedDependencies =
-      typeof dependencies === 'function' ? await dependencies() : dependencies;
-    const context = await resolvedDependencies.getSecurityContext();
-    const authorization: AuthorizationFacade = new AuthorizationFacade(
-      resolvedDependencies.authorizationService,
-    );
+    let context: SecurityContext | undefined;
     const effectiveResource: ResourceContext =
       resource ??
       ({
@@ -80,9 +92,54 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       createAction(resource?.type ?? 'system', handler.name || 'execute');
 
     try {
-      // 1. Unified authorization check via central facade
+      const resolvedDependencies =
+        typeof dependencies === 'function'
+          ? await dependencies()
+          : dependencies;
+      context = await resolvedDependencies.getSecurityContext();
+      const authorization: AuthorizationFacade = new AuthorizationFacade(
+        resolvedDependencies.authorizationService,
+      );
+
+      // 1. Readiness checks (ordered by specificity)
+      const readinessDeniedStatus = (() => {
+        switch (context.readinessStatus) {
+          case 'BOOTSTRAP_REQUIRED':
+            return 'bootstrap_required' as const;
+          case 'ONBOARDING_REQUIRED':
+            return 'onboarding_required' as const;
+          case 'TENANT_CONTEXT_REQUIRED':
+            return 'tenant_context_required' as const;
+          case 'TENANT_MEMBERSHIP_REQUIRED':
+            return 'tenant_membership_required' as const;
+          default:
+            return null;
+        }
+      })();
+
+      if (readinessDeniedStatus !== null) {
+        await logActionAudit({
+          actionName,
+          input,
+          result: 'failure',
+          error: `Readiness check failed: ${context.readinessStatus}`,
+          context,
+        });
+        return { status: readinessDeniedStatus };
+      }
+
       if (!context.user) {
-        throw new AuthorizationError('Authentication required');
+        await logActionAudit({
+          actionName,
+          input,
+          result: 'failure',
+          error: 'Authentication required',
+          context,
+        });
+        return {
+          status: 'unauthorized' as const,
+          error: 'Authentication required',
+        };
       }
 
       const requestScope = createRequestScopedContextFromSecurityContext(
@@ -140,17 +197,21 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         data: result,
       };
     } catch (error) {
-      const errorMessage =
+      const rawErrorMessage =
         error instanceof Error ? error.message : 'Internal Server Error';
+      const userFriendlyErrorMessage =
+        toUserFriendlyErrorMessage(rawErrorMessage);
 
       // 6. Audit Log (Failure)
-      await logActionAudit({
-        actionName,
-        input,
-        result: 'failure',
-        error: errorMessage,
-        context,
-      });
+      if (context) {
+        await logActionAudit({
+          actionName,
+          input,
+          result: 'failure',
+          error: rawErrorMessage,
+          context,
+        });
+      }
 
       if (error instanceof z.ZodError) {
         return {
@@ -162,13 +223,24 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       if (error instanceof AuthorizationError) {
         return {
           status: 'unauthorized' as const,
-          error: errorMessage,
+          error: userFriendlyErrorMessage,
         };
+      }
+
+      if (
+        error instanceof MissingTenantContextError ||
+        error instanceof TenantNotProvisionedError
+      ) {
+        return { status: 'tenant_context_required' as const };
+      }
+
+      if (error instanceof TenantMembershipRequiredError) {
+        return { status: 'tenant_membership_required' as const };
       }
 
       return {
         status: 'error' as const,
-        error: errorMessage,
+        error: userFriendlyErrorMessage,
       };
     }
   };

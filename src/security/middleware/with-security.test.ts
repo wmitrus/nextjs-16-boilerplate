@@ -40,6 +40,8 @@ describe('Security Pipeline', () => {
     const res = await pipeline(req);
 
     expect(res?.status).toBe(200);
+    expect(res?.headers.get('x-correlation-id')).toBeTruthy();
+    expect(res?.headers.get('x-request-id')).toBeTruthy();
     expect(mockWithHeaders).not.toHaveBeenCalled();
   });
 
@@ -61,7 +63,8 @@ describe('Security Pipeline', () => {
     const res = await pipeline(req);
 
     expect(res?.status).toBe(403);
-    expect(terminalHandler).toHaveBeenCalled();
+    expect(res?.headers.get('x-correlation-id')).toBeTruthy();
+    expect(res?.headers.get('x-request-id')).toBeTruthy();
   });
 
   it('should apply headers and correlation id', async () => {

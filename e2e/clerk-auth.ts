@@ -1,5 +1,93 @@
+/* eslint-disable security/detect-object-injection -- E2E test file; all lookups use typed const Record keys or controlled env var names, no user input */
 import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright';
 import type { Page } from '@playwright/test';
+
+export type ClerkE2EIdentity =
+  | 'singleNewUser'
+  | 'singleProvisionedUser'
+  | 'incompleteUser'
+  | 'personalNewUser'
+  | 'orgProviderOwner'
+  | 'orgProviderMember'
+  | 'orgDbSeededMember'
+  | 'linkingBlockedUnverified';
+
+export type ClerkE2EOrganization = 'providerOwner' | 'providerMember';
+
+interface EnvAliasPair {
+  readonly username: readonly string[];
+  readonly password: readonly string[];
+}
+
+const IDENTITY_ENV: Record<ClerkE2EIdentity, EnvAliasPair> = {
+  singleNewUser: {
+    username: [
+      'E2E_CLERK_SINGLE_NEW_USER_USERNAME',
+      'E2E_CLERK_UNPROVISIONED_USER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_SINGLE_NEW_USER_PASSWORD',
+      'E2E_CLERK_UNPROVISIONED_USER_PASSWORD',
+    ],
+  },
+  singleProvisionedUser: {
+    username: [
+      'E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME',
+      'E2E_CLERK_USER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD',
+      'E2E_CLERK_USER_PASSWORD',
+    ],
+  },
+  incompleteUser: {
+    username: ['E2E_CLERK_INCOMPLETE_USER_USERNAME'],
+    password: ['E2E_CLERK_INCOMPLETE_USER_PASSWORD'],
+  },
+  personalNewUser: {
+    username: ['E2E_CLERK_PERSONAL_NEW_USER_USERNAME'],
+    password: ['E2E_CLERK_PERSONAL_NEW_USER_PASSWORD'],
+  },
+  orgProviderOwner: {
+    username: [
+      'E2E_CLERK_ORG_PROVIDER_OWNER_USERNAME',
+      'E2E_CLERK_ORG_OWNER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_ORG_PROVIDER_OWNER_PASSWORD',
+      'E2E_CLERK_ORG_OWNER_PASSWORD',
+    ],
+  },
+  orgProviderMember: {
+    username: [
+      'E2E_CLERK_ORG_PROVIDER_MEMBER_USERNAME',
+      'E2E_CLERK_ORG_MEMBER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_ORG_PROVIDER_MEMBER_PASSWORD',
+      'E2E_CLERK_ORG_MEMBER_PASSWORD',
+    ],
+  },
+  orgDbSeededMember: {
+    username: ['E2E_CLERK_ORG_DB_SEEDED_MEMBER_USERNAME'],
+    password: ['E2E_CLERK_ORG_DB_SEEDED_MEMBER_PASSWORD'],
+  },
+  linkingBlockedUnverified: {
+    username: [
+      'E2E_CLERK_LINK_BLOCKED_UNVERIFIED_USERNAME',
+      'E2E_CLERK_UNVERIFIED_EMAIL_USER_USERNAME',
+    ],
+    password: [
+      'E2E_CLERK_LINK_BLOCKED_UNVERIFIED_PASSWORD',
+      'E2E_CLERK_UNVERIFIED_EMAIL_USER_PASSWORD',
+    ],
+  },
+};
+
+const ORGANIZATION_ENV: Record<ClerkE2EOrganization, string> = {
+  providerOwner: 'E2E_CLERK_ORG_PROVIDER_OWNER_SLUG',
+  providerMember: 'E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG',
+};
 
 function required(value: string | undefined, variableName: string): string {
   if (!value) {
@@ -11,35 +99,252 @@ function required(value: string | undefined, variableName: string): string {
   return value;
 }
 
-export function hasClerkE2ECredentials(): boolean {
+function firstDefined(names: readonly string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function requiredFromAliases(names: readonly string[]): string {
+  const value = firstDefined(names);
+  if (!value) {
+    throw new Error(
+      `Missing one of: ${names.join(', ')}. Set it in your environment for Clerk-authenticated E2E tests.`,
+    );
+  }
+
+  return value;
+}
+
+export function getClerkE2ECredentials(identity: ClerkE2EIdentity): {
+  username: string;
+  password: string;
+} {
+  const envConfig = IDENTITY_ENV[identity];
+
+  return {
+    username: requiredFromAliases(envConfig.username),
+    password: requiredFromAliases(envConfig.password),
+  };
+}
+
+export function hasClerkIdentityE2ECredentials(
+  identity: ClerkE2EIdentity,
+): boolean {
+  const credentials = IDENTITY_ENV[identity];
   return Boolean(
-    process.env.E2E_CLERK_USER_USERNAME && process.env.E2E_CLERK_USER_PASSWORD,
+    firstDefined(credentials.username) && firstDefined(credentials.password),
   );
 }
 
-export async function signInE2E(page: Page): Promise<void> {
+export function hasClerkE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('singleProvisionedUser');
+}
+
+async function completeGenericOnboarding(page: Page): Promise<void> {
+  await page.getByLabel(/display name/i).fill('E2E User');
+  await page.getByLabel(/language/i).selectOption('en-US');
+  await page.getByLabel(/timezone/i).selectOption('Europe/Warsaw');
+  await page.getByRole('button', { name: /get started/i }).click();
+}
+
+async function establishProgrammaticSessionWithoutBootstrap(
+  page: Page,
+  credentials: { username: string; password: string },
+): Promise<void> {
+  // Follow Clerk's recommended Playwright flow:
+  // load Clerk on a public page, then sign in via the helper.
   await setupClerkTestingToken({ page });
-
   await page.goto('/');
-
   await clerk.signIn({
     page,
     signInParams: {
       strategy: 'password',
-      identifier: required(
-        process.env.E2E_CLERK_USER_USERNAME,
-        'E2E_CLERK_USER_USERNAME',
-      ),
-      password: required(
-        process.env.E2E_CLERK_USER_PASSWORD,
-        'E2E_CLERK_USER_PASSWORD',
-      ),
+      identifier: credentials.username,
+      password: credentials.password,
     },
   });
 
   await clerk.loaded({ page });
+
+  try {
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          window.Clerk?.loaded && window.Clerk?.session && window.Clerk?.user,
+        ),
+      { timeout: 10_000 },
+    );
+  } catch (error) {
+    const url = page.url();
+    const bodyText = await page
+      .locator('body')
+      .innerText()
+      .catch(() => '');
+    const needsSecondFactor =
+      url.includes('/sign-in/factor-two') ||
+      /check your email|verification code|second factor/i.test(bodyText);
+
+    if (needsSecondFactor) {
+      throw new Error(
+        "Clerk E2E sign-in requires a second factor. This runtime helper intentionally supports only Clerk's documented first-factor Playwright flow. Disable Client Trust / MFA for dedicated password fixtures, or move these fixtures to a different supported auth strategy.",
+      );
+    }
+
+    const message =
+      error instanceof Error ? error.message : 'unknown Clerk sign-in failure';
+
+    throw new Error(
+      `Clerk Playwright helper did not establish a session. Verify that the app keys point to the correct Clerk test instance, password sign-in is enabled, and the fixture is not blocked by Client Trust / MFA. Original error: ${message}`,
+    );
+  }
+
+  // Clerk's recommended flow performs a navigation after sign-in.
+  // This allows the app server to observe the established browser session
+  // before the runtime tests hit protected APIs or routes.
+  await page.goto('/', { waitUntil: 'networkidle' });
+}
+
+export async function signInWithCredentials(
+  page: Page,
+  credentials: { username: string; password: string },
+): Promise<void> {
+  await establishProgrammaticSessionWithoutBootstrap(page, credentials);
+}
+
+export async function signInClerkIdentityE2E(
+  page: Page,
+  identity: ClerkE2EIdentity,
+): Promise<void> {
+  await signInWithCredentials(page, getClerkE2ECredentials(identity));
+}
+
+export async function signInE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'singleProvisionedUser');
+  await page.goto('/auth/bootstrap/start?redirect_url=/users');
+
+  if (page.url().includes('/onboarding')) {
+    await completeGenericOnboarding(page);
+  }
+}
+
+export function hasClerkUnprovisionedE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('singleNewUser');
+}
+
+export async function signInUnprovisionedE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'singleNewUser');
 }
 
 export async function withClerkTestingToken(page: Page): Promise<void> {
   await setupClerkTestingToken({ page });
+}
+
+export function hasClerkSingleNewUserE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('singleNewUser');
+}
+
+export async function signInSingleNewUserE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'singleNewUser');
+}
+
+export function hasClerkSingleProvisionedUserE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('singleProvisionedUser');
+}
+
+export async function signInSingleProvisionedUserE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'singleProvisionedUser');
+}
+
+export function hasClerkIncompleteUserE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('incompleteUser');
+}
+
+export async function signInClerkIncompleteUserE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'incompleteUser');
+}
+
+export function hasClerkPersonalNewUserE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('personalNewUser');
+}
+
+export async function signInClerkPersonalNewUserE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'personalNewUser');
+}
+
+export function hasClerkOrgOwnerE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgProviderOwner');
+}
+
+export async function signInClerkOrgOwnerE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'orgProviderOwner');
+}
+
+export function hasClerkOrgMemberE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgProviderMember');
+}
+
+export async function signInClerkOrgMemberE2E(page: Page): Promise<void> {
+  await signInClerkIdentityE2E(page, 'orgProviderMember');
+}
+
+export function hasClerkOrgProviderOwnerE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgProviderOwner');
+}
+
+export async function signInClerkOrgProviderOwnerE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'orgProviderOwner');
+}
+
+export function hasClerkOrgProviderMemberE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgProviderMember');
+}
+
+export async function signInClerkOrgProviderMemberE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'orgProviderMember');
+}
+
+export function hasClerkOrgDbSeededMemberE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('orgDbSeededMember');
+}
+
+export async function signInClerkOrgDbSeededMemberE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'orgDbSeededMember');
+}
+
+export function hasClerkLinkingBlockedUnverifiedE2ECredentials(): boolean {
+  return hasClerkIdentityE2ECredentials('linkingBlockedUnverified');
+}
+
+export async function signInClerkLinkingBlockedUnverifiedE2E(
+  page: Page,
+): Promise<void> {
+  await signInClerkIdentityE2E(page, 'linkingBlockedUnverified');
+}
+
+export function hasClerkE2EOrganizationSlug(
+  organization: ClerkE2EOrganization,
+): boolean {
+  const value = process.env[ORGANIZATION_ENV[organization]];
+  return Boolean(value && value.trim().length > 0);
+}
+
+export function getClerkE2EOrganizationSlug(
+  organization: ClerkE2EOrganization,
+): string {
+  const variableName = ORGANIZATION_ENV[organization];
+  return required(process.env[variableName], variableName);
 }

@@ -1,8 +1,7 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { vi } from 'vitest';
 
-import { bootstrap } from '../src/core/container';
 import { AUTH, AUTHORIZATION } from '../src/core/contracts';
 import { ROLES } from '../src/core/contracts/roles';
 // Force early initialization of critical infrastructure mocks
@@ -26,48 +25,77 @@ vi.mock('next/headers', () => ({
   cookies: mockCookies,
 }));
 
-vi.mock('@/core/env', () => ({
-  env: mockEnv,
-}));
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    env: mockEnv,
+    validateTenancyConfig: vi.fn(),
+    validateTenancyConfigValues: vi.fn(),
+    validateAuthProviderConfig: vi.fn(),
+    validateAuthProviderConfigValues: vi.fn(),
+  };
+});
 
-// Mock modules to avoid real Clerk infrastructure in unit tests
-vi.mock('../src/modules/auth', () => ({
-  authModule: {
-    register: (c: {
-      register: (key: string | symbol, value: unknown) => void;
-    }) => {
-      c.register(AUTH.IDENTITY_PROVIDER, {
-        getCurrentIdentity: vi.fn().mockResolvedValue(null),
-      });
-      c.register(AUTH.TENANT_RESOLVER, {
-        resolve: vi.fn().mockResolvedValue({
-          tenantId: 'test-tenant',
-          userId: 'test-user',
-        }),
-      });
-      c.register(AUTH.USER_REPOSITORY, {
-        updateAttributes: vi.fn(),
-      });
-    },
-  },
-}));
+// Mock the composition root to avoid real DB/Clerk initialization in unit tests
+vi.mock('../src/core/runtime/bootstrap', async () => {
+  const { Container } = await import('../src/core/container');
 
-vi.mock('../src/modules/authorization', () => ({
-  authorizationModule: {
-    register: (c: {
-      register: (key: string | symbol, value: unknown) => void;
-    }) => {
-      c.register(AUTHORIZATION.SERVICE, {
-        can: vi.fn().mockResolvedValue(true),
-      });
-      c.register(AUTHORIZATION.ROLE_REPOSITORY, {
-        getRoles: vi.fn().mockResolvedValue([ROLES.USER]),
-      });
-      c.register(AUTHORIZATION.MEMBERSHIP_REPOSITORY, {});
-      c.register(AUTHORIZATION.POLICY_REPOSITORY, {});
-    },
-  },
-}));
+  const container = new Container();
+  container.register(AUTH.IDENTITY_PROVIDER, {
+    getCurrentIdentity: vi.fn().mockResolvedValue(null),
+  });
+  container.register(AUTH.TENANT_RESOLVER, {
+    resolve: vi.fn().mockResolvedValue({
+      tenantId: 'test-tenant',
+      userId: 'test-user',
+    }),
+  });
+  container.register(AUTH.USER_REPOSITORY, {
+    findById: vi.fn().mockResolvedValue(null),
+    updateAttributes: vi.fn(),
+    updateOnboardingStatus: vi.fn(),
+    updateProfile: vi.fn(),
+  });
+  container.register(AUTHORIZATION.SERVICE, {
+    can: vi.fn().mockResolvedValue(true),
+  });
+  container.register(AUTHORIZATION.ROLE_REPOSITORY, {
+    getRoles: vi.fn().mockResolvedValue([ROLES.USER]),
+  });
+  container.register(AUTHORIZATION.MEMBERSHIP_REPOSITORY, {});
+  container.register(AUTHORIZATION.POLICY_REPOSITORY, {});
+
+  return {
+    createApp: vi.fn(() => container),
+    getAppContainer: vi.fn(() => container),
+    createEdgeRequestContainer: vi.fn(() => container),
+  };
+});
+
+vi.mock('../src/core/runtime/edge', async () => {
+  const { Container } = await import('../src/core/container');
+
+  const container = new Container();
+  container.register(AUTH.IDENTITY_PROVIDER, {
+    getCurrentIdentity: vi.fn().mockResolvedValue(null),
+  });
+  container.register(AUTH.TENANT_RESOLVER, {
+    resolve: vi.fn().mockResolvedValue({
+      tenantId: 'test-tenant',
+      userId: 'test-user',
+    }),
+  });
+  container.register(AUTH.USER_REPOSITORY, {
+    findById: vi.fn().mockResolvedValue(null),
+    updateOnboardingStatus: vi.fn(),
+    updateProfile: vi.fn(),
+  });
+
+  return {
+    createEdgeRequestContainer: vi.fn(() => container),
+  };
+});
 
 // Global mocks for core services to prevent un-mocked side effects
 vi.mock('pino', () => ({
@@ -94,10 +122,8 @@ vi.mock('next/image', () => {
 
 beforeAll(() => {
   server.listen();
-  bootstrap();
 });
 afterEach(() => {
   server.resetHandlers();
-  // Reset container mocks if needed or re-bootstrap
 });
 afterAll(() => server.close());

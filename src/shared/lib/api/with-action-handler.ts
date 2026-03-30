@@ -18,12 +18,15 @@ const logger = resolveServerLogger().child({
  */
 function mapToAppError(error: unknown): unknown {
   if (error instanceof ZodError) {
-    const errors: Record<string, string[]> = {};
+    const errors = Object.create(null) as Record<string, string[]>;
     error.issues.forEach((err) => {
       const path = err.path.join('.');
+      // eslint-disable-next-line security/detect-object-injection -- errors uses Object.create(null); path is a Zod field path string, not user-controlled
       if (!errors[path]) {
+        // eslint-disable-next-line security/detect-object-injection -- same as above
         errors[path] = [];
       }
+      // eslint-disable-next-line security/detect-object-injection -- same as above
       errors[path].push(err.message);
     });
     return new AppError('Validation failed', 400, 'VALIDATION_ERROR', errors);

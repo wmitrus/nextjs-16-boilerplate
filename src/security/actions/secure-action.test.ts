@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { z } from 'zod';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
+import { MissingTenantContextError } from '@/core/contracts/tenancy';
 
 import { logActionAudit } from './action-audit';
 import { validateReplayToken } from './action-replay';
@@ -136,5 +137,105 @@ describe('Secure Action Wrapper', () => {
     if (result.status === 'error') {
       expect(result.error).toBe('Internal Boom');
     }
+  });
+
+  it('should sanitize raw SQL query errors into a user-friendly message', async () => {
+    const handler = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'Failed query: select "user_id" from "auth_user_identities" where ...',
+        ),
+      );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
+
+    const result = await action({ name: 'test' });
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.error).toBe(
+        'Authentication sync is temporarily unavailable. Please try again.',
+      );
+    }
+  });
+
+  it('should return tenant_context_required when tenant is missing', async () => {
+    mockGetSecurityContext.mockRejectedValue(new MissingTenantContextError());
+
+    const handler = vi.fn();
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
+
+    const result = await action({ name: 'test' });
+
+    expect(result.status).toBe('tenant_context_required');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['BOOTSTRAP_REQUIRED', 'bootstrap_required'],
+    ['ONBOARDING_REQUIRED', 'onboarding_required'],
+    ['TENANT_CONTEXT_REQUIRED', 'tenant_context_required'],
+    ['TENANT_MEMBERSHIP_REQUIRED', 'tenant_membership_required'],
+  ] as const)(
+    'should return %s as typed readiness response',
+    async (readinessStatus, expectedStatus) => {
+      const handler = vi.fn();
+      mockGetSecurityContext.mockResolvedValue(
+        createMockSecurityContext({
+          user: undefined,
+          readinessStatus,
+        }),
+      );
+
+      const action = createSecureAction({
+        schema,
+        dependencies: getDependencies(),
+        handler,
+      });
+
+      const result = await action({ name: 'test' });
+
+      expect(result.status).toBe(expectedStatus);
+      expect(handler).not.toHaveBeenCalled();
+      expect(logActionAudit).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'failure' }),
+      );
+    },
+  );
+
+  it('should return unauthorized when readinessStatus is UNAUTHENTICATED', async () => {
+    const handler = vi.fn();
+    mockGetSecurityContext.mockResolvedValue(
+      createMockSecurityContext({
+        user: undefined,
+        readinessStatus: 'UNAUTHENTICATED',
+      }),
+    );
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
+
+    const result = await action({ name: 'test' });
+
+    expect(result.status).toBe('unauthorized');
+    if (result.status === 'unauthorized') {
+      expect(result.error).toBe('Authentication required');
+    }
+    expect(handler).not.toHaveBeenCalled();
+    expect(logActionAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ result: 'failure' }),
+    );
   });
 });

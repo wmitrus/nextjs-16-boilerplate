@@ -14,10 +14,10 @@ jobs:
     steps:
       # Removed unnecessary checkout step
       # - name: Checkout repository
-      #   uses: actions/checkout@v4
+      #   uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
 
       - name: Auto-label PRs
-        uses: actions/labeler@v5
+        uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # actions/labeler@v6
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           configuration-path: .github/labeler.yml

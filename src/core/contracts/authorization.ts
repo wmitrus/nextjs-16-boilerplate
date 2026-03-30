@@ -43,6 +43,7 @@ export interface TenantAttributes {
   readonly features?: readonly string[];
   readonly contractType?: 'standard' | 'enterprise';
   readonly userLimit?: number;
+  readonly policyTemplateVersion?: number;
   readonly [key: string]: unknown;
 }
 

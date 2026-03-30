@@ -1,0 +1,47 @@
+name: DB Tests (Testcontainers)
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  db-tests:
+    name: DB Integration Tests (Testcontainers / Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Disable Ryuk cleanup container — avoids permission issues in some CI runners
+      TESTCONTAINERS_RYUK_DISABLED: 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pre-pull Postgres Docker image
+        run: docker pull postgres:16-alpine
+
+      - name: Run DB tests (Testcontainers)
+        run: pnpm test:db:ci

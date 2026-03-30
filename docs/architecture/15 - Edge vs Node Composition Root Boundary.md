@@ -1,0 +1,143 @@
+# 15 - Edge vs Node Composition Root Boundary
+
+## Purpose
+
+This document is the architecture-level source of truth for runtime boundaries in this repository.
+
+It defines where security checks may run, where DB-backed authorization is allowed, and which composition root must be used in each runtime.
+
+## Non-negotiable boundary
+
+- Edge middleware must not initialize or use DB runtime.
+- DB-backed RBAC/ABAC authorization must run only in Node runtime.
+
+## Composition roots
+
+### Edge composition root
+
+- Entry point: `createEdgeRequestContainer(config)`
+- Used by: `src/proxy.ts` middleware flow
+- Allowed dependencies:
+  - identity provider
+  - tenant resolver
+- Forbidden dependencies:
+  - DB runtime
+  - authorization service backed by Drizzle/Postgres/PGLite
+
+### Node composition root
+
+- Entry points:
+  - `getAppContainer()` (default env-driven helper)
+  - `createRequestContainer(config)` (preferred for tests and explicit profiles)
+- Used by: server actions, route handlers, server-only services
+- Allowed dependencies:
+  - DB runtime via process-scope infrastructure
+  - authorization service and policy engine
+  - full RBAC/ABAC checks
+
+## Why this boundary exists
+
+- Next middleware executes in Edge runtime by default.
+- DB clients used in this app are not a valid middleware strategy for Edge runtime.
+- Running DB-backed authorization in middleware causes runtime failures and architecture drift.
+
+## Security responsibility split
+
+### Edge middleware responsibilities
+
+- request classification
+- internal API guard
+- rate limiting
+- authentication gate (signed in vs not signed in)
+- security headers
+- coarse route gating only (no DB-backed provisioning truth)
+
+### Node responsibilities
+
+- provisioning/onboarding readiness gate (internal identity, onboarding state, tenant context, membership)
+- resource-level authorization (`AuthorizationService`, policies, ABAC attributes)
+- domain security decisions requiring persistence
+
+## Required implementation rules
+
+1. `src/proxy.ts` must resolve dependencies from `createEdgeRequestContainer(config)` only.
+2. `withAuth` in middleware must run with `enforceResourceAuthorization: false`.
+3. No middleware code may resolve `AUTHORIZATION.SERVICE`.
+4. Resource-level authorization must be executed in Node flows (`secure-action`, route handlers, server-side orchestration).
+5. Onboarding/provisioning readiness must be validated in Node flows for protected pages and APIs.
+6. Process-scope DB runtime lifecycle remains centralized in `src/core/runtime/infrastructure.ts`.
+7. Request containers are ephemeral; DB runtime is process-scoped and shared.
+
+## Forbidden patterns
+
+- Using `getAppContainer()` or `createRequestContainer(config)` in middleware.
+- Importing or resolving `AUTHORIZATION.SERVICE` in Edge middleware composition.
+- Creating DB clients/pools per middleware request.
+- Moving policy decisions into `proxy.ts` to "save one server call".
+- Treating Edge-authenticated external session as proof of internal provisioning completeness.
+
+## Validation gates for this boundary
+
+- Runtime guard tests:
+  - `src/proxy.edge-composition.test.ts`
+  - `src/testing/integration/proxy-runtime.integration.test.ts`
+- Auth middleware tests:
+  - `src/security/middleware/with-auth.test.ts`
+  - `src/testing/integration/middleware.test.ts`
+- Static gates:
+  - `pnpm typecheck`
+  - `pnpm madge`
+  - `pnpm test`
+
+## Extension rule
+
+Any new security feature must first decide runtime placement:
+
+- If it needs DB/policy/tenant attributes from persistence -> Node only.
+- If it is request-level gate/headers/rate/internal-key -> Edge middleware is valid.
+
+If uncertain, default to Node and keep middleware minimal.
+
+## External identity mapping rule
+
+When integrating external auth providers (Clerk/AuthJS/Supabase), keep mapping provider-agnostic and port-driven:
+
+- map `provider + external_user_id -> internal user UUID`
+- map `provider + external_tenant_id -> internal tenant UUID`
+
+Mapping runtime rule:
+
+- resolve/create identity mappings in Node runtime only
+- middleware/Edge should consume already-resolved request context and must not perform DB-backed mapping
+
+## External identity mapping flow
+
+```mermaid
+flowchart LR
+  A[External auth provider\nClerk/AuthJS/Supabase] --> B[RequestScopedIdentityProvider]
+  A --> C[Tenant resolver strategy\n(single/personal/org-provider/org-db)]
+  B --> D[InternalIdentityLookup\nread-only lookup]
+  C --> D
+  D --> E[(auth_user_identities)]
+  D --> F[(auth_tenant_identities)]
+  E --> G[Internal user UUID]
+  F --> H[Internal tenant UUID]
+  G --> I[AuthorizationService / policies]
+  H --> I
+  J[ProvisioningService.ensureProvisioned\nwrite-path only] --> E
+  J --> F
+
+  classDef edge fill:#f3f4f6,stroke:#9ca3af,color:#111827;
+  classDef node fill:#ecfeff,stroke:#0891b2,color:#0c4a6e;
+
+  class A edge;
+  class B,C,D,E,F,G,H,I,J node;
+```
+
+Adapter contract rule (important):
+
+- `RequestScopedIdentityProvider` and Node tenant resolvers use read-only lookup (`InternalIdentityLookup`).
+- Write-side mapping and creation belongs exclusively to `ProvisioningService.ensureProvisioned()`.
+- Keep lookup contracts segregated from write contracts to avoid resolver side effects.
+
+This preserves interface segregation, simplifies tests, and keeps modular boundaries clear.

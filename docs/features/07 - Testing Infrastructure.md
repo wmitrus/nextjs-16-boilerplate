@@ -37,14 +37,32 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - **Purpose**: Test complete user flows in real browser environments.
 - **Commands**:
   - `pnpm e2e`: Runs E2E tests against the development server.
-  - `pnpm e2e:ci`: Builds the app and runs E2E tests against the production server (text reporter).
+  - `pnpm e2e:auth-matrix:ci`: Builds the app and runs the auth/bootstrap/onboarding matrix in CI mode.
+  - `pnpm e2e:ci`: Builds the app and runs the broader scenario matrix in CI mode.
 
 #### E2E configuration notes
 
-- The Playwright web server uses `pnpm start` and sets `E2E_ENABLED=true` and `NEXT_PUBLIC_E2E_ENABLED=true`.
+- Local Playwright runs start `pnpm dev`; CI Playwright runs start `pnpm start`.
+- CI-facing Playwright commands therefore build before execution.
+- The Playwright web server sets `E2E_ENABLED=true` and `NEXT_PUBLIC_E2E_ENABLED=true`.
 - **Environment Flags**: These flags are injected specifically for E2E runs and are intentionally omitted from `src/core/env.ts` to keep them isolated from standard build/runtime validation.
 - A test-only route (`/e2e-error`) is gated by `NEXT_PUBLIC_E2E_ENABLED` and is only intended for E2E boundary validation.
 - Dev overlay is disabled for E2E runs via `NEXT_DISABLE_DEV_OVERLAY=1` to avoid click interception.
+- When `PLAYWRIGHT_SERVER_LOG_DIR` is set, the runner disables local server reuse and forces the app runtime to write server evidence into that explicit path.
+- The stable repository path for uploaded server evidence is `logs/playwright/...` rather than `test-results/...`, because `test-results` is Playwright-managed output.
+
+#### E2E workflow split in GitHub Actions
+
+- Auth-matrix workflow: [../../.github/workflows/e2e-label.yml](../../.github/workflows/e2e-label.yml)
+  - PR label: `run-e2e`
+  - manual dispatch supported
+  - command: `pnpm e2e:auth-matrix:ci`
+- Broad matrix workflow: [../../.github/workflows/e2e-matrix.yml](../../.github/workflows/e2e-matrix.yml)
+  - PR label: `run-e2e-matrix`
+  - manual dispatch supported
+  - command: `pnpm e2e:ci`
+
+This split allows auth evidence collection and the broader scenario suite to run independently.
 
 #### When to add E2E tests
 

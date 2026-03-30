@@ -1,90 +1,141 @@
 # Clerk Authentication
 
-This document details the global integration of **Clerk Authentication** within the boilerplate, ensuring secure access and identity management.
+This document describes Clerk integration in the current modular monolith architecture.
 
-## 1. Overview
+## 1. Scope
 
-Clerk is the primary authentication provider, integrated with **Next.js 16**, **React 19**, and the **App Router**. The implementation focuses on performance (using Suspense), type safety (via T3-Env), and centralized middleware management.
+Clerk is one supported `AUTH_PROVIDER` adapter. It is integrated through contracts, not directly through domain code.
 
-## 2. Setup & Configuration
+Current provider status:
 
-### Dependencies
+- `clerk`: runtime-ready.
+- `authjs`, `supabase`: architecture-ready, adapter implementation pending.
 
-- `@clerk/nextjs`: Core SDK for Next.js integration.
+## 2. Runtime Boundaries
 
-### Environment Variables
+Clerk-specific SDK usage is limited to delivery/infrastructure boundaries:
 
-Managed via [./src/core/env.ts](@/core/env.ts).
+- `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts`
+- `src/proxy.ts` (`clerkMiddleware` path)
+- `src/app/layout.tsx` (`ClerkProvider` path only when `AUTH_PROVIDER=clerk`)
+- Clerk UI routes/components (`/sign-in`, `/sign-up`, waitlist, header auth controls)
 
-| Variable                            | Description                                   |
-| ----------------------------------- | --------------------------------------------- |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Public key for client-side SDK.               |
-| `CLERK_SECRET_KEY`                  | Private key for server-side Backend API.      |
-| `NEXT_PUBLIC_CLERK_SIGN_IN_URL`     | Path to the custom sign-in page (`/sign-in`). |
-| `NEXT_PUBLIC_CLERK_SIGN_UP_URL`     | Path to the custom sign-up page (`/sign-up`). |
+Core contracts, provisioning domain, authorization domain, and security core do not import Clerk SDK APIs.
 
-## 3. Root Integration
+## 3. Claims Mapping Contract
 
-The `ClerkProvider` is the root of the authentication context. In this boilerplate, it is placed inside the Root Layout and wrapped in a `<Suspense>` boundary to comply with Next.js 16 async API requirements.
+`ClerkRequestIdentitySource` maps provider claims to `RequestIdentitySourceData`:
 
-```tsx
-// src/app/layout.tsx
-<Suspense fallback={null}>
-  <ClerkProvider
-    signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
-    signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
-    signInFallbackRedirectUrl={
-      env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
-    }
-    signUpFallbackRedirectUrl={
-      env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
-    }
-  >
-    <Header />
-    {children}
-  </ClerkProvider>
-</Suspense>
+- `userId` <- Clerk `userId`
+- `email` <- `sessionClaims.email` or `sessionClaims.primaryEmail`
+- `emailVerified` <- `sessionClaims.email_verified === true`
+- `tenantExternalId` <- Clerk `orgId`
+- `tenantRole` <- Clerk `orgRole`
+
+This data is external-only. Internal UUID resolution happens separately via `InternalIdentityLookup` and provisioning.
+
+Operational rule:
+
+- Clerk Session Token v2 does not provide a default email claim in the compact claims set used by `auth().sessionClaims`
+- preferred custom contract for this boilerplate: add `email` to the session token
+- supported backward-compatible alternative: add `primaryEmail` to the session token
+- fallback `external+clerk-...@local.invalid` is an emergency continuity path only, not a valid production steady-state
+
+### 3.1 Session Token Setup
+
+If runtime provisioning stores synthetic `@local.invalid` emails, fix the Clerk session token contract.
+
+Clerk Dashboard:
+
+1. Go to `Sessions`.
+2. Open `Customize session token`.
+3. Add this minimal custom claim:
+
+```json
+{
+  "email": "{{user.primary_email_address}}"
+}
 ```
 
-## 4. Middleware & Access Control
+4. Save.
+5. Sign out completely and sign in again so a new session token is minted.
 
-Authentication logic is centralized in [./src/proxy.ts](@/proxy.ts). It handles:
+Expected result after the next bootstrap:
 
-- **Public Routes**: Pages accessible to everyone (e.g., Home, Landing).
-- **Private Routes**: Enforced via `auth.protect()`.
-- **Auth Redirects**: Redirecting signed-in users away from `/sign-in` or `/sign-up`.
-- **Onboarding Redirects**: Forcing users to complete onboarding if required.
+- `auth().sessionClaims.email` will be available
+- `auth().sessionClaims.primaryEmail` is still supported if you intentionally use that custom name
+- provisioning should store the real Clerk email in `users.email`
+- if the user was previously created with `external+clerk-...@local.invalid`, the next bootstrap will repair that row automatically when safe
 
-## 5. Custom Authentication Pages
+## 4. Env Setup (Clerk)
 
-Custom pages are implemented to maintain brand consistency and avoid redirects to Clerk's hosted portal.
+Required only when `AUTH_PROVIDER=clerk`:
 
-- **Sign In**: [./src/app/sign-in/[[...sign-in]]/page.tsx](@/app/sign-in/[[...sign-in]]/page.tsx)
-- **Sign Up**: [./src/app/sign-up/[[...sign-up]]/page.tsx](@/app/sign-up/[[...sign-up]]/page.tsx)
+- `CLERK_SECRET_KEY`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 
-**Key Requirements:**
+Common optional route vars:
 
-- Use the `path` prop on `<SignIn />` and `<SignUp />`.
-- Wrap components in `<Suspense>` with skeleton fallbacks to prevent hydration mismatches and "Blocking Route" errors.
+- `NEXT_PUBLIC_CLERK_SIGN_IN_URL`
+- `NEXT_PUBLIC_CLERK_SIGN_UP_URL`
+- `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`
+- `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL`
+- `NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL`
+- `NEXT_PUBLIC_CLERK_WAITLIST_URL`
 
-## 6. UI Components
+## 5. Layout and UI Behavior
 
-### Header Integration
+`src/app/layout.tsx` conditionally wraps with `ClerkProvider` only for `AUTH_PROVIDER=clerk`.
 
-The [./src/shared/components/Header.tsx](@/shared/components/Header.tsx) uses Clerk's control components:
+- Clerk mode: full Clerk auth context is enabled.
+- Non-Clerk mode: app renders without Clerk provider and without Clerk auth UI crash.
 
-- `<SignedIn>`: Content visible only to authenticated users.
-- `<SignedOut>`: Content visible only to guests (Sign In/Up buttons).
-- `<UserButton>`: User profile management.
+`/sign-in` and `/sign-up` pages are provider-aware:
 
-**Hydration Safety:**
-To prevent SSR mismatches, components that depend on client-side auth state use an `isMounted` hook.
+- Clerk mode: render Clerk components.
+- Non-Clerk mode: show informative "not configured" message.
 
-## 7. Error Handling
+## 6. Proxy Behavior
 
-Development-only warnings (like "single session enabled") are suppressed in the [./src/shared/components/error/global-error-handlers.tsx](@/shared/components/error/global-error-handlers.tsx) to keep the console clean.
+`src/proxy.ts` selects runtime path by `AUTH_PROVIDER`:
 
-## 8. Related Features
+- Clerk mode: wraps pipeline with `clerkMiddleware`, builds request-scoped identity source from Clerk auth callback.
+- Non-Clerk mode: runs same security middleware chain without Clerk wrapper.
 
-- **Onboarding**: For details on the custom onboarding flow, see [17 - Clerk Onboarding.md](@/features/17%20-%20Clerk%20Onboarding.md).
-- **Waitlist**: For early access management, see [16 - Clerk Waitlist.md](@/features/16%20-%20Clerk%20Waitlist.md).
+This preserves edge/node composition boundaries and avoids provider leakage.
+
+Important:
+
+- Edge middleware validates session presence only.
+- Internal provisioning/onboarding truth is enforced by Node gate on protected pages/APIs.
+- Use `/api/me/provisioning-status` as authoritative runtime probe.
+
+## 7. Clerk Organizations vs Tenancy
+
+Clerk orgs are optional and depend on tenancy mode:
+
+1. `TENANCY_MODE=single`: org claims are ignored.
+2. `TENANCY_MODE=personal`: org claims are ignored.
+3. `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=provider`: `tenantExternalId` (Clerk org) is required.
+4. `TENANCY_MODE=org` + `TENANT_CONTEXT_SOURCE=db`: active tenant comes from app header/cookie context, not provider org claim.
+
+Dashboard requirements by scenario:
+
+| Tenancy profile | Organizations feature | Clerk org membership | Active org in session | Additional requirement                      |
+| --------------- | --------------------- | -------------------- | --------------------- | ------------------------------------------- |
+| `single`        | optional              | not required         | not required          | email sign-in enabled                       |
+| `personal`      | optional              | not required         | not required          | email sign-in enabled                       |
+| `org/provider`  | required              | required             | required              | assign org role for owner/member path tests |
+| `org/db`        | optional (ignored)    | not required         | not required          | set active tenant in app header/cookie      |
+
+Minimal universal Clerk baseline:
+
+1. Configure `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`.
+2. Enable email sign-in/sign-up.
+3. Use verified test emails when validating cross-provider linking policy (`CROSS_PROVIDER_EMAIL_LINKING=verified-only`).
+
+## 8. Related Docs
+
+- `docs/features/ENV-requirements.md`
+- `docs/features/17 - Clerk Onboarding.md`
+- `docs/getting-started/03 - Tenancy, Organizations, Roles and Onboarding - Runtime Matrix.md`

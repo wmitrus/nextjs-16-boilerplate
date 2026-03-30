@@ -336,6 +336,8 @@ export function main() {
   console.log('✅ Clerk E2E fixture vars are set');
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Only run main() if this file is executed directly via `node`, not when imported
+const isDirectlyExecuted = process.argv[1] === fileURLToPath(import.meta.url);
+if (isDirectlyExecuted && typeof process.env.VITEST === 'undefined') {
   main();
 }

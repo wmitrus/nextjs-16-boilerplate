@@ -9,7 +9,7 @@ vi.mock('./sign-in-client', () => ({
   SignInClient: () => <div data-testid="sign-in-client" />,
 }));
 
-import Page from './page';
+import { SignInPageContent } from './page';
 
 import { mockEnv, resetEnvMocks } from '@/testing';
 
@@ -21,7 +21,7 @@ describe('SignInPage', () => {
   it('renders the client-only SignInClient when AUTH_PROVIDER is clerk', async () => {
     mockEnv.AUTH_PROVIDER = 'clerk';
 
-    render(await Page());
+    render(await SignInPageContent());
 
     expect(screen.getByTestId('sign-in-client')).toBeInTheDocument();
     expect(
@@ -32,7 +32,7 @@ describe('SignInPage', () => {
   it('renders "not configured" message when AUTH_PROVIDER is not clerk', async () => {
     mockEnv.AUTH_PROVIDER = 'authjs';
 
-    render(await Page());
+    render(await SignInPageContent());
 
     expect(
       screen.getByText(/Sign-in UI is not configured for AUTH_PROVIDER=/),

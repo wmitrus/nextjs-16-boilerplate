@@ -1,10 +1,11 @@
 import { connection } from 'next/server';
+import { Suspense } from 'react';
 
 import { env } from '@/core/env';
 
 import { SignInClient } from './sign-in-client';
 
-export default async function Page() {
+export async function SignInPageContent() {
   await connection();
 
   if (env.AUTH_PROVIDER !== 'clerk') {
@@ -20,5 +21,13 @@ export default async function Page() {
     <div className="flex min-h-screen items-center justify-center">
       <SignInClient />
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <SignInPageContent />
+    </Suspense>
   );
 }

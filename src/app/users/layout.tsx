@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
@@ -13,7 +14,19 @@ const logger = resolveServerLogger().child({
   module: 'users-guard',
 });
 
-export default async function UsersLayout({
+export default function UsersLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <Suspense fallback={null}>
+      <UsersLayoutGuard>{children}</UsersLayoutGuard>
+    </Suspense>
+  );
+}
+
+export async function UsersLayoutGuard({
   children,
 }: {
   children: React.ReactNode;

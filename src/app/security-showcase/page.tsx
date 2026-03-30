@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { Suspense } from 'react';
 
 import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
@@ -16,7 +17,15 @@ import { SettingsFormExample } from '@/features/security-showcase/components/Set
 import { createSecurityContext } from '@/security/core/security-context';
 import type { NodeSecurityContextDependencies } from '@/security/core/security-dependencies';
 
-export default async function SecurityShowcasePage() {
+export default function SecurityShowcasePage() {
+  return (
+    <Suspense fallback={null}>
+      <SecurityShowcasePageContent />
+    </Suspense>
+  );
+}
+
+export async function SecurityShowcasePageContent() {
   const headerList = await headers();
   const cookieHeader = headerList.get('cookie') ?? '';
   const hasClerkSessionCookie =

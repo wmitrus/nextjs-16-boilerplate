@@ -117,6 +117,7 @@ See the canonical guard patterns in `.github/agents/security-auth.agent.md` unde
 - If a change affects runtime boundaries, validate the relevant route, action, or handler behavior.
 - If full validation is not possible, say exactly what was not run and why.
 - Do not claim a fix is complete if it was not validated at a sensible level.
+- **Always run `pnpm lint --fix`, never plain `pnpm lint`.** The linter auto-fixes import ordering and formatting on save; running without `--fix` wastes tokens reporting errors that are automatically fixable. Only report errors that remain unfixable after `--fix`.
 
 ## When To Stop And Escalate
 

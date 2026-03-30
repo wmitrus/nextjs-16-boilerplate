@@ -232,7 +232,7 @@ export function validateClerkRedirectEnv(
   );
 }
 
-function main() {
+export function main() {
   const { scenario, variant, withOauth } = parseArgs(process.argv.slice(2));
 
   const loadedEnv = loadScenarioEnv({
@@ -336,4 +336,6 @@ function main() {
   console.log('✅ Clerk E2E fixture vars are set');
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

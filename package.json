@@ -202,7 +202,7 @@
       "minimatch": ">=10.2.3",
       "lodash": ">=4.17.23",
       "rollup": "^4.59.0",
-      "serialize-javascript": ">=7.0.3",
+      "serialize-javascript": ">=7.0.5",
       "undici": ">=7.24.0",
       "tmp": ">=0.2.4",
       "flatted": ">=3.4.2",
@@ -214,7 +214,8 @@
       "cosmiconfig>yaml": ">=2.8.3",
       "docker-compose>yaml": ">=2.8.3",
       "lint-staged>yaml": ">=2.8.3",
-      "brace-expansion": ">=5.0.5"
+      "brace-expansion": ">=5.0.5",
+      "handlebars": ">=4.7.9"
     },
     "onlyBuiltDependencies": [
       "@clerk/shared",

@@ -15,12 +15,22 @@ vi.mock('@/core/logger/client', () => ({
   logger: mockLogger,
 }));
 
-describe('Global error UI', () => {
-  it('renders fallback and calls reset', async () => {
-    const user = userEvent.setup();
-    const reset = vi.fn();
+vi.mock('@sentry/nextjs', () => ({
+  captureException: vi.fn(),
+}));
 
-    render(<GlobalError error={new Error('Critical')} reset={reset} />);
+describe('Global error UI', () => {
+  it('renders fallback and calls unstable_retry', async () => {
+    const user = userEvent.setup();
+    const unstable_retry = vi.fn();
+
+    render(
+      <GlobalError
+        error={new Error('Critical')}
+        reset={vi.fn()}
+        unstable_retry={unstable_retry}
+      />,
+    );
 
     expect(screen.getByText('Critical Error')).toBeInTheDocument();
 
@@ -28,7 +38,7 @@ describe('Global error UI', () => {
       screen.getByRole('button', { name: 'Refresh Application' }),
     );
 
-    expect(reset).toHaveBeenCalled();
+    expect(unstable_retry).toHaveBeenCalled();
     expect(mockLogger.child).toHaveBeenCalled();
   });
 });

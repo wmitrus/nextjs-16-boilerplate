@@ -452,6 +452,11 @@ If asked to design or implement:
 - start with boundaries, trust, runtime, and constraints before code
 - prefer low-blast-radius recommendations unless larger change is clearly justified
 
+All fenced code blocks in markdown artifacts MUST include a language identifier.
+Use `shell` or `bash` for terminal output and commands, `json` for JSON, `text` for plain text and
+stack traces, `typescript` / `javascript` for source code, and the appropriate token for all other
+languages. Bare ` ``` ` fences without a language identifier are not acceptable.
+
 ---
 
 ## Artifact-Backed Work

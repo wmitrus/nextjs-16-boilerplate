@@ -162,8 +162,9 @@ These confirm it is safe to re-trigger the release after applying the fix.
 Removed `\n\n${nextRelease.notes}` from the `@semantic-release/git` commit message template.
 JSON validity confirmed after edit. No other files changed.
 
-This is a **temporary fix** (Option A). After v1.11.0 releases successfully, the user must
-open a second PR to restore the original message template.
+This is a **permanent fix** (Option B). The CHANGELOG.md and GitHub Release both contain the
+full release notes — there is no functional purpose served by duplicating them in the git
+commit message body.
 
 ---
 

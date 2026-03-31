@@ -11,8 +11,8 @@ Review the existing requirements and workflow for upgrading this repository from
 - [x] `intake.md` completed
 - [x] `01 - Architecture Guard - Summary.md` completed
 - [x] `03 - Next.js Runtime - Summary.md` completed
-- [ ] `04 - Implementation Agent - Summary.md` completed
-- [ ] `validation-report.md` completed
+- [x] `04 - Implementation Agent - Summary.md` completed
+- [x] `validation-report.md` completed
 
 ## Likely Affected Areas
 
@@ -53,8 +53,8 @@ Review the existing requirements and workflow for upgrading this repository from
 - [x] Artifact initialization completed
 - [x] Architecture review completed
 - [x] Next.js Runtime review completed
-- [ ] Implementation completed
-- [ ] Focused validation recorded
+- [x] Implementation completed
+- [x] Focused validation recorded
 
 ## Specialist Status
 
@@ -62,7 +62,7 @@ Review the existing requirements and workflow for upgrading this repository from
 - `03 - Next.js Runtime`: completed
 - `02 - Security & Auth`: not required for the baseline upgrade; required only if SRI or auth-sensitive cache experiments move into scope
 - `05 - Validation Strategy`: not required yet; use only if validation scope expands beyond the obvious framework-upgrade checks
-- `04 - Implementation Agent`: required next; the runtime contract scope and minimum verification set are now explicit
+- `04 - Implementation Agent`: completed
 - `07 - Playwright E2E`: optional for the baseline version bump; useful only if browser-observable runtime regressions need proof beyond build/test evidence
 
 ## Known Risks / Unknowns
@@ -88,8 +88,8 @@ Review the existing requirements and workflow for upgrading this repository from
 - [x] `intake.md`
 - [x] `01 - Architecture Guard - Summary.md`
 - [x] `03 - Next.js Runtime - Summary.md`
-- [ ] `04 - Implementation Agent - Summary.md`
-- [ ] `validation-report.md`
+- [x] `04 - Implementation Agent - Summary.md`
+- [x] `validation-report.md`
 
 ## Current Status Note
 

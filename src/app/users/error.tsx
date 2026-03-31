@@ -1,16 +1,14 @@
 'use client';
 
+import type { ErrorInfo } from 'next/error';
 import { useEffect } from 'react';
 
 import { logger } from '@/core/logger/client';
 
 export default function UsersErrorBoundary({
   error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+  unstable_retry,
+}: ErrorInfo) {
   useEffect(() => {
     logger.error(error, 'Users route error boundary caught an error');
   }, [error]);
@@ -44,7 +42,7 @@ export default function UsersErrorBoundary({
       )}
       <div className="mt-6 flex gap-3">
         <button
-          onClick={() => reset()}
+          onClick={() => unstable_retry()}
           className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:outline-none"
         >
           Retry users page

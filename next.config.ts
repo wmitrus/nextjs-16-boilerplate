@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   experimental: {
     turbopackFileSystemCacheForDev: true,
   },
+  logging: {
+    browserToTerminal: 'warn',
+  },
 };
 
 export default withSentryConfig(nextConfig, {

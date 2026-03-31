@@ -190,6 +190,7 @@ Within that structure:
 - no unsupported claims
 - no implementation unless asked
 - no vague “could be anything” summaries
+- all fenced code blocks in markdown artifacts MUST include a language identifier — use `shell` or `bash` for terminal output and commands, `json` for JSON, `text` for plain text and stack traces, and the appropriate language token for all source code; bare ` ``` ` fences are not acceptable
 
 When the task is artifact-backed, your persistent per-task summary artifact must be the single file `06 - Debug Investigation - Summary.md`, updated on later runs instead of replaced by a new file.
 

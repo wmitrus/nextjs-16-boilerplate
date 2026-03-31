@@ -1,3 +1,16 @@
+# [1.12.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.11.0...v1.12.0) (2026-03-31)
+
+
+### Features
+
+* **e2e-error:** update error boundary to use unstable_retry ([2fae4c7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2fae4c7796404f107816c3ceaf698b3a00a98dfd))
+* **error:** enhance error boundary handling and logging ([6eed149](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6eed14922aa82e4b3badce6de8f483cc90c380f0))
+* **error:** update users error boundary to use unstable_retry ([76234c4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/76234c4e0add2be6a5f6299a319300e69acf51ea))
+* **global-error:** enhance error handling and retry mechanism ([a5bb2e9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a5bb2e9ec57da3a10e35714c0fabc3632c982ea1))
+* **logging:** add logging configuration for browser to terminal ([748e2ab](https://github.com/wmitrus/nextjs-16-boilerplate/commit/748e2ab3b1858a5350b654d6389f618bb888b6c4))
+* **next:** upgrade Next.js to 16.2.1 and implement new features ([92762f4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/92762f46559c4ad7711ea4c2b1b001b5c11301dc))
+* **postcss:** add initial PostCSS configuration ([bb05670](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bb0567097903d42b80638a34694b7e572a35a447))
+
 # [1.11.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.10.0...v1.11.0) (2026-03-31)
 
 

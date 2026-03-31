@@ -14,7 +14,7 @@ Bootstrap the TanStack Start project skeleton with all tooling configured correc
 2. `package.json` – dependencies
 3. `vite.config.ts` – build configuration with dual deployment target
 4. `tsconfig.json` – TypeScript strict config
-5. `postcss.config.mjs` – Tailwind CSS 4
+5. `postcss.config.ts` – Tailwind CSS 4
 6. `eslint.config.mjs` – ESLint flat config
 7. `.prettierrc.json` – Prettier config
 8. `commitlint.config.mjs` – Conventional Commits

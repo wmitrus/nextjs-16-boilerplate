@@ -36,7 +36,7 @@ config:
           - 'eslint.config.mjs'
           - 'commitlint.config.mjs'
           - '.prettierrc.json'
-          - 'postcss.config.mjs'
+          - 'postcss.config.ts'
           - '.github/**/*'
           - '.storybook/**/*'
           - 'plop-templates/**/*'

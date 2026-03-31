@@ -57,7 +57,7 @@ Do not search for `middleware.ts`. Do not treat its absence as a finding. Analyz
 
 **Main Dependencies**:
 
-- **next**: `16.1.6`
+- **next**: `16.2.1`
 - **react** / **react-dom**: `19.2.4`
 - **@clerk/nextjs**: `^6.39.0` — Authentication
 - **@sentry/nextjs**: `^10.40.0` — Error tracking & observability
@@ -106,7 +106,7 @@ pnpm release          # Semantic release
 - **`next.config.ts`**: Next.js configuration with Sentry wrapper.
 - **`eslint.config.mjs`**: ESLint 9 Flat Config.
 - **`tsconfig.json`**: TypeScript strict config with path aliases.
-- **`postcss.config.mjs`**: PostCSS / Tailwind CSS 4 config.
+- **`postcss.config.ts`**: PostCSS / Tailwind CSS 4 config.
 - **`src/proxy.ts`**: Node.js runtime request proxy (replaces middleware for Node use cases).
 - **`src/instrumentation.ts`** / **`src/instrumentation-client.ts`**: Sentry instrumentation hooks.
 - **`.env.example`**: Template with all required environment variables.

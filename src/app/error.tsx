@@ -1,6 +1,7 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
+import type { ErrorInfo } from 'next/error';
 import { useEffect } from 'react';
 
 import { logger as baseLogger } from '@/core/logger/client';
@@ -11,34 +12,28 @@ const logger = baseLogger.child({
   module: 'root-error',
 });
 
-export default function ErrorBoundary({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function ErrorBoundary({ error, unstable_retry }: ErrorInfo) {
+  const digest = (error as Error & { digest?: string }).digest;
+
   useEffect(() => {
     const errorPayload = {
       errorName: error.name,
       errorMessage: error.message,
-      digest: error.digest,
+      digest,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     };
 
     logger.error(errorPayload, 'Root Error Boundary caught an error');
 
-    if (error instanceof Error) {
-      Sentry.captureException(error, {
-        contexts: {
-          error_boundary: {
-            level: 'route',
-            digest: error.digest,
-          },
+    Sentry.captureException(error, {
+      contexts: {
+        error_boundary: {
+          level: 'route',
+          digest,
         },
-      });
-    }
-  }, [error]);
+      },
+    });
+  }, [error, digest]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-8 text-center">
@@ -67,13 +62,13 @@ export default function ErrorBoundary({
           fix it.
         </p>
 
-        {error.digest && (
+        {digest && (
           <div className="mt-4 rounded-md bg-gray-50 p-4 text-left">
             <p className="text-xs font-semibold text-gray-700">
               Error Reference ID
             </p>
             <p className="mt-1 font-mono text-xs break-all text-gray-600">
-              {error.digest}
+              {digest}
             </p>
           </div>
         )}
@@ -94,7 +89,7 @@ export default function ErrorBoundary({
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
         <button
-          onClick={() => reset()}
+          onClick={() => unstable_retry()}
           className="rounded-md bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
         >
           Try again

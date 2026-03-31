@@ -1,6 +1,7 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
+import type { ErrorInfo } from 'next/error';
 import { useEffect } from 'react';
 
 import { logger as baseLogger } from '@/core/logger/client';
@@ -11,34 +12,28 @@ const logger = baseLogger.child({
   module: 'global-error',
 });
 
-export default function GlobalError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function GlobalError({ error, unstable_retry }: ErrorInfo) {
+  const digest = (error as Error & { digest?: string }).digest;
+
   useEffect(() => {
     const errorPayload = {
       errorName: error.name,
       errorMessage: error.message,
-      digest: error.digest,
+      digest,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     };
 
     logger.error(errorPayload, 'Global Error caught');
 
-    if (error instanceof Error) {
-      Sentry.captureException(error, {
-        contexts: {
-          error_boundary: {
-            level: 'global',
-            digest: error.digest,
-          },
+    Sentry.captureException(error, {
+      contexts: {
+        error_boundary: {
+          level: 'global',
+          digest,
         },
-      });
-    }
-  }, [error]);
+      },
+    });
+  }, [error, digest]);
 
   return (
     <html lang="en">
@@ -71,15 +66,15 @@ export default function GlobalError({
             page.
           </p>
 
-          {error.digest && (
+          {digest && (
             <div style={digestContainerStyles}>
               <p style={digestLabelStyles}>Error Reference ID</p>
-              <p style={digestValueStyles}>{error.digest}</p>
+              <p style={digestValueStyles}>{digest}</p>
             </div>
           )}
 
           <button
-            onClick={() => reset()}
+            onClick={() => unstable_retry()}
             style={buttonStyles}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = '#bb2d3b';

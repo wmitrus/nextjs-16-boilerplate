@@ -15,18 +15,28 @@ vi.mock('@/core/logger/client', () => ({
   logger: mockLogger,
 }));
 
-describe('Root error boundary UI', () => {
-  it('renders fallback and calls reset', async () => {
-    const user = userEvent.setup();
-    const reset = vi.fn();
+vi.mock('@sentry/nextjs', () => ({
+  captureException: vi.fn(),
+}));
 
-    render(<ErrorBoundary error={new Error('Crash')} reset={reset} />);
+describe('Root error boundary UI', () => {
+  it('renders fallback and calls unstable_retry', async () => {
+    const user = userEvent.setup();
+    const unstable_retry = vi.fn();
+
+    render(
+      <ErrorBoundary
+        error={new Error('Crash')}
+        reset={vi.fn()}
+        unstable_retry={unstable_retry}
+      />,
+    );
 
     expect(screen.getByText('Something went wrong!')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
-    expect(reset).toHaveBeenCalled();
+    expect(unstable_retry).toHaveBeenCalled();
     expect(mockLogger.child).toHaveBeenCalled();
   });
 });

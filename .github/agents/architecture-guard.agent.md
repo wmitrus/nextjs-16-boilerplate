@@ -1,7 +1,7 @@
 ---
 description: 'Use when reviewing architecture, modular-monolith boundaries, dependency direction, DI/composition discipline, auth routing shape, Clerk/bootstrap/onboarding design, security boundary placement, or docs-vs-code drift. Pick this agent over the default agent for architecture review, governance, and repository reality-checking rather than implementation.'
 name: '01 - Architecture Guard'
-tools: [read, search, web]
+tools: [read, search, web, edit]
 user-invocable: true
 agents: []
 ---

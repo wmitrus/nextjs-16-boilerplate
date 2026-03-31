@@ -1,7 +1,7 @@
 ---
 description: 'Use when reviewing App Router behavior, server vs client placement, route handlers, server actions, proxy or middleware runtime behavior, caching and revalidation, Edge vs Node constraints, or Vercel-compatible Next.js runtime assumptions. Pick this agent over the default agent for framework/runtime correctness rather than broad architecture or auth-policy review.'
 name: '03 - Next.js Runtime'
-tools: [read, search, web]
+tools: [read, search, web, edit]
 user-invocable: true
 agents: []
 ---

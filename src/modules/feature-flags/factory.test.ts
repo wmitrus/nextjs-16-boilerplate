@@ -8,35 +8,41 @@ vi.mock('./infrastructure/growthbook/GrowthBookFeatureFlagService', () => ({
   GrowthBookFeatureFlagService: vi.fn(),
 }));
 
+const mockLogger = vi.hoisted(() => {
+  const warn = vi.fn();
+  const child = vi.fn();
+  const instance = { warn, child };
+  child.mockReturnValue(instance);
+  return instance;
+});
+
+vi.mock('@/core/logger/di', () => ({
+  resolveServerLogger: () => mockLogger,
+}));
+
 import type { DrizzleDb } from '@/core/db';
 
 import { createFeatureFlagService } from './factory';
 import { DrizzleFeatureFlagService } from './infrastructure/drizzle/DrizzleFeatureFlagService';
 import { GrowthBookFeatureFlagService } from './infrastructure/growthbook/GrowthBookFeatureFlagService';
-import { StaticFeatureFlagService } from './infrastructure/static/StaticFeatureFlagService';
+import { ResilientFeatureFlagService } from './infrastructure/resilient/ResilientFeatureFlagService';
 
 const fakeDb = {} as DrizzleDb;
 
 describe('createFeatureFlagService', () => {
-  it('returns StaticFeatureFlagService when provider is "static"', () => {
+  it('always wraps the adapter in ResilientFeatureFlagService', () => {
     const svc = createFeatureFlagService('static', {});
-
-    expect(svc).toBeInstanceOf(StaticFeatureFlagService);
+    expect(svc).toBeInstanceOf(ResilientFeatureFlagService);
   });
 
-  it('passes parsed static flags when provider is "static"', () => {
-    const svc = createFeatureFlagService('static', {
-      staticFlags: 'my-flag=true',
-    });
-
-    expect(svc).toBeInstanceOf(StaticFeatureFlagService);
+  it('creates a static adapter when provider is "static"', () => {
+    const svc = createFeatureFlagService('static', { staticFlags: 'f=true' });
+    expect(svc).toBeInstanceOf(ResilientFeatureFlagService);
   });
 
-  it('returns DrizzleFeatureFlagService when provider is "db" and db is provided', () => {
-    const svc = createFeatureFlagService('db', { db: fakeDb });
-
+  it('creates a DrizzleFeatureFlagService when provider is "db" and db is provided', () => {
+    createFeatureFlagService('db', { db: fakeDb });
     expect(DrizzleFeatureFlagService).toHaveBeenCalledWith(fakeDb);
-    expect(svc).toBeDefined();
   });
 
   it('throws when provider is "db" and db is missing', () => {
@@ -45,8 +51,8 @@ describe('createFeatureFlagService', () => {
     );
   });
 
-  it('returns GrowthBookFeatureFlagService when provider is "growthbook" and clientKey is provided', () => {
-    const svc = createFeatureFlagService('growthbook', {
+  it('creates a GrowthBookFeatureFlagService when provider is "growthbook" and clientKey is provided', () => {
+    createFeatureFlagService('growthbook', {
       growthbookClientKey: 'sdk-key',
       growthbookApiHost: 'https://cdn.growthbook.io',
     });
@@ -55,7 +61,6 @@ describe('createFeatureFlagService', () => {
       clientKey: 'sdk-key',
       apiHost: 'https://cdn.growthbook.io',
     });
-    expect(svc).toBeDefined();
   });
 
   it('uses default apiHost when growthbookApiHost is not provided', () => {
@@ -75,12 +80,12 @@ describe('createFeatureFlagService', () => {
     );
   });
 
-  it('falls back to StaticFeatureFlagService for unknown provider values', () => {
+  it('falls back to static (all off) for unknown provider values', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const svc = createFeatureFlagService('unknown' as 'static', {});
 
-    expect(svc).toBeInstanceOf(StaticFeatureFlagService);
+    expect(svc).toBeInstanceOf(ResilientFeatureFlagService);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });

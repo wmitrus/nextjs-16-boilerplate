@@ -4,12 +4,13 @@ import type { RequestIdentitySource } from '@/core/contracts/identity';
 
 import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
+import { NeonRequestIdentitySource } from './infrastructure/neon/NeonRequestIdentitySource';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from './infrastructure/RequestScopedTenantResolver';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
 
 export interface EdgeAuthModuleConfig {
-  authProvider: 'clerk' | 'authjs' | 'supabase';
+  authProvider: 'clerk' | 'authjs' | 'supabase' | 'neon';
 }
 
 type AuthProvider = EdgeAuthModuleConfig['authProvider'];
@@ -24,6 +25,8 @@ function buildIdentitySource(
       return new AuthJsRequestIdentitySource();
     case 'supabase':
       return new SupabaseRequestIdentitySource();
+    case 'neon':
+      return new NeonRequestIdentitySource();
     default:
       throw new Error(
         `[edgeAuthModule] Unknown AUTH_PROVIDER: ${authProvider}`,

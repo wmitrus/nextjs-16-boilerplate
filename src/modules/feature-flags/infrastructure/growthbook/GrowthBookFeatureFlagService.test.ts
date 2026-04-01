@@ -1,0 +1,80 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+import type { AuthorizationContext } from '@/core/contracts/authorization';
+
+const mockGb = vi.hoisted(() => ({
+  init: vi.fn().mockResolvedValue({}),
+  setAttributes: vi.fn().mockResolvedValue(undefined),
+  isOn: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock('@growthbook/growthbook', () => ({
+  GrowthBook: vi.fn().mockImplementation(function () {
+    return mockGb;
+  }),
+}));
+
+import { GrowthBookFeatureFlagService } from './GrowthBookFeatureFlagService';
+
+const ctx: AuthorizationContext = {
+  tenant: { tenantId: 'tenant-1' },
+  subject: { id: 'user-1' },
+  resource: { type: 'feature' },
+  action: 'feature:read',
+};
+
+describe('GrowthBookFeatureFlagService', () => {
+  beforeEach(() => {
+    mockGb.init.mockClear();
+    mockGb.setAttributes.mockClear();
+    mockGb.isOn.mockClear();
+    mockGb.init.mockResolvedValue({});
+    mockGb.setAttributes.mockResolvedValue(undefined);
+    mockGb.isOn.mockReturnValue(false);
+  });
+
+  it('calls init on the GrowthBook instance', async () => {
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-init-test',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+
+    await svc.isEnabled('some-flag', ctx);
+
+    expect(mockGb.init).toHaveBeenCalledWith({ timeout: 2000 });
+  });
+
+  it('returns false when GrowthBook reports flag is off', async () => {
+    mockGb.isOn.mockReturnValue(false);
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-off-test',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+
+    expect(await svc.isEnabled('disabled-flag', ctx)).toBe(false);
+  });
+
+  it('returns true when GrowthBook reports flag is on', async () => {
+    mockGb.isOn.mockReturnValue(true);
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-on-test',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+
+    expect(await svc.isEnabled('enabled-flag', ctx)).toBe(true);
+  });
+
+  it('sets attributes with user id and tenant id from context', async () => {
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-attrs-test',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+
+    await svc.isEnabled('any-flag', ctx);
+
+    expect(mockGb.setAttributes).toHaveBeenCalledWith({
+      id: 'user-1',
+      company: 'tenant-1',
+    });
+  });
+});

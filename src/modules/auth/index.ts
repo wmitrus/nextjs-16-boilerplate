@@ -15,6 +15,7 @@ import type { DrizzleDb } from '@/core/db';
 import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
 import { DrizzleInternalIdentityLookup } from './infrastructure/drizzle/DrizzleInternalIdentityLookup';
+import { NeonRequestIdentitySource } from './infrastructure/neon/NeonRequestIdentitySource';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
 import { SystemIdentitySource } from './infrastructure/system/SystemIdentitySource';
@@ -31,7 +32,7 @@ import { SingleTenantResolver } from '@/modules/provisioning/infrastructure/Sing
 import { DrizzleUserRepository } from '@/modules/user/infrastructure/drizzle/DrizzleUserRepository';
 
 export interface AuthModuleConfig {
-  authProvider: 'clerk' | 'authjs' | 'supabase';
+  authProvider: 'clerk' | 'authjs' | 'supabase' | 'neon';
   tenancyMode: TenancyMode;
   defaultTenantId?: string;
   tenantContextSource?: TenantContextSource;
@@ -52,6 +53,8 @@ function buildIdentitySource(
       return new AuthJsRequestIdentitySource();
     case 'supabase':
       return new SupabaseRequestIdentitySource();
+    case 'neon':
+      return new NeonRequestIdentitySource();
     default:
       throw new Error(`[authModule] Unknown AUTH_PROVIDER: ${authProvider}`);
   }

@@ -181,7 +181,7 @@ These checks cover critical provisioning security paths not fully executable via
 
 ## Notes
 
-- `AUTH_PROVIDER=authjs` and `AUTH_PROVIDER=supabase` are not runtime-complete yet (identity adapters are placeholders).
+- `AUTH_PROVIDER=authjs`, `AUTH_PROVIDER=supabase`, and `AUTH_PROVIDER=neon` are not runtime-complete yet (identity adapters are placeholders).
 - `/security-showcase` mutation check is diagnostic only in this runbook until policy mapping for that action is explicitly aligned.
 - For architecture rationale see:
   - `03 - Tenancy, Organizations, Roles and Onboarding - Runtime Matrix`

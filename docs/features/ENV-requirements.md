@@ -22,7 +22,7 @@ pnpm env:check
 
 Runtime behavior is controlled by independent axes:
 
-1. `AUTH_PROVIDER=clerk|authjs|supabase`
+1. `AUTH_PROVIDER=clerk|authjs|supabase|neon`
 2. `TENANCY_MODE=single|personal|org`
 3. `TENANT_CONTEXT_SOURCE=provider|db` (required only for `TENANCY_MODE=org`)
 
@@ -50,13 +50,13 @@ The app fails fast at startup when these rules are violated:
   - `NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL`
   - `NEXT_PUBLIC_CLERK_WAITLIST_URL`
 
-### 4.2 Auth.js / Supabase
+### 4.2 Auth.js / Supabase / Neon
 
-No Clerk keys are required when `AUTH_PROVIDER=authjs|supabase`.
+No Clerk keys are required when `AUTH_PROVIDER=authjs|supabase|neon`.
 
 Important current status:
 
-- `AuthJsRequestIdentitySource` and `SupabaseRequestIdentitySource` are placeholder adapters (return no authenticated identity).
+- `AuthJsRequestIdentitySource`, `SupabaseRequestIdentitySource`, and `NeonRequestIdentitySource` are placeholder adapters that fail fast before returning authenticated identity.
 - These providers are architecture-ready but not runtime-complete yet.
 
 ## 5. Tenancy Vars

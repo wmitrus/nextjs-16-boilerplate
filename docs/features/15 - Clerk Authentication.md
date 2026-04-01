@@ -9,7 +9,7 @@ Clerk is one supported `AUTH_PROVIDER` adapter. It is integrated through contrac
 Current provider status:
 
 - `clerk`: runtime-ready.
-- `authjs`, `supabase`: architecture-ready, adapter implementation pending.
+- `authjs`, `supabase`, `neon`: placeholder-only, adapter implementation pending.
 
 ## 2. Runtime Boundaries
 

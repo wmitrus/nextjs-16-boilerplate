@@ -317,7 +317,7 @@ Expected:
 
 ## 9. Known limits in current runtime
 
-- `AUTH_PROVIDER=authjs` and `AUTH_PROVIDER=supabase` are not yet runtime-complete.
+- `AUTH_PROVIDER=authjs`, `AUTH_PROVIDER=supabase`, and `AUTH_PROVIDER=neon` are not yet runtime-complete.
 - Identity source adapters for those providers currently return no authenticated identity.
 
 Do not treat those provider runtime failures as tenancy/provisioning regressions yet.

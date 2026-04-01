@@ -49,7 +49,9 @@ export const env = createEnv({
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    AUTH_PROVIDER: z.enum(['clerk', 'authjs', 'supabase']).default('clerk'),
+    AUTH_PROVIDER: z
+      .enum(['clerk', 'authjs', 'supabase', 'neon'])
+      .default('clerk'),
     DB_PROVIDER: z.enum(['drizzle', 'prisma']).default('drizzle'),
     DATABASE_URL: z.string().optional(),
     DB_DRIVER: z.enum(['pglite', 'postgres']).optional(),

@@ -21,11 +21,18 @@ pnpm env:check
 
 ### 3.1 Auth provider axis
 
-- `AUTH_PROVIDER=clerk|authjs|supabase`
+- `AUTH_PROVIDER=clerk|authjs|supabase|neon`
 
 Cross-field validation:
 
 - when `AUTH_PROVIDER=clerk`, both Clerk keys are required
+
+Current runtime status:
+
+- `clerk`: implemented
+- `authjs`: placeholder only
+- `supabase`: placeholder only
+- `neon`: placeholder only
 
 ### 3.2 Tenancy axis
 

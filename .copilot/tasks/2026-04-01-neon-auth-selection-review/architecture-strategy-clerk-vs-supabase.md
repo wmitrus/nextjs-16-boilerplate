@@ -60,11 +60,12 @@ It is still not implemented, but it is aligned with the existing modular boundar
 
 ## Why Neon Auth Is Not The Same Kind Of Future Option
 
-Neon Auth is not represented in the current provider union, adapter surface, or UI path.
+Neon Auth is now represented in the provider union only as a placeholder-only target.
+
+It is still not represented in a runtime-ready adapter surface or UI path.
 
 Architecturally, adding Neon Auth would require:
 
-- extending the provider contract itself
 - adding a new infrastructure adapter family
 - generalizing or replacing the current Clerk-specific UI flow
 - revalidating proxy behavior, session handling, and post-auth bootstrap assumptions

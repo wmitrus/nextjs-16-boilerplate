@@ -28,7 +28,7 @@ Prepare the repository for future Neon Auth support at the contract and document
 - [x] update auth module wiring for placeholder provider selection
 - [x] update runtime status documentation to mark Neon as not ready yet
 - [x] align edge auth-module wiring with the Neon placeholder provider
-- [ ] hand off to Next.js Runtime review for real provider integration only if the team chooses to build it
+- [x] document the future `03 - Next.js Runtime` handoff as deferred follow-up work outside the current scope
 
 ## Handoff Trigger
 
@@ -42,3 +42,9 @@ Required parallel or preceding reviews when that starts:
 
 - `02 - Security & Auth` for trust-boundary and provider-isolation review
 - `04 - Implementation Agent` after the runtime shape is approved
+
+## Completion Note
+
+This implementation plan is complete for the approved placeholder-only scope.
+
+Any real Neon runtime integration remains intentionally deferred and requires a new task.

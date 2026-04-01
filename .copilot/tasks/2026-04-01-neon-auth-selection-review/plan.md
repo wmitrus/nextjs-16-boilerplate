@@ -17,6 +17,8 @@ Determine whether the Neon project-creation option `Auth` should be enabled for 
 - [x] `implementation-plan.md` completed
 - [x] minimal Neon placeholder provider implementation completed
 - [x] implementation-agent hardening pass completed
+- [x] final validation completed
+- [x] task closeout artifacts synchronized
 
 ## Scope
 
@@ -45,6 +47,7 @@ Determine whether the Neon project-creation option `Auth` should be enabled for 
 - Architecture guidance is now recorded for: when to stay on Clerk, why Supabase is the best future adapter candidate, and why Neon Auth is a larger migration topic.
 - The repository now includes a failing-fast Neon placeholder adapter and matching status documentation. Neon remains non-ready for runtime use.
 - Edge auth composition now matches the declared Neon placeholder provider, with focused unit coverage.
+- Final validation passed for the placeholder-only scope: `pnpm typecheck`, focused Vitest auth placeholder tests, and `pnpm lint --fix`.
 
 ## Recommended Next Step
 
@@ -53,3 +56,7 @@ Determine whether the Neon project-creation option `Auth` should be enabled for 
 - If the team wants to preserve a low-cost alternative on the roadmap, Supabase is the best fit for a future adapter path in the current repository design.
 - `04 - Implementation Agent` has completed the placeholder-hardening pass.
 - Switch to `03 - Next.js Runtime` before any real Neon runtime integration beyond placeholders.
+
+## Completion Status
+
+This task is complete for its approved scope: Neon deployment decision, provider-strategy guidance, and placeholder-only repository preparation.

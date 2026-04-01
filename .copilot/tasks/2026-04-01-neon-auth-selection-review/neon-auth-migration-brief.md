@@ -8,7 +8,7 @@ Explain why a future Neon Auth migration would be materially larger than a Supab
 
 Neon Auth is not just missing implementation in the current codebase.
 
-It is outside the repository's current auth-provider contract.
+It is represented in the repository's auth-provider contract only as a placeholder-only target.
 
 That makes Neon Auth a **new provider integration plus architectural expansion**, whereas Supabase is a **pre-modeled but unimplemented provider path**.
 
@@ -21,10 +21,11 @@ The supported external provider union in `src/core/contracts/identity.ts` is:
 - `clerk`
 - `authjs`
 - `supabase`
+- `neon`
 
-Neon Auth is not represented here.
+Neon is represented here only as a failing-fast placeholder.
 
-Adding it means changing core-level provider typing and every path that depends on provider discrimination.
+The remaining work is still larger than Supabase because the runtime, delivery, and session boundaries are not implemented.
 
 ### 2. It has no adapter seam in the current repo
 

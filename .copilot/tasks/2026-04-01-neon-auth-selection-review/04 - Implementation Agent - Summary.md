@@ -5,7 +5,7 @@
 - Task ID: `2026-04-01-neon-auth-selection-review`
 - Task Objective: implement the smallest safe code changes that keep the Neon placeholder path internally consistent while preserving the reviewed architecture and security constraints.
 - Current Run Scope: edge auth-module parity, focused placeholder hardening, auth-doc synchronization.
-- Status: IN PROGRESS
+- Status: COMPLETED
 - Last Updated: 2026-04-01
 - Related Control Artifacts: `plan.md`, `intake.md`, `implementation-plan.md`, `01 - Architecture Guard - Summary.md`, `02 - Security & Auth - Summary.md`
 
@@ -56,6 +56,8 @@
 - focused validation executed:
   - editor diagnostics on touched files
   - targeted Vitest run for auth placeholder wiring
+  - full repository typecheck
+  - final lint pass
 
 ## Files Changed
 
@@ -97,24 +99,28 @@
 
 - commands run:
   - `pnpm vitest run src/modules/auth/edge.test.ts src/modules/auth/index.test.ts src/modules/auth/infrastructure/neon/NeonRequestIdentitySource.test.ts --config vitest.unit.config.ts --coverage.enabled false`
+  - `pnpm typecheck`
+  - `pnpm lint --fix`
 - results:
   - 3 test files passed, 8 tests passed
+  - repository typecheck passed
+  - lint fix pass completed with no remaining workspace errors
   - editor diagnostics reported no errors in touched code files
 - validation not run:
-  - no full app typecheck, lint, or end-to-end auth flow run
+  - no end-to-end auth flow run for Neon runtime
 - residual risk from validation gaps:
   - remaining risk is architectural, not local: Neon runtime behavior is still unimplemented in layout, proxy session acquisition, and auth UI
 
 ## Artifact Synchronization
 
 - `plan.md` updates:
-  - should note that an implementation-agent hardening pass was completed
+  - implementation and validation completion reflected
 - `intake.md` updates:
   - no intake change required beyond existing resolved outcome
 - `implementation-plan.md` updates:
-  - should note the edge-auth parity step and the runtime-integration blocker
+  - completion recorded and future runtime handoff marked deferred
 - specialist artifact updates:
-  - created the persistent `04 - Implementation Agent - Summary.md`
+  - refreshed the persistent `04 - Implementation Agent - Summary.md`
 
 ## Open Questions / Blockers
 
@@ -144,5 +150,5 @@
 
 - Date: 2026-04-01
 - Trigger: user asked the Implementation Agent to take the existing instructions and reviews and implement the approved work step by step
-- Summary of change: completed the smallest safe implementation step by aligning the edge auth module with the existing Neon placeholder path, added focused tests, and synchronized auth-facing docs while documenting the blocker to real Neon runtime integration
+- Summary of change: completed the placeholder-only Neon hardening scope, validated it with typecheck, focused tests, and lint, and synchronized task artifacts with the final repository state
 - Sections refreshed: all

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 
 import { FEATURE_FLAGS } from '@/core/contracts';
@@ -27,6 +28,12 @@ export default function FeatureFlagsDemoPage() {
 }
 
 async function FeatureFlagsDemoContent() {
+  // connection() opts this route into dynamic rendering.
+  // Required before calling getAppContainer() because the DI infrastructure
+  // initializer uses Pino which calls Date.now() — triggering Next.js 16
+  // prerender errors unless a dynamic data source is accessed first.
+  await connection();
+
   const requestContainer = getAppContainer().createChild();
   const flagService = requestContainer.resolve<FeatureFlagService>(
     FEATURE_FLAGS.SERVICE,

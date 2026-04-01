@@ -43,6 +43,13 @@
       "when": 1741363295000,
       "tag": "0005_generic_profile_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1775058326717,
+      "tag": "0006_breezy_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

@@ -118,8 +118,10 @@ export class TenantNotProvisionedError extends Error {
 /**
  * Auth provider identifier — one of the supported external identity providers.
  * Used as a discriminant for identity mapping (provider + externalId => internalId).
+ *
+ * `neon` is currently placeholder-only and is not runtime-complete.
  */
-export type ExternalAuthProvider = 'clerk' | 'authjs' | 'supabase';
+export type ExternalAuthProvider = 'clerk' | 'authjs' | 'supabase' | 'neon';
 
 /**
  * Read-only lookup: resolves external provider IDs to internal database UUIDs.

@@ -67,6 +67,20 @@ describe('createAuthModule', () => {
     expect(userRepository).toBeInstanceOf(DrizzleUserRepository);
   });
 
+  it('registers DB-backed user repository for neon provider', () => {
+    const container = createContainerWithDb();
+    const authModule = createAuthModule({
+      ...baseConfig,
+      authProvider: 'neon',
+    });
+
+    authModule.register(container);
+    const userRepository = container.resolve<UserRepository>(
+      AUTH.USER_REPOSITORY,
+    );
+    expect(userRepository).toBeInstanceOf(DrizzleUserRepository);
+  });
+
   it('fails fast when DB runtime is missing', () => {
     const container = createContainer();
     const authModule = createAuthModule({

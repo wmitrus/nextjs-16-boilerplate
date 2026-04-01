@@ -114,10 +114,12 @@ DATABASE_URL=postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=re
 3. Run:
 
 ```bash
-pnpm db:migrate:prod
+pnpm db:migrate:prod:local
 ```
 
-The script (`node --env-file=.env.production node_modules/drizzle-kit/bin.cjs migrate --config=src/core/db/migrations/config/drizzle.prod.ts`) loads `.env.production` via Node's built-in `--env-file` flag (Node 24 required, already enforced by `.node-version`).
+Use `db:migrate:prod:local` only for local operator runs that intentionally load `.env.production`.
+
+`db:migrate:prod` must stay CI-friendly and read `DATABASE_URL` from the active environment without requiring a local file.
 
 **No SSH tunnel required.** Neon supports direct external TLS connections from any IP.
 
@@ -141,6 +143,8 @@ If you use a build override command, adjust to:
 ```bash
 DATABASE_URL=$DATABASE_URL_UNPOOLED pnpm db:migrate:prod && pnpm build
 ```
+
+This works because `db:migrate:prod` does not require `.env.production`; it reads the injected `DATABASE_URL` directly.
 
 ### Automated Migrations on Production
 

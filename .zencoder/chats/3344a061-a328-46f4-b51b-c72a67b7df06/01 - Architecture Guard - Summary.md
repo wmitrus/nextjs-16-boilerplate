@@ -221,3 +221,59 @@ This change must be part of the implementation task. Without it, feature flags r
 - **Trigger**: Initial task intake for feature-flags use-case.
 - **Summary of change**: Full architecture review. Six binding decisions made. Critical DI wiring gap identified. Docs drift catalogued.
 - **Sections refreshed**: All sections (initial entry).
+
+---
+
+### Update Entry — Demo Design Review (Step 13)
+
+- **Date**: 2026-04-01
+- **Trigger**: User requested a feature-flags demo page (Phase 3).
+- **Summary of change**: Architecture Guard reviewed proposed demo design. Seven binding decisions produced for the demo implementation.
+
+#### Demo Binding Decisions
+
+**D1 — Route location: APPROVED**
+`src/app/feature-flags-demo/page.tsx` as an async RSC page. Mirrors `src/app/security-showcase/page.tsx` exactly. Public, no auth required.
+
+**D2 — DI resolution pattern: APPROVED**
+Resolve `FEATURE_FLAGS.SERVICE` via `getAppContainer().createChild()`. This is the established pattern for RSC pages in this repo (confirmed in `security-showcase/page.tsx`). No alternative pattern needed.
+
+**D3 — Synthetic `AuthorizationContext` for demo: APPROVED WITH CONSTRAINT**
+
+- `TenantId` and `SubjectId` are both `string` — type-safe to use literal values.
+- The static adapter ignores context, so `{ tenantId: 'demo', subjectId: 'anonymous' }` is safe.
+- For DB/GrowthBook adapters, the anonymous context returns `false` for all flags — the correct default (no demo flags exist for `tenantId='demo'` in those adapters).
+- **CONSTRAINT**: Name the constant `demoAuthContext` (not `guestContext`). Add an inline comment: `// Demo-only synthetic context — carries no security significance.` The RSC page must display a visible note that evaluation uses an anonymous demo context.
+
+**D4 — Exposing active provider name: APPROVED WITH CONSTRAINT**
+
+- The RSC page (`page.tsx`) may read `env.FEATURE_FLAG_PROVIDER` directly. It is a server component; `env` is the validated T3-Env schema. Reading it here is safe and consistent with how other pages read env.
+- **CONSTRAINT**: Pass the provider value as a prop to components (`provider: string`). Components must NOT import or read `env` themselves. Do NOT add any method to `FeatureFlagService` or the contract to expose provider identity — that would leak infrastructure concern into the contract boundary.
+
+**D5 — Feature module location: APPROVED**
+`src/features/feature-flags-showcase/components/` is the correct location. This matches the existing `src/features/security-showcase/` pattern.
+
+**D6 — Homepage link placement: APPROVED WITH APPROACH**
+
+- Do NOT modify `FeaturesGrouped.tsx` to add a dynamic link (it is a static marketing section).
+- Add `Feature Flags` as a named entry in `FeaturesGrouped.tsx` under an appropriate group (e.g., "Production Resilience & Security") as a static text feature description — no link needed there.
+- Add a navigational link to `/feature-flags-demo` in the `Hero.tsx` or `CTA.tsx` section, or as a plain `<Link>` in the page footer. Keep it unobtrusive — one small link is sufficient.
+
+**D7 — No new contract methods: BINDING**
+Do NOT add `getProviderName()`, `getProviderType()`, or any introspection method to `FeatureFlagService`. The contract stays: `isEnabled(flag, context): Promise<boolean>`. Provider identity is an infrastructure detail, not an app contract.
+
+#### Demo Component Constraint
+
+- `FeatureFlagStatusCard.tsx` receives `{ flagName: string; enabled: boolean; provider: string }` as props.
+- No component may import from `@/modules/feature-flags/**` directly. All flag evaluation happens in the RSC page.
+- No component may import `env` from `@/core/env`.
+
+#### Demo Flag Pre-Configuration
+
+Add to `.env.example` (if not already present from Step 2):
+
+```bash
+FEATURE_FLAGS_STATIC=demo.new-dashboard-ui=true,demo.beta-exports=false,demo.experimental-analytics=true
+```
+
+- **Sections refreshed**: Added demo design review section with 7 binding decisions.

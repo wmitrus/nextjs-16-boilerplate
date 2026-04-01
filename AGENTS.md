@@ -53,6 +53,26 @@ In this repository, middleware-style request interception lives in **`src/proxy.
 
 Do not search for `middleware.ts`. Do not treat its absence as a finding. Analyze `src/proxy.ts` directly.
 
+## RSC Dynamic Rendering — `getAppContainer()` Pattern
+
+Any async RSC page or component that calls `getAppContainer()` **must** call `await connection()` (from `next/server`) **before** that call.
+
+**Why**: The DI infrastructure initializer (`getInfrastructure()`) calls `logger.debug()` via Pino, which records timestamps using `Date.now()` internally. Next.js 16 prerender mode throws an error if `Date.now()` is called before any request-time data source is accessed.
+
+**Fix pattern**:
+
+```typescript
+import { connection } from 'next/server';
+
+async function MyServerComponent() {
+  await connection(); // opts route into dynamic rendering — MUST come before getAppContainer()
+  const requestContainer = getAppContainer().createChild();
+  // ...
+}
+```
+
+`headers()` or `cookies()` from `next/headers` also satisfy this requirement (and are used by `security-showcase` which reads cookies). Use `connection()` when no actual request data is needed.
+
 ## Dependencies
 
 **Main Dependencies**:

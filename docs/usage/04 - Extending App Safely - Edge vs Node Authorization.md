@@ -69,7 +69,7 @@ If you need to choose one and are unsure, choose Node context with explicit `cre
 
 ## External auth provider mapping (implementation note)
 
-For provider integrations (Clerk/AuthJS/Supabase):
+For provider integrations (Clerk/AuthJS/Supabase/Neon):
 
 - map external IDs to internal UUIDs in Node runtime (`provider + external id -> internal id`)
 - keep adapter contracts segregated:

@@ -100,7 +100,7 @@ If uncertain, default to Node and keep middleware minimal.
 
 ## External identity mapping rule
 
-When integrating external auth providers (Clerk/AuthJS/Supabase), keep mapping provider-agnostic and port-driven:
+When integrating external auth providers (Clerk/AuthJS/Supabase/Neon), keep mapping provider-agnostic and port-driven:
 
 - map `provider + external_user_id -> internal user UUID`
 - map `provider + external_tenant_id -> internal tenant UUID`
@@ -114,7 +114,7 @@ Mapping runtime rule:
 
 ```mermaid
 flowchart LR
-  A[External auth provider\nClerk/AuthJS/Supabase] --> B[RequestScopedIdentityProvider]
+  A[External auth provider\nClerk/AuthJS/Supabase/Neon] --> B[RequestScopedIdentityProvider]
   A --> C[Tenant resolver strategy\n(single/personal/org-provider/org-db)]
   B --> D[InternalIdentityLookup\nread-only lookup]
   C --> D

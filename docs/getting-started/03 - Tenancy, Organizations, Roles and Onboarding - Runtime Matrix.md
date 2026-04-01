@@ -6,11 +6,12 @@ This is the canonical runtime guide for testing all tenant/org/role/onboarding u
 
 ### 1.1 By auth provider
 
-| AUTH_PROVIDER | Runtime status | Notes                                                 |
-| ------------- | -------------- | ----------------------------------------------------- |
-| `clerk`       | Ready          | Full flow available with current adapters.            |
-| `authjs`      | Not ready yet  | Identity source adapter is placeholder (no `userId`). |
-| `supabase`    | Not ready yet  | Identity source adapter is placeholder (no `userId`). |
+| AUTH_PROVIDER | Runtime status | Notes                                                                                   |
+| ------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `clerk`       | Ready          | Full flow available with current adapters.                                              |
+| `authjs`      | Not ready yet  | Identity source adapter is placeholder (no `userId`).                                   |
+| `supabase`    | Not ready yet  | Identity source adapter is placeholder (no `userId`).                                   |
+| `neon`        | Not ready yet  | Identity source adapter is placeholder; session and UI integration are not implemented. |
 
 ### 1.2 By tenancy mode (with Clerk)
 
@@ -220,7 +221,7 @@ Execution model:
 
 ## 9. Important Testing Limitation
 
-`authjs` and `supabase` adapters are not implemented yet, so runtime tests for those providers are expected to fail at identity acquisition stage.
+`authjs`, `supabase`, and `neon` adapters are not implemented yet, so runtime tests for those providers are expected to fail at identity acquisition stage.
 
 Use Clerk profiles to validate tenancy/provisioning logic now; add provider-specific runtime tests after adapter implementation.
 
@@ -229,6 +230,8 @@ Use Clerk profiles to validate tenancy/provisioning logic now; add provider-spec
 - env schema: `src/core/env.ts`
 - auth module resolver wiring: `src/modules/auth/index.ts`
 - clerk identity source: `src/modules/auth/infrastructure/clerk/ClerkRequestIdentitySource.ts`
+- supabase identity source placeholder: `src/modules/auth/infrastructure/supabase/SupabaseRequestIdentitySource.ts`
+- neon identity source placeholder: `src/modules/auth/infrastructure/neon/NeonRequestIdentitySource.ts`
 - onboarding action: `src/modules/auth/ui/onboarding-actions.ts`
 - provisioning service: `src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.ts`
 - route auth middleware: `src/security/middleware/with-auth.ts`

@@ -3,6 +3,7 @@ import type { DrizzleDb } from '@/core/db';
 
 import { DrizzleFeatureFlagService } from './infrastructure/drizzle/DrizzleFeatureFlagService';
 import { GrowthBookFeatureFlagService } from './infrastructure/growthbook/GrowthBookFeatureFlagService';
+import { ResilientFeatureFlagService } from './infrastructure/resilient/ResilientFeatureFlagService';
 import {
   StaticFeatureFlagService,
   parseStaticFlagsEnv,
@@ -18,6 +19,14 @@ export interface FeatureFlagFactoryOptions {
 export function createFeatureFlagService(
   provider: 'static' | 'db' | 'growthbook',
   opts: FeatureFlagFactoryOptions = {},
+): FeatureFlagService {
+  const delegate = createDelegate(provider, opts);
+  return new ResilientFeatureFlagService(delegate);
+}
+
+function createDelegate(
+  provider: 'static' | 'db' | 'growthbook',
+  opts: FeatureFlagFactoryOptions,
 ): FeatureFlagService {
   switch (provider) {
     case 'static':

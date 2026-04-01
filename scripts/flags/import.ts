@@ -1,31 +1,21 @@
+import '../load-env';
+
 import * as fs from 'fs';
 
-import { eq, and, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { createDb } from '@/core/db/create-db';
-import type { DbDriver, DbProvider, DrizzleDb } from '@/core/db/types';
+import type { DrizzleDb } from '@/core/db/types';
 
 import type { FlagsFile } from './types';
+import {
+  isSchemaNotFoundError,
+  parseArg,
+  resolveDriver,
+  resolveProvider,
+} from './utils';
 
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
-
-function parseArg(name: string): string | undefined {
-  const prefix = `--${name}=`;
-  const arg = process.argv.find((a) => a.startsWith(prefix));
-  return arg ? arg.slice(prefix.length) : undefined;
-}
-
-function resolveDriver(): DbDriver {
-  const explicit = process.env.DB_DRIVER?.trim();
-  if (explicit === 'postgres' || explicit === 'pglite') return explicit;
-  return process.env.NODE_ENV === 'production' ? 'postgres' : 'pglite';
-}
-
-function resolveProvider(): DbProvider {
-  return (
-    (process.env.DB_PROVIDER?.trim() as DbProvider | undefined) ?? 'drizzle'
-  );
-}
 
 function readInput(filePath: string | undefined): FlagsFile {
   let raw: string;
@@ -110,6 +100,14 @@ async function run(): Promise<void> {
 
   try {
     await upsertFlags(dbRuntime.db, data);
+  } catch (err) {
+    if (isSchemaNotFoundError(err)) {
+      console.error(
+        "[flags:import] DB schema not ready. Run 'pnpm db:migrate:dev' first to apply the feature_flags migration.",
+      );
+      process.exit(1);
+    }
+    throw err;
   } finally {
     await dbRuntime.close?.();
   }

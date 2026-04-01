@@ -1,3 +1,15 @@
+# [1.13.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.12.0...v1.13.0) (2026-04-01)
+
+
+### Features
+
+* **auth:** add neon as an auth provider option ([76f44c9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/76f44c99cbbcd8304750a3d0dcfef85c2b42062d))
+* **auth:** add neon as an auth provider option ([7069cbd](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7069cbd6f2ec1bf5dd705c5dc253577c5f47577a))
+* **auth:** add Neon placeholder support ([0fb43cc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0fb43ccdaccb7da45b950dde8cf0615445b16666))
+* **auth:** add NeonRequestIdentitySource placeholder implementation ([4de3e5f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4de3e5f6ac200e71f7777fe887234e387687f8d2))
+* **env:** add neon as an AUTH_PROVIDER option ([e818a74](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e818a740d17a32a598631ebe4f386c0fb9016ae6))
+* **identity:** add neon as an external auth provider option ([d3359a7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d3359a78dbfd737bcde2d53cc4d6cd52bbc1a981))
+
 # [1.12.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.11.0...v1.12.0) (2026-03-31)
 
 

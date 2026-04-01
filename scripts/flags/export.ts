@@ -1,30 +1,14 @@
+import '../load-env';
+
 import * as fs from 'fs';
 
 import { createDb } from '@/core/db/create-db';
-import type { DbDriver, DbProvider } from '@/core/db/types';
 
 import type { FlagsFile } from './types';
+import { parseArg, resolveDriver, resolveProvider } from './utils';
 
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
 import { parseStaticFlagsEnv } from '@/modules/feature-flags/infrastructure/static/StaticFeatureFlagService';
-
-function parseArg(name: string): string | undefined {
-  const prefix = `--${name}=`;
-  const arg = process.argv.find((a) => a.startsWith(prefix));
-  return arg ? arg.slice(prefix.length) : undefined;
-}
-
-function resolveDriver(): DbDriver {
-  const explicit = process.env.DB_DRIVER?.trim();
-  if (explicit === 'postgres' || explicit === 'pglite') return explicit;
-  return process.env.NODE_ENV === 'production' ? 'postgres' : 'pglite';
-}
-
-function resolveProvider(): DbProvider {
-  return (
-    (process.env.DB_PROVIDER?.trim() as DbProvider | undefined) ?? 'drizzle'
-  );
-}
 
 async function exportStatic(): Promise<FlagsFile> {
   const raw = process.env.FEATURE_FLAGS_STATIC;

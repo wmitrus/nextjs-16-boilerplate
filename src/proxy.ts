@@ -168,7 +168,7 @@ async function nonClerkProxy(request: NextRequest): Promise<NextResponse> {
  *   clerkMiddleware() wraps the pipeline and a request-scoped identity source
  *   is injected from Clerk auth() output.
  *
- * - AUTH_PROVIDER=authjs|supabase:
+ * - AUTH_PROVIDER=authjs|supabase|neon:
  *   runs the same security middleware chain with provider-specific edge auth module
  *   wiring (no Clerk wrapper).
  *

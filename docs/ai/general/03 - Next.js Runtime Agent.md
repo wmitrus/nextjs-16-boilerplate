@@ -42,6 +42,22 @@ Protect the repository's runtime correctness around:
 - Do not spend time searching for `middleware.ts` or treating its absence as a finding.
 - For middleware-like concerns, inspect `src/proxy.ts` first.
 
+### RSC Dynamic Rendering — `getAppContainer()` Pattern
+
+Any async RSC page or component that calls `getAppContainer()` **must** call `await connection()` (from `next/server`) **before** that call.
+
+**Why**: `getAppContainer()` → `createRequestContainer()` → `getInfrastructure()` invokes `logger.debug()` via Pino. Pino records timestamps using `Date.now()` internally. Next.js 16 prerender mode throws:
+
+```
+Route used `Date.now()` before accessing uncached data (fetch, cookies, headers, connection, searchParams).
+```
+
+**Fix**: `await connection()` from `next/server` at the top of the async component, before any DI container call. This opts the route into dynamic rendering and suppresses the error.
+
+**Reference**: `src/app/feature-flags-demo/page.tsx` (uses `connection()`). `src/app/security-showcase/page.tsx` uses `await headers()` which also works because it reads request-time data.
+
+**Rule**: Never design an RSC page that calls `getAppContainer()` without one of `connection()`, `headers()`, `cookies()`, or `searchParams` being awaited first. Treat this as MAJOR in runtime reviews.
+
 ## Working Mode
 
 - Prefer read-only exploration first.

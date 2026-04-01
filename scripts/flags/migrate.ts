@@ -1,36 +1,27 @@
+import '../load-env';
+
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { createDb } from '@/core/db/create-db';
-import type { DbDriver, DbProvider, DrizzleDb } from '@/core/db/types';
+import type { DrizzleDb } from '@/core/db/types';
 
 import type { FlagsFile } from './types';
+import {
+  isSchemaNotFoundError,
+  parseArg,
+  resolveDriver,
+  resolveProvider,
+} from './utils';
 
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
 import { parseStaticFlagsEnv } from '@/modules/feature-flags/infrastructure/static/StaticFeatureFlagService';
 
-function parseArg(name: string): string | undefined {
-  const prefix = `--${name}=`;
-  const arg = process.argv.find((a) => a.startsWith(prefix));
-  return arg ? arg.slice(prefix.length) : undefined;
-}
-
-function resolveDriver(): DbDriver {
-  const explicit = process.env.DB_DRIVER?.trim();
-  if (explicit === 'postgres' || explicit === 'pglite') return explicit;
-  return process.env.NODE_ENV === 'production' ? 'postgres' : 'pglite';
-}
-
-function resolveProvider(): DbProvider {
-  return (
-    (process.env.DB_PROVIDER?.trim() as DbProvider | undefined) ?? 'drizzle'
-  );
-}
-
-function readStaticFlags(): FlagsFile {
+export function readStaticFlags(): FlagsFile {
   const raw = process.env.FEATURE_FLAGS_STATIC;
   const parsed = parseStaticFlagsEnv(raw);
   const flags: FlagsFile['flags'] = {};
   for (const [key, enabled] of Object.entries(parsed)) {
+    // eslint-disable-next-line security/detect-object-injection
     flags[key] = { enabled, tenantId: null };
   }
   return { flags };
@@ -88,7 +79,7 @@ async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
   console.error(`[flags:migrate] Migrated ${entries.length} flag(s) to DB.`);
 }
 
-function writeToStaticFormat(data: FlagsFile): void {
+export function writeToStaticFormat(data: FlagsFile): void {
   const pairs = Object.entries(data.flags)
     .filter(([, entry]) => entry.tenantId === null)
     .map(([key, entry]) => `${key}=${entry.enabled}`)
@@ -132,12 +123,28 @@ async function run(): Promise<void> {
       );
       process.exit(1);
     }
+  } catch (err) {
+    if (isSchemaNotFoundError(err)) {
+      console.error(
+        "[flags:migrate] DB schema not ready. Run 'pnpm db:migrate:dev' first to apply the feature_flags migration.",
+      );
+      process.exit(1);
+    }
+    throw err;
   } finally {
     await dbRuntime.close?.();
   }
 }
 
-run().catch((err: unknown) => {
-  console.error('[flags:migrate] Fatal error:', err);
-  process.exit(1);
-});
+const isMain =
+  typeof process.argv[1] === 'string' &&
+  (process.argv[1].endsWith('/migrate.ts') ||
+    process.argv[1].endsWith('/migrate.js') ||
+    process.argv[1].endsWith('/migrate'));
+
+if (isMain) {
+  run().catch((err: unknown) => {
+    console.error('[flags:migrate] Fatal error:', err);
+    process.exit(1);
+  });
+}

@@ -1,23 +1,25 @@
-import { GrowthBook } from '@growthbook/growthbook';
+import { GrowthBookClient } from '@growthbook/growthbook';
 
 import type { AuthorizationContext } from '@/core/contracts/authorization';
 import type { FeatureFlagService } from '@/core/contracts/feature-flags';
 
-interface CacheEntry {
-  gb: GrowthBook;
+interface ClientEntry {
+  client: GrowthBookClient;
   ready: Promise<void>;
 }
 
-const instanceCache = new Map<string, CacheEntry>();
+const clientCache = new Map<string, ClientEntry>();
 
-function getOrCreateInstance(clientKey: string, apiHost: string): CacheEntry {
-  const existing = instanceCache.get(clientKey);
+function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
+  const existing = clientCache.get(clientKey);
   if (existing) return existing;
 
-  const gb = new GrowthBook({ clientKey, apiHost });
-  const ready = gb.init({ timeout: 2000 }).then(() => undefined);
-  const entry: CacheEntry = { gb, ready };
-  instanceCache.set(clientKey, entry);
+  const client = new GrowthBookClient({ clientKey, apiHost });
+  const ready = client
+    .init({ timeout: 2000, streaming: true })
+    .then(() => undefined);
+  const entry: ClientEntry = { client, ready };
+  clientCache.set(clientKey, entry);
   return entry;
 }
 
@@ -39,15 +41,14 @@ export class GrowthBookFeatureFlagService implements FeatureFlagService {
     flag: string,
     context: AuthorizationContext,
   ): Promise<boolean> {
-    const { gb, ready } = getOrCreateInstance(this.clientKey, this.apiHost);
-
+    const { client, ready } = getOrCreateClient(this.clientKey, this.apiHost);
     await ready;
-
-    await gb.setAttributes({
-      id: context.subject.id,
-      company: context.tenant.tenantId,
+    await client.refreshFeatures();
+    return client.isOn(flag, {
+      attributes: {
+        id: context.subject.id,
+        company: context.tenant.tenantId,
+      },
     });
-
-    return gb.isOn(flag);
   }
 }

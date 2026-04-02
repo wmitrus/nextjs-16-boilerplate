@@ -17,10 +17,14 @@ const mockClient = vi.hoisted(() => ({
   isOn: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('@growthbook/growthbook', () => ({
-  GrowthBookClient: vi.fn().mockImplementation(function () {
+const GrowthBookClientMock = vi.hoisted(() =>
+  vi.fn().mockImplementation(function () {
     return mockClient;
   }),
+);
+
+vi.mock('@growthbook/growthbook', () => ({
+  GrowthBookClient: GrowthBookClientMock,
 }));
 
 import { GrowthBookFeatureFlagService } from './GrowthBookFeatureFlagService';
@@ -37,6 +41,7 @@ describe('GrowthBookFeatureFlagService', () => {
     mockClient.init.mockClear();
     mockClient.refreshFeatures.mockClear();
     mockClient.isOn.mockClear();
+    GrowthBookClientMock.mockClear();
     mockClient.init.mockResolvedValue({});
     mockClient.refreshFeatures.mockResolvedValue(undefined);
     mockClient.isOn.mockReturnValue(false);
@@ -103,6 +108,29 @@ describe('GrowthBookFeatureFlagService', () => {
         id: 'user-1',
         company: 'tenant-1',
       },
+    });
+  });
+
+  it('creates separate client instances for different apiHost values with same clientKey', async () => {
+    const svc1 = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-host-test',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+    const svc2 = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-host-test',
+      apiHost: 'https://self-hosted.example.com',
+    });
+
+    await svc1.isEnabled('flag-a', ctx);
+    await svc2.isEnabled('flag-b', ctx);
+
+    expect(GrowthBookClientMock).toHaveBeenCalledWith({
+      clientKey: 'sdk-key-host-test',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+    expect(GrowthBookClientMock).toHaveBeenCalledWith({
+      clientKey: 'sdk-key-host-test',
+      apiHost: 'https://self-hosted.example.com',
     });
   });
 });

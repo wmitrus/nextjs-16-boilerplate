@@ -11,7 +11,8 @@ interface ClientEntry {
 const clientCache = new Map<string, ClientEntry>();
 
 function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
-  const existing = clientCache.get(clientKey);
+  const cacheKey = `${clientKey}|${apiHost}`;
+  const existing = clientCache.get(cacheKey);
   if (existing) return existing;
 
   const client = new GrowthBookClient({ clientKey, apiHost });
@@ -19,7 +20,7 @@ function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
     .init({ timeout: 2000, streaming: true })
     .then(() => undefined);
   const entry: ClientEntry = { client, ready };
-  clientCache.set(clientKey, entry);
+  clientCache.set(cacheKey, entry);
   return entry;
 }
 

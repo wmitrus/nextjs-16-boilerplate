@@ -50,6 +50,13 @@
       "when": 1775058326717,
       "tag": "0006_breezy_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1775119651946,
+      "tag": "0007_zippy_gorilla_man",
+      "breakpoints": true
     }
   ]
 }

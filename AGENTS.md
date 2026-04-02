@@ -545,13 +545,117 @@ This document is the living, authoritative catalogue of:
 
 Key rules currently in effect:
 
-| ID     | Rule                                                                                                                |
-| ------ | ------------------------------------------------------------------------------------------------------------------- |
-| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL` |
-| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                    |
-| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                |
-| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                    |
-| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                   |
-| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                      |
+| ID     | Rule                                                                                                                  |
+| ------ | --------------------------------------------------------------------------------------------------------------------- |
+| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`   |
+| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                      |
+| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                  |
+| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                      |
+| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                     |
+| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                        |
+| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs               |
+| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                      |
+| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context |
+| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields            |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
+
+---
+
+## DB Schema Type Discipline
+
+**Pattern A — UUID vs TEXT for identifiers**
+
+| Column type | Use when                                                                                                                          |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `uuid`      | DB-generated PKs (`defaultRandom()`), FK references to UUID-typed PKs                                                             |
+| `text`      | Externally-sourced string identifiers: Clerk org IDs (`org_xxx`), tenant slugs, string scope keys, feature flag tenant scope keys |
+
+**Rule**: Misuse of UUID for external/application-level string IDs causes Postgres error `22P02: invalid input syntax for type uuid` at query parameter binding time — silent in unit tests with mocked DB, crash in production.
+
+**Also applies to unique indexes with nullable columns**: A `uniqueIndex(...).on(col1, nullableCol)` in Postgres does NOT enforce uniqueness when `nullableCol IS NULL` (BTree treats `NULL != NULL`). Use `.nullsNotDistinct()` on the unique **constraint** builder (`unique(name).on(cols).nullsNotDistinct()`) when NULLs should be treated as equal for uniqueness.
+
+---
+
+## Script Environment Patterns
+
+**Pattern E — `load-env.ts` for tsx scripts**
+
+`tsx` scripts do NOT auto-load `.env.local`. Scripts that need env vars must import `scripts/load-env.ts` as their absolute first import:
+
+```typescript
+import '../load-env'; // MUST be first import
+```
+
+`node --env-file ... node_modules/.bin/tsx` is **BROKEN** — the tsx CLI binary is a shell script, not a Node.js module. The canonical `package.json` entry is:
+
+```json
+"my:script": "tsx scripts/my-script.ts"
+```
+
+**Pattern D — `isMain` guard for exported script functions**
+
+Scripts that export functions AND run side-effectful code at module level MUST use an `isMain` guard:
+
+```typescript
+const isMain =
+  typeof process.argv[1] === 'string' &&
+  process.argv[1].endsWith('/script-name.ts');
+if (isMain) {
+  run().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+```
+
+Without this guard, importing the script in tests triggers the side-effectful `run()` call.
+
+---
+
+## DB Adapter Testing — `*.db.test.ts` Required
+
+**Pattern B — Real-DB integration test for every Drizzle adapter**
+
+Every `Drizzle*Service` or `Drizzle*Repository` class MUST have a companion `*.db.test.ts` integration test alongside it.
+
+Pattern:
+
+- `/** @vitest-environment node */` at the top
+- Uses `resolveTestDb()` from `@/testing/db/create-test-db`
+- `beforeAll`: create testDb, seed test data directly into the relevant table
+- `afterAll`: `testDb.cleanup()`
+- Must cover: not found, enabled/disabled, tenant isolation, fallback to global
+
+Unit tests with mocked DB (`vi.mock('drizzle-orm', ...)`) are **NOT** sufficient alone — they cannot catch Postgres schema type errors (e.g., `22P02`) or NULL uniqueness issues.
+
+---
+
+## MSW for External HTTP Adapters
+
+**Pattern C — MSW handler required for any adapter making HTTP calls**
+
+Any adapter that calls an external HTTP service (GrowthBook SDK, third-party APIs) MUST have a companion MSW handler:
+
+- File location: `src/modules/{module}/infrastructure/{adapter}/__mocks__/handlers.ts`
+- Export a named array: `export const {adapter}Handlers: HttpHandler[]`
+- Register via the MSW server from `src/shared/lib/mocks/server.ts`
+
+**Important**: The GrowthBook SDK captures `globalThis.fetch` at module import time. If the module is pre-imported before `server.listen()` runs in `beforeAll`, MSW interception will not work for that module in vitest. In that case, keep the MSW handlers for future integration test use and use `vi.mock(...)` for the unit test.
+
+---
+
+## E2E Coverage for Demo / Showcase Pages
+
+**Pattern F — Playwright spec required for every demo or showcase page**
+
+Every showcase or demo page added to the boilerplate (`/security-showcase`, `/feature-flags-demo`, etc.) MUST have a Playwright E2E spec.
+
+Minimum coverage:
+
+- Page loads without error boundary
+- Page title is correct
+- Key UI elements (status cards, section headings) are visible
+- Active provider / adapter name is visible
+
+Demo pages are public (no auth required). E2E specs MUST NOT depend on Clerk credentials. Do not add `storageState` or authentication setup to demo page specs.

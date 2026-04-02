@@ -20,9 +20,9 @@ async function exportStatic(): Promise<FlagsFile> {
   const raw = process.env.FEATURE_FLAGS_STATIC;
   const parsed = parseStaticFlagsEnv(raw);
 
-  const flags: FlagsFile['flags'] = {};
+  const flags: FlagsFile['flags'] = [];
   for (const [key, enabled] of Object.entries(parsed)) {
-    flags[key] = { enabled, tenantId: null };
+    flags.push({ key, enabled, tenantId: null });
   }
 
   return { flags };
@@ -44,15 +44,13 @@ async function exportDb(): Promise<FlagsFile> {
 
   try {
     const rows = await dbRuntime.db.select().from(featureFlagsTable);
-    const flags: FlagsFile['flags'] = {};
 
-    for (const row of rows) {
-      flags[row.key] = {
-        enabled: row.enabled,
-        tenantId: row.tenantId ?? null,
-        ...(row.description ? { description: row.description } : {}),
-      };
-    }
+    const flags: FlagsFile['flags'] = rows.map((row) => ({
+      key: row.key,
+      enabled: row.enabled,
+      tenantId: row.tenantId ?? null,
+      ...(row.description ? { description: row.description } : {}),
+    }));
 
     return { flags };
   } finally {

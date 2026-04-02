@@ -65,6 +65,7 @@
     "arch:lint": "./scripts/architecture-lint.sh",
     "db:generate": "drizzle-kit generate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:migrate:dev": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.dev.ts",
+    "db:migrate:dev:postgres": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.dev.postgres.ts",
     "db:migrate:prod": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
     "db:migrate:prod:local": "node --env-file=.env.production node_modules/drizzle-kit/bin.cjs migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
     "db:migrate:cli": "tsx src/core/db/migrate-cli.ts",

@@ -257,3 +257,21 @@ Within that structure:
 When the task is artifact-backed, your persistent per-task summary artifact must be the single file `03 - Next.js Runtime - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Your job is to protect runtime correctness, framework boundary discipline, and deployment-safe Next.js behavior without drifting into broad architecture or security-policy review.
+
+---
+
+## RSC / App Router — `getAppContainer()` Pattern
+
+When a React Server Component calls async infrastructure (DB, feature flags, etc.) inside `async` functions that Next.js may prerender, use `connection()` from `next/server` to opt-out of static prerendering:
+
+```typescript
+import { connection } from 'next/server';
+
+export default async function Page() {
+  await connection(); // Opt out of static prerendering for dynamic data
+  const container = await getAppContainer();
+  // ...
+}
+```
+
+`connection()` signals to Next.js that this route depends on per-request dynamic data and should not be prerendered at build time. Without this, the build will fail when the RSC tries to access the DB during static rendering.

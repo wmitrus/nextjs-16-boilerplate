@@ -67,14 +67,17 @@ describe('ResilientFeatureFlagService', () => {
     );
   });
 
-  it('includes the thrown error in the warning log', async () => {
+  it('logs sanitized errorMessage and errorName (not the raw error object) when delegate throws', async () => {
     const error = new Error('connection refused');
     const svc = new ResilientFeatureFlagService(makeDelegate(error));
 
     await svc.isEnabled('any-flag', ctx);
 
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ error }),
+      expect.objectContaining({
+        errorMessage: 'connection refused',
+        errorName: 'Error',
+      }),
       expect.any(String),
     );
   });

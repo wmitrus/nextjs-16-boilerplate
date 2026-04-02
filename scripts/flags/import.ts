@@ -34,20 +34,18 @@ function readInput(filePath: string | undefined): FlagsFile {
 }
 
 async function upsertFlags(db: DrizzleDb, data: FlagsFile): Promise<void> {
-  const entries = Object.entries(data.flags);
-
-  if (entries.length === 0) {
+  if (data.flags.length === 0) {
     console.error('[flags:import] No flags found in input. Nothing to import.');
     return;
   }
 
-  for (const [key, entry] of entries) {
+  for (const entry of data.flags) {
     const existing = await db
       .select({ id: featureFlagsTable.id })
       .from(featureFlagsTable)
       .where(
         and(
-          eq(featureFlagsTable.key, key),
+          eq(featureFlagsTable.key, entry.key),
           entry.tenantId
             ? eq(featureFlagsTable.tenantId, entry.tenantId)
             : isNull(featureFlagsTable.tenantId),
@@ -66,7 +64,7 @@ async function upsertFlags(db: DrizzleDb, data: FlagsFile): Promise<void> {
         .where(eq(featureFlagsTable.id, existing[0]!.id));
     } else {
       await db.insert(featureFlagsTable).values({
-        key,
+        key: entry.key,
         tenantId: entry.tenantId ?? null,
         enabled: entry.enabled,
         description: entry.description ?? null,
@@ -74,7 +72,9 @@ async function upsertFlags(db: DrizzleDb, data: FlagsFile): Promise<void> {
     }
   }
 
-  console.error(`[flags:import] Imported ${entries.length} flag(s) into DB.`);
+  console.error(
+    `[flags:import] Imported ${data.flags.length} flag(s) into DB.`,
+  );
 }
 
 async function run(): Promise<void> {

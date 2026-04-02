@@ -1,11 +1,17 @@
 import '../load-env';
 
 import * as fs from 'fs';
+import path from 'node:path';
 
 import { createDb } from '@/core/db/create-db';
 
 import type { FlagsFile } from './types';
-import { parseArg, resolveDriver, resolveProvider } from './utils';
+import {
+  assertPathWithinBase,
+  parseArg,
+  resolveDriver,
+  resolveProvider,
+} from './utils';
 
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
 import { parseStaticFlagsEnv } from '@/modules/feature-flags/infrastructure/static/StaticFeatureFlagService';
@@ -69,8 +75,10 @@ async function run(): Promise<void> {
   const json = JSON.stringify(result, null, 2);
 
   if (outFile) {
-    fs.writeFileSync(outFile, json, 'utf8');
-    console.error(`[flags:export] Written to ${outFile}`);
+    const resolved = path.resolve(outFile);
+    assertPathWithinBase(resolved, process.cwd());
+    fs.writeFileSync(resolved, json, 'utf8');
+    console.error(`[flags:export] Written to ${resolved}`);
   } else {
     process.stdout.write(json + '\n');
   }

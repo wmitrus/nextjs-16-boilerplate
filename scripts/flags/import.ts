@@ -1,6 +1,7 @@
 import '../load-env';
 
 import * as fs from 'fs';
+import path from 'node:path';
 
 import { and, eq, isNull } from 'drizzle-orm';
 
@@ -9,6 +10,7 @@ import type { DrizzleDb } from '@/core/db/types';
 
 import type { FlagsFile } from './types';
 import {
+  assertPathWithinBase,
   isSchemaNotFoundError,
   parseArg,
   resolveDriver,
@@ -21,7 +23,9 @@ function readInput(filePath: string | undefined): FlagsFile {
   let raw: string;
 
   if (filePath) {
-    raw = fs.readFileSync(filePath, 'utf8');
+    const resolved = path.resolve(filePath);
+    assertPathWithinBase(resolved, process.cwd());
+    raw = fs.readFileSync(resolved, 'utf8');
   } else {
     raw = fs.readFileSync('/dev/stdin', 'utf8');
   }

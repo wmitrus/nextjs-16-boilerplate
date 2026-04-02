@@ -7,6 +7,7 @@ export const PUBLIC_ROUTE_PREFIXES = [
   '/security-showcase',
   '/sentry-example-page',
   '/monitoring',
+  '/feature-flags-demo',
   '/api/security-test/ssrf',
   '/api/logs',
 ] as const;

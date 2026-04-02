@@ -265,3 +265,24 @@ Within that structure:
 When the task is artifact-backed, your persistent per-task summary artifact must be the single file `03 - Next.js Runtime - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Your job is to protect runtime correctness, framework boundary discipline, and deployment-safe Next.js behavior without drifting into broad architecture or security-policy review.
+
+---
+
+## RSC Dynamic Rendering — `connection()` Pattern
+
+When a React Server Component uses async infrastructure (DB, feature flags, etc.) that requires per-request data, use `connection()` from `next/server` to opt out of static prerendering:
+
+```typescript
+import { connection } from 'next/server';
+
+export default async function Page() {
+  await connection(); // must be called before any dynamic data access
+  // ...
+}
+```
+
+Without `connection()`, Next.js may attempt to prerender the route at build time, causing build failures when the RSC accesses the DB.
+
+## Script Env Loading — `load-env.ts` Pattern
+
+RSC pages that call `getAppContainer()` rely on env vars being present. In development, this is handled by Next.js dev server. In scripts, `tsx` does NOT auto-load `.env.local` — use `scripts/load-env.ts`.

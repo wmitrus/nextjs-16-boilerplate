@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
 export function parseArg(name: string): string | undefined {
@@ -36,4 +38,25 @@ export function isSchemaNotFoundError(err: unknown): boolean {
     msg.includes('relation') &&
     (msg.includes('does not exist') || msg.includes('undefined table'))
   );
+}
+
+export function assertPathWithinBase(
+  resolvedPath: string,
+  baseDir: string,
+): void {
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  const expectedPrefix = normalizedBase.endsWith(path.sep)
+    ? normalizedBase
+    : normalizedBase + path.sep;
+  if (
+    normalizedPath !== normalizedBase &&
+    !normalizedPath.startsWith(expectedPrefix)
+  ) {
+    throw new Error(
+      `Security: file path escapes the allowed directory.\n` +
+        `  Allowed base : ${normalizedBase}\n` +
+        `  Resolved path: ${normalizedPath}\n`,
+    );
+  }
 }

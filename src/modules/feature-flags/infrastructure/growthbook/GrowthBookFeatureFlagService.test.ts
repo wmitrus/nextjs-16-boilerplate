@@ -6,20 +6,20 @@ import type { AuthorizationContext } from '@/core/contracts/authorization';
  * Unit tests for GrowthBookFeatureFlagService using a full module mock.
  *
  * MSW-based integration testing for GrowthBook HTTP calls requires module
- * isolation (dynamic import) to avoid the module-level `instanceCache`
+ * isolation (dynamic import) to avoid the module-level `clientCache`
  * singleton capturing `polyfills.fetch` before MSW can intercept.
  * MSW handlers are provided in `./__mocks__/handlers.ts` for use in
  * future integration test contexts.
  */
-const mockGb = vi.hoisted(() => ({
+const mockClient = vi.hoisted(() => ({
   init: vi.fn().mockResolvedValue({}),
-  setAttributes: vi.fn().mockResolvedValue(undefined),
+  refreshFeatures: vi.fn().mockResolvedValue(undefined),
   isOn: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('@growthbook/growthbook', () => ({
-  GrowthBook: vi.fn().mockImplementation(function () {
-    return mockGb;
+  GrowthBookClient: vi.fn().mockImplementation(function () {
+    return mockClient;
   }),
 }));
 
@@ -34,15 +34,15 @@ const ctx: AuthorizationContext = {
 
 describe('GrowthBookFeatureFlagService', () => {
   beforeEach(() => {
-    mockGb.init.mockClear();
-    mockGb.setAttributes.mockClear();
-    mockGb.isOn.mockClear();
-    mockGb.init.mockResolvedValue({});
-    mockGb.setAttributes.mockResolvedValue(undefined);
-    mockGb.isOn.mockReturnValue(false);
+    mockClient.init.mockClear();
+    mockClient.refreshFeatures.mockClear();
+    mockClient.isOn.mockClear();
+    mockClient.init.mockResolvedValue({});
+    mockClient.refreshFeatures.mockResolvedValue(undefined);
+    mockClient.isOn.mockReturnValue(false);
   });
 
-  it('calls init on the GrowthBook instance', async () => {
+  it('calls init on the GrowthBookClient instance', async () => {
     const svc = new GrowthBookFeatureFlagService({
       clientKey: 'sdk-key-init-test',
       apiHost: 'https://cdn.growthbook.io',
@@ -50,11 +50,28 @@ describe('GrowthBookFeatureFlagService', () => {
 
     await svc.isEnabled('some-flag', ctx);
 
-    expect(mockGb.init).toHaveBeenCalledWith({ timeout: 2000 });
+    expect(mockClient.init).toHaveBeenCalledWith({
+      timeout: 2000,
+      streaming: true,
+    });
+  });
+
+  it('calls refreshFeatures before isOn to ensure feature freshness', async () => {
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-refresh-test',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+
+    await svc.isEnabled('some-flag', ctx);
+
+    expect(mockClient.refreshFeatures).toHaveBeenCalledOnce();
+    const refreshOrder = mockClient.refreshFeatures.mock.invocationCallOrder[0];
+    const isOnOrder = mockClient.isOn.mock.invocationCallOrder[0];
+    expect(refreshOrder).toBeLessThan(isOnOrder);
   });
 
   it('returns false when GrowthBook reports flag is off', async () => {
-    mockGb.isOn.mockReturnValue(false);
+    mockClient.isOn.mockReturnValue(false);
     const svc = new GrowthBookFeatureFlagService({
       clientKey: 'sdk-key-off-test',
       apiHost: 'https://cdn.growthbook.io',
@@ -64,7 +81,7 @@ describe('GrowthBookFeatureFlagService', () => {
   });
 
   it('returns true when GrowthBook reports flag is on', async () => {
-    mockGb.isOn.mockReturnValue(true);
+    mockClient.isOn.mockReturnValue(true);
     const svc = new GrowthBookFeatureFlagService({
       clientKey: 'sdk-key-on-test',
       apiHost: 'https://cdn.growthbook.io',
@@ -73,7 +90,7 @@ describe('GrowthBookFeatureFlagService', () => {
     expect(await svc.isEnabled('enabled-flag', ctx)).toBe(true);
   });
 
-  it('sets attributes with user id and tenant id from context', async () => {
+  it('passes flag key and per-request user attributes to isOn', async () => {
     const svc = new GrowthBookFeatureFlagService({
       clientKey: 'sdk-key-attrs-test',
       apiHost: 'https://cdn.growthbook.io',
@@ -81,9 +98,11 @@ describe('GrowthBookFeatureFlagService', () => {
 
     await svc.isEnabled('any-flag', ctx);
 
-    expect(mockGb.setAttributes).toHaveBeenCalledWith({
-      id: 'user-1',
-      company: 'tenant-1',
+    expect(mockClient.isOn).toHaveBeenCalledWith('any-flag', {
+      attributes: {
+        id: 'user-1',
+        company: 'tenant-1',
+      },
     });
   });
 });

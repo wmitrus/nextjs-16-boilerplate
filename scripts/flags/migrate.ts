@@ -19,37 +19,33 @@ import { parseStaticFlagsEnv } from '@/modules/feature-flags/infrastructure/stat
 export function readStaticFlags(): FlagsFile {
   const raw = process.env.FEATURE_FLAGS_STATIC;
   const parsed = parseStaticFlagsEnv(raw);
-  const flags: FlagsFile['flags'] = {};
+  const flags: FlagsFile['flags'] = [];
   for (const [key, enabled] of Object.entries(parsed)) {
-    // eslint-disable-next-line security/detect-object-injection
-    flags[key] = { enabled, tenantId: null };
+    flags.push({ key, enabled, tenantId: null });
   }
   return { flags };
 }
 
 async function readDbFlags(db: DrizzleDb): Promise<FlagsFile> {
   const rows = await db.select().from(featureFlagsTable);
-  const flags: FlagsFile['flags'] = {};
-  for (const row of rows) {
-    flags[row.key] = {
+  return {
+    flags: rows.map((row) => ({
+      key: row.key,
       enabled: row.enabled,
       tenantId: row.tenantId ?? null,
       ...(row.description ? { description: row.description } : {}),
-    };
-  }
-  return { flags };
+    })),
+  };
 }
 
 async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
-  const entries = Object.entries(data.flags);
-
-  for (const [key, entry] of entries) {
+  for (const entry of data.flags) {
     const existing = await db
       .select({ id: featureFlagsTable.id })
       .from(featureFlagsTable)
       .where(
         and(
-          eq(featureFlagsTable.key, key),
+          eq(featureFlagsTable.key, entry.key),
           entry.tenantId
             ? eq(featureFlagsTable.tenantId, entry.tenantId)
             : isNull(featureFlagsTable.tenantId),
@@ -68,7 +64,7 @@ async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
         .where(eq(featureFlagsTable.id, existing[0]!.id));
     } else {
       await db.insert(featureFlagsTable).values({
-        key,
+        key: entry.key,
         tenantId: entry.tenantId ?? null,
         enabled: entry.enabled,
         description: entry.description ?? null,
@@ -76,13 +72,13 @@ async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
     }
   }
 
-  console.error(`[flags:migrate] Migrated ${entries.length} flag(s) to DB.`);
+  console.error(`[flags:migrate] Migrated ${data.flags.length} flag(s) to DB.`);
 }
 
 export function writeToStaticFormat(data: FlagsFile): void {
-  const pairs = Object.entries(data.flags)
-    .filter(([, entry]) => entry.tenantId === null)
-    .map(([key, entry]) => `${key}=${entry.enabled}`)
+  const pairs = data.flags
+    .filter((entry) => entry.tenantId === null)
+    .map((entry) => `${entry.key}=${entry.enabled}`)
     .join(',');
 
   process.stdout.write(`FEATURE_FLAGS_STATIC=${pairs}\n`);

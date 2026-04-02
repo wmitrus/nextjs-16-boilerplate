@@ -1,4 +1,11 @@
-import { isSchemaNotFoundError, parseArg, resolveDriver } from './utils';
+import path from 'node:path';
+
+import {
+  assertPathWithinBase,
+  isSchemaNotFoundError,
+  parseArg,
+  resolveDriver,
+} from './utils';
 
 describe('parseArg', () => {
   it('returns value for a matching --name=value arg', () => {
@@ -66,5 +73,43 @@ describe('isSchemaNotFoundError', () => {
     expect(isSchemaNotFoundError('string error')).toBe(false);
     expect(isSchemaNotFoundError(null)).toBe(false);
     expect(isSchemaNotFoundError(42)).toBe(false);
+  });
+});
+
+describe('assertPathWithinBase', () => {
+  it('does not throw for a file path within the base directory', () => {
+    const base = process.cwd();
+    expect(() =>
+      assertPathWithinBase(path.join(base, 'flags.json'), base),
+    ).not.toThrow();
+  });
+
+  it('does not throw when resolved path equals the base directory exactly', () => {
+    const base = process.cwd();
+    expect(() => assertPathWithinBase(base, base)).not.toThrow();
+  });
+
+  it('throws for a path traversal using ".."', () => {
+    const base = process.cwd();
+    expect(() =>
+      assertPathWithinBase(path.join(base, '..', 'outside.json'), base),
+    ).toThrow(/Security: file path escapes/);
+  });
+
+  it('throws for an absolute path outside the base directory', () => {
+    const base = process.cwd();
+    expect(() => assertPathWithinBase('/etc/passwd', base)).toThrow(
+      /Security: file path escapes/,
+    );
+  });
+
+  it('throws for a deeply nested traversal', () => {
+    const base = process.cwd();
+    expect(() =>
+      assertPathWithinBase(
+        path.join(base, 'sub', '..', '..', '..', 'secret.txt'),
+        base,
+      ),
+    ).toThrow(/Security: file path escapes/);
   });
 });

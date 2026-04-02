@@ -81,12 +81,39 @@ describe('createFeatureFlagService', () => {
   });
 
   it('falls back to static (all off) for unknown provider values', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     const svc = createFeatureFlagService('unknown' as 'static', {});
 
     expect(svc).toBeInstanceOf(ResilientFeatureFlagService);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'feature-flag:unknown-provider' }),
+      expect.any(String),
+    );
+  });
+
+  it('throws when GROWTHBOOK_API_HOST uses http: protocol', () => {
+    expect(() =>
+      createFeatureFlagService('growthbook', {
+        growthbookClientKey: 'sdk-key',
+        growthbookApiHost: 'http://cdn.growthbook.io',
+      }),
+    ).toThrow(/must use https: protocol/);
+  });
+
+  it('accepts an on-prem https host for GrowthBook', () => {
+    expect(() =>
+      createFeatureFlagService('growthbook', {
+        growthbookClientKey: 'sdk-key',
+        growthbookApiHost: 'https://growthbook.mycompany.com',
+      }),
+    ).not.toThrow();
+  });
+
+  it('throws when GROWTHBOOK_API_HOST is not a valid URL', () => {
+    expect(() =>
+      createFeatureFlagService('growthbook', {
+        growthbookClientKey: 'sdk-key',
+        growthbookApiHost: 'not-a-url',
+      }),
+    ).toThrow(/Invalid GROWTHBOOK_API_HOST/);
   });
 });

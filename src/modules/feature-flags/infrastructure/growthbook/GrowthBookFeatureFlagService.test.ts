@@ -2,6 +2,15 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { AuthorizationContext } from '@/core/contracts/authorization';
 
+/**
+ * Unit tests for GrowthBookFeatureFlagService using a full module mock.
+ *
+ * MSW-based integration testing for GrowthBook HTTP calls requires module
+ * isolation (dynamic import) to avoid the module-level `instanceCache`
+ * singleton capturing `polyfills.fetch` before MSW can intercept.
+ * MSW handlers are provided in `./__mocks__/handlers.ts` for use in
+ * future integration test contexts.
+ */
 const mockGb = vi.hoisted(() => ({
   init: vi.fn().mockResolvedValue({}),
   setAttributes: vi.fn().mockResolvedValue(undefined),

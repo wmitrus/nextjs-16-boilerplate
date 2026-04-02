@@ -22,7 +22,8 @@ export class ResilientFeatureFlagService implements FeatureFlagService {
         {
           event: 'feature-flag:evaluation-error',
           flag,
-          error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorName: error instanceof Error ? error.name : 'UnknownError',
         },
         'Feature flag evaluation failed; defaulting to false (fail-safe)',
       );

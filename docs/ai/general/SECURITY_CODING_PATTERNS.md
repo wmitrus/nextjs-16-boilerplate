@@ -375,3 +375,178 @@ shuffling UI elements, non-critical sampling.
 session identifiers, nonces, or any value an adversary must not be able to predict.
 
 ---
+
+---
+
+## Schema Type Discipline (DB Layer)
+
+**ID**: SEC-07
+
+**Rule**: `uuid` Drizzle column type must only be used for DB-generated PKs (`defaultRandom()`) and FK references to UUID-typed PKs. Never use `uuid` for application-level or externally-sourced string identifiers (Clerk org IDs, tenant slugs, string scope keys).
+
+**Why**: Postgres validates UUID format at query parameter binding time. A non-UUID string passed to a `uuid`-typed column raises `22P02: invalid input syntax for type uuid` before any rows are evaluated — even if the query uses `OR col IS NULL`. Unit tests with mocked DBs cannot catch this; only `*.db.test.ts` integration tests will surface it.
+
+**Correct alternative**: Use `text` column type for externally-sourced identifiers. Document the expected value format (e.g., "will always be a UUID-shaped string from `tenants.id` in production") in a code comment.
+
+**ID**: SEC-08
+
+**Rule**: Unique indexes on nullable columns using `uniqueIndex().on(col1, nullableCol)` do NOT enforce uniqueness when `nullableCol IS NULL` in Postgres. BTree indexes treat `NULL != NULL`, allowing multiple rows with the same key and NULL in the nullable column.
+
+**Correct alternative**: Use the `unique()` constraint builder with `.nullsNotDistinct()`:
+
+```typescript
+unique('constraint_name').on(t.key, t.nullableCol).nullsNotDistinct();
+```
+
+This generates `UNIQUE NULLS NOT DISTINCT` (requires Postgres 15+).
+
+---
+
+## SEC-09 — Shared Mutable State in SDK Singleton Across Requests
+
+**ID**: SEC-09
+
+**Category**: Multi-tenancy / Request Isolation
+
+**Vulnerability Class**: Cross-tenant attribute contamination via shared mutable SDK instance
+
+**Classification**: Real risk — architecture-level
+
+**Affected Contexts**: Any adapter that caches an SDK instance at module level and mutates it with per-request user/tenant context
+
+---
+
+### Pattern (DO NOT use)
+
+```typescript
+// DANGEROUS: module-level singleton + per-request mutation
+const instanceCache = new Map<string, SdkInstance>();
+
+async function isEnabled(
+  flag: string,
+  context: AuthorizationContext,
+): Promise<boolean> {
+  const instance = getOrCreate(clientKey);
+  await instance.setAttributes({
+    // ← mutates shared state with request context
+    id: context.subject.id,
+    company: context.tenant.tenantId,
+  });
+  return instance.isOn(flag); // ← reads from mutable shared state
+}
+```
+
+### Why This Is Dangerous
+
+Even in Node.js's single-threaded event loop, if `setAttributes()` is async (or becomes async in a future SDK version), the event loop can interleave:
+
+1. Request A sets attributes `{ company: 'tenant-a' }` → awaits
+2. Event loop processes Request B: sets `{ company: 'tenant-b' }` → overwrites
+3. Request A calls `isOn(flag)` → evaluates with tenant-B's context
+
+Cross-tenant flag evaluation is a tenant isolation violation. Feature flags gating sensitive features become unreliable.
+
+### Correct Pattern
+
+Separate the safe (feature definition cache) from the unsafe (mutable attribute state):
+
+```typescript
+// SAFE: cache only the feature definitions (HTTP response), not the mutable instance
+let cachedFeatures: FeatureDefinitions | null = null;
+
+async function isEnabled(
+  flag: string,
+  context: AuthorizationContext,
+): Promise<boolean> {
+  if (!cachedFeatures) {
+    cachedFeatures = await fetchFeatureDefinitions(clientKey, apiHost);
+  }
+  // Create a stateless evaluator with per-request context — no shared mutable state
+  const result = evaluateFeature(flag, cachedFeatures, {
+    id: context.subject.id,
+    company: context.tenant.tenantId,
+  });
+  return result;
+}
+```
+
+Or with the GrowthBook SDK v2+ stateless evaluation API: pass attributes directly to `evalFeature()` without calling `setAttributes()` on a shared instance.
+
+### Rule for Agents
+
+**DO NOT** cache SDK instances that expose mutable attribute/context setters and call those setters per-request.
+
+**DO** cache only the immutable result of remote data fetches (feature definitions, rule sets, etc.).
+
+**DO** create stateless per-request evaluation contexts with the cached definitions and the current request's identity/tenant data.
+
+This rule applies to: GrowthBook, LaunchDarkly, Unleash, or any feature-flag SDK that exposes per-instance attribute mutation.
+
+---
+
+## SEC-10 — Error Objects Must Be Sanitized Before Logging
+
+**ID**: SEC-10
+
+**Category**: Sensitive Data Exposure / Logging
+
+**Vulnerability Class**: DB connection strings and internal host info in log payloads
+
+**Classification**: Real risk
+
+**Affected Contexts**: Any catch block that logs an `error` object from DB, HTTP, or infrastructure adapters
+
+---
+
+### Pattern (DO NOT use)
+
+```typescript
+// DANGEROUS: raw error object serialized into log payload
+logger.warn({ event: 'evaluation-error', flag, error }, 'Failed');
+```
+
+### Why This Is Dangerous
+
+Infrastructure errors from databases, HTTP clients, and SDKs commonly embed sensitive data in their `.message` property:
+
+```
+Error: connection to server at "db.internal" (10.0.0.5), port 5432 failed:
+FATAL: password authentication failed for user "dbuser"
+connection string: postgres://dbuser:PASSWORD@db.internal:5432/appdb
+```
+
+When serialized by Pino, the full `Error` object (including `message`, `stack`, and any custom properties) is written to the log payload. This exposes:
+
+- Internal hostnames and IPs
+- Database usernames and potentially passwords
+- Connection string fragments
+
+### Correct Pattern
+
+Extract only the safe fields before logging:
+
+```typescript
+// SAFE: sanitize error before logging
+logger.warn(
+  {
+    event: 'evaluation-error',
+    flag,
+    errorMessage: error instanceof Error ? error.message : String(error),
+    errorName: error instanceof Error ? error.name : 'UnknownError',
+    // Do NOT include error.stack in production logs unless explicitly needed for debugging
+  },
+  'Failed; defaulting to safe fallback',
+);
+```
+
+If stack traces are needed, log them only at `debug` level and only in non-production environments.
+
+### Rule for Agents
+
+**DO NOT** pass raw `error` objects as structured log fields in Pino or any logger.
+
+**DO** extract `error.message` and `error.name` as separate string fields.
+
+**DO NOT** log `error.stack` in production at `warn` or `error` level.
+
+This rule applies to all catch blocks in infrastructure adapters, resilient wrappers, and route handlers.

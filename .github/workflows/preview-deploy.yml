@@ -46,6 +46,12 @@ jobs:
         env:
           APP_ENV: preview
 
+      - name: Validate Environment Cross-Field Requirements
+        run: pnpm env:validate
+        env:
+          APP_ENV: preview
+          NODE_ENV: production
+
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
         env:

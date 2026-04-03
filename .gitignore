@@ -51,6 +51,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Local Codacy analysis artifacts
+.codacy/reports/*
+!.codacy/reports/.gitkeep
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

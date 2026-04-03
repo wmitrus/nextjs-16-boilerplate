@@ -59,6 +59,7 @@
     "generate:secret": "node scripts/generate-secret.mjs",
     "env:init": "node scripts/setup-env.mjs",
     "env:check": "node scripts/check-env-consistency.mjs",
+    "env:validate": "tsx scripts/validate-env.ts",
     "chromatic": "chromatic",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",

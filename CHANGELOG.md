@@ -1,3 +1,28 @@
+# [1.15.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.14.0...v1.15.0) (2026-04-03)
+
+
+### Bug Fixes
+
+* **auth:** improve error resolution logic in bootstrap process ([31c2a55](https://github.com/wmitrus/nextjs-16-boilerplate/commit/31c2a556f1d2a9cd7dba08a6a31e80c0cec26c14))
+* **docs:** update security coding patterns for object access and file handling ([f56a208](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f56a208aec8a78e76cee823ec2b6e001fd8434ef))
+* **env:** improve environment validation logic ([df9d1cf](https://github.com/wmitrus/nextjs-16-boilerplate/commit/df9d1cf0fc3ebf40154a351a31654817aab7c7e3))
+* **logger:** ensure log directory path validation ([f44f8be](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f44f8be34a53b6f330c48876b441c081ad974e3d))
+* **security:** enhance security guidelines for implementation agents ([db8178e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db8178efca86a4f8c02bb2645fe5f8754bf7a10a))
+* **security:** enhance validation and checks in security guidelines ([844dd67](https://github.com/wmitrus/nextjs-16-boilerplate/commit/844dd67a56e4c7b558d2768efabd6d082541d42d))
+* **security:** improve validation for user-controlled lookups ([d0490cd](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d0490cd3df39c357416c430a662b8d95d48fb403))
+
+
+### Features
+
+* **codacy:** add installation script for codacy-cli-v2 ([a24a12b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a24a12b14cc669478e7616b22357e1bee6dc3721))
+* **codacy:** add local Codacy analysis script ([62a805b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/62a805b3dd49428c230d97b9b1699f4f8cb642f6))
+* **codacy:** implement findings review and remediation plan ([7ef5025](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7ef50252cec17c3ef550595082179336d7d56d78))
+* **env:** load environment variables from .env files ([28e9590](https://github.com/wmitrus/nextjs-16-boilerplate/commit/28e9590a02ff888d16239d50a4aa519424ea6199))
+* **scripts:** add environment validation script ([f83c3b7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f83c3b72ebd202302d756b61d15535b8ef81f980))
+* **security-showcase:** enhance error handling and logging ([0844e20](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0844e20c4138e36f9373a80f8a1b9d76a436a6b7))
+* **security:** mark workflow steps as completed ([5247bd6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5247bd6465a1dbb2406e1135d8b315d3fa6c0721))
+* **validation:** implement environment validation script and CI integration ([587a245](https://github.com/wmitrus/nextjs-16-boilerplate/commit/587a245af81d44033ba8c269c1bc85c787f472c6))
+
 # [1.14.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.13.0...v1.14.0) (2026-04-03)
 
 

@@ -116,3 +116,41 @@
 - Trigger: Security incident intake
 - Summary: Full security and auth surface reviewed; four issues confirmed; constraints established
 - Sections refreshed: All
+
+---
+
+## Final Security Check (Post-Implementation)
+
+**Date**: 2026-04-03
+**Trigger**: Implementation complete; validation passed
+
+### Trust Boundary Closure
+
+- **DEFAULT_TENANT_ID enforcement**: ✅ Still required in `TENANCY_MODE=single` — no change to the requirement, only the detection timing improved (CI gate now catches it before deploy)
+- **Auth key enforcement**: ✅ `validateAuthProviderConfigValues` still enforces Clerk keys when `AUTH_PROVIDER=clerk` — no change
+- **Bootstrap error isolation**: ✅ Security showcase page now catches bootstrap failure and does NOT expose raw error details in production; only a generic "Configuration Error" banner shown
+- **Server logger usage**: ✅ Bootstrap error logged with `resolveServerLogger()` in structured format — only `errorName` and `errorMessage` logged, no stack traces, no env var values
+
+### New Security Surface Review
+
+- `scripts/validate-env.ts` — new file: reads only from `process.env` via T3-Env; calls validators with those values; does not log secrets or env var values; exits with structured error messages only containing field names, not values. **No new security risk.**
+- `package.json` — added `env:validate` entry: no security implications.
+- CI/CD workflow YAML — added `pnpm env:validate` steps: no new secrets exposed; Vercel-pulled environment is already trusted at that stage.
+- `security-showcase/page.tsx` — modified: bootstrap error message only shown in `NODE_ENV === 'development'`; production shows generic text. **No security regression.**
+- SDD docs — corrected: replaced invalid placeholder strings with UUID instructions. **No security implications.**
+
+### No New Regressions Identified
+
+The implementation does not introduce:
+
+- new auth bypass paths
+- new authorization weaknesses
+- new tenant isolation risks
+- new sensitive data exposure
+- new open redirect risks
+- new server-to-client boundary violations
+
+### Status: CLOSED
+
+Trust-boundary issue (missing deploy-time enforcement of mandatory config) is **closed** by the implementation.
+Residual documentation risk from invalid UUID placeholders is **closed** by the doc fix.

@@ -82,7 +82,15 @@ async function run(): Promise<void> {
   }
 }
 
-run().catch((err: unknown) => {
-  console.error('[flags:export] Fatal error:', err);
-  process.exit(1);
-});
+const isMain =
+  typeof process.argv[1] === 'string' &&
+  (process.argv[1].endsWith('/export.ts') ||
+    process.argv[1].endsWith('/export.js') ||
+    process.argv[1].endsWith('/export'));
+
+if (isMain) {
+  run().catch((err: unknown) => {
+    console.error('[flags:export] Fatal error:', err);
+    process.exit(1);
+  });
+}

@@ -5,6 +5,7 @@ import { AUTH } from '@/core/contracts';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
+import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { AdminOnlyExample } from '@/features/security-showcase/components/AdminOnlyExample';
@@ -16,6 +17,12 @@ import { SettingsFormExample } from '@/features/security-showcase/components/Set
 
 import { createSecurityContext } from '@/security/core/security-context';
 import type { NodeSecurityContextDependencies } from '@/security/core/security-dependencies';
+
+const logger = resolveServerLogger().child({
+  type: 'UI',
+  category: 'security-showcase',
+  module: 'page',
+});
 
 export default function SecurityShowcasePage() {
   return (
@@ -32,35 +39,59 @@ export async function SecurityShowcasePageContent() {
     cookieHeader.includes('__session=') ||
     cookieHeader.includes('__client_uat=');
 
-  const requestContainer = getAppContainer().createChild();
-  const securityContextDependencies: NodeSecurityContextDependencies = {
-    identityProvider: requestContainer.resolve<IdentityProvider>(
-      AUTH.IDENTITY_PROVIDER,
-    ),
-    tenantResolver: requestContainer.resolve<TenantResolver>(
-      AUTH.TENANT_RESOLVER,
-    ),
-    userRepository: requestContainer.resolve<UserRepository>(
-      AUTH.USER_REPOSITORY,
-    ),
+  const syntheticGuestContext = {
+    user: undefined,
+    ip: 'unknown',
+    userAgent: undefined,
+    correlationId: crypto.randomUUID(),
+    runtime: 'node' as const,
+    environment: 'development' as const,
+    requestId: crypto.randomUUID(),
+    readinessStatus: 'UNAUTHENTICATED' as const,
   };
+
+  let requestContainer;
+  let bootstrapError: string | null = null;
+
+  try {
+    requestContainer = getAppContainer().createChild();
+  } catch (error) {
+    bootstrapError =
+      process.env.NODE_ENV === 'development' && error instanceof Error
+        ? error.message
+        : 'Application configuration error. Check server logs for details.';
+    logger.error(
+      {
+        event: 'security-showcase:bootstrap:failure',
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+      'Security showcase page bootstrap failed — rendering in degraded mode',
+    );
+  }
 
   let context: Awaited<ReturnType<typeof createSecurityContext>>;
   let contextError: string | null = null;
 
-  if (!hasClerkSessionCookie) {
-    context = {
-      user: undefined,
-      ip: 'unknown',
-      userAgent: undefined,
-      correlationId: crypto.randomUUID(),
-      runtime: 'node',
-      environment: 'development',
-      requestId: crypto.randomUUID(),
-      readinessStatus: 'UNAUTHENTICATED',
-    };
+  if (bootstrapError !== null || !requestContainer) {
+    context = syntheticGuestContext;
+    contextError = bootstrapError ?? 'Bootstrap unavailable.';
+  } else if (!hasClerkSessionCookie) {
+    context = syntheticGuestContext;
     contextError = 'No active Clerk session; using guest context.';
   } else {
+    const securityContextDependencies: NodeSecurityContextDependencies = {
+      identityProvider: requestContainer.resolve<IdentityProvider>(
+        AUTH.IDENTITY_PROVIDER,
+      ),
+      tenantResolver: requestContainer.resolve<TenantResolver>(
+        AUTH.TENANT_RESOLVER,
+      ),
+      userRepository: requestContainer.resolve<UserRepository>(
+        AUTH.USER_REPOSITORY,
+      ),
+    };
+
     try {
       context = await Promise.race([
         createSecurityContext(securityContextDependencies),
@@ -72,16 +103,7 @@ export async function SecurityShowcasePageContent() {
       ]);
     } catch (error) {
       contextError = error instanceof Error ? error.message : 'Unknown error';
-      context = {
-        user: undefined,
-        ip: 'unknown',
-        userAgent: undefined,
-        correlationId: crypto.randomUUID(),
-        runtime: 'node',
-        environment: 'development',
-        requestId: crypto.randomUUID(),
-        readinessStatus: 'UNAUTHENTICATED',
-      };
+      context = syntheticGuestContext;
     }
   }
 
@@ -96,6 +118,24 @@ export async function SecurityShowcasePageContent() {
           protecting this application.
         </p>
       </header>
+
+      {bootstrapError !== null && (
+        <div className="mb-8 rounded-lg border border-red-300 bg-red-50 p-4">
+          <p className="font-semibold text-red-800">
+            Configuration Error — Degraded Mode
+          </p>
+          <p className="mt-1 text-sm text-red-700">
+            The application container could not be initialized. Some features
+            are unavailable. Contact your administrator or check the server
+            logs.
+          </p>
+          {process.env.NODE_ENV === 'development' && bootstrapError && (
+            <pre className="mt-2 overflow-auto rounded border bg-red-100 p-2 font-mono text-xs text-red-900">
+              {bootstrapError}
+            </pre>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-8">
         {/* 1. Security Context */}

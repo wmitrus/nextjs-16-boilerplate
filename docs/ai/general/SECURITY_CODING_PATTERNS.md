@@ -630,3 +630,112 @@ function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
 This rule applies to: GrowthBook, LaunchDarkly, Unleash, OpenFeature providers, or any SDK with configurable backend host/endpoint + identifier pairs.
 
 **Relationship to SEC-09**: SEC-09 addresses mutable attribute state shared across requests. SEC-11 addresses incomplete cache key selection when caching client instances themselves. Both are required for correct multi-tenant SDK isolation.
+
+---
+
+## SEC-12 — Script `fs.*` Paths Must Use `path.resolve`, Not `path.join`
+
+**ID**: SEC-12
+**Category**: File access / SEC-05 refinement
+**Surface**: Scripts (`scripts/*.ts`), CLI helpers, any Node.js utility outside Next.js runtime
+
+### Rule
+
+All `fs.*` calls in scripts must construct their paths with `path.resolve(cwd, '<literal>')`, not `path.join(cwd, '<literal>')`.
+
+Both produce the same result for non-traversal inputs, but `resolve` is the explicitly documented safe pattern in this repository (see SEC-05), and is what static analysis tools expect.
+
+### Correct Pattern
+
+```typescript
+import { resolve } from 'node:path';
+
+const ROOT = process.cwd();
+applyEnvFile(resolve(ROOT, '.env'));
+applyEnvFile(resolve(ROOT, '.env.local'));
+```
+
+### Incorrect Pattern
+
+```typescript
+import { join } from 'node:path';
+
+const ROOT = process.cwd();
+applyEnvFile(join(ROOT, '.env')); // violates SEC-05 convention — use resolve
+```
+
+### Rule for Agents
+
+Never use `path.join` for `fs.*` paths in scripts. Always use `path.resolve`. This applies even when the second argument is a string literal with no traversal risk — the convention is `resolve`, not `join`.
+
+---
+
+## SEC-13 — `env:validate` Is a Deploy Gate, Not a PR Quality Gate
+
+**ID**: SEC-13
+**Category**: CI/CD configuration / env validation scope
+
+### Rule
+
+`pnpm env:validate` requires deployment secrets (`CLERK_SECRET_KEY`, `DEFAULT_TENANT_ID`, etc.) that are unavailable in PR workflows — particularly for forked PRs where GitHub Actions does not expose repository secrets.
+
+**`env:validate` MUST run in**: `preview-deploy.yml`, `prod-deploy.yml` — after `vercel pull` has written the deployment env to `.vercel/.env.{env}.local`.
+
+**`env:validate` MUST NOT run in**: `pr-validation.yml` — no deployment env context exists; validation would always fail.
+
+### Correct Placement
+
+```yaml
+# preview-deploy.yml / prod-deploy.yml — CORRECT
+- name: Environment Consistency
+  run: pnpm env:check
+- name: Environment Cross-Field Validation
+  run: pnpm env:validate # runs AFTER vercel pull
+  env:
+    NODE_ENV: production
+    APP_ENV: preview # or production
+```
+
+```yaml
+# pr-validation.yml — CORRECT (env:validate is intentionally absent)
+- name: Environment Consistency
+  run: pnpm env:check
+# env:validate omitted — it is a deploy gate, not a code quality gate
+```
+
+### Rule for Agents
+
+Do not add `env:validate` to PR validation workflows. It belongs only in deploy-gating workflows where `vercel pull` has already populated the deployment environment.
+
+---
+
+## SEC-14 — UUID Test Fixtures Must Use Valid v4 Format
+
+**ID**: SEC-14
+**Category**: Test fixture correctness / schema alignment
+
+### Rule
+
+When a field is validated with `z.uuid()` (which enforces RFC 4122 v4 format), all test fixtures for that field must use a genuine v4 UUID.
+
+A v4 UUID has the form `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx` where:
+
+- Position 3 (after the second `-`) starts with `4`
+- The first character of position 4 is one of `8`, `9`, `a`, or `b`
+
+### Correct Pattern
+
+```typescript
+const VALID_UUID =
+  'f47ac10b-58cc-4372-a567-0e02b2c3d479'; /* RFC 4122 v4 UUID */
+```
+
+### Incorrect Pattern
+
+```typescript
+const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000'; // NOT v4 — position 3 is '12d3', not '4xxx'
+```
+
+### Rule for Agents
+
+Always use a valid v4 UUID in test fixtures for fields validated with `z.uuid()`. Non-v4 UUIDs pass Zod's `z.uuid()` check at runtime in some versions but misalign the test intent with the schema contract and can cause unexpected failures if schema enforcement tightens.

@@ -100,7 +100,7 @@
 
 ## Open Questions / Blockers
 
-- **Unresolved**: Can `scripts/validate-env.mjs` safely `import('@/core/env')` from a plain Node script, or does it need a different approach due to TypeScript path aliases? (Most likely needs `tsx` or compiled output — to be confirmed by Runtime agent)
+- **Resolved**: `scripts/validate-env.ts` runs via `tsx` which handles `@/core/env` path aliases correctly. The script reads from `process.env` directly (not T3-Env proxy) in `main()` to ensure env file values loaded by `load-env-files.ts` are visible.
 - **Unresolved**: Should the showcase page config-error UI be a banner (page still renders with all flags off) or a full-page error card?
 
 ## Handoff Notes

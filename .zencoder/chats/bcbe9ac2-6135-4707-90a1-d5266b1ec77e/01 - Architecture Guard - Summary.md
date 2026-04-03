@@ -62,7 +62,7 @@
 **Fix 4 — SDD doc correction:**
 
 - `docs/sdd/` contains example deployment templates. These are documentation, not production configuration.
-- Correcting `DEFAULT_TENANT_ID: 'default'` to `DEFAULT_TENANT_ID: '<your-uuid-here>'` (with explicit instruction) is a documentation-only change — zero architectural risk.
+- Correcting `DEFAULT_TENANT_ID: 'default'` to `DEFAULT_TENANT_ID: '<your-uuid-v4-here>'` (with explicit instruction) is a documentation-only change — zero architectural risk.
 - No module boundaries involved.
 
 ### Risks

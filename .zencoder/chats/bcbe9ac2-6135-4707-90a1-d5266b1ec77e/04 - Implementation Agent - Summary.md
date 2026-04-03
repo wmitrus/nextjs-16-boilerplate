@@ -33,11 +33,12 @@
 
 Created a TypeScript validation script that:
 
-- Imports `validateAuthProviderConfigValues`, `validateTenancyConfigValues`, and `env` from `@/core/env`
+- Imports only `validateAuthProviderConfigValues` and `validateTenancyConfigValues` from `@/core/env` (NOT the `env` proxy object — see fix notes below)
 - Exports `runValidation(...)` as a pure function for testability
 - Calls `main()` only when the script is invoked directly (`import.meta.url === process.argv[1]` guard)
 - Accumulates all cross-field errors before reporting (not fail-fast)
 - Exits non-zero with clear error messages on failure; exits zero with success summary on pass
+  > **Fix note (post-review)**: `main()` reads from `process.env` directly (not the T3-Env proxy) because T3-Env caches `process.env` at module-init time. The `load-env-files` side-effect module populates `process.env` before `main()` runs but after T3-Env initializes. Reading from `process.env` directly guarantees fresh values.
 - Uses `fileURLToPath(import.meta.url)` from `node:url` for ESM-compatible direct-run detection
 
 ### Fix 2: `package.json` + CI/CD workflow files

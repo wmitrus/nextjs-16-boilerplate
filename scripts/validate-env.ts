@@ -1,10 +1,11 @@
 import { fileURLToPath } from 'node:url';
 
 import {
-  env,
   validateAuthProviderConfigValues,
   validateTenancyConfigValues,
 } from '@/core/env';
+
+import { loadedFiles } from './load-env-files';
 
 export function runValidation(
   authProvider: string | undefined,
@@ -40,18 +41,29 @@ export function runValidation(
 }
 
 function main(): void {
+  const source =
+    loadedFiles.length > 0
+      ? `loaded from: ${loadedFiles.join(', ')}`
+      : 'no local .env files found — reading from process.env only (expected in CI after vercel pull)';
+
+  // Read from process.env directly — T3-Env proxy caches values at module init time
+  // and may have stale undefined for optional fields when .env.local is loaded after.
+  // By the time main() runs, load-env-files has already populated process.env.
+  const authProvider = process.env.AUTH_PROVIDER ?? 'clerk';
+  const tenancyMode = process.env.TENANCY_MODE ?? 'single';
+
   const errors = runValidation(
-    env.AUTH_PROVIDER,
-    env.CLERK_SECRET_KEY,
-    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-    env.TENANCY_MODE,
-    env.DEFAULT_TENANT_ID,
-    env.TENANT_CONTEXT_SOURCE,
+    authProvider,
+    process.env.CLERK_SECRET_KEY,
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    tenancyMode,
+    process.env.DEFAULT_TENANT_ID,
+    process.env.TENANT_CONTEXT_SOURCE,
   );
 
   if (errors.length > 0) {
     console.error(
-      '❌ Environment validation failed. The following cross-field requirements are not met:',
+      `❌ Environment validation failed (${source}).\nThe following cross-field requirements are not met:`,
     );
     for (const error of errors) {
       console.error(`   ${error}`);
@@ -63,7 +75,7 @@ function main(): void {
   }
 
   console.log(
-    `✅ Environment cross-field validation passed (NODE_ENV=${env.NODE_ENV}, AUTH_PROVIDER=${env.AUTH_PROVIDER}, TENANCY_MODE=${env.TENANCY_MODE})`,
+    `✅ Environment cross-field validation passed (${source})\n   NODE_ENV=${process.env.NODE_ENV ?? 'development'}, AUTH_PROVIDER=${authProvider}, TENANCY_MODE=${tenancyMode}`,
   );
 }
 

@@ -132,7 +132,7 @@ For each finding include:
 ### [ ] Step: Rule Review
 
 <!-- agent: architecture-guard-agent -->
-<!-- security-auth-agent -->
+<!-- agent: security-auth-agent -->
 
 Review repeated rules and decide:
 

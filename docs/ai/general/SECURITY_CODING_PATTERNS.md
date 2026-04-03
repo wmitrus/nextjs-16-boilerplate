@@ -11,14 +11,15 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category          | Vulnerability Class                                  | Classification            | Affected Contexts |
-| ------ | ----------------- | ---------------------------------------------------- | ------------------------- | ----------------- |
-| SEC-01 | Cryptography      | Timing attack — Symbol `===` in DI mocks             | False positive            | Unit test files   |
-| SEC-02 | Routes            | Open redirect — hardcoded path via `req.url` origin  | False positive            | Middleware        |
-| SEC-03 | Routes            | Open redirect — forwarded `redirect_url` query param | Latent risk → fixed       | Middleware        |
-| SEC-04 | Command injection | Dynamic logger dispatch `logger[level]()`            | False positive → hardened | API route         |
-| SEC-05 | File access       | Dynamic `fs.*` with static literal paths             | False positive            | E2E helpers       |
-| SEC-06 | Cryptography      | `Math.random()` for test email uniqueness            | False positive            | E2E specs         |
+| #      | Category          | Vulnerability Class                                  | Classification            | Affected Contexts         |
+| ------ | ----------------- | ---------------------------------------------------- | ------------------------- | ------------------------- |
+| SEC-01 | Cryptography      | Timing attack — Symbol `===` in DI mocks             | False positive            | Unit test files           |
+| SEC-02 | Routes            | Open redirect — hardcoded path via `req.url` origin  | False positive            | Middleware                |
+| SEC-03 | Routes            | Open redirect — forwarded `redirect_url` query param | Latent risk → fixed       | Middleware                |
+| SEC-04 | Command injection | Dynamic logger dispatch `logger[level]()`            | False positive → hardened | API route                 |
+| SEC-05 | File access       | Dynamic `fs.*` with static literal paths             | False positive            | E2E helpers               |
+| SEC-06 | Cryptography      | `Math.random()` for test email uniqueness            | False positive            | E2E specs                 |
+| SEC-11 | Caching           | SDK client cache key missing differentiating config  | Real risk → fixed         | Module-level SDK adapters |
 
 ---
 
@@ -400,6 +401,8 @@ unique('constraint_name').on(t.key, t.nullableCol).nullsNotDistinct();
 
 This generates `UNIQUE NULLS NOT DISTINCT` (requires Postgres 15+).
 
+**SQLint false positive**: SQLint reports `UNIQUE NULLS NOT DISTINCT(...)` as "non-ANSI SQL syntax". This is a false positive for this Postgres-only codebase. Drizzle ORM generates this exact SQL from `.nullsNotDistinct()`. Do not edit Drizzle-generated migration files to work around this warning. Configure SQLint to allow PostgreSQL dialect extensions, or suppress the warning with a per-file ignore.
+
 ---
 
 ## SEC-09 — Shared Mutable State in SDK Singleton Across Requests
@@ -550,3 +553,80 @@ If stack traces are needed, log them only at `debug` level and only in non-produ
 **DO NOT** log `error.stack` in production at `warn` or `error` level.
 
 This rule applies to all catch blocks in infrastructure adapters, resilient wrappers, and route handlers.
+
+---
+
+## SEC-11 — SDK Client Cache Key Must Include All Differentiating Configuration
+
+**ID**: SEC-11
+
+**Category**: Caching / Multi-tenancy / Request Isolation
+
+**Vulnerability Class**: Wrong backend silently queried due to incomplete cache key
+
+**Classification**: Real risk
+
+**Affected Contexts**: Any module-level SDK client cache keyed by a subset of the client's configuration
+
+---
+
+### Pattern (DO NOT use)
+
+```typescript
+// DANGEROUS: cache key uses only clientKey, ignoring apiHost
+const clientCache = new Map<string, ClientEntry>();
+
+function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
+  const existing = clientCache.get(clientKey); // ← ignores apiHost
+  if (existing) return existing;
+
+  const client = new SdkClient({ clientKey, apiHost });
+  clientCache.set(clientKey, { client, ready: client.init() });
+  return clientCache.get(clientKey)!;
+}
+```
+
+### Why This Is Dangerous
+
+If two `SdkClient` instances are constructed with the same `clientKey` but different `apiHost` values (e.g., self-hosted vs. CDN, staging vs. production, different regions), the second instance silently reuses the first cached client. All subsequent flag evaluations, feature fetches, or API calls go to the wrong backend.
+
+This is **silent** — no error is thrown. Feature flags may be evaluated against stale or wrong definitions, potentially causing:
+
+- Incorrectly enabled features for tenants or users
+- Wrong rollout percentages applied
+- Wrong experiments evaluated
+
+### Correct Pattern
+
+Include **all** configuration that differentiates client behavior in the cache key:
+
+```typescript
+// SAFE: cache key includes all differentiating config
+const clientCache = new Map<string, ClientEntry>();
+
+function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
+  const cacheKey = `${clientKey}|${apiHost}`; // ← all differentiating config
+  const existing = clientCache.get(cacheKey);
+  if (existing) return existing;
+
+  const client = new SdkClient({ clientKey, apiHost });
+  const ready = client.init({ timeout: 2000 }).then(() => undefined);
+  const entry: ClientEntry = { client, ready };
+  clientCache.set(cacheKey, entry);
+  return entry;
+}
+```
+
+**Separator choice**: Use `|` as the separator between key components. Ensure the separator character cannot appear in any of the key component values to avoid collisions. For SDK client keys and HTTPS URLs, `|` is safe.
+
+### Rule for Agents
+
+**DO NOT** key a module-level SDK client cache by a subset of the client's configuration.
+
+**DO** include all configuration fields that distinguish one client instance from another in the cache key.
+
+**DO** use a separator character that cannot appear in any of the key components.
+
+This rule applies to: GrowthBook, LaunchDarkly, Unleash, OpenFeature providers, or any SDK with configurable backend host/endpoint + identifier pairs.
+
+**Relationship to SEC-09**: SEC-09 addresses mutable attribute state shared across requests. SEC-11 addresses incomplete cache key selection when caching client instances themselves. Both are required for correct multi-tenant SDK isolation.

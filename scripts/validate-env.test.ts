@@ -14,7 +14,8 @@ vi.mock('@/core/env', async () => {
 
 import { runValidation } from './validate-env';
 
-const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000';
+const VALID_UUID =
+  'f47ac10b-58cc-4372-a567-0e02b2c3d479'; /* RFC 4122 v4 UUID */
 
 describe('validate-env: runValidation', () => {
   describe('auth provider validation', () => {

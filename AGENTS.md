@@ -558,6 +558,9 @@ Key rules currently in effect:
 | SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context   |
 | SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields              |
 | SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset |
+| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)            |
+| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`   |
+| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                     |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

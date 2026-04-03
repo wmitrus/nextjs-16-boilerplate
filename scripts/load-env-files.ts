@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 
 /**
  * Side-effect module: loads .env, .env.local, and Vercel-pulled env files into
@@ -23,7 +23,7 @@ const ROOT = process.cwd();
 export const loadedFiles: string[] = [];
 
 function applyEnvFile(filePath: string): void {
-  // filePath is always join(process.cwd(), '<static-literal or safe env-derived path>').
+  // filePath is always resolve(process.cwd(), '<static-literal or safe env-derived path>').
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   if (!existsSync(filePath)) return;
 
@@ -50,15 +50,15 @@ function applyEnvFile(filePath: string): void {
 }
 
 // 1. Base defaults
-applyEnvFile(join(ROOT, '.env'));
+applyEnvFile(resolve(ROOT, '.env'));
 
 // 2. Local developer overrides
-applyEnvFile(join(ROOT, '.env.local'));
+applyEnvFile(resolve(ROOT, '.env.local'));
 
 // 3. Vercel-pulled env file — created by `vercel pull --environment={env}` in CI.
 //    APP_ENV is set by the GitHub Actions workflows (preview-deploy.yml, prod-deploy.yml).
 //    VERCEL_ENV is set by the Vercel runtime itself during builds.
 const vercelEnv = process.env.APP_ENV ?? process.env.VERCEL_ENV;
 if (vercelEnv === 'preview' || vercelEnv === 'production') {
-  applyEnvFile(join(ROOT, `.vercel/.env.${vercelEnv}.local`));
+  applyEnvFile(resolve(ROOT, `.vercel/.env.${vercelEnv}.local`));
 }

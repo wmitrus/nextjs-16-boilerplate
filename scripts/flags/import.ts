@@ -19,6 +19,53 @@ import {
 
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
 
+class FlagsInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FlagsInputError';
+  }
+}
+
+export function parseFlagsJson(raw: string): FlagsFile {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new FlagsInputError(
+      '[flags:import] Failed to parse input as JSON. Ensure the file contains valid JSON.',
+    );
+  }
+
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('flags' in (parsed as object))
+  ) {
+    throw new FlagsInputError(
+      '[flags:import] Invalid input: missing top-level "flags" field.\n' +
+        '  Expected format: { "flags": [{ "key": "...", "enabled": true, "tenantId": null }] }',
+    );
+  }
+
+  const { flags } = parsed as { flags: unknown };
+
+  if (!Array.isArray(flags)) {
+    if (typeof flags === 'object' && flags !== null) {
+      throw new FlagsInputError(
+        '[flags:import] Old export format detected.\n' +
+          '  The "flags" field is an object map (pre-array format), but the current format requires an array.\n' +
+          '  Regenerate your backup with: pnpm flags:export --adapter=db --out=flags-backup.json',
+      );
+    }
+    throw new FlagsInputError(
+      '[flags:import] Invalid input: "flags" must be an array.\n' +
+        '  Expected format: { "flags": [{ "key": "...", "enabled": true, "tenantId": null }] }',
+    );
+  }
+
+  return parsed as FlagsFile;
+}
+
 function readInput(filePath: string | undefined): FlagsFile {
   let raw: string;
 
@@ -30,7 +77,15 @@ function readInput(filePath: string | undefined): FlagsFile {
     raw = fs.readFileSync('/dev/stdin', 'utf8');
   }
 
-  return JSON.parse(raw) as FlagsFile;
+  try {
+    return parseFlagsJson(raw);
+  } catch (err) {
+    if (err instanceof FlagsInputError) {
+      console.error(err.message);
+      process.exit(1);
+    }
+    throw err;
+  }
 }
 
 async function upsertFlags(db: DrizzleDb, data: FlagsFile): Promise<void> {

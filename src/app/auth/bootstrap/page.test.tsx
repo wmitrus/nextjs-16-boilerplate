@@ -106,6 +106,11 @@ describe('BootstrapPageContent', () => {
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 
+  it('defaults to db_error for inherited prototype keys in reason', async () => {
+    render(await BootstrapPageContent(makeProps({ reason: 'toString' })));
+    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  });
+
   it('defaults to db_error when no params are provided', async () => {
     render(await BootstrapPageContent(makeProps()));
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');

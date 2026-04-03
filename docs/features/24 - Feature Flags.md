@@ -143,7 +143,7 @@ pnpm db:migrate:dev
 
 ### How it works
 
-Uses the official `@growthbook/growthbook` SDK via the stateless `GrowthBookClient` API. The client instance is cached at module level per `clientKey` to avoid repeated initialization overhead.
+Uses the official `@growthbook/growthbook` SDK via the stateless `GrowthBookClient` API. The client instance is cached at module level per `clientKey` and `apiHost` combination to avoid repeated initialization overhead. Using both ensures instances targeting different GrowthBook backends are never confused with each other.
 
 On every `isEnabled()` call:
 
@@ -251,17 +251,19 @@ Output format:
 
 ```json
 {
-  "flags": {
-    "demo.new-dashboard-ui": {
+  "flags": [
+    {
+      "key": "demo.new-dashboard-ui",
       "enabled": true,
       "tenantId": null
     },
-    "demo.beta-exports": {
+    {
+      "key": "demo.beta-exports",
       "enabled": false,
       "tenantId": "org_acme",
       "description": "Beta exports for Acme tenant only"
     }
-  }
+  ]
 }
 ```
 

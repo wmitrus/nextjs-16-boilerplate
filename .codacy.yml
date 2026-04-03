@@ -1,10 +1,77 @@
 ---
+# Codacy configuration file.
+#
+# Controls path exclusions for each engine. Note: enabling/disabling tools
+# is done in the Codacy UI (Code patterns page) — not here.
+#
+# Docs: https://docs.codacy.com/repositories-configure/codacy-configuration-file/
+
 engines:
+  # ── Lizard — cyclomatic complexity ──────────────────────────────────────────
+  # Tool enable state is set in Codacy UI. Exclusions below are always applied.
   lizard:
     exclude_paths:
       - '**/*.test.ts'
       - '**/*.test.tsx'
       - '**/*.integration.test.ts'
       - '**/*.spec.ts'
+      - '**/*.stories.ts'
+      - '**/*.stories.tsx'
       - 'e2e/**'
       - 'scripts/**'
+      - '.next/**'
+      - 'node_modules/**'
+
+  # ── ESLint — TypeScript static analysis ─────────────────────────────────────
+  # Codacy reads this project's eslint.config.mjs and applies it.
+  eslint:
+    exclude_paths:
+      - '.vscode/**'
+      - '.next/**'
+      - 'node_modules/**'
+      - 'coverage/**'
+      - 'storybook-static/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'scripts/**'
+      - '**/*.stories.ts'
+      - '**/*.stories.tsx'
+
+  # ── Semgrep — semantic code patterns ────────────────────────────────────────
+  semgrep:
+    exclude_paths:
+      - '.vscode/**'
+      - '.next/**'
+      - 'node_modules/**'
+      - 'coverage/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'scripts/**'
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.integration.test.ts'
+      - '**/*.spec.ts'
+
+  # ── Trivy — dependency vulnerability scanning ───────────────────────────────
+  trivy:
+    exclude_paths:
+      - '.next/**'
+
+  # ── Checkov — IaC security scanning ─────────────────────────────────────────
+  checkov:
+    exclude_paths:
+      - '.next/**'
+      - 'node_modules/**'
+
+# ── Global exclusions applied to all engines ────────────────────────────────
+exclude_paths:
+  - '.vscode/**'
+  - '.next/**'
+  - 'node_modules/**'
+  - 'coverage/**'
+  - 'storybook-static/**'
+  - '.vercel/**'
+  - 'dist/**'
+  - 'exports/**'
+  - 'logs/**'
+  - 'data/**'

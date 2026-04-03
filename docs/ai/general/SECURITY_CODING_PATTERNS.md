@@ -20,6 +20,8 @@ Update it after every security review group.
 | SEC-05 | File access       | Dynamic `fs.*` with static literal paths             | False positive            | E2E helpers               |
 | SEC-06 | Cryptography      | `Math.random()` for test email uniqueness            | False positive            | E2E specs                 |
 | SEC-11 | Caching           | SDK client cache key missing differentiating config  | Real risk → fixed         | Module-level SDK adapters |
+| SEC-15 | Object access     | User-controlled key lookup via `key in object`       | Latent risk               | Auth/bootstrap UI mapping |
+| SEC-16 | File access       | Reusable helper fs paths lack sink confinement       | Latent risk               | Runtime logger helpers    |
 
 ---
 
@@ -630,3 +632,247 @@ function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
 This rule applies to: GrowthBook, LaunchDarkly, Unleash, OpenFeature providers, or any SDK with configurable backend host/endpoint + identifier pairs.
 
 **Relationship to SEC-09**: SEC-09 addresses mutable attribute state shared across requests. SEC-11 addresses incomplete cache key selection when caching client instances themselves. Both are required for correct multi-tenant SDK isolation.
+
+---
+
+## SEC-12 — Script `fs.*` Paths Must Use `path.resolve`, Not `path.join`
+
+**ID**: SEC-12
+**Category**: File access / SEC-05 refinement
+**Surface**: Scripts (`scripts/*.ts`), CLI helpers, any Node.js utility outside Next.js runtime
+
+### Rule
+
+All `fs.*` calls in scripts must construct their paths with `path.resolve(cwd, '<literal>')`, not `path.join(cwd, '<literal>')`.
+
+Both produce the same result for non-traversal inputs, but `resolve` is the explicitly documented safe pattern in this repository (see SEC-05), and is what static analysis tools expect.
+
+### Correct Pattern
+
+```typescript
+import { resolve } from 'node:path';
+
+const ROOT = process.cwd();
+applyEnvFile(resolve(ROOT, '.env'));
+applyEnvFile(resolve(ROOT, '.env.local'));
+```
+
+### Incorrect Pattern
+
+```typescript
+import { join } from 'node:path';
+
+const ROOT = process.cwd();
+applyEnvFile(join(ROOT, '.env')); // violates SEC-05 convention — use resolve
+```
+
+### Rule for Agents
+
+Never use `path.join` for `fs.*` paths in scripts. Always use `path.resolve`. This applies even when the second argument is a string literal with no traversal risk — the convention is `resolve`, not `join`.
+
+---
+
+## SEC-13 — `env:validate` Is a Deploy Gate, Not a PR Quality Gate
+
+**ID**: SEC-13
+**Category**: CI/CD configuration / env validation scope
+
+### Rule
+
+`pnpm env:validate` requires deployment secrets (`CLERK_SECRET_KEY`, `DEFAULT_TENANT_ID`, etc.) that are unavailable in PR workflows — particularly for forked PRs where GitHub Actions does not expose repository secrets.
+
+**`env:validate` MUST run in**: `preview-deploy.yml`, `prod-deploy.yml` — after `vercel pull` has written the deployment env to `.vercel/.env.{env}.local`.
+
+**`env:validate` MUST NOT run in**: `pr-validation.yml` — no deployment env context exists; validation would always fail.
+
+### Correct Placement
+
+```yaml
+# preview-deploy.yml / prod-deploy.yml — CORRECT
+- name: Environment Consistency
+  run: pnpm env:check
+- name: Environment Cross-Field Validation
+  run: pnpm env:validate # runs AFTER vercel pull
+  env:
+    NODE_ENV: production
+    APP_ENV: preview # or production
+```
+
+```yaml
+# pr-validation.yml — CORRECT (env:validate is intentionally absent)
+- name: Environment Consistency
+  run: pnpm env:check
+# env:validate omitted — it is a deploy gate, not a code quality gate
+```
+
+### Rule for Agents
+
+Do not add `env:validate` to PR validation workflows. It belongs only in deploy-gating workflows where `vercel pull` has already populated the deployment environment.
+
+---
+
+## SEC-14 — UUID Test Fixtures Must Use Valid v4 Format
+
+**ID**: SEC-14
+**Category**: Test fixture correctness / schema alignment
+
+### Rule
+
+When a field is validated with `z.uuid()` (which enforces RFC 4122 v4 format), all test fixtures for that field must use a genuine v4 UUID.
+
+A v4 UUID has the form `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx` where:
+
+- Position 3 (after the second `-`) starts with `4`
+- The first character of position 4 is one of `8`, `9`, `a`, or `b`
+
+### Correct Pattern
+
+```typescript
+const VALID_UUID =
+  'f47ac10b-58cc-4372-a567-0e02b2c3d479'; /* RFC 4122 v4 UUID */
+```
+
+### Incorrect Pattern
+
+```typescript
+const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000'; // NOT v4 — position 3 is '12d3', not '4xxx'
+```
+
+### Rule for Agents
+
+Always use a valid v4 UUID in test fixtures for fields validated with `z.uuid()`. Non-v4 UUIDs pass Zod's `z.uuid()` check at runtime in some versions but misalign the test intent with the schema contract and can cause unexpected failures if schema enforcement tightens.
+
+---
+
+## SEC-15 — Never Guard User-Controlled Record Lookups With `key in plainObject`
+
+**ID**: SEC-15
+**Category**: Object access / prototype-chain trust boundary
+**Surface**: Auth/bootstrap mappings, route-handler lookup tables, any plain-object record indexed by request or query input
+
+### Scanner / Review Signal
+
+This pattern often appears as `security/detect-object-injection`, but the deeper issue is not generic object injection. The real problem is trusting `key in plainObject` as a safe membership guard for a user-controlled string before reading `plainObject[key]`.
+
+### Why This Is Risky
+
+- The `in` operator walks the prototype chain.
+- User-controlled keys like `toString`, `constructor`, or other inherited names satisfy `key in obj` even when they are not intended application keys.
+- If the code then reads `obj[key]`, the guard has accepted inherited properties rather than only the repository's explicit allowlist.
+- This is a trust-boundary bug even when the lookup is read-only.
+
+### Dangerous Pattern (DO NOT use)
+
+```typescript
+const ERROR_BY_REASON: Record<string, BootstrapError> = {
+  quota_exceeded: 'quota_exceeded',
+  db_error: 'db_error',
+};
+
+if (reason && reason in ERROR_BY_REASON) {
+  return ERROR_BY_REASON[reason];
+}
+```
+
+### Correct Patterns
+
+Use one of these instead:
+
+```typescript
+if (reason && Object.hasOwn(ERROR_BY_REASON, reason)) {
+  return ERROR_BY_REASON[reason as keyof typeof ERROR_BY_REASON];
+}
+```
+
+```typescript
+const ERROR_BY_REASON = Object.assign(Object.create(null), {
+  quota_exceeded: 'quota_exceeded',
+  db_error: 'db_error',
+}) as Record<string, BootstrapError>;
+```
+
+```typescript
+const errorByReason = new Map<string, BootstrapError>([
+  ['quota_exceeded', 'quota_exceeded'],
+  ['db_error', 'db_error'],
+]);
+
+const resolved = reason ? errorByReason.get(reason) : undefined;
+if (resolved) return resolved;
+```
+
+### Rule for Agents
+
+**DO NOT** validate a user-controlled key with `key in plainObject` and then read `plainObject[key]`.
+
+**DO** use `Object.hasOwn`, a null-prototype record, or a `Map` for user-controlled key lookups.
+
+**Relationship to SEC-04**: SEC-04 covers dynamic method dispatch and explicit dispatch maps. SEC-15 covers read-only lookup tables where the key itself is untrusted and must not be accepted through the prototype chain.
+
+---
+
+## SEC-16 — Reusable `fs.*` Helpers Must Enforce Path Confinement At The Sink
+
+**ID**: SEC-16
+**Category**: File access / path confinement
+**Surface**: Reusable helpers in runtime code or scripts that accept a path, directory, or filename argument and call `fs.*`
+
+### Review Signal
+
+Some `security/detect-non-literal-fs-filename` findings are true false positives because the path is a static literal. This rule is different: when a reusable helper accepts a path-like argument, caller assumptions are not enough. The helper itself must resolve and confine the path before `fs.*` access.
+
+### Why This Is Risky
+
+- Callers can drift from today's static inputs to tomorrow's env-driven or operator-provided values.
+- If the helper performs `fs.existsSync`, `fs.mkdirSync`, `fs.readFileSync`, or similar on a joined path without confinement, the sink remains vulnerable to future misuse.
+- Upstream validation is not a substitute for point-of-use guards.
+
+### Dangerous Pattern (DO NOT use)
+
+```typescript
+function ensureLogDirectory(logDir: string): boolean {
+  const logDirectory = path.join(process.cwd(), logDir);
+  if (!fs.existsSync(logDirectory)) {
+    fs.mkdirSync(logDirectory, { recursive: true });
+  }
+  return true;
+}
+```
+
+### Correct Pattern
+
+```typescript
+function assertPathWithinBase(resolvedPath: string, baseDir: string) {
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  const expectedPrefix = normalizedBase.endsWith(path.sep)
+    ? normalizedBase
+    : normalizedBase + path.sep;
+
+  if (
+    normalizedPath !== normalizedBase &&
+    !normalizedPath.startsWith(expectedPrefix)
+  ) {
+    throw new Error(`Path escapes allowed base: ${normalizedPath}`);
+  }
+}
+
+function ensureLogDirectory(logDir: string): boolean {
+  const baseDir = process.cwd();
+  const resolvedPath = path.resolve(baseDir, logDir);
+  assertPathWithinBase(resolvedPath, baseDir);
+
+  if (!fs.existsSync(resolvedPath)) {
+    fs.mkdirSync(resolvedPath, { recursive: true });
+  }
+  return true;
+}
+```
+
+### Rule for Agents
+
+**DO NOT** rely on caller-side assumptions that a helper path argument is static or already validated.
+
+**DO** resolve and confine path-like arguments inside the helper immediately before the `fs.*` sink.
+
+**Relationship to SEC-05 / SEC-12**: SEC-05 covers true false positives for static literal paths. SEC-12 sets the repository script convention to use `path.resolve`. SEC-16 adds the missing sink-level rule for reusable helpers that accept dynamic path arguments.

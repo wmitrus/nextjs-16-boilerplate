@@ -9,21 +9,43 @@ import pretty from 'pino-pretty';
 
 import { env } from '@/core/env';
 
+function assertPathWithinBase(resolvedPath: string, baseDir: string) {
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  const expectedPrefix = normalizedBase.endsWith(path.sep)
+    ? normalizedBase
+    : normalizedBase + path.sep;
+
+  if (
+    normalizedPath !== normalizedBase &&
+    !normalizedPath.startsWith(expectedPrefix)
+  ) {
+    throw new Error(
+      `Log path escapes the allowed base directory: ${normalizedPath}`,
+    );
+  }
+}
+
 /**
  * Ensures that the log directory exists.
  */
 export function ensureLogDirectory(logDir: string): boolean {
-  const logDirectory = path.join(process.cwd(), logDir);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- logDirectory is path.join(cwd, logDir) where logDir is always a static literal from call sites; no user input (SEC-05)
-  if (!fs.existsSync(logDirectory)) {
-    try {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- same as above; static config path
+  const baseDir = process.cwd();
+
+  try {
+    const logDirectory = path.resolve(baseDir, logDir);
+    assertPathWithinBase(logDirectory, baseDir);
+
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- logDirectory is resolved and confined to process.cwd() at the sink (SEC-16)
+    if (!fs.existsSync(logDirectory)) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- same as above; resolved and confined before fs access
       fs.mkdirSync(logDirectory, { recursive: true });
-    } catch (err) {
-      console.error('Error setting up log directory:', err);
-      return false;
     }
+  } catch (err) {
+    console.error('Error setting up log directory:', err);
+    return false;
   }
+
   return true;
 }
 

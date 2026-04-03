@@ -129,6 +129,7 @@ Update all locations below that apply to the rule's scope.
 | Incident investigation         | `.zenflow/workflows/incident-investigation.md`                                                                                                                           |
 | Security incident              | `.zenflow/workflows/security-incident-workflow.md`                                                                                                                       |
 | Codacy PR security review      | `.zenflow/workflows/codacy-security-review.md` · `docs/ai/general/Workflow 10 - Codacy Security Review Workflow.md` · `.github/prompts/codacy-security-review.prompt.md` |
+| Codacy local findings review   | `.zenflow/workflows/codacy-findings-review.md` · `docs/ai/general/Workflow 11 - Codacy Findings Review Workflow.md` · `.github/prompts/codacy-findings-review.prompt.md` |
 | Auth flow change review        | `.zenflow/workflows/auth-flow-change-review.md`                                                                                                                          |
 | Change validation              | `.zenflow/workflows/change-validation.md`                                                                                                                                |
 | Repository baseline validation | `.zenflow/workflows/repository-baseline-validation.md`                                                                                                                   |

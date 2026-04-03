@@ -118,7 +118,8 @@ Always flag these if present:
 - secrets exposed to client bundles
 - logs containing tokens, session identifiers, or unnecessary private user data
 - provider SDK usage inside domain or core contracts
-- dynamically constructed file paths used in `fs` operations without `path.resolve()` and base-directory confinement check (CWE-22 — path traversal)
+- validating a user-controlled record lookup with `key in plainObject` before reading `plainObject[key]` — use `Object.hasOwn`, a null-prototype record, or `Map` instead (SEC-15)
+- dynamically constructed file paths used in `fs` operations without `path.resolve()` and base-directory confinement check at the sink, including reusable helpers (CWE-22 — path traversal, SEC-16)
 - environment-variable-sourced or user-controlled URLs passed directly to `fetch()` or any HTTP client without protocol and hostname allowlist validation (CWE-918 — SSRF)
 - forwarding `redirect_url` or similar query parameters to any redirect destination without calling `sanitizeRedirectUrl()` first — unvalidated params propagate open redirect risk downstream even when the immediate redirect target is a safe literal (SEC-03)
 - using `obj[dynamicKey]()` bracket dispatch on objects to call methods — use explicit `Record<AllowedKeys, fn>` dispatch maps; the Zod guard upstream is invisible to static analysis (SEC-04)
@@ -140,6 +141,7 @@ Never approve a design that relies on:
 - cache behavior that could leak user- or tenant-scoped data
 - logs or telemetry that expose secrets, tokens, or unnecessary private data
 - upstream allowlist validation of CLI args or config values as a substitute for point-of-use guards in file path construction or HTTP calls
+- inherited-key checks on plain objects as a substitute for own-key validation on untrusted input
 
 ## Script and Tooling Security Rules
 

@@ -54,6 +54,13 @@ jobs:
       - name: Environment Consistency
         run: pnpm env:check
 
+      # env:validate is intentionally NOT run here.
+      # It is a deployment-configuration gate, not a code-quality gate.
+      # It requires deployment secrets (CLERK_SECRET_KEY, DEFAULT_TENANT_ID, etc.)
+      # that are unavailable in PR context — particularly for forked PRs.
+      # Cross-field env validation runs in preview-deploy.yml and prod-deploy.yml
+      # after `vercel pull` has downloaded the actual deployment environment.
+
       - name: Circular Dependency Check (Skott)
         run: pnpm skott:check:only
 

@@ -75,6 +75,24 @@ describe('logger utils', () => {
       const result = ensureLogDirectory('logs');
       expect(result).toBe(false);
     });
+
+    it('should reject paths that escape the workspace root', () => {
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const result = ensureLogDirectory('../logs');
+
+      expect(result).toBe(false);
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(fs.mkdirSync).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Error setting up log directory:',
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('createConsoleStream', () => {

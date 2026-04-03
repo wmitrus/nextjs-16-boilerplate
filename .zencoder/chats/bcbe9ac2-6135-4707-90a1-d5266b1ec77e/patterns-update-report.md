@@ -32,13 +32,13 @@ This session produced two potential candidates for the security patterns catalog
 
 **No new entries added to `docs/ai/general/SECURITY_CODING_PATTERNS.md`.**
 
-The existing patterns (SEC-01 through SEC-06) remain accurate and current. None were contradicted or extended by this session.
+The existing patterns (SEC-01 through SEC-11) remain accurate and current. None were contradicted or extended by this session.
 
 ## AGENTS.md Propagation Check
 
 The two candidates above are operational/architectural rules, not security coding rules. They do not qualify for:
 
-- `AGENTS.md` always-on rules table (which covers coding-level patterns like SEC-01 through SEC-06)
+- `AGENTS.md` always-on rules table (which covers coding-level patterns like SEC-01 through SEC-11)
 - `SECURITY_CODING_PATTERNS.md` scanner-focused catalogue
 
 If a deploy-readiness production checklist document is created in the future, it should capture:

@@ -54,6 +54,11 @@ jobs:
       - name: Environment Consistency
         run: pnpm env:check
 
+      - name: Environment Cross-Field Validation
+        run: pnpm env:validate
+        env:
+          NODE_ENV: production
+
       - name: Circular Dependency Check (Skott)
         run: pnpm skott:check:only
 

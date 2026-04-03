@@ -65,7 +65,7 @@ They do not, by themselves, prove that the tool visibly switched the active agen
 
 ## Workflow Steps
 
-### [ ] Step: Incident Intake
+### [x] Step: Incident Intake
 
 Understand the incident before remediation.
 
@@ -85,7 +85,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Security Review
+### [x] Step: Security Review
 
 <!-- agent: security-auth-agent -->
 
@@ -114,7 +114,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Runtime Review (Conditional)
+### [x] Step: Runtime Review (Conditional)
 
 <!-- agent: nextjs-runtime-agent -->
 
@@ -154,7 +154,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Architecture Review (Conditional)
+### [x] Step: Architecture Review (Conditional)
 
 <!-- agent: architecture-guard-agent -->
 
@@ -192,7 +192,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Constraints Summary
+### [x] Step: Constraints Summary
 
 Consolidate prior specialist outputs into one implementation-ready constraint brief.
 
@@ -217,7 +217,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Validation Strategy
+### [x] Step: Validation Strategy
 
 <!-- agent: validation-strategy-agent -->
 
@@ -241,7 +241,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Implementation
+### [x] Step: Implementation
 
 <!-- agent: implementation-agent -->
 
@@ -274,7 +274,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Validation
+### [x] Step: Validation
 
 Run the validation plan defined in:
 
@@ -294,7 +294,7 @@ Output file:
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Scanner Ignore Report
+### [x] Step: Scanner Ignore Report
 
 <!-- agent: security-auth-agent -->
 
@@ -314,7 +314,7 @@ For every finding in this session:
 - findings that were fixed -> recommend resolved or fixed
 - findings classified as real risk but deferred -> recommend accepted risk with explanation
 
-### [ ] Step: Final Security Check
+### [x] Step: Final Security Check
 
 <!-- agent: security-auth-agent -->
 
@@ -340,7 +340,7 @@ Do not create a second security-specific artifact for this recheck.
 
 If execution control is `manual-handoff`, stop after writing this artifact and wait for operator confirmation before continuing.
 
-### [ ] Step: Security Patterns Update
+### [x] Step: Security Patterns Update
 
 <!-- agent: security-auth-agent -->
 

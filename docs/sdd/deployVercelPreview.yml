@@ -79,7 +79,7 @@ jobs:
 
           # Multi-tenant
           MULTI_TENANT_ENABLED: 'true'
-          DEFAULT_TENANT_ID: 'preview-tenant'
+          DEFAULT_TENANT_ID: '<your-uuid-v4-here>' # Required: generate with `uuidgen` or an online UUID generator; must be a valid UUID v4
 
           # API configuration
           API_RATE_LIMIT_ENABLED: 'true'

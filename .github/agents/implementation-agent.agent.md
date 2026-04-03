@@ -89,12 +89,14 @@ You do not own:
 - Do not introduce provider-specific concepts into core contracts.
 - Keep public APIs stable unless the task requires a change.
 - Avoid opportunistic cleanup unrelated to the task.
-- Do not use dynamically constructed file paths in `fs` operations without first resolving with `path.resolve()` and asserting the path is within the expected base directory (CWE-22 — path traversal).
+- Do not read from a plain object with a user-controlled key after only a `key in object` check; use `Object.hasOwn`, a null-prototype record, or `Map` before lookup (SEC-15).
+- Do not use dynamically constructed file paths in `fs` operations without first resolving with `path.resolve()` and asserting the path is within the expected base directory at the sink, including reusable helpers (CWE-22 — path traversal, SEC-16).
 - Do not pass environment-variable-sourced or user-controlled URLs to `fetch()` or any HTTP client without parsing with `new URL()` and validating protocol and hostname (CWE-918 — SSRF).
 - Upstream allowlist validation of CLI args does not substitute for point-of-use guards — defense in depth requires guards at both the intake point and the point of file or network access.
 - Do not write if/else chains of `token === SYMBOL` in DI mock test containers — use `Map<symbol, unknown>` with `Map.get(token)` instead (SEC-01 in `SECURITY_CODING_PATTERNS.md`).
 - Do not forward `redirect_url` or similar query parameters to downstream routes without calling `sanitizeRedirectUrl()` at the point the param is read from the request (SEC-03 in `SECURITY_CODING_PATTERNS.md`).
 - Do not use `obj[dynamicKey]()` bracket dispatch on objects to call methods — use an explicit `Record<AllowedKeys, fn>` dispatch map instead (SEC-04 in `SECURITY_CODING_PATTERNS.md`).
+- Do not rely on caller-side validation alone for helper paths that eventually reach `fs.*`; reusable helpers must perform their own confinement check at the point of file access (SEC-16 in `SECURITY_CODING_PATTERNS.md`).
 - `Math.random()` must never be used for tokens, secrets, session identifiers, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06 in `SECURITY_CODING_PATTERNS.md`).
 
 ## Script and Tooling Security Rules

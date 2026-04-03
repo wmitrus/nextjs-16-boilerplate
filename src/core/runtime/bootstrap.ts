@@ -1,5 +1,5 @@
 import { Container } from '@/core/container';
-import { INFRASTRUCTURE, PROVISIONING } from '@/core/contracts';
+import { FEATURE_FLAGS, INFRASTRUCTURE, PROVISIONING } from '@/core/contracts';
 import type { DbConfig } from '@/core/db/types';
 import {
   env,
@@ -12,6 +12,7 @@ import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
 import { createAuthorizationModule } from '@/modules/authorization';
 import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
+import { createFeatureFlagService } from '@/modules/feature-flags/factory';
 import { DrizzleProvisioningService } from '@/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService';
 
 export { createEdgeRequestContainer } from './edge';
@@ -81,6 +82,16 @@ export function createRequestContainer(config: AppConfig): Container {
     createAuthModule({ ...config.auth, membershipRepository }),
   );
   container.registerModule(createAuthorizationModule({ db: dbRuntime.db }));
+
+  container.register(
+    FEATURE_FLAGS.SERVICE,
+    createFeatureFlagService(env.FEATURE_FLAG_PROVIDER, {
+      staticFlags: env.FEATURE_FLAGS_STATIC,
+      db: dbRuntime.db,
+      growthbookClientKey: env.GROWTHBOOK_CLIENT_KEY,
+      growthbookApiHost: env.GROWTHBOOK_API_HOST,
+    }),
+  );
 
   container.register(
     PROVISIONING.SERVICE,

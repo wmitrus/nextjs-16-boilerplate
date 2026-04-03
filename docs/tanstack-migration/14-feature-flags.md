@@ -1,3 +1,26 @@
+> **DEPRECATED — TanStack Start Migration Artefact**
+>
+> This document was written for a **TanStack Start** boilerplate migration and does **not** reflect
+> the current Next.js 16 implementation.
+>
+> Key differences from the live code:
+>
+> - The live contract is `FeatureFlagService` (not `FeatureFlagProvider`)
+> - The live DI token is `FEATURE_FLAGS.SERVICE` (not `FEATURE_FLAGS.PROVIDER`)
+> - The live evaluation context is `AuthorizationContext` (not `FeatureFlagContext`)
+> - `getVariant()` does **not** exist in the live contract — it is explicitly deferred
+> - The live adapters are: `StaticFeatureFlagService`, `InMemoryFeatureFlagService`,
+>   `DrizzleFeatureFlagService`, `GrowthBookFeatureFlagService`
+> - Adapter selection is via `FEATURE_FLAG_PROVIDER=static|db|growthbook` env var
+>
+> For the current implementation, refer to:
+>
+> - `src/core/contracts/feature-flags.ts` — live contract
+> - `src/modules/feature-flags/` — all adapters and the factory
+> - `src/core/runtime/bootstrap.ts` — DI wiring
+>
+> This document is retained as historical reference only.
+
 # Phase 13: Feature Flags – Readiness Seams
 
 ## Objective

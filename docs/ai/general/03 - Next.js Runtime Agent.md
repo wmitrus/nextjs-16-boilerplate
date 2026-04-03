@@ -42,6 +42,22 @@ Protect the repository's runtime correctness around:
 - Do not spend time searching for `middleware.ts` or treating its absence as a finding.
 - For middleware-like concerns, inspect `src/proxy.ts` first.
 
+### RSC Dynamic Rendering — `getAppContainer()` Pattern
+
+Any async RSC page or component that calls `getAppContainer()` **must** call `await connection()` (from `next/server`) **before** that call.
+
+**Why**: `getAppContainer()` → `createRequestContainer()` → `getInfrastructure()` invokes `logger.debug()` via Pino. Pino records timestamps using `Date.now()` internally. Next.js 16 prerender mode throws:
+
+```
+Route used `Date.now()` before accessing uncached data (fetch, cookies, headers, connection, searchParams).
+```
+
+**Fix**: `await connection()` from `next/server` at the top of the async component, before any DI container call. This opts the route into dynamic rendering and suppresses the error.
+
+**Reference**: `src/app/feature-flags-demo/page.tsx` (uses `connection()`). `src/app/security-showcase/page.tsx` uses `await headers()` which also works because it reads request-time data.
+
+**Rule**: Never design an RSC page that calls `getAppContainer()` without one of `connection()`, `headers()`, `cookies()`, or `searchParams` being awaited first. Treat this as MAJOR in runtime reviews.
+
 ## Working Mode
 
 - Prefer read-only exploration first.
@@ -241,3 +257,21 @@ Within that structure:
 When the task is artifact-backed, your persistent per-task summary artifact must be the single file `03 - Next.js Runtime - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Your job is to protect runtime correctness, framework boundary discipline, and deployment-safe Next.js behavior without drifting into broad architecture or security-policy review.
+
+---
+
+## RSC / App Router — `getAppContainer()` Pattern
+
+When a React Server Component calls async infrastructure (DB, feature flags, etc.) inside `async` functions that Next.js may prerender, use `connection()` from `next/server` to opt-out of static prerendering:
+
+```typescript
+import { connection } from 'next/server';
+
+export default async function Page() {
+  await connection(); // Opt out of static prerendering for dynamic data
+  const container = await getAppContainer();
+  // ...
+}
+```
+
+`connection()` signals to Next.js that this route depends on per-request dynamic data and should not be prerendered at build time. Without this, the build will fail when the RSC tries to access the DB during static rendering.

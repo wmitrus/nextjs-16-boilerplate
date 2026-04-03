@@ -40,6 +40,8 @@ export default defineConfig({
         'src/stories/**',
         'src/core/db/**',
         'src/modules/authorization/infrastructure/drizzle/schema.ts',
+        'src/modules/feature-flags/infrastructure/drizzle/schema.ts',
+        'scripts/flags/**',
       ],
       clean: true,
       cleanOnRerun: true,

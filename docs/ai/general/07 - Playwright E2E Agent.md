@@ -98,3 +98,20 @@ When the task is artifact-backed, your persistent per-task summary artifact must
 - findings must be traceable to a command, scenario, or runtime observation
 
 Your job is to verify real-browser behavior and leave behind strong evidence, not to redesign or patch the system.
+
+---
+
+## Pattern F — E2E Coverage for Demo / Showcase Pages
+
+Every demo or showcase page added to the boilerplate MUST have a Playwright E2E spec.
+
+Minimum coverage:
+
+- Page loads without error boundary (no `.error-boundary` or error page elements)
+- `<title>` contains the expected page title
+- Key UI elements (status cards, section headings, active adapter/provider name) are visible
+- Adapter switching instructions or configuration section is visible
+
+**Auth rule**: Demo pages are public — do NOT add `storageState`, `use: { storageState }`, or any Clerk credential setup. Tests must work with a fresh browser context.
+
+Reference: `e2e/feature-flags-demo.spec.ts`, `e2e/home.spec.ts`, `e2e/security.spec.ts`

@@ -23,6 +23,26 @@ vi.mock('@/modules/authorization', () => ({
     }) as Module,
 }));
 
+vi.mock(
+  '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository',
+  () => ({
+    DrizzleMembershipRepository: vi.fn(),
+  }),
+);
+
+vi.mock('@/modules/feature-flags/factory', () => ({
+  createFeatureFlagService: vi.fn().mockReturnValue({
+    isEnabled: vi.fn().mockResolvedValue(false),
+  }),
+}));
+
+vi.mock(
+  '@/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService',
+  () => ({
+    DrizzleProvisioningService: vi.fn(),
+  }),
+);
+
 describe('bootstrap request/process scopes', () => {
   beforeEach(() => {
     createDbMock.mockReset();

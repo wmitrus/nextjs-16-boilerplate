@@ -123,6 +123,7 @@ Always flag these if present:
 - forwarding `redirect_url` or similar query parameters to any redirect destination without calling `sanitizeRedirectUrl()` first — unvalidated params propagate open redirect risk downstream even when the immediate redirect target is a safe literal (SEC-03)
 - using `obj[dynamicKey]()` bracket dispatch on objects to call methods — use explicit `Record<AllowedKeys, fn>` dispatch maps; the Zod guard upstream is invisible to static analysis (SEC-04)
 - `Math.random()` for tokens, secrets, session identifiers, API keys, nonces, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06)
+- keying module-level SDK client caches by a subset of the client's configuration — always include ALL differentiating config fields (e.g., both `clientKey` and `apiHost`) in the cache key to prevent silent wrong-backend selection (SEC-11)
 
 ## Hard Security Rules
 

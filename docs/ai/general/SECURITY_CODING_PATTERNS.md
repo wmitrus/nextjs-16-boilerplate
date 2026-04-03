@@ -20,6 +20,8 @@ Update it after every security review group.
 | SEC-05 | File access       | Dynamic `fs.*` with static literal paths             | False positive            | E2E helpers               |
 | SEC-06 | Cryptography      | `Math.random()` for test email uniqueness            | False positive            | E2E specs                 |
 | SEC-11 | Caching           | SDK client cache key missing differentiating config  | Real risk → fixed         | Module-level SDK adapters |
+| SEC-15 | Object access     | User-controlled key lookup via `key in object`       | Latent risk               | Auth/bootstrap UI mapping |
+| SEC-16 | File access       | Reusable helper fs paths lack sink confinement       | Latent risk               | Runtime logger helpers    |
 
 ---
 
@@ -739,3 +741,138 @@ const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000'; // NOT v4 — positio
 ### Rule for Agents
 
 Always use a valid v4 UUID in test fixtures for fields validated with `z.uuid()`. Non-v4 UUIDs pass Zod's `z.uuid()` check at runtime in some versions but misalign the test intent with the schema contract and can cause unexpected failures if schema enforcement tightens.
+
+---
+
+## SEC-15 — Never Guard User-Controlled Record Lookups With `key in plainObject`
+
+**ID**: SEC-15
+**Category**: Object access / prototype-chain trust boundary
+**Surface**: Auth/bootstrap mappings, route-handler lookup tables, any plain-object record indexed by request or query input
+
+### Scanner / Review Signal
+
+This pattern often appears as `security/detect-object-injection`, but the deeper issue is not generic object injection. The real problem is trusting `key in plainObject` as a safe membership guard for a user-controlled string before reading `plainObject[key]`.
+
+### Why This Is Risky
+
+- The `in` operator walks the prototype chain.
+- User-controlled keys like `toString`, `constructor`, or other inherited names satisfy `key in obj` even when they are not intended application keys.
+- If the code then reads `obj[key]`, the guard has accepted inherited properties rather than only the repository's explicit allowlist.
+- This is a trust-boundary bug even when the lookup is read-only.
+
+### Dangerous Pattern (DO NOT use)
+
+```typescript
+const ERROR_BY_REASON: Record<string, BootstrapError> = {
+  quota_exceeded: 'quota_exceeded',
+  db_error: 'db_error',
+};
+
+if (reason && reason in ERROR_BY_REASON) {
+  return ERROR_BY_REASON[reason];
+}
+```
+
+### Correct Patterns
+
+Use one of these instead:
+
+```typescript
+if (reason && Object.hasOwn(ERROR_BY_REASON, reason)) {
+  return ERROR_BY_REASON[reason as keyof typeof ERROR_BY_REASON];
+}
+```
+
+```typescript
+const ERROR_BY_REASON = Object.assign(Object.create(null), {
+  quota_exceeded: 'quota_exceeded',
+  db_error: 'db_error',
+}) as Record<string, BootstrapError>;
+```
+
+```typescript
+const errorByReason = new Map<string, BootstrapError>([
+  ['quota_exceeded', 'quota_exceeded'],
+  ['db_error', 'db_error'],
+]);
+
+const resolved = reason ? errorByReason.get(reason) : undefined;
+if (resolved) return resolved;
+```
+
+### Rule for Agents
+
+**DO NOT** validate a user-controlled key with `key in plainObject` and then read `plainObject[key]`.
+
+**DO** use `Object.hasOwn`, a null-prototype record, or a `Map` for user-controlled key lookups.
+
+**Relationship to SEC-04**: SEC-04 covers dynamic method dispatch and explicit dispatch maps. SEC-15 covers read-only lookup tables where the key itself is untrusted and must not be accepted through the prototype chain.
+
+---
+
+## SEC-16 — Reusable `fs.*` Helpers Must Enforce Path Confinement At The Sink
+
+**ID**: SEC-16
+**Category**: File access / path confinement
+**Surface**: Reusable helpers in runtime code or scripts that accept a path, directory, or filename argument and call `fs.*`
+
+### Review Signal
+
+Some `security/detect-non-literal-fs-filename` findings are true false positives because the path is a static literal. This rule is different: when a reusable helper accepts a path-like argument, caller assumptions are not enough. The helper itself must resolve and confine the path before `fs.*` access.
+
+### Why This Is Risky
+
+- Callers can drift from today's static inputs to tomorrow's env-driven or operator-provided values.
+- If the helper performs `fs.existsSync`, `fs.mkdirSync`, `fs.readFileSync`, or similar on a joined path without confinement, the sink remains vulnerable to future misuse.
+- Upstream validation is not a substitute for point-of-use guards.
+
+### Dangerous Pattern (DO NOT use)
+
+```typescript
+function ensureLogDirectory(logDir: string): boolean {
+  const logDirectory = path.join(process.cwd(), logDir);
+  if (!fs.existsSync(logDirectory)) {
+    fs.mkdirSync(logDirectory, { recursive: true });
+  }
+  return true;
+}
+```
+
+### Correct Pattern
+
+```typescript
+function assertPathWithinBase(resolvedPath: string, baseDir: string) {
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  const expectedPrefix = normalizedBase.endsWith(path.sep)
+    ? normalizedBase
+    : normalizedBase + path.sep;
+
+  if (
+    normalizedPath !== normalizedBase &&
+    !normalizedPath.startsWith(expectedPrefix)
+  ) {
+    throw new Error(`Path escapes allowed base: ${normalizedPath}`);
+  }
+}
+
+function ensureLogDirectory(logDir: string): boolean {
+  const baseDir = process.cwd();
+  const resolvedPath = path.resolve(baseDir, logDir);
+  assertPathWithinBase(resolvedPath, baseDir);
+
+  if (!fs.existsSync(resolvedPath)) {
+    fs.mkdirSync(resolvedPath, { recursive: true });
+  }
+  return true;
+}
+```
+
+### Rule for Agents
+
+**DO NOT** rely on caller-side assumptions that a helper path argument is static or already validated.
+
+**DO** resolve and confine path-like arguments inside the helper immediately before the `fs.*` sink.
+
+**Relationship to SEC-05 / SEC-12**: SEC-05 covers true false positives for static literal paths. SEC-12 sets the repository script convention to use `path.resolve`. SEC-16 adds the missing sink-level rule for reusable helpers that accept dynamic path arguments.

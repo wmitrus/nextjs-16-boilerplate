@@ -26,19 +26,27 @@ engines:
   # Codacy reads this project's eslint.config.mjs and applies it.
   eslint:
     exclude_paths:
+      - '.vscode/**'
       - '.next/**'
       - 'node_modules/**'
       - 'coverage/**'
       - 'storybook-static/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'scripts/**'
       - '**/*.stories.ts'
       - '**/*.stories.tsx'
 
   # ── Semgrep — semantic code patterns ────────────────────────────────────────
   semgrep:
     exclude_paths:
+      - '.vscode/**'
       - '.next/**'
       - 'node_modules/**'
       - 'coverage/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'scripts/**'
       - '**/*.test.ts'
       - '**/*.test.tsx'
       - '**/*.integration.test.ts'
@@ -57,6 +65,7 @@ engines:
 
 # ── Global exclusions applied to all engines ────────────────────────────────
 exclude_paths:
+  - '.vscode/**'
   - '.next/**'
   - 'node_modules/**'
   - 'coverage/**'

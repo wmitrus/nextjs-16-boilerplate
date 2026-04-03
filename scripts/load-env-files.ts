@@ -2,8 +2,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Side-effect module: loads .env and .env.local into process.env before T3-Env initializes.
- * Import this BEFORE importing @/core/env in scripts that run outside Next.js dev/build context.
+ * Side-effect module: loads .env, .env.local, and Vercel-pulled env files into
+ * process.env before T3-Env initializes. Import this BEFORE importing @/core/env
+ * in scripts that run outside the Next.js dev/build context.
+ *
+ * Load order (last-write wins for duplicates is irrelevant — existing keys are NOT
+ * overwritten, so earlier files take precedence):
+ *   1. .env                          — base defaults
+ *   2. .env.local                    — local developer overrides
+ *   3. .vercel/.env.{APP_ENV}.local  — downloaded by `vercel pull` in CI
  *
  * Rules:
  * - Existing process.env values are NOT overwritten (CI/Vercel-injected values take precedence).
@@ -16,7 +23,7 @@ const ROOT = process.cwd();
 export const loadedFiles: string[] = [];
 
 function applyEnvFile(filePath: string): void {
-  // filePath is always join(process.cwd(), '<static-literal>') — not user input.
+  // filePath is always join(process.cwd(), '<static-literal or safe env-derived path>').
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   if (!existsSync(filePath)) return;
 
@@ -42,5 +49,16 @@ function applyEnvFile(filePath: string): void {
   loadedFiles.push(filePath.replace(ROOT, '.'));
 }
 
+// 1. Base defaults
 applyEnvFile(join(ROOT, '.env'));
+
+// 2. Local developer overrides
 applyEnvFile(join(ROOT, '.env.local'));
+
+// 3. Vercel-pulled env file — created by `vercel pull --environment={env}` in CI.
+//    APP_ENV is set by the GitHub Actions workflows (preview-deploy.yml, prod-deploy.yml).
+//    VERCEL_ENV is set by the Vercel runtime itself during builds.
+const vercelEnv = process.env.APP_ENV ?? process.env.VERCEL_ENV;
+if (vercelEnv === 'preview' || vercelEnv === 'production') {
+  applyEnvFile(join(ROOT, `.vercel/.env.${vercelEnv}.local`));
+}

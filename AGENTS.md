@@ -545,18 +545,19 @@ This document is the living, authoritative catalogue of:
 
 Key rules currently in effect:
 
-| ID     | Rule                                                                                                                  |
-| ------ | --------------------------------------------------------------------------------------------------------------------- |
-| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`   |
-| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                      |
-| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                  |
-| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                      |
-| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                     |
-| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                        |
-| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs               |
-| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                      |
-| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context |
-| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields            |
+| ID     | Rule                                                                                                                    |
+| ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`     |
+| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                        |
+| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                    |
+| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                        |
+| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                       |
+| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                          |
+| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                 |
+| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                        |
+| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context   |
+| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields              |
+| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

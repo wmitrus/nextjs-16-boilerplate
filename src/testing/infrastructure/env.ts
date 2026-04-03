@@ -63,6 +63,10 @@ const defaultEnv: MutableEnv = {
   TENANT_CONTEXT_COOKIE: 'active_tenant_id',
   FREE_TIER_MAX_USERS: 5,
   CROSS_PROVIDER_EMAIL_LINKING: 'verified-only' as const,
+  FEATURE_FLAG_PROVIDER: 'static' as const,
+  FEATURE_FLAGS_STATIC: undefined,
+  GROWTHBOOK_CLIENT_KEY: undefined,
+  GROWTHBOOK_API_HOST: undefined,
 };
 
 /**

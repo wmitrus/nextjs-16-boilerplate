@@ -153,3 +153,41 @@ Do not pad the answer with generic advice.
 Do not hide uncertainty.
 
 Your job is to implement safely and concretely inside established repository guardrails.
+
+---
+
+## Mandatory Coding Patterns (from Production Experience)
+
+### Pattern A — Schema Type Discipline: UUID vs TEXT
+
+`uuid` Drizzle column type ONLY for DB-generated PKs (`defaultRandom()`) and FK refs to UUID PKs. Use `text` for all externally-sourced string IDs (Clerk org IDs, tenant slugs, scope keys). Misuse causes Postgres `22P02` at query bind time — silent in unit tests, crashes in production.
+
+For unique constraints on nullable columns: use `unique(name).on(cols).nullsNotDistinct()` — NOT `uniqueIndex().on(...)`. The `uniqueIndex()` builder does not expose `.nullsNotDistinct()`.
+
+### Pattern B — `*.db.test.ts` Required for All Drizzle Adapters
+
+Every `Drizzle*Service`/`Drizzle*Repository` MUST have `*.db.test.ts` using `resolveTestDb()` from `@/testing/db/create-test-db`. Unit tests with mocked DB alone do not catch schema type errors.
+
+### Pattern C — MSW Handlers for External HTTP Adapters
+
+Adapters calling external HTTP services need `__mocks__/handlers.ts` with named handler arrays. Register via `src/shared/lib/mocks/server.ts`.
+
+### Pattern D — `isMain` Guard for Script Functions
+
+Scripts that export functions AND run side effects at module level need:
+
+```typescript
+const isMain =
+  typeof process.argv[1] === 'string' &&
+  process.argv[1].endsWith('/script-name.ts');
+if (isMain) {
+  run().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+```
+
+### Pattern E — `load-env.ts` for tsx Scripts
+
+`tsx` does NOT auto-load `.env.local`. Import `scripts/load-env.ts` as the absolute first import. Do NOT use `node --env-file ... node_modules/.bin/tsx` (broken — tsx is a shell script).

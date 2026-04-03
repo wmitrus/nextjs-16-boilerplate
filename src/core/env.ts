@@ -64,6 +64,12 @@ export const env = createEnv({
     CROSS_PROVIDER_EMAIL_LINKING: z
       .enum(['disabled', 'verified-only'])
       .default('verified-only'),
+    FEATURE_FLAG_PROVIDER: z
+      .enum(['static', 'db', 'growthbook'])
+      .default('static'),
+    FEATURE_FLAGS_STATIC: z.string().optional(),
+    GROWTHBOOK_CLIENT_KEY: z.string().optional(),
+    GROWTHBOOK_API_HOST: z.url().optional(),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -140,6 +146,10 @@ export const env = createEnv({
     TENANT_CONTEXT_COOKIE: process.env.TENANT_CONTEXT_COOKIE,
     FREE_TIER_MAX_USERS: process.env.FREE_TIER_MAX_USERS,
     CROSS_PROVIDER_EMAIL_LINKING: process.env.CROSS_PROVIDER_EMAIL_LINKING,
+    FEATURE_FLAG_PROVIDER: process.env.FEATURE_FLAG_PROVIDER,
+    FEATURE_FLAGS_STATIC: process.env.FEATURE_FLAGS_STATIC,
+    GROWTHBOOK_CLIENT_KEY: process.env.GROWTHBOOK_CLIENT_KEY,
+    GROWTHBOOK_API_HOST: process.env.GROWTHBOOK_API_HOST,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:

@@ -1,3 +1,60 @@
+# [1.14.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.13.0...v1.14.0) (2026-04-03)
+
+
+### Bug Fixes
+
+* **db:** change feature_flags.tenant_id schema type from UUID to TEXT ([9a31b40](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9a31b409c82d9b682e13d9068ed04c1c654b0201))
+* **flags:** improve error handling in feature flag evaluation ([bc4c657](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bc4c6571bcc1d4a51fdeb80953a54ea8e462d6f7))
+* **flags:** resolve lossy multi-tenant export and cache key issues ([06ddc31](https://github.com/wmitrus/nextjs-16-boilerplate/commit/06ddc317f99dff051c1a83ddfe99f0a9f3f92ee8))
+* **security:** address critical and major findings in feature flags system ([f322c5d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f322c5d0082d32850cf5d954b277875bdf3c99d1))
+* **security:** improve cache key handling for SDK clients ([97d22af](https://github.com/wmitrus/nextjs-16-boilerplate/commit/97d22af0aef8683d527d571964df19dc94bd3e1a))
+* **security:** update SDK client caching rules ([5e10d77](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5e10d776b8013d2b6bed102c2ff475727007aaed))
+
+
+### Features
+
+* **db:** add feature flags table and migration ([af4681e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/af4681ef25c9a5f4df0022f7e978019b5b084452))
+* **db:** add feature flags table schema ([7f8105e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7f8105ecb3bf3bc2f7f55b9db5a99ce08b22cbe7))
+* **db:** add migration for feature flags schema update ([fbea437](https://github.com/wmitrus/nextjs-16-boilerplate/commit/fbea4370286bbaa4f9d7e3d6257b7eb4b6869ae6))
+* **docs:** add security coding patterns for database and logging practices ([82606fa](https://github.com/wmitrus/nextjs-16-boilerplate/commit/82606fa6300e2e6c40cbbb6f6944349c553638b9))
+* **env:** add default feature flags for demo ([d369ed4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d369ed41278080f54b29d43d438d4b37a5642a85))
+* **env:** add environment file loader and parser ([5e41e92](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5e41e9243f5a4512a7e312fc7a8026f7fcdf926a))
+* **env:** add feature flag configuration to default environment ([593f273](https://github.com/wmitrus/nextjs-16-boilerplate/commit/593f2730c7d187cbd7182cff581b756778134b63))
+* **flags:** add '/feature-flags-demo' to public route prefixes ([0e7297a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0e7297a6dd128ef62c2479aebde9c33fa93258c6))
+* **flags:** add BetaExportsDemo component for feature flag showcase ([91ab11a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/91ab11a6bff4c2ee72abea3e151f29cd48fa77bb))
+* **flags:** add demo design review section with binding decisions ([7815a14](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7815a14c31b2ea32a3a021e6f78e03bc28e10562))
+* **flags:** add documentation for multi-adapter feature flag system ([8119cc7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8119cc7a8e8d046c65e4634cf154abceae8bcd0f))
+* **flags:** add ExperimentalAnalyticsDemo component ([26564e4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/26564e4bd4538ddb8035a5c809b8b300a7c56b9f))
+* **flags:** add feature flag configuration to environment variables ([b4ced98](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b4ced98fb93a9de9ecd69082579b7900e513a334))
+* **flags:** add feature flag environment variables ([47df417](https://github.com/wmitrus/nextjs-16-boilerplate/commit/47df417d212bf7d05914ba47ed326a29df45d195))
+* **flags:** add feature flags demo page ([38caff1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/38caff12a55e03d4b5e21806aabc9d1b519d6a0c))
+* **flags:** add feature flags group to FeaturesGrouped component ([5892e0a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5892e0a151404bb75276347467d8c3d25887b8a3))
+* **flags:** add FeatureFlagStatusCard component ([69c53c2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/69c53c2723baf165c777e9bff9f1cb790ef663c3))
+* **flags:** add isFeatureEnabled function for feature flag evaluation ([b7e2eba](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b7e2eba1872088b4fc6adb18e506b10f9de8c988))
+* **flags:** add link to Feature Flags Demo in footer ([ec30dea](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ec30dea9ad33994d28b48542976905264c2c2cb1))
+* **flags:** add mock handlers for GrowthBook feature flags ([5874952](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5874952b2c7a6a9b6c5e9cfcfe3fe8cc6c0af269))
+* **flags:** add NewDashboardUiDemo component for feature flag showcase ([4681cc0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4681cc05e5ee578a49320b63882a199aea828a98))
+* **flags:** add path validation for security ([56fd048](https://github.com/wmitrus/nextjs-16-boilerplate/commit/56fd048efc082969ca20be2b1cd7ab2837dad5b8))
+* **flags:** add resilient feature flag service integration ([26ec02f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/26ec02f15bacae3fb36f1daf404829453dd300b3))
+* **flags:** add scripts for feature flag management ([d9f2cbc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d9f2cbca4e21f72308cbeff7f74ac0ba0d63024e))
+* **flags:** add utility functions for database configuration ([f01aeef](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f01aeef8d1465e88e8e2a4fc96511c1f52b97dd5))
+* **flags:** enable dynamic rendering for feature flags demo ([231808a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/231808ad6bf564f53ebab505c78d8cce77e09bf0))
+* **flags:** enhance JSON parsing for flags input ([9d3b7ae](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9d3b7ae1dc58dd5a41cdeb64182d6709e2087380))
+* **flags:** enhance migration script with error handling and exports ([4b3ac07](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4b3ac07fb9d8f2209771be810b272ac06851b850))
+* **flags:** implement architecture guard and feature flag management plan ([452b285](https://github.com/wmitrus/nextjs-16-boilerplate/commit/452b28584fda857aa7b1f30141b89275d2162267))
+* **flags:** implement DrizzleFeatureFlagService for feature flag management ([ea458f5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ea458f5842fa30a3a40451ba4e7935961948d43f))
+* **flags:** implement feature flag service factory ([8934d80](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8934d804432a1960695dd0f87891899b1bcf3b01))
+* **flags:** implement feature flags export, import, and migration scripts ([13cb484](https://github.com/wmitrus/nextjs-16-boilerplate/commit/13cb4843c7e91d90cd95e2694d0db57698d57f66))
+* **flags:** implement GrowthBookFeatureFlagService for feature flag management ([986311e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/986311e671407af85f0a2abb42c4d15bc16b91ab))
+* **flags:** implement resilient feature flag service ([ef3a412](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ef3a412643e939e3e7448ea268172eafef2942e9))
+* **flags:** implement StaticFeatureFlagService and its tests ([2ef532b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2ef532b44632f1a19af8444f3d1d5395d4f5b610))
+* **flags:** implement StaticFeatureFlagService for feature flag management ([5fb2649](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5fb26499c530a37cf73ca291fa870c4d10f148b3))
+* **flags:** improve flags import script with error handling ([a9d39ad](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a9d39add306b9e41e8da6877f8a4d9b536579f59))
+* **flags:** register feature flag service in request container ([c002125](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c002125e7686ec39ea66daf88ee6eae67ebc533d))
+* **flags:** update feature flag exports for consistency ([1b04b7e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1b04b7e48d62b60c3adb139e2fedda99ea68efc7))
+* **flags:** update feature flag exports in index file ([823a2f0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/823a2f0cdef3773059ee9e2c648996b06b73792f))
+* **ui:** add feature flags demo link to header ([8d59c75](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8d59c759adb4c4a6c188265b9f35ff87591b5d14))
+
 # [1.13.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.12.0...v1.13.0) (2026-04-01)
 
 

@@ -57,6 +57,14 @@ const Footer = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
                     Use Cases
                   </Link>
                 </li>
+                <li>
+                  <Link
+                    href="/feature-flags-demo"
+                    className="text-sm text-zinc-600 hover:text-black dark:text-zinc-400 dark:hover:text-white"
+                  >
+                    Feature Flags Demo
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>

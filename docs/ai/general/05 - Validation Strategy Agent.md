@@ -192,3 +192,40 @@ If the task is blocked, state the block clearly before any recommendation.
 When the task is artifact-backed, your persistent per-task summary artifact must be the single file `05 - Validation Strategy - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Your job is to protect validation quality, calibration, and cost-effectiveness so the repository gets meaningful evidence rather than inflated test volume.
+
+---
+
+## Mandatory Validation Patterns (from Production Experience)
+
+### Pattern B — `*.db.test.ts` Required for All Drizzle Adapters
+
+Every `Drizzle*Service` or `Drizzle*Repository` MUST have a companion `*.db.test.ts` integration test.
+
+A unit test with a mocked DB is NOT sufficient alone. The `*.db.test.ts` test must use `resolveTestDb()` from `@/testing/db/create-test-db` (PGlite in-memory) and cover:
+
+- Not found → `false`
+- Global flag enabled/disabled
+- Tenant-scoped override beats global
+- Cross-tenant isolation (different tenant must not see another tenant's override)
+- **Schema type validation**: use non-UUID string tenant IDs (e.g., `'demo'`, `'acme'`) to verify the column accepts them
+
+If a Drizzle adapter lacks a `*.db.test.ts`, treat this as a validation gap and require it.
+
+### Pattern C — MSW Handlers for External HTTP Adapters
+
+Any adapter that makes external HTTP calls MUST have a companion MSW handler in `__mocks__/handlers.ts`. Validation must verify the MSW handler intercepts the HTTP call correctly in a test environment.
+
+**Known limitation with GrowthBook SDK**: The SDK captures `globalThis.fetch` at module import time. If the module is pre-loaded before `server.listen()` in vitest `beforeAll`, MSW interception will not work. Use `vi.mock(...)` for the unit test in that case, and document the MSW handler for future integration test use.
+
+### Pattern F — E2E Tests for All Public Demo / Showcase Pages
+
+Every demo or showcase page (`/security-showcase`, `/feature-flags-demo`, etc.) MUST have a Playwright E2E spec.
+
+Minimum:
+
+- Page loads without error boundary
+- Page title is correct
+- Key UI elements are visible
+- Active provider / adapter name is visible
+
+Demo pages are public — do NOT require Clerk auth credentials. Do not add `storageState` to demo page specs.

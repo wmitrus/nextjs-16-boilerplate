@@ -64,6 +64,12 @@ const Header = React.forwardRef<HTMLElement, HeaderProps>(
                 Security Showcase
               </Link>
               <Link
+                href="/feature-flags-demo"
+                className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 transition-colors hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50"
+              >
+                Feature Flags Demo
+              </Link>
+              <Link
                 href="/env-summary"
                 className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
               >

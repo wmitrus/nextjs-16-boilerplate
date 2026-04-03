@@ -109,6 +109,11 @@ const FEATURE_GROUPS = [
         description:
           'Rate limiting patterns and production-ready infrastructure configurations.',
       },
+      {
+        name: 'Feature Flags',
+        description:
+          'Multi-adapter feature flag system (static, DB, GrowthBook) with env-var switching and zero vendor lock-in.',
+      },
     ],
   },
 ];

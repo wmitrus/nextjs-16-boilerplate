@@ -146,3 +146,63 @@ Do not pad the answer with generic advice.
 Do not hide uncertainty.
 
 Your job is to implement safely and concretely inside established repository guardrails.
+
+---
+
+## Mandatory Coding Patterns (from Production Experience)
+
+### Pattern A — Schema Type Discipline: UUID vs TEXT
+
+`uuid` Drizzle column type must ONLY be used for:
+
+1. DB-generated PKs with `defaultRandom()`
+2. FK references to UUID-typed PKs
+
+**Use `text` for all externally-sourced string identifiers**: Clerk org IDs (`org_xxx`), tenant slugs, string scope keys, feature flag tenant scope keys.
+
+Misuse of `uuid` for external IDs causes Postgres error `22P02: invalid input syntax for type uuid` at query bind time — silent in unit tests, crashes in production.
+
+Also: unique indexes on nullable columns using `uniqueIndex().on(col1, nullableCol)` do NOT enforce uniqueness when `nullableCol IS NULL` in Postgres. Use `unique(name).on(cols).nullsNotDistinct()` instead.
+
+### Pattern B — `*.db.test.ts` Required for All Drizzle Adapters
+
+Every `Drizzle*Service` or `Drizzle*Repository` MUST have a companion `*.db.test.ts`:
+
+- `/** @vitest-environment node */` at top
+- `resolveTestDb()` from `@/testing/db/create-test-db`
+- `beforeAll`: create testDb, seed data; `afterAll`: `testDb.cleanup()`
+- Unit tests with mocked DB alone are insufficient — they cannot catch schema type errors.
+
+### Pattern C — MSW Handlers for External HTTP Adapters
+
+Any adapter calling an external HTTP service MUST have an MSW handler:
+
+- Location: `src/modules/{module}/infrastructure/{adapter}/__mocks__/handlers.ts`
+- Export: `export const {adapter}Handlers: HttpHandler[]`
+- Register via `src/shared/lib/mocks/server.ts`
+
+### Pattern D — `isMain` Guard for Exported Script Functions
+
+Scripts that export functions AND run side-effectful code at module level MUST use:
+
+```typescript
+const isMain =
+  typeof process.argv[1] === 'string' &&
+  process.argv[1].endsWith('/script-name.ts');
+if (isMain) {
+  run().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+```
+
+### Pattern E — `load-env.ts` for tsx Scripts
+
+`tsx` scripts do NOT auto-load `.env.local`. Add as first import:
+
+```typescript
+import '../load-env'; // MUST be first import
+```
+
+`node --env-file ... node_modules/.bin/tsx` is BROKEN. Use `tsx scripts/my-script.ts` in `package.json`.

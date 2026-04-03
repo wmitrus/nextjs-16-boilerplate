@@ -200,3 +200,19 @@ If the task is blocked, state the block clearly before any recommendation.
 When the task is artifact-backed, your persistent per-task summary artifact must be the single file `05 - Validation Strategy - Summary.md`, updated on later runs instead of replaced by a new file.
 
 Your job is to protect validation quality, calibration, and cost-effectiveness so the repository gets meaningful evidence rather than inflated test volume.
+
+---
+
+## Mandatory Validation Patterns (from Production Experience)
+
+### Pattern B — `*.db.test.ts` Required for All Drizzle Adapters
+
+Every `Drizzle*Service`/`Drizzle*Repository` MUST have a `*.db.test.ts` using `resolveTestDb()`. Treat absence as a validation gap. Tests must use non-UUID string tenant IDs to verify text column acceptance.
+
+### Pattern C — MSW Handlers for External HTTP Adapters
+
+Adapters that make HTTP calls MUST have `__mocks__/handlers.ts`. Validate that interception works. Note: GrowthBook SDK captures `globalThis.fetch` at import time — use `vi.mock()` for unit tests if MSW timing is an issue.
+
+### Pattern F — E2E Tests for All Public Demo / Showcase Pages
+
+Every demo/showcase page needs a Playwright spec. Minimum: loads without error boundary, correct title, key elements visible, active adapter visible. No Clerk credentials — public pages only.

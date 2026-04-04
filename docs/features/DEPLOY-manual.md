@@ -59,11 +59,14 @@ Before starting, ensure you have accounts and projects ready on:
 3. **Configure Project**:
    - **Framework Preset**: Next.js
    - **Root Directory**: `./`
-   - **Build Command**: `pnpm build` (Vercel usually detects this)
+   - **Build Command**: `pnpm build` initially, then adjust after database integration is configured
    - **Output Directory**: `.next`
 4. **Environment Variables**: Expand this section and add the required keys from [ENV-requirements.md](./ENV-requirements.md).
 5. Click **Deploy**.
 6. Once created, go to **Settings > General** and copy the **Project ID** and **Organization ID** for your GitHub Secrets.
+7. If you enable Neon automated preview branching, update Vercel Build Settings:
+   - **Preview Build Command**: `DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build`
+   - **Production Build Command**: keep aligned with your production workflow ownership model
 
 ### Option B: Create via Vercel CLI
 
@@ -88,8 +91,9 @@ Run the following locally to create and link the project:
 
 ### Automatic (Recommended)
 
-Opening or updating a PR to `main` triggers a **Preview Deployment** (see `preview-deploy.yml`).
-Merging into `main` triggers a **Production Deployment** (see `prod-deploy.yml`).
+Opening or updating a PR to `main` triggers a **Preview Deployment** (see `preview-deploy.yml`). Preview validation runs in GitHub Actions, but the actual preview build happens remotely on Vercel so Neon preview-branch migrations run against deployment-scoped branch variables.
+
+Merging into `main` triggers a **Production Deployment** (see `prod-deploy.yml`). Production remains GitHub Actions controlled and uses an explicit migration step before the prebuilt deployment.
 
 ### Manual CLI Deployment (Emergency only)
 

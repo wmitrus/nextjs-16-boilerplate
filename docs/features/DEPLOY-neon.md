@@ -125,26 +125,34 @@ Use `db:migrate:prod:local` only for local operator runs that intentionally load
 
 ### Automated Migrations on Preview Deployments
 
-To apply migrations automatically on each Vercel Preview Deployment:
+For Neon automated preview branching, let Vercel own the preview build so migrations run against the deployment-scoped preview branch variables that Neon injects at deploy time.
 
-1. Vercel Dashboard → Project → **Settings → Build & Deployment Settings**.
-2. Enable **Override Build Command** and set:
+Required behavior:
 
-```bash
-pnpm db:migrate:prod && pnpm build
-```
+1. Keep the Vercel project Build Command responsible for preview migrations.
 
-3. In **Environment Variables**, ensure `DATABASE_URL` for the **Preview** environment points to the **unpooled** connection string of the preview branch, OR set a separate `MIGRATION_DATABASE_URL` env var and update the script accordingly.
-
-> **Note**: The auto-injected preview `DATABASE_URL` on Neon Native Integration is the **pooled** URL. For preview migrations in the build step, Neon also injects `DATABASE_URL_UNPOOLED` — use that for migration commands.
-
-If you use a build override command, adjust to:
+Example:
 
 ```bash
-DATABASE_URL=$DATABASE_URL_UNPOOLED pnpm db:migrate:prod && pnpm build
+DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build
 ```
 
-This works because `db:migrate:prod` does not require `.env.production`; it reads the injected `DATABASE_URL` directly.
+2. In GitHub Actions, do **not** run preview migrations before `vercel deploy` and do **not** use `vercel build` / `vercel deploy --prebuilt` for preview deployments.
+
+Use a normal preview deploy instead:
+
+```bash
+vercel deploy --token="$VERCEL_TOKEN"
+```
+
+3. You may still run `vercel pull --yes --environment=preview --git-branch="$GIT_BRANCH"` locally in CI when you need preview env vars for validation, but do not treat that local cache as the migration authority for Neon preview branches.
+
+Why this matters:
+
+- Neon preview branch connection strings are injected for the specific deployment at deployment time.
+- `DATABASE_URL_UNPOOLED` is the correct direct URL for Drizzle DDL.
+- A local prebuild flow can migrate a different database than the final preview deployment uses.
+- Letting Vercel run the preview build keeps the migration and the deployment on the same preview branch target.
 
 ### Automated Migrations on Production
 
@@ -152,12 +160,14 @@ Add a migration step before the production build in `prod-deploy.yml`:
 
 ```yaml
 - name: Run DB Migrations (Production)
-  run: pnpm db:migrate:prod
-  env:
-    DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+  shell: bash
+  run: |
+    set -a
+    source .vercel/.env.production.local
+    set +a
+    export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+    pnpm db:migrate:prod
 ```
-
-Add `DATABASE_URL_UNPOOLED` as a GitHub secret (copy from Neon Console → your project → Connection Details → Direct connection).
 
 ---
 

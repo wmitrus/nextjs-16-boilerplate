@@ -161,6 +161,17 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This repository deploys to Vercel through GitHub Actions.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Key deployment rules:
+
+- Preview deployments use a normal `vercel deploy` so Vercel can build remotely against the deployment-scoped preview database variables injected by Neon preview branching.
+- Production deployments continue to use the GitHub Actions controlled build + `vercel deploy --prebuilt` flow.
+- For Neon preview branching, keep the Vercel Preview Build Command set to `DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build`.
+- Do not run preview migrations in a local prebuild CI step when using Neon automated preview branches.
+
+Primary deployment docs:
+
+- [docs/features/19 - CI-CD & Lighthouse CI.md](./docs/features/19%20-%20CI-CD%20%26%20Lighthouse%20CI.md)
+- [docs/features/DEPLOY-neon.md](./docs/features/DEPLOY-neon.md)
+- [docs/features/DEPLOY-manual.md](./docs/features/DEPLOY-manual.md)

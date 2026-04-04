@@ -125,31 +125,34 @@ Use `db:migrate:prod:local` only for local operator runs that intentionally load
 
 ### Automated Migrations on Preview Deployments
 
-For this repository's GitHub Actions + `vercel build` / `vercel deploy --prebuilt` flow, run preview migrations in the workflow before the build.
+For Neon automated preview branching, let Vercel own the preview build so migrations run against the deployment-scoped preview branch variables that Neon injects at deploy time.
 
 Required behavior:
 
-1. Pull the exact PR-scoped preview env, not the generic Preview env:
+1. Keep the Vercel project Build Command responsible for preview migrations.
+
+Example:
 
 ```bash
-vercel pull --yes --environment=preview --git-branch="$GIT_BRANCH"
+DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build
 ```
 
-2. Load the pulled env file and remap `DATABASE_URL` to the direct Neon URL:
+2. In GitHub Actions, do **not** run preview migrations before `vercel deploy` and do **not** use `vercel build` / `vercel deploy --prebuilt` for preview deployments.
+
+Use a normal preview deploy instead:
 
 ```bash
-source .vercel/.env.preview.local
-DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod
+vercel deploy --token="$VERCEL_TOKEN"
 ```
 
-3. Only then run `vercel build`.
+3. You may still run `vercel pull --yes --environment=preview --git-branch="$GIT_BRANCH"` locally in CI when you need preview env vars for validation, but do not treat that local cache as the migration authority for Neon preview branches.
 
 Why this matters:
 
-- Preview deployments use branch-specific Neon databases.
-- `DATABASE_URL` is the pooled runtime URL and is the wrong input for Drizzle DDL.
-- `DATABASE_URL_UNPOOLED` is the correct direct URL for migrations.
-- Without `--git-branch`, `vercel pull` may resolve only the generic Preview environment instead of the exact PR-scoped preview branch.
+- Neon preview branch connection strings are injected for the specific deployment at deployment time.
+- `DATABASE_URL_UNPOOLED` is the correct direct URL for Drizzle DDL.
+- A local prebuild flow can migrate a different database than the final preview deployment uses.
+- Letting Vercel run the preview build keeps the migration and the deployment on the same preview branch target.
 
 ### Automated Migrations on Production
 

@@ -124,3 +124,10 @@
 - Trigger: user requested implementation fix for preview branch migrations
 - Summary of change: changed preview workflow to use remote `vercel deploy` instead of local prebuild migration/build steps, and updated Neon deployment guidance to document Vercel-owned preview migrations for automated preview branches
 - Sections refreshed: implementation fix applied
+
+### Update Entry 07
+
+- Date: 2026-04-04
+- Trigger: preview deploy log showed migration success but build failed during TypeScript
+- Summary of change: confirmed migration now succeeds on the real preview branch DB; fixed the actual remaining build blocker by moving the TEST_DATABASE_URL Vitest context augmentation into the shared vitest.shims.d.ts file so production typechecking sees it
+- Sections refreshed: final fix validation

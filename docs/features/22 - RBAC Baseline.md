@@ -80,7 +80,7 @@ RBAC state changes (roles, policies, memberships) are write-path operations in p
 Before shipping RBAC-affecting changes:
 
 1. Run `pnpm typecheck`
-2. Run `pnpm lint`
+2. Run `pnpm lint --fix`
 3. Run unit tests touching authorization/provisioning
 4. Run DB tests for policy-role isolation and provisioning idempotence
 5. Verify no wildcard policy regressions

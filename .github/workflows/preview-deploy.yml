@@ -39,7 +39,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --git-branch=${{ github.head_ref }} --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Verify Environment
         run: pnpm env:check
@@ -51,6 +51,21 @@ jobs:
         env:
           APP_ENV: preview
           NODE_ENV: production
+
+      - name: Run DB Migrations (Preview)
+        shell: bash
+        run: |
+          set -a
+          source .vercel/.env.preview.local
+          set +a
+
+          if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
+            echo "DATABASE_URL_UNPOOLED is missing after vercel pull for preview."
+            exit 1
+          fi
+
+          export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+          pnpm db:migrate:prod
 
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}

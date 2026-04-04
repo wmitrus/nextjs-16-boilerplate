@@ -125,26 +125,31 @@ Use `db:migrate:prod:local` only for local operator runs that intentionally load
 
 ### Automated Migrations on Preview Deployments
 
-To apply migrations automatically on each Vercel Preview Deployment:
+For this repository's GitHub Actions + `vercel build` / `vercel deploy --prebuilt` flow, run preview migrations in the workflow before the build.
 
-1. Vercel Dashboard → Project → **Settings → Build & Deployment Settings**.
-2. Enable **Override Build Command** and set:
+Required behavior:
 
-```bash
-pnpm db:migrate:prod && pnpm build
-```
-
-3. In **Environment Variables**, ensure `DATABASE_URL` for the **Preview** environment points to the **unpooled** connection string of the preview branch, OR set a separate `MIGRATION_DATABASE_URL` env var and update the script accordingly.
-
-> **Note**: The auto-injected preview `DATABASE_URL` on Neon Native Integration is the **pooled** URL. For preview migrations in the build step, Neon also injects `DATABASE_URL_UNPOOLED` — use that for migration commands.
-
-If you use a build override command, adjust to:
+1. Pull the exact PR-scoped preview env, not the generic Preview env:
 
 ```bash
-DATABASE_URL=$DATABASE_URL_UNPOOLED pnpm db:migrate:prod && pnpm build
+vercel pull --yes --environment=preview --git-branch="$GIT_BRANCH"
 ```
 
-This works because `db:migrate:prod` does not require `.env.production`; it reads the injected `DATABASE_URL` directly.
+2. Load the pulled env file and remap `DATABASE_URL` to the direct Neon URL:
+
+```bash
+source .vercel/.env.preview.local
+DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod
+```
+
+3. Only then run `vercel build`.
+
+Why this matters:
+
+- Preview deployments use branch-specific Neon databases.
+- `DATABASE_URL` is the pooled runtime URL and is the wrong input for Drizzle DDL.
+- `DATABASE_URL_UNPOOLED` is the correct direct URL for migrations.
+- Without `--git-branch`, `vercel pull` may resolve only the generic Preview environment instead of the exact PR-scoped preview branch.
 
 ### Automated Migrations on Production
 
@@ -152,12 +157,14 @@ Add a migration step before the production build in `prod-deploy.yml`:
 
 ```yaml
 - name: Run DB Migrations (Production)
-  run: pnpm db:migrate:prod
-  env:
-    DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+  shell: bash
+  run: |
+    set -a
+    source .vercel/.env.production.local
+    set +a
+    export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+    pnpm db:migrate:prod
 ```
-
-Add `DATABASE_URL_UNPOOLED` as a GitHub secret (copy from Neon Console → your project → Connection Details → Direct connection).
 
 ---
 

@@ -1,20 +1,28 @@
 /**
- * RBAC Role Definitions — Single Source of Truth
+ * Security-Layer Application Role Definitions
  *
- * This file is the ONLY place where roles are defined.
- * Adding a new role requires changing ONLY this file.
- * All other files import from here — no raw strings allowed.
+ * Defines the application-level role set used by the security layer (middleware,
+ * request-scoped context, floor-check comparisons).
  *
- * Hierarchy: guest < user < admin
+ * NOTE — Two distinct role systems exist in this repository:
+ *
+ * 1. Security-layer roles (this file): `guest | user | admin`
+ *    Used for request-context floor checks and middleware authorization decisions.
+ *    Not stored in the tenant database.
+ *
+ * 2. Tenant DB roles: `owner | member`
+ *    Stored in the `roles` table, scoped per tenant, used by DefaultAuthorizationService
+ *    and the PolicyEngine for policy evaluation.
+ *    Defined by provisioning — see docs/features/22 - RBAC Baseline.md.
+ *
+ * These two sets are intentionally separate. RoleId (from RoleRepository) is an
+ * opaque string carrying tenant DB role names — it is NOT constrained to UserRole values.
  *
  * Allowed imports: none (pure type/constant file)
  */
 
 /**
- * Normalized role type used in the security layer.
- *
- * Represents the effective role of an authenticated principal
- * after mapping raw RoleIds from the repository.
+ * Security-layer role type for authenticated principals.
  *
  * - `'guest'`  → unauthenticated principal (conceptual; context.user is undefined in practice)
  * - `'user'`   → authenticated, standard access
@@ -23,15 +31,12 @@
 export type UserRole = 'guest' | 'user' | 'admin';
 
 /**
- * Typed role constants.
+ * Typed role constants for security-layer floor checks.
  *
- * Use instead of raw string literals everywhere:
+ * Use instead of raw string literals:
  *   ROLES.ADMIN  instead of  'admin'
  *   ROLES.USER   instead of  'user'
  *   ROLES.GUEST  instead of  'guest'
- *
- * Also serves as the recognized RoleId values returned by RoleRepository
- * (database role names must match these values for the mapping to work).
  */
 export const ROLES = {
   GUEST: 'guest',

@@ -12,10 +12,11 @@
  *   - .codacy/codacy.yaml present (already committed to this repository)
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
 const BINARY_NAME = 'codacy-cli-v2';
 const GITHUB_REPO = 'codacy/codacy-cli-v2';
@@ -84,6 +85,46 @@ function getCurrentVersion() {
   }
 }
 
+function waitForChildProcess(child, commandName) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    child.once('error', (error) => {
+      rejectPromise(error);
+    });
+    child.once('close', (code, signal) => {
+      if (code === 0) {
+        resolvePromise();
+        return;
+      }
+
+      if (signal) {
+        rejectPromise(
+          new Error(`${commandName} exited due to signal ${signal}`),
+        );
+        return;
+      }
+
+      rejectPromise(
+        new Error(`${commandName} exited with code ${code ?? 'unknown'}`),
+      );
+    });
+  });
+}
+
+async function downloadAndExtractArchive(downloadUrl) {
+  const curl = spawn('curl', ['-fsSL', downloadUrl], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const tar = spawn('tar', ['xz', '-C', INSTALL_DIR, BINARY_NAME], {
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
+
+  await Promise.all([
+    pipeline(curl.stdout, tar.stdin),
+    waitForChildProcess(curl, 'curl'),
+    waitForChildProcess(tar, 'tar'),
+  ]);
+}
+
 // ─── Install binary ────────────────────────────────────────────────────────────
 
 const installedVersion = isInstalled() ? getCurrentVersion() : null;
@@ -126,13 +167,7 @@ if (
   }
 
   try {
-    const archiveBytes = execFileSync('curl', ['-fsSL', downloadUrl], {
-      stdio: 'pipe',
-    });
-    execFileSync('tar', ['xz', '-C', INSTALL_DIR, BINARY_NAME], {
-      stdio: ['pipe', 'inherit', 'inherit'],
-      input: archiveBytes,
-    });
+    await downloadAndExtractArchive(downloadUrl);
     execFileSync('chmod', ['+x', BINARY_PATH], { stdio: 'pipe' });
 
     const version = getCurrentVersion();

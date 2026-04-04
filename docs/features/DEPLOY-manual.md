@@ -66,7 +66,7 @@ Before starting, ensure you have accounts and projects ready on:
 6. Once created, go to **Settings > General** and copy the **Project ID** and **Organization ID** for your GitHub Secrets.
 7. If you enable Neon automated preview branching, update Vercel Build Settings:
    - **Preview Build Command**: `DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build`
-   - **Production Build Command**: keep aligned with your production workflow ownership model
+   - **Production Build Command**: leave the default `pnpm build`; production deployments are built in GitHub Actions via `vercel build --prod` and deployed with `vercel deploy --prebuilt --prod`
 
 ### Option B: Create via Vercel CLI
 

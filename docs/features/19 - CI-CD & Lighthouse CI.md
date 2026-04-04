@@ -74,14 +74,14 @@ This repository uses two different deployment ownership models:
 
 2. **Production Deployments**
    - GitHub Actions remains the deployment authority.
-   - Production migrations run explicitly in [prod-deploy.yml](.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
+   - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
    - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
 
 Why the split exists:
 
 - Neon preview branches inject deployment-scoped database variables for the specific preview deployment.
 - A local prebuild flow can migrate a different database than the final preview deployment uses.
-- Production does not depend on preview-branch injection, so the GitHub Actions controlled prebuilt flow remains valid there.
+- Production does not depend on preview-branch injection, so the GitHub Actions-controlled prebuilt flow remains valid there.
 
 Add this repository variable for LHCI:
 

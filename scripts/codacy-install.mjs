@@ -24,6 +24,10 @@ const INSTALL_DIR = resolve(homedir(), '.local', 'bin');
 const BINARY_PATH = resolve(INSTALL_DIR, BINARY_NAME);
 const REQUESTED_VERSION = process.env.CODACY_CLI_V2_VERSION?.trim();
 
+function normalizeVersionIdentifier(version) {
+  return version?.trim().replace(/^v/, '') ?? null;
+}
+
 function detectPlatformSuffix() {
   const platform = process.platform;
   const arch = process.arch;
@@ -77,9 +81,12 @@ function isInstalled() {
 
 function getCurrentVersion() {
   try {
-    return execFileSync(BINARY_PATH, ['--version'], { stdio: 'pipe' })
-      .toString()
-      .trim();
+    const output = execFileSync(BINARY_PATH, ['version'], {
+      stdio: 'pipe',
+    }).toString();
+    const match = output.match(/^Version:\s+(.+)$/m);
+
+    return normalizeVersionIdentifier(match?.[1] ?? output);
   } catch {
     return null;
   }
@@ -128,10 +135,13 @@ async function downloadAndExtractArchive(downloadUrl) {
 // ─── Install binary ────────────────────────────────────────────────────────────
 
 const installedVersion = isInstalled() ? getCurrentVersion() : null;
+const normalizedRequestedVersion =
+  normalizeVersionIdentifier(REQUESTED_VERSION);
 
 if (
   installedVersion &&
-  (!REQUESTED_VERSION || installedVersion === REQUESTED_VERSION)
+  (!normalizedRequestedVersion ||
+    installedVersion === normalizedRequestedVersion)
 ) {
   console.log(
     `✅ codacy-cli-v2 already installed: ${installedVersion ?? 'unknown version'}`,
@@ -154,8 +164,8 @@ if (
 
   if (
     installedVersion &&
-    REQUESTED_VERSION &&
-    installedVersion !== REQUESTED_VERSION
+    normalizedRequestedVersion &&
+    installedVersion !== normalizedRequestedVersion
   ) {
     console.log(`   Replacing installed version: ${installedVersion}`);
   }

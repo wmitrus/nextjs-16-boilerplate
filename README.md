@@ -166,7 +166,7 @@ This repository deploys to Vercel through GitHub Actions.
 Key deployment rules:
 
 - Preview deployments use a normal `vercel deploy` so Vercel can build remotely against the deployment-scoped preview database variables injected by Neon preview branching.
-- Production deployments continue to use the GitHub Actions controlled build + `vercel deploy --prebuilt` flow.
+- Production deployments continue to use the GitHub Actions-controlled build + `vercel deploy --prebuilt` flow.
 - For Neon preview branching, keep the Vercel Preview Build Command set to `DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build`.
 - Do not run preview migrations in a local prebuild CI step when using Neon automated preview branches.
 

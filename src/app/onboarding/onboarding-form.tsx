@@ -6,7 +6,11 @@ import { getBrowserLogger } from '@/core/logger/browser';
 
 import { completeOnboarding } from './actions';
 
-export function OnboardingForm() {
+interface OnboardingFormProps {
+  redirectUrl?: string;
+}
+
+export function OnboardingForm({ redirectUrl }: OnboardingFormProps) {
   const [error, setError] = React.useState('');
   const [isPending, setIsPending] = React.useState(false);
 
@@ -44,6 +48,9 @@ export function OnboardingForm() {
       </p>
 
       <form action={handleSubmit} className="space-y-6">
+        {redirectUrl && (
+          <input type="hidden" name="redirect_url" value={redirectUrl} />
+        )}
         <div>
           <label
             htmlFor="displayName"

@@ -83,30 +83,44 @@
 
 ## Update Log
 
-### Update Entry
+### Update Entry 01
 
 - Date: 2026-04-04
 - Trigger: initial investigation
 - Summary of change: traced all current migration entrypoints across deploy, DB test, and E2E CI paths
 - Sections refreshed: all
 
-### Update Entry
+### Update Entry 02
 
 - Date: 2026-04-04
 - Trigger: follow-up investigation of missing `feature_flags` table in preview after migration success
 - Summary of change: confirmed `feature_flags` is in the committed prod migration set and narrowed the issue to DB targeting identity or schema drift
 - Sections refreshed: Task Context, Scope Handled, Inputs Reviewed, Symptom Summary, Confirmed Evidence, Execution Path, Hypotheses And Failure Points, Missing Evidence / Uncertainty, Handoff Notes, Update Log
 
-### Update Entry
+### Update Entry 03
 
 - Date: 2026-04-04
 - Trigger: user requested sanitized DB-target diagnostics in preview workflow
 - Summary of change: added a preview migration log line that prints branch, host, and database name parsed from DATABASE_URL_UNPOOLED before pnpm db:migrate:prod
 - Sections refreshed: implementation follow-up only
 
-### Update Entry
+### Update Entry 04
 
 - Date: 2026-04-04
 - Trigger: docs verification for Neon/Vercel integration build behavior
 - Summary of change: confirmed from Neon docs that preview-branch integrations inject branch-specific env vars and recommend adding migrations to Vercel Build Command; confirmed from Vercel docs that Build Command is a normal project override, so current duplicate migration comes from Vercel project settings rather than hidden integration runtime behavior
 - Sections refreshed: evidence follow-up only
+
+### Update Entry 05
+
+- Date: 2026-04-04
+- Trigger: user provided drizzle.\_\_drizzle_migrations rows from inspected preview DB
+- Summary of change: confirmed the inspected DB records latest feature-flags migrations as applied; this shifts the leading root-cause hypothesis to inherited schema drift from the source branch/default database, because Drizzle will not recreate feature_flags when migration history already includes 0006/0007
+- Sections refreshed: root-cause narrowing only
+
+### Update Entry 06
+
+- Date: 2026-04-04
+- Trigger: user requested implementation fix for preview branch migrations
+- Summary of change: changed preview workflow to use remote `vercel deploy` instead of local prebuild migration/build steps, and updated Neon deployment guidance to document Vercel-owned preview migrations for automated preview branches
+- Sections refreshed: implementation fix applied

@@ -1,3 +1,14 @@
+## [1.16.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.16.0...v1.16.1) (2026-04-04)
+
+
+### Bug Fixes
+
+* **ci:** resolve review comments and improve deployment documentation ([3e283de](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3e283dee8508b3332c04f7818620d4222c10433e))
+* **codacy-install:** improve version handling for codacy-cli-v2 installation ([7c826ff](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7c826ff64ed0b6ca48f60784e4cc7d1c40c2e88c))
+* **docs:** correct file path in CI/CD documentation ([c645102](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c6451026b49a8e1c583c5cb08ddc9b9942d1c1e4))
+* **docs:** update production build command in deployment guide ([328320a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/328320a606f392e0e296512a57f1da5adecda6f7))
+* **vitest:** make TEST_DATABASE_URL optional in ProvidedContext ([94b73d5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/94b73d5400528045d6b6621305247113a888635a))
+
 # [1.16.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.15.0...v1.16.0) (2026-04-04)
 
 

@@ -1,7 +1,7 @@
 # Intake
 
 - Task ID: investigate-ci-migrations
-- Request: Verify whether migrations are already being performed automatically during CI so the explicit migration steps in preview and production deploy workflows are not duplicated unnecessarily.
+- Request: Verify whether migrations are already being performed automatically during CI so the explicit migration steps in preview and production deploy workflows are not duplicated unnecessarily, then implement the resulting deployment fixes and close the review comments on those changes.
 - Status: Completed
 
 ## Source Inputs
@@ -20,6 +20,11 @@
 - src/core/db/migrations/run-migrations.ts
 - README.md
 - docs/features/DEPLOY-neon.md
+- README.md
+- docs/features/19 - CI-CD & Lighthouse CI.md
+- docs/features/DEPLOY-manual.md
+- scripts/codacy-install.mjs
+- vitest.shims.d.ts
 
 ## Readiness Checklist
 
@@ -27,3 +32,4 @@
 - [x] Potential CI-side migration entrypoints identified
 - [x] Runtime/build/install hooks inspected for implicit migrations
 - [x] Final evidence summary synchronized with plan
+- [x] Follow-up review comments resolved in code and docs

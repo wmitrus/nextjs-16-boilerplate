@@ -5,7 +5,7 @@
 - Task ID: investigate-ci-migrations
 - Task Objective: Determine whether migrations execute automatically in CI outside the explicit preview and production deploy steps, and explain what likely produced prior migration logs.
 - Current Run Scope: workflow, script, and runtime tracing for migration entrypoints
-- Status: IN PROGRESS
+- Status: COMPLETED
 - Last Updated: 2026-04-04
 - Related Control Artifacts: plan.md, intake.md
 
@@ -67,6 +67,12 @@
 - `intake.md` updates: created and partially completed
 - `implementation-plan.md` updates: not applicable for investigation-only task
 - specialist artifact updates: this file created
+
+## Handoff Notes
+
+- what the next agent should rely on: only explicit preview/prod deploy workflows migrate deploy databases; test-related CI also runs migrations, but on test/E2E databases
+- what remains unproven: which exact historical workflow produced the remembered log lines
+- recommended next specialist or step: no specialist handoff required unless workflow changes are requested
 
 ## Handoff Notes
 

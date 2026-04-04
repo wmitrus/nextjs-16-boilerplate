@@ -2,7 +2,7 @@
 
 - Task ID: investigate-ci-migrations
 - Request: Verify whether migrations are already being performed automatically during CI so the explicit migration steps in preview and production deploy workflows are not duplicated unnecessarily.
-- Status: In progress
+- Status: Completed
 
 ## Source Inputs
 
@@ -26,4 +26,4 @@
 - [x] Explicit deploy migration paths identified
 - [x] Potential CI-side migration entrypoints identified
 - [x] Runtime/build/install hooks inspected for implicit migrations
-- [ ] Final evidence summary synchronized with plan
+- [x] Final evidence summary synchronized with plan

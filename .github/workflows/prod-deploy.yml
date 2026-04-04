@@ -51,6 +51,21 @@ jobs:
           APP_ENV: production
           NODE_ENV: production
 
+      - name: Run DB Migrations (Production)
+        shell: bash
+        run: |
+          set -a
+          source .vercel/.env.production.local
+          set +a
+
+          if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
+            echo "DATABASE_URL_UNPOOLED is missing after vercel pull for production."
+            exit 1
+          fi
+
+          export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+          pnpm db:migrate:prod
+
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:

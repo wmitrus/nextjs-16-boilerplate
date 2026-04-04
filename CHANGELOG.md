@@ -1,3 +1,20 @@
+# [1.16.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.15.0...v1.16.0) (2026-04-04)
+
+
+### Bug Fixes
+
+* **ci:** add database migration step to production deployment ([d769864](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d769864c95b78ac87e9dd2540ed87cc85507ca3d))
+* **ci:** correct agent comment in Codacy findings review workflow ([898338f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/898338f4ea0d667abbad41be84813c9608c29efe))
+* **ci:** improve preview migration process for Vercel deployments ([288de65](https://github.com/wmitrus/nextjs-16-boilerplate/commit/288de65460f53f6665b39729ba4bf2173aa9e347))
+* **ci:** update vercel pull command and add DB migration step ([17890af](https://github.com/wmitrus/nextjs-16-boilerplate/commit/17890afbc09250bfceb4fddb0245145384c4ad28))
+* **codacy:** improve installation process for codacy-cli-v2 ([a989a06](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a989a06addd96e1cf1620dffe76f28828b84d461))
+
+
+### Features
+
+* **ci:** enhance codacy installation process ([48989f4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/48989f4153b218989418e5033db1faccae93b2d9))
+* **vitest:** add TEST_DATABASE_URL to ProvidedContext ([4b04e58](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4b04e582b7afbc44b3634bfed4c6fed51ae7f8ca))
+
 # [1.15.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.14.0...v1.15.0) (2026-04-03)
 
 

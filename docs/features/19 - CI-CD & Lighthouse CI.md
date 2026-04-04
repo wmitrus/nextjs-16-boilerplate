@@ -32,7 +32,7 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 ## Key Pipeline Behaviors
 
 - **PR Validation** runs on pull requests to `main` and blocks PRs originating from `main`.
-- **Preview Deploy** builds a preview using Vercel, posts the preview URL, and runs LHCI against it.
+- **Preview Deploy** validates preview env in GitHub Actions, then triggers a normal `vercel deploy` so Vercel builds remotely and runs preview DB migrations against Neon deployment-scoped branch variables before LHCI audits the resulting preview URL.
 - **Production Deploy** runs on pushes to `main` and skips docs-only changes.
 - **Release** runs semantic-release on `main` using a GitHub App token.
 - **Security Scan** runs on `main`, PRs, and weekly schedules.
@@ -62,21 +62,26 @@ To ensure smooth builds on Vercel with pnpm 10, the project includes:
 - **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
 - **.vercelignore**: Optimized to exclude `node_modules`, `coverage`, `docs`, and `tests` from the upload payload to prevent transient API errors.
 
-## Vercel Deployment Strategy (GitHub Actions as Source of Truth)
+## Vercel Deployment Strategy
 
-To ensure that GitHub Actions remains the **Single Source of Truth** for deployments and to prevent redundant builds on Vercel's infrastructure:
+This repository uses two different deployment ownership models:
 
-1.  **Disable Vercel Automatic Builds**:
-    - Go to **Vercel Project Settings** > **Git**.
-    - Find the **"Ignored Build Step"** section.
-    - Select **"Custom"**.
-    - Enter `exit 0` as the command.
-    - This tells Vercel to skip its own internal build process whenever a commit is pushed, as the GitHub Action will handle the build and deployment via the CLI.
+1. **Preview Deployments**
+   - GitHub Actions remains the orchestration entrypoint for env validation and Lighthouse CI.
+   - Vercel owns the actual preview build because Neon automated preview branching injects branch-specific connection strings at deployment time.
+   - Keep the Vercel Preview Build Command set to `DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build`.
+   - Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
 
-2.  **Why this is necessary**:
-    - **Quality Gates**: GitHub Actions run environment validation (`pnpm env:check`) and testing before deploying.
-    - **Performance**: Prevents paying for double build minutes on both platforms.
-    - **Lighthouse CI**: GitHub Actions automatically trigger Lighthouse audits against the newly created preview URLs.
+2. **Production Deployments**
+   - GitHub Actions remains the deployment authority.
+   - Production migrations run explicitly in [prod-deploy.yml](.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
+   - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
+
+Why the split exists:
+
+- Neon preview branches inject deployment-scoped database variables for the specific preview deployment.
+- A local prebuild flow can migrate a different database than the final preview deployment uses.
+- Production does not depend on preview-branch injection, so the GitHub Actions controlled prebuilt flow remains valid there.
 
 Add this repository variable for LHCI:
 

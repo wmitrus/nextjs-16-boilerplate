@@ -52,50 +52,10 @@ jobs:
           APP_ENV: preview
           NODE_ENV: production
 
-      - name: Run DB Migrations (Preview)
-        shell: bash
-        run: |
-          set -a
-          source .vercel/.env.preview.local
-          set +a
-
-          if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
-            echo "DATABASE_URL_UNPOOLED is missing after vercel pull for preview."
-            exit 1
-          fi
-
-          node <<'EOF'
-          const previewBranch = process.env.GITHUB_HEAD_REF ?? '(unknown)';
-          const rawUrl = process.env.DATABASE_URL_UNPOOLED;
-
-          try {
-            const parsed = new URL(rawUrl);
-            const databaseName = parsed.pathname.replace(/^\//, '') || '(none)';
-            console.log(
-              `[preview-migrations] branch=${previewBranch} host=${parsed.hostname} database=${databaseName}`,
-            );
-          } catch {
-            console.error(
-              '[preview-migrations] Failed to parse DATABASE_URL_UNPOOLED.',
-            );
-            process.exit(1);
-          }
-          EOF
-
-          export DATABASE_URL="$DATABASE_URL_UNPOOLED"
-          pnpm db:migrate:prod
-
-      - name: Build Project Artifacts
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          APP_ENV: preview
-          NEXT_PUBLIC_APP_ENV: preview
-          SKIP_ENV_VALIDATION: false
-
       - name: Deploy to Vercel
         id: vercel_deploy
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          DEPLOY_URL=$(vercel deploy --token=${{ secrets.VERCEL_TOKEN }})
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
       - name: Run Lighthouse Audit

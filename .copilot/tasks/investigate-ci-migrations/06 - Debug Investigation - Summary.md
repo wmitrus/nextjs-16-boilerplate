@@ -103,3 +103,10 @@
 - Trigger: user requested sanitized DB-target diagnostics in preview workflow
 - Summary of change: added a preview migration log line that prints branch, host, and database name parsed from DATABASE_URL_UNPOOLED before pnpm db:migrate:prod
 - Sections refreshed: implementation follow-up only
+
+### Update Entry
+
+- Date: 2026-04-04
+- Trigger: docs verification for Neon/Vercel integration build behavior
+- Summary of change: confirmed from Neon docs that preview-branch integrations inject branch-specific env vars and recommend adding migrations to Vercel Build Command; confirmed from Vercel docs that Build Command is a normal project override, so current duplicate migration comes from Vercel project settings rather than hidden integration runtime behavior
+- Sections refreshed: evidence follow-up only

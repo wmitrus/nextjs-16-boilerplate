@@ -64,6 +64,24 @@ jobs:
             exit 1
           fi
 
+          node <<'EOF'
+          const previewBranch = process.env.GITHUB_HEAD_REF ?? '(unknown)';
+          const rawUrl = process.env.DATABASE_URL_UNPOOLED;
+
+          try {
+            const parsed = new URL(rawUrl);
+            const databaseName = parsed.pathname.replace(/^\//, '') || '(none)';
+            console.log(
+              `[preview-migrations] branch=${previewBranch} host=${parsed.hostname} database=${databaseName}`,
+            );
+          } catch {
+            console.error(
+              '[preview-migrations] Failed to parse DATABASE_URL_UNPOOLED.',
+            );
+            process.exit(1);
+          }
+          EOF
+
           export DATABASE_URL="$DATABASE_URL_UNPOOLED"
           pnpm db:migrate:prod
 

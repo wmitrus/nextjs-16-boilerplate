@@ -1,3 +1,15 @@
+# [1.17.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.16.1...v1.17.0) (2026-04-05)
+
+
+### Bug Fixes
+
+* **docs:** update linting command to include auto-fix option ([38bdfc8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/38bdfc8980a018431b61f0f912dbcefc1924e1dd))
+
+
+### Features
+
+* **docs:** implement bucket 1 and bucket 2 fixes ([39207a8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/39207a8807bf5a361bf868c0d0e82cebbc01b49b))
+
 ## [1.16.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.16.0...v1.16.1) (2026-04-04)
 
 

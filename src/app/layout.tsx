@@ -2,10 +2,11 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import Script from 'next/script';
 import { Suspense } from 'react';
 
 import { env } from '@/core/env';
-import { getBrowserSnippetSafe } from '@/core/observability/new-relic';
+import { hasBrowserSnippetConfiguredSafe } from '@/core/observability/new-relic';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
@@ -58,7 +59,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const nrBrowserHeader = env.NEW_RELIC_ENABLED ? getBrowserSnippetSafe() : '';
+  const hasNewRelicBrowserSnippet =
+    env.NEW_RELIC_ENABLED && hasBrowserSnippetConfiguredSafe();
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
   const signInFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
     env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
@@ -80,10 +82,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {nrBrowserHeader && (
-          <script
+        {hasNewRelicBrowserSnippet && (
+          <Script
             id="nr-browser-agent"
-            dangerouslySetInnerHTML={{ __html: nrBrowserHeader }}
+            src="/observability/new-relic-browser.js"
+            strategy="beforeInteractive"
           />
         )}
       </head>

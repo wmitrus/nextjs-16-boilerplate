@@ -27,7 +27,7 @@ Security review for the NR Browser SPA snippet injection via `NEW_RELIC_BROWSER_
 
 ### Finding 1: Browser Ingest Key Classification ✅ SAFE
 
-`licenseKey: "NRJS-dbe070977fff304932b"` is a **browser-only write-only ingest key**.
+The browser snippet's `licenseKey` field is a **browser-only write-only ingest key**.
 
 - It has no read capability
 - It has no account management capability

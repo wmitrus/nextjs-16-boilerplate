@@ -196,3 +196,7 @@ export function getBrowserSnippetSafe(): string {
     }),
   );
 }
+
+export function hasBrowserSnippetConfiguredSafe(): boolean {
+  return getBrowserSnippetSafe().length > 0;
+}

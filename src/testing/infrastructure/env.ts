@@ -70,6 +70,9 @@ const defaultEnv: MutableEnv = {
   NEW_RELIC_LICENSE_KEY: undefined,
   NEW_RELIC_APP_NAME: 'nextjs-16-boilerplate',
   NEW_RELIC_ENABLED: false,
+  NEW_RELIC_NERDGRAPH_API_URL: undefined,
+  NEW_RELIC_USER_API_KEY: undefined,
+  NEW_RELIC_ACCOUNT_ID: undefined,
   NEW_RELIC_BROWSER_SNIPPET: undefined,
   NEW_RELIC_BROWSER_SNIPPET_BASE64: undefined,
 };

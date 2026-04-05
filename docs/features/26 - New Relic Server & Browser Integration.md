@@ -138,6 +138,7 @@ a curated read-only NerdGraph / NRQL catalog:
 
 - `pnpm nr -- list`
 - `pnpm nr -- run baseline`
+- `pnpm nr -- run baseline --view=compact`
 - `pnpm nr -- run golden-signals`
 - `pnpm nr -- run throughput.rate`
 - `pnpm nr:query -- "SELECT count(*) FROM Transaction SINCE 1 hour ago"`
@@ -146,12 +147,14 @@ Optional flags:
 
 - `--format=json` for machine-readable output
 - `--account=1234567` to override `NEW_RELIC_ACCOUNT_ID`
+- `--view=compact` for an operator-friendly bundle summary
 
 Design notes:
 
 - `pnpm nr` is the professional day-to-day entrypoint
 - query definitions live in `scripts/new-relic/catalog.ts`
 - bundles keep `package.json` small while preserving a rich query set
+- compact view turns baseline-style bundles into a one-row summary plus short highlights
 - `pnpm nr:query` remains the escape hatch for one-off or advanced NRQL
 
 These commands are intentionally separate from the Next.js runtime integration:

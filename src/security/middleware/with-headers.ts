@@ -70,6 +70,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     'https://de.sentry.io',
   ];
 
+  const newRelicScriptDomain = 'https://js-agent.newrelic.com';
   const scriptSrc = [
     "'self'",
     "'unsafe-inline'",
@@ -77,6 +78,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     ...clerkDomains,
     ...cloudflareDomains,
     ...sentryScriptDomains,
+    newRelicScriptDomain,
     ...(isPreview || isDev ? vercelInsightsScriptDomains : []),
     isPreview ? 'https://vercel.live' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_SCRIPT_EXTRA),
@@ -92,6 +94,11 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     'https://*.ingest.de.sentry.io',
   ];
 
+  const newRelicBeaconDomains = [
+    'https://bam.nr-data.net',
+    'https://bam.eu01.nr-data.net',
+  ];
+
   const connectSrc = [
     "'self'",
     ...clerkDomains,
@@ -99,6 +106,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     ...(isPreview || isDev ? vercelInsightsConnectDomains : []),
     'https://clerk-telemetry.com',
     ...sentryDomains,
+    ...newRelicBeaconDomains,
     isPreview ? 'https://vercel.live wss://vercel.live wss://*.pusher.com' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_CONNECT_EXTRA),
   ]

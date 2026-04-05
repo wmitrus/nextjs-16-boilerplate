@@ -115,3 +115,9 @@ When Sentry is integrated for error management, keep Logflare focused on:
 - Client logging uses `sendBeacon` with a `fetch` fallback to avoid blocking navigation.
 - Edge and browser logs share the same ingest payload contract, but only the server logger owns persistent sink delivery.
 - Ingest protection (rate limiting/auth) should be added before production deployment.
+
+## Related deep dives
+
+- `docs/features/25 - Per-Request Container Caching.md`
+- `docs/features/26 - New Relic Server & Browser Integration.md`
+  These two docs cover the request-scoped DI cache and the split New Relic server/browser integration in detail.

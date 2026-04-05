@@ -1,7 +1,7 @@
 # Task Plan: New Relic Browser SPA Agent Integration
 
 **Task ID**: `2026-04-05-nr-browser-spa`
-**Status**: ✅ Complete — All validation passed, smoke test issues resolved
+**Status**: ✅ Complete — All validation passed, including preview-runtime follow-up
 **Created**: 2026-04-05
 **Parent task**: `2026-04-05-per-request-caching` (NR integration sub-task)
 
@@ -89,15 +89,16 @@ Replace the current APM `getBrowserTimingHeader()` browser injection with the st
   - Add `NEW_RELIC_BROWSER_SNIPPET` to `src/core/env.ts`
   - Add to `.env.example` with security comment
   - Update `src/core/observability/new-relic.ts` — `getBrowserSnippetSafe()`
-  - Update `src/app/layout.tsx` — use snippet if set, else APM fallback
+  - Update `src/app/layout.tsx` — load Browser SPA script without inline hydration risk
   - Revert `newrelic.js` logging level from `trace` back to `info`
   - Update user documentation / comment in `.env.example`
+  - Follow-up fix: move the browser script route off `/api/*` to avoid proxy auth/rate-limit interception
 - [x] **Step 4 — Validation** · `validation-report.md`
   - `pnpm typecheck` — 0 errors
   - `pnpm lint --fix` — 0 errors
   - `pnpm test` — all pass (892+)
   - Manual smoke: env var set → snippet injected in page source → correct app ID (538837440)
-  - Manual smoke: env var unset → falls back to `getBrowserTimingHeaderSafe()`
+  - Manual smoke: local production homepage loads with zero Chromium runtime errors using `/observability/new-relic-browser.js`
 
 ---
 

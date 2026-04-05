@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+vi.mock('server-only', () => ({}));
+
 import type { Container } from '@/core/container';
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';

@@ -5,6 +5,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { Suspense } from 'react';
 
 import { env } from '@/core/env';
+import { getBrowserSnippetSafe } from '@/core/observability/new-relic';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
@@ -57,6 +58,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nrBrowserHeader = env.NEW_RELIC_ENABLED ? getBrowserSnippetSafe() : '';
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
   const signInFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
     env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
@@ -77,6 +79,14 @@ export default function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        {nrBrowserHeader && (
+          <script
+            id="nr-browser-agent"
+            dangerouslySetInnerHTML={{ __html: nrBrowserHeader }}
+          />
+        )}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

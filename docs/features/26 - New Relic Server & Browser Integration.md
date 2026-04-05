@@ -104,6 +104,9 @@ Server-only env vars involved in this integration:
 - `NEW_RELIC_ENABLED`
 - `NEW_RELIC_LICENSE_KEY`
 - `NEW_RELIC_APP_NAME`
+- `NEW_RELIC_NERDGRAPH_API_URL`
+- `NEW_RELIC_USER_API_KEY`
+- `NEW_RELIC_ACCOUNT_ID`
 - `NEW_RELIC_BROWSER_SNIPPET`
 - `NEW_RELIC_BROWSER_SNIPPET_BASE64`
 
@@ -127,6 +130,29 @@ Browser monitoring needs the New Relic beacon domains in `connect-src`. This rep
 Examples of intentionally ignored vendor-host suggestions include SaaS sinks such as Sentry ingest, Clerk traffic, Upstash, GrowthBook, or Logflare endpoints. If app-owned contract instrumentation is needed later, it should be scoped as its own task.
 
 ## Troubleshooting
+
+## NerdGraph debug scripts
+
+For local debugging and operational inspection, this repository now includes
+read-only NerdGraph / NRQL scripts:
+
+- `pnpm nr:health`
+- `pnpm nr:errors:top`
+- `pnpm nr:transactions:slow`
+- `pnpm nr:logs:recent`
+- `pnpm nr:query -- "SELECT count(*) FROM Transaction SINCE 1 hour ago"`
+
+Optional flags:
+
+- `--format=json` for machine-readable output
+- `--account=1234567` to override `NEW_RELIC_ACCOUNT_ID`
+
+These scripts are intentionally separate from the Next.js runtime integration:
+
+- they run only from `scripts/new-relic/*`
+- they use a user API key, not the APM license key
+- they are meant for debugging, CI diagnostics, and human investigation
+- they do not expose arbitrary NRQL execution to browser code or public routes
 
 ### Browser snippet loads but breaks in the console
 

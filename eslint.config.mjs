@@ -220,6 +220,7 @@ const eslintConfig = defineConfig([
     'debug-storybook.log',
     'next-env.d.ts',
     'node_modules/**',
+    'docs/**/*.js',
   ]),
   prettier,
   ...storybook.configs['flat/recommended'],

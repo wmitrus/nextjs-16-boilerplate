@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTH } from '@/core/contracts';
 import { UserNotProvisionedError } from '@/core/contracts/identity';
 import type { IdentityProvider } from '@/core/contracts/identity';

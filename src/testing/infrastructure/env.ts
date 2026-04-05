@@ -67,6 +67,11 @@ const defaultEnv: MutableEnv = {
   FEATURE_FLAGS_STATIC: undefined,
   GROWTHBOOK_CLIENT_KEY: undefined,
   GROWTHBOOK_API_HOST: undefined,
+  NEW_RELIC_LICENSE_KEY: undefined,
+  NEW_RELIC_APP_NAME: 'nextjs-16-boilerplate',
+  NEW_RELIC_ENABLED: false,
+  NEW_RELIC_BROWSER_SNIPPET: undefined,
+  NEW_RELIC_BROWSER_SNIPPET_BASE64: undefined,
 };
 
 /**

@@ -41,6 +41,7 @@ export const env = createEnv({
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
     NEW_RELIC_BROWSER_SNIPPET: z.string().optional(),
+    NEW_RELIC_BROWSER_SNIPPET_BASE64: z.string().optional(),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
@@ -138,6 +139,8 @@ export const env = createEnv({
     NEW_RELIC_APP_NAME: process.env.NEW_RELIC_APP_NAME,
     NEW_RELIC_ENABLED: process.env.NEW_RELIC_ENABLED,
     NEW_RELIC_BROWSER_SNIPPET: process.env.NEW_RELIC_BROWSER_SNIPPET,
+    NEW_RELIC_BROWSER_SNIPPET_BASE64:
+      process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,

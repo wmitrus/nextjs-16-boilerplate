@@ -7,6 +7,8 @@ import {
   getNumericValue,
   parseCliFlag,
   parseOutputFormat,
+  parsePositionalArgs,
+  parseView,
   resolveNerdGraphConfig,
 } from './lib';
 
@@ -34,6 +36,16 @@ describe('new-relic script helpers', () => {
       expect(parseOutputFormat(['node', 'script', '--format=json'])).toBe(
         'json',
       );
+    });
+  });
+
+  describe('parseView', () => {
+    it('defaults to full view', () => {
+      expect(parseView(['node', 'script'])).toBe('full');
+    });
+
+    it('supports compact view', () => {
+      expect(parseView(['node', 'script', '--view=compact'])).toBe('compact');
     });
   });
 
@@ -67,6 +79,23 @@ describe('new-relic script helpers', () => {
       expect(() => extractNrqlFromArgv(['node', 'script'])).toThrow(
         'Missing NRQL query',
       );
+    });
+  });
+
+  describe('parsePositionalArgs', () => {
+    it('returns bare positional arguments while skipping supported flags', () => {
+      expect(
+        parsePositionalArgs([
+          'node',
+          'script',
+          'run',
+          'baseline',
+          '--format=json',
+          '--view=compact',
+          '--account',
+          '1234567',
+        ]),
+      ).toEqual(['run', 'baseline']);
     });
   });
 

@@ -73,6 +73,38 @@ async function MyServerComponent() {
 
 `headers()` or `cookies()` from `next/headers` also satisfy this requirement (and are used by `security-showcase` which reads cookies). Use `connection()` when no actual request data is needed.
 
+## RSC Prerender — Third-Party API `Date.now()` Constraint
+
+**Any third-party library or internal helper that records timestamps (`Date.now()` / `new Date()`) must never be called from a Server Component or layout that may be statically prerendered by Next.js 16.**
+
+Next.js 16 prerender mode throws a hard error if `Date.now()` is accessed before a dynamic data source (`fetch()`, `cookies()`, `headers()`, `connection()`, `searchParams`) is accessed first.
+
+**Known violators:**
+
+- `newrelic.getBrowserTimingHeader()` — records timestamps internally even when it returns an empty string
+- `pino` logger — records `Date.now()` on every log call (managed by the `await connection()` rule above)
+
+**Rule**: If a helper function wraps any NR API call (or any library that calls `Date.now()` / `new Date()` internally), it **must not** be called from `layout.tsx` or any page/component that may be prerendered. Use an env-var–based approach instead:
+
+```typescript
+// ✅ Safe — reads env var, never calls NR API
+export function getBrowserSnippetSafe(): string {
+  return resolveBrowserSnippetSource({
+    base64Snippet: process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
+    rawSnippet: process.env.NEW_RELIC_BROWSER_SNIPPET,
+  });
+}
+
+// ❌ Unsafe in prerendered layouts — NR records Date.now() internally
+export function getBrowserTimingHeaderSafe(): string {
+  return nr.getBrowserTimingHeader(...); // triggers prerender error
+}
+```
+
+**Diagnostic signal**: Error message will reference `new Date()` or the current time, plus the call-stack path through `layout.tsx`. The root cause is always a library recording timestamps — not the layout itself.
+
+**Fix pattern**: If you must inject third-party browser monitoring scripts in a layout, store the full inert snippet string in a server-only env var and inject it as a raw string — never call the third-party SDK API from the layout.
+
 ## Dependencies
 
 **Main Dependencies**:

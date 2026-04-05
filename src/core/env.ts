@@ -40,6 +40,9 @@ export const env = createEnv({
     NEW_RELIC_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
+    NEW_RELIC_NERDGRAPH_API_URL: z.url().optional(),
+    NEW_RELIC_USER_API_KEY: z.string().optional(),
+    NEW_RELIC_ACCOUNT_ID: z.coerce.number().int().positive().optional(),
     NEW_RELIC_BROWSER_SNIPPET: z.string().optional(),
     NEW_RELIC_BROWSER_SNIPPET_BASE64: z.string().optional(),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
@@ -138,6 +141,9 @@ export const env = createEnv({
     NEW_RELIC_LICENSE_KEY: process.env.NEW_RELIC_LICENSE_KEY,
     NEW_RELIC_APP_NAME: process.env.NEW_RELIC_APP_NAME,
     NEW_RELIC_ENABLED: process.env.NEW_RELIC_ENABLED,
+    NEW_RELIC_NERDGRAPH_API_URL: process.env.NEW_RELIC_NERDGRAPH_API_URL,
+    NEW_RELIC_USER_API_KEY: process.env.NEW_RELIC_USER_API_KEY,
+    NEW_RELIC_ACCOUNT_ID: process.env.NEW_RELIC_ACCOUNT_ID,
     NEW_RELIC_BROWSER_SNIPPET: process.env.NEW_RELIC_BROWSER_SNIPPET,
     NEW_RELIC_BROWSER_SNIPPET_BASE64:
       process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,

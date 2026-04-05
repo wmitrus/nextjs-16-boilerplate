@@ -35,6 +35,11 @@ export const env = createEnv({
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),
     LOG_INGEST_SECRET: z.string().optional(),
     SENTRY_DSN: z.url().optional(),
+    NEW_RELIC_LICENSE_KEY: z.string().optional(),
+    NEW_RELIC_APP_NAME: z.string().default('nextjs-16-boilerplate'),
+    NEW_RELIC_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
@@ -128,6 +133,9 @@ export const env = createEnv({
     API_RATE_LIMIT_WINDOW: process.env.API_RATE_LIMIT_WINDOW,
     LOG_INGEST_SECRET: process.env.LOG_INGEST_SECRET,
     SENTRY_DSN: process.env.SENTRY_DSN,
+    NEW_RELIC_LICENSE_KEY: process.env.NEW_RELIC_LICENSE_KEY,
+    NEW_RELIC_APP_NAME: process.env.NEW_RELIC_APP_NAME,
+    NEW_RELIC_ENABLED: process.env.NEW_RELIC_ENABLED,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,

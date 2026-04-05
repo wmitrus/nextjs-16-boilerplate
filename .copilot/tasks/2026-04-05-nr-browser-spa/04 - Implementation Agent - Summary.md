@@ -1,57 +1,111 @@
 # 04 — Implementation Agent Summary
 
-**Task**: `2026-04-05-nr-browser-spa`
-**Date**: 2026-04-05
-**Status**: ✅ Complete
+## Task Context
 
----
+- Task ID: `2026-04-05-nr-browser-spa`
+- Task Objective: deliver New Relic Browser SPA instrumentation safely in Next.js 16 and resolve the preview hydration/runtime regression introduced by inline snippet delivery
+- Current Run Scope: production code fix, focused runtime validation, artifact sync
+- Status: COMPLETED
+- Last Updated: 2026-04-05
+- Related Control Artifacts: `plan.md`, `validation-report.md`, `01 - Architecture Guard - Summary.md`, `02 - Security & Auth - Summary.md`
 
-## Changes Made
+## Scope Handled
 
-### 1. `src/core/env.ts`
+- modules / files changed: `src/app/layout.tsx`, `src/app/observability/new-relic-browser.js/route.ts`, `src/core/observability/new-relic.ts`, `.env.example`, `newrelic.js`, historical task artifacts for the gitleaks false positive
+- implementation goals in scope: inject the browser SPA snippet without prerender violations, avoid proxy/auth interference, preserve server-only snippet sourcing, clear CI secret-scan failure
+- constraints applied: no client-bundle secret exposure, minimal blast radius, Next.js 16 Cache Components compatibility, preserve existing auth/proxy rules for real API routes
 
-- Added `NEW_RELIC_BROWSER_SNIPPET: z.string().optional()` to server schema
-- Added `NEW_RELIC_BROWSER_SNIPPET: process.env.NEW_RELIC_BROWSER_SNIPPET` to runtime binding
-- Server-side only — no `NEXT_PUBLIC_` prefix
+## Inputs Reviewed
 
-### 2. `src/core/observability/new-relic.ts`
+- code paths reviewed: `src/app/layout.tsx`, `src/core/observability/new-relic.ts`, `src/proxy.ts`, `src/security/middleware/route-policy.ts`, `src/security/middleware/with-auth.ts`, `src/security/middleware/with-rate-limit.ts`, `src/core/env.ts`, `src/testing/infrastructure/env.ts`
+- upstream specialist artifacts reviewed: architecture and security summaries in this task folder
+- earlier implementation notes reviewed: existing implementation summary, validation report, CI secret-scanning failure log
 
-- Added `getBrowserSnippetSafe()` export
-- Priority: `process.env.NEW_RELIC_BROWSER_SNIPPET` (standalone SPA snippet) → `getBrowserTimingHeaderSafe()` (APM fallback) → `''`
-- No top-level imports added (module stays import-free at module level — avoids T3-Env init in test context)
-- `process.env.NEW_RELIC_BROWSER_SNIPPET` accessed at call time, not module load time
+## Actions Performed
 
-### 3. `src/app/layout.tsx`
+- code changes made:
+  - added `hasBrowserSnippetConfiguredSafe()` in `src/core/observability/new-relic.ts`
+  - changed `src/app/layout.tsx` to load the browser agent with `next/script`
+  - moved snippet delivery from inline head HTML to a dedicated public route: `/observability/new-relic-browser.js`
+  - removed the obsolete `/api/observability/new-relic-browser` route after confirming it was intercepted by the proxy and returned auth JSON instead of JavaScript
+  - removed key-shaped example text from tracked task artifacts and added a narrow `.gitleaksignore` fingerprint to clear PR-history secret scanning
+- tests or supporting files updated: task artifacts only; no new test files added
+- focused validation executed: production builds, local PR-history gitleaks scan, HTTP checks against the script route, Chromium runtime verification of the homepage
 
-- Import changed: `getBrowserTimingHeaderSafe` → `getBrowserSnippetSafe`
-- Call site updated: `getBrowserTimingHeaderSafe()` → `getBrowserSnippetSafe()`
-- No other changes to layout
+## Files Changed
 
-### 4. `.env.example`
+- production files: `src/app/layout.tsx`, `src/app/observability/new-relic-browser.js/route.ts`, `src/core/observability/new-relic.ts`, `.env.example`, `newrelic.js`, `.gitleaksignore`
+- test files: none
+- docs / artifact files: `.copilot/tasks/2026-04-05-nr-browser-spa/02 - Security & Auth - Summary.md`, `.copilot/tasks/2026-04-05-nr-browser-spa/04 - Implementation Agent - Summary.md`, `.copilot/tasks/2026-04-05-nr-browser-spa/plan.md`, `.copilot/tasks/2026-04-05-nr-browser-spa/validation-report.md`
 
-- Added `NEW_RELIC_BROWSER_SNIPPET=` (empty value) with 4-line security comment
-- Comment instructs: get snippet from NR UI, use Pro+SPA, never commit actual content
+## Behavior Change Summary
 
-### 5. `newrelic.js`
+- previous behavior:
+  - browser SPA snippet was injected inline in the root layout head
+  - follow-up attempt to externalize it under `/api/observability/...` was blocked by proxy auth/rate limiting because all `/api/*` routes flow through the global security pipeline
+- new behavior:
+  - layout loads a public script URL at `/observability/new-relic-browser.js`
+  - the route returns JavaScript directly and is not treated as a protected API route by the proxy matcher
+  - homepage renders cleanly in production browser validation with zero runtime errors
+- intentional non-changes:
+  - auth and rate-limit policies for actual API routes were not widened
+  - no additional broad test surface was added
 
-- Reverted `logging.level` from `'trace'` (debug session) back to `'info'`
+## Implementation Decisions / Constraints
 
----
+- implementation choices made:
+  - used a non-API `.js` route rather than adding another public API exception
+  - kept snippet sourcing on the server via `getBrowserSnippetSafe()`
+  - used `next/script` with `beforeInteractive` to preserve early loader execution without inline HTML injection
+- constraints preserved:
+  - no `NEXT_PUBLIC_*` exposure of the raw snippet
+  - no changes to proxy security policy beyond moving the script off the protected namespace
+  - route remains compatible with Cache Components by avoiding incompatible route segment config
+- tradeoffs accepted:
+  - script delivery is now one extra HTTP request instead of inline HTML, in exchange for lower hydration risk and cleaner interaction with proxy/auth rules
 
-## Design Decisions
+## Validation Performed
 
-| Decision                                   | Rationale                                                                                                               |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `process.env` over `env` object            | `new-relic.ts` has no top-level imports; adding T3-Env import at module level breaks test isolation (bootstrap.test.ts) |
-| Fallback to `getBrowserTimingHeaderSafe()` | Preserves APM approach for users who don't set `NEW_RELIC_BROWSER_SNIPPET`                                              |
-| Server-side env var                        | Snippet contains browser ingest key — must not appear in client bundle                                                  |
-| No validation on snippet content           | Content is provider-controlled and opaque; length validation would reject valid large snippets                          |
+- commands run:
+  - `pnpm build`
+  - local `gitleaks` PR-history scan from merge-base
+  - HTTP fetch checks for `/observability/new-relic-browser.js`
+  - Chromium page load against local production server
+- results:
+  - production build passed
+  - gitleaks scan reported no leaks
+  - script endpoint returned `200` with `application/javascript; charset=utf-8`
+  - Chromium loaded `/` with `ERROR_COUNT 0`, expected title, and visible main heading
+- validation not run:
+  - no remote preview browser session was run from this environment
+  - no New Relic dashboard ingestion verification after the route move
+- residual risk from validation gaps:
+  - preview-specific env or CDN behavior could still differ from local production, but the locally reproduced auth interception issue is now removed at the routing level
 
----
+## Artifact Synchronization
 
-## Rollback Procedure
+- `plan.md` updates: aligned status with final implementation and validation outcome
+- `intake.md` updates: not present for this older task folder
+- `implementation-plan.md` updates: not present for this older task folder
+- specialist artifact updates: refreshed implementation summary and validation report after runtime follow-up work
 
-Rollback requires zero code changes:
+## Open Questions / Blockers
 
-1. Remove `NEW_RELIC_BROWSER_SNIPPET` from `.env.local` (or deployment env store)
-2. `getBrowserSnippetSafe()` falls back to `getBrowserTimingHeaderSafe()` automatically
+- unresolved questions: whether preview deployment now shows Browser SPA data in the NR dashboard after redeploy
+- blockers: none
+- follow-up needed: confirm preview deployment after this patch and optionally verify Browser app ingest in New Relic UI
+
+## Handoff Notes
+
+- what the next agent should rely on: the public `.js` route is the intended stable delivery path for the Browser SPA snippet; do not move it back under `/api/*` without also redesigning proxy exemptions
+- residual risks for review: preview-only differences are now narrowed to deployment/env behavior rather than local runtime or proxy auth interception
+- recommended next specialist or step: none unless preview still fails after redeploy
+
+## Update Log
+
+### Update Entry
+
+- Date: 2026-04-05
+- Trigger: preview branch hydration/runtime regression and CI secret-scan failure follow-up
+- Summary of change: externalized the Browser SPA snippet to a public `.js` route, removed the protected API variant, validated clean local production runtime, and synchronized artifact status
+- Sections refreshed: all

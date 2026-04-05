@@ -134,12 +134,12 @@ Examples of intentionally ignored vendor-host suggestions include SaaS sinks suc
 ## NerdGraph debug scripts
 
 For local debugging and operational inspection, this repository now includes
-read-only NerdGraph / NRQL scripts:
+a curated read-only NerdGraph / NRQL catalog:
 
-- `pnpm nr:health`
-- `pnpm nr:errors:top`
-- `pnpm nr:transactions:slow`
-- `pnpm nr:logs:recent`
+- `pnpm nr -- list`
+- `pnpm nr -- run baseline`
+- `pnpm nr -- run golden-signals`
+- `pnpm nr -- run throughput.rate`
 - `pnpm nr:query -- "SELECT count(*) FROM Transaction SINCE 1 hour ago"`
 
 Optional flags:
@@ -147,7 +147,14 @@ Optional flags:
 - `--format=json` for machine-readable output
 - `--account=1234567` to override `NEW_RELIC_ACCOUNT_ID`
 
-These scripts are intentionally separate from the Next.js runtime integration:
+Design notes:
+
+- `pnpm nr` is the professional day-to-day entrypoint
+- query definitions live in `scripts/new-relic/catalog.ts`
+- bundles keep `package.json` small while preserving a rich query set
+- `pnpm nr:query` remains the escape hatch for one-off or advanced NRQL
+
+These commands are intentionally separate from the Next.js runtime integration:
 
 - they run only from `scripts/new-relic/*`
 - they use a user API key, not the APM license key

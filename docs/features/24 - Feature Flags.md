@@ -499,7 +499,7 @@ MSW handlers for GrowthBook HTTP interception are available in `src/modules/feat
 The `/feature-flags-demo` page has a Playwright spec. Run it with:
 
 ```bash
-pnpm test:e2e
+pnpm e2e
 ```
 
 ---

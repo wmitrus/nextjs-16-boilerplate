@@ -7,6 +7,19 @@ export interface RequestScopedContext {
   readonly requestId: string;
   readonly runtime: 'edge' | 'node';
   readonly environment: 'development' | 'test' | 'production';
+  /**
+   * Opt-in pre-fetched feature flag values for this request.
+   *
+   * Defaults to {} — the auth layer does NOT populate this automatically.
+   * Population is the responsibility of the specific RSC page, server action,
+   * or route handler that knows which named flags are relevant.
+   *
+   * Use FeatureFlagService.isEnabled(flag, authorizationContext) at the point
+   * of consumption. Pre-populate this field only when passing a known flag
+   * map explicitly through component props or action context.
+   *
+   * For ABAC policy conditions, use TenantAttributes.features instead.
+   */
   readonly featureFlags: Readonly<Record<string, boolean>>;
   readonly metadata: Readonly<Record<string, unknown>>;
 }

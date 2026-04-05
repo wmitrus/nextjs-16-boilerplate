@@ -11,6 +11,12 @@ Internal canonical roles are tenant-scoped and stored in DB:
 
 These roles are created/ensured per tenant by provisioning and referenced by memberships and policies.
 
+> **Note — Two distinct role systems**: `src/core/contracts/roles.ts` defines a separate set of
+> security-layer application roles (`guest | user | admin`) used for request-context floor checks
+> and middleware authorization decisions. These are **not** the same as the tenant DB roles above.
+> The `RoleId` type returned by `RoleRepository` is an opaque string carrying the DB role name
+> (`owner` or `member`) and is not constrained to the security-layer `UserRole` values.
+
 ## 2. Authorization Decision Flow
 
 1. Identity is resolved (`IdentityProvider`) to internal user UUID.
@@ -80,7 +86,7 @@ RBAC state changes (roles, policies, memberships) are write-path operations in p
 Before shipping RBAC-affecting changes:
 
 1. Run `pnpm typecheck`
-2. Run `pnpm lint`
+2. Run `pnpm lint --fix`
 3. Run unit tests touching authorization/provisioning
 4. Run DB tests for policy-role isolation and provisioning idempotence
 5. Verify no wildcard policy regressions

@@ -30,7 +30,7 @@ pnpm typecheck
 Run ESLint (includes Prettier checks):
 
 ```bash
-pnpm lint
+pnpm lint --fix
 ```
 
 ## Directory Structure

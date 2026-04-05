@@ -56,13 +56,17 @@ export function parseOutputFormat(argv: string[]): 'json' | 'table' {
   return parseCliFlag(argv, 'format') === 'json' ? 'json' : 'table';
 }
 
-export function extractNrqlFromArgv(argv: string[]): string {
-  const flagValue = parseCliFlag(argv, 'nrql');
+export function parseView(argv: string[]): 'full' | 'compact' {
+  const view = parseCliFlag(argv, 'view');
 
-  if (flagValue) {
-    return flagValue;
+  if (view === 'compact') {
+    return 'compact';
   }
 
+  return 'full';
+}
+
+export function parsePositionalArgs(argv: string[]): string[] {
   const positional: string[] = [];
   let skipNext = false;
 
@@ -77,7 +81,8 @@ export function extractNrqlFromArgv(argv: string[]): string {
     if (
       current === '--format' ||
       current === '--account' ||
-      current === '--nrql'
+      current === '--nrql' ||
+      current === '--view'
     ) {
       skipNext = true;
       continue;
@@ -86,7 +91,8 @@ export function extractNrqlFromArgv(argv: string[]): string {
     if (
       current.startsWith('--format=') ||
       current.startsWith('--account=') ||
-      current.startsWith('--nrql=')
+      current.startsWith('--nrql=') ||
+      current.startsWith('--view=')
     ) {
       continue;
     }
@@ -94,6 +100,17 @@ export function extractNrqlFromArgv(argv: string[]): string {
     positional.push(current);
   }
 
+  return positional;
+}
+
+export function extractNrqlFromArgv(argv: string[]): string {
+  const flagValue = parseCliFlag(argv, 'nrql');
+
+  if (flagValue) {
+    return flagValue;
+  }
+
+  const positional = parsePositionalArgs(argv);
   const query = positional.join(' ').trim();
 
   if (!query) {

@@ -45,7 +45,7 @@ Replace the current APM `getBrowserTimingHeader()` browser injection with the st
 
 ### Security
 
-- The snippet contains `licenseKey: "NRJS-..."` — a **browser-only write-only ingest key**
+- The snippet contains a browser `licenseKey` field — a **browser-only write-only ingest key**
   - Safe to inject into HTML (all users can see it in page source — by design)
   - Must NOT be committed to the repository
   - Must stay in `.env.local` / deployment secret store only

@@ -22,7 +22,7 @@ You complement those agents by producing evidence-driven investigation output th
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before investigation.
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before investigation.
 - When investigating security-related failures or unexpected scanner findings, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` — it documents known false positives and confirmed security patterns that are likely relevant context for the investigation.
-- If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `06 - Debug Investigation - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
+- If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `06 - Debug Investigation - Summary.md` in that task directory before handoff, using `docs/ai/templates/specialist-summaries/06 - Debug Investigation - Summary Template.md`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - Treat repository code as the primary source of truth.
 - Treat logs, diagnostics, Sentry data, task artifacts, and observed runtime behavior as supporting evidence.

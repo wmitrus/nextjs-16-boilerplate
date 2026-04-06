@@ -1,121 +1,92 @@
-# Zestaw agentow dla Twojego projektu
+# Codex Repo Skills Quick Start
 
-| Agent                     | Command              | Cel                                                 | Kiedy uzywac                                     | Input                          | Output                                                      | Priority   |
-| ------------------------- | -------------------- | --------------------------------------------------- | ------------------------------------------------ | ------------------------------ | ----------------------------------------------------------- | ---------- |
-| SDD Architect             | `/architect-sdd`     | Projektowanie feature przez spec-driven development | Zanim napiszesz kod dla nowej funkcji lub modulu | idea feature / problem         | spec, architektura, phased plan, risks, acceptance criteria | ⭐⭐⭐⭐⭐ |
-| Modular Monolith Reviewer | `/review-boundaries` | Kontrola boundary i architektury modular monolith   | Po refactorze lub przed merge                    | zmienione pliki / repo         | boundary leaks, forbidden dependencies, remediation plan    | ⭐⭐⭐⭐⭐ |
-| Next.js Runtime Architect | `/next-runtime`      | Decyzje runtime Next.js                             | Projektowanie flow w App Router                  | feature spec lub fragment kodu | server/client split, runtime placement, caching strategy    | ⭐⭐⭐⭐   |
-| Auth & Tenancy Architect  | `/auth-tenancy`      | Projektowanie auth, tenantow, RBAC/ABAC             | Gdy dotykasz auth, rol, organizacji              | auth flow / wymagania          | auth architecture, enforcement points, risks                | ⭐⭐⭐⭐⭐ |
-| Feature Flags Architect   | `/flags-architect`   | Projektowanie systemu feature flags                 | Dodawanie eksperymentow lub rolloutow            | feature change                 | flag taxonomy, evaluation architecture, rollout strategy    | ⭐⭐⭐     |
-| Implementation Planner    | `/impl-plan`         | Rozbijanie architektury na kroki implementacji      | Po zaprojektowaniu feature                       | architecture spec              | phased tasks, files map, migration plan                     | ⭐⭐⭐⭐   |
-| Principal Code Reviewer   | `/principal-review`  | Review jak od principal engineer                    | Przed merge PR                                   | diff / zmiany                  | approve/reject + critical issues                            | ⭐⭐⭐⭐   |
-| Security Auditor          | `/security-audit`    | Audyt bezpieczenstwa aplikacji                      | Przed release lub po duzym feature               | repo / modul                   | vulnerabilities, exploit paths, fixes                       | ⭐⭐⭐⭐⭐ |
-| Test Strategy Designer    | `/test-strategy`     | Projektowanie sensownych testow                     | Po implementacji feature                         | feature spec                   | test matrix, edge cases, CI plan                            | ⭐⭐⭐     |
-| Observability Architect   | `/observability`     | Monitoring, Sentry, telemetry                       | Konfiguracja observability                       | modul / feature                | instrumentation plan, metrics, alerts                       | ⭐⭐⭐     |
-| ADR Writer                | `/adr-writer`        | Dokumentowanie decyzji architektonicznych           | Po decyzjach architektonicznych                  | decision context               | ADR document                                                | ⭐⭐       |
+> **IMPORTANT - THIS DIRECTORY CONTAINS THE REAL REPO-LOCAL CODEX SKILLS.**
+>
+> The runtime skill files live under `.agents/skills/`.
+> The guides in `docs/ai/codex/` are human-facing descriptions only.
 
-## Jak wyglada workflow pracy
+Use this directory when you want the actual Codex runtime surface for this repository.
 
-1. Start nowego feature
-   Command: `/architect-sdd`
-   Agent tworzy:
+## Skill Types
 
-- spec
-- architecture
-- plan implementacji
+### Specialist Skill
 
-2. Sprawdzenie runtime Next.js
-   Command: `/next-runtime`
-   Sprawdza:
+A specialist skill is a focused reviewer or implementer role.
 
-- server vs client
-- actions
-- caching
-- edge vs node
+Current specialist skills:
 
-3. Jesli feature dotyczy auth / tenantow
-   Command: `/auth-tenancy`
-   Sprawdza:
+- `architecture-guard` -> `.agents/skills/architecture-guard/SKILL.md`
+- `security-auth` -> `.agents/skills/security-auth/SKILL.md`
+- `nextjs-runtime` -> `.agents/skills/nextjs-runtime/SKILL.md`
+- `implementation-agent` -> `.agents/skills/implementation-agent/SKILL.md`
+- `validation-strategy` -> `.agents/skills/validation-strategy/SKILL.md`
+- `debug-investigation` -> `.agents/skills/debug-investigation/SKILL.md`
+- `playwright-e2e` -> `.agents/skills/playwright-e2e/SKILL.md`
+- `workflow-orchestrator` -> `.agents/skills/workflow-orchestrator/SKILL.md`
+- `task-brief-authoring` -> `.agents/skills/task-brief-authoring/SKILL.md`
 
-- trust boundaries
-- tenant propagation
-- RBAC enforcement
+### Workflow Skill
 
-4. Rozbijanie na zadania
-   Command: `/impl-plan`
-   Tworzy:
+A workflow skill is a reusable, multi-step operating mode that coordinates intake,
+constraints, implementation, and validation for a recurring task shape.
 
-- kolejnosc PR
-- mape plikow
-- migration notes
+Current workflow skills:
 
-5. Po implementacji
-   Commands: `/review-boundaries`, `/principal-review`
-   Sprawdza:
+- `safe-feature-workflow` -> `.agents/skills/safe-feature-workflow/SKILL.md`
+- `safe-refactor-workflow` -> `.agents/skills/safe-refactor-workflow/SKILL.md`
+- `security-incident-workflow` -> `.agents/skills/security-incident-workflow/SKILL.md`
+- `incident-investigation-workflow` -> `.agents/skills/incident-investigation-workflow/SKILL.md`
+- `auth-flow-change-review-workflow` ->
+  `.agents/skills/auth-flow-change-review-workflow/SKILL.md`
+- `playwright-e2e-validation-workflow` ->
+  `.agents/skills/playwright-e2e-validation-workflow/SKILL.md`
+- `change-validation-workflow` -> `.agents/skills/change-validation-workflow/SKILL.md`
+- `repository-baseline-validation-workflow` ->
+  `.agents/skills/repository-baseline-validation-workflow/SKILL.md`
+- `codacy-security-review-workflow` ->
+  `.agents/skills/codacy-security-review-workflow/SKILL.md`
+- `codacy-findings-review-workflow` ->
+  `.agents/skills/codacy-findings-review-workflow/SKILL.md`
 
-- architecture
-- maintainability
-- code quality
+Workflow roadmap:
 
-6. Przed release
-   Commands: `/security-audit`, `/test-strategy`, `/observability`
+- `docs/ai/codex/Workflow Roadmap.md`
 
-7. Dokumentacja decyzji
-   Command: `/adr-writer`
+## Recommended Starting Points
 
-## Co jest najwazniejsze
+- architecture or boundary review:
+  `.agents/skills/architecture-guard/SKILL.md`
+- behavior-preserving refactor or cleanup:
+  `.agents/skills/safe-refactor-workflow/SKILL.md`
+- feature delivery with constraint-first sequencing:
+  `.agents/skills/safe-feature-workflow/SKILL.md`
+- multi-step task sequencing and delegation:
+  `.agents/skills/workflow-orchestrator/SKILL.md`
+- task brief or intake normalization before orchestration:
+  `.agents/skills/task-brief-authoring/SKILL.md`
 
-Jesli mialbym wybrac minimum, ktore daje 80% wartosci:
+## Codex Delegation Note
 
-- `/architect-sdd`
-- `/review-boundaries`
-- `/auth-tenancy`
-- `/security-audit`
-- `/impl-plan`
-- `/principal-review`
+Codex can orchestrate multi-step work and spawn subagents for this repository, but the
+repo-local skills in `.agents/skills/*/SKILL.md` are instruction surfaces, not
+automatically registered spawned-agent identities.
 
-To juz daje workflow enterprise architecture level.
+Use `workflow-orchestrator` to decide when delegation is appropriate. Spawned subagents
+still need explicit, bounded handoffs that carry the relevant role constraints.
 
-## Bonus: agent, ktory polecam jeszcze dodac
+## Compatibility Notes
 
-Jesli bedziesz robil duzo projektow z tego boilerplate, dodaj jeszcze:
+- `AGENTS.md` remains the primary always-applied context.
+- Shared specialist prompts live in `docs/ai/general/01-09 - *.md`.
+- Neutral workflow specs live in `docs/ai/general/Workflow *.md`.
+- GitHub Copilot runtime surfaces live in `.github/agents/` and `.github/prompts/`.
+- ZenFlow runtime workflow specs live in `.zenflow/workflows/`.
+- Human-facing Codex guides live in `docs/ai/codex/`.
 
-`Boilerplate Maintainer`
+When a repo-local Codex skill changes, propagate that change to the matching shared
+source, any relevant Copilot or ZenFlow counterpart, and the guide layer under
+`docs/ai/codex/`.
 
-Command: `/boilerplate-maintainer`
-
-Cel:
-
-- pilnowanie, aby boilerplate byl clean template
-- identyfikowanie kodu, ktory nie powinien byc w template
-- sprawdzanie, czy moduly sa opcjonalne
-
-To jest bardzo przydatne przy multi-template strategy.
-
-## Pro tip dla Zencoder
-
-Polecam stworzyc workflow: `SDD Feature Workflow`, ktory automatycznie odpala:
-
-- `architect-sdd`
-- `next-runtime`
-- `impl-plan`
-- `review-boundaries`
-- `principal-review`
-- `security-audit`
-
-To daje pelny lifecycle feature development.
-
-## Dodatkowo
-
-Jesli chcesz, moge tez przygotowac:
-
-`Ultimate Zencoder Agents Pack for Next.js Architects`
-
-Czyli:
-
-- 11 gotowych promptow agentow
-- kazdy production-grade
-- kazdy ~300-500 linii instrukcji
-- zoptymalizowane pod Next.js 16 + modular monolith + tenancy + RBAC + feature flags
-
-To jest poziom konfiguracji, ktory zwykle maja staff engineers w duzych firmach.
+For artifact-backed work, every non-orchestrator specialist skill must maintain exactly
+one persistent summary artifact under `.copilot/tasks/{task_id}/` and update that same
+file on later runs instead of creating duplicates.

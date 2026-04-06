@@ -96,8 +96,11 @@ When any agent rule, security pattern, or behavioral constraint is added or chan
 - **`AGENTS.md`** (root) — primary always-applied context, update here first
 - `docs/ai/general/0[1-9] - *.md` — Zencoder agent prompts
 - `.github/agents/*.agent.md` — GitHub Copilot agents
+- `.github/prompts/*.prompt.md` — GitHub Copilot workflow prompts
+- `.agents/skills/*/SKILL.md` — Codex repo-local skills
 - `.zenflow/workflows/*.md` — ZenFlow workflow specs
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md` — if the rule is security-related
+- `docs/ai/zencoder/*.md`, `docs/ai/copilot/*.md`, `docs/ai/codex/*.md` — human-facing description guides
 
 **Never add to `.zencoder/rules/` — Zen Rules are deprecated April 20, 2026.**
 

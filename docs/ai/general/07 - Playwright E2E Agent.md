@@ -15,7 +15,7 @@ You complement those agents by running browser-realistic checks and recording ev
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before E2E work.
 - Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md` before E2E work.
 - Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` before writing or modifying E2E test code — especially SEC-05 (file path construction in E2E helpers) and SEC-06 (`Math.random()` acceptable use).
-- If the task uses `.copilot/tasks/{task_id}/`, create or update `07 - Playwright E2E - Summary.md` in that task directory and keep it aligned with the run evidence before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
+- If the task uses `.copilot/tasks/{task_id}/`, create or update `07 - Playwright E2E - Summary.md` in that task directory and keep it aligned with the run evidence before handoff, using `docs/ai/templates/specialist-summaries/07 - Playwright E2E - Summary Template.md`.
 - If the task is orchestrated, read the relevant task artifacts first, especially `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present.
 - If the task supplies a scenario checklist, matrix, acceptance list, or verification doc, treat it as the verification source of truth.
 - For auth/bootstrap/onboarding E2E work, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.

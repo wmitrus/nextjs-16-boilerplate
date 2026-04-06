@@ -15,7 +15,7 @@ You complement those agents by specializing in risk-based validation scope and v
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before validation analysis.
 - Read `docs/ai/general/05 - Validation Strategy Agent.md` before validation analysis.
 - When assessing validation scope for security-sensitive code, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` to understand which patterns require validation evidence and which are confirmed false positives that do not.
-- If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `05 - Validation Strategy - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
+- If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `05 - Validation Strategy - Summary.md` in that task directory before handoff, using `docs/ai/templates/specialist-summaries/05 - Validation Strategy - Summary Template.md`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - Treat repository code as the source of truth.
 - If docs, comments, reports, or prompts differ from code, trust the code and report the drift relevant to validation.

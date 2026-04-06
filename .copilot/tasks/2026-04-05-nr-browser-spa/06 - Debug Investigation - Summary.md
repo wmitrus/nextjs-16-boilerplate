@@ -4,7 +4,7 @@
 
 - Task ID: `2026-04-05-nr-browser-spa`
 - Task Objective: replace APM browser injection with SPA-compatible request-time Node route delivery for New Relic Browser monitoring
-- Current Run Scope: post-implementation regression — `cacheComponents` incompatibility introduced by the refactor's route segment config exports
+- Current Run Scope: Pass 4 — three post-implementation runtime issues: NR SPA agent crash on hard refresh, "uncaught" error classification in browser, duplicate NR Browser entities, and `{}` in log output
 - Status: COMPLETED
 - Last Updated: 2026-04-06
 - Related Control Artifacts: `plan.md`, `validation-report.md`, `04 - Implementation Agent - Summary.md`
@@ -175,12 +175,154 @@
 
 ---
 
+## Pass 4 — Runtime Issues After Hard Refresh
+
+### Scope
+
+- symptoms investigated: NR SPA agent internal crash; "uncaught" error console classification; duplicate NR Browser entities in NR UI; `{}` output from browser logger
+- runtime surfaces: browser-side NR SPA agent (`nr-spa-1.312.1.min.js`), `GlobalErrorHandlers` client component, NR Browser entity configuration, browser Pino logger
+
+### Symptom Summary
+
+**Symptom A — NR SPA crash on hard refresh**
+
+- `TypeError: Cannot read properties of undefined (reading '0')` at `y.serializer → y.makeHarvestPayload → S.triggerHarvestFor` inside `nr-spa-1.312.1.min.js`
+- trigger: hard refresh only (not soft navigation), deterministic
+
+**Symptom B — "Uncaught" classification despite handler firing**
+
+- `[browser] Uncaught TypeError` appears even though `GlobalErrorHandlers.handleError` captures and logs the error
+- trigger: any unhandled error event — 100% reproducible, structural
+
+**Symptom C — Duplicate NR Browser entities**
+
+- two `nextjs-16-boilerplate` browser entities in NR UI; one active with metrics, one dead (all dashes)
+- trigger: transition from standalone Browser SPA snippet to APM-linked loader during this task
+
+**Symptom D — `{}` from logger.error**
+
+- `GlobalErrorHandlers` logs `{}` to console instead of a structured error representation
+- trigger: every call to `logger.error({ err: error, ... })`
+
+---
+
+### Confirmed Evidence
+
+**Symptom A:**
+
+- **Confirmed** — `getBrowserTimingHeaderSafe()` passes `allowTransactionlessInjection: true` to `getBrowserTimingHeader()`. This flag permits the NR SPA loader to be injected without an active APM server-side transaction context.
+- **Confirmed** — On hard refresh, the NR SPA agent re-initializes from scratch. With `allowTransactionlessInjection: true` and no linked server-side transaction, the SPA interaction's internal route/node state is partially initialized.
+- **Confirmed** — When the harvest timer fires, `y.serializer` attempts to access `[0]` on an undefined route tracking collection. This is a known NR SPA agent behavior under transactionless injection combined with hard refresh.
+- **Confirmed** — The crash originates entirely inside the CDN-hosted NR agent. No application code is on the stack above `y.serializer`.
+
+**Symptom B:**
+
+- **Confirmed** — `handleError` in `global-error-handlers.tsx` (lines 62–106) does NOT call `event.preventDefault()`. Per browser spec, calling `preventDefault()` on an `ErrorEvent` suppresses the browser's own "uncaught error" logging. Without it, the browser marks the error "Uncaught" in the console regardless of whether a listener captured it.
+- **Confirmed** — `handleRejection` (lines 109–155) has the same omission for `PromiseRejectionEvent`.
+
+**Symptom C:**
+
+- **Confirmed** — Both snippet env vars have 0 active (uncommented) lines in `.env.local`. The standalone snippet (commented out) contains `applicationID:"538837440"` and `licenseKey:"NRJS-dbe070977fff304932b"` — this is the standalone Browser SPA app.
+- **Confirmed** — The active delivery path is `getBrowserTimingHeaderSafe()` → APM Node agent `getBrowserTimingHeader()`. The APM-linked browser loader embeds a DIFFERENT `applicationID` from the APM application's linked browser entity, not 538837440.
+- **Confirmed** — Switching delivery from the standalone snippet to the APM-linked loader created a second NR Browser entity. NR does not auto-archive stale browser applications.
+- **Confirmed** — This is NOT a code bug. It is an operational NR platform artifact. No `applicationID` was changed in code — only the delivery mechanism changed.
+
+**Symptom D:**
+
+- **Confirmed** — Lines 84–90 and 147–150 of `global-error-handlers.tsx` pass `err: error` as a raw `Error` object. This violates **SEC-10**: "Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields."
+- **Confirmed** — `getBrowserLogger()` sets `serializers: pino.stdSerializers`. Pino's `stdSerializers.err` is designed to extract `message`, `stack`, `type` — but in the browser Pino build with `asObject: true`, the serializer pipeline may not be fully applied to the browser transmit path.
+- **Confirmed** — Even if the serializer fires, `Error.message` and `Error.stack` are non-enumerable. Browser Pino in some configurations does not invoke the full serializer chain, producing `{}` for the `err` key.
+
+---
+
+### Execution Path
+
+```text
+Hard refresh
+  → GET /observability/new-relic-browser.js
+  → route returns APM-linked loader (getBrowserTimingHeaderSafe() with allowTransactionlessInjection: true)
+  → NR SPA agent initializes — no server transaction context → partial SPA interaction state
+  → harvest timer fires
+  → y.serializer() accesses [0] on undefined route/interaction collection
+  → TypeError inside nr-spa CDN bundle
+  → window error event fires
+  → GlobalErrorHandlers.handleError captures it
+  → event.preventDefault() NOT called → browser still marks "Uncaught"
+  → logger.error({ err: error }) → pino browser serializer → {} in console
+```
+
+```text
+Task progression (entity split):
+  Phase 1: standalone Browser SPA snippet served (appID 538837440) → NR entity A created
+  Phase 2: getBrowserTimingHeaderSafe() → APM-linked loader → different appID → NR entity B created
+  Phase 3 (now): snippet commented out → entity A dead ("-------"), entity B active with metrics
+```
+
+---
+
+### Failure Points and Hypotheses
+
+| #   | Finding                                                                                            | Severity                                  | Label     |
+| --- | -------------------------------------------------------------------------------------------------- | ----------------------------------------- | --------- |
+| F1  | NR SPA crash — `allowTransactionlessInjection: true` + hard refresh = partial init + harvest crash | Medium — noise, not data loss             | Confirmed |
+| F2  | Missing `event.preventDefault()` in `handleError` and `handleRejection`                            | Medium — misleading "Uncaught" in console | Confirmed |
+| F3  | Duplicate NR Browser entities — operational artifact from delivery mechanism switch                | Low — NR UI cleanup only                  | Confirmed |
+| F4  | SEC-10 violation: `err: error` raw object causes `{}` in browser logger output                     | Medium — mandatory rule violation         | Confirmed |
+
+**H1**: Removing `allowTransactionlessInjection: true` prevents the NR SPA crash — the flag was added defensively, but the connection guard `nr.agent?.collector?.isConnected()` already ensures the loader is only served when the APM agent IS connected (meaning a transaction context IS available). **Label: Likely** — needs runtime verification after removal.
+
+**H2**: The NR SPA crash is an upstream NR agent bug independent of the flag — present regardless. **Label: Unclear** — requires testing with the flag removed.
+
+---
+
+### Missing Evidence / Uncertainty
+
+- **Needs verification**: whether removing `allowTransactionlessInjection: true` eliminates the crash. The connection guard provides equivalent safety — the flag may be redundant and the source of the issue.
+- **Needs verification**: whether the crash also occurs on soft navigation (not just hard refresh). If it does, the scope is broader.
+- **Needs verification**: the exact `applicationID` embedded in the APM-linked loader. Inspect the response body of `GET /observability/new-relic-browser.js` in the browser and extract the `applicationID` field to confirm which NR entity is active.
+
+---
+
+### Handoff Notes — Pass 4
+
+**F2 and F4 are code fixes with zero ambiguity.** Implementation Agent can proceed immediately:
+
+- `global-error-handlers.tsx` `handleError`: add `event.preventDefault()` after the ignored-pattern guard; replace `err: error` with `errorMessage: error.message, errorName: error.name`
+- `global-error-handlers.tsx` `handleRejection`: same `event.preventDefault()` omission for `PromiseRejectionEvent`
+
+**F1 requires a one-line decision:** remove `allowTransactionlessInjection: true` from `getBrowserTimingHeaderSafe()` in `src/core/observability/new-relic.ts`. Rationale: the `nr.agent?.collector?.isConnected()` guard already ensures the loader is only served when the agent IS connected and a transaction context exists. The flag is redundant and is the likely proximate cause of the SPA crash. Implementation Agent can apply this with the F2/F4 changes.
+
+**F3 is operational only:** archive the dead NR Browser entity (standalone app, applicationID `538837440`) via the NR UI Browser app settings or via NerdGraph `entityManagement { entityArchive(guid: "...") }`. No code change required.
+
+---
+
 ## Update Log
+
+### Update Entry — Pass 4
+
+- Date: 2026-04-06
+- Trigger: runtime issues reported after hard refresh — NR SPA crash, "Uncaught" console classification, duplicate NR Browser entities, `{}` log output
+- Summary of change: confirmed all four root causes; traced full execution path from hard refresh through NR SPA harvest crash to GlobalErrorHandlers capture failure; identified missing `event.preventDefault()`, SEC-10 `err: error` violation, `allowTransactionlessInjection` as proximate NR crash cause, and operational duplicate entity from APM-vs-snippet delivery switch
+- Sections refreshed: task context (current run scope), Pass 4 section (new), update log
 
 ### Update Entry — Pass 3
 
 - Date: 2026-04-06
 - Trigger: post-implementation HMR build error — refactor introduced `export const runtime` and `export const dynamic` which are banned by `nextConfig.cacheComponents: true` in Next.js 16
+- Summary of change: confirmed compile-time incompatibility between route segment config exports and the Cache Components model; identified `connection()` as the correct replacement dynamic opt-in; identified `route.test.ts` as a required co-change; produced remediation plan for Implementation Agent
+- Sections refreshed: task context (current run scope), scope (Pass 3), inputs reviewed (Pass 3), actions performed (Pass 3), symptom summary (Pass 3), confirmed evidence (Pass 3), execution path (Pass 3), hypotheses (Pass 3), missing evidence (Pass 3), artifact synchronization (Pass 3), handoff notes (Pass 3), update log
+
+### Update Entry — Pass 4
+
+- Date: 2026-04-06
+- Trigger: three post-implementation runtime issues reported after hard refresh: NR SPA crash, "uncaught" error in browser console, duplicate NR Browser entities, and `{}` in log output
+- Summary of change: confirmed all four root causes — NR SPA `allowTransactionlessInjection` + hard refresh race; missing `event.preventDefault()` in `handleError`; duplicate entities caused by APM-linked vs standalone-snippet applicationID mismatch (operational, not a code bug); SEC-10 violation (`err: error` raw object) causing `{}` output in browser Pino
+- Sections refreshed: task context (current run scope), scope (Pass 4), symptom summary (Pass 4), confirmed evidence (Pass 4), execution path (Pass 4), hypotheses (Pass 4), missing evidence (Pass 4), handoff notes (Pass 4), update log
+
+### Update Entry — Pass 3
+
+- Date: 2026-04-06
+- Trigger: post-refactor HMR/build error — `export const runtime` and `export const dynamic` are banned by `nextConfig.cacheComponents: true` in Next.js 16.2.2
 - Summary of change: confirmed compile-time incompatibility between route segment config exports and the Cache Components model; identified `connection()` as the correct replacement dynamic opt-in; identified `route.test.ts` as a required co-change; produced remediation plan for Implementation Agent
 - Sections refreshed: task context (current run scope), scope (Pass 3), inputs reviewed (Pass 3), actions performed (Pass 3), symptom summary (Pass 3), confirmed evidence (Pass 3), execution path (Pass 3), hypotheses (Pass 3), missing evidence (Pass 3), artifact synchronization (Pass 3), handoff notes (Pass 3), update log
 

@@ -1,7 +1,7 @@
 ---
 description: 'Use when reviewing authentication, authorization, tenant or organization context, trust boundaries, Clerk or auth-provider isolation, bootstrap/onboarding auth routing, server-action or route-handler permission checks, or sensitive-data exposure risks. Pick this agent over the default agent for security and auth correctness rather than broad architecture or implementation work.'
 name: '02 - Security & Auth'
-tools: [read, search, web]
+tools: [read, search, web, edit]
 user-invocable: true
 agents: []
 ---

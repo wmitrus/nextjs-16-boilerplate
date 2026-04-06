@@ -4,7 +4,7 @@
 
 - Task ID: `2026-04-05-nr-browser-spa`
 - Task Objective: deliver New Relic Browser SPA instrumentation safely in Next.js 16 and keep the deployment model compatible with Vercel env-var limits
-- Current Run Scope: cacheComponents regression fix — remove banned route segment config exports, replace with `connection()` dynamic opt-in
+- Current Run Scope: Pass 4 — F1 remove `allowTransactionlessInjection`, F2 add `event.preventDefault()`, F4 SEC-10 error field extraction
 - Status: COMPLETED
 - Last Updated: 2026-04-06
 - Related Control Artifacts: `plan.md`, `validation-report.md`, `01 - Architecture Guard - Summary.md`, `02 - Security & Auth - Summary.md`
@@ -161,7 +161,18 @@ This section is the direct answer for the Vercel/env-var issue that triggered th
 
 ## Update Log
 
-### Update Entry
+### Update Entry — Pass 4
+
+- Date: 2026-04-06
+- Trigger: runtime issues after hard refresh — NR SPA crash, "Uncaught" console noise, SEC-10 `{}` log output
+- Summary of change:
+  - `src/core/observability/new-relic.ts`: removed `allowTransactionlessInjection: true` from `getBrowserTimingHeader()` call and removed the unused option from the `NewRelicApi` interface type — the `isConnected()` guard already ensures a transaction context exists, making the flag redundant and the likely cause of the NR SPA harvest crash on hard refresh
+  - `src/shared/components/error/global-error-handlers.tsx`: added `event.preventDefault()` before the logging try block in both `handleError` and `handleRejection` — this suppresses the browser's "Uncaught" console classification for errors we fully own; replaced `err: error` (raw Error object, SEC-10 violation) with `errorMessage: error.message, errorName: error.name` in both logger calls
+  - `src/shared/components/error/global-error-handlers.test.tsx`: updated all `err: testError` / `err: expect.any(Error)` assertions to use `errorMessage`/`errorName` fields; added two new tests covering the `preventDefault` call for errors and rejections
+- Validation: 34/34 unit tests pass across both files; lint clean (zero errors, 4 pre-existing unrelated warnings)
+- Sections refreshed: task context (current run scope), update log
+
+### Update Entry — Pass 3
 
 - Date: 2026-04-06
 - Trigger: post-refactor HMR/build error — `export const runtime` and `export const dynamic` are banned by `nextConfig.cacheComponents: true` in Next.js 16.2.2

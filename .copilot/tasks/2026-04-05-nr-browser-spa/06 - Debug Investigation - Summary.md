@@ -222,7 +222,7 @@
 
 **Symptom C:**
 
-- **Confirmed** — Both snippet env vars have 0 active (uncommented) lines in `.env.local`. The standalone snippet (commented out) contains `applicationID:"538837440"` and `licenseKey:"NRJS-dbe070977fff304932b"` — this is the standalone Browser SPA app.
+- **Confirmed** — Both snippet env vars have 0 active (uncommented) lines in `.env.local`. The standalone snippet (commented out) contains `applicationID:"538837440"` and `licenseKey:"[REDACTED]"` — this is the standalone Browser SPA app.
 - **Confirmed** — The active delivery path is `getBrowserTimingHeaderSafe()` → APM Node agent `getBrowserTimingHeader()`. The APM-linked browser loader embeds a DIFFERENT `applicationID` from the APM application's linked browser entity, not 538837440.
 - **Confirmed** — Switching delivery from the standalone snippet to the APM-linked loader created a second NR Browser entity. NR does not auto-archive stale browser applications.
 - **Confirmed** — This is NOT a code bug. It is an operational NR platform artifact. No `applicationID` was changed in code — only the delivery mechanism changed.

@@ -133,6 +133,7 @@ Never:
 - hide ambiguity
 - recommend broad refactors before the failure path is understood
 - confuse symptom location with root cause location
+- write real credential-shaped values (keys, tokens, passwords, license keys, API keys) into artifact files — always replace with `[REDACTED]` even when the value is technically public or browser-visible; gitleaks scans all committed markdown and will fail the `security-scan` CI workflow
 
 ## Authority Boundaries
 

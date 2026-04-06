@@ -23,7 +23,6 @@ interface NewRelicApi {
   getBrowserTimingHeader(options?: {
     nonce?: string;
     hasToRemoveScriptWrapper?: boolean;
-    allowTransactionlessInjection?: boolean;
   }): string;
 }
 
@@ -169,7 +168,6 @@ export function getBrowserTimingHeaderSafe(): string {
   try {
     const header = nr.getBrowserTimingHeader({
       hasToRemoveScriptWrapper: true,
-      allowTransactionlessInjection: true,
     });
     return header.startsWith('<!--') ? '' : header;
   } catch {

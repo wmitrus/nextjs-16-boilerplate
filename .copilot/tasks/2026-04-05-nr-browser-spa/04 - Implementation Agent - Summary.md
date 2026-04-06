@@ -4,7 +4,7 @@
 
 - Task ID: `2026-04-05-nr-browser-spa`
 - Task Objective: deliver New Relic Browser SPA instrumentation safely in Next.js 16 and keep the deployment model compatible with Vercel env-var limits
-- Current Run Scope: Pass 4 — F1 remove `allowTransactionlessInjection`, F2 add `event.preventDefault()`, F4 SEC-10 error field extraction
+- Current Run Scope: Pass 5 — agent documentation hardening across AGENTS.md, docs/ai/general, .github/agents
 - Status: COMPLETED
 - Last Updated: 2026-04-06
 - Related Control Artifacts: `plan.md`, `validation-report.md`, `01 - Architecture Guard - Summary.md`, `02 - Security & Auth - Summary.md`
@@ -160,6 +160,19 @@ This section is the direct answer for the Vercel/env-var issue that triggered th
 - recommended next specialist or step: none unless preview still fails after redeploy
 
 ## Update Log
+
+### Update Entry — Pass 5
+
+- Date: 2026-04-06
+- Trigger: user requested all AI agent docs be hardened to prevent recurrence of the patterns that caused bugs in this task
+- Summary of change:
+  - `AGENTS.md`: added "New Relic Browser — `allowTransactionlessInjection` Is Banned" section with crash signature and correct pattern
+  - `docs/ai/general/03 - Next.js Runtime Agent.md`: added same NR `allowTransactionlessInjection` section after the `getAppContainer()` rule
+  - `.github/agents/nextjs-runtime.agent.md`: mirrored the same NR section (Copilot agent counterpart)
+  - `.github/agents/implementation-agent.agent.md`: added Pattern F (`vi.importActual` without type annotation) and Pattern G (`event.preventDefault()` in error handlers)
+  - All existing Pass 3/4 doc updates confirmed present: cacheComponents constraint in AGENTS.md + `03 - Next.js Runtime Agent` + `nextjs-runtime.agent.md`; Pattern F/G in `04 - Implementation Agents.md`; SEC-10 + `event.preventDefault()` bullets in AGENTS.md Observability section
+- Validation: no code changes — documentation only; no lint/typecheck required
+- Sections refreshed: task context (current run scope), update log
 
 ### Update Entry — Pass 4
 

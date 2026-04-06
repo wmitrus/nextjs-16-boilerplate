@@ -4,7 +4,7 @@
 
 - Task ID: `2026-04-05-nr-browser-spa`
 - Task Objective: deliver New Relic Browser SPA instrumentation safely in Next.js 16 and keep the deployment model compatible with Vercel env-var limits
-- Current Run Scope: Pass 5 — agent documentation hardening across AGENTS.md, docs/ai/general, .github/agents
+- Current Run Scope: Pass 6 — font preload warnings fix (globals.css + layout.tsx)
 - Status: COMPLETED
 - Last Updated: 2026-04-06
 - Related Control Artifacts: `plan.md`, `validation-report.md`, `01 - Architecture Guard - Summary.md`, `02 - Security & Auth - Summary.md`
@@ -160,6 +160,17 @@ This section is the direct answer for the Vercel/env-var issue that triggered th
 - recommended next specialist or step: none unless preview still fails after redeploy
 
 ## Update Log
+
+### Update Entry — Pass 6
+
+- Date: 2026-04-06
+- Trigger: browser console "preloaded but not used" warnings for two woff2 font files on `/` and `/feature-flags-demo`
+- Root cause (confirmed by Debug Investigation): `globals.css` body rule hardcoded `font-family: Arial` overriding the `--font-sans` CSS variable, so Geist Sans was preloaded by `next/font` but never rendered; `Geist_Mono` initialized at root layout level causing global preload on all pages including the homepage which has no `font-mono` elements
+- Summary of change:
+  - `src/app/globals.css`: changed `body { font-family: Arial, Helvetica, sans-serif }` → `body { font-family: var(--font-sans), Arial, Helvetica, sans-serif }` so Geist Sans is actually applied via the Tailwind `@theme inline` alias
+  - `src/app/layout.tsx`: added `preload: false` to `Geist_Mono({...})` — removes the global `<link rel="preload">` for Geist Mono; font still self-hosts and loads on-demand when `font-mono` elements render
+- Validation: `pnpm lint --fix` — 0 errors, 4 pre-existing unrelated warnings; `pnpm typecheck` — clean
+- Sections refreshed: task context (current run scope), update log
 
 ### Update Entry — Pass 5
 

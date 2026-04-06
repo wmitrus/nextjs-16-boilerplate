@@ -25,6 +25,12 @@ describe('new-relic script helpers', () => {
         parseCliFlag(['node', 'script', '--format', 'json'], 'format'),
       ).toBe('json');
     });
+
+    it('does not treat tokens after -- as flags', () => {
+      expect(
+        parseCliFlag(['node', 'script', '--', '--format=json'], 'format'),
+      ).toBeUndefined();
+    });
   });
 
   describe('parseOutputFormat', () => {
@@ -97,6 +103,20 @@ describe('new-relic script helpers', () => {
         ]),
       ).toEqual(['run', 'baseline']);
     });
+
+    it('treats all tokens after -- as positional arguments', () => {
+      expect(
+        parsePositionalArgs([
+          'node',
+          'script',
+          'run',
+          '--',
+          '--format=json',
+          'SELECT',
+          'count(*)',
+        ]),
+      ).toEqual(['run', '--format=json', 'SELECT', 'count(*)']);
+    });
   });
 
   describe('resolveNerdGraphConfig', () => {
@@ -132,6 +152,26 @@ describe('new-relic script helpers', () => {
           userApiKey: 'NRAK_test',
         }),
       ).toThrow('NEW_RELIC_ACCOUNT_ID');
+    });
+
+    it('rejects non-https NerdGraph urls', () => {
+      expect(() =>
+        resolveNerdGraphConfig({
+          accountId: '1234567',
+          apiUrl: 'http://api.newrelic.com/graphql',
+          userApiKey: 'NRAK_test',
+        }),
+      ).toThrow('must use https');
+    });
+
+    it('rejects unexpected NerdGraph hosts', () => {
+      expect(() =>
+        resolveNerdGraphConfig({
+          accountId: '1234567',
+          apiUrl: 'https://evil.example.com/graphql',
+          userApiKey: 'NRAK_test',
+        }),
+      ).toThrow('api.newrelic.com or api.eu.newrelic.com');
     });
   });
 

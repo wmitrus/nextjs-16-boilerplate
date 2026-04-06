@@ -7,11 +7,19 @@ const { mockGetBrowserAgentScriptSafe } = vi.hoisted(() => ({
   mockGetBrowserAgentScriptSafe: vi.fn(),
 }));
 
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return {
+    ...actual,
+    connection: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 vi.mock('@/core/observability/new-relic', () => ({
   getBrowserAgentScriptSafe: mockGetBrowserAgentScriptSafe,
 }));
 
-import { GET, dynamic, runtime } from './route';
+import { GET } from './route';
 
 import { mockEnv } from '@/testing/infrastructure/env';
 
@@ -19,11 +27,6 @@ describe('GET /observability/new-relic-browser.js', () => {
   beforeEach(() => {
     mockEnv.NEW_RELIC_ENABLED = false;
     mockGetBrowserAgentScriptSafe.mockReset();
-  });
-
-  it('pins the route to request-time Node execution', () => {
-    expect(runtime).toBe('nodejs');
-    expect(dynamic).toBe('force-dynamic');
   });
 
   it('returns an empty script when New Relic is disabled', async () => {

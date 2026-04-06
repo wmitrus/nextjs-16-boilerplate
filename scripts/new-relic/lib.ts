@@ -23,6 +23,12 @@ export interface NerdGraphResponse<TData> {
 
 export type ResultRow = Record<string, unknown>;
 
+const NERDGRAPH_ALLOWED_HOSTS = new Set([
+  'api.newrelic.com',
+  'api.eu.newrelic.com',
+]);
+const NERDGRAPH_REQUEST_TIMEOUT_MS = 30000;
+
 interface NrqlEnvelope {
   actor?: {
     account?: {
@@ -34,17 +40,20 @@ interface NrqlEnvelope {
 }
 
 export function parseCliFlag(argv: string[], name: string): string | undefined {
+  const endOfOptionsIndex = argv.indexOf('--');
+  const searchableArgv =
+    endOfOptionsIndex === -1 ? argv : argv.slice(0, endOfOptionsIndex);
   const inlinePrefix = `--${name}=`;
-  const inline = argv.find((arg) => arg.startsWith(inlinePrefix));
+  const inline = searchableArgv.find((arg) => arg.startsWith(inlinePrefix));
 
   if (inline) {
     return inline.slice(inlinePrefix.length).trim();
   }
 
-  const index = argv.indexOf(`--${name}`);
+  const index = searchableArgv.indexOf(`--${name}`);
   if (index === -1) return undefined;
 
-  const value = argv[index + 1];
+  const value = searchableArgv[index + 1];
   if (typeof value !== 'string' || value.startsWith('--')) {
     return undefined;
   }
@@ -69,6 +78,7 @@ export function parseView(argv: string[]): 'full' | 'compact' {
 export function parsePositionalArgs(argv: string[]): string[] {
   const positional: string[] = [];
   let skipNext = false;
+  let reachedEndOfOptions = false;
 
   for (const current of argv.slice(2)) {
     if (skipNext) {
@@ -76,7 +86,15 @@ export function parsePositionalArgs(argv: string[]): string[] {
       continue;
     }
 
-    if (current === '--') continue;
+    if (reachedEndOfOptions) {
+      positional.push(current);
+      continue;
+    }
+
+    if (current === '--') {
+      reachedEndOfOptions = true;
+      continue;
+    }
 
     if (
       current === '--format' ||
@@ -132,6 +150,8 @@ export function resolveNerdGraphConfig(
     );
   }
 
+  const parsedApiUrl = validateNerdGraphUrl(apiUrl);
+
   const userApiKey = input.userApiKey?.trim();
   if (!userApiKey) {
     throw new Error(
@@ -152,9 +172,33 @@ export function resolveNerdGraphConfig(
 
   return {
     accountId: rawAccountId,
-    apiUrl,
+    apiUrl: parsedApiUrl.toString(),
     userApiKey,
   };
+}
+
+function validateNerdGraphUrl(apiUrl: string): URL {
+  let parsedApiUrl: URL;
+
+  try {
+    parsedApiUrl = new URL(apiUrl);
+  } catch {
+    throw new Error(
+      'NEW_RELIC_NERDGRAPH_API_URL must be a valid absolute URL.',
+    );
+  }
+
+  if (parsedApiUrl.protocol !== 'https:') {
+    throw new Error('NEW_RELIC_NERDGRAPH_API_URL must use https.');
+  }
+
+  if (!NERDGRAPH_ALLOWED_HOSTS.has(parsedApiUrl.hostname)) {
+    throw new Error(
+      'NEW_RELIC_NERDGRAPH_API_URL must target api.newrelic.com or api.eu.newrelic.com.',
+    );
+  }
+
+  return parsedApiUrl;
 }
 
 export function getNerdGraphConfig(argv: string[]): NerdGraphConfig {
@@ -169,30 +213,46 @@ export async function runNrqlQuery(
   config: NerdGraphConfig,
   nrql: string,
 ): Promise<ResultRow[]> {
-  const response = await fetch(config.apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'API-Key': config.userApiKey,
-    },
-    body: JSON.stringify({
-      query: `
-        query RunNrql($accountId: Int!, $nrql: Nrql!) {
-          actor {
-            account(id: $accountId) {
-              nrql(query: $nrql) {
-                results
+  let response: Response;
+
+  try {
+    response = await fetch(config.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'API-Key': config.userApiKey,
+      },
+      body: JSON.stringify({
+        query: `
+          query RunNrql($accountId: Int!, $nrql: Nrql!) {
+            actor {
+              account(id: $accountId) {
+                nrql(query: $nrql) {
+                  results
+                }
               }
             }
           }
-        }
-      `,
-      variables: {
-        accountId: config.accountId,
-        nrql,
-      },
-    }),
-  });
+        `,
+        variables: {
+          accountId: config.accountId,
+          nrql,
+        },
+      }),
+      signal: AbortSignal.timeout(NERDGRAPH_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.name === 'TimeoutError')
+    ) {
+      throw new Error(
+        `New Relic NerdGraph request timed out after ${NERDGRAPH_REQUEST_TIMEOUT_MS}ms.`,
+      );
+    }
+
+    throw error;
+  }
 
   const payload = (await response.json()) as NerdGraphResponse<NrqlEnvelope>;
 

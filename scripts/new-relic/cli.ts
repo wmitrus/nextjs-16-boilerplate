@@ -112,8 +112,11 @@ function printCatalog(format: 'json' | 'table'): void {
   console.table(presets);
 }
 
-async function runPreset(id: string, format: 'json' | 'table'): Promise<void> {
-  const config = getNerdGraphConfig(process.argv);
+async function runPreset(
+  config: ReturnType<typeof getNerdGraphConfig>,
+  id: string,
+  format: 'json' | 'table',
+): Promise<void> {
   const preset = getPreset(id);
   const rows = await runNrqlQuery(config, preset.nrql);
 
@@ -141,11 +144,11 @@ async function runPreset(id: string, format: 'json' | 'table'): Promise<void> {
 }
 
 async function runBundle(
+  config: ReturnType<typeof getNerdGraphConfig>,
   id: string,
   format: 'json' | 'table',
   view: 'full' | 'compact',
 ): Promise<void> {
-  const config = getNerdGraphConfig(process.argv);
   const bundle = getBundle(id);
   const presets = resolveBundlePresets(bundle);
   const queryResults: ExecutedQueryResult[] = await Promise.all(
@@ -233,13 +236,15 @@ export async function run(argv = process.argv): Promise<void> {
     );
   }
 
+  const config = getNerdGraphConfig(argv);
+
   if (hasBundle(target)) {
-    await runBundle(target, format, view);
+    await runBundle(config, target, format, view);
     return;
   }
 
   if (hasPreset(target)) {
-    await runPreset(target, format);
+    await runPreset(config, target, format);
     return;
   }
 

@@ -42,6 +42,39 @@ Protect the repository's runtime correctness around:
 - Do not spend time searching for `middleware.ts` or treating its absence as a finding.
 - For middleware-like concerns, inspect `src/proxy.ts` first.
 
+### `cacheComponents: true` — Route Segment Configs Are Banned
+
+`next.config.ts` has `cacheComponents: true` (Cache Components model, PPR-compatible). This setting **forbids** `export const dynamic` and `export const runtime` in any App Router file. Both cause a compile-time hard error that loops indefinitely in Turbopack HMR:
+
+```text
+Route segment config "dynamic" is not compatible with nextConfig.cacheComponents. Please remove it.
+Route segment config "runtime" is not compatible with nextConfig.cacheComponents. Please remove it.
+```
+
+**This applies to pages, layouts, AND route handlers.** There is no exception.
+
+**Banned (will crash the build):**
+
+```typescript
+export const runtime = 'nodejs'; // ❌
+export const dynamic = 'force-dynamic'; // ❌
+```
+
+**Required pattern — opt into dynamic rendering via `connection()`:**
+
+```typescript
+import { connection } from 'next/server';
+
+export async function GET(): Promise<Response> {
+  await connection(); // opts this route handler into dynamic rendering
+  // request-time logic here
+}
+```
+
+`connection()` must be the **first `await`** in the handler/page before any request-time data access, timestamp recording, or DI container call. This rule applies to RSC pages, layouts, and route handlers equally.
+
+**Treat any `export const dynamic` or `export const runtime` in this repository as CRITICAL — flag it before implementation proceeds.**
+
 ### RSC Dynamic Rendering — `getAppContainer()` Pattern
 
 Any async RSC page or component that calls `getAppContainer()` **must** call `await connection()` (from `next/server`) **before** that call.

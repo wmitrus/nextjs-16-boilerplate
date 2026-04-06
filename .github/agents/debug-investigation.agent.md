@@ -1,7 +1,7 @@
 ---
 description: 'Use when investigating complex bugs, unstable flows, inconsistent behavior, hard-to-reproduce failures, env-driven divergence, race conditions, ordering bugs, provisioning or onboarding instability, or unclear auth/runtime/data failure chains. Pick this agent over the default agent for evidence gathering and flow tracing before architecture, security, runtime, validation, or implementation decisions.'
 name: '06 - Debug Investigation'
-tools: [read, search, execute, web]
+tools: [read, search, execute, web, edit]
 user-invocable: true
 agents: []
 ---

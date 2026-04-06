@@ -1,3 +1,7 @@
+import 'server-only';
+
+import { cache } from 'react';
+
 import { Container } from '@/core/container';
 import { FEATURE_FLAGS, INFRASTRUCTURE, PROVISIONING } from '@/core/contracts';
 import type { DbConfig } from '@/core/db/types';
@@ -6,6 +10,10 @@ import {
   validateAuthProviderConfigValues,
   validateTenancyConfigValues,
 } from '@/core/env';
+import {
+  recordContainerCreated,
+  withContainerCreationSpan,
+} from '@/core/observability/new-relic';
 import { getInfrastructure } from '@/core/runtime/infrastructure';
 
 import { createAuthModule } from '@/modules/auth';
@@ -127,6 +135,27 @@ function buildConfig(): AppConfig {
   };
 }
 
+// Module-level constant — MUST remain at module scope.
+// React.cache() creates a single memoized function reference shared by all
+// callers. Moving this inside getAppContainer() would create a new cache()
+// scope on every call, silently breaking per-request deduplication.
+//
+// Lifecycle:
+//   RSC render pass  → same Container returned on every call within the pass
+//   Server Action    → per-invocation Container (cache() is invocation-scoped)
+//   New request      → React invalidates the cache, new Container is created
+const getRequestScopedContainer = cache((): Container => {
+  const instanceId = crypto.randomUUID();
+
+  const container = withContainerCreationSpan(() =>
+    createRequestContainer(buildConfig()),
+  );
+
+  recordContainerCreated(instanceId, 'rsc');
+
+  return container;
+});
+
 export function getAppContainer(): Container {
-  return createRequestContainer(buildConfig());
+  return getRequestScopedContainer();
 }

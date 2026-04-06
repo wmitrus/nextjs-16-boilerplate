@@ -1,7 +1,7 @@
 ---
 description: 'Use when assessing repository validation strategy, deciding the minimum safe validation scope for a change, reviewing test quality, spotting over-mocking or false confidence, or choosing between unit, integration, e2e, contract, and CI validation. Pick this agent over the default agent for risk-based validation planning rather than architecture, auth-policy, runtime, or implementation work.'
 name: '05 - Validation Strategy'
-tools: [read, search, web]
+tools: [read, search, web, edit]
 user-invocable: true
 agents: []
 ---

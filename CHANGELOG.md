@@ -1,3 +1,34 @@
+# [1.19.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.18.0...v1.19.0) (2026-04-06)
+
+
+### Bug Fixes
+
+* **agents:** enforce redaction of sensitive information in task artifacts ([7a63a73](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7a63a732e70b57d6677f32b262bdc212e4981591))
+* **docs:** redact sensitive credential values in investigation documentation ([e6aee88](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e6aee8847e50ccf7922e4b79685bf60e1390651d))
+* **docs:** update implementation agent summary for font preload warnings ([9537311](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9537311da2918f8312913e82c94497e86bf7f802))
+* **gitleaks:** update gitleaksignore to include additional keys ([8495bf4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8495bf4fca12cafcad8ff29b803af01d0a5e4157))
+* **layout:** correct geistMono font preload setting ([54d370e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/54d370e5209f4539f8f315b35c8c45813aa1f8b7))
+* **newrelic:** ban transactionless injection in New Relic browser header ([f25f74e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f25f74eb1e539c571d10164e4c6b5d5a7751f08d))
+* **newrelic:** ban transactionless injection in New Relic browser header ([6222415](https://github.com/wmitrus/nextjs-16-boilerplate/commit/62224155c04c8154913fb8ef0a0d0c548248e46f))
+* **newrelic:** ban transactionless injection in New Relic browser header ([444ebbb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/444ebbb91c8c7a3d563dd3555b4be7a0004d51c7))
+* **newrelic:** redact sensitive information in debug investigation docs ([9ebe978](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9ebe978bbb9074abbe2d480d08435bba17852df1))
+* **observability:** address runtime issues in New Relic SPA integration ([7de9ad9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7de9ad9d34501bb4bfd40cc57ca994408556c80c))
+* **observability:** enhance error logging in GlobalErrorHandlers ([ede9cef](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ede9cefc5d958fe16e50d0d41c724c664a4e45ef))
+* **observability:** remove allowTransactionlessInjection from New Relic API ([6cb4423](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6cb4423d8c382d93875374503c5783e756c43773))
+* **observability:** resolve compile-time errors in New Relic browser route ([d6790cc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d6790ccd67e4dbe779f150049a70ce5bb856ff42))
+* **observability:** resolve New Relic SPA crash and enhance error handling ([cf6a7a6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cf6a7a649557b1824c77edffbf651d4812d6a82b))
+* **observability:** resolve Vercel env-var limits for New Relic snippet ([674af27](https://github.com/wmitrus/nextjs-16-boilerplate/commit/674af27405c7390c3f8ba66e04b9b7bc324f1ed3))
+* **observability:** simplify New Relic browser snippet handling ([6a8b3cc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6a8b3cce6541bb553b51e9e67ce1be637d9e05e8))
+* **observability:** update New Relic browser integration for Vercel ([68fc0e3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/68fc0e3059baf87f5b6724937c4f39591b595016))
+* **observability:** update New Relic browser route for connection handling ([8c4e2ca](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8c4e2ca5867768e0284cd95b9798570e4e81ae12))
+* **security:** redact sensitive credential values in markdown files ([0ac5cfc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0ac5cfc4473f8b88a7370164ac90348ab8516335))
+* **style:** update font-family in body styles ([7cb4f7d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7cb4f7d0b2afae75327b2c1fb1adfb0e1cf3f686))
+
+
+### Features
+
+* **observability:** add runtime-generated APM loader support ([b146c23](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b146c23be0aae123cee5ed630b8b564cd7c902cf))
+
 # [1.18.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.17.0...v1.18.0) (2026-04-06)
 
 

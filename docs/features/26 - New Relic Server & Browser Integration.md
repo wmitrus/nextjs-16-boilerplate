@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document explains how New Relic is integrated in this repository for both server-side APM and browser monitoring, and why the browser path is environment-backed instead of calling the New Relic browser API at layout render time.
+This document explains how New Relic is integrated in this repository for both server-side APM and browser monitoring, and why the browser path uses a request-time Node loader route instead of calling the New Relic browser API at layout render time.
 
 ## Integration split
 
@@ -70,34 +70,36 @@ This preserves modular boundaries and keeps provider-specific code out of featur
 
 In Next.js 16, calling the New Relic browser timing API during a prerenderable layout is unsafe. The underlying SDK records timestamps internally, which triggers the prerender dynamic-access constraint.
 
-Because of that, the layout uses an inert env-backed snippet instead of calling the SDK API during render.
+Because of that, the layout only loads a public script route. The actual browser loader is generated later in a request-time Node route, not during layout render.
 
 ### Active browser path
 
-`src/app/layout.tsx` loads the browser snippet through a public JavaScript route only when New Relic is enabled and a snippet resolves.
+`src/app/layout.tsx` loads the browser snippet through a public JavaScript route whenever New Relic is enabled.
 
 ```tsx
-const hasNewRelicBrowserSnippet =
-  env.NEW_RELIC_ENABLED && hasBrowserSnippetConfiguredSafe();
-
 <head>
-  {hasNewRelicBrowserSnippet && (
+  {env.NEW_RELIC_ENABLED && (
     <Script
       id="nr-browser-agent"
       src="/observability/new-relic-browser.js"
       strategy="beforeInteractive"
     />
   )}
-</head>;
+</head>
 ```
 
 The script body is served by `src/app/observability/new-relic-browser.js/route.ts`.
 
 That route:
 
+- is pinned to the Node runtime and forced dynamic execution
+- prefers `getBrowserTimingHeader()` at request time through `getBrowserAgentScriptSafe()`
+- falls back to the env-backed snippet only for local/dev compatibility or when the agent is unavailable
 - returns an empty JavaScript response when New Relic is disabled or no browser snippet is configured
 - returns `application/javascript` with `Cache-Control: no-store`
 - sets `X-Content-Type-Options: nosniff`
+
+This keeps the layout prerender-safe while avoiding oversized deployment env vars for the full browser copy/paste snippet.
 
 ### Why the loader route is not under `/api`
 
@@ -109,9 +111,14 @@ The active implementation uses `/observability/new-relic-browser.js` so it is tr
 
 ### Snippet resolution logic
 
-`getBrowserSnippetSafe()` supports three realities:
+`getBrowserAgentScriptSafe()` supports two deployment paths:
 
-1. Preferred: `NEW_RELIC_BROWSER_SNIPPET_BASE64`
+1. Preferred for deployments: request-time `getBrowserTimingHeader()` generation from the Node agent
+2. Fallback for local/dev compatibility: env-backed snippet resolution
+
+The env-backed fallback still supports three realities:
+
+1. Preferred local transport: `NEW_RELIC_BROWSER_SNIPPET_BASE64`
 2. Fallback: `NEW_RELIC_BROWSER_SNIPPET`
 3. Recovery path: re-read `.env.local` or `.env` when dotenv truncates the raw snippet at `#`
 
@@ -129,6 +136,12 @@ Server-only env vars involved in this integration:
 - `NEW_RELIC_ACCOUNT_ID`
 - `NEW_RELIC_BROWSER_SNIPPET`
 - `NEW_RELIC_BROWSER_SNIPPET_BASE64`
+
+### Preferred deployment path
+
+For Vercel and other hosted deployments, prefer the request-time Node loader route and do not rely on storing the full browser copy/paste snippet in env vars.
+
+Reason: the full snippet can exceed practical deployment env-var limits and is awkward to manage operationally.
 
 ### Preferred local transport
 
@@ -201,16 +214,17 @@ Verify all of the following:
 - `NEW_RELIC_ENABLED=true`
 - server rendered the `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
 - `/observability/new-relic-browser.js` returns `200` with JavaScript, not `401` or JSON
+- the route runs in the Node runtime, not Edge
 - when New Relic is intentionally disabled, `/observability/new-relic-browser.js` still resolves as a harmless empty JavaScript asset
 - CSP `connect-src` allows the NR beacon host
-- the copied snippet is for the correct app
+- if you use the env fallback locally, the copied snippet is for the correct app
 - enough ingest time has passed for data to appear
 
 ## Guardrails
 
 - Keep server APM initialization in `src/instrumentation.ts`.
 - Keep custom SDK usage isolated in `src/core/observability/new-relic.ts`.
-- Keep browser injection env-backed and layout-safe.
+- Keep browser injection request-time, Node-only, and layout-safe.
 - Keep browser loader delivery on a public non-API route unless proxy behavior is intentionally redesigned.
-- Prefer base64 snippet transport in local dotenv files.
+- Prefer base64 snippet transport only for local dotenv fallback.
 - Treat vendor-host instrumentation suggestions as out of scope unless a separate task justifies them.

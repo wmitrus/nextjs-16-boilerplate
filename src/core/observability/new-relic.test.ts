@@ -23,6 +23,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 import {
   getBrowserSnippetSafe,
+  resolveBrowserAgentScriptSource,
   resolveBrowserSnippetSource,
 } from './new-relic';
 
@@ -124,5 +125,26 @@ describe('resolveBrowserSnippetSource', () => {
         rawEnvFileSnippet: 'xyzabcdef',
       }),
     ).toBe('abc');
+  });
+});
+
+describe('resolveBrowserAgentScriptSource', () => {
+  it('prefers the runtime-generated agent snippet over env-backed fallback content', () => {
+    expect(
+      resolveBrowserAgentScriptSource({
+        agentSnippet:
+          '<script>;window.NREUM||(NREUM={});NREUM.init={runtime:true};</script>',
+        rawSnippet: ';window.NREUM||(NREUM={});NREUM.init={fallback:true};',
+      }),
+    ).toBe(';window.NREUM||(NREUM={});NREUM.init={runtime:true};');
+  });
+
+  it('falls back to the env-backed snippet when the runtime-generated agent snippet is absent', () => {
+    expect(
+      resolveBrowserAgentScriptSource({
+        agentSnippet: '',
+        rawSnippet: ';window.NREUM||(NREUM={});NREUM.init={fallback:true};',
+      }),
+    ).toBe(';window.NREUM||(NREUM={});NREUM.init={fallback:true};');
   });
 });

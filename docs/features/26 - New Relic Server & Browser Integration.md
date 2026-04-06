@@ -59,10 +59,12 @@ This preserves modular boundaries and keeps provider-specific code out of featur
 ### Files
 
 - `src/app/layout.tsx`
+- `src/app/observability/new-relic-browser.js/route.ts`
 - `src/core/observability/new-relic.ts`
 - `src/core/env.ts`
 - `.env.example`
 - `src/security/middleware/with-headers.ts`
+- `src/proxy.ts`
 
 ### Why the layout does not call `getBrowserTimingHeader()`
 
@@ -72,20 +74,38 @@ Because of that, the layout uses an inert env-backed snippet instead of calling 
 
 ### Active browser path
 
-`src/app/layout.tsx` injects the snippet directly into `<head>` only when New Relic is enabled and a snippet resolves.
+`src/app/layout.tsx` loads the browser snippet through a public JavaScript route only when New Relic is enabled and a snippet resolves.
 
 ```tsx
-const nrBrowserHeader = env.NEW_RELIC_ENABLED ? getBrowserSnippetSafe() : '';
+const hasNewRelicBrowserSnippet =
+  env.NEW_RELIC_ENABLED && hasBrowserSnippetConfiguredSafe();
 
 <head>
-  {nrBrowserHeader && (
-    <script
+  {hasNewRelicBrowserSnippet && (
+    <Script
       id="nr-browser-agent"
-      dangerouslySetInnerHTML={{ __html: nrBrowserHeader }}
+      src="/observability/new-relic-browser.js"
+      strategy="beforeInteractive"
     />
   )}
 </head>;
 ```
+
+The script body is served by `src/app/observability/new-relic-browser.js/route.ts`.
+
+That route:
+
+- returns an empty JavaScript response when New Relic is disabled or no browser snippet is configured
+- returns `application/javascript` with `Cache-Control: no-store`
+- sets `X-Content-Type-Options: nosniff`
+
+### Why the loader route is not under `/api`
+
+This repository runs a global proxy and security pipeline for `/api/*` routes.
+
+An earlier implementation used `/api/observability/new-relic-browser`, but that path was intercepted by auth and rate-limit middleware and returned JSON instead of JavaScript. The browser then refused to execute it.
+
+The active implementation uses `/observability/new-relic-browser.js` so it is treated like a public script resource rather than a protected API endpoint. This works with the proxy matcher in `src/proxy.ts`, which excludes `.js` paths from the generic non-API matcher while still handling real `/api/*` routes separately.
 
 ### Snippet resolution logic
 
@@ -179,7 +199,9 @@ The resolver tolerates this for compatibility, but it is still the wrong storage
 Verify all of the following:
 
 - `NEW_RELIC_ENABLED=true`
-- server rendered the `<script id="nr-browser-agent">`
+- server rendered the `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
+- `/observability/new-relic-browser.js` returns `200` with JavaScript, not `401` or JSON
+- when New Relic is intentionally disabled, `/observability/new-relic-browser.js` still resolves as a harmless empty JavaScript asset
 - CSP `connect-src` allows the NR beacon host
 - the copied snippet is for the correct app
 - enough ingest time has passed for data to appear
@@ -189,5 +211,6 @@ Verify all of the following:
 - Keep server APM initialization in `src/instrumentation.ts`.
 - Keep custom SDK usage isolated in `src/core/observability/new-relic.ts`.
 - Keep browser injection env-backed and layout-safe.
+- Keep browser loader delivery on a public non-API route unless proxy behavior is intentionally redesigned.
 - Prefer base64 snippet transport in local dotenv files.
 - Treat vendor-host instrumentation suggestions as out of scope unless a separate task justifies them.

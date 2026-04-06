@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 
 import { env } from '@/core/env';
-import { getBrowserSnippetSafe } from '@/core/observability/new-relic';
+import { getBrowserAgentScriptSafe } from '@/core/observability/new-relic';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 function createEmptyScriptResponse(): NextResponse {
   return new NextResponse('', {
@@ -18,7 +21,7 @@ export async function GET(): Promise<Response> {
     return createEmptyScriptResponse();
   }
 
-  const snippet = getBrowserSnippetSafe();
+  const snippet = getBrowserAgentScriptSafe();
   if (!snippet) {
     return createEmptyScriptResponse();
   }

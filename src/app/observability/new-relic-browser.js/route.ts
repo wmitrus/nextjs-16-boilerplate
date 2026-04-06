@@ -1,10 +1,8 @@
+import { connection } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { env } from '@/core/env';
 import { getBrowserAgentScriptSafe } from '@/core/observability/new-relic';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 function createEmptyScriptResponse(): NextResponse {
   return new NextResponse('', {
@@ -17,6 +15,8 @@ function createEmptyScriptResponse(): NextResponse {
 }
 
 export async function GET(): Promise<Response> {
+  await connection();
+
   if (!env.NEW_RELIC_ENABLED) {
     return createEmptyScriptResponse();
   }

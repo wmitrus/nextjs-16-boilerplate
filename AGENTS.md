@@ -577,6 +577,12 @@ If a task uses `.copilot/tasks/{task_id}/` artifacts or workflow-managed task ar
 - require each non-orchestrator specialist to maintain exactly one persistent summary artifact for the task
 - use the corresponding templates in `docs/ai/templates/` and `docs/ai/templates/specialist-summaries/`
 
+> **CRITICAL — Task artifacts must never contain real credential-shaped values**
+>
+> When quoting evidence from env files, snippets, config, or logs that contains any key, token, password, license key, API key, secret, or credential-shaped string, **always replace the value with `[REDACTED]`** before writing it into any artifact file.
+>
+> This applies to ALL agents writing `.copilot/tasks/{task_id}/*.md` files. Browser monitoring license keys (e.g., NR `licenseKey`), API keys, and connection strings are in scope — even when technically public or browser-visible. Gitleaks scans all committed text including markdown. A violation fails the `security-scan` CI workflow and requires both a file redaction and a `.gitleaksignore` fingerprint entry to unblock the branch.
+
 Reference guides:
 
 - `docs/ai/general/ARTIFACTS_GUIDE.md`

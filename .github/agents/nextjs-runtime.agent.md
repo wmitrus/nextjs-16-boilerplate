@@ -99,6 +99,28 @@ Route used `Date.now()` before accessing uncached data (fetch, cookies, headers,
 
 **Rule**: Never design an RSC page that calls `getAppContainer()` without one of `connection()`, `headers()`, `cookies()`, or `searchParams` being awaited first. Treat this as MAJOR in runtime reviews.
 
+### New Relic Browser — `allowTransactionlessInjection` Is Banned
+
+**Do not pass `allowTransactionlessInjection: true` to `nr.getBrowserTimingHeader()`.**
+
+The repository guard `nr.agent?.collector?.isConnected()` already ensures the loader is only served when the APM agent has an active server-side transaction context. Bypassing this with `allowTransactionlessInjection: true` causes the NR SPA agent to initialize without a linked transaction on hard refresh, crashing its internal harvest serializer:
+
+```text
+TypeError: Cannot read properties of undefined (reading '0')
+  at y.serializer (nr-spa-*.min.js)
+  at y.makeHarvestPayload
+  at S.triggerHarvestFor
+```
+
+**Correct pattern:**
+
+```typescript
+if (!nr.agent?.collector?.isConnected()) return '';
+const header = nr.getBrowserTimingHeader({ hasToRemoveScriptWrapper: true });
+```
+
+Treat any `allowTransactionlessInjection: true` in this repository as a runtime regression.
+
 ## Working Mode
 
 - Prefer read-only exploration first.

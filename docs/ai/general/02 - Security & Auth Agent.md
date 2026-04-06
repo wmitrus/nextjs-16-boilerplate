@@ -116,6 +116,7 @@ Always flag these if present:
 - forwarding `redirect_url` or similar query parameters to any redirect destination without calling `sanitizeRedirectUrl()` first — unvalidated params propagate open redirect risk downstream even when the immediate redirect target is a safe literal (SEC-03)
 - using `obj[dynamicKey]()` bracket dispatch on objects to call methods — use explicit `Record<AllowedKeys, fn>` dispatch maps; the Zod guard upstream is invisible to static analysis (SEC-04)
 - `Math.random()` for tokens, secrets, session identifiers, API keys, nonces, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06)
+- real credential-shaped values (API keys, tokens, license keys, passwords, secrets) written verbatim into task artifact markdown files (`.copilot/tasks/{task_id}/*.md`) — always replace with `[REDACTED]`; gitleaks scans all committed markdown and will fail the `security-scan` CI workflow
 
 ## Hard Security Rules
 

@@ -125,6 +125,7 @@ Always flag these if present:
 - using `obj[dynamicKey]()` bracket dispatch on objects to call methods — use explicit `Record<AllowedKeys, fn>` dispatch maps; the Zod guard upstream is invisible to static analysis (SEC-04)
 - `Math.random()` for tokens, secrets, session identifiers, API keys, nonces, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06)
 - keying module-level SDK client caches by a subset of the client's configuration — always include ALL differentiating config fields (e.g., both `clientKey` and `apiHost`) in the cache key to prevent silent wrong-backend selection (SEC-11)
+- real credential-shaped values (API keys, tokens, license keys, passwords, secrets) written verbatim into task artifact markdown files (`.copilot/tasks/{task_id}/*.md`) — always replace with `[REDACTED]`; gitleaks scans all committed markdown and will fail the `security-scan` CI workflow
 
 ## Hard Security Rules
 

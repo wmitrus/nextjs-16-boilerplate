@@ -129,6 +129,35 @@ export function getBrowserTimingHeaderSafe(): string {
 
 **Fix pattern**: If you must inject third-party browser monitoring scripts in a layout, store the full inert snippet string in a server-only env var and inject it as a raw string — never call the third-party SDK API from the layout.
 
+## New Relic Browser — `allowTransactionlessInjection` Is Banned
+
+**Do not pass `allowTransactionlessInjection: true` to `nr.getBrowserTimingHeader()`.**
+
+The repository guard `nr.agent?.collector?.isConnected()` already ensures the loader is only served when the APM agent has an active server-side transaction context. Passing `allowTransactionlessInjection: true` overrides this safety: the NR SPA agent initializes without a linked transaction on hard refresh, causing its internal harvest serializer to crash with:
+
+```text
+TypeError: Cannot read properties of undefined (reading '0')
+  at y.serializer (nr-spa-*.min.js)
+  at y.makeHarvestPayload
+  at S.triggerHarvestFor
+```
+
+**Correct pattern** — `isConnected()` guard is sufficient, no additional flags needed:
+
+```typescript
+if (!nr.agent?.collector?.isConnected()) return '';
+const header = nr.getBrowserTimingHeader({ hasToRemoveScriptWrapper: true });
+```
+
+**Never**:
+
+```typescript
+nr.getBrowserTimingHeader({
+  hasToRemoveScriptWrapper: true,
+  allowTransactionlessInjection: true, // ❌ causes SPA harvest crash on hard refresh
+});
+```
+
 ## Dependencies
 
 **Main Dependencies**:

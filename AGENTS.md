@@ -47,6 +47,30 @@ A production-grade **Next.js 16** boilerplate implementing a **Modular Monolith*
 - `experimental.turbopackFileSystemCacheForDev: true` — Filesystem caching for dev restarts.
 - Sentry integrated via `withSentryConfig` (source maps, tunnel route in production, Vercel Cron monitors).
 
+> **`cacheComponents: true` hard constraint — route segment configs are banned**
+>
+> When `cacheComponents: true` is active, Next.js 16 **forbids** `export const dynamic` and `export const runtime` in any App Router route segment (pages, layouts, route handlers). Both produce a compile-time hard error that loops indefinitely in Turbopack HMR.
+>
+> **Do not use:**
+>
+> ```typescript
+> export const runtime = 'nodejs'; // ❌ banned with cacheComponents
+> export const dynamic = 'force-dynamic'; // ❌ banned with cacheComponents
+> ```
+>
+> **Use instead** — opt into dynamic rendering explicitly at request time:
+>
+> ```typescript
+> import { connection } from 'next/server';
+>
+> export async function GET(): Promise<Response> {
+>   await connection(); // opts route into dynamic rendering
+>   // ...
+> }
+> ```
+>
+> `await connection()` is the only supported dynamic opt-in under the Cache Components model. It applies equally to RSC pages, layouts, and route handlers. The `isConnected()` guard or other request-time checks do NOT replace `connection()` — they are separate concerns.
+
 ## Middleware Note
 
 In this repository, middleware-style request interception lives in **`src/proxy.ts`** — not `middleware.ts`.
@@ -431,6 +455,8 @@ Hard rules:
 - do not emit telemetry that leaks secrets, tokens, or sensitive user data
 - do not add noisy monitoring without signal
 - do not ignore failure visibility for auth, provisioning, sync, or security-critical flows
+- do not pass raw `Error` objects to logger calls — extract `errorMessage: error.message` and `errorName: error.name` as separate string fields (SEC-10)
+- when a `window.addEventListener('error', handler)` or `addEventListener('unhandledrejection', handler)` fully owns an error (logs it, sends it to Sentry), **always call `event.preventDefault()`** — without it the browser still marks the error "Uncaught" in the console even after the handler has captured it
 
 Prefer:
 
@@ -698,3 +724,35 @@ Minimum coverage:
 - Active provider / adapter name is visible
 
 Demo pages are public (no auth required). E2E specs MUST NOT depend on Clerk credentials. Do not add `storageState` or authentication setup to demo page specs.
+
+---
+
+## Testing Patterns
+
+### Pattern G — `vi.mock('next/server')` with `vi.importActual`
+
+When mocking `next/server` in Vitest unit tests, use `vi.importActual` (the standalone `vi.` method) without a type parameter. **Never** use `typeof import('next/server')` inline as a type annotation — it violates `@typescript-eslint/consistent-type-imports`.
+
+```typescript
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return {
+    ...actual,
+    connection: vi.fn().mockResolvedValue(undefined),
+  };
+});
+```
+
+This pattern:
+
+- Spreads the real module so `NextResponse`, `NextRequest`, etc. remain functional
+- Overrides only the specific API that needs mocking (e.g., `connection`)
+- Avoids the `consistent-type-imports` lint error
+- Matches the established pattern used for `pino` in `src/core/logger/utils.test.ts`
+
+**Never use:**
+
+```typescript
+// ❌ violates @typescript-eslint/consistent-type-imports
+const actual = await importActual<typeof import('next/server')>();
+```

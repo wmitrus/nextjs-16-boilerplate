@@ -2,7 +2,7 @@
 
 **Task ID**: `2026-04-05-nr-browser-spa`
 **Date**: 2026-04-05
-**Status**: ✅ All gates passed, including runtime follow-up
+**Status**: ✅ All gates passed, including runtime follow-up, disabled-env build validation, and CLI hardening checks
 
 ---
 
@@ -14,11 +14,13 @@
 
 ## Static Analysis
 
-| Check             | Result                                                                                                    |
-| ----------------- | --------------------------------------------------------------------------------------------------------- |
-| `pnpm typecheck`  | ✅ 0 errors                                                                                               |
-| `pnpm lint --fix` | ✅ 0 errors (4 pre-existing security warnings, confirmed false positives per SECURITY_CODING_PATTERNS.md) |
-| `pnpm build`      | ✅ Passed after moving browser script delivery to `/observability/new-relic-browser.js`                   |
+| Check              | Result                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `pnpm typecheck`   | ✅ 0 errors                                                                                               |
+| `pnpm lint --fix`  | ✅ 0 errors (4 pre-existing security warnings, confirmed false positives per SECURITY_CODING_PATTERNS.md) |
+| `pnpm build`       | ✅ Passed after moving browser script delivery to `/observability/new-relic-browser.js`                   |
+| Disabled-env build | ✅ Passed after clearing `.next` and building with `NEW_RELIC_ENABLED=false`                              |
+| Script tests       | ✅ `scripts/new-relic/lib.test.ts` + `scripts/new-relic/cli.test.ts` passed (19 tests)                    |
 
 ## Manual Smoke Test (Confirmed by User)
 
@@ -43,6 +45,22 @@
 
 **Status**: ✅ Fixed locally
 
+### Issue 4 — Disabled preview env failed prerender export
+
+**Symptom**: preview deploy failed while prerendering `/observability/new-relic-browser.js` when `NEW_RELIC_ENABLED` was unset or false.
+
+**Root cause**: the disabled/no-snippet path for the route used a no-content response strategy that failed in the Next.js prerender/export path.
+
+**Fix**: changed the route to return an empty JavaScript asset with normal script headers when New Relic is disabled or no snippet is configured.
+
+**Validation**:
+
+- clean build passed after `rm -rf .next`
+- clean build passed with `NEW_RELIC_ENABLED=false`
+- clean build passed with `NEW_RELIC_BROWSER_SNIPPET` and `NEW_RELIC_BROWSER_SNIPPET_BASE64` unset
+
+**Status**: ✅ Fixed locally
+
 ## New Issues Found During Smoke Test (Fixed)
 
 ### Issue 1 — CSP blocking NR CDN script
@@ -63,5 +81,5 @@
 
 - `getBrowserTimingHeaderSafe()` is retained (not removed) with a JSDoc warning documenting the prerender constraint. It may be useful for non-prerendered route handlers in the future.
 - `NEW_RELIC_BROWSER_SNIPPET` must be set in deployment secrets (Vercel env vars) for browser monitoring to work in production.
-- After deployment, preview should be rechecked once to confirm the external script path clears the previously reported React hydration failure.
+- After deployment, preview should be rechecked once to confirm the external script path clears both the reported hydration failure and the disabled-env export path.
 - Rollback: unset `NEW_RELIC_BROWSER_SNIPPET` — system silently skips injection, no errors.

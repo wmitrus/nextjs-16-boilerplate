@@ -6,7 +6,6 @@ import Script from 'next/script';
 import { Suspense } from 'react';
 
 import { env } from '@/core/env';
-import { hasBrowserSnippetConfiguredSafe } from '@/core/observability/new-relic';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
@@ -23,6 +22,7 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -59,8 +59,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const hasNewRelicBrowserSnippet =
-    env.NEW_RELIC_ENABLED && hasBrowserSnippetConfiguredSafe();
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
   const signInFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
     env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
@@ -82,7 +80,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {hasNewRelicBrowserSnippet && (
+        {env.NEW_RELIC_ENABLED && (
           <Script
             id="nr-browser-agent"
             src="/observability/new-relic-browser.js"

@@ -50,6 +50,39 @@ Protect the repository's runtime correctness around:
 - Do not spend time searching for `middleware.ts` or treating its absence as a finding.
 - For middleware-like concerns, inspect `src/proxy.ts` first.
 
+### `cacheComponents: true` — Route Segment Configs Are Banned
+
+`next.config.ts` has `cacheComponents: true` (Cache Components model, PPR-compatible). This setting **forbids** `export const dynamic` and `export const runtime` in any App Router file. Both cause a compile-time hard error that loops indefinitely in Turbopack HMR:
+
+```text
+Route segment config "dynamic" is not compatible with nextConfig.cacheComponents. Please remove it.
+Route segment config "runtime" is not compatible with nextConfig.cacheComponents. Please remove it.
+```
+
+**This applies to pages, layouts, AND route handlers.** There is no exception.
+
+**Banned (will crash the build):**
+
+```typescript
+export const runtime = 'nodejs'; // ❌
+export const dynamic = 'force-dynamic'; // ❌
+```
+
+**Required pattern — opt into dynamic rendering via `connection()`:**
+
+```typescript
+import { connection } from 'next/server';
+
+export async function GET(): Promise<Response> {
+  await connection(); // opts this route handler into dynamic rendering
+  // request-time logic here
+}
+```
+
+`connection()` must be the **first `await`** in the handler/page before any request-time data access, timestamp recording, or DI container call. This rule applies to RSC pages, layouts, and route handlers equally.
+
+**Treat any `export const dynamic` or `export const runtime` in this repository as CRITICAL — flag it before implementation proceeds.**
+
 ### RSC Dynamic Rendering — `getAppContainer()` Pattern
 
 Any async RSC page or component that calls `getAppContainer()` **must** call `await connection()` (from `next/server`) **before** that call.
@@ -65,6 +98,28 @@ Route used `Date.now()` before accessing uncached data (fetch, cookies, headers,
 **Reference**: `src/app/feature-flags-demo/page.tsx` (uses `connection()`). `src/app/security-showcase/page.tsx` uses `await headers()` which also works because it reads request-time data.
 
 **Rule**: Never design an RSC page that calls `getAppContainer()` without one of `connection()`, `headers()`, `cookies()`, or `searchParams` being awaited first. Treat this as MAJOR in runtime reviews.
+
+### New Relic Browser — `allowTransactionlessInjection` Is Banned
+
+**Do not pass `allowTransactionlessInjection: true` to `nr.getBrowserTimingHeader()`.**
+
+The repository guard `nr.agent?.collector?.isConnected()` already ensures the loader is only served when the APM agent has an active server-side transaction context. Bypassing this with `allowTransactionlessInjection: true` causes the NR SPA agent to initialize without a linked transaction on hard refresh, crashing its internal harvest serializer:
+
+```text
+TypeError: Cannot read properties of undefined (reading '0')
+  at y.serializer (nr-spa-*.min.js)
+  at y.makeHarvestPayload
+  at S.triggerHarvestFor
+```
+
+**Correct pattern:**
+
+```typescript
+if (!nr.agent?.collector?.isConnected()) return '';
+const header = nr.getBrowserTimingHeader({ hasToRemoveScriptWrapper: true });
+```
+
+Treat any `allowTransactionlessInjection: true` in this repository as a runtime regression.
 
 ## Working Mode
 

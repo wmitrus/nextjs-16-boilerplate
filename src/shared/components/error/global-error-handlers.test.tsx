@@ -51,7 +51,8 @@ describe('GlobalErrorHandlers', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        err: testError,
+        errorMessage: testError.message,
+        errorName: testError.name,
       }),
       'Unhandled Client Error',
     );
@@ -69,7 +70,8 @@ describe('GlobalErrorHandlers', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        err: testError,
+        errorMessage: testError.message,
+        errorName: testError.name,
       }),
       'Unhandled Promise Rejection',
     );
@@ -86,6 +88,31 @@ describe('GlobalErrorHandlers', () => {
     window.dispatchEvent(event2);
 
     expect(mockLogger.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls preventDefault on handled errors to suppress Uncaught console output', () => {
+    render(<GlobalErrorHandlers />);
+
+    const testError = new Error('Handled error');
+    const event = new ErrorEvent('error', { error: testError });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    window.dispatchEvent(event);
+
+    expect(preventDefaultSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls preventDefault on handled rejections to suppress Uncaught console output', () => {
+    render(<GlobalErrorHandlers />);
+
+    const testError = new Error('Handled rejection');
+    const event = new PromiseRejectionEvent('unhandledrejection', {
+      promise: Promise.resolve(),
+      reason: testError,
+    });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    window.dispatchEvent(event);
+
+    expect(preventDefaultSpy).toHaveBeenCalledTimes(1);
   });
 
   it('captures Connection closed errors', () => {
@@ -147,7 +174,8 @@ describe('GlobalErrorHandlers', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        err: error,
+        errorMessage: error.message,
+        errorName: error.name,
       }),
       'Unhandled Promise Rejection',
     );
@@ -215,7 +243,8 @@ describe('GlobalErrorHandlers', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        err: expect.any(Error),
+        errorMessage: expect.any(String),
+        errorName: expect.any(String),
       }),
       'Unhandled Promise Rejection',
     );
@@ -229,7 +258,8 @@ describe('GlobalErrorHandlers', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        err: expect.any(Error),
+        errorMessage: expect.any(String),
+        errorName: expect.any(String),
       }),
       'Unhandled Client Error',
     );
@@ -249,7 +279,8 @@ describe('GlobalErrorHandlers', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        err: testError,
+        errorMessage: testError.message,
+        errorName: testError.name,
         filename: 'test.js',
         lineno: 42,
         colno: 10,

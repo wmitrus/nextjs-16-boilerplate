@@ -76,14 +76,16 @@ export function GlobalErrorHandlers() {
         return;
       }
 
-      // New error, log it
+      // New error, log it — suppress browser "Uncaught" since we own this error
+      event.preventDefault();
       const errorContext = createErrorContext(error);
       errorMap.set(fingerprint, errorContext);
 
       try {
         logger.error(
           {
-            err: error,
+            errorMessage: error.message,
+            errorName: error.name,
             filename: event.filename,
             lineno: event.lineno,
             colno: event.colno,
@@ -139,14 +141,16 @@ export function GlobalErrorHandlers() {
         return;
       }
 
-      // New error, log it
+      // New error, log it — suppress browser "Uncaught" since we own this error
+      event.preventDefault();
       const errorContext = createErrorContext(error);
       errorMap.set(fingerprint, errorContext);
 
       try {
         logger.error(
           {
-            err: error,
+            errorMessage: error.message,
+            errorName: error.name,
           },
           'Unhandled Promise Rejection',
         );

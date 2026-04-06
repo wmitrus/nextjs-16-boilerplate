@@ -193,3 +193,45 @@ if (isMain) {
 ### Pattern E — `load-env.ts` for tsx Scripts
 
 `tsx` does NOT auto-load `.env.local`. Import `scripts/load-env.ts` as the absolute first import. Do NOT use `node --env-file ... node_modules/.bin/tsx` (broken — tsx is a shell script).
+
+### Pattern F — `vi.mock('next/server')` with `vi.importActual`
+
+When mocking `next/server` in Vitest, use the standalone `vi.importActual()` call — NOT the `importActual` factory parameter with an inline type annotation (violates `@typescript-eslint/consistent-type-imports`):
+
+```typescript
+// ✅ Correct
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return {
+    ...actual,
+    connection: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+// ❌ Wrong — lint error
+vi.mock('next/server', async (importActual) => {
+  const actual = await importActual<typeof import('next/server')>();
+});
+```
+
+Spread `actual` to preserve `NextResponse`, `NextRequest`, and all other real APIs. Only override what the test specifically requires.
+
+### Pattern G — `event.preventDefault()` in Global Error Handlers
+
+When a `window.addEventListener('error', handler)` or `addEventListener('unhandledrejection', handler)` fully owns an error (logs it, reports to Sentry), it **must** call `event.preventDefault()`. Without it, the browser marks the error "Uncaught" in the console even though the listener fired.
+
+Call `preventDefault()` after the ignore-pattern early return and the deduplication check — only for errors the handler actually processes:
+
+```typescript
+const handleError = (event: ErrorEvent) => {
+  if (isIgnored(event.message)) return; // do NOT preventDefault for ignored errors
+  if (isDuplicate(error)) {
+    /* update count */ return;
+  }
+
+  event.preventDefault(); // ← suppresses "Uncaught" for errors we own
+  logger.error({ errorMessage: error.message, errorName: error.name }, 'msg');
+};
+```
+
+Same rule applies to `PromiseRejectionEvent` in `unhandledrejection` handlers.

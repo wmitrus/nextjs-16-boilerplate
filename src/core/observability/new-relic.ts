@@ -23,7 +23,6 @@ interface NewRelicApi {
   getBrowserTimingHeader(options?: {
     nonce?: string;
     hasToRemoveScriptWrapper?: boolean;
-    allowTransactionlessInjection?: boolean;
   }): string;
 }
 
@@ -169,12 +168,41 @@ export function getBrowserTimingHeaderSafe(): string {
   try {
     const header = nr.getBrowserTimingHeader({
       hasToRemoveScriptWrapper: true,
-      allowTransactionlessInjection: true,
     });
     return header.startsWith('<!--') ? '' : header;
   } catch {
     return '';
   }
+}
+
+/**
+ * Returns the browser script to serve from a request-time Node route.
+ *
+ * Prefer the runtime-generated APM loader because it avoids shipping the full
+ * browser snippet through deployment env vars. Fall back to the env-backed
+ * snippet only for local/dev compatibility or when the agent is unavailable.
+ */
+export function resolveBrowserAgentScriptSource(options: {
+  agentSnippet?: string;
+  base64Snippet?: string;
+  rawSnippet?: string;
+  rawEnvFileSnippet?: string;
+}): string {
+  const trimmedAgentSnippet = stripOptionalScriptWrapper(
+    options.agentSnippet?.trim() ?? '',
+  );
+
+  if (trimmedAgentSnippet) {
+    return trimmedAgentSnippet;
+  }
+
+  return stripOptionalScriptWrapper(
+    resolveBrowserSnippetSource({
+      base64Snippet: options.base64Snippet,
+      rawSnippet: options.rawSnippet,
+      rawEnvFileSnippet: options.rawEnvFileSnippet,
+    }),
+  );
 }
 
 /**
@@ -188,15 +216,24 @@ export function getBrowserTimingHeaderSafe(): string {
  * Date.now() constraint.
  */
 export function getBrowserSnippetSafe(): string {
-  return stripOptionalScriptWrapper(
-    resolveBrowserSnippetSource({
-      base64Snippet: process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
-      rawSnippet: process.env.NEW_RELIC_BROWSER_SNIPPET,
-      rawEnvFileSnippet: readRawSnippetFromEnvFiles(),
-    }),
-  );
+  return resolveBrowserAgentScriptSource({
+    base64Snippet: process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
+    rawSnippet: process.env.NEW_RELIC_BROWSER_SNIPPET,
+    rawEnvFileSnippet: readRawSnippetFromEnvFiles(),
+  });
 }
 
-export function hasBrowserSnippetConfiguredSafe(): boolean {
-  return getBrowserSnippetSafe().length > 0;
+/**
+ * Request-time loader source for the public browser JS route.
+ *
+ * Safe in Node route handlers because it executes at request time instead of
+ * during layout prerender. Do not call this from prerenderable layouts.
+ */
+export function getBrowserAgentScriptSafe(): string {
+  return resolveBrowserAgentScriptSource({
+    agentSnippet: getBrowserTimingHeaderSafe(),
+    base64Snippet: process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
+    rawSnippet: process.env.NEW_RELIC_BROWSER_SNIPPET,
+    rawEnvFileSnippet: readRawSnippetFromEnvFiles(),
+  });
 }

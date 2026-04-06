@@ -1,7 +1,8 @@
+import { connection } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { env } from '@/core/env';
-import { getBrowserSnippetSafe } from '@/core/observability/new-relic';
+import { getBrowserAgentScriptSafe } from '@/core/observability/new-relic';
 
 function createEmptyScriptResponse(): NextResponse {
   return new NextResponse('', {
@@ -14,11 +15,13 @@ function createEmptyScriptResponse(): NextResponse {
 }
 
 export async function GET(): Promise<Response> {
+  await connection();
+
   if (!env.NEW_RELIC_ENABLED) {
     return createEmptyScriptResponse();
   }
 
-  const snippet = getBrowserSnippetSafe();
+  const snippet = getBrowserAgentScriptSafe();
   if (!snippet) {
     return createEmptyScriptResponse();
   }

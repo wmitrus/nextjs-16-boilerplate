@@ -128,6 +128,10 @@ Commonly required:
 - `DATABASE_URL` (required for postgres driver)
 - `NODE_ENV`
 
+Optional observability note:
+
+- `NEW_RELIC_BROWSER_SNIPPET` and `NEW_RELIC_BROWSER_SNIPPET_BASE64` are local/dev fallback inputs, not the preferred hosted deployment path for browser monitoring.
+
 Security and ops vars remain optional with defaults unless your deployment policy requires strict values.
 
 ## 8. Production Notes

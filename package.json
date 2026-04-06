@@ -62,6 +62,8 @@
     "env:validate": "tsx scripts/validate-env.ts",
     "nr": "tsx scripts/new-relic/cli.ts",
     "nr:query": "tsx scripts/new-relic/query.ts",
+    "lt": "tsx scripts/leantime/cli.ts",
+    "lt:rpc": "tsx scripts/leantime/rpc.ts",
     "codacy:install": "node scripts/codacy-install.mjs",
     "codacy:analyze": "node --env-file-if-exists=.env.codacy scripts/codacy-analyze.mjs",
     "codacy:analyze:sarif": "CODACY_REPORT_MODE=sarif node --env-file-if-exists=.env.codacy scripts/codacy-analyze.mjs",

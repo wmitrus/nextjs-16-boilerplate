@@ -1,7 +1,7 @@
 # Task Plan: New Relic Browser SPA Agent Integration
 
 **Task ID**: `2026-04-05-nr-browser-spa`
-**Status**: ✅ Complete — All validation passed, including preview-runtime follow-up
+**Status**: ✅ Complete — Vercel env-size follow-up resolved with request-time Node loader path
 **Created**: 2026-04-05
 **Parent task**: `2026-04-05-per-request-caching` (NR integration sub-task)
 
@@ -9,7 +9,7 @@
 
 ## Objective
 
-Replace the current APM `getBrowserTimingHeader()` browser injection with the standalone NR Browser SPA snippet approach, which correctly tracks Next.js App Router client-side navigation.
+Replace the current APM `getBrowserTimingHeader()` browser injection with a Browser SPA-compatible delivery path that correctly tracks Next.js App Router client-side navigation and remains safe for Vercel deployments.
 
 **Root cause (confirmed by debug investigation):**
 
@@ -20,24 +20,25 @@ Replace the current APM `getBrowserTimingHeader()` browser injection with the st
 
 **Fix:**
 
-- Inject the standalone NR Browser SPA snippet (Pro + SPA loader, `nr-loader-spa-*`)
-- The snippet fires on route changes, captures AJAX, errors, and page timing in real-time
-- The snippet is already configured and available from the NR UI (app ID: 538837440)
+- Serve the browser loader from a public request-time Node route
+- Prefer runtime `getBrowserTimingHeader()` generation in that route
+- Keep env-backed snippet transport only as an optional local/dev fallback
+- Avoid shipping an 88 KB copy/paste snippet through Vercel deployment env vars
 
 ---
 
 ## Classification
 
-| Dimension       | Value                                                         |
-| --------------- | ------------------------------------------------------------- |
-| Type            | Observability fix — browser monitoring approach change        |
-| Blast radius    | Low — layout.tsx only; existing APM approach kept as fallback |
-| Risk level      | Low — purely additive env var; easy rollback (unset env var)  |
-| Runtime target  | Node.js SSR (Server Component render path)                    |
-| Auth impact     | None                                                          |
-| Security impact | Medium — browser ingest key management                        |
-| E2E required    | No                                                            |
-| Demo page       | No                                                            |
+| Dimension       | Value                                                                            |
+| --------------- | -------------------------------------------------------------------------------- |
+| Type            | Observability fix — browser monitoring delivery refactor                         |
+| Blast radius    | Low — layout, public JS route, observability facade, docs                        |
+| Risk level      | Low/Medium — runtime-safe but depends on Node agent availability at request time |
+| Runtime target  | Node.js SSR + request-time Node route handler                                    |
+| Auth impact     | None                                                                             |
+| Security impact | Medium — browser ingest key management and public script route behavior          |
+| E2E required    | No                                                                               |
+| Demo page       | No                                                                               |
 
 ---
 
@@ -45,31 +46,40 @@ Replace the current APM `getBrowserTimingHeader()` browser injection with the st
 
 ### Security
 
-- The snippet contains a browser `licenseKey` field — a **browser-only write-only ingest key**
-  - Safe to inject into HTML (all users can see it in page source — by design)
+- The browser payload contains a browser `licenseKey` field — a **browser-only write-only ingest key**
+  - Safe to inject into HTML or a public JavaScript asset (all users can see it in page source — by design)
   - Must NOT be committed to the repository
-  - Must stay in `.env.local` / deployment secret store only
-- The env var holding the snippet must be **server-side only** (not exposed to client bundle)
-- No other secrets are involved
+- Do not store the full copy/paste snippet in tracked files
+- Local fallback env vars remain **server-side only**
+- No sensitive server secrets are exposed to the client by this refactor
 
 ### Rollback
 
-- The new env var `NEW_RELIC_BROWSER_SNIPPET` is optional
-- If unset → falls back to existing `getBrowserTimingHeaderSafe()` (APM approach)
-- Rollback = unset the env var → system reverts to prior behavior
-- No code changes needed to roll back
+- `NEW_RELIC_BROWSER_SNIPPET` and `NEW_RELIC_BROWSER_SNIPPET_BASE64` are optional fallback inputs
+- If the Node agent is unavailable at request time and no fallback is configured → the route degrades to an empty JS asset
+- Rollback = revert the route to env-only delivery or disable browser injection entirely with `NEW_RELIC_ENABLED=false`
+- No schema or data migration is involved
 
 ### Architecture
 
 - Injection logic stays in `src/core/observability/new-relic.ts` facade
-- `layout.tsx` receives a string (snippet or empty) — no NR dependency in layout directly
-- Env schema is the single source of truth for feature enablement
+- `layout.tsx` only decides whether to load the public JS route
+- The public JS route owns runtime generation and fallback selection
+- Env schema remains the single source of truth for feature enablement
 
 ### Runtime
 
-- `NEW_RELIC_BROWSER_SNIPPET` is a server-side env var (not `NEXT_PUBLIC_*`)
-- Accessed only in `RootLayout` server component — correct placement
-- `strategy="beforeInteractive"` on `<Script>` moves it to `<head>` — required by NR docs
+- The public JS route is pinned to `runtime = 'nodejs'`
+- The public JS route is pinned to `dynamic = 'force-dynamic'`
+- `layout.tsx` never calls `getBrowserTimingHeader()` during prerender
+- `strategy="beforeInteractive"` on `<Script>` still moves the browser loader to `<head>`
+- This avoids both the Next.js 16 prerender `Date.now()` constraint and Vercel Edge env-var limits
+
+### Deployment
+
+- Vercel documents a total 64 KB environment variable budget per deployment for Node runtimes, with no single variable larger than 64 KB
+- Vercel documents a 5 KB per-variable limit for Edge Functions and Middleware
+- The observed browser snippet size (`88,088` characters) exceeds the documented Node per-variable limit, so the full snippet must not be modeled as a normal Vercel env var
 
 ---
 
@@ -86,19 +96,18 @@ Replace the current APM `getBrowserTimingHeader()` browser injection with the st
   - Confirm no key committed to repo
   - Confirm CSP is sufficient (already done for APM approach — verify applies to snippet)
 - [x] **Step 3 — Implementation** · `04 - Implementation Agent - Summary.md`
-  - Add `NEW_RELIC_BROWSER_SNIPPET` to `src/core/env.ts`
-  - Add to `.env.example` with security comment
-  - Update `src/core/observability/new-relic.ts` — `getBrowserSnippetSafe()`
-  - Update `src/app/layout.tsx` — load Browser SPA script without inline hydration risk
-  - Revert `newrelic.js` logging level from `trace` back to `info`
+  - Keep `NEW_RELIC_BROWSER_SNIPPET` / `_BASE64` only as optional local fallback inputs
+  - Update `src/core/observability/new-relic.ts` — prefer request-time runtime generation, fallback to env-backed snippet
+  - Update `src/app/layout.tsx` — load Browser SPA script without requiring a prevalidated env-backed snippet
+  - Update `src/app/observability/new-relic-browser.js/route.ts` — force Node runtime + dynamic request-time execution
   - Update user documentation / comment in `.env.example`
-  - Follow-up fix: move the browser script route off `/api/*` to avoid proxy auth/rate-limit interception
+  - Follow-up fix: align the task narrative with Vercel env-size limits and deployment-safe guidance
 - [x] **Step 4 — Validation** · `validation-report.md`
-  - `pnpm typecheck` — 0 errors
-  - `pnpm lint --fix` — 0 errors
-  - `pnpm test` — all pass (892+)
-  - Manual smoke: env var set → snippet injected in page source → correct app ID (538837440)
-  - Manual smoke: local production homepage loads with zero Chromium runtime errors using `/observability/new-relic-browser.js`
+  - `pnpm lint --fix` — focused touched files clean
+  - focused Vitest coverage-free run for `src/core/observability/new-relic.test.ts`
+  - focused Vitest coverage-free run for `src/app/observability/new-relic-browser.js/route.test.ts`
+  - verify route response semantics still degrade cleanly when no loader resolves
+  - verify the layout now depends only on `NEW_RELIC_ENABLED`
 
 ---
 
@@ -108,10 +117,11 @@ Replace the current APM `getBrowserTimingHeader()` browser injection with the st
 | ---------------------------------------- | ----------------------------------------------------------------- |
 | `plan.md`                                | ✅                                                                |
 | `intake.md`                              | ✅ (this document + `plan.md` serve combined role)                |
-| `01 - Architecture Guard - Summary.md`   | 🔲 Pending                                                        |
-| `02 - Security & Auth - Summary.md`      | 🔲 Pending                                                        |
+| `01 - Architecture Guard - Summary.md`   | ✅                                                                |
+| `02 - Security & Auth - Summary.md`      | ✅                                                                |
 | `03 - Next.js Runtime - Summary.md`      | ⏭️ Skip — no new runtime surface beyond existing layout injection |
-| `04 - Implementation Agent - Summary.md` | 🔲 Pending                                                        |
+| `04 - Implementation Agent - Summary.md` | ✅                                                                |
+| `06 - Debug Investigation - Summary.md`  | ✅                                                                |
 | `validation-report.md`                   | ✅                                                                |
 
 ---
@@ -129,7 +139,17 @@ Confirmed findings from prior debug investigation session:
 
 ---
 
-## Pause Points
+## Operational Conclusion
 
-- **After Step 1 (Architecture Review)**: pause for user review before proceeding
-- **After Step 3 (Implementation)**: pause — user must manually set `NEW_RELIC_BROWSER_SNIPPET` in `.env.local` and smoke-test browser data in NR
+- The original env-snippet model is acceptable for local `.env.local` fallback only
+- It is not the correct primary deployment model for Vercel once the snippet exceeds the documented env-var limits
+- The repository now uses a lower-friction deployment path:
+  - `layout.tsx` loads the public loader route when `NEW_RELIC_ENABLED=true`
+  - the route generates the loader from the Node agent at request time
+  - env-backed snippet values remain optional fallback transport only
+
+## Sources
+
+- Vercel environment variable limits: https://vercel.com/docs/projects/environment-variables
+- Vercel environment variable CLI management: https://vercel.com/docs/cli/env
+- New Relic browser installation paths: https://docs.newrelic.com/docs/browser/browser-monitoring/installation/install-browser-monitoring-agent/

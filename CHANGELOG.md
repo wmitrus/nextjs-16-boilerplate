@@ -1,3 +1,52 @@
+# [1.18.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.17.0...v1.18.0) (2026-04-06)
+
+
+### Bug Fixes
+
+* **observability:** resolve preview build failure for New Relic route ([0e644e0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0e644e06801a6cef6a2580052b5fffd5330ee119))
+* **observability:** resolve protected API route issue for browser loader ([dd95868](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dd95868555965c48f5097cba05f2246d3692f19c))
+* **validation-report:** address disabled preview env prerender export failure ([2a8d215](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2a8d21564133250db3985b4ab8522e44c569fe83))
+
+
+### Features
+
+* **agents:** add edit tool to agents for enhanced functionality ([d226154](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d226154eb6a13ee2ab4e450da5c5635f24167228))
+* **caching:** implement per-request DI container caching with New Relic integration ([7a34ce5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7a34ce542c898cdf20b575deef8dee785e08e812))
+* **dependencies:** add server-only package ([44617f7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/44617f7b8a6517f5aee22840499c9f7a7668809f))
+* **docs:** add documentation for per-request container caching and New Relic integration ([29ddd87](https://github.com/wmitrus/nextjs-16-boilerplate/commit/29ddd87b55d45dca526e56e26292948bc8fe51cd))
+* **env:** add base64 encoded New Relic browser snippet support ([3a75964](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3a75964cbda3b8ee00ab289ef111444194ea859e))
+* **env:** add New Relic APM configuration ([50001ac](https://github.com/wmitrus/nextjs-16-boilerplate/commit/50001acadd356ef7c2c5c21680cb891c4d1b15a9))
+* **env:** add New Relic browser snippet configuration ([11afcc5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/11afcc59c64278fc772b008bbd6c4b53be595caf))
+* **env:** add New Relic configuration options ([161338d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/161338de9c9a9095e6a0106dc681f9c752389fe8))
+* **env:** add New Relic configuration options ([3f8c746](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3f8c7462ddc165daa1e28ff51ac37336644327cb))
+* **env:** add New Relic configuration options ([10b6d81](https://github.com/wmitrus/nextjs-16-boilerplate/commit/10b6d8163953e607224ad246778b39f1587b7f49))
+* **env:** add New Relic configuration to environment ([ef39b5c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ef39b5c126031cf7d4cf1afdf91688a33f7a354d))
+* **instrumentation:** add New Relic integration for nodejs runtime ([32ed65b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/32ed65bb9127ed07e5c13ee2d3b4f2f4877deb38))
+* **layout:** integrate New Relic browser snippet in layout component ([236940a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/236940af6da0ac755c93572d330939aa24a085a3))
+* **new-relic:** add compact bundle result builder ([18c6de4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/18c6de480356d655c1edbef127adaaf22f169b24))
+* **new-relic:** add compact view option for baseline command ([7afcb62](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7afcb62ae758d8d2d6ad1de3b278e90d98002b0d))
+* **new-relic:** add NerdGraph API configuration to .env.example ([e2b3555](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e2b355511c697668383264029769a6adc8975cd0))
+* **new-relic:** add New Relic health and error monitoring scripts ([27e4435](https://github.com/wmitrus/nextjs-16-boilerplate/commit/27e4435e96ca9fd0e34fd35bd7143f79deb94ffa))
+* **new-relic:** add NRQL presets and bundles ([bdc6573](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bdc6573c401bb4fd1482c5f770bd96641142f376))
+* **new-relic:** enhance CLI argument parsing for NRQL and view options ([463f256](https://github.com/wmitrus/nextjs-16-boilerplate/commit/463f256add255e6dcfadd610b7576c3a5d3e7b27))
+* **new-relic:** enhance NerdGraph configuration and request handling ([e7db215](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e7db215dc76df6dcc7e4a6db82d16a2986b6613d))
+* **new-relic:** implement NerdGraph API integration ([b42f339](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b42f339551cd4e936dd526df9e4ac77f1c90d633))
+* **new-relic:** implement New Relic CLI for query execution ([5d0313e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5d0313e089c33fc963f0ae43042a946ff0c7ace6))
+* **new-relic:** implement NRQL query execution script ([9ba0413](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9ba0413194c18b173e60170434b501af30e1cf73))
+* **new-relic:** simplify New Relic CLI commands ([9f4791d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9f4791d12e92bea250eb80a5fb45a71a55715ef6))
+* **newrelic:** add New Relic configuration file ([7aa647a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7aa647a272ebf9194f8d28b6393c1c41531244b9))
+* **newrelic:** integrate New Relic Browser SPA snippet ([eddc394](https://github.com/wmitrus/nextjs-16-boilerplate/commit/eddc394dd8840b855ee30e675c4ccb36315430f7))
+* **observability:** add hasBrowserSnippetConfiguredSafe function ([40d51ab](https://github.com/wmitrus/nextjs-16-boilerplate/commit/40d51ab5f1141e4cf5a55575434044158fa773fd))
+* **observability:** enhance New Relic browser integration ([839f3a7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/839f3a7400c555cae63082b414afe5ca53fddcb9))
+* **observability:** externalize Browser SPA snippet delivery ([91c5dad](https://github.com/wmitrus/nextjs-16-boilerplate/commit/91c5dad8d3251f477ab5a559cf25af9b7f90eed7))
+* **observability:** implement New Relic browser snippet route ([1b20df8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1b20df832832b36df098665068a646a20bcca714))
+* **observability:** implement New Relic integration for browser monitoring ([d7328da](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d7328dafbe613f7603f16b8ed29dd2156959d259))
+* **observability:** implement request-scoped container caching ([2fd1391](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2fd1391b2ee19acfbc3e298a80659d6c914b8156))
+* **observability:** integrate New Relic browser snippet conditionally ([5d83eba](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5d83ebab49094414db45a7a503d2c78e69dd2c10))
+* **observability:** integrate New Relic Browser SPA snippet ([503f4c3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/503f4c347f5e99a153f5662b32606de7a011a0be))
+* **runtime:** implement per-request DI container caching with New Relic integration ([dbf67d9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dbf67d92e6ebab95c550a7a2492b95220db8f808))
+* **security:** add New Relic script and beacon domains to CSP ([2b7ec56](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2b7ec568d14bee890680dbe3e3324650754ceb40))
+
 # [1.17.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.16.1...v1.17.0) (2026-04-05)
 
 

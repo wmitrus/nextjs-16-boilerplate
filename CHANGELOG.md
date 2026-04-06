@@ -1,3 +1,22 @@
+# [1.20.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.19.0...v1.20.0) (2026-04-06)
+
+
+### Features
+
+* **agents:** add new Codex skills and update agent correspondence ([b03d636](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b03d636ba16f7f7ffba93ba15ea0a402626ccd98))
+* **agents:** add new specialist skills for repository management ([6b43f12](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6b43f122e79236d66452b25eff667d4569d5c271))
+* **codex:** add new workflows for Codex skills ([940fded](https://github.com/wmitrus/nextjs-16-boilerplate/commit/940fdedb52856a2c7fc8bd9a86458eb31372067e))
+* **codex:** add Playwright E2E Agent and workflow roadmap ([cac6385](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cac63856a543c6ced7b13f7d9d0e43e61a70eb43))
+* **codex:** add repo-local Architecture Guard Codex skill ([9bde9ab](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9bde9ab6140cd1275724aa0d393de2e3b1ba21fa))
+* **codex:** implement Codex Next.js Runtime skill and documentation ([a554ab5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a554ab506dfb062a3c4d18cedf830f31db91fd2b))
+* **codex:** implement Codex safe-refactor workflow and documentation ([63cbed8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/63cbed8d8c8b1c11cb24253094cf20c3cb8eb571))
+* **codex:** implement Debug Investigation Agent and update documentation ([35a4311](https://github.com/wmitrus/nextjs-16-boilerplate/commit/35a43110351632958d6a8c3e8df0b36e641f4af3))
+* **codex:** implement full Codex workflow layer and update documentation ([a062b69](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a062b69ec9d430689b606a3e282d076830536830))
+* **codex:** implement Security & Auth skill and enhance documentation ([7e26a42](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7e26a4229faa05ce2166d4a8cbbaac633101ce09))
+* **codex:** implement Validation Strategy skill and related documentation ([6003539](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6003539a6058c0fc183c87fbb59e9a2c02b44dc4))
+* **codex:** implement Workflow Orchestrator and Task Brief skills ([3e916c2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3e916c2bb6810d2653836fa1414dc236913437dc))
+* **workflows:** add multiple new workflows for repository management ([50d3b90](https://github.com/wmitrus/nextjs-16-boilerplate/commit/50d3b901a4ad25c0fe915e11bb038b67e53001c2))
+
 # [1.19.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.18.0...v1.19.0) (2026-04-06)
 
 

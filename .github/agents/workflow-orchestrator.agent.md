@@ -12,6 +12,7 @@ agents:
     '05 - Validation Strategy',
     '07 - Playwright E2E',
     '04 - Implementation Agent',
+    '10 - Leantime Integration',
   ]
 ---
 
@@ -35,6 +36,7 @@ You are the process owner for multi-step task execution.
 - Create `intake.md` after `plan.md` to normalize the task objective, requirements, acceptance criteria, referenced files, and open questions.
 - Record which specialist steps are required, skipped, blocked, or completed.
 - Ensure each specialist step leaves an artifact in the same task directory.
+- Read `docs/ai/general/LEANTIME_AUTOMATION.md` — invoke `10 - Leantime Integration Agent` at task open and task close.
 - For auth/bootstrap/onboarding work, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`, `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`, and `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` before sequencing the task.
 
 ## Primary Mission

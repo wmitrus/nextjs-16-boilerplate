@@ -5,6 +5,10 @@ argument-hint: 'Refactor description, affected modules, expected invariants to p
 agent: 08 - Workflow Orchestrator
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Start a behavior-preserving refactor task using `08 - Workflow Orchestrator`.
 
 Task input package:

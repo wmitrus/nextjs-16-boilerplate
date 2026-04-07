@@ -5,6 +5,10 @@ argument-hint: 'Task context, scenario checklist, referenced files, risks, or en
 agent: '07 - Playwright E2E'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Run `07 - Playwright E2E` for the current task.
 
 Required workflow:

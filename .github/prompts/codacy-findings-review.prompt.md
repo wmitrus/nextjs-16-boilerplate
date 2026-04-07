@@ -5,6 +5,10 @@ argument-hint: 'Pass the local findings JSON path, for example .codacy/reports/c
 agent: '08 - Workflow Orchestrator'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Start a local Codacy findings review using `08 - Workflow Orchestrator`.
 
 Workflow references:

@@ -5,6 +5,10 @@ argument-hint: 'Bug symptoms, repro notes, suspected area, or logs to emphasize'
 agent: '06 - Debug Investigation'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Run `06 - Debug Investigation` for the current issue.
 
 For any auth/bootstrap/onboarding issue:

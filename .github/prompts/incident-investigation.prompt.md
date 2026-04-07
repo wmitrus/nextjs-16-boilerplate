@@ -5,6 +5,10 @@ argument-hint: 'Incident symptoms, logs, repro steps, affected user flow, enviro
 agent: '08 - Workflow Orchestrator'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Start a full incident investigation using `08 - Workflow Orchestrator`.
 
 Use this prompt for confirmed production failures or regressions where the root cause is unclear and a full specialist sequence is needed.

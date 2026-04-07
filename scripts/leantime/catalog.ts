@@ -12,7 +12,7 @@ const IDEA_STATUS_KEYS = [
 
 type IdeaStatusKey = (typeof IDEA_STATUS_KEYS)[number];
 
-const BLUEPRINT_BOARD_TYPES = ['value'] as const;
+const BLUEPRINT_BOARD_TYPES = ['value', 'risks'] as const;
 
 type BlueprintBoardType = (typeof BLUEPRINT_BOARD_TYPES)[number];
 
@@ -1107,7 +1107,7 @@ const OPERATIONS: OperationDefinition[] = [
     title: 'Create Blueprint Board',
     category: 'blueprints',
     description:
-      'Create a supported Blueprint board through AutomationApi Canvas RPC. Phase 1 supports Project Value Canvas only.',
+      'Create a supported Blueprint board through AutomationApi Canvas RPC.',
     execute: async ({ config, input }) => {
       const record = withDefaultEntityIds(
         asRecord(input, 'blueprints.board.create input'),

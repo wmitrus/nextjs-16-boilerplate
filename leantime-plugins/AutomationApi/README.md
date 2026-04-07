@@ -61,9 +61,12 @@ leantime.rpc.AutomationApi.Canvas.linkMilestone
 leantime.rpc.AutomationApi.Canvas.unlinkMilestone
 ```
 
-The current Canvas slice supports only `boardType=value` / Project Value
-Canvas. Additional Blueprint families should be added one rollout phase at a
-time.
+The current Canvas slice supports:
+
+- `boardType=value` / Project Value Canvas
+- `boardType=risks` / Risk Analysis
+
+Additional Blueprint families should be added one rollout phase at a time.
 
 Local stack commands:
 

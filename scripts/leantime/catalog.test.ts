@@ -222,6 +222,92 @@ describe('leantime catalog', () => {
     expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
   });
 
+  it('creates a Risk Analysis board through the same AutomationApi Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      id: 18,
+      projectId: 2,
+      title: 'Risk Analysis',
+    });
+
+    const result = await executeOperation('blueprints.board.create', {
+      config,
+      input: {
+        boardType: 'risks',
+        description: 'Risk register for delivery planning',
+        projectId: 2,
+        title: 'Risk Analysis',
+      },
+    });
+
+    expect(result).toEqual({
+      id: 18,
+      projectId: 2,
+      title: 'Risk Analysis',
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createBoard',
+      {
+        author: 1,
+        boardType: 'risks',
+        description: 'Risk register for delivery planning',
+        projectId: 2,
+        title: 'Risk Analysis',
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('creates a Risk Analysis item with relates metadata through plugin RPC', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'risks_imp_high_pro_high',
+      canvasId: 18,
+      description: 'Cache model migration risk',
+      id: 19,
+      relates: 'relates_capabilities',
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 18,
+        boardType: 'risks',
+        box: 'risks_imp_high_pro_high',
+        data: '<p>Next.js cache behavior can change delivery assumptions.</p>',
+        relates: 'relates_capabilities',
+        title: 'Cache model migration risk',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'risks_imp_high_pro_high',
+      canvasId: 18,
+      description: 'Cache model migration risk',
+      id: 19,
+      relates: 'relates_capabilities',
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'risks',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'risks_imp_high_pro_high',
+          canvasId: 18,
+          clientId: 1,
+          data: '<p>Next.js cache behavior can change delivery assumptions.</p>',
+          description: 'Cache model migration risk',
+          projectId: 2,
+          relates: 'relates_capabilities',
+          title: 'Cache model migration risk',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
   it('creates a Project Value Canvas item comment through plugin RPC', async () => {
     mockRunLeantimeRpc.mockResolvedValueOnce({
       commentId: 7,

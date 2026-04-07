@@ -17,6 +17,7 @@ const BLUEPRINT_BOARD_TYPES = [
   'risks',
   'swot',
   'obm',
+  'retros',
   'lean',
   'minempathy',
   'sb',

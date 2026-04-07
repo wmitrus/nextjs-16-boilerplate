@@ -644,13 +644,17 @@ Production deployment state:
 Next implementation slice:
 
 - keep destructive Ideas wrappers behind explicit cleanup tasks
-- continue `AutomationApi.Canvas` / Blueprints with the phase 7 decision on
-  hidden or specialized canvas families after the visible board set is
-  production deployed and read-only validated
+- continue `AutomationApi.Canvas` with the separate `Retroscanvas` /
+  Retrospectives slice
+- keep hidden or specialized canvas families (`lbm`, `dbm`, `cp`, `sm`, `sq`,
+  `em`) as explicit backlog until they are needed
 
 The dedicated Blueprints / Canvas task brief, architecture plan, rollout phases,
 and production Leantime tracking IDs are documented in
 [30 - Leantime AutomationApi Blueprints Plan.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/30%20-%20Leantime%20AutomationApi%20Blueprints%20Plan.md).
+
+The dedicated Retrospectives task brief and rollout notes are documented in
+[31 - Leantime AutomationApi Retrospectives Plan.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/31%20-%20Leantime%20AutomationApi%20Retrospectives%20Plan.md).
 
 The production deploy workflow is documented separately in
 [29 - Leantime AutomationApi Plugin Deploy Workflow.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/29%20-%20Leantime%20AutomationApi%20Plugin%20Deploy%20Workflow.md).

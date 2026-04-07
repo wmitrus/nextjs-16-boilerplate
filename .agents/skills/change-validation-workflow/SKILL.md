@@ -47,3 +47,12 @@ Determine, execute, and report the minimum safe validation scope for a specific 
 - `.github/prompts/change-validation.prompt.md` remains the Copilot workflow entrypoint
 - `.zenflow/workflows/change-validation.md` remains the ZenFlow execution layer
 - this skill is the Codex-native runtime surface for the same workflow intent
+
+## Leantime Integration
+
+**This skill participates in the mandatory Leantime workflow.**
+
+At task open and close, the Workflow Orchestrator invokes
+`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
+
+Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`

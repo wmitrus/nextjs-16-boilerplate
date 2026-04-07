@@ -122,3 +122,12 @@ When the role changes, update:
 - `docs/ai/general/09 - Task Brief Authoring.md`
 - `.agents/skills/task-brief-authoring/SKILL.md`
 - the applicable description guides under `docs/ai/`
+
+## Leantime Integration
+
+**This skill participates in the mandatory Leantime workflow.**
+
+At task open and close, the Workflow Orchestrator invokes
+`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
+
+Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`

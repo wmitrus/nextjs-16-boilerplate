@@ -151,3 +151,12 @@ When the role changes, update:
 - `.github/agents/implementation-agent.agent.md`
 - `.agents/skills/implementation-agent/SKILL.md`
 - the applicable description guides under `docs/ai/`
+
+## Leantime Integration
+
+**This skill participates in the mandatory Leantime workflow.**
+
+At task open and close, the Workflow Orchestrator invokes
+`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
+
+Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`

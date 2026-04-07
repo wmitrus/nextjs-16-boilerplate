@@ -332,6 +332,75 @@ Phase 1 residual scope:
 - comments, milestone linking, and delete-confirm flows remain phase 2.
 - other board types remain phase 3+.
 
+## Phase 2 Implementation Log
+
+Phase 2 was implemented on 2026-04-07 for `boardType=value` / Project Value
+Canvas shared item operations.
+
+Implemented plugin RPC methods:
+
+- `leantime.rpc.AutomationApi.Canvas.deleteItem`
+- `leantime.rpc.AutomationApi.Canvas.listComments`
+- `leantime.rpc.AutomationApi.Canvas.createComment`
+- `leantime.rpc.AutomationApi.Canvas.editComment`
+- `leantime.rpc.AutomationApi.Canvas.deleteComment`
+- `leantime.rpc.AutomationApi.Canvas.createAndLinkMilestone`
+- `leantime.rpc.AutomationApi.Canvas.linkMilestone`
+- `leantime.rpc.AutomationApi.Canvas.unlinkMilestone`
+
+Implemented CLI wrappers:
+
+- `blueprints.board.delete`
+- `blueprints.item.delete`
+- `blueprints.comment.list`
+- `blueprints.comment.create`
+- `blueprints.comment.edit`
+- `blueprints.comment.delete`
+- `blueprints.milestone.create-link`
+- `blueprints.milestone.link-existing`
+- `blueprints.milestone.unlink`
+
+Local write smoke test against the Podman Leantime stack:
+
+- created local comment `#2` on item `#4`
+- edited local comment `#2`
+- listed comments for item `#4` and confirmed edited text
+- deleted local comment `#2` with `confirm=true`
+- created and linked local milestone `#12` to item `#4`
+- unlinked milestone from item `#4`
+- created temporary local item `#5` for destructive delete testing
+- deleted local item `#5` with `confirm=true`
+- read local item `#4` back and confirmed `milestoneId` was empty after unlink
+
+Production deploy evidence:
+
+- apply manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T13-43-02Z-AutomationApi-apply.json`
+- post-deploy plan manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T13-43-29Z-AutomationApi-plan.json`
+- deployment actions: `overwrite: 2`, `skip-same: 4`
+- post-deploy plan result: `skip-same: 6`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T13-43-02Z/README.md`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T13-43-02Z/Services/Canvas.php`
+
+Production read-only smoke test:
+
+- `pnpm lt -- list --format=json` showed the new phase 2 `blueprints.*`
+  commands.
+- `blueprints.types.list` still loaded the `AutomationApi.Canvas` service after
+  the new `Comments` and `Tickets` dependencies were added.
+- `blueprints.board.list` for project `2` and `boardType=value` still returned
+  `[]`.
+
+Phase 2 residual scope:
+
+- production write/delete smoke remains intentionally deferred until real
+  Project Value Canvas boards are seeded or temporary production boards are
+  explicitly approved.
+- `risks` / Risk Analysis remains phase 3.
+
 ## Leantime Tracking Artifacts
 
 This section is updated whenever production Leantime artifacts are created for

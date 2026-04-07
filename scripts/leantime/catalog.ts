@@ -39,6 +39,7 @@ export interface OperationDefinition {
     | 'files'
     | 'goals'
     | 'ideas'
+    | 'retrospectives'
     | 'lookup'
     | 'projects'
     | 'reports'
@@ -1557,6 +1558,343 @@ const OPERATIONS: OperationDefinition[] = [
             getStringValue(record, ['boardType', 'type']),
           ),
           itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.board.create',
+    title: 'Create Retrospective Board',
+    category: 'retrospectives',
+    description:
+      'Create a Retrospective board (boardType=retros) through AutomationApi Canvas RPC. Boxes: well, notwell, startdoing.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'retrospectives.board.create input'),
+        config,
+      );
+      const title = getNonEmptyStringValue(record, [
+        'title',
+        'name',
+        'headline',
+      ]);
+
+      if (!title) {
+        throw new Error(
+          'retrospectives.board.create requires "title", "name", or "headline".',
+        );
+      }
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('retrospectives.board.create requires "projectId".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createBoard',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          boardType: 'retros',
+          description: getStringValue(record, ['description']) ?? '',
+          projectId,
+          title,
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.board.list',
+    title: 'List Retrospective Boards',
+    category: 'retrospectives',
+    description:
+      'List Retrospective boards (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'retrospectives.board.list input'),
+        config,
+      );
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('retrospectives.board.list requires "projectId".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.listBoards',
+        {
+          boardType: 'retros',
+          projectId,
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.board.get',
+    title: 'Get Retrospective Board',
+    category: 'retrospectives',
+    description:
+      'Fetch one Retrospective board (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.board.get input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.getBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'id'],
+            'boardId',
+          ),
+          boardType: 'retros',
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.board.update',
+    title: 'Update Retrospective Board',
+    category: 'retrospectives',
+    description:
+      'Update a Retrospective board title (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.board.update input');
+      const title = getNonEmptyStringValue(record, [
+        'title',
+        'name',
+        'headline',
+      ]);
+
+      if (!title) {
+        throw new Error(
+          'retrospectives.board.update requires "title", "name", or "headline".',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.updateBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'id'],
+            'boardId',
+          ),
+          boardType: 'retros',
+          title,
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.item.create',
+    title: 'Create Retrospective Item',
+    category: 'retrospectives',
+    description:
+      'Create an item on a Retrospective board (boardType=retros). Box must be one of: well, notwell, startdoing.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.item.create input');
+      const box = getStringValue(record, ['box']);
+      const validBoxes = ['well', 'notwell', 'startdoing'];
+
+      if (!box || !validBoxes.includes(box)) {
+        throw new Error(
+          'retrospectives.item.create requires "box" with value well, notwell, or startdoing.',
+        );
+      }
+
+      const values = normalizeCanvasItemPayload(record, config);
+      values.box = box;
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createItem',
+        {
+          boardType: 'retros',
+          values,
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.item.list',
+    title: 'List Retrospective Items',
+    category: 'retrospectives',
+    description:
+      'List items on a Retrospective board (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.item.list input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.listItems',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'id'],
+            'boardId',
+          ),
+          boardType: 'retros',
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.item.get',
+    title: 'Get Retrospective Item',
+    category: 'retrospectives',
+    description:
+      'Fetch one item from a Retrospective board (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.item.get input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.getItem',
+        {
+          boardType: 'retros',
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.item.update',
+    title: 'Update Retrospective Item',
+    category: 'retrospectives',
+    description:
+      'Update a Retrospective item (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.item.update input');
+      const itemId = requirePositiveIdFromKeys(
+        record,
+        ['itemId', 'id'],
+        'itemId',
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.updateItem',
+        {
+          boardType: 'retros',
+          itemId,
+          values: normalizeCanvasItemPayload(record, config),
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.item.patch',
+    title: 'Patch Retrospective Item',
+    category: 'retrospectives',
+    description:
+      'Patch selected fields on a Retrospective item (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.item.patch input');
+      const fields = getRecordField(record, 'fields', ['params']);
+
+      if (!fields) {
+        throw new Error(
+          'retrospectives.item.patch requires a "fields" or "params" object.',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.patchItem',
+        {
+          boardType: 'retros',
+          fields,
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.comment.list',
+    title: 'List Retrospective Item Comments',
+    category: 'retrospectives',
+    description:
+      'List comments on a Retrospective item (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.comment.list input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.listComments',
+        {
+          boardType: 'retros',
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.comment.create',
+    title: 'Create Retrospective Item Comment',
+    category: 'retrospectives',
+    description:
+      'Add a comment to a Retrospective item (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'retrospectives.comment.create input');
+      const text = getNonEmptyStringValue(record, ['text', 'comment']);
+
+      if (!text) {
+        throw new Error(
+          'retrospectives.comment.create requires "text" or "comment".',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createComment',
+        {
+          boardType: 'retros',
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+          text,
+        },
+      );
+    },
+  },
+  {
+    id: 'retrospectives.milestone.create-link',
+    title: 'Create And Link Milestone To Retrospective Item',
+    category: 'retrospectives',
+    description:
+      'Create a milestone and link it to a Retrospective item (boardType=retros) through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(
+        input,
+        'retrospectives.milestone.create-link input',
+      );
+      const headline = getNonEmptyStringValue(record, [
+        'newMilestone',
+        'milestoneTitle',
+        'title',
+        'headline',
+      ]);
+
+      if (!headline) {
+        throw new Error(
+          'retrospectives.milestone.create-link requires a milestone title.',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createAndLinkMilestone',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          boardType: 'retros',
+          headline,
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+          values: {
+            tags: getStringValue(record, ['tags']),
+          },
         },
       );
     },

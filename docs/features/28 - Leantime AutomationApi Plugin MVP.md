@@ -644,7 +644,8 @@ Production deployment state:
 Next implementation slice:
 
 - keep destructive Ideas wrappers behind explicit cleanup tasks
-- start `AutomationApi.Canvas` / Blueprints as a new, separate task
+- continue `AutomationApi.Canvas` / Blueprints with phase 3 Risk Analysis after
+  the Project Value Canvas phase 1-2 slice
 
 The dedicated Blueprints / Canvas task brief, architecture plan, rollout phases,
 and production Leantime tracking IDs are documented in

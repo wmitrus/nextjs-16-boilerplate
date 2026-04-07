@@ -113,10 +113,10 @@ Verified against the on-prem instance on `2026-04-06`:
   default agent behavior.
 - During blueprint discovery:
   Use plugin-backed `blueprints.types.list` and `blueprints.type.get` before
-  creating any board items. The current Canvas rollout supports only
-  `boardType: "value"` / Project Value Canvas. Keep production writes
-  intentional and prefer local Podman smoke tests before seeding real
-  production boards.
+  creating any board items. The current Canvas rollout supports
+  `boardType: "value"` / Project Value Canvas and `boardType: "risks"` / Risk
+  Analysis. Keep production writes intentional and prefer local Podman smoke
+  tests before seeding real production boards.
 
 ## Verified Commands
 
@@ -197,6 +197,15 @@ validated on `2026-04-07`:
 - `pnpm lt -- run blueprints.types.list --format=json`
 - `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"value"}' --format=json`
 
+The Risk Analysis slice of `AutomationApi.Canvas` was exercised successfully
+against the local Podman Leantime stack on `http://localhost:8185`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.create --input '{"boardType":"risks","title":"CLI Risk Analysis","description":"Local phase 3 smoke test board."}' --format=json`
+- `pnpm lt -- run blueprints.item.create --input '{"boardType":"risks","boardId":15,"box":"risks_imp_high_pro_high","title":"Cache model migration risk","data":"<p>Next.js cache behavior can invalidate assumptions.</p>","assumptions":"Use explicit validation before rollout.","relates":"relates_capabilities"}' --format=json`
+- `pnpm lt -- run blueprints.item.patch --input '{"boardType":"risks","itemId":6,"fields":{"status":"status_review","conclusion":"Treat as active architecture/runtime risk until validated."}}' --format=json`
+- `pnpm lt -- run blueprints.item.get --input '{"boardType":"risks","itemId":6}' --format=json`
+
 ## Fields Agents Should Prefer
 
 ### Projects
@@ -243,15 +252,22 @@ validated on `2026-04-07`:
 
 ### Blueprints
 
-- `boardType`, currently only `value` for Project Value Canvas
+- `boardType`, currently `value` for Project Value Canvas or `risks` for Risk
+  Analysis
 - `boardId` or `canvasId`
-- item `box`, currently one of `customersegment`, `problem`, `solution`,
-  `uniquevalue`
+- item `box`; for `value`, one of `customersegment`, `problem`, `solution`,
+  `uniquevalue`; for `risks`, one of `risks_imp_low_pro_low`,
+  `risks_imp_low_pro_high`, `risks_imp_high_pro_low`,
+  `risks_imp_high_pro_high`
 - item `description` or `title`
 - item evidence fields: `assumptions`, `data`, `conclusion`
-- item `status`, currently one of the upstream Project Value Canvas status keys
-  such as `status_draft`, `status_review`, `status_valid`, `status_hold`,
+- item `status`, currently one of the shared upstream Canvas status keys such as
+  `status_draft`, `status_review`, `status_valid`, `status_hold`,
   `status_invalid`
+- item `relates` for relation-aware boards such as `risks`; common values
+  include `relates_none`, `relates_customers`, `relates_offerings`,
+  `relates_capabilities`, `relates_financials`, `relates_markets`,
+  `relates_environment`, and `relates_firm`
 - `commentId` for comment edits and deletes
 - `existingMilestoneId` or `milestoneId` for linking an existing milestone
 - `confirm: true` for destructive `blueprints.board.delete`,

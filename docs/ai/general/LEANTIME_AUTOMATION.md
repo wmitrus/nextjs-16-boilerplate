@@ -206,6 +206,13 @@ against the local Podman Leantime stack on `http://localhost:8185`:
 - `pnpm lt -- run blueprints.item.patch --input '{"boardType":"risks","itemId":6,"fields":{"status":"status_review","conclusion":"Treat as active architecture/runtime risk until validated."}}' --format=json`
 - `pnpm lt -- run blueprints.item.get --input '{"boardType":"risks","itemId":6}' --format=json`
 
+The Risk Analysis slice was deployed to the on-prem instance and read-only
+validated on `2026-04-07`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"risks"}' --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"value"}' --format=json`
+
 ## Fields Agents Should Prefer
 
 ### Projects

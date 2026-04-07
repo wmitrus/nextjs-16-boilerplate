@@ -265,6 +265,73 @@ Validation explicitly not required per individual board type:
 - destructive delete execution in production, unless cleanup is explicitly
   requested.
 
+## Phase 1 Implementation Log
+
+Phase 1 was implemented on 2026-04-07 for `boardType=value` / Project Value
+Canvas only.
+
+Implemented plugin RPC methods:
+
+- `leantime.rpc.AutomationApi.Canvas.listBoardTypes`
+- `leantime.rpc.AutomationApi.Canvas.getBoardType`
+- `leantime.rpc.AutomationApi.Canvas.listBoards`
+- `leantime.rpc.AutomationApi.Canvas.getBoard`
+- `leantime.rpc.AutomationApi.Canvas.createBoard`
+- `leantime.rpc.AutomationApi.Canvas.updateBoard`
+- `leantime.rpc.AutomationApi.Canvas.deleteBoard`
+- `leantime.rpc.AutomationApi.Canvas.listItems`
+- `leantime.rpc.AutomationApi.Canvas.getItem`
+- `leantime.rpc.AutomationApi.Canvas.createItem`
+- `leantime.rpc.AutomationApi.Canvas.updateItem`
+- `leantime.rpc.AutomationApi.Canvas.patchItem`
+
+Implemented CLI wrappers:
+
+- `blueprints.types.list`
+- `blueprints.type.get`
+- `blueprints.board.list`
+- `blueprints.board.get`
+- `blueprints.board.create`
+- `blueprints.board.update`
+- `blueprints.item.list`
+- `blueprints.item.get`
+- `blueprints.item.create`
+- `blueprints.item.update`
+- `blueprints.item.patch`
+
+Local write smoke test against the Podman Leantime stack:
+
+- created local board `#14`: `CLI Project Value Canvas`
+- created local item `#4` in box `problem`
+- patched local item `#4` to `status_valid`
+- read local item `#4` back and confirmed the patched status and conclusion
+
+Production deploy evidence:
+
+- apply manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T13-27-25Z-AutomationApi-apply.json`
+- post-deploy plan manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T13-27-50Z-AutomationApi-plan.json`
+- deployment actions: `create: 1`, `overwrite: 1`, `skip-same: 4`
+- post-deploy plan result: `skip-same: 6`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T13-27-25Z/README.md`
+
+Production read-only smoke test:
+
+- `blueprints.types.list` returned Project Value Canvas metadata, translated box
+  labels, and status labels.
+- `blueprints.board.list` for project `2` and `boardType=value` returned `[]`,
+  confirming the endpoint works and that no real production Project Value Canvas
+  board has been seeded yet.
+
+Phase 1 residual scope:
+
+- production write smoke is intentionally deferred until we decide whether to
+  seed final boilerplate Blueprint boards or use temporary production boards.
+- comments, milestone linking, and delete-confirm flows remain phase 2.
+- other board types remain phase 3+.
+
 ## Leantime Tracking Artifacts
 
 This section is updated whenever production Leantime artifacts are created for

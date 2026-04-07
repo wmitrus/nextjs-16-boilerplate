@@ -39,7 +39,23 @@ leantime.rpc.AutomationApi.Ideas.toggleCommentReaction
 leantime.rpc.AutomationApi.Ideas.createAndLinkMilestone
 leantime.rpc.AutomationApi.Ideas.linkMilestone
 leantime.rpc.AutomationApi.Ideas.unlinkMilestone
+leantime.rpc.AutomationApi.Canvas.listBoardTypes
+leantime.rpc.AutomationApi.Canvas.getBoardType
+leantime.rpc.AutomationApi.Canvas.listBoards
+leantime.rpc.AutomationApi.Canvas.getBoard
+leantime.rpc.AutomationApi.Canvas.createBoard
+leantime.rpc.AutomationApi.Canvas.updateBoard
+leantime.rpc.AutomationApi.Canvas.deleteBoard
+leantime.rpc.AutomationApi.Canvas.listItems
+leantime.rpc.AutomationApi.Canvas.getItem
+leantime.rpc.AutomationApi.Canvas.createItem
+leantime.rpc.AutomationApi.Canvas.updateItem
+leantime.rpc.AutomationApi.Canvas.patchItem
 ```
+
+The current Canvas slice supports only `boardType=value` / Project Value
+Canvas. Additional Blueprint families should be added one rollout phase at a
+time.
 
 Local stack commands:
 

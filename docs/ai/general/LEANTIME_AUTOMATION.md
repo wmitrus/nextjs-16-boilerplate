@@ -557,6 +557,17 @@ Use `insights_oberve` for the Insights observation box. This is the upstream
 Leantime key spelling in code; do not silently change it to
 `insights_observe` in automation payloads.
 
+Retrospectives are handled as a separate upstream module (`Retroscanvas`), not
+as a hidden Blueprint family. The local AutomationApi plugin reuses the generic
+Canvas RPC contract for this board with `boardType=retros`:
+
+- `well` / Continue - What went well?
+- `notwell` / Stop - What should we stop doing?
+- `startdoing` / Start - What should we start doing to improve?
+
+Use `blueprints.*` with `boardType=retros` until a dedicated
+`retrospectives.*` CLI alias is introduced.
+
 Verified internal Ideas status keys:
 
 - `idea`

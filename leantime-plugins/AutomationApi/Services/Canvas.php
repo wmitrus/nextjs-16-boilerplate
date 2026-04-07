@@ -5,6 +5,8 @@ namespace Leantime\Plugins\AutomationApi\Services;
 use InvalidArgumentException;
 use Leantime\Domain\Canvas\Repositories\Canvas as BaseCanvasRepository;
 use Leantime\Domain\Comments\Repositories\Comments as CommentsRepository;
+use Leantime\Domain\Leancanvas\Repositories\Leancanvas as LeancanvasRepository;
+use Leantime\Domain\Obmcanvas\Repositories\Obmcanvas as ObmcanvasRepository;
 use Leantime\Domain\Riskscanvas\Repositories\Riskscanvas as RiskscanvasRepository;
 use Leantime\Domain\Swotcanvas\Repositories\Swotcanvas as SwotcanvasRepository;
 use Leantime\Domain\Tickets\Services\Tickets as TicketService;
@@ -15,6 +17,8 @@ class Canvas
     private const DEFAULT_BOARD_TYPE = 'value';
 
     private const SUPPORTED_BOARD_TYPES = [
+        'lean' => 'Lean Canvas',
+        'obm' => 'Business Model Board',
         'risks' => 'Risk Analysis',
         'swot' => 'SWOT Analysis',
         'value' => 'Project Value Canvas',
@@ -83,6 +87,8 @@ class Canvas
 
     public function __construct(
         private ValuecanvasRepository $valuecanvasRepository,
+        private LeancanvasRepository $leancanvasRepository,
+        private ObmcanvasRepository $obmcanvasRepository,
         private RiskscanvasRepository $riskscanvasRepository,
         private SwotcanvasRepository $swotcanvasRepository,
         private CommentsRepository $commentsRepository,
@@ -378,6 +384,8 @@ class Canvas
         $boardType = $this->requireSupportedBoardType($boardType);
 
         return match ($boardType) {
+            'lean' => $this->leancanvasRepository,
+            'obm' => $this->obmcanvasRepository,
             'risks' => $this->riskscanvasRepository,
             'swot' => $this->swotcanvasRepository,
             self::DEFAULT_BOARD_TYPE => $this->valuecanvasRepository,

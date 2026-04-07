@@ -392,6 +392,98 @@ describe('leantime catalog', () => {
     expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
   });
 
+  it('creates a Business Model Board item through the generic Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'obm_vp',
+      canvasId: 22,
+      description: 'Reusable boilerplate value proposition',
+      id: 23,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 22,
+        boardType: 'obm',
+        box: 'obm_vp',
+        data: '<p>Production-grade starter for future apps.</p>',
+        title: 'Reusable boilerplate value proposition',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'obm_vp',
+      canvasId: 22,
+      description: 'Reusable boilerplate value proposition',
+      id: 23,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'obm',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'obm_vp',
+          canvasId: 22,
+          clientId: 1,
+          data: '<p>Production-grade starter for future apps.</p>',
+          description: 'Reusable boilerplate value proposition',
+          projectId: 2,
+          title: 'Reusable boilerplate value proposition',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('creates a Lean Canvas item through the generic Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'problem',
+      canvasId: 24,
+      description: 'App setup takes too long',
+      id: 25,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 24,
+        boardType: 'lean',
+        box: 'problem',
+        data: '<p>Teams repeatedly rebuild auth and observability setup.</p>',
+        title: 'App setup takes too long',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'problem',
+      canvasId: 24,
+      description: 'App setup takes too long',
+      id: 25,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'lean',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'problem',
+          canvasId: 24,
+          clientId: 1,
+          data: '<p>Teams repeatedly rebuild auth and observability setup.</p>',
+          description: 'App setup takes too long',
+          projectId: 2,
+          title: 'App setup takes too long',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
   it('creates a Project Value Canvas item comment through plugin RPC', async () => {
     mockRunLeantimeRpc.mockResolvedValueOnce({
       commentId: 7,

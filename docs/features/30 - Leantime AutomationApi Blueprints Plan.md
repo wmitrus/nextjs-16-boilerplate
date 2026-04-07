@@ -573,6 +573,110 @@ Leantime status update:
 - task `#30` remains the next phase task and should be patched to `status=4`
   only when phase 5 actually starts.
 
+## Phase 5 Implementation Log
+
+Phase 5 was implemented on 2026-04-07 for `boardType=obm` / Business Model
+Board and `boardType=lean` / Lean Canvas.
+
+Implementation summary:
+
+- added `Obmcanvas` repository support to `AutomationApi.Canvas`
+- added `Leancanvas` repository support to `AutomationApi.Canvas`
+- expanded `blueprints.*` CLI validation to accept `boardType=obm` and
+  `boardType=lean`
+- kept both wide boards on the same generic Canvas command set
+
+Business Model Board metadata confirmed from local upstream code and live smoke:
+
+- canvas type: `obmcanvas`
+- comment module: `obmcanvasitem`
+- boxes:
+  - `obm_kp`
+  - `obm_kr`
+  - `obm_ka`
+  - `obm_vp`
+  - `obm_ch`
+  - `obm_cr`
+  - `obm_cs`
+  - `obm_fc`
+  - `obm_fr`
+- data labels:
+  - `assumptions`
+  - `data`
+  - `conclusion`
+- `relatesLabels` is intentionally empty upstream for OBM
+- status labels are inherited from the shared Canvas base repository
+
+Lean Canvas metadata confirmed from local upstream code and live smoke:
+
+- canvas type: `leancanvas`
+- comment module: `leancanvasitem`
+- boxes:
+  - `problem`
+  - `alternatives`
+  - `solution`
+  - `keymetrics`
+  - `uniquevalue`
+  - `highlevelconcept`
+  - `unfairadvantage`
+  - `channels`
+  - `customersegment`
+  - `earlyadopters`
+  - `cost`
+  - `revenue`
+- data labels:
+  - `assumptions`
+  - `data`
+  - `conclusion`
+- `relatesLabels` is intentionally empty upstream for Lean Canvas
+- status labels are inherited from the shared Canvas base repository
+
+Local write smoke test against the Podman Leantime stack:
+
+- `blueprints.types.list` returned `obm`, `lean`, `swot`, `risks`, and `value`
+- created local Business Model Board `#17`: `CLI Business Model Board`
+- created local OBM item `#8` in box `obm_vp`
+- patched local OBM item `#8` to `status_valid`
+- read local OBM item `#8` back and confirmed status and conclusion persisted
+- created local Lean Canvas board `#18`: `CLI Lean Canvas`
+- created local Lean item `#9` in box `problem`
+- patched local Lean item `#9` to `status_review`
+- read local Lean item `#9` back and confirmed status and conclusion persisted
+
+Production deploy evidence:
+
+- apply manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T17-07-39Z-AutomationApi-apply.json`
+- post-deploy plan manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T17-08-02Z-AutomationApi-plan.json`
+- deployment actions: `overwrite: 2`, `skip-same: 4`
+- post-deploy plan result: `skip-same: 6`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T17-07-39Z/README.md`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T17-07-39Z/Services/Canvas.php`
+
+Production read-only smoke test:
+
+- `blueprints.types.list` returned `obm` and `lean` metadata, translated box
+  labels, disclaimers, shared status labels, and empty relation labels.
+- `blueprints.board.list` for project `2` and `boardType=obm` returned `[]`,
+  confirming the endpoint works and that no real production Business Model Board
+  has been seeded yet.
+- `blueprints.board.list` for project `2` and `boardType=lean` returned `[]`,
+  confirming the endpoint works and that no real production Lean Canvas board
+  has been seeded yet.
+- `blueprints.board.list` for project `2` and `boardType=swot` still returned
+  `[]`, confirming the existing SWOT path still loads after the `Obmcanvas` and
+  `Leancanvas` dependencies were added.
+
+Phase 5 residual scope:
+
+- production OBM/Lean write smoke remains intentionally deferred until real
+  boilerplate Blueprint boards are seeded or a temporary production board is
+  explicitly approved.
+- `minempathy`, `sb`, `ea`, and `insights` remain phase 6.
+
 ## Leantime Tracking Artifacts
 
 This section is updated whenever production Leantime artifacts are created for

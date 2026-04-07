@@ -66,6 +66,8 @@ The current Canvas slice supports:
 - `boardType=value` / Project Value Canvas
 - `boardType=risks` / Risk Analysis
 - `boardType=swot` / SWOT Analysis
+- `boardType=obm` / Business Model Board
+- `boardType=lean` / Lean Canvas
 
 Additional Blueprint families should be added one rollout phase at a time.
 

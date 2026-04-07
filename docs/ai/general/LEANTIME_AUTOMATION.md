@@ -122,8 +122,9 @@ Verified against the on-prem instance on `2026-04-06`:
   Use plugin-backed `blueprints.types.list` and `blueprints.type.get` before
   creating any board items. The current Canvas rollout supports
   `boardType: "value"` / Project Value Canvas, `boardType: "risks"` / Risk
-  Analysis, and `boardType: "swot"` / SWOT Analysis. Keep production writes
-  intentional and prefer local Podman smoke tests before seeding real
+  Analysis, `boardType: "swot"` / SWOT Analysis, `boardType: "obm"` /
+  Business Model Board, and `boardType: "lean"` / Lean Canvas. Keep production
+  writes intentional and prefer local Podman smoke tests before seeding real
   production boards.
 
 ## Verified Commands
@@ -237,6 +238,28 @@ validated on `2026-04-07`:
 - `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"swot"}' --format=json`
 - `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"risks"}' --format=json`
 
+The Business Model Board and Lean Canvas slices of `AutomationApi.Canvas` were
+exercised successfully against the local Podman Leantime stack on
+`http://localhost:8185`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.create --input '{"boardType":"obm","title":"CLI Business Model Board","description":"Local phase 5 OBM smoke test board."}' --format=json`
+- `pnpm lt -- run blueprints.item.create --input '{"boardType":"obm","boardId":17,"box":"obm_vp","title":"Reusable boilerplate value proposition","data":"<p>Production-grade starter for future apps.</p>","assumptions":"Teams value low setup friction.","conclusion":"The boilerplate value proposition is repeatable delivery quality."}' --format=json`
+- `pnpm lt -- run blueprints.item.patch --input '{"boardType":"obm","itemId":8,"fields":{"status":"status_valid","conclusion":"OBM item patch persisted during Phase 5 smoke."}}' --format=json`
+- `pnpm lt -- run blueprints.item.get --input '{"boardType":"obm","itemId":8}' --format=json`
+- `pnpm lt -- run blueprints.board.create --input '{"boardType":"lean","title":"CLI Lean Canvas","description":"Local phase 5 Lean smoke test board."}' --format=json`
+- `pnpm lt -- run blueprints.item.create --input '{"boardType":"lean","boardId":18,"box":"problem","title":"App setup takes too long","data":"<p>Teams repeatedly rebuild auth and observability setup.</p>","assumptions":"Setup friction slows first delivery.","conclusion":"Lean problem item persisted during Phase 5 smoke."}' --format=json`
+- `pnpm lt -- run blueprints.item.patch --input '{"boardType":"lean","itemId":9,"fields":{"status":"status_review","conclusion":"Lean item patch persisted during Phase 5 smoke."}}' --format=json`
+- `pnpm lt -- run blueprints.item.get --input '{"boardType":"lean","itemId":9}' --format=json`
+
+The Business Model Board and Lean Canvas slices were deployed to the on-prem
+instance and read-only validated on `2026-04-07`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"obm"}' --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"lean"}' --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"swot"}' --format=json`
+
 ## Fields Agents Should Prefer
 
 ### Projects
@@ -284,13 +307,19 @@ validated on `2026-04-07`:
 ### Blueprints
 
 - `boardType`, currently `value` for Project Value Canvas, `risks` for Risk
-  Analysis, or `swot` for SWOT Analysis
+  Analysis, `swot` for SWOT Analysis, `obm` for Business Model Board, or
+  `lean` for Lean Canvas
 - `boardId` or `canvasId`
 - item `box`; for `value`, one of `customersegment`, `problem`, `solution`,
   `uniquevalue`; for `risks`, one of `risks_imp_low_pro_low`,
   `risks_imp_low_pro_high`, `risks_imp_high_pro_low`,
   `risks_imp_high_pro_high`; for `swot`, one of `swot_strengths`,
-  `swot_weaknesses`, `swot_opportunities`, `swot_threats`
+  `swot_weaknesses`, `swot_opportunities`, `swot_threats`; for `obm`, one of
+  `obm_kp`, `obm_kr`, `obm_ka`, `obm_vp`, `obm_ch`, `obm_cr`, `obm_cs`,
+  `obm_fc`, `obm_fr`; for `lean`, one of `problem`, `alternatives`,
+  `solution`, `keymetrics`, `uniquevalue`, `highlevelconcept`,
+  `unfairadvantage`, `channels`, `customersegment`, `earlyadopters`, `cost`,
+  `revenue`
 - item `description` or `title`
 - item evidence fields: `assumptions`, `data`, `conclusion`
 - item `status`, currently one of the shared upstream Canvas status keys such as

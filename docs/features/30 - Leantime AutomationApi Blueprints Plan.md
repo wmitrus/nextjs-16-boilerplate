@@ -79,11 +79,14 @@ These exist in code but are not part of the first visible-template rollout:
 | Strategy Messaging / Positioning | `sm`        | Defer; hidden and specialized.                                   |
 | Strategy Questions               | `sq`        | Defer; hidden and specialized.                                   |
 | Full Empathy Map                 | `em`        | Defer; hidden; use `minempathy` first.                           |
-| Retrospective Canvas             | `retros`    | Defer; separate retrospective workflow.                          |
 | Goal Canvas                      | `goal`      | Already handled through native `Goalcanvas` JSON-RPC.            |
 
 If a hidden family becomes important, it should be added after the visible
 families are stable.
+
+Retrospectives are intentionally not listed as a hidden Blueprint family here.
+They use their own upstream `Retroscanvas` module and should be handled in a
+separate Retrospectives task.
 
 ## Generic Canvas Data Model
 
@@ -197,7 +200,7 @@ read-only validated, documented, and committed before the next phase starts.
 | 4     | `swot` / SWOT Analysis                                                 | Similar four-box shape, validates another relation-aware board.                                 |
 | 5     | `obm` / Business Model Board and `lean` / Lean Canvas                  | Broader business and startup hypothesis boards with many boxes but no relation labels.          |
 | 6     | `minempathy`, `sb`, `ea`, `insights` visible boards                    | Completes the remaining GUI-visible Blueprint boards before hidden/specialized families.        |
-| 7     | Hidden/specialized families decision                                   | Decide whether `lbm`, `dbm`, `cp`, `sm`, `sq`, `em`, `retros` are worth implementing.           |
+| 7     | Hidden/specialized families decision                                   | Decide whether `lbm`, `dbm`, `cp`, `sm`, `sq`, and `em` are worth implementing.                 |
 
 ## Production Motives By Blueprint
 
@@ -868,8 +871,6 @@ were run in parallel after the milestone was created.
 
 - Whether production writes should create a dedicated temporary Blueprint board
   per phase or use final boilerplate boards directly after each type is proven.
-- Whether `retros` belongs in the Blueprints task or should remain part of a
-  separate Retrospectives workflow.
 - Whether hidden families (`lbm`, `dbm`, `cp`, `sm`, `sq`, `em`) should be
   implemented immediately after visible families or kept as explicit backlog.
 - Whether the plugin should expose translated labels from Leantime language

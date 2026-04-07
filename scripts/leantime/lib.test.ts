@@ -6,7 +6,9 @@ import {
   parseCliFlag,
   parseOutputFormat,
   parsePositionalArgs,
+  readStructuredInput,
   resolveLeantimeConfig,
+  runLeantimeWebRequest,
 } from './lib';
 
 describe('leantime script helpers', () => {
@@ -26,7 +28,27 @@ describe('leantime script helpers', () => {
     it('does not treat tokens after -- as flags', () => {
       expect(
         parseCliFlag(['node', 'script', '--', '--format=json'], 'format'),
-      ).toBeUndefined();
+      ).toBe('json');
+    });
+
+    it('reads flags after pnpm script separator and before a later end-of-options marker', () => {
+      expect(
+        parseCliFlag(
+          [
+            'node',
+            'script',
+            '--',
+            'run',
+            'project.get',
+            '--input',
+            '{"id":2}',
+            '--format=json',
+            '--',
+            'ignored',
+          ],
+          'input',
+        ),
+      ).toBe('{"id":2}');
     });
   });
 
@@ -58,6 +80,37 @@ describe('leantime script helpers', () => {
         ]),
       ).toEqual(['run', 'task.create']);
     });
+
+    it('supports pnpm script argument forwarding', () => {
+      expect(
+        parsePositionalArgs([
+          'node',
+          'script',
+          '--',
+          'run',
+          'project.get',
+          '--input',
+          '{"id":2}',
+          '--format=json',
+        ]),
+      ).toEqual(['run', 'project.get']);
+    });
+  });
+
+  describe('readStructuredInput', () => {
+    it('parses JSON passed after the pnpm separator', () => {
+      expect(
+        readStructuredInput([
+          'node',
+          'script',
+          '--',
+          'run',
+          'project.get',
+          '--input',
+          '{"id":2}',
+        ]),
+      ).toEqual({ id: 2 });
+    });
   });
 
   describe('resolveLeantimeConfig', () => {
@@ -69,6 +122,7 @@ describe('leantime script helpers', () => {
           defaultAuthorId: '12',
           defaultProjectId: '34',
           rpcPath: 'api/jsonrpc',
+          sessionCookie: 'LEANTIMESESSID=example',
           timeoutMs: '45000',
         }),
       ).toEqual({
@@ -78,6 +132,7 @@ describe('leantime script helpers', () => {
         defaultClientId: undefined,
         defaultProjectId: 34,
         rpcUrl: 'https://leantime.example.com/api/jsonrpc',
+        sessionCookie: 'LEANTIMESESSID=example',
         timeoutMs: 45000,
       });
     });
@@ -107,6 +162,24 @@ describe('leantime script helpers', () => {
           baseUrl: 'http://127.0.0.1:8080',
         }).rpcUrl,
       ).toBe('http://127.0.0.1:8080/api/jsonrpc');
+    });
+  });
+
+  describe('runLeantimeWebRequest', () => {
+    it('requires a session cookie for web-session operations', async () => {
+      await expect(
+        runLeantimeWebRequest(
+          {
+            apiKey: 'lt_example',
+            baseUrl: 'https://leantime.example.com/',
+            rpcUrl: 'https://leantime.example.com/api/jsonrpc',
+            timeoutMs: 30000,
+          },
+          {
+            path: '/ideas/boardDialog',
+          },
+        ),
+      ).rejects.toThrow('LEANTIME_SESSION_COOKIE');
     });
   });
 });

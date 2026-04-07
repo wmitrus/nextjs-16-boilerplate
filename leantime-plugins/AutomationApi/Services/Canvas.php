@@ -3,13 +3,20 @@
 namespace Leantime\Plugins\AutomationApi\Services;
 
 use InvalidArgumentException;
+use Leantime\Domain\Canvas\Repositories\Canvas as BaseCanvasRepository;
 use Leantime\Domain\Comments\Repositories\Comments as CommentsRepository;
+use Leantime\Domain\Riskscanvas\Repositories\Riskscanvas as RiskscanvasRepository;
 use Leantime\Domain\Tickets\Services\Tickets as TicketService;
 use Leantime\Domain\Valuecanvas\Repositories\Valuecanvas as ValuecanvasRepository;
 
 class Canvas
 {
     private const DEFAULT_BOARD_TYPE = 'value';
+
+    private const SUPPORTED_BOARD_TYPES = [
+        'risks' => 'Risk Analysis',
+        'value' => 'Project Value Canvas',
+    ];
 
     private const ITEM_WRITE_FIELDS = [
         'action',
@@ -74,6 +81,7 @@ class Canvas
 
     public function __construct(
         private ValuecanvasRepository $valuecanvasRepository,
+        private RiskscanvasRepository $riskscanvasRepository,
         private CommentsRepository $commentsRepository,
         private TicketService $ticketService,
     ) {}
@@ -83,9 +91,13 @@ class Canvas
      */
     public function listBoardTypes(): array
     {
-        return [
-            self::DEFAULT_BOARD_TYPE => $this->boardTypeMetadata(self::DEFAULT_BOARD_TYPE),
-        ];
+        $boardTypes = [];
+
+        foreach (array_keys(self::SUPPORTED_BOARD_TYPES) as $boardType) {
+            $boardTypes[$boardType] = $this->boardTypeMetadata($boardType);
+        }
+
+        return $boardTypes;
     }
 
     /**
@@ -358,18 +370,14 @@ class Canvas
         return $this->repository($boardType)->patchCanvasItem($itemId, ['milestoneId' => '']);
     }
 
-    /**
-     * @return ValuecanvasRepository
-     */
-    private function repository(string $boardType): ValuecanvasRepository
+    private function repository(string $boardType): BaseCanvasRepository
     {
         $boardType = $this->requireSupportedBoardType($boardType);
 
-        if ($boardType === self::DEFAULT_BOARD_TYPE) {
-            return $this->valuecanvasRepository;
-        }
-
-        throw new InvalidArgumentException("Unsupported boardType: {$boardType}");
+        return match ($boardType) {
+            'risks' => $this->riskscanvasRepository,
+            self::DEFAULT_BOARD_TYPE => $this->valuecanvasRepository,
+        };
     }
 
     private function boardTypeMetadata(string $boardType): array
@@ -386,7 +394,7 @@ class Canvas
             'icon' => $repository->getIcon(),
             'relatesLabels' => $repository->getRelatesLabels(),
             'statusLabels' => $repository->getStatusLabels(),
-            'title' => 'Project Value Canvas',
+            'title' => self::SUPPORTED_BOARD_TYPES[$boardType],
         ];
     }
 
@@ -468,8 +476,8 @@ class Canvas
     {
         $boardType = $this->requireNonEmptyString($boardType, 'boardType');
 
-        if ($boardType !== self::DEFAULT_BOARD_TYPE) {
-            throw new InvalidArgumentException("Unsupported boardType for this phase: {$boardType}");
+        if (! array_key_exists($boardType, self::SUPPORTED_BOARD_TYPES)) {
+            throw new InvalidArgumentException("Unsupported boardType: {$boardType}");
         }
 
         return $boardType;

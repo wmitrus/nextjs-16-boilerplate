@@ -558,6 +558,10 @@ Do not reimplement business logic.
 For the implementation-oriented skeleton, see
 [28 - Leantime AutomationApi Plugin MVP.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/28%20-%20Leantime%20AutomationApi%20Plugin%20MVP.md).
 
+For the active Blueprints / Canvas task brief, architecture plan, rollout
+phases, and production Leantime tracking IDs, see
+[30 - Leantime AutomationApi Blueprints Plan.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/30%20-%20Leantime%20AutomationApi%20Blueprints%20Plan.md).
+
 For production plugin deployment, backup, rollback, and manifest rules, see
 [29 - Leantime AutomationApi Plugin Deploy Workflow.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/29%20-%20Leantime%20AutomationApi%20Plugin%20Deploy%20Workflow.md).
 

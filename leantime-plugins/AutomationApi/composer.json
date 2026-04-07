@@ -1,0 +1,16 @@
+{
+  "name": "wmitrus/leantime-automation-api",
+  "description": "On-prem Leantime automation API plugin for Ideas and Blueprint workflows.",
+  "version": "0.1.0",
+  "homepage": "https://leantime.wmitrus.useruno.com/",
+  "authors": [
+    {
+      "name": "Wojciech Mitruś"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Leantime\\Plugins\\AutomationApi\\": "."
+    }
+  }
+}

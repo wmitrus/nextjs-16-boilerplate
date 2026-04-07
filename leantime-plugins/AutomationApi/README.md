@@ -67,6 +67,7 @@ The current Canvas slice supports:
 - `boardType=risks` / Risk Analysis
 - `boardType=swot` / SWOT Analysis
 - `boardType=obm` / Business Model Board
+- `boardType=retros` / Retrospectives
 - `boardType=lean` / Lean Canvas
 - `boardType=minempathy` / Simple Empathy Map
 - `boardType=sb` / Project Brief

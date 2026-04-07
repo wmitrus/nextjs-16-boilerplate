@@ -3,6 +3,8 @@
 namespace Leantime\Plugins\AutomationApi\Services;
 
 use InvalidArgumentException;
+use Leantime\Domain\Comments\Repositories\Comments as CommentsRepository;
+use Leantime\Domain\Tickets\Services\Tickets as TicketService;
 use Leantime\Domain\Valuecanvas\Repositories\Valuecanvas as ValuecanvasRepository;
 
 class Canvas
@@ -72,6 +74,8 @@ class Canvas
 
     public function __construct(
         private ValuecanvasRepository $valuecanvasRepository,
+        private CommentsRepository $commentsRepository,
+        private TicketService $ticketService,
     ) {}
 
     /**
@@ -239,6 +243,122 @@ class Canvas
     }
 
     /**
+     * @api
+     */
+    public function deleteItem(int $itemId, string $boardType = self::DEFAULT_BOARD_TYPE, bool $confirm = false): bool
+    {
+        $this->requireConfirmed($confirm, 'deleteItem');
+        $this->requireItem($itemId, $boardType);
+
+        $this->repository($boardType)->delCanvasItem($itemId);
+
+        return $this->getItem($itemId, $boardType) === false;
+    }
+
+    /**
+     * @api
+     */
+    public function listComments(int $itemId, string $boardType = self::DEFAULT_BOARD_TYPE, int $parent = 0): array|false
+    {
+        $this->requireItem($itemId, $boardType);
+
+        return $this->commentsRepository->getComments($this->commentModule($boardType), $itemId, $parent);
+    }
+
+    /**
+     * @api
+     */
+    public function createComment(int $itemId, string $text, ?int $author = null, string $boardType = self::DEFAULT_BOARD_TYPE, int $parent = 0, ?string $status = null): array|false
+    {
+        $this->requireItem($itemId, $boardType);
+
+        $commentId = $this->commentsRepository->addComment([
+            'commentParent' => $parent,
+            'date' => date('Y-m-d H:i:s'),
+            'moduleId' => $itemId,
+            'status' => $status ?? '',
+            'text' => $this->requireNonEmptyString($text, 'text'),
+            'userId' => $this->resolveAuthor($author),
+        ], $this->commentModule($boardType));
+
+        if ($commentId === false) {
+            return false;
+        }
+
+        return [
+            'commentId' => (int) $commentId,
+            'itemId' => $itemId,
+            'module' => $this->commentModule($boardType),
+        ];
+    }
+
+    /**
+     * @api
+     */
+    public function editComment(int $commentId, string $text): bool
+    {
+        return $this->commentsRepository->editComment(
+            $this->requireNonEmptyString($text, 'text'),
+            $commentId,
+        );
+    }
+
+    /**
+     * @api
+     */
+    public function deleteComment(int $commentId, bool $confirm = false): bool
+    {
+        $this->requireConfirmed($confirm, 'deleteComment');
+
+        return $this->commentsRepository->deleteComment($commentId);
+    }
+
+    /**
+     * @api
+     */
+    public function createAndLinkMilestone(int $itemId, string $headline, ?int $author = null, string $boardType = self::DEFAULT_BOARD_TYPE, array $values = []): array|false
+    {
+        $item = $this->requireItem($itemId, $boardType);
+        $board = $this->requireBoard((int) $item['canvasId'], $boardType);
+        $resolvedAuthor = $this->resolveAuthor($author);
+        $milestoneId = $this->ticketService->quickAddMilestone([
+            'editorId' => $resolvedAuthor,
+            'headline' => $this->requireNonEmptyString($headline, 'headline'),
+            'projectId' => (int) $board['projectId'],
+            'tags' => $values['tags'] ?? '#ccc',
+            'userId' => $resolvedAuthor,
+        ]);
+
+        if (is_array($milestoneId) || $milestoneId === false) {
+            return false;
+        }
+
+        $this->repository($boardType)->patchCanvasItem($itemId, ['milestoneId' => (string) $milestoneId]);
+
+        return $this->getItem($itemId, $boardType);
+    }
+
+    /**
+     * @api
+     */
+    public function linkMilestone(int $itemId, int $milestoneId, string $boardType = self::DEFAULT_BOARD_TYPE): bool
+    {
+        $this->requireItem($itemId, $boardType);
+
+        return $this->repository($boardType)->patchCanvasItem($itemId, ['milestoneId' => (string) $milestoneId]);
+    }
+
+    /**
+     * @api
+     */
+    public function unlinkMilestone(int $itemId, string $boardType = self::DEFAULT_BOARD_TYPE): bool
+    {
+        $this->requireItem($itemId, $boardType);
+
+        return $this->repository($boardType)->patchCanvasItem($itemId, ['milestoneId' => '']);
+    }
+
+    /**
      * @return ValuecanvasRepository
      */
     private function repository(string $boardType): ValuecanvasRepository
@@ -268,6 +388,11 @@ class Canvas
             'statusLabels' => $repository->getStatusLabels(),
             'title' => 'Project Value Canvas',
         ];
+    }
+
+    private function commentModule(string $boardType): string
+    {
+        return $this->requireSupportedBoardType($boardType).'canvasitem';
     }
 
     private function normalizeItemPayload(array $values, string $boardType): array

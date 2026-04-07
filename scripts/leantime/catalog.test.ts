@@ -222,6 +222,94 @@ describe('leantime catalog', () => {
     expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
   });
 
+  it('creates a Project Value Canvas item comment through plugin RPC', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      commentId: 7,
+      itemId: 16,
+      module: 'valuecanvasitem',
+    });
+
+    const result = await executeOperation('blueprints.comment.create', {
+      config,
+      input: {
+        boardType: 'value',
+        itemId: 16,
+        text: '<p>Evidence comment</p>',
+      },
+    });
+
+    expect(result).toEqual({
+      commentId: 7,
+      itemId: 16,
+      module: 'valuecanvasitem',
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createComment',
+      {
+        author: undefined,
+        boardType: 'value',
+        itemId: 16,
+        parent: 0,
+        status: '',
+        text: '<p>Evidence comment</p>',
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('links an existing milestone to a Project Value Canvas item through plugin RPC', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce(true);
+
+    const result = await executeOperation(
+      'blueprints.milestone.link-existing',
+      {
+        config,
+        input: {
+          boardType: 'value',
+          existingMilestoneId: 25,
+          itemId: 16,
+        },
+      },
+    );
+
+    expect(result).toBe(true);
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.linkMilestone',
+      {
+        boardType: 'value',
+        itemId: 16,
+        milestoneId: 25,
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('requires explicit confirmation for destructive Project Value Canvas item deletion', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce(true);
+
+    await executeOperation('blueprints.item.delete', {
+      config,
+      input: {
+        boardType: 'value',
+        confirm: true,
+        itemId: 16,
+      },
+    });
+
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.deleteItem',
+      {
+        boardType: 'value',
+        confirm: true,
+        itemId: 16,
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
   it('creates an ideas board through the AutomationApi plugin RPC flow', async () => {
     mockRunLeantimeRpc.mockResolvedValueOnce(['13']);
 

@@ -68,6 +68,10 @@ The current Canvas slice supports:
 - `boardType=swot` / SWOT Analysis
 - `boardType=obm` / Business Model Board
 - `boardType=lean` / Lean Canvas
+- `boardType=minempathy` / Simple Empathy Map
+- `boardType=sb` / Project Brief
+- `boardType=ea` / Environmental Analysis
+- `boardType=insights` / Observe / Learn - Insights
 
 Additional Blueprint families should be added one rollout phase at a time.
 

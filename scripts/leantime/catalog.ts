@@ -18,6 +18,10 @@ const BLUEPRINT_BOARD_TYPES = [
   'swot',
   'obm',
   'lean',
+  'minempathy',
+  'sb',
+  'ea',
+  'insights',
 ] as const;
 
 type BlueprintBoardType = (typeof BLUEPRINT_BOARD_TYPES)[number];

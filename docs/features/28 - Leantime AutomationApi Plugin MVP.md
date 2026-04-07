@@ -644,9 +644,9 @@ Production deployment state:
 Next implementation slice:
 
 - keep destructive Ideas wrappers behind explicit cleanup tasks
-- continue `AutomationApi.Canvas` / Blueprints with phase 6 Empathy, Project
-  Brief, Environmental Analysis, and Insights after the Project Value Canvas,
-  Risk Analysis, SWOT, Business Model, and Lean Canvas slices
+- continue `AutomationApi.Canvas` / Blueprints with the phase 7 decision on
+  hidden or specialized canvas families after the visible board set is
+  production deployed and read-only validated
 
 The dedicated Blueprints / Canvas task brief, architecture plan, rollout phases,
 and production Leantime tracking IDs are documented in

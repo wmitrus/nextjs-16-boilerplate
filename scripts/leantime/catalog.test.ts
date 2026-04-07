@@ -484,6 +484,192 @@ describe('leantime catalog', () => {
     expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
   });
 
+  it('creates a Simple Empathy Map item through the generic Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'minempathy_who',
+      canvasId: 26,
+      description: 'Solo developer adopting the boilerplate',
+      id: 27,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 26,
+        boardType: 'minempathy',
+        box: 'minempathy_who',
+        data: '<p>Founder or senior engineer starting a new app.</p>',
+        title: 'Solo developer adopting the boilerplate',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'minempathy_who',
+      canvasId: 26,
+      description: 'Solo developer adopting the boilerplate',
+      id: 27,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'minempathy',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'minempathy_who',
+          canvasId: 26,
+          clientId: 1,
+          data: '<p>Founder or senior engineer starting a new app.</p>',
+          description: 'Solo developer adopting the boilerplate',
+          projectId: 2,
+          title: 'Solo developer adopting the boilerplate',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('creates a Project Brief item through the generic Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'sb_description',
+      canvasId: 28,
+      description: 'Boilerplate delivery mission',
+      id: 29,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 28,
+        boardType: 'sb',
+        box: 'sb_description',
+        data: '<p>Capture the strategic brief for the reusable app base.</p>',
+        title: 'Boilerplate delivery mission',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'sb_description',
+      canvasId: 28,
+      description: 'Boilerplate delivery mission',
+      id: 29,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'sb',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'sb_description',
+          canvasId: 28,
+          clientId: 1,
+          data: '<p>Capture the strategic brief for the reusable app base.</p>',
+          description: 'Boilerplate delivery mission',
+          projectId: 2,
+          title: 'Boilerplate delivery mission',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('creates an Environmental Analysis item through the generic Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'ea_technological',
+      canvasId: 30,
+      description: 'Rapid framework release cadence',
+      id: 31,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 30,
+        boardType: 'ea',
+        box: 'ea_technological',
+        data: '<p>Next.js, React, and auth providers change quickly.</p>',
+        relates: 'relates_offerings',
+        title: 'Rapid framework release cadence',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'ea_technological',
+      canvasId: 30,
+      description: 'Rapid framework release cadence',
+      id: 31,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'ea',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'ea_technological',
+          canvasId: 30,
+          clientId: 1,
+          data: '<p>Next.js, React, and auth providers change quickly.</p>',
+          description: 'Rapid framework release cadence',
+          projectId: 2,
+          relates: 'relates_offerings',
+          title: 'Rapid framework release cadence',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('creates an Insights item through the generic Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'insights_knowledge',
+      canvasId: 32,
+      description: 'Deployment workflow evidence',
+      id: 33,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 32,
+        boardType: 'insights',
+        box: 'insights_knowledge',
+        data: '<p>Local smoke plus production read-only validation.</p>',
+        title: 'Deployment workflow evidence',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'insights_knowledge',
+      canvasId: 32,
+      description: 'Deployment workflow evidence',
+      id: 33,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'insights',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'insights_knowledge',
+          canvasId: 32,
+          clientId: 1,
+          data: '<p>Local smoke plus production read-only validation.</p>',
+          description: 'Deployment workflow evidence',
+          projectId: 2,
+          title: 'Deployment workflow evidence',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
   it('creates a Project Value Canvas item comment through plugin RPC', async () => {
     mockRunLeantimeRpc.mockResolvedValueOnce({
       commentId: 7,

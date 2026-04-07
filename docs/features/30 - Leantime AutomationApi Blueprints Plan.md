@@ -195,13 +195,9 @@ read-only validated, documented, and committed before the next phase starts.
 | 2     | Generic comments, milestone links, delete-confirm controls for `value` | Validates shared item collaboration before broadening to more board types.                      |
 | 3     | `risks` / Risk Analysis                                                | Introduces risk quadrants and useful `relates` semantics for production planning.               |
 | 4     | `swot` / SWOT Analysis                                                 | Similar four-box shape, validates another relation-aware board.                                 |
-| 5     | `obm` / Business Model Board                                           | Broader business model with nine boxes.                                                         |
-| 6     | `lean` / Lean Canvas                                                   | Startup/product hypothesis structure with overlapping keys from `value`.                        |
-| 7     | `minempathy` / Simple Empathy Map                                      | Customer research view, short visible board.                                                    |
-| 8     | `sb` / Project Brief                                                   | Planning/RACI style project context.                                                            |
-| 9     | `ea` / Environmental Analysis                                          | PESTLE with explicit status and relation labels.                                                |
-| 10    | `insights` / Observe / Learn                                           | Research evidence capture; includes upstream typo `insights_oberve`.                            |
-| 11    | Hidden/specialized families decision                                   | Decide whether `lbm`, `dbm`, `cp`, `sm`, `sq`, `em`, `retros` are worth implementing.           |
+| 5     | `obm` / Business Model Board and `lean` / Lean Canvas                  | Broader business and startup hypothesis boards with many boxes but no relation labels.          |
+| 6     | `minempathy`, `sb`, `ea`, `insights` visible boards                    | Completes the remaining GUI-visible Blueprint boards before hidden/specialized families.        |
+| 7     | Hidden/specialized families decision                                   | Decide whether `lbm`, `dbm`, `cp`, `sm`, `sq`, `em`, `retros` are worth implementing.           |
 
 ## Production Motives By Blueprint
 
@@ -676,6 +672,176 @@ Phase 5 residual scope:
   boilerplate Blueprint boards are seeded or a temporary production board is
   explicitly approved.
 - `minempathy`, `sb`, `ea`, and `insights` remain phase 6.
+
+## Phase 6 Implementation Log - Remaining Visible Boards
+
+Phase 6 was implemented on 2026-04-07 for the remaining GUI-visible Blueprint
+boards:
+
+- `boardType=minempathy` / Simple Empathy Map
+- `boardType=sb` / Project Brief
+- `boardType=ea` / Environmental Analysis
+- `boardType=insights` / Observe / Learn - Insights
+
+Implementation summary:
+
+- added the four repository dependencies to `AutomationApi.Canvas`
+- expanded `blueprints.*` CLI validation to accept `minempathy`, `sb`, `ea`,
+  and `insights`
+- added contract tests for representative create-item payloads for all four
+  board types
+- kept the same shared board, item, comment, milestone, and confirm-delete
+  methods from previous phases
+- hardened the board `description` RPC boundary to accept `null`; Leantime's
+  JSON-RPC parameter preparation can normalize an empty top-level string to
+  `null` before service invocation
+
+Simple Empathy Map metadata confirmed from local upstream code and live smoke:
+
+- canvas type: `minempathycanvas`
+- comment module: `minempathycanvasitem`
+- boxes:
+  - `minempathy_who`
+  - `minempathy_struggles`
+  - `minempathy_where`
+  - `minempathy_why`
+  - `minempathy_how`
+- data labels:
+  - `conclusion`
+  - `data`
+  - `assumptions`
+- `relatesLabels` is intentionally empty upstream
+- status labels are inherited from the shared Canvas base repository
+
+Project Brief metadata confirmed from local upstream code and live smoke:
+
+- canvas type: `sbcanvas`
+- comment module: `sbcanvasitem`
+- boxes:
+  - `sb_industry`
+  - `sb_description`
+  - `sb_st_design`
+  - `sb_st_decision`
+  - `sb_st_experts`
+  - `sb_st_support`
+  - `sb_budget`
+  - `sb_time`
+  - `sb_culture`
+  - `sb_change`
+  - `sb_principles`
+- data labels:
+  - `conclusion`
+  - `data`
+  - `assumptions`
+- `relatesLabels` is intentionally empty upstream
+- status labels:
+  - `status_pending`
+  - `status_accepted`
+  - `status_rejected`
+
+Environmental Analysis metadata confirmed from local upstream code and live
+smoke:
+
+- canvas type: `eacanvas`
+- comment module: `eacanvasitem`
+- boxes:
+  - `ea_political`
+  - `ea_economic`
+  - `ea_societal`
+  - `ea_technological`
+  - `ea_legal`
+  - `ea_ecological`
+- data labels:
+  - `conclusion`
+  - `data`
+  - `assumptions`
+- relation labels:
+  - `relates_none`
+  - `relates_customers`
+  - `relates_offerings`
+  - `relates_markets`
+  - `relates_stakeholders`
+- status labels:
+  - `status_observation`
+  - `status_threat`
+  - `status_trend`
+
+Insights metadata confirmed from local upstream code and live smoke:
+
+- canvas type: `insightscanvas`
+- comment module: `insightscanvasitem`
+- boxes:
+  - `insights_oberve`
+  - `insights_interview`
+  - `insights_focus_groups`
+  - `insights_secondary_research`
+  - `insights_knowledge`
+- note: `insights_oberve` is the upstream key spelling in code; do not silently
+  "fix" it to `insights_observe` in automation payloads
+- data labels:
+  - `conclusion`
+  - `data`
+  - `assumptions`
+- relation labels are inherited from the shared Canvas base repository
+- status labels are inherited from the shared Canvas base repository
+
+Local write smoke test against the Podman Leantime stack:
+
+- `blueprints.types.list` returned `minempathy`, `sb`, `ea`, `insights`,
+  `obm`, `lean`, `swot`, `risks`, and `value`
+- created local Simple Empathy Map board `#19`: `CLI Simple Empathy Map`
+- created local Simple Empathy Map item `#10` in box `minempathy_who`
+- patched local Simple Empathy Map item `#10` to `status_valid`
+- created local Project Brief board `#20`: `CLI Project Brief`
+- created local Project Brief item `#11` in box `sb_description`
+- patched local Project Brief item `#11` to `status_accepted`
+- created local Environmental Analysis board `#21`: `CLI Environmental Analysis`
+- created local Environmental Analysis item `#12` in box `ea_technological`
+  with `relates_offerings`
+- patched local Environmental Analysis item `#12` to `status_trend`
+- read local Environmental Analysis item `#12` back and confirmed status,
+  conclusion, and relation persisted
+- created local Insights board `#22`: `CLI Insights Board`
+- created local Insights item `#13` in box `insights_knowledge`
+- patched local Insights item `#13` to `status_review`
+
+Production deploy evidence:
+
+- apply manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T17-33-17Z-AutomationApi-apply.json`
+- post-deploy plan manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T17-33-44Z-AutomationApi-plan.json`
+- deployment actions: `overwrite: 2`, `skip-same: 4`
+- post-deploy plan result: `skip-same: 6`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T17-33-17Z/README.md`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T17-33-17Z/Services/Canvas.php`
+
+Production read-only smoke test:
+
+- `blueprints.types.list` returned `minempathy`, `sb`, `ea`, and `insights`
+  metadata, translated box labels, status labels, and relation labels where
+  upstream exposes them.
+- `blueprints.board.list` for project `2` and `boardType=minempathy` returned
+  `[]`, confirming the endpoint works and that no real production Simple
+  Empathy Map board has been seeded yet.
+- `blueprints.board.list` for project `2` and `boardType=sb` returned `[]`,
+  confirming the endpoint works and that no real production Project Brief board
+  has been seeded yet.
+- `blueprints.board.list` for project `2` and `boardType=ea` returned `[]`,
+  confirming the endpoint works and that no real production Environmental
+  Analysis board has been seeded yet.
+- `blueprints.board.list` for project `2` and `boardType=insights` returned
+  `[]`, confirming the endpoint works and that no real production Insights board
+  has been seeded yet.
+
+Phase 6 residual scope:
+
+- production write smoke remains intentionally deferred until real boilerplate
+  Blueprint boards are seeded or a temporary production board is explicitly
+  approved.
+- hidden/specialized families remain phase 7.
 
 ## Leantime Tracking Artifacts
 

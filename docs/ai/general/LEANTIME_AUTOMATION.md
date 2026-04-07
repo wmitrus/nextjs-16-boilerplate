@@ -540,6 +540,23 @@ Normal board, idea, comment, reaction, label, milestone-link, and kanban status
 operations should prefer plugin RPC where the `AutomationApi` plugin is
 available.
 
+Blueprints now have a plugin-backed generic Canvas slice for the visible boards
+completed so far:
+
+- `boardType=value` / Project Value Canvas
+- `boardType=risks` / Risk Analysis
+- `boardType=swot` / SWOT Analysis
+- `boardType=obm` / Business Model Board
+- `boardType=lean` / Lean Canvas
+- `boardType=minempathy` / Simple Empathy Map
+- `boardType=sb` / Project Brief
+- `boardType=ea` / Environmental Analysis
+- `boardType=insights` / Observe / Learn - Insights
+
+Use `insights_oberve` for the Insights observation box. This is the upstream
+Leantime key spelling in code; do not silently change it to
+`insights_observe` in automation payloads.
+
 Verified internal Ideas status keys:
 
 - `idea`
@@ -730,17 +747,19 @@ Ideas still have a small validation backlog:
 
 Native API or documented stable automation coverage is currently weak or missing for:
 
-- native blueprint board creation / editing
 - retrospective board automation
-- generic blueprint JSON-RPC CRUD outside `Goalcanvas`
+- hidden or specialized blueprint families not yet added to
+  `AutomationApi.Canvas`, such as `lbm`, `dbm`, `cp`, `sm`, `sq`, and `em`
 
 Until the on-prem `AutomationApi` plugin grows the remaining unsupported flows,
 agents should use:
 
 - plugin-backed `ideas.*` flows for board, idea, comment, reaction, label,
   milestone-link, and kanban movement
+- plugin-backed `blueprints.*` flows for visible Blueprint board and item
+  automation
 - no web-session fallback for normal Ideas automation
-- wiki articles for structured project briefs, insights, and retros
+- wiki articles for retros and any unsupported hidden/specialized canvas family
 - goals plus milestones plus tasks for execution tracking
 - `pnpm lt:rpc` only for officially documented methods
 

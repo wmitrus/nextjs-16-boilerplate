@@ -5,9 +5,13 @@ namespace Leantime\Plugins\AutomationApi\Services;
 use InvalidArgumentException;
 use Leantime\Domain\Canvas\Repositories\Canvas as BaseCanvasRepository;
 use Leantime\Domain\Comments\Repositories\Comments as CommentsRepository;
+use Leantime\Domain\Eacanvas\Repositories\Eacanvas as EacanvasRepository;
+use Leantime\Domain\Insightscanvas\Repositories\Insightscanvas as InsightscanvasRepository;
 use Leantime\Domain\Leancanvas\Repositories\Leancanvas as LeancanvasRepository;
+use Leantime\Domain\Minempathycanvas\Repositories\Minempathycanvas as MinempathycanvasRepository;
 use Leantime\Domain\Obmcanvas\Repositories\Obmcanvas as ObmcanvasRepository;
 use Leantime\Domain\Riskscanvas\Repositories\Riskscanvas as RiskscanvasRepository;
+use Leantime\Domain\Sbcanvas\Repositories\Sbcanvas as SbcanvasRepository;
 use Leantime\Domain\Swotcanvas\Repositories\Swotcanvas as SwotcanvasRepository;
 use Leantime\Domain\Tickets\Services\Tickets as TicketService;
 use Leantime\Domain\Valuecanvas\Repositories\Valuecanvas as ValuecanvasRepository;
@@ -17,9 +21,13 @@ class Canvas
     private const DEFAULT_BOARD_TYPE = 'value';
 
     private const SUPPORTED_BOARD_TYPES = [
+        'ea' => 'Environmental Analysis',
+        'insights' => 'Observe / Learn - Insights',
         'lean' => 'Lean Canvas',
+        'minempathy' => 'Simple Empathy Map',
         'obm' => 'Business Model Board',
         'risks' => 'Risk Analysis',
+        'sb' => 'Project Brief',
         'swot' => 'SWOT Analysis',
         'value' => 'Project Value Canvas',
     ];
@@ -87,9 +95,13 @@ class Canvas
 
     public function __construct(
         private ValuecanvasRepository $valuecanvasRepository,
+        private EacanvasRepository $eacanvasRepository,
+        private InsightscanvasRepository $insightscanvasRepository,
         private LeancanvasRepository $leancanvasRepository,
+        private MinempathycanvasRepository $minempathycanvasRepository,
         private ObmcanvasRepository $obmcanvasRepository,
         private RiskscanvasRepository $riskscanvasRepository,
+        private SbcanvasRepository $sbcanvasRepository,
         private SwotcanvasRepository $swotcanvasRepository,
         private CommentsRepository $commentsRepository,
         private TicketService $ticketService,
@@ -142,12 +154,12 @@ class Canvas
     /**
      * @api
      */
-    public function createBoard(int $projectId, string $title, ?int $author = null, string $boardType = self::DEFAULT_BOARD_TYPE, string $description = ''): array|false
+    public function createBoard(int $projectId, string $title, ?int $author = null, string $boardType = self::DEFAULT_BOARD_TYPE, ?string $description = null): array|false
     {
         $repository = $this->repository($boardType);
         $boardId = $repository->addCanvas([
             'author' => $this->resolveAuthor($author),
-            'description' => $description,
+            'description' => $description ?? '',
             'projectId' => $projectId,
             'title' => $this->requireNonEmptyString($title, 'title'),
         ]);
@@ -162,12 +174,12 @@ class Canvas
     /**
      * @api
      */
-    public function updateBoard(int $boardId, string $title, string $boardType = self::DEFAULT_BOARD_TYPE, string $description = ''): bool
+    public function updateBoard(int $boardId, string $title, string $boardType = self::DEFAULT_BOARD_TYPE, ?string $description = null): bool
     {
         $this->requireBoard($boardId, $boardType);
 
         return $this->repository($boardType)->updateCanvas([
-            'description' => $description,
+            'description' => $description ?? '',
             'id' => $boardId,
             'title' => $this->requireNonEmptyString($title, 'title'),
         ]) >= 0;
@@ -384,9 +396,13 @@ class Canvas
         $boardType = $this->requireSupportedBoardType($boardType);
 
         return match ($boardType) {
+            'ea' => $this->eacanvasRepository,
+            'insights' => $this->insightscanvasRepository,
             'lean' => $this->leancanvasRepository,
+            'minempathy' => $this->minempathycanvasRepository,
             'obm' => $this->obmcanvasRepository,
             'risks' => $this->riskscanvasRepository,
+            'sb' => $this->sbcanvasRepository,
             'swot' => $this->swotcanvasRepository,
             self::DEFAULT_BOARD_TYPE => $this->valuecanvasRepository,
         };

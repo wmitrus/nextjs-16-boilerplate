@@ -1020,6 +1020,10 @@ diagnostics.
 The detailed implementation skeleton for that plugin lives in
 [28 - Leantime AutomationApi Plugin MVP.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/28%20-%20Leantime%20AutomationApi%20Plugin%20MVP.md).
 
+The dedicated Blueprints / Canvas task brief, architecture plan, rollout phases,
+and production Leantime tracking IDs live in
+[30 - Leantime AutomationApi Blueprints Plan.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/30%20-%20Leantime%20AutomationApi%20Blueprints%20Plan.md).
+
 The production-safe deployment, backup, rollback, and manifest workflow lives in
 [29 - Leantime AutomationApi Plugin Deploy Workflow.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/29%20-%20Leantime%20AutomationApi%20Plugin%20Deploy%20Workflow.md).
 

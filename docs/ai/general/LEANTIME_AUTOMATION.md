@@ -65,6 +65,18 @@ Verified against the on-prem instance on `2026-04-06`:
 - `blueprints.milestone.create-link`
 - `blueprints.milestone.link-existing`
 - `blueprints.milestone.unlink`
+- `retrospectives.board.create`
+- `retrospectives.board.list`
+- `retrospectives.board.get`
+- `retrospectives.board.update`
+- `retrospectives.item.create`
+- `retrospectives.item.list`
+- `retrospectives.item.get`
+- `retrospectives.item.update`
+- `retrospectives.item.patch`
+- `retrospectives.comment.create`
+- `retrospectives.comment.list`
+- `retrospectives.milestone.create-link`
 - `ideas.board.create`
 - `ideas.board.list`
 - `ideas.board.get`
@@ -758,9 +770,11 @@ Ideas still have a small validation backlog:
 
 Native API or documented stable automation coverage is currently weak or missing for:
 
-- retrospective board automation
 - hidden or specialized blueprint families not yet added to
   `AutomationApi.Canvas`, such as `lbm`, `dbm`, `cp`, `sm`, `sq`, and `em`
+
+> **Note**: Retrospective board automation is now available through the
+> `retrospectives.*` alias family. See the Retrospectives CLI Operations section.
 
 Until the on-prem `AutomationApi` plugin grows the remaining unsupported flows,
 agents should use:
@@ -769,8 +783,9 @@ agents should use:
   milestone-link, and kanban movement
 - plugin-backed `blueprints.*` flows for visible Blueprint board and item
   automation
+- plugin-backed `retrospectives.*` flows for Retrospective boards and items
 - no web-session fallback for normal Ideas automation
-- wiki articles for retros and any unsupported hidden/specialized canvas family
+- wiki articles for any unsupported hidden/specialized canvas family
 - goals plus milestones plus tasks for execution tracking
 - `pnpm lt:rpc` only for officially documented methods
 
@@ -790,3 +805,230 @@ Keep this follow-up list explicit:
 - project assignment fields such as `assignedUsers`
 - supported file-upload or richer attachment workflows if exposed by the instance
 - destructive Ideas cleanup commands only when explicitly requested
+
+---
+
+## Mandatory Agent Flow
+
+**Every non-trivial task that uses an AI agent or workflow MUST include Leantime
+steps at task open and task close.**
+
+This applies to all task types: feature implementation, bug fix, refactor,
+documentation, security incident, baseline validation, and E2E verification.
+
+The `10 - Leantime Integration Agent` is responsible for executing these steps.
+The Workflow Orchestrator (`08`) invokes it at the boundaries defined below.
+
+### Task Open Protocol
+
+At the start of every non-trivial task:
+
+1. **Check for existing tasks**: Run `tasks.list` and `milestones.list` for the
+   project. Do not create duplicates.
+2. **Create or locate the milestone**: Use `milestone.create` if no matching
+   milestone exists, or record the existing `milestoneid`.
+3. **Create the main task**: Use `task.create` with a rich HTML description
+   following the Task Description Template below.
+4. **Patch task status to W toku**: Run `task.patch` with `status: 4`.
+5. **Record the task ID**: Store the Leantime task ID in the task artifact
+   (e.g., `intake.md` or `plan.md`) so subsequent steps can reference it.
+
+### Task Close Protocol
+
+At the end of every non-trivial task:
+
+1. **Patch task status to Zrobione**: Run `task.patch` with `status: 0`.
+2. **Log time**: Run `time.log` with a summary of work done.
+3. **Update wiki if applicable**: Run `wiki.article.update` for implementation
+   notes, findings, or retrospective comments.
+4. **Seed production boards if required**: Run `retrospectives.board.create` or
+   `blueprints.board.create` only when explicitly part of the task scope.
+
+### Status Reference
+
+| Code | Label       | Meaning                     |
+| ---- | ----------- | --------------------------- |
+| 3    | Nowe        | Not yet started             |
+| 4    | W toku      | In progress (active work)   |
+| 0    | Zrobione    | Done                        |
+| 1    | Zablokowane | Blocked                     |
+| 2    | Do oceny    | Pending explicit acceptance |
+
+---
+
+## Time Tracking Policy
+
+**Log time once at task close, not at every handoff.**
+
+Rules:
+
+- Use `pnpm lt -- run time.log` (not `pnpm lt:rpc`).
+- Estimate hours from session duration. Do not fabricate precise timestamps.
+- Use the correct `kind` value:
+
+| Work type                                | `kind`          |
+| ---------------------------------------- | --------------- |
+| Code implementation, refactor            | `DEVELOPMENT`   |
+| Writing or updating documentation        | `DOCUMENTATION` |
+| Bug investigation and fix                | `BUG`           |
+| Planning, orchestration, task management | `MANAGEMENT`    |
+| Code review, quality checks              | `REVIEW`        |
+
+- Hour estimates:
+  - Short task (< 30 min): `0.5`
+  - Moderate task (1–2 sessions): `1.0`–`2.0`
+  - Full-session implementation: `3.0`–`4.0`
+  - Multi-session: sum across sessions, log once at close
+
+Example:
+
+```shell
+pnpm lt -- run time.log --input '{"ticketId":35,"hours":1.5,"kind":"DEVELOPMENT","description":"Implemented retrospectives CLI alias and updated all agent extension files.","date":"2026-04-07"}' --format=json
+```
+
+---
+
+## Task Description Template
+
+Use this HTML template for all Leantime task descriptions. Adjust sections as
+needed for the task type.
+
+```html
+<h2>Objective</h2>
+<p>[One-sentence summary of what this task achieves and why it matters.]</p>
+
+<h2>Scope</h2>
+<ul>
+  <li>[Scope item 1]</li>
+  <li>[Scope item 2]</li>
+</ul>
+
+<h2>Out of Scope</h2>
+<ul>
+  <li>[Excluded item 1]</li>
+</ul>
+
+<h2>Acceptance Criteria</h2>
+<ul>
+  <li>[Criterion 1]</li>
+  <li>[Criterion 2]</li>
+</ul>
+
+<h2>Affected Areas</h2>
+<ul>
+  <li>[File, module, or system 1]</li>
+</ul>
+
+<h2>Notes</h2>
+<p>[Any context, constraints, or decisions relevant to this task.]</p>
+```
+
+For subtasks, a shorter format is acceptable:
+
+```html
+<p>
+  [Brief description of what this subtask covers and its definition of done.]
+</p>
+```
+
+---
+
+## Task Creation Field Reference
+
+When using `task.create`, always include these fields:
+
+| Field                | Required    | Notes                                                      |
+| -------------------- | ----------- | ---------------------------------------------------------- |
+| `headline`           | Yes         | Short, imperative title (e.g., "Add retrospectives alias") |
+| `projectId`          | Yes         | Default: `LEANTIME_DEFAULT_PROJECT_ID` (2)                 |
+| `description`        | Yes         | Full HTML using the Task Description Template              |
+| `acceptanceCriteria` | Recommended | Markdown or plain text list of done criteria               |
+| `priority`           | Recommended | 1 (low) – 3 (medium) – 5 (high)                            |
+| `storypoints`        | Optional    | Effort estimate in points                                  |
+| `planHours`          | Optional    | Planned effort in hours                                    |
+| `milestoneid`        | Recommended | Link to the parent milestone                               |
+| `tags`               | Optional    | Comma-separated: e.g., `leantime,automation,cli`           |
+| `status`             | Yes         | Set to `3` (Nowe) on create, then patch to `4`             |
+| `type`               | Optional    | Default: task. Use `milestone` type for milestones         |
+
+For milestones, use `milestone.create`:
+
+| Field         | Notes                         |
+| ------------- | ----------------------------- |
+| `headline`    | Short milestone title         |
+| `projectId`   | Default project               |
+| `description` | HTML content                  |
+| `tags`        | Optional comma-separated tags |
+
+---
+
+## Retrospectives CLI Operations
+
+Retrospectives are now available as a dedicated `retrospectives.*` alias family.
+These operations delegate to `blueprints.*` with `boardType=retros` and the
+Retroscanvas box model:
+
+| Box key      | Board column                                   |
+| ------------ | ---------------------------------------------- |
+| `well`       | Continue — What went well?                     |
+| `notwell`    | Stop — What should we stop doing?              |
+| `startdoing` | Start — What should we start doing to improve? |
+
+Available operations:
+
+- `retrospectives.board.create` — Create a new Retrospective board
+- `retrospectives.board.list` — List all Retrospective boards
+- `retrospectives.board.get` — Get a specific Retrospective board
+- `retrospectives.board.update` — Update a Retrospective board title
+- `retrospectives.item.create` — Create an item in a box (`well`, `notwell`, `startdoing`)
+- `retrospectives.item.list` — List items on a Retrospective board
+- `retrospectives.item.get` — Get a specific item
+- `retrospectives.item.update` — Update an item
+- `retrospectives.item.patch` — Patch individual item fields
+- `retrospectives.comment.create` — Add a comment to an item
+- `retrospectives.comment.list` — List comments on an item
+- `retrospectives.milestone.create-link` — Create and link a milestone to an item
+
+Example:
+
+```shell
+pnpm lt -- run retrospectives.board.create --input '{"title":"Sprint Retrospective Q2 2026","projectId":2}' --format=json
+pnpm lt -- run retrospectives.item.create --input '{"boardId":123,"box":"well","title":"Deployment pipeline worked flawlessly"}' --format=json
+pnpm lt -- run retrospectives.item.create --input '{"boardId":123,"box":"notwell","title":"PR review cycle too slow"}' --format=json
+pnpm lt -- run retrospectives.item.create --input '{"boardId":123,"box":"startdoing","title":"Add automated smoke tests before deploy"}' --format=json
+```
+
+---
+
+## Secondary Area Decisions
+
+The following areas were deferred from earlier phases. Their current status is:
+
+### File Upload / Write Surface
+
+- **Status**: Not implemented, not validated.
+- **Decision**: Out of scope for the current automation layer. Leantime file
+  uploads are browser-form driven and have no confirmed stable JSON-RPC surface.
+  Agents must not attempt file upload automation until this is explicitly
+  re-evaluated in a future task.
+
+### Project Assignment Semantics (`assignedUsers`)
+
+- **Status**: Field exists in Leantime's project model but has not been
+  validated in the automation layer.
+- **Decision**: Deferred. When needed, validate `project.patch` with
+  `assignedUsers` against the on-prem instance before relying on it in
+  production automation.
+
+### Blueprints / Retrospectives Delete Flows
+
+- **Status**: Delete operations exist in the `AutomationApi.Canvas` plugin with
+  `confirm=true` requirement.
+- **Decision**: Only invoke delete flows when explicitly requested by the
+  operator as a cleanup task. Default agent behavior must never trigger delete.
+
+### Hidden / Specialized Canvas Families
+
+- **Status**: `lbm`, `dbm`, `cp`, `sm`, `sq`, `em` are deferred.
+- **Decision**: Deferred pending explicit future decision. Do not implement until
+  the hidden canvas families are explicitly included in a task brief.

@@ -1185,6 +1185,32 @@ const OPERATIONS: OperationDefinition[] = [
     },
   },
   {
+    id: 'blueprints.board.delete',
+    title: 'Delete Blueprint Board',
+    category: 'blueprints',
+    description:
+      'Delete one supported Blueprint board through AutomationApi Canvas RPC. Requires confirm=true.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.board.delete input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.deleteBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'id'],
+            'boardId',
+          ),
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          confirm: getOptionalBoolean(record, 'confirm') ?? false,
+        },
+      );
+    },
+  },
+  {
     id: 'blueprints.item.list',
     title: 'List Blueprint Items',
     category: 'blueprints',
@@ -1302,6 +1328,223 @@ const OPERATIONS: OperationDefinition[] = [
             getStringValue(record, ['boardType', 'type']),
           ),
           fields,
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.item.delete',
+    title: 'Delete Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Delete one supported Blueprint item through AutomationApi Canvas RPC. Requires confirm=true.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.item.delete input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.deleteItem',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          confirm: getOptionalBoolean(record, 'confirm') ?? false,
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.comment.list',
+    title: 'List Blueprint Item Comments',
+    category: 'blueprints',
+    description:
+      'List comments for a supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.comment.list input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.listComments',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+          parent: getOptionalNonNegativeInt(record, 'parent') ?? 0,
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.comment.create',
+    title: 'Add Blueprint Item Comment',
+    category: 'blueprints',
+    description:
+      'Add a comment to a supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.comment.create input');
+      const text = getNonEmptyStringValue(record, ['text', 'comment']);
+
+      if (!text) {
+        throw new Error(
+          'blueprints.comment.create requires "text" or "comment".',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createComment',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+          parent: getOptionalNonNegativeInt(record, 'parent') ?? 0,
+          status: getStringValue(record, ['status']) ?? '',
+          text,
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.comment.edit',
+    title: 'Edit Blueprint Item Comment',
+    category: 'blueprints',
+    description:
+      'Edit a supported Blueprint item comment through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.comment.edit input');
+      const text = getNonEmptyStringValue(record, ['text', 'comment']);
+
+      if (!text) {
+        throw new Error(
+          'blueprints.comment.edit requires "text" or "comment".',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.editComment',
+        {
+          commentId: requirePositiveIdFromKeys(
+            record,
+            ['commentId', 'id'],
+            'commentId',
+          ),
+          text,
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.comment.delete',
+    title: 'Delete Blueprint Item Comment',
+    category: 'blueprints',
+    description:
+      'Delete a supported Blueprint item comment through AutomationApi Canvas RPC. Requires confirm=true.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.comment.delete input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.deleteComment',
+        {
+          commentId: requirePositiveIdFromKeys(
+            record,
+            ['commentId', 'id'],
+            'commentId',
+          ),
+          confirm: getOptionalBoolean(record, 'confirm') ?? false,
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.milestone.create-link',
+    title: 'Create And Link Milestone To Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Create a milestone and link it to a supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.milestone.create-link input');
+      const headline = getNonEmptyStringValue(record, [
+        'newMilestone',
+        'milestoneTitle',
+        'title',
+        'headline',
+      ]);
+
+      if (!headline) {
+        throw new Error(
+          'blueprints.milestone.create-link requires a milestone title.',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createAndLinkMilestone',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          headline,
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+          values: {
+            tags: getStringValue(record, ['tags']),
+          },
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.milestone.link-existing',
+    title: 'Link Existing Milestone To Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Link an existing milestone to a supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(
+        input,
+        'blueprints.milestone.link-existing input',
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.linkMilestone',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+          milestoneId: requirePositiveIdFromKeys(
+            record,
+            ['existingMilestoneId', 'existingMilestone', 'milestoneId'],
+            'milestoneId',
+          ),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.milestone.unlink',
+    title: 'Unlink Milestone From Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Unlink a milestone from a supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.milestone.unlink input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.unlinkMilestone',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
           itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
         },
       );

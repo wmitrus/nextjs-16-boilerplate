@@ -1,0 +1,51 @@
+services:
+  leantime-db:
+    image: docker.io/library/mariadb:10.11
+    container_name: nextjs16_leantime_db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${LEANTIME_LOCAL_DB_NAME}
+      MARIADB_PASSWORD: ${LEANTIME_LOCAL_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${LEANTIME_LOCAL_DB_ROOT_PASSWORD}
+      MARIADB_USER: ${LEANTIME_LOCAL_DB_USER}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'mariadb-admin ping -h 127.0.0.1 -u"$${MARIADB_USER}" -p"$${MARIADB_PASSWORD}" --silent',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - nextjs16_leantime_db_data:/var/lib/mysql
+
+  leantime:
+    image: ${LEANTIME_LOCAL_IMAGE}
+    container_name: nextjs16_leantime_app
+    restart: unless-stopped
+    depends_on:
+      - leantime-db
+    ports:
+      - '${LEANTIME_LOCAL_HTTP_PORT}:8080'
+    environment:
+      LEAN_APP_URL: ${LEANTIME_LOCAL_APP_URL}
+      LEAN_DB_DATABASE: ${LEANTIME_LOCAL_DB_NAME}
+      LEAN_DB_HOST: leantime-db
+      LEAN_DB_PASSWORD: ${LEANTIME_LOCAL_DB_PASSWORD}
+      LEAN_DB_PORT: 3306
+      LEAN_DB_USER: ${LEANTIME_LOCAL_DB_USER}
+      LEAN_DEBUG: ${LEANTIME_LOCAL_DEBUG}
+      LEAN_SESSION_PASSWORD: ${LEANTIME_LOCAL_SESSION_PASSWORD}
+      LEAN_SESSION_SECURE: 'false'
+    volumes:
+      - nextjs16_leantime_public_userfiles:/var/www/html/public/userfiles
+      - nextjs16_leantime_logs:/var/www/html/storage/logs
+      - nextjs16_leantime_userfiles:/var/www/html/userfiles
+      - ./leantime-plugins/AutomationApi:/var/www/html/app/Plugins/AutomationApi:Z
+
+volumes:
+  nextjs16_leantime_db_data:
+  nextjs16_leantime_logs:
+  nextjs16_leantime_public_userfiles:
+  nextjs16_leantime_userfiles:

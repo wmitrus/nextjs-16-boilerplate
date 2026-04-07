@@ -75,13 +75,6 @@ const defaultEnv: MutableEnv = {
   NEW_RELIC_ACCOUNT_ID: undefined,
   NEW_RELIC_BROWSER_SNIPPET: undefined,
   NEW_RELIC_BROWSER_SNIPPET_BASE64: undefined,
-  LEANTIME_URL: undefined,
-  LEANTIME_API_KEY: undefined,
-  LEANTIME_RPC_PATH: 'api/jsonrpc',
-  LEANTIME_API_TIMEOUT_MS: 30000,
-  LEANTIME_DEFAULT_PROJECT_ID: undefined,
-  LEANTIME_DEFAULT_AUTHOR_ID: undefined,
-  LEANTIME_DEFAULT_CLIENT_ID: undefined,
 };
 
 /**

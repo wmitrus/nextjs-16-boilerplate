@@ -65,6 +65,7 @@ The current Canvas slice supports:
 
 - `boardType=value` / Project Value Canvas
 - `boardType=risks` / Risk Analysis
+- `boardType=swot` / SWOT Analysis
 
 Additional Blueprint families should be added one rollout phase at a time.
 

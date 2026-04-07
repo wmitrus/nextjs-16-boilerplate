@@ -99,6 +99,13 @@ Verified against the on-prem instance on `2026-04-06`:
   Use `initiative.kickoff` to create a milestone, wiki space, starter articles, and initial tasks.
 - During implementation:
   Use `task.patch` and `task.update` for status and detail changes, and `wiki.article.update` for implementation notes.
+- During tracked phase work:
+  Before implementation starts, patch the active Leantime task to `status: 4`
+  (`W toku`). After implementation, local smoke, production deploy, and
+  production read-only validation are complete, patch that phase task to
+  `status: 0` (`Zrobione`). Leave future phases at `status: 3` (`Nowe`) until
+  work actually begins. Use `status: 1` only for `Zablokowane`, and `status: 2`
+  only when explicit acceptance is required.
 - During validation:
   Use `wiki.article.update` to store findings, verification notes, and follow-ups.
 - During retrospectives:
@@ -114,9 +121,10 @@ Verified against the on-prem instance on `2026-04-06`:
 - During blueprint discovery:
   Use plugin-backed `blueprints.types.list` and `blueprints.type.get` before
   creating any board items. The current Canvas rollout supports
-  `boardType: "value"` / Project Value Canvas and `boardType: "risks"` / Risk
-  Analysis. Keep production writes intentional and prefer local Podman smoke
-  tests before seeding real production boards.
+  `boardType: "value"` / Project Value Canvas, `boardType: "risks"` / Risk
+  Analysis, and `boardType: "swot"` / SWOT Analysis. Keep production writes
+  intentional and prefer local Podman smoke tests before seeding real
+  production boards.
 
 ## Verified Commands
 
@@ -213,6 +221,22 @@ validated on `2026-04-07`:
 - `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"risks"}' --format=json`
 - `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"value"}' --format=json`
 
+The SWOT Analysis slice of `AutomationApi.Canvas` was exercised successfully
+against the local Podman Leantime stack on `http://localhost:8185`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.create --input '{"boardType":"swot","title":"CLI SWOT Analysis","description":"Local phase 4 smoke test board."}' --format=json`
+- `pnpm lt -- run blueprints.item.create --input '{"boardType":"swot","boardId":16,"box":"swot_strengths","title":"Strong architecture discipline","data":"<p>Validated through plugin rollout phases.</p>","conclusion":"Strict modular and workflow discipline is a reusable strength.","relates":"relates_capabilities"}' --format=json`
+- `pnpm lt -- run blueprints.item.patch --input '{"boardType":"swot","itemId":7,"fields":{"conclusion":"Architecture discipline remains a strategic strength after Phase 4 smoke.","relates":"relates_capabilities"}}' --format=json`
+- `pnpm lt -- run blueprints.item.get --input '{"boardType":"swot","itemId":7}' --format=json`
+
+The SWOT Analysis slice was deployed to the on-prem instance and read-only
+validated on `2026-04-07`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"swot"}' --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"risks"}' --format=json`
+
 ## Fields Agents Should Prefer
 
 ### Projects
@@ -259,18 +283,21 @@ validated on `2026-04-07`:
 
 ### Blueprints
 
-- `boardType`, currently `value` for Project Value Canvas or `risks` for Risk
-  Analysis
+- `boardType`, currently `value` for Project Value Canvas, `risks` for Risk
+  Analysis, or `swot` for SWOT Analysis
 - `boardId` or `canvasId`
 - item `box`; for `value`, one of `customersegment`, `problem`, `solution`,
   `uniquevalue`; for `risks`, one of `risks_imp_low_pro_low`,
   `risks_imp_low_pro_high`, `risks_imp_high_pro_low`,
-  `risks_imp_high_pro_high`
+  `risks_imp_high_pro_high`; for `swot`, one of `swot_strengths`,
+  `swot_weaknesses`, `swot_opportunities`, `swot_threats`
 - item `description` or `title`
 - item evidence fields: `assumptions`, `data`, `conclusion`
 - item `status`, currently one of the shared upstream Canvas status keys such as
   `status_draft`, `status_review`, `status_valid`, `status_hold`,
-  `status_invalid`
+  `status_invalid`; note that SWOT currently exposes an empty `statusLabels`
+  map upstream, so do not force status for `boardType: "swot"` unless a future
+  upstream version adds labels
 - item `relates` for relation-aware boards such as `risks`; common values
   include `relates_none`, `relates_customers`, `relates_offerings`,
   `relates_capabilities`, `relates_financials`, `relates_markets`,

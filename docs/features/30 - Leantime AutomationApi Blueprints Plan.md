@@ -473,6 +473,106 @@ Phase 3 residual scope:
   explicitly approved.
 - `swot` / SWOT Analysis remains phase 4.
 
+Leantime status corrections applied after phase 3:
+
+- status map confirmed from production `Tickets.getStatusLabels`:
+  - `0`: `Zrobione`
+  - `1`: `Zablokowane`
+  - `2`: `Oczekuje na akceptację`
+  - `3`: `Nowe`
+  - `4`: `W toku`
+- task `#27` was patched to `status=0` after phase 0 completion.
+- task `#26` was patched to `status=0` after phase 1 completion.
+- task `#29` was patched to `status=0` after phase 2 completion.
+- task `#28` was patched to `status=0` after phase 3 completion.
+- task `#32` was patched to `status=4` before phase 4 implementation started.
+
+Operational correction: future Blueprint phases must patch the active Leantime
+task to `status=4` before code changes begin and to `status=0` after local
+smoke, production deploy, and production read-only validation complete. Future
+phase tasks remain `status=3` until their phase starts.
+
+## Phase 4 Implementation Log
+
+Phase 4 was implemented on 2026-04-07 for `boardType=swot` / SWOT Analysis.
+
+Implementation summary:
+
+- added `Swotcanvas` repository support to `AutomationApi.Canvas`
+- expanded `blueprints.*` CLI validation to accept `boardType=swot`
+- kept SWOT on the same generic Canvas command set rather than adding
+  SWOT-specific commands
+- adjusted item defaulting so board types with empty upstream `statusLabels`
+  keep an empty status instead of forcing `status_draft`
+
+SWOT metadata confirmed from local upstream code and live smoke:
+
+- canvas type: `swotcanvas`
+- comment module: `swotcanvasitem`
+- boxes:
+  - `swot_strengths`
+  - `swot_weaknesses`
+  - `swot_opportunities`
+  - `swot_threats`
+- data labels:
+  - `conclusion`: description
+  - `data`: supporting data
+  - `assumptions`: assumptions, inactive upstream
+- `statusLabels` is intentionally empty upstream for SWOT
+- relation labels come from the shared Canvas base repository, including
+  `relates_none`, `relates_customers`, `relates_offerings`,
+  `relates_capabilities`, `relates_financials`, `relates_markets`,
+  `relates_environment`, and `relates_firm`
+
+Local write smoke test against the Podman Leantime stack:
+
+- `blueprints.types.list` returned `swot`, `risks`, and `value`
+- created local SWOT board `#16`: `CLI SWOT Analysis`
+- created local SWOT item `#7` in box `swot_strengths`
+- wrote `relates=relates_capabilities`
+- confirmed local item `#7` persisted with empty `status`, matching upstream
+  empty `statusLabels`
+- patched local item `#7` conclusion and relation
+- read local item `#7` back and confirmed conclusion and relation persisted
+
+Production deploy evidence:
+
+- apply manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T14-19-16Z-AutomationApi-apply.json`
+- post-deploy plan manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T14-19-39Z-AutomationApi-plan.json`
+- deployment actions: `overwrite: 2`, `skip-same: 4`
+- post-deploy plan result: `skip-same: 6`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T14-19-16Z/README.md`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T14-19-16Z/Services/Canvas.php`
+
+Production read-only smoke test:
+
+- `blueprints.types.list` returned `swot` metadata, translated box labels,
+  shared relation labels, and an empty `statusLabels` map.
+- `blueprints.board.list` for project `2` and `boardType=swot` returned `[]`,
+  confirming the endpoint works and that no real production SWOT board has been
+  seeded yet.
+- `blueprints.board.list` for project `2` and `boardType=risks` still returned
+  `[]`, confirming the existing Risk Analysis path still loads after the
+  `Swotcanvas` dependency was added.
+
+Phase 4 residual scope:
+
+- production SWOT write smoke remains intentionally deferred until real
+  boilerplate Blueprint boards are seeded or a temporary production board is
+  explicitly approved.
+- `obm` / Business Model Board and `lean` / Lean Canvas remain phase 5.
+
+Leantime status update:
+
+- task `#32` was patched from `status=4` to `status=0` after phase 4 local
+  smoke, production deploy, and production read-only validation completed.
+- task `#30` remains the next phase task and should be patched to `status=4`
+  only when phase 5 actually starts.
+
 ## Leantime Tracking Artifacts
 
 This section is updated whenever production Leantime artifacts are created for

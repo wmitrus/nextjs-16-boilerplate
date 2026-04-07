@@ -6,6 +6,7 @@ use InvalidArgumentException;
 use Leantime\Domain\Canvas\Repositories\Canvas as BaseCanvasRepository;
 use Leantime\Domain\Comments\Repositories\Comments as CommentsRepository;
 use Leantime\Domain\Riskscanvas\Repositories\Riskscanvas as RiskscanvasRepository;
+use Leantime\Domain\Swotcanvas\Repositories\Swotcanvas as SwotcanvasRepository;
 use Leantime\Domain\Tickets\Services\Tickets as TicketService;
 use Leantime\Domain\Valuecanvas\Repositories\Valuecanvas as ValuecanvasRepository;
 
@@ -15,6 +16,7 @@ class Canvas
 
     private const SUPPORTED_BOARD_TYPES = [
         'risks' => 'Risk Analysis',
+        'swot' => 'SWOT Analysis',
         'value' => 'Project Value Canvas',
     ];
 
@@ -82,6 +84,7 @@ class Canvas
     public function __construct(
         private ValuecanvasRepository $valuecanvasRepository,
         private RiskscanvasRepository $riskscanvasRepository,
+        private SwotcanvasRepository $swotcanvasRepository,
         private CommentsRepository $commentsRepository,
         private TicketService $ticketService,
     ) {}
@@ -376,6 +379,7 @@ class Canvas
 
         return match ($boardType) {
             'risks' => $this->riskscanvasRepository,
+            'swot' => $this->swotcanvasRepository,
             self::DEFAULT_BOARD_TYPE => $this->valuecanvasRepository,
         };
     }
@@ -412,7 +416,8 @@ class Canvas
         $payload['description'] = $this->requireNonEmptyString((string) ($payload['description'] ?? ''), 'description');
 
         if (! array_key_exists('status', $payload)) {
-            $payload['status'] = 'status_draft';
+            $statusLabels = $this->repository($boardType)->getStatusLabels();
+            $payload['status'] = $statusLabels === [] ? '' : array_key_first($statusLabels);
         }
 
         return $payload;

@@ -308,6 +308,90 @@ describe('leantime catalog', () => {
     expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
   });
 
+  it('creates a SWOT Analysis board through the same AutomationApi Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      id: 20,
+      projectId: 2,
+      title: 'SWOT Analysis',
+    });
+
+    const result = await executeOperation('blueprints.board.create', {
+      config,
+      input: {
+        boardType: 'swot',
+        description: 'Strategic quadrant board',
+        projectId: 2,
+        title: 'SWOT Analysis',
+      },
+    });
+
+    expect(result).toEqual({
+      id: 20,
+      projectId: 2,
+      title: 'SWOT Analysis',
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createBoard',
+      {
+        author: 1,
+        boardType: 'swot',
+        description: 'Strategic quadrant board',
+        projectId: 2,
+        title: 'SWOT Analysis',
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('creates a SWOT Analysis item without forcing a board-specific status', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'swot_strengths',
+      canvasId: 20,
+      description: 'Strong architecture discipline',
+      id: 21,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 20,
+        boardType: 'swot',
+        box: 'swot_strengths',
+        data: '<p>Validated through plugin rollout phases.</p>',
+        relates: 'relates_capabilities',
+        title: 'Strong architecture discipline',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'swot_strengths',
+      canvasId: 20,
+      description: 'Strong architecture discipline',
+      id: 21,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'swot',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'swot_strengths',
+          canvasId: 20,
+          clientId: 1,
+          data: '<p>Validated through plugin rollout phases.</p>',
+          description: 'Strong architecture discipline',
+          projectId: 2,
+          relates: 'relates_capabilities',
+          title: 'Strong architecture discipline',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
   it('creates a Project Value Canvas item comment through plugin RPC', async () => {
     mockRunLeantimeRpc.mockResolvedValueOnce({
       commentId: 7,

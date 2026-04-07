@@ -12,7 +12,7 @@ const IDEA_STATUS_KEYS = [
 
 type IdeaStatusKey = (typeof IDEA_STATUS_KEYS)[number];
 
-const BLUEPRINT_BOARD_TYPES = ['value', 'risks'] as const;
+const BLUEPRINT_BOARD_TYPES = ['value', 'risks', 'swot'] as const;
 
 type BlueprintBoardType = (typeof BLUEPRINT_BOARD_TYPES)[number];
 

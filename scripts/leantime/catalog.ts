@@ -1,6 +1,17 @@
 import type { LeantimeConfig } from './lib';
 import { asRecord, runLeantimeRpc, withDefaultEntityIds } from './lib';
 
+const IDEA_STATUS_KEYS = [
+  'idea',
+  'research',
+  'prototype',
+  'validation',
+  'implemented',
+  'deferred',
+] as const;
+
+type IdeaStatusKey = (typeof IDEA_STATUS_KEYS)[number];
+
 export interface OperationContext {
   config: LeantimeConfig;
   input: unknown;
@@ -11,6 +22,7 @@ export interface OperationDefinition {
     | 'composite'
     | 'files'
     | 'goals'
+    | 'ideas'
     | 'lookup'
     | 'projects'
     | 'reports'
@@ -28,7 +40,7 @@ function requireId(record: Record<string, unknown>, key = 'id'): number {
     throw new Error(`"${key}" must be a positive integer.`);
   }
 
-  // eslint-disable-next-line security/detect-object-injection -- key is a validated local CLI field name
+  // eslint-disable-next-line security/detect-object-injection -- key is selected by local wrapper code and guarded with Object.hasOwn before lookup
   const value = record[key];
   const numeric =
     typeof value === 'number'
@@ -42,6 +54,28 @@ function requireId(record: Record<string, unknown>, key = 'id'): number {
   }
 
   return numeric;
+}
+
+function requireIdInput(input: unknown, context: string, key = 'id'): number {
+  if (typeof input === 'number') {
+    if (Number.isInteger(input) && input > 0) {
+      return input;
+    }
+
+    throw new Error(`"${key}" must be a positive integer.`);
+  }
+
+  if (typeof input === 'string') {
+    const numeric = Number.parseInt(input.trim(), 10);
+
+    if (Number.isInteger(numeric) && numeric > 0) {
+      return numeric;
+    }
+
+    throw new Error(`"${key}" must be a positive integer.`);
+  }
+
+  return requireId(asRecord(input, context), key);
 }
 
 function getOptionalPositiveInt(
@@ -68,6 +102,57 @@ function getOptionalPositiveInt(
   }
 
   return numeric;
+}
+
+function getOptionalNonNegativeInt(
+  record: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  if (!Object.hasOwn(record, key)) {
+    return undefined;
+  }
+
+  // eslint-disable-next-line security/detect-object-injection -- key is selected by local wrapper code and guarded with Object.hasOwn before lookup
+  const value = record[key];
+  if (value === undefined || value === null || value === '') return undefined;
+
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+
+  if (!Number.isInteger(numeric) || numeric < 0) {
+    throw new Error(`"${key}" must be a non-negative integer when provided.`);
+  }
+
+  return numeric;
+}
+
+function getOptionalBoolean(
+  record: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
+  if (!Object.hasOwn(record, key)) {
+    return undefined;
+  }
+
+  // eslint-disable-next-line security/detect-object-injection -- key is selected by local wrapper code and guarded with Object.hasOwn before lookup
+  const value = record[key];
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+
+    if (['1', 'true', 'yes'].includes(normalized)) return true;
+    if (['0', 'false', 'no'].includes(normalized)) return false;
+  }
+
+  throw new Error(`"${key}" must be a boolean when provided.`);
 }
 
 function getRecordField(
@@ -115,6 +200,36 @@ function normalizeArticlePayload(
   const article = getRecordField(input, 'article');
   const normalized = withDefaultEntityIds(article ?? input, config);
 
+  if (
+    normalized.title === undefined &&
+    typeof normalized.headline === 'string' &&
+    normalized.headline.trim() !== ''
+  ) {
+    normalized.title = normalized.headline.trim();
+  }
+
+  if (
+    normalized.description === undefined &&
+    typeof normalized.content === 'string'
+  ) {
+    normalized.description = normalized.content;
+  }
+
+  if (normalized.canvasId === undefined) {
+    if (normalized.wikiId !== undefined) {
+      normalized.canvasId = normalized.wikiId;
+    } else if (normalized.wiki !== undefined) {
+      normalized.canvasId = normalized.wiki;
+    }
+  }
+
+  if (
+    normalized.milestoneId === undefined &&
+    normalized.milestoneid !== undefined
+  ) {
+    normalized.milestoneId = normalized.milestoneid;
+  }
+
   if (normalized.parent === undefined) {
     normalized.parent = 0;
   }
@@ -123,7 +238,152 @@ function normalizeArticlePayload(
     normalized.status = 'published';
   }
 
+  delete normalized.content;
+  delete normalized.headline;
+  delete normalized.wiki;
+  delete normalized.wikiId;
+  delete normalized.milestoneid;
+
   return normalized;
+}
+
+function normalizeGoalBoardPayload(
+  input: Record<string, unknown>,
+  config: LeantimeConfig,
+): Record<string, unknown> {
+  const board = withDefaultEntityIds(input, config);
+
+  if (
+    board.title === undefined &&
+    typeof board.headline === 'string' &&
+    board.headline.trim() !== ''
+  ) {
+    board.title = board.headline.trim();
+  }
+
+  delete board.headline;
+
+  return board;
+}
+
+function normalizeGoalPayload(
+  input: Record<string, unknown>,
+  config: LeantimeConfig,
+): Record<string, unknown> {
+  const goal = withDefaultEntityIds(input, config);
+
+  if (
+    goal.title === undefined &&
+    typeof goal.headline === 'string' &&
+    goal.headline.trim() !== ''
+  ) {
+    goal.title = goal.headline.trim();
+  }
+
+  if (goal.canvasId === undefined) {
+    if (goal.boardId !== undefined) {
+      goal.canvasId = goal.boardId;
+    } else if (goal.board !== undefined) {
+      goal.canvasId = goal.board;
+    }
+  }
+
+  if (goal.milestoneId === undefined && goal.milestoneid !== undefined) {
+    goal.milestoneId = goal.milestoneid;
+  }
+
+  if (goal.box === undefined) {
+    goal.box = 'goal';
+  }
+
+  if (goal.status === undefined) {
+    goal.status = 'status_ontrack';
+  }
+
+  delete goal.headline;
+  delete goal.board;
+  delete goal.boardId;
+  delete goal.goalBoard;
+  delete goal.goalBoardTitle;
+  delete goal.boardTitle;
+  delete goal.milestoneid;
+
+  return goal;
+}
+
+async function resolveGoalBoardId(
+  config: LeantimeConfig,
+  input: Record<string, unknown>,
+  fallbackProjectId?: number,
+  fallbackAuthorId?: number,
+): Promise<number> {
+  const directBoardId =
+    getOptionalPositiveInt(input, 'canvasId') ??
+    getOptionalPositiveInt(input, 'boardId') ??
+    getOptionalPositiveInt(input, 'board');
+
+  if (directBoardId) {
+    return directBoardId;
+  }
+
+  const boardInput =
+    getRecordField(input, 'goalBoard', ['board']) ??
+    (typeof input.goalBoardTitle === 'string' &&
+    input.goalBoardTitle.trim() !== ''
+      ? {
+          author: fallbackAuthorId,
+          description: '',
+          projectId: fallbackProjectId,
+          title: input.goalBoardTitle.trim(),
+        }
+      : typeof input.boardTitle === 'string' && input.boardTitle.trim() !== ''
+        ? {
+            author: fallbackAuthorId,
+            description: '',
+            projectId: fallbackProjectId,
+            title: input.boardTitle.trim(),
+          }
+        : undefined);
+
+  if (!boardInput) {
+    throw new Error(
+      'Goal operations require "canvasId" / "boardId" or a "goalBoard" definition.',
+    );
+  }
+
+  const normalizedBoard = normalizeGoalBoardPayload(boardInput, config);
+  normalizedBoard.projectId = normalizedBoard.projectId ?? fallbackProjectId;
+  normalizedBoard.author = normalizedBoard.author ?? fallbackAuthorId;
+
+  const createdBoardId = await runLeantimeRpc(
+    config,
+    'leantime.rpc.Goalcanvas.Goalcanvas.createGoalboard',
+    {
+      values: normalizedBoard,
+    },
+  );
+
+  const boardIdCandidate = Array.isArray(createdBoardId)
+    ? createdBoardId[0]
+    : createdBoardId;
+
+  if (
+    typeof boardIdCandidate === 'number' &&
+    Number.isInteger(boardIdCandidate) &&
+    boardIdCandidate > 0
+  ) {
+    return boardIdCandidate;
+  }
+
+  if (typeof boardIdCandidate === 'string') {
+    const numeric = Number.parseInt(boardIdCandidate, 10);
+
+    if (Number.isInteger(numeric) && numeric > 0) {
+      return numeric;
+    }
+  }
+
+  throw new Error('Failed to resolve a valid goal board id.');
 }
 
 function buildSubtaskValues(
@@ -152,6 +412,158 @@ function buildArticleBody(title: string, sections: string[]): string {
   return [`# ${title}`, '', ...sections].join('\n');
 }
 
+function buildSearchCriteria(
+  record: Record<string, unknown>,
+  excludedKeys: string[],
+): Record<string, unknown> {
+  const nested = getRecordField(record, 'searchCriteria', ['filters']);
+
+  if (nested) {
+    return nested;
+  }
+
+  return Object.fromEntries(
+    Object.entries(record).filter(([key]) => !excludedKeys.includes(key)),
+  );
+}
+
+function getStringValue(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    if (!Object.hasOwn(record, key)) {
+      continue;
+    }
+
+    // eslint-disable-next-line security/detect-object-injection -- key is selected from local static alias lists and guarded with Object.hasOwn before lookup
+    const value = record[key];
+    if (typeof value !== 'string') {
+      continue;
+    }
+
+    return value;
+  }
+
+  return undefined;
+}
+
+function getNonEmptyStringValue(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = getStringValue(record, [key])?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function requirePositiveIdFromKeys(
+  record: Record<string, unknown>,
+  keys: string[],
+  label: string,
+): number {
+  for (const key of keys) {
+    const value = getOptionalPositiveInt(record, key);
+
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  throw new Error(`"${label}" must be a positive integer.`);
+}
+
+function normalizeIdeaStatusKey(
+  value: string,
+  fieldName: string,
+): IdeaStatusKey {
+  if ((IDEA_STATUS_KEYS as readonly string[]).includes(value)) {
+    return value as IdeaStatusKey;
+  }
+
+  throw new Error(
+    `"${fieldName}" must be one of ${IDEA_STATUS_KEYS.join(', ')}.`,
+  );
+}
+
+function normalizeIdeaPluginPayload(
+  input: Record<string, unknown>,
+  config: LeantimeConfig,
+): Record<string, unknown> {
+  const idea = withDefaultEntityIds(input, config);
+
+  if (idea.canvasId === undefined) {
+    if (idea.boardId !== undefined) {
+      idea.canvasId = idea.boardId;
+    } else if (idea.board !== undefined) {
+      idea.canvasId = idea.board;
+    }
+  }
+
+  if (
+    idea.description === undefined &&
+    typeof idea.title === 'string' &&
+    idea.title.trim() !== ''
+  ) {
+    idea.description = idea.title.trim();
+  }
+
+  if (
+    idea.description === undefined &&
+    typeof idea.headline === 'string' &&
+    idea.headline.trim() !== ''
+  ) {
+    idea.description = idea.headline.trim();
+  }
+
+  if (idea.data === undefined) {
+    if (typeof idea.content === 'string') {
+      idea.data = idea.content;
+    } else if (typeof idea.body === 'string') {
+      idea.data = idea.body;
+    }
+  }
+
+  delete idea.board;
+  delete idea.boardId;
+  delete idea.body;
+  delete idea.content;
+  delete idea.headline;
+  delete idea.title;
+
+  return idea;
+}
+
+function unwrapRpcScalar<TValue>(value: TValue[] | TValue): TValue {
+  if (Array.isArray(value) && value.length === 1) {
+    return value[0] as TValue;
+  }
+
+  return value as TValue;
+}
+
+function normalizeCreatedId(value: unknown, label: string): number {
+  const candidate = unwrapRpcScalar(value);
+  const numeric =
+    typeof candidate === 'number'
+      ? candidate
+      : typeof candidate === 'string'
+        ? Number.parseInt(candidate, 10)
+        : Number.NaN;
+
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    throw new Error(`Failed to resolve a valid ${label} id.`);
+  }
+
+  return numeric;
+}
+
 const OPERATIONS: OperationDefinition[] = [
   {
     id: 'users.list',
@@ -171,9 +583,8 @@ const OPERATIONS: OperationDefinition[] = [
     category: 'lookup',
     description: 'Fetch one user by id.',
     execute: async ({ config, input }) => {
-      const record = asRecord(input, 'users.get input');
       return runLeantimeRpc(config, 'leantime.rpc.Users.Users.getUser', {
-        id: requireId(record),
+        id: requireIdInput(input, 'users.get input'),
       });
     },
   },
@@ -240,12 +651,11 @@ const OPERATIONS: OperationDefinition[] = [
     category: 'projects',
     description: 'Fetch one project by id.',
     execute: async ({ config, input }) => {
-      const record = asRecord(input, 'project.get input');
       return runLeantimeRpc(
         config,
         'leantime.rpc.Projects.Projects.getProject',
         {
-          id: requireId(record),
+          id: requireIdInput(input, 'project.get input'),
         },
       );
     },
@@ -295,9 +705,11 @@ const OPERATIONS: OperationDefinition[] = [
     category: 'tasks',
     description: 'Query tasks using Leantime ticket search criteria.',
     execute: async ({ config, input }) => {
-      const record = asRecord(input, 'tasks.list input');
-      const searchCriteria =
-        getRecordField(record, 'searchCriteria', ['filters']) ?? null;
+      const record = withDefaultEntityIds(
+        asRecord(input, 'tasks.list input'),
+        config,
+      );
+      const searchCriteria = buildSearchCriteria(record, ['limit']);
 
       return runLeantimeRpc(config, 'leantime.rpc.Tickets.Tickets.getAll', {
         limit: getOptionalPositiveInt(record, 'limit'),
@@ -311,9 +723,8 @@ const OPERATIONS: OperationDefinition[] = [
     category: 'tasks',
     description: 'Fetch one task or milestone by id.',
     execute: async ({ config, input }) => {
-      const record = asRecord(input, 'task.get input');
       return runLeantimeRpc(config, 'leantime.rpc.Tickets.Tickets.getTicket', {
-        id: requireId(record),
+        id: requireIdInput(input, 'task.get input'),
       });
     },
   },
@@ -424,16 +835,67 @@ const OPERATIONS: OperationDefinition[] = [
     description:
       'List milestones using Leantime ticket milestone search criteria.',
     execute: async ({ config, input }) => {
-      const record = asRecord(input, 'milestones.list input');
-      const searchCriteria =
-        getRecordField(record, 'searchCriteria', ['filters']) ?? {};
+      const record = withDefaultEntityIds(
+        asRecord(input, 'milestones.list input'),
+        config,
+      );
+      const searchCriteria = buildSearchCriteria(record, ['sortBy']);
+      const sortBy =
+        typeof record.sortBy === 'string' && record.sortBy.trim() !== ''
+          ? record.sortBy
+          : 'standard';
+
+      try {
+        return await runLeantimeRpc(
+          config,
+          'leantime.rpc.Tickets.Tickets.getAllMilestones',
+          {
+            searchCriteria,
+            sortBy,
+          },
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        if (
+          !message.includes('leantime.rpc.Tickets.Tickets.getAllMilestones') ||
+          !message.includes('Server error')
+        ) {
+          throw error;
+        }
+
+        return runLeantimeRpc(
+          config,
+          'leantime.rpc.Tickets.Tickets.getAllMilestonesOverview',
+          {
+            clientId:
+              getOptionalPositiveInt(record, 'clientId') ??
+              config.defaultClientId ??
+              0,
+            includeArchived: false,
+            includeTasks: false,
+            sortBy,
+          },
+        );
+      }
+    },
+  },
+  {
+    id: 'goalboard.create',
+    title: 'Create Goal Board',
+    category: 'goals',
+    description: 'Create a Goal Canvas board before adding goal items.',
+    execute: async ({ config, input }) => {
+      const record = normalizeGoalBoardPayload(
+        asRecord(input, 'goalboard.create input'),
+        config,
+      );
 
       return runLeantimeRpc(
         config,
-        'leantime.rpc.Tickets.Tickets.getAllMilestones',
+        'leantime.rpc.Goalcanvas.Goalcanvas.createGoalboard',
         {
-          searchCriteria,
-          sortBy: record.sortBy ?? 'standard',
+          values: record,
         },
       );
     },
@@ -466,14 +928,594 @@ const OPERATIONS: OperationDefinition[] = [
     category: 'goals',
     description: 'Create a goal or KPI entry in Goal Canvas.',
     execute: async ({ config, input }) => {
-      const record = withDefaultEntityIds(
+      const rawRecord = withDefaultEntityIds(
         asRecord(input, 'goal.create input'),
         config,
       );
+      const projectId =
+        getOptionalPositiveInt(rawRecord, 'projectId') ??
+        config.defaultProjectId;
+      const authorId =
+        getOptionalPositiveInt(rawRecord, 'author') ??
+        getOptionalPositiveInt(rawRecord, 'authorId') ??
+        config.defaultAuthorId;
+      const canvasId = await resolveGoalBoardId(
+        config,
+        rawRecord,
+        projectId,
+        authorId,
+      );
+      const record = normalizeGoalPayload(rawRecord, config);
+      record.canvasId = canvasId;
+
       return runLeantimeRpc(
         config,
         'leantime.rpc.Goalcanvas.Goalcanvas.createGoal',
         { values: record },
+      );
+    },
+  },
+  {
+    id: 'ideas.board.create',
+    title: 'Create Idea Board',
+    category: 'ideas',
+    description:
+      'Create an Ideas board through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'ideas.board.create input'),
+        config,
+      );
+      const boardTitle = getNonEmptyStringValue(record, [
+        'canvastitle',
+        'title',
+        'name',
+        'headline',
+      ]);
+
+      if (!boardTitle) {
+        throw new Error(
+          'ideas.board.create requires "canvastitle", "title", "name", or "headline".',
+        );
+      }
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('ideas.board.create requires "projectId".');
+      }
+
+      const result = await runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.createBoard',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          projectId,
+          title: boardTitle,
+        },
+      );
+      return {
+        boardId: normalizeCreatedId(result, 'idea board'),
+      };
+    },
+  },
+  {
+    id: 'ideas.board.list',
+    title: 'List Idea Boards',
+    category: 'ideas',
+    description:
+      'List Ideas boards through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'ideas.board.list input'),
+        config,
+      );
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('ideas.board.list requires "projectId".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.listBoards',
+        { projectId },
+      );
+    },
+  },
+  {
+    id: 'ideas.board.get',
+    title: 'Get Idea Board',
+    category: 'ideas',
+    description:
+      'Fetch one Ideas board through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.board.get input');
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.getBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'id'],
+            'boardId',
+          ),
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.board.update',
+    title: 'Update Idea Board',
+    category: 'ideas',
+    description:
+      'Rename an Ideas board through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.board.update input');
+      const title = getNonEmptyStringValue(record, [
+        'title',
+        'name',
+        'headline',
+      ]);
+
+      if (!title) {
+        throw new Error(
+          'ideas.board.update requires "title", "name", or "headline".',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.updateBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'id'],
+            'boardId',
+          ),
+          title,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.board.delete',
+    title: 'Delete Idea Board',
+    category: 'ideas',
+    description:
+      'Delete an Ideas board through the AutomationApi plugin RPC surface. Requires confirm=true.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.board.delete input');
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.deleteBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'id'],
+            'boardId',
+          ),
+          confirm: getOptionalBoolean(record, 'confirm') ?? false,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.get',
+    title: 'Get Idea',
+    category: 'ideas',
+    description: 'Fetch one idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.get input');
+      const ideaId = requirePositiveIdFromKeys(
+        record,
+        ['ideaId', 'id'],
+        'ideaId',
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.getIdea',
+        {
+          ideaId,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.list',
+    title: 'List Ideas',
+    category: 'ideas',
+    description:
+      'List ideas for an Ideas board through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.list input');
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.listIdeas',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'board'],
+            'boardId',
+          ),
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.create',
+    title: 'Create Idea',
+    category: 'ideas',
+    description:
+      'Create a new idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.create input');
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.createIdea',
+        {
+          values: normalizeIdeaPluginPayload(record, config),
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.update',
+    title: 'Update Idea',
+    category: 'ideas',
+    description:
+      'Update an existing idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.update input');
+      const ideaId = requirePositiveIdFromKeys(
+        record,
+        ['ideaId', 'id'],
+        'ideaId',
+      );
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.updateIdea',
+        {
+          ideaId,
+          values: normalizeIdeaPluginPayload(record, config),
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.delete',
+    title: 'Delete Idea',
+    category: 'ideas',
+    description:
+      'Delete an idea through the AutomationApi plugin RPC surface. Requires confirm=true.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.delete input');
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.deleteIdea',
+        {
+          confirm: getOptionalBoolean(record, 'confirm') ?? false,
+          ideaId: requirePositiveIdFromKeys(record, ['ideaId', 'id'], 'ideaId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.comment.list',
+    title: 'List Idea Comments',
+    category: 'ideas',
+    description:
+      'List comments for an idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.comment.list input');
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.listComments',
+        {
+          ideaId: requirePositiveIdFromKeys(record, ['ideaId', 'id'], 'ideaId'),
+          parent: getOptionalNonNegativeInt(record, 'parent') ?? 0,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.comment.create',
+    title: 'Add Idea Comment',
+    category: 'ideas',
+    description:
+      'Add a comment to an idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.comment.create input');
+      const ideaId = requirePositiveIdFromKeys(
+        record,
+        ['ideaId', 'id'],
+        'ideaId',
+      );
+      const text = getNonEmptyStringValue(record, ['text', 'comment']);
+
+      if (!text) {
+        throw new Error('ideas.comment.create requires "text" or "comment".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.createComment',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          ideaId,
+          parent: getOptionalNonNegativeInt(record, 'parent') ?? 0,
+          status: getStringValue(record, ['status']) ?? '',
+          text,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.comment.edit',
+    title: 'Edit Idea Comment',
+    category: 'ideas',
+    description:
+      'Edit an existing idea comment through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.comment.edit input');
+      const commentId = requirePositiveIdFromKeys(
+        record,
+        ['commentId', 'father'],
+        'commentId',
+      );
+      const text = getNonEmptyStringValue(record, ['text', 'comment']);
+
+      if (!text) {
+        throw new Error('ideas.comment.edit requires "text" or "comment".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.editComment',
+        {
+          commentId,
+          text,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.comment.delete',
+    title: 'Delete Idea Comment',
+    category: 'ideas',
+    description:
+      'Delete an idea comment through the AutomationApi plugin RPC surface. Requires confirm=true.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.comment.delete input');
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.deleteComment',
+        {
+          commentId: requirePositiveIdFromKeys(
+            record,
+            ['commentId', 'id'],
+            'commentId',
+          ),
+          confirm: getOptionalBoolean(record, 'confirm') ?? false,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.kanban.move',
+    title: 'Move Idea In Kanban',
+    category: 'ideas',
+    description:
+      'Move an idea between verified Ideas kanban columns through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.kanban.move input');
+      const ideaId = requirePositiveIdFromKeys(
+        record,
+        ['ideaId', 'id'],
+        'ideaId',
+      );
+      const toStatus = normalizeIdeaStatusKey(
+        getNonEmptyStringValue(record, ['toStatus', 'statusKey', 'column']) ??
+          '',
+        'toStatus',
+      );
+
+      const result = await runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.moveIdea',
+        {
+          ideaId,
+          status: toStatus,
+        },
+      );
+
+      return {
+        ideaId,
+        result,
+        toStatus,
+      };
+    },
+  },
+  {
+    id: 'ideas.label.update',
+    title: 'Update Ideas Column Label',
+    category: 'ideas',
+    description:
+      'Rename an Ideas kanban column label through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'ideas.label.update input'),
+        config,
+      );
+      const statusKey = normalizeIdeaStatusKey(
+        getNonEmptyStringValue(record, ['statusKey', 'column', 'label']) ?? '',
+        'statusKey',
+      );
+      const newLabel = getNonEmptyStringValue(record, ['newLabel', 'title']);
+
+      if (!newLabel) {
+        throw new Error('ideas.label.update requires "newLabel" or "title".');
+      }
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('ideas.label.update requires "projectId".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.updateLabel',
+        {
+          newLabel,
+          projectId,
+          statusKey,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.label.list',
+    title: 'List Ideas Column Labels',
+    category: 'ideas',
+    description:
+      'List Ideas kanban column labels through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'ideas.label.list input'),
+        config,
+      );
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('ideas.label.list requires "projectId".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.listLabels',
+        { projectId },
+      );
+    },
+  },
+  {
+    id: 'ideas.reaction.toggle',
+    title: 'Toggle Idea Comment Reaction',
+    category: 'ideas',
+    description:
+      'Toggle a reaction on an idea comment through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.reaction.toggle input');
+      const commentId = requirePositiveIdFromKeys(
+        record,
+        ['commentId'],
+        'commentId',
+      );
+      const reaction = getNonEmptyStringValue(record, ['reaction']) ?? 'like';
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.toggleCommentReaction',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          commentId,
+          reaction,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.milestone.create-link',
+    title: 'Create And Link Milestone To Idea',
+    category: 'ideas',
+    description:
+      'Create a new milestone and link it to an idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.milestone.create-link input');
+      const ideaId = requirePositiveIdFromKeys(
+        record,
+        ['ideaId', 'id'],
+        'ideaId',
+      );
+      const milestoneTitle = getNonEmptyStringValue(record, [
+        'newMilestone',
+        'milestoneTitle',
+        'title',
+        'headline',
+      ]);
+
+      if (!milestoneTitle) {
+        throw new Error(
+          'ideas.milestone.create-link requires a milestone title.',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.createAndLinkMilestone',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          headline: milestoneTitle,
+          ideaId,
+          values: {
+            tags: getStringValue(record, ['tags']),
+          },
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.milestone.link-existing',
+    title: 'Link Existing Milestone To Idea',
+    category: 'ideas',
+    description:
+      'Link an existing milestone to an idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.milestone.link-existing input');
+      const ideaId = requirePositiveIdFromKeys(
+        record,
+        ['ideaId', 'id'],
+        'ideaId',
+      );
+      const milestoneId = requirePositiveIdFromKeys(
+        record,
+        ['existingMilestoneId', 'existingMilestone', 'milestoneId'],
+        'milestoneId',
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.linkMilestone',
+        {
+          ideaId,
+          milestoneId,
+        },
+      );
+    },
+  },
+  {
+    id: 'ideas.milestone.unlink',
+    title: 'Unlink Milestone From Idea',
+    category: 'ideas',
+    description:
+      'Unlink a milestone from an idea through the AutomationApi plugin RPC surface.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'ideas.milestone.unlink input');
+      const ideaId = requirePositiveIdFromKeys(
+        record,
+        ['ideaId', 'id'],
+        'ideaId',
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Ideas.unlinkMilestone',
+        {
+          ideaId,
+        },
       );
     },
   },
@@ -504,9 +1546,8 @@ const OPERATIONS: OperationDefinition[] = [
     category: 'wiki',
     description: 'Fetch one wiki space by id.',
     execute: async ({ config, input }) => {
-      const record = asRecord(input, 'wiki.get input');
       return runLeantimeRpc(config, 'leantime.rpc.Wiki.Wiki.getWiki', {
-        id: requireId(record),
+        id: requireIdInput(input, 'wiki.get input'),
       });
     },
   },
@@ -652,6 +1693,7 @@ const OPERATIONS: OperationDefinition[] = [
         asRecord(input, 'reports.realtime input'),
         config,
       );
+      const sprintId = getOptionalNonNegativeInt(record, 'sprintId') ?? 0;
       return runLeantimeRpc(
         config,
         'leantime.rpc.Reports.Reports.getRealtimeReport',
@@ -659,7 +1701,7 @@ const OPERATIONS: OperationDefinition[] = [
           projectId:
             getOptionalPositiveInt(record, 'projectId') ??
             config.defaultProjectId,
-          sprintId: record.sprintId,
+          sprintId,
         },
       );
     },
@@ -695,6 +1737,7 @@ const OPERATIONS: OperationDefinition[] = [
           : 'Initiative';
 
       const created: {
+        goalBoard?: unknown;
         goals: unknown[];
         milestone?: unknown;
         tasks: unknown[];
@@ -728,12 +1771,28 @@ const OPERATIONS: OperationDefinition[] = [
       );
 
       const goals = Array.isArray(record.goals) ? record.goals : [];
+      let goalBoardId: number | undefined;
+
+      if (goals.length > 0) {
+        goalBoardId = await resolveGoalBoardId(
+          config,
+          record,
+          projectId,
+          authorId,
+        );
+        created.goalBoard = goalBoardId;
+      }
+
       for (const rawGoal of goals) {
-        const goal = withDefaultEntityIds(
+        const goal = normalizeGoalPayload(
           asRecord(rawGoal, 'initiative goal'),
           config,
         );
         goal.projectId = goal.projectId ?? projectId;
+        goal.canvasId =
+          getOptionalPositiveInt(goal, 'canvasId') ??
+          goalBoardId ??
+          goal.canvasId;
 
         const createdGoal = await runLeantimeRpc(
           config,
@@ -760,7 +1819,7 @@ const OPERATIONS: OperationDefinition[] = [
 
       const starterArticles = [
         {
-          data: buildArticleBody('Project Brief', [
+          description: buildArticleBody('Project Brief', [
             '## Objective',
             '',
             'State the user value, desired outcome, and expected scope.',
@@ -771,11 +1830,10 @@ const OPERATIONS: OperationDefinition[] = [
             '- Secondary outcome',
             '- Risks to watch',
           ]),
-          description: 'High-level context and acceptance framing.',
           title: `${name} Project Brief`,
         },
         {
-          data: buildArticleBody('Implementation Notes', [
+          description: buildArticleBody('Implementation Notes', [
             '## Context',
             '',
             'Capture implementation decisions, constraints, and links to work items.',
@@ -786,11 +1844,10 @@ const OPERATIONS: OperationDefinition[] = [
             '- Follow-up ideas',
             '- AI-agent learnings',
           ]),
-          description: 'Running implementation notes for the initiative.',
           title: `${name} Implementation Notes`,
         },
         {
-          data: buildArticleBody('Retrospective', [
+          description: buildArticleBody('Retrospective', [
             '## Continue',
             '',
             '- What went well?',
@@ -803,7 +1860,6 @@ const OPERATIONS: OperationDefinition[] = [
             '',
             '- What should start next?',
           ]),
-          description: 'Continue / Stop / Start retrospective workspace.',
           title: `${name} Retrospective`,
         },
       ];

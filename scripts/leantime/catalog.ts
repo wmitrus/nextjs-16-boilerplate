@@ -12,6 +12,10 @@ const IDEA_STATUS_KEYS = [
 
 type IdeaStatusKey = (typeof IDEA_STATUS_KEYS)[number];
 
+const BLUEPRINT_BOARD_TYPES = ['value'] as const;
+
+type BlueprintBoardType = (typeof BLUEPRINT_BOARD_TYPES)[number];
+
 export interface OperationContext {
   config: LeantimeConfig;
   input: unknown;
@@ -19,6 +23,7 @@ export interface OperationContext {
 
 export interface OperationDefinition {
   category:
+    | 'blueprints'
     | 'composite'
     | 'files'
     | 'goals'
@@ -492,6 +497,21 @@ function normalizeIdeaStatusKey(
   );
 }
 
+function normalizeBlueprintBoardType(
+  value: string | undefined,
+  fieldName = 'boardType',
+): BlueprintBoardType {
+  const normalized = value?.trim() || 'value';
+
+  if ((BLUEPRINT_BOARD_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as BlueprintBoardType;
+  }
+
+  throw new Error(
+    `"${fieldName}" must be one of ${BLUEPRINT_BOARD_TYPES.join(', ')}.`,
+  );
+}
+
 function normalizeIdeaPluginPayload(
   input: Record<string, unknown>,
   config: LeantimeConfig,
@@ -538,6 +558,45 @@ function normalizeIdeaPluginPayload(
   delete idea.title;
 
   return idea;
+}
+
+function normalizeCanvasItemPayload(
+  input: Record<string, unknown>,
+  config: LeantimeConfig,
+): Record<string, unknown> {
+  const item = withDefaultEntityIds(input, config);
+
+  if (item.canvasId === undefined) {
+    if (item.boardId !== undefined) {
+      item.canvasId = item.boardId;
+    } else if (item.board !== undefined) {
+      item.canvasId = item.board;
+    }
+  }
+
+  if (
+    item.description === undefined &&
+    typeof item.headline === 'string' &&
+    item.headline.trim() !== ''
+  ) {
+    item.description = item.headline.trim();
+  }
+
+  if (
+    item.description === undefined &&
+    typeof item.title === 'string' &&
+    item.title.trim() !== ''
+  ) {
+    item.description = item.title.trim();
+  }
+
+  delete item.board;
+  delete item.boardId;
+  delete item.boardType;
+  delete item.headline;
+  delete item.type;
+
+  return item;
 }
 
 function unwrapRpcScalar<TValue>(value: TValue[] | TValue): TValue {
@@ -952,6 +1011,299 @@ const OPERATIONS: OperationDefinition[] = [
         config,
         'leantime.rpc.Goalcanvas.Goalcanvas.createGoal',
         { values: record },
+      );
+    },
+  },
+  {
+    id: 'blueprints.types.list',
+    title: 'List Blueprint Board Types',
+    category: 'blueprints',
+    description:
+      'List Blueprint board types currently supported by the AutomationApi Canvas RPC surface.',
+    execute: async ({ config }) => {
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.listBoardTypes',
+        {},
+      );
+    },
+  },
+  {
+    id: 'blueprints.type.get',
+    title: 'Get Blueprint Board Type',
+    category: 'blueprints',
+    description:
+      'Fetch metadata for one supported Blueprint board type, including boxes and labels.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.type.get input');
+      const boardType = normalizeBlueprintBoardType(
+        getStringValue(record, ['boardType', 'type']),
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.getBoardType',
+        { boardType },
+      );
+    },
+  },
+  {
+    id: 'blueprints.board.list',
+    title: 'List Blueprint Boards',
+    category: 'blueprints',
+    description:
+      'List boards for a supported Blueprint board type through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'blueprints.board.list input'),
+        config,
+      );
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('blueprints.board.list requires "projectId".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.listBoards',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          projectId,
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.board.get',
+    title: 'Get Blueprint Board',
+    category: 'blueprints',
+    description:
+      'Fetch one supported Blueprint board through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.board.get input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.getBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'id'],
+            'boardId',
+          ),
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.board.create',
+    title: 'Create Blueprint Board',
+    category: 'blueprints',
+    description:
+      'Create a supported Blueprint board through AutomationApi Canvas RPC. Phase 1 supports Project Value Canvas only.',
+    execute: async ({ config, input }) => {
+      const record = withDefaultEntityIds(
+        asRecord(input, 'blueprints.board.create input'),
+        config,
+      );
+      const title = getNonEmptyStringValue(record, [
+        'title',
+        'name',
+        'headline',
+      ]);
+
+      if (!title) {
+        throw new Error(
+          'blueprints.board.create requires "title", "name", or "headline".',
+        );
+      }
+      const projectId =
+        getOptionalPositiveInt(record, 'projectId') ?? config.defaultProjectId;
+
+      if (!projectId) {
+        throw new Error('blueprints.board.create requires "projectId".');
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createBoard',
+        {
+          author: getOptionalPositiveInt(record, 'author'),
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          description: getStringValue(record, ['description']) ?? '',
+          projectId,
+          title,
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.board.update',
+    title: 'Update Blueprint Board',
+    category: 'blueprints',
+    description:
+      'Update one supported Blueprint board through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.board.update input');
+      const title = getNonEmptyStringValue(record, [
+        'title',
+        'name',
+        'headline',
+      ]);
+
+      if (!title) {
+        throw new Error(
+          'blueprints.board.update requires "title", "name", or "headline".',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.updateBoard',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'id'],
+            'boardId',
+          ),
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          description: getStringValue(record, ['description']) ?? '',
+          title,
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.item.list',
+    title: 'List Blueprint Items',
+    category: 'blueprints',
+    description:
+      'List items on a supported Blueprint board through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.item.list input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.listItems',
+        {
+          boardId: requirePositiveIdFromKeys(
+            record,
+            ['boardId', 'canvasId', 'board'],
+            'boardId',
+          ),
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.item.get',
+    title: 'Get Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Fetch one supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.item.get input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.getItem',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.item.create',
+    title: 'Create Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Create an item on a supported Blueprint board through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.item.create input');
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.createItem',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          values: normalizeCanvasItemPayload(record, config),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.item.update',
+    title: 'Update Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Update a supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.item.update input');
+      const itemId = requirePositiveIdFromKeys(
+        record,
+        ['itemId', 'id'],
+        'itemId',
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.updateItem',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          itemId,
+          values: normalizeCanvasItemPayload(record, config),
+        },
+      );
+    },
+  },
+  {
+    id: 'blueprints.item.patch',
+    title: 'Patch Blueprint Item',
+    category: 'blueprints',
+    description:
+      'Patch selected fields on a supported Blueprint item through AutomationApi Canvas RPC.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(input, 'blueprints.item.patch input');
+      const fields = getRecordField(record, 'fields', ['params']);
+
+      if (!fields) {
+        throw new Error(
+          'blueprints.item.patch requires a "fields" or "params" object.',
+        );
+      }
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.patchItem',
+        {
+          boardType: normalizeBlueprintBoardType(
+            getStringValue(record, ['boardType', 'type']),
+          ),
+          fields,
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+        },
       );
     },
   },

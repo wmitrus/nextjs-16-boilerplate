@@ -45,6 +45,26 @@ Verified against the on-prem instance on `2026-04-06`:
 - `milestone.create`
 - `goalboard.create`
 - `goal.create`
+- `blueprints.types.list`
+- `blueprints.type.get`
+- `blueprints.board.list`
+- `blueprints.board.get`
+- `blueprints.board.create`
+- `blueprints.board.update`
+- `blueprints.board.delete`
+- `blueprints.item.list`
+- `blueprints.item.get`
+- `blueprints.item.create`
+- `blueprints.item.update`
+- `blueprints.item.patch`
+- `blueprints.item.delete`
+- `blueprints.comment.list`
+- `blueprints.comment.create`
+- `blueprints.comment.edit`
+- `blueprints.comment.delete`
+- `blueprints.milestone.create-link`
+- `blueprints.milestone.link-existing`
+- `blueprints.milestone.unlink`
 - `ideas.board.create`
 - `ideas.board.list`
 - `ideas.board.get`
@@ -91,6 +111,12 @@ Verified against the on-prem instance on `2026-04-06`:
   `ideas.reaction.toggle`, `ideas.milestone.*`, and `ideas.kanban.move`.
   Destructive commands require explicit `confirm=true` and should stay out of
   default agent behavior.
+- During blueprint discovery:
+  Use plugin-backed `blueprints.types.list` and `blueprints.type.get` before
+  creating any board items. The current Canvas rollout supports only
+  `boardType: "value"` / Project Value Canvas. Keep production writes
+  intentional and prefer local Podman smoke tests before seeding real
+  production boards.
 
 ## Verified Commands
 
@@ -141,6 +167,36 @@ and read-only validated on `2026-04-07`:
 - `pnpm lt -- run ideas.get --input '{"ideaId":10}' --format=json`
 - `pnpm lt -- run ideas.comment.list --input '{"ideaId":10}' --format=json`
 
+The Project Value Canvas slice of `AutomationApi.Canvas` was deployed to the
+on-prem instance and read-only validated on `2026-04-07`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"value"}' --format=json`
+
+These plugin-backed Project Value Canvas commands were exercised successfully
+against the local Podman Leantime stack on `http://localhost:8185`:
+
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.create --input '{"boardType":"value","title":"CLI Project Value Canvas","description":"Local phase 1 smoke test board."}' --format=json`
+- `pnpm lt -- run blueprints.item.create --input '{"boardType":"value","boardId":14,"box":"problem","title":"Slow project setup","data":"<p>Observed in local smoke test.</p>","assumptions":"Teams lose time before coding."}' --format=json`
+- `pnpm lt -- run blueprints.item.patch --input '{"boardType":"value","itemId":4,"fields":{"status":"status_valid","conclusion":"Project setup speed is a real value-driver."}}' --format=json`
+- `pnpm lt -- run blueprints.item.get --input '{"boardType":"value","itemId":4}' --format=json`
+- `pnpm lt -- run blueprints.comment.create --input '{"boardType":"value","itemId":4,"text":"<p>Phase 2 local comment smoke test.</p>","author":2}' --format=json`
+- `pnpm lt -- run blueprints.comment.edit --input '{"commentId":2,"text":"<p>Phase 2 local comment edited.</p>"}' --format=json`
+- `pnpm lt -- run blueprints.comment.list --input '{"boardType":"value","itemId":4}' --format=json`
+- `pnpm lt -- run blueprints.comment.delete --input '{"commentId":2,"confirm":true}' --format=json`
+- `pnpm lt -- run blueprints.milestone.create-link --input '{"boardType":"value","itemId":4,"title":"Phase 2 Blueprint Local Milestone","author":2}' --format=json`
+- `pnpm lt -- run blueprints.milestone.unlink --input '{"boardType":"value","itemId":4}' --format=json`
+- `pnpm lt -- run blueprints.item.delete --input '{"boardType":"value","itemId":5,"confirm":true}' --format=json`
+
+The shared Project Value Canvas helpers for comments, milestone linkage, and
+confirm-delete controls were deployed to the on-prem instance and read-only
+validated on `2026-04-07`:
+
+- `pnpm lt -- list --format=json`
+- `pnpm lt -- run blueprints.types.list --format=json`
+- `pnpm lt -- run blueprints.board.list --input '{"projectId":2,"boardType":"value"}' --format=json`
+
 ## Fields Agents Should Prefer
 
 ### Projects
@@ -184,6 +240,22 @@ and read-only validated on `2026-04-07`:
 - `tags`
 - `commentId` for comment edits and reactions
 - `existingMilestoneId` for idea-to-milestone linkage
+
+### Blueprints
+
+- `boardType`, currently only `value` for Project Value Canvas
+- `boardId` or `canvasId`
+- item `box`, currently one of `customersegment`, `problem`, `solution`,
+  `uniquevalue`
+- item `description` or `title`
+- item evidence fields: `assumptions`, `data`, `conclusion`
+- item `status`, currently one of the upstream Project Value Canvas status keys
+  such as `status_draft`, `status_review`, `status_valid`, `status_hold`,
+  `status_invalid`
+- `commentId` for comment edits and deletes
+- `existingMilestoneId` or `milestoneId` for linking an existing milestone
+- `confirm: true` for destructive `blueprints.board.delete`,
+  `blueprints.item.delete`, and `blueprints.comment.delete`
 
 ### Wiki
 

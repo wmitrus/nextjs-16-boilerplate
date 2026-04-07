@@ -51,6 +51,14 @@ leantime.rpc.AutomationApi.Canvas.getItem
 leantime.rpc.AutomationApi.Canvas.createItem
 leantime.rpc.AutomationApi.Canvas.updateItem
 leantime.rpc.AutomationApi.Canvas.patchItem
+leantime.rpc.AutomationApi.Canvas.deleteItem
+leantime.rpc.AutomationApi.Canvas.listComments
+leantime.rpc.AutomationApi.Canvas.createComment
+leantime.rpc.AutomationApi.Canvas.editComment
+leantime.rpc.AutomationApi.Canvas.deleteComment
+leantime.rpc.AutomationApi.Canvas.createAndLinkMilestone
+leantime.rpc.AutomationApi.Canvas.linkMilestone
+leantime.rpc.AutomationApi.Canvas.unlinkMilestone
 ```
 
 The current Canvas slice supports only `boardType=value` / Project Value

@@ -670,6 +670,52 @@ describe('leantime catalog', () => {
     expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
   });
 
+  it('creates a Retrospectives item through the generic Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'well',
+      canvasId: 34,
+      description: 'Deployment flow worked well',
+      id: 35,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 34,
+        boardType: 'retros',
+        box: 'well',
+        data: '<p>Backup manifests and read-only smoke tests were reliable.</p>',
+        title: 'Deployment flow worked well',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'well',
+      canvasId: 34,
+      description: 'Deployment flow worked well',
+      id: 35,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'retros',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'well',
+          canvasId: 34,
+          clientId: 1,
+          data: '<p>Backup manifests and read-only smoke tests were reliable.</p>',
+          description: 'Deployment flow worked well',
+          projectId: 2,
+          title: 'Deployment flow worked well',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
   it('creates a Project Value Canvas item comment through plugin RPC', async () => {
     mockRunLeantimeRpc.mockResolvedValueOnce({
       commentId: 7,

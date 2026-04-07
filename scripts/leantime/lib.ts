@@ -1,8 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 
-import { env } from '@/core/env';
-
 export interface LeantimeConfigInput {
   apiKey?: string;
   baseUrl?: string;
@@ -10,6 +8,7 @@ export interface LeantimeConfigInput {
   defaultClientId?: number | string;
   defaultProjectId?: number | string;
   rpcPath?: string;
+  sessionCookie?: string;
   timeoutMs?: number | string;
 }
 
@@ -20,6 +19,7 @@ export interface LeantimeConfig {
   defaultClientId?: number;
   defaultProjectId?: number;
   rpcUrl: string;
+  sessionCookie?: string;
   timeoutMs: number;
 }
 
@@ -36,14 +36,57 @@ export interface LeantimeRpcResponse<TData> {
   result?: TData;
 }
 
+export type LeantimeFormEntryValue =
+  | boolean
+  | number
+  | string
+  | null
+  | undefined;
+
+export interface LeantimeWebRequestOptions {
+  formEntries?: Array<[string, LeantimeFormEntryValue]>;
+  headers?: Record<string, string>;
+  method?: 'GET' | 'POST';
+  path: string;
+  redirect?: RequestRedirect;
+  refererPath?: string;
+}
+
+export interface LeantimeWebResponse<TData = unknown> {
+  contentType: string | null;
+  data: TData;
+  location?: string;
+  status: number;
+  url: string;
+}
+
 const LOCAL_HTTP_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const DEFAULT_RPC_PATH = 'api/jsonrpc';
 const DEFAULT_TIMEOUT_MS = 30000;
 
+function readEnv(name: string): string | undefined {
+  // eslint-disable-next-line security/detect-object-injection -- name is selected from static Leantime CLI env var names in this script
+  const value = process.env[name];
+  return value && value.trim() !== '' ? value.trim() : undefined;
+}
+
+function normalizeCliArgv(argv: string[]): string[] {
+  const args = argv.slice(2);
+
+  if (args[0] === '--') {
+    return args.slice(1);
+  }
+
+  return args;
+}
+
 export function parseCliFlag(argv: string[], name: string): string | undefined {
-  const endOfOptionsIndex = argv.indexOf('--');
+  const normalizedArgv = normalizeCliArgv(argv);
+  const endOfOptionsIndex = normalizedArgv.indexOf('--');
   const searchableArgv =
-    endOfOptionsIndex === -1 ? argv : argv.slice(0, endOfOptionsIndex);
+    endOfOptionsIndex === -1
+      ? normalizedArgv
+      : normalizedArgv.slice(0, endOfOptionsIndex);
   const inlinePrefix = `--${name}=`;
   const inline = searchableArgv.find((arg) => arg.startsWith(inlinePrefix));
 
@@ -82,7 +125,7 @@ export function parsePositionalArgs(argv: string[]): string[] {
   let skipNext = false;
   let reachedEndOfOptions = false;
 
-  for (const current of argv.slice(2)) {
+  for (const current of normalizeCliArgv(argv)) {
     if (skipNext) {
       skipNext = false;
       continue;
@@ -229,22 +272,24 @@ export function resolveLeantimeConfig(
     defaultClientId: parseOptionalPositiveInt(input.defaultClientId),
     defaultProjectId: parseOptionalPositiveInt(input.defaultProjectId),
     rpcUrl,
+    sessionCookie: input.sessionCookie?.trim() || undefined,
     timeoutMs,
   };
 }
 
 export function getLeantimeConfig(argv: string[]): LeantimeConfig {
   return resolveLeantimeConfig({
-    apiKey: env.LEANTIME_API_KEY,
-    baseUrl: env.LEANTIME_URL,
+    apiKey: readEnv('LEANTIME_API_KEY'),
+    baseUrl: readEnv('LEANTIME_URL'),
     defaultAuthorId:
-      parseCliFlag(argv, 'author') ?? env.LEANTIME_DEFAULT_AUTHOR_ID,
+      parseCliFlag(argv, 'author') ?? readEnv('LEANTIME_DEFAULT_AUTHOR_ID'),
     defaultClientId:
-      parseCliFlag(argv, 'client') ?? env.LEANTIME_DEFAULT_CLIENT_ID,
+      parseCliFlag(argv, 'client') ?? readEnv('LEANTIME_DEFAULT_CLIENT_ID'),
     defaultProjectId:
-      parseCliFlag(argv, 'project') ?? env.LEANTIME_DEFAULT_PROJECT_ID,
-    rpcPath: env.LEANTIME_RPC_PATH,
-    timeoutMs: env.LEANTIME_API_TIMEOUT_MS,
+      parseCliFlag(argv, 'project') ?? readEnv('LEANTIME_DEFAULT_PROJECT_ID'),
+    rpcPath: readEnv('LEANTIME_RPC_PATH'),
+    sessionCookie: readEnv('LEANTIME_SESSION_COOKIE'),
+    timeoutMs: readEnv('LEANTIME_API_TIMEOUT_MS'),
   });
 }
 
@@ -358,6 +403,116 @@ export async function runLeantimeRpc<TData>(
   }
 
   return payload.result as TData;
+}
+
+function buildLeantimeUrl(baseUrl: string, path: string): URL {
+  return new URL(path, baseUrl);
+}
+
+function buildFormBody(
+  formEntries: Array<[string, LeantimeFormEntryValue]>,
+): URLSearchParams {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of formEntries) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    params.append(key, String(value));
+  }
+
+  return params;
+}
+
+export async function runLeantimeWebRequest<TData = unknown>(
+  config: LeantimeConfig,
+  options: LeantimeWebRequestOptions,
+): Promise<LeantimeWebResponse<TData>> {
+  if (!config.sessionCookie) {
+    throw new Error(
+      'LEANTIME_SESSION_COOKIE is required for Leantime web-session operations.',
+    );
+  }
+
+  const requestUrl = buildLeantimeUrl(config.baseUrl, options.path);
+  const headers = new Headers({
+    Accept: '*/*',
+    Cookie: config.sessionCookie,
+    ...(options.headers ?? {}),
+  });
+
+  if (!headers.has('Origin')) {
+    headers.set('Origin', requestUrl.origin);
+  }
+
+  if (options.refererPath && !headers.has('Referer')) {
+    headers.set(
+      'Referer',
+      buildLeantimeUrl(config.baseUrl, options.refererPath).toString(),
+    );
+  }
+
+  let body: string | undefined;
+
+  if (options.formEntries) {
+    body = buildFormBody(options.formEntries).toString();
+
+    if (!headers.has('Content-Type')) {
+      headers.set(
+        'Content-Type',
+        'application/x-www-form-urlencoded; charset=UTF-8',
+      );
+    }
+
+    if (!headers.has('X-Requested-With')) {
+      headers.set('X-Requested-With', 'XMLHttpRequest');
+    }
+  }
+
+  const response = await fetch(requestUrl, {
+    body,
+    headers,
+    method: options.method ?? (body ? 'POST' : 'GET'),
+    redirect: options.redirect ?? 'manual',
+    signal: AbortSignal.timeout(config.timeoutMs),
+  }).catch((error: unknown) => {
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.name === 'TimeoutError')
+    ) {
+      throw new Error(
+        `Leantime request timed out after ${config.timeoutMs}ms for ${options.method ?? 'GET'} ${options.path}.`,
+      );
+    }
+
+    throw error;
+  });
+
+  const contentType = response.headers.get('content-type');
+  let data: unknown = null;
+
+  if (response.status !== 204 && response.status !== 205) {
+    if (contentType?.includes('application/json')) {
+      data = (await response.json()) as TData;
+    } else {
+      data = await response.text();
+    }
+  }
+
+  if (!response.ok && (response.status < 300 || response.status >= 400)) {
+    throw new Error(
+      `Leantime web request failed with HTTP ${response.status} for ${options.method ?? 'GET'} ${options.path}.`,
+    );
+  }
+
+  return {
+    contentType,
+    data: data as TData,
+    location: response.headers.get('location') ?? undefined,
+    status: response.status,
+    url: response.url,
+  };
 }
 
 export function printValue(value: unknown, format: 'json' | 'table'): void {

@@ -10,6 +10,7 @@ use Leantime\Domain\Insightscanvas\Repositories\Insightscanvas as Insightscanvas
 use Leantime\Domain\Leancanvas\Repositories\Leancanvas as LeancanvasRepository;
 use Leantime\Domain\Minempathycanvas\Repositories\Minempathycanvas as MinempathycanvasRepository;
 use Leantime\Domain\Obmcanvas\Repositories\Obmcanvas as ObmcanvasRepository;
+use Leantime\Domain\Retroscanvas\Repositories\Retroscanvas as RetroscanvasRepository;
 use Leantime\Domain\Riskscanvas\Repositories\Riskscanvas as RiskscanvasRepository;
 use Leantime\Domain\Sbcanvas\Repositories\Sbcanvas as SbcanvasRepository;
 use Leantime\Domain\Swotcanvas\Repositories\Swotcanvas as SwotcanvasRepository;
@@ -26,6 +27,7 @@ class Canvas
         'lean' => 'Lean Canvas',
         'minempathy' => 'Simple Empathy Map',
         'obm' => 'Business Model Board',
+        'retros' => 'Retrospectives',
         'risks' => 'Risk Analysis',
         'sb' => 'Project Brief',
         'swot' => 'SWOT Analysis',
@@ -100,6 +102,7 @@ class Canvas
         private LeancanvasRepository $leancanvasRepository,
         private MinempathycanvasRepository $minempathycanvasRepository,
         private ObmcanvasRepository $obmcanvasRepository,
+        private RetroscanvasRepository $retroscanvasRepository,
         private RiskscanvasRepository $riskscanvasRepository,
         private SbcanvasRepository $sbcanvasRepository,
         private SwotcanvasRepository $swotcanvasRepository,
@@ -401,6 +404,7 @@ class Canvas
             'lean' => $this->leancanvasRepository,
             'minempathy' => $this->minempathycanvasRepository,
             'obm' => $this->obmcanvasRepository,
+            'retros' => $this->retroscanvasRepository,
             'risks' => $this->riskscanvasRepository,
             'sb' => $this->sbcanvasRepository,
             'swot' => $this->swotcanvasRepository,

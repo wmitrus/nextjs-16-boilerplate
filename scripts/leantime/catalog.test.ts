@@ -109,6 +109,119 @@ describe('leantime catalog', () => {
     );
   });
 
+  it('creates a Project Value Canvas board through the AutomationApi Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      id: 15,
+      projectId: 2,
+      title: 'Project Value Canvas',
+    });
+
+    const result = await executeOperation('blueprints.board.create', {
+      config,
+      input: {
+        boardType: 'value',
+        description: 'First generic Canvas board',
+        projectId: 2,
+        title: 'Project Value Canvas',
+      },
+    });
+
+    expect(result).toEqual({
+      id: 15,
+      projectId: 2,
+      title: 'Project Value Canvas',
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createBoard',
+      {
+        author: 1,
+        boardType: 'value',
+        description: 'First generic Canvas board',
+        projectId: 2,
+        title: 'Project Value Canvas',
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('creates a Project Value Canvas item through the AutomationApi Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce({
+      box: 'problem',
+      canvasId: 15,
+      description: 'Slow project setup',
+      id: 16,
+    });
+
+    const result = await executeOperation('blueprints.item.create', {
+      config,
+      input: {
+        boardId: 15,
+        boardType: 'value',
+        box: 'problem',
+        data: '<p>Observed during setup.</p>',
+        title: 'Slow project setup',
+      },
+    });
+
+    expect(result).toEqual({
+      box: 'problem',
+      canvasId: 15,
+      description: 'Slow project setup',
+      id: 16,
+    });
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.createItem',
+      {
+        boardType: 'value',
+        values: {
+          author: 1,
+          authorId: 1,
+          box: 'problem',
+          canvasId: 15,
+          clientId: 1,
+          data: '<p>Observed during setup.</p>',
+          description: 'Slow project setup',
+          projectId: 2,
+          title: 'Slow project setup',
+        },
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
+  it('patches a Project Value Canvas item through the AutomationApi Canvas RPC flow', async () => {
+    mockRunLeantimeRpc.mockResolvedValueOnce(true);
+
+    const result = await executeOperation('blueprints.item.patch', {
+      config,
+      input: {
+        boardType: 'value',
+        fields: {
+          conclusion: 'Validated',
+          status: 'status_valid',
+        },
+        itemId: 16,
+      },
+    });
+
+    expect(result).toBe(true);
+    expect(mockRunLeantimeRpc).toHaveBeenCalledWith(
+      config,
+      'leantime.rpc.AutomationApi.Canvas.patchItem',
+      {
+        boardType: 'value',
+        fields: {
+          conclusion: 'Validated',
+          status: 'status_valid',
+        },
+        itemId: 16,
+      },
+    );
+    expect(mockRunLeantimeWebRequest).not.toHaveBeenCalled();
+  });
+
   it('creates an ideas board through the AutomationApi plugin RPC flow', async () => {
     mockRunLeantimeRpc.mockResolvedValueOnce(['13']);
 

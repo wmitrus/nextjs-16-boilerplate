@@ -401,6 +401,78 @@ Phase 2 residual scope:
   explicitly approved.
 - `risks` / Risk Analysis remains phase 3.
 
+## Phase 3 Implementation Log
+
+Phase 3 was implemented on 2026-04-07 for `boardType=risks` / Risk Analysis.
+
+Implementation summary:
+
+- added `Riskscanvas` repository support to `AutomationApi.Canvas`
+- expanded `blueprints.*` CLI validation to accept `boardType=risks`
+- kept the existing generic Canvas command set instead of adding risk-specific
+  commands
+- confirmed `risks` uses the same shared item, comment, milestone, and
+  confirm-delete helpers as `value`
+
+Risk Analysis metadata confirmed from local upstream code and live smoke:
+
+- canvas type: `riskscanvas`
+- comment module: `riskscanvasitem`
+- boxes:
+  - `risks_imp_low_pro_low`
+  - `risks_imp_low_pro_high`
+  - `risks_imp_high_pro_low`
+  - `risks_imp_high_pro_high`
+- data labels:
+  - `conclusion`: risk description
+  - `data`: supporting data
+  - `assumptions`: planned mitigation measures
+- relation labels come from the shared Canvas base repository, including
+  `relates_none`, `relates_customers`, `relates_offerings`,
+  `relates_capabilities`, `relates_financials`, `relates_markets`,
+  `relates_environment`, and `relates_firm`
+
+Local write smoke test against the Podman Leantime stack:
+
+- `blueprints.types.list` returned both `risks` and `value`
+- created local Risk Analysis board `#15`: `CLI Risk Analysis`
+- created local Risk Analysis item `#6` in box `risks_imp_high_pro_high`
+- wrote `relates=relates_capabilities`
+- patched local item `#6` to `status_review`
+- read local item `#6` back and confirmed status, conclusion, and relation
+  persisted
+
+Production deploy evidence:
+
+- apply manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T14-04-40Z-AutomationApi-apply.json`
+- post-deploy plan manifest:
+  `logs/leantime-plugin-deployments/2026-04-07T14-05-11Z-AutomationApi-plan.json`
+- deployment actions: `overwrite: 2`, `skip-same: 4`
+- post-deploy plan result: `skip-same: 6`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T14-04-40Z/README.md`
+- overwritten file backup:
+  `storage/plugin-backups/AutomationApi/2026-04-07T14-04-40Z/Services/Canvas.php`
+
+Production read-only smoke test:
+
+- `blueprints.types.list` returned `risks` metadata, translated box labels,
+  shared relation labels, and shared status labels.
+- `blueprints.board.list` for project `2` and `boardType=risks` returned `[]`,
+  confirming the endpoint works and that no real production Risk Analysis board
+  has been seeded yet.
+- `blueprints.board.list` for project `2` and `boardType=value` still returned
+  `[]`, confirming the existing Project Value Canvas path still loads after the
+  `Riskscanvas` dependency was added.
+
+Phase 3 residual scope:
+
+- production Risk Analysis write smoke remains intentionally deferred until real
+  boilerplate Blueprint boards are seeded or a temporary production board is
+  explicitly approved.
+- `swot` / SWOT Analysis remains phase 4.
+
 ## Leantime Tracking Artifacts
 
 This section is updated whenever production Leantime artifacts are created for

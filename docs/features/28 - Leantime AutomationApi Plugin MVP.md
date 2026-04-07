@@ -646,5 +646,9 @@ Next implementation slice:
 - keep destructive Ideas wrappers behind explicit cleanup tasks
 - start `AutomationApi.Canvas` / Blueprints as a new, separate task
 
+The dedicated Blueprints / Canvas task brief, architecture plan, rollout phases,
+and production Leantime tracking IDs are documented in
+[30 - Leantime AutomationApi Blueprints Plan.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/30%20-%20Leantime%20AutomationApi%20Blueprints%20Plan.md).
+
 The production deploy workflow is documented separately in
 [29 - Leantime AutomationApi Plugin Deploy Workflow.md](/home/wojtek/projects/nextjs-16-boilerplate/docs/features/29%20-%20Leantime%20AutomationApi%20Plugin%20Deploy%20Workflow.md).

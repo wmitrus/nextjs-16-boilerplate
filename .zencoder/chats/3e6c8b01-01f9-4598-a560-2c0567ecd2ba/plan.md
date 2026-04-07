@@ -2,7 +2,7 @@
 
 ## Configuration
 
-- **Artifacts Path**: `{@artifacts_path}` -> `.zenflow/tasks/{task_id}`
+- **Artifacts Path**: `/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba` -> `.zenflow/tasks/{task_id}`
 - **Step Agent Presets**: this workflow uses ZenFlow's documented `<!-- agent: preset-name -->` step binding pattern.
 - **Required Saved Presets**:
   - `architecture-guard-agent`
@@ -49,30 +49,9 @@ For every workflow step:
 
 ---
 
-## Leantime Integration
-
-**This workflow must include Leantime steps at task open and close.**
-
-Read: `docs/ai/general/LEANTIME_AUTOMATION.md`
-
-At workflow start, invoke `10 - Leantime Integration Agent` to:
-
-- Check for existing tasks and milestones.
-- Create milestone and main task with HTML description.
-- Patch status to W toku (4).
-- Record task ID in the workflow intake artifact.
-
-At workflow end, invoke `10 - Leantime Integration Agent` to:
-
-- Patch status to Zrobione (0).
-- Log time with `pnpm lt -- run time.log`.
-- Update wiki if findings should persist.
-
----
-
 ## Workflow Steps
 
-### [ ] Step: Feature Intake
+### [x] Step: Feature Intake
 
 Understand the requested feature before any design or implementation.
 
@@ -88,9 +67,9 @@ Document:
 
 Output file:
 
-`{@artifacts_path}/feature-intake.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/feature-intake.md`
 
-### [ ] Step: Architecture Design
+### [x] Step: Architecture Design
 
 <!-- agent: architecture-guard-agent -->
 
@@ -112,9 +91,9 @@ The agent must determine:
 
 Output file:
 
-`{@artifacts_path}/architecture-review.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/architecture-review.md`
 
-### [ ] Step: Security Review (Conditional)
+### [x] Step: Security Review (Conditional)
 
 <!-- agent: security-auth-agent -->
 
@@ -147,9 +126,9 @@ The agent must assess:
 
 Output file:
 
-`{@artifacts_path}/security-review.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/security-review.md`
 
-### [ ] Step: Runtime Review (Conditional)
+### [x] Step: Runtime Review (Conditional)
 
 <!-- agent: nextjs-runtime-agent -->
 
@@ -183,9 +162,9 @@ The agent must assess:
 
 Output file:
 
-`{@artifacts_path}/runtime-review.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/runtime-review.md`
 
-### [ ] Step: Feature Constraints
+### [x] Step: Feature Constraints
 
 Consolidate specialist findings into one implementation brief.
 
@@ -205,9 +184,9 @@ The summary must include:
 
 Output file:
 
-`{@artifacts_path}/constraints.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/constraints.md`
 
-### [ ] Step: Validation Strategy
+### [x] Step: Validation Strategy
 
 <!-- agent: validation-strategy-agent -->
 
@@ -227,9 +206,9 @@ The agent must determine:
 
 Output file:
 
-`{@artifacts_path}/validation-strategy.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/validation-strategy.md`
 
-### [ ] Step: Implementation
+### [x] Step: Implementation
 
 <!-- agent: implementation-agent -->
 
@@ -237,12 +216,12 @@ Run **Implementation Agent**.
 
 The agent must read these artifacts before implementation:
 
-- `{@artifacts_path}/feature-intake.md`
-- `{@artifacts_path}/architecture-review.md`
-- `{@artifacts_path}/security-review.md` if present
-- `{@artifacts_path}/runtime-review.md` if present
-- `{@artifacts_path}/constraints.md`
-- `{@artifacts_path}/validation-strategy.md`
+- `/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/feature-intake.md`
+- `/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/architecture-review.md`
+- `/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/security-review.md` if present
+- `/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/runtime-review.md` if present
+- `/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/constraints.md`
+- `/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/validation-strategy.md`
 
 The implementation must:
 
@@ -255,13 +234,13 @@ The implementation must:
 
 Output file:
 
-`{@artifacts_path}/implementation-report.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/implementation-report.md`
 
-### [ ] Step: Validation
+### [x] Step: Validation
 
 Run validation defined in:
 
-`{@artifacts_path}/validation-strategy.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/validation-strategy.md`
 
 Document:
 
@@ -273,9 +252,9 @@ Document:
 
 Output file:
 
-`{@artifacts_path}/validation-report.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/validation-report.md`
 
-### [ ] Step: E2E Verification (When Required)
+### [x] Step: E2E Verification (When Required)
 
 <!-- agent: playwright-e2e-agent -->
 
@@ -283,7 +262,7 @@ Run Playwright verification when the feature includes auth flows, routing, or br
 
 Output file:
 
-`{@artifacts_path}/e2e-report.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/e2e-report.md`
 
 Include:
 
@@ -292,7 +271,7 @@ Include:
 - pass/fail per scenario
 - evidence summary
 
-### [ ] Step: Final Architecture Check
+### [x] Step: Final Architecture Check
 
 <!-- agent: architecture-guard-agent -->
 
@@ -307,4 +286,4 @@ Confirm:
 
 Output file:
 
-`{@artifacts_path}/architecture-final.md`
+`/home/wojtek/projects/nextjs-16-boilerplate/.zencoder/chats/3e6c8b01-01f9-4598-a560-2c0567ecd2ba/architecture-final.md`

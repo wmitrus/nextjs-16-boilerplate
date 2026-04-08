@@ -13,12 +13,12 @@ declare global {
   }
 
   interface NewRelicBrowserInteraction {
-    setName(name: string): NewRelicBrowserInteraction;
-    save(): NewRelicBrowserInteraction;
+    setName?: (name: string) => NewRelicBrowserInteraction;
+    save?: () => NewRelicBrowserInteraction;
   }
 
   interface NewRelicBrowserAgent {
-    interaction(): NewRelicBrowserInteraction;
+    interaction?: (() => NewRelicBrowserInteraction) | undefined;
   }
 
   interface Window {

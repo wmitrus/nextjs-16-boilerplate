@@ -3,9 +3,14 @@ import '@/testing/infrastructure/env';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetBrowserAgentScriptSafe } = vi.hoisted(() => ({
-  mockGetBrowserAgentScriptSafe: vi.fn(),
-}));
+const { mockGetBrowserAgentScriptSafe, mockGetNrBrowserDiagnostics } =
+  vi.hoisted(() => ({
+    mockGetBrowserAgentScriptSafe: vi.fn(),
+    mockGetNrBrowserDiagnostics: vi.fn().mockReturnValue({
+      agentLoaded: false,
+      agentConnected: false,
+    }),
+  }));
 
 vi.mock('next/server', async () => {
   const actual = await vi.importActual('next/server');
@@ -17,6 +22,7 @@ vi.mock('next/server', async () => {
 
 vi.mock('@/core/observability/new-relic', () => ({
   getBrowserAgentScriptSafe: mockGetBrowserAgentScriptSafe,
+  getNrBrowserDiagnostics: mockGetNrBrowserDiagnostics,
 }));
 
 import { GET } from './route';
@@ -27,6 +33,10 @@ describe('GET /observability/new-relic-browser.js', () => {
   beforeEach(() => {
     mockEnv.NEW_RELIC_ENABLED = false;
     mockGetBrowserAgentScriptSafe.mockReset();
+    mockGetNrBrowserDiagnostics.mockReturnValue({
+      agentLoaded: false,
+      agentConnected: false,
+    });
   });
 
   it('returns an empty script when New Relic is disabled', async () => {
@@ -40,7 +50,7 @@ describe('GET /observability/new-relic-browser.js', () => {
     expect(mockGetBrowserAgentScriptSafe).not.toHaveBeenCalled();
   });
 
-  it('returns an empty script when the runtime loader and env fallback are both unavailable', async () => {
+  it('returns an empty script when the runtime loader is unavailable', async () => {
     mockEnv.NEW_RELIC_ENABLED = true;
     mockGetBrowserAgentScriptSafe.mockReturnValue('');
 
@@ -48,6 +58,7 @@ describe('GET /observability/new-relic-browser.js', () => {
 
     expect(await response.text()).toBe('');
     expect(mockGetBrowserAgentScriptSafe).toHaveBeenCalledTimes(1);
+    expect(mockGetNrBrowserDiagnostics).toHaveBeenCalledTimes(1);
   });
 
   it('returns the resolved browser script when available', async () => {

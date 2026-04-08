@@ -9,6 +9,8 @@ const { mockGetBrowserAgentScriptSafe, mockGetNrBrowserDiagnostics } =
     mockGetNrBrowserDiagnostics: vi.fn().mockReturnValue({
       agentLoaded: false,
       agentConnected: false,
+      hasActiveTransaction: false,
+      hasApplicationId: false,
     }),
   }));
 
@@ -37,6 +39,8 @@ describe('GET /observability/new-relic-browser.js', () => {
     mockGetNrBrowserDiagnostics.mockReturnValue({
       agentLoaded: false,
       agentConnected: false,
+      hasActiveTransaction: false,
+      hasApplicationId: false,
     });
   });
 

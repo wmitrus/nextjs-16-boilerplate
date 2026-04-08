@@ -4,6 +4,15 @@
 
 This document explains how New Relic is integrated in this repository for both server-side APM and browser monitoring, and why the browser path uses a request-time Node loader route instead of calling the New Relic browser API at layout render time.
 
+## Root Cause Note — Next.js Bootstrap On Vercel
+
+New Relic's official Node.js install guidance for Next.js says the agent should be preloaded via `NODE_OPTIONS='--require newrelic'` at process start.
+
+In this repository, relying only on a later `require('newrelic')` inside `src/instrumentation.ts` is not sufficient for hosted preview/production runtimes. When the agent is not preloaded early enough:
+
+- backend web transactions may never be instrumented on Vercel
+- `getBrowserTimingHeader()` can keep returning an empty comment because it requires both collector/app metadata and an active web transaction
+
 ## Critical Constraints — Read Before Changing Anything
 
 ### Snippet env var size limit — Vercel
@@ -48,7 +57,9 @@ They share New Relic as a vendor, but they do not use the same integration path.
 
 ### Boot sequence
 
-`src/instrumentation.ts` conditionally loads the Node.js agent during the Node runtime bootstrap.
+For hosted Next.js preview/production runtimes, set `NODE_OPTIONS=--require newrelic` so the agent is preloaded before Next.js initializes.
+
+`src/instrumentation.ts` still conditionally loads the module during the Node runtime bootstrap and warns when production New Relic is enabled without the preload.
 
 ```typescript
 if (process.env.NEXT_RUNTIME === 'nodejs') {
@@ -63,7 +74,7 @@ if (process.env.NEXT_RUNTIME === 'nodejs') {
 }
 ```
 
-This keeps the agent disabled by default and avoids loading it when no license key is configured.
+This keeps the agent disabled by default, avoids loading it when no license key is configured, and makes missing preloading visible in logs before telemetry silently disappears.
 
 ### Provider isolation
 
@@ -116,9 +127,8 @@ The script body is served by `src/app/observability/new-relic-browser.js/route.t
 
 That route:
 
-- is pinned to the Node runtime and forced dynamic execution
+- uses `await connection()` for request-time execution under `cacheComponents: true`
 - prefers `getBrowserTimingHeader()` at request time through `getBrowserAgentScriptSafe()`
-- falls back to the env-backed snippet only for local/dev compatibility or when the agent is unavailable
 - returns an empty JavaScript response when New Relic is disabled or no browser snippet is configured
 - returns `application/javascript` with `Cache-Control: no-store`
 - sets `X-Content-Type-Options: nosniff`
@@ -204,11 +214,12 @@ These commands are intentionally separate from the Next.js runtime integration:
 
 Verify all of the following:
 
+- `NODE_OPTIONS=--require newrelic` is set in the hosted preview/production runtime when `NEW_RELIC_ENABLED=true`
 - `NEW_RELIC_ENABLED=true`
 - `NEW_RELIC_LICENSE_KEY` is present in the deployment environment
 - server rendered `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
 - `/observability/new-relic-browser.js` returns `200` with JavaScript content (non-empty)
-- Vercel logs show no `[NR Browser] Returning empty browser script.` warning, or if they do, check `agentConnected` field
+- Vercel logs show no `[NR Browser] Empty script ...` warning, or if they do, check `loaded=`, `connected=`, `tx=`, and `appId=` values
 - NR APM entity has browser monitoring **enabled** in NR UI (APM → Applications → your app → Settings → Application)
 - Browser monitoring type is set to **Pro + SPA** in NR UI
 - `logging.filepath: 'stdout'` is set in `newrelic.js` (prevents EROFS crash on Vercel)
@@ -225,15 +236,27 @@ If `newrelic.js` does not have `logging.filepath: 'stdout'`, the NR agent crashe
 If `NEW_RELIC_ENABLED=true`, the deployment must also provide
 `NEW_RELIC_LICENSE_KEY`.
 
+If this is a hosted preview/production runtime, it must also preload the agent
+with `NODE_OPTIONS=--require newrelic`.
+
 This repository now treats that as a deploy-time cross-field requirement:
 
 - `pnpm env:validate` fails when New Relic is enabled without a license key
+- `pnpm env:validate` fails in production when `NODE_OPTIONS` does not preload `newrelic`
 - the root layout does not inject the browser loader unless both values are present
 - `/env-summary` and `/api/internal/env-check` report the misconfiguration
 
 ### Empty browser script on cold start (`agentConnected: false`)
 
 The NR APM agent needs ~1-3 seconds after cold start to connect to the NR collector. Until connected, `isConnected()` = false and the browser route returns an empty script. This is expected for the first request after a cold start. Subsequent warm requests will return the full snippet.
+
+### Empty browser script with `tx=false` or `appId=false`
+
+If the warning shows `tx=false`, the browser timing API is being called without an active instrumented web transaction.
+
+If it shows `appId=false`, the agent still has not completed the collector handshake and does not have `application_id` yet.
+
+In hosted Next.js runtimes, both states usually mean the process did not preload the New Relic agent early enough. Check `NODE_OPTIONS=--require newrelic` first.
 
 ## Guardrails
 

@@ -131,7 +131,7 @@ Commonly required:
 Optional observability note:
 
 - If `NEW_RELIC_ENABLED=true`, `NEW_RELIC_LICENSE_KEY` must also be set for deploy validation to pass and for telemetry to start.
-- If `NEW_RELIC_ENABLED=true` in preview/production, set `NODE_OPTIONS=-r newrelic` so the hosted Next.js runtime preloads the agent before request handling starts.
+- If `NEW_RELIC_ENABLED=true` in preview/production, set `NODE_OPTIONS=--require newrelic` so the hosted Next.js runtime preloads the agent before request handling starts.
 
 Security and ops vars remain optional with defaults unless your deployment policy requires strict values.
 

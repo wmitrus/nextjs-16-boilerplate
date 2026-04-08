@@ -1,6 +1,8 @@
 import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
 
+import { nodeOptionsPreloadsNewRelic } from '@/core/observability/new-relic-node-options';
+
 export const env = createEnv({
   /**
    * Server-side environment variables schema.
@@ -257,14 +259,9 @@ export function validateNewRelicConfigValues(
     return;
   }
 
-  const normalizedNodeOptions = nodeOptions?.trim() ?? '';
-  const preloadsNewRelic = /(^|\s)(-r|--require)\s+newrelic(\s|$)/u.test(
-    normalizedNodeOptions,
-  );
-
-  if (!preloadsNewRelic) {
+  if (!nodeOptionsPreloadsNewRelic(nodeOptions)) {
     throw new Error(
-      'NEW_RELIC_ENABLED=true in production requires NODE_OPTIONS to preload the agent with "--require newrelic".',
+      'NEW_RELIC_ENABLED=true in production requires NODE_OPTIONS to preload New Relic. Use "--require ./scripts/new-relic/preload.cjs".',
     );
   }
 }

@@ -1,19 +1,19 @@
 import * as Sentry from '@sentry/nextjs';
 
+import { nodeOptionsPreloadsNewRelic } from '@/core/observability/new-relic-node-options';
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     if (
       process.env.NEW_RELIC_ENABLED === 'true' &&
       process.env.NEW_RELIC_LICENSE_KEY
     ) {
-      const nodeOptions = process.env.NODE_OPTIONS ?? '';
-      const preloadsNewRelic = /(^|\s)(-r|--require)\s+newrelic(\s|$)/u.test(
-        nodeOptions,
-      );
-
-      if (process.env.NODE_ENV === 'production' && !preloadsNewRelic) {
+      if (
+        process.env.NODE_ENV === 'production' &&
+        !nodeOptionsPreloadsNewRelic(process.env.NODE_OPTIONS)
+      ) {
         console.warn(
-          '[New Relic] NODE_OPTIONS is missing "--require newrelic". Next.js production runtimes should preload the agent for reliable transaction and browser timing instrumentation.',
+          '[New Relic] NODE_OPTIONS is missing a valid New Relic preload. Use "--require ./scripts/new-relic/preload.cjs" in hosted runtimes for reliable transaction and browser timing instrumentation.',
         );
       }
 

@@ -1,3 +1,5 @@
+import { nodeOptionsPreloadsNewRelic } from '@/core/observability/new-relic-node-options';
+
 type EnvValue = string | undefined;
 
 export interface EnvDiagnosticsEntry {
@@ -147,14 +149,13 @@ export function getEnvDiagnostics(): EnvDiagnostics {
       process.env.VERCEL_ENV === 'production')
   ) {
     const nodeOptions = getEnv('NODE_OPTIONS');
-    const preloadsNewRelic = Boolean(
-      nodeOptions && /(^|\s)(-r|--require)\s+newrelic(\s|$)/u.test(nodeOptions),
-    );
 
-    if (!preloadsNewRelic) {
+    if (!nodeOptionsPreloadsNewRelic(nodeOptions)) {
       conditionalIssues.push({
         condition: 'NEW_RELIC_ENABLED=true in hosted production runtime',
-        missing: ['NODE_OPTIONS includes --require newrelic'],
+        missing: [
+          'NODE_OPTIONS includes --require ./scripts/new-relic/preload.cjs',
+        ],
         issue:
           'New Relic is enabled but the Node.js process is not preloading the agent, so Next.js/Vercel transactions and browser timing headers can fail to initialize.',
       });
@@ -176,7 +177,7 @@ export function getEnvDiagnostics(): EnvDiagnostics {
       'If LOGFLARE_SERVER_ENABLED=true, set LOGFLARE_API_KEY and SOURCE_TOKEN or SOURCE_NAME.',
       'If LOGFLARE_EDGE_ENABLED=true, set NEXT_PUBLIC_APP_URL to your deployment URL.',
       'If NEW_RELIC_ENABLED=true, set NEW_RELIC_LICENSE_KEY for server and browser telemetry.',
-      'If NEW_RELIC_ENABLED=true in preview/production, set NODE_OPTIONS=--require newrelic so the Next.js process preloads the agent.',
+      'If NEW_RELIC_ENABLED=true in preview/production, set NODE_OPTIONS=--require ./scripts/new-relic/preload.cjs so the Next.js process preloads the agent safely during hosted builds and runtime.',
       'Keep INTERNAL_API_KEY aligned with any internal clients/tests.',
     ],
   };

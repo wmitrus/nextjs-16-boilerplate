@@ -27,7 +27,9 @@ export async function GET(): Promise<Response> {
   const snippet = getBrowserAgentScriptSafe();
   if (!snippet) {
     const diag = getNrBrowserDiagnostics();
-    console.warn('[NR Browser] Returning empty browser script.', diag);
+    console.warn(
+      `[NR Browser] Empty script loaded=${diag.agentLoaded} connected=${diag.agentConnected} tx=${diag.hasActiveTransaction} appId=${diag.hasApplicationId}`,
+    );
     return createEmptyScriptResponse();
   }
 

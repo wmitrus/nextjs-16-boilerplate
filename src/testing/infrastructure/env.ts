@@ -9,6 +9,7 @@ type MutableEnv = {
 
 const defaultEnv: MutableEnv = {
   NODE_ENV: 'test',
+  NODE_OPTIONS: undefined,
   LOG_LEVEL: 'info',
   INTERNAL_API_KEY: 'test-secret',
   SECURITY_ALLOWED_OUTBOUND_HOSTS:

@@ -49,6 +49,27 @@ For every workflow step:
 
 ---
 
+## Leantime Integration
+
+**This workflow must include Leantime steps at task open and close.**
+
+Read: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
+At workflow start, invoke `10 - Leantime Integration Agent` to:
+
+- Check for existing tasks and milestones.
+- Create milestone and main task with HTML description.
+- Patch status to W toku (4).
+- Record task ID in the workflow intake artifact.
+
+At workflow end, invoke `10 - Leantime Integration Agent` to:
+
+- Patch status to Zrobione (0).
+- Log time with `pnpm lt -- run time.log`.
+- Update wiki if findings should persist.
+
+---
+
 ## Workflow Steps
 
 ### [ ] Step: Feature Intake

@@ -24,6 +24,9 @@ newrelic_agent.log
 /playwright-report/
 /test-results/
 
+# Temporary agent working files (Leantime input staging, etc.)
+/.tmp
+
 # Storybook
 storybook-static
 *storybook.log
@@ -48,6 +51,8 @@ yarn-error.log*
 # env files
 .env*
 !.env.example
+!.env.leantime.example
+!.env.leantime-dev.example
 
 # vercel
 .vercel

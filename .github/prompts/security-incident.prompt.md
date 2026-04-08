@@ -5,6 +5,10 @@ argument-hint: 'Incident description, affected surface, severity level, symptoms
 agent: '08 - Workflow Orchestrator'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Start a security incident investigation using `08 - Workflow Orchestrator`.
 
 Task input package:

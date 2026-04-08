@@ -5,6 +5,10 @@ argument-hint: 'Optional change context, risk notes, or files to emphasize'
 agent: '05 - Validation Strategy'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Run `05 - Validation Strategy` in `Change Validation` mode for the current repository change.
 
 For any auth/bootstrap/onboarding change:

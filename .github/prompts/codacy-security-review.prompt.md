@@ -5,6 +5,10 @@ argument-hint: 'Paste Codacy findings from the PR comment — file paths, line n
 agent: '08 - Workflow Orchestrator'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Start a Codacy security review using `08 - Workflow Orchestrator`.
 
 ZenFlow workflow reference:

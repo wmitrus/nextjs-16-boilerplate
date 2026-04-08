@@ -1,0 +1,12 @@
+{
+  "headline": "Leantime AI Agent Integration Redesign",
+  "projectId": 2,
+  "description": "<h2>Objective</h2><p>Redesign and fully codify the Leantime automation layer as a first-class, mandatory part of every AI agent workflow in this repository.</p><h2>Scope</h2><ul><li>New <code>10 - Leantime Integration Agent</code> in all three extension systems</li><li>Updated <code>LEANTIME_AUTOMATION.md</code> with governing flow, time tracking policy, and HTML description template</li><li><code>retrospectives.*</code> CLI alias in <code>scripts/leantime/catalog.ts</code></li><li>Leantime step additions to all workflow files</li><li><code>AGENTS.md</code> update with agent 10 and Leantime protocol section</li><li>HTML description template in <code>docs/ai/templates/</code></li><li>Production board seeding (Blueprint + Retrospective)</li><li>Deferred canvas families task update</li><li>Secondary area documentation</li></ul><h2>Acceptance Criteria</h2><ul><li>Agent 10 definition files exist in all three extension systems</li><li>All workflows and prompts reference the Leantime integration protocol</li><li><code>retrospectives.*</code> CLI alias implemented and passes typecheck</li><li>Production Blueprint board seeded</li><li>Production Retrospective board seeded</li><li>Time tracking policy documented</li><li>HTML description template available</li></ul><h2>Affected Areas</h2><ul><li><code>docs/ai/general/LEANTIME_AUTOMATION.md</code></li><li><code>docs/ai/general/10 - Leantime Integration Agent.md</code></li><li><code>AGENTS.md</code></li><li><code>scripts/leantime/catalog.ts</code></li><li><code>.github/agents/leantime-integration.agent.md</code></li><li><code>.agents/skills/leantime-integration/SKILL.md</code></li><li>All <code>.zenflow/workflows/*.md</code> files</li><li>All <code>.github/prompts/*.prompt.md</code> files</li><li>All <code>.agents/skills/*/SKILL.md</code> files</li></ul>",
+  "acceptanceCriteria": "- Agent 10 exists in all three extension systems\n- All workflows reference Leantime protocol\n- retrospectives.* CLI alias passes typecheck and smoke test\n- Production boards seeded\n- Time tracking and HTML template documented",
+  "priority": 3,
+  "storypoints": 5,
+  "planHours": 4,
+  "milestoneid": 34,
+  "tags": "leantime,agents,automation,retrospectives",
+  "status": 3
+}

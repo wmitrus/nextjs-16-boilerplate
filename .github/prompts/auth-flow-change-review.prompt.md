@@ -5,6 +5,10 @@ argument-hint: 'Auth-flow change summary, affected files, symptoms, or risks to 
 agent: '02 - Security & Auth'
 ---
 
+> **Leantime Integration Required**
+> At task open and close, invoke the `10 - Leantime Integration Agent`.
+> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
 Review the current auth/bootstrap/onboarding change.
 
 Required auth-flow context:

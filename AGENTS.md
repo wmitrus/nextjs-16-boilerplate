@@ -300,6 +300,49 @@ If a requested solution conflicts with sound architecture, security, or runtime 
 
 ---
 
+## Leantime Integration — Mandatory Agent Protocol
+
+Every non-trivial AI agent task MUST include Leantime steps at task open and task close.
+
+**Governing reference**: `docs/ai/general/LEANTIME_AUTOMATION.md`
+
+**Responsible agent**: `10 - Leantime Integration Agent`
+(`docs/ai/general/10 - Leantime Integration Agent.md`)
+
+### When Leantime steps are required
+
+- Every feature implementation, bug fix, refactor, documentation, security
+  incident, baseline validation, and E2E verification task.
+- Every workflow run in `.zenflow/workflows/`, `.github/prompts/`, and
+  `.agents/skills/` that uses the agent system.
+
+### Task Open (at workflow start)
+
+1. Check existing milestones and tasks in the project (no duplicates).
+2. Create or locate milestone.
+3. Create main task with HTML description (see Task Description Template in
+   `LEANTIME_AUTOMATION.md`).
+4. Patch status to `W toku` (4).
+5. Record task ID in `intake.md` or `plan.md`.
+
+### Task Close (at workflow end)
+
+1. Patch status to `Zrobione` (0).
+2. Log time with `pnpm lt -- run time.log` (see Time Tracking Policy in
+   `LEANTIME_AUTOMATION.md`).
+3. Update wiki article if implementation notes should persist.
+
+### CLI Entrypoint
+
+```shell
+pnpm lt -- run <operation-id> --input '{"...": "..."}' --format=json
+```
+
+For Retrospective boards: use `retrospectives.*` operations.
+For Blueprint/Canvas boards: use `blueprints.*` operations.
+
+---
+
 ## Source Of Truth
 
 Repository code is authoritative.
@@ -625,6 +668,7 @@ Full correspondence table and process ownership rules: `docs/ai/general/REPOSITO
 | 07  | Playwright E2E        | `docs/ai/general/07 - Playwright E2E Agent.md`        | `.github/agents/playwright-e2e.agent.md`        | `.agents/skills/playwright-e2e/SKILL.md`        | `playwright-e2e-agent`      |
 | 08  | Workflow Orchestrator | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | `.github/agents/workflow-orchestrator.agent.md` | `.agents/skills/workflow-orchestrator/SKILL.md` | —                           |
 | 09  | Task Brief Authoring  | `docs/ai/general/09 - Task Brief Authoring.md`        | —                                               | `.agents/skills/task-brief-authoring/SKILL.md`  | —                           |
+| 10  | Leantime Integration  | `docs/ai/general/10 - Leantime Integration Agent.md`  | `.github/agents/leantime-integration.agent.md`  | `.agents/skills/leantime-integration/SKILL.md`  | —                           |
 
 ### Workflow Entry Point Correspondence
 

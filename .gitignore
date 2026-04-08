@@ -24,6 +24,9 @@ newrelic_agent.log
 /playwright-report/
 /test-results/
 
+# Temporary agent working files (Leantime input staging, etc.)
+/.tmp
+
 # Storybook
 storybook-static
 *storybook.log

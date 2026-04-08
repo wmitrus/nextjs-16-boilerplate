@@ -35,5 +35,5 @@ export function onRouterTransitionStart(
   navigationType: 'push' | 'replace' | 'traverse',
 ): void {
   Sentry.captureRouterTransitionStart(url, navigationType);
-  window.newrelic?.interaction()?.setName(url)?.save();
+  window.newrelic?.interaction?.()?.setName?.(url)?.save?.();
 }

@@ -158,6 +158,22 @@ nr.getBrowserTimingHeader({
 });
 ```
 
+## New Relic Browser — Snippet Size and Delivery Constraints
+
+**The NR Browser SPA snippet is approximately 88 KB.** Vercel per-variable limit is 64 KB for Node and 5 KB for Edge.
+
+**Do NOT recommend setting `NEW_RELIC_BROWSER_SNIPPET_BASE64` or `NEW_RELIC_BROWSER_SNIPPET` as Vercel environment variables.** This was ruled out in task `2026-04-05-nr-browser-spa` and is documented in `docs/features/26 - New Relic Server & Browser Integration.md`.
+
+The correct delivery model:
+
+- `/observability/new-relic-browser.js` route serves the loader at request time via `getBrowserAgentScriptSafe()` → `getBrowserTimingHeaderSafe()` → APM Node agent
+- No snippet env var needed on Vercel
+- `NEW_RELIC_BROWSER_SNIPPET_BASE64` / `NEW_RELIC_BROWSER_SNIPPET` are local `.env.local` fallback only
+
+**SPA vs rum/lite**: if `getBrowserTimingHeaderSafe()` returns rum/lite (not SPA), only 1 page view per hard navigation is recorded. To fix: switch the APM app browser monitoring type to SPA in the NR UI.
+
+**Prior task**: `.copilot/tasks/2026-04-05-nr-browser-spa/` — read before any NR Browser work.
+
 ## Dependencies
 
 **Main Dependencies**:

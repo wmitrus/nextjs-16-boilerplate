@@ -8,7 +8,9 @@ This document explains how New Relic is integrated in this repository for both s
 
 New Relic's official Node.js install guidance for Next.js says the agent should be preloaded via `NODE_OPTIONS='--require newrelic'` at process start.
 
-In this repository, relying only on a later `require('newrelic')` inside `src/instrumentation.ts` is not sufficient for hosted preview/production runtimes. When the agent is not preloaded early enough:
+In this repository, relying only on a later `require('newrelic')` inside `src/instrumentation.ts` is not sufficient for hosted preview/production runtimes. Additionally, raw `NODE_OPTIONS='--require newrelic'` can crash Vercel preview builds before dependencies are installed in the remote build sandbox. This repository therefore uses a repo-local preload shim: `NODE_OPTIONS='--require ./scripts/new-relic/preload.cjs'`.
+
+When the agent is not preloaded early enough:
 
 - backend web transactions may never be instrumented on Vercel
 - `getBrowserTimingHeader()` can keep returning an empty comment because it requires both collector/app metadata and an active web transaction
@@ -57,7 +59,7 @@ They share New Relic as a vendor, but they do not use the same integration path.
 
 ### Boot sequence
 
-For hosted Next.js preview/production runtimes, set `NODE_OPTIONS=--require newrelic` so the agent is preloaded before Next.js initializes.
+For hosted Next.js preview/production runtimes, set `NODE_OPTIONS=--require ./scripts/new-relic/preload.cjs` so the agent is preloaded before Next.js initializes without crashing remote preview builds.
 
 `src/instrumentation.ts` still conditionally loads the module during the Node runtime bootstrap and warns when production New Relic is enabled without the preload.
 
@@ -74,7 +76,7 @@ if (process.env.NEXT_RUNTIME === 'nodejs') {
 }
 ```
 
-This keeps the agent disabled by default, avoids loading it when no license key is configured, and makes missing preloading visible in logs before telemetry silently disappears.
+The preload shim safely no-ops when the `newrelic` package is not installed yet in the current process, which prevents Vercel's remote preview build bootstrap from failing before dependency installation. This keeps the agent disabled by default, avoids loading it when no license key is configured, and makes missing preloading visible in logs before telemetry silently disappears.
 
 ### Provider isolation
 
@@ -214,7 +216,7 @@ These commands are intentionally separate from the Next.js runtime integration:
 
 Verify all of the following:
 
-- `NODE_OPTIONS=--require newrelic` is set in the hosted preview/production runtime when `NEW_RELIC_ENABLED=true`
+- `NODE_OPTIONS=--require ./scripts/new-relic/preload.cjs` is set in the hosted preview/production runtime when `NEW_RELIC_ENABLED=true`
 - `NEW_RELIC_ENABLED=true`
 - `NEW_RELIC_LICENSE_KEY` is present in the deployment environment
 - server rendered `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
@@ -237,12 +239,12 @@ If `NEW_RELIC_ENABLED=true`, the deployment must also provide
 `NEW_RELIC_LICENSE_KEY`.
 
 If this is a hosted preview/production runtime, it must also preload the agent
-with `NODE_OPTIONS=--require newrelic`.
+with `NODE_OPTIONS=--require ./scripts/new-relic/preload.cjs`.
 
 This repository now treats that as a deploy-time cross-field requirement:
 
 - `pnpm env:validate` fails when New Relic is enabled without a license key
-- `pnpm env:validate` fails in production when `NODE_OPTIONS` does not preload `newrelic`
+- `pnpm env:validate` fails in production when `NODE_OPTIONS` does not preload New Relic
 - the root layout does not inject the browser loader unless both values are present
 - `/env-summary` and `/api/internal/env-check` report the misconfiguration
 
@@ -256,7 +258,7 @@ If the warning shows `tx=false`, the browser timing API is being called without 
 
 If it shows `appId=false`, the agent still has not completed the collector handshake and does not have `application_id` yet.
 
-In hosted Next.js runtimes, both states usually mean the process did not preload the New Relic agent early enough. Check `NODE_OPTIONS=--require newrelic` first.
+In hosted Next.js runtimes, both states usually mean the process did not preload the New Relic agent early enough. Check `NODE_OPTIONS=--require ./scripts/new-relic/preload.cjs` first.
 
 ## Guardrails
 

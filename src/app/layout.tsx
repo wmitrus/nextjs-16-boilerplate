@@ -59,6 +59,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isNewRelicEnabled =
+    env.NEW_RELIC_ENABLED && Boolean(env.NEW_RELIC_LICENSE_KEY);
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
   const signInFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
     env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
@@ -80,7 +82,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {env.NEW_RELIC_ENABLED && (
+        {isNewRelicEnabled && (
           <Script
             id="nr-browser-agent"
             src="/observability/new-relic-browser.js"

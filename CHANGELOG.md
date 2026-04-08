@@ -1,3 +1,22 @@
+# [1.23.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.22.0...v1.23.0) (2026-04-08)
+
+
+### Bug Fixes
+
+* **observability:** correct logging filepath configuration ([020668d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/020668dd281e7689a5f79c1d8089cb5f4438e1a9))
+* **observability:** correct New Relic interaction method chaining ([1f0c8e3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1f0c8e34d4b85c1e3dba42b61edf578a21340ab6))
+* **observability:** enhance New Relic browser script handling ([e8b9f57](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e8b9f57deea708cb9cd544277c70965264b25ace))
+* **observability:** streamline New Relic browser snippet integration ([11bcde2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/11bcde2d8122e8e6b075f5a2a820db4de641624d))
+* **observability:** update New Relic browser monitoring integration ([6f57000](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6f57000e24290b38e1d5bcccdfd7716100302d8d))
+* **observability:** update New Relic interaction interfaces for optional methods ([76a662b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/76a662b5c273119ce95d5f28921b93d558d5db51))
+
+
+### Features
+
+* **observability:** add New Relic browser agent and interaction types ([b28bde0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b28bde04be2e72592c2f72f1b0b5608423599de7))
+* **observability:** add New Relic browser agent interfaces ([331ac19](https://github.com/wmitrus/nextjs-16-boilerplate/commit/331ac190d632b92286d5203e8ec14517a2312abf))
+* **observability:** enhance router transition tracking with New Relic ([f7cfb09](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f7cfb092e6938e2f4f15a3b4e823a4e7832eb2c0))
+
 # [1.22.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.21.0...v1.22.0) (2026-04-08)
 
 ### Bug Fixes

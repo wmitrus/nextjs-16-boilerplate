@@ -203,7 +203,7 @@ describe('validate-env: runValidation', () => {
         undefined,
         'true',
         'nr_license_key',
-        '--require newrelic',
+        '--require ./scripts/new-relic/preload.cjs',
         'production',
       );
 
@@ -238,7 +238,7 @@ describe('validate-env: runValidation', () => {
         undefined,
         'true',
         '   ',
-        '--require newrelic',
+        '--require ./scripts/new-relic/preload.cjs',
         'production',
       );
 
@@ -246,8 +246,40 @@ describe('validate-env: runValidation', () => {
       expect(errors[0]).toContain('NEW_RELIC_LICENSE_KEY');
     });
 
-    it('accepts the short -r preload form for backward compatibility', () => {
+    it('accepts the repo-local preload shim', () => {
       const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        'nr_license_key',
+        '--require ./scripts/new-relic/preload.cjs',
+        'production',
+      );
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('accepts direct package preload forms for backward compatibility', () => {
+      let errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        'nr_license_key',
+        '--require newrelic',
+        'production',
+      );
+
+      expect(errors).toHaveLength(0);
+
+      errors = runValidation(
         'authjs',
         undefined,
         undefined,

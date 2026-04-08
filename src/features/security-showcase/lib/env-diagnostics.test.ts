@@ -44,7 +44,7 @@ describe('getEnvDiagnostics', () => {
       INTERNAL_API_KEY: 'internal-key',
       NEW_RELIC_ENABLED: 'true',
       NEW_RELIC_LICENSE_KEY: 'nr_license_key',
-      NODE_OPTIONS: '--require newrelic',
+      NODE_OPTIONS: '--require ./scripts/new-relic/preload.cjs',
     };
 
     const { getEnvDiagnostics } = await import('./env-diagnostics');
@@ -76,7 +76,9 @@ describe('getEnvDiagnostics', () => {
     expect(diagnostics.ok).toBe(false);
     expect(diagnostics.conditionalIssues).toContainEqual({
       condition: 'NEW_RELIC_ENABLED=true in hosted production runtime',
-      missing: ['NODE_OPTIONS includes --require newrelic'],
+      missing: [
+        'NODE_OPTIONS includes --require ./scripts/new-relic/preload.cjs',
+      ],
       issue:
         'New Relic is enabled but the Node.js process is not preloading the agent, so Next.js/Vercel transactions and browser timing headers can fail to initialize.',
     });

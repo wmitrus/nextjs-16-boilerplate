@@ -484,7 +484,7 @@ describe('validateNewRelicConfigValues', () => {
       validateNewRelicConfigValues(
         true,
         'nr_license_key',
-        '--require newrelic',
+        '--require ./scripts/new-relic/preload.cjs',
         'production',
       ),
     ).not.toThrow();
@@ -498,7 +498,7 @@ describe('validateNewRelicConfigValues', () => {
       validateNewRelicConfigValues(
         'true',
         'nr_license_key',
-        '--require newrelic',
+        '--require ./scripts/new-relic/preload.cjs',
         'production',
       ),
     ).not.toThrow();
@@ -512,7 +512,7 @@ describe('validateNewRelicConfigValues', () => {
       validateNewRelicConfigValues(
         true,
         '  nr_license_key  ',
-        '--require newrelic',
+        '--require ./scripts/new-relic/preload.cjs',
         'production',
       ),
     ).not.toThrow();
@@ -526,15 +526,38 @@ describe('validateNewRelicConfigValues', () => {
       validateNewRelicConfigValues(
         true,
         '   ',
-        '--require newrelic',
+        '--require ./scripts/new-relic/preload.cjs',
         'production',
       ),
     ).toThrow('NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY');
   });
 
-  it('also accepts the short -r preload form for backward compatibility', async () => {
+  it('accepts the repo-local preload shim', async () => {
     vi.resetModules();
     const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues(
+        true,
+        'nr_license_key',
+        '--require ./scripts/new-relic/preload.cjs',
+        'production',
+      ),
+    ).not.toThrow();
+  });
+
+  it('also accepts direct package preload forms for backward compatibility', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues(
+        true,
+        'nr_license_key',
+        '--require newrelic',
+        'production',
+      ),
+    ).not.toThrow();
 
     expect(() =>
       validateNewRelicConfigValues(

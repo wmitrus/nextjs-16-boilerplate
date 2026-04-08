@@ -458,6 +458,15 @@ describe('validateNewRelicConfigValues', () => {
     expect(() => validateNewRelicConfigValues(false, undefined)).not.toThrow();
   });
 
+  it('throws when New Relic is enabled via string without a license key', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() => validateNewRelicConfigValues('true', undefined)).toThrow(
+      'NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY',
+    );
+  });
+
   it('throws when New Relic is enabled without a license key', async () => {
     vi.resetModules();
     const { validateNewRelicConfigValues } = await import('./env');
@@ -489,6 +498,20 @@ describe('validateNewRelicConfigValues', () => {
       validateNewRelicConfigValues(
         'true',
         'nr_license_key',
+        '--require newrelic',
+        'production',
+      ),
+    ).not.toThrow();
+  });
+
+  it('passes when New Relic license key has surrounding whitespace', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues(
+        true,
+        '  nr_license_key  ',
         '--require newrelic',
         'production',
       ),

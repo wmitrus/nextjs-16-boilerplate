@@ -32,6 +32,7 @@ import { mockEnv } from '@/testing/infrastructure/env';
 describe('GET /observability/new-relic-browser.js', () => {
   beforeEach(() => {
     mockEnv.NEW_RELIC_ENABLED = false;
+    mockEnv.NEW_RELIC_LICENSE_KEY = undefined;
     mockGetBrowserAgentScriptSafe.mockReset();
     mockGetNrBrowserDiagnostics.mockReturnValue({
       agentLoaded: false,
@@ -52,6 +53,7 @@ describe('GET /observability/new-relic-browser.js', () => {
 
   it('returns an empty script when the runtime loader is unavailable', async () => {
     mockEnv.NEW_RELIC_ENABLED = true;
+    mockEnv.NEW_RELIC_LICENSE_KEY = 'nr_license_key';
     mockGetBrowserAgentScriptSafe.mockReturnValue('');
 
     const response = await GET();
@@ -63,6 +65,7 @@ describe('GET /observability/new-relic-browser.js', () => {
 
   it('returns the resolved browser script when available', async () => {
     mockEnv.NEW_RELIC_ENABLED = true;
+    mockEnv.NEW_RELIC_LICENSE_KEY = 'nr_license_key';
     mockGetBrowserAgentScriptSafe.mockReturnValue(
       ';window.NREUM||(NREUM={});NREUM.init={};',
     );

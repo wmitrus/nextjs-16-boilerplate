@@ -449,3 +449,30 @@ describe('validateAuthProviderConfigValues', () => {
     ).not.toThrow();
   });
 });
+
+describe('validateNewRelicConfigValues', () => {
+  it('passes when New Relic is disabled', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() => validateNewRelicConfigValues(false, undefined)).not.toThrow();
+  });
+
+  it('throws when New Relic is enabled without a license key', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() => validateNewRelicConfigValues(true, undefined)).toThrow(
+      'NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY',
+    );
+  });
+
+  it('passes when New Relic is enabled with a license key', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues(true, 'nr_license_key'),
+    ).not.toThrow();
+  });
+});

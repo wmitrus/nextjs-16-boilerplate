@@ -30,4 +30,10 @@ if (sentryDsn) {
   });
 }
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+export function onRouterTransitionStart(
+  url: string,
+  navigationType: 'push' | 'replace' | 'traverse',
+): void {
+  Sentry.captureRouterTransitionStart(url, navigationType);
+  window.newrelic?.interaction()?.setName(url)?.save();
+}

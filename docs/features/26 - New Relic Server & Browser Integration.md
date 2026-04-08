@@ -4,6 +4,30 @@
 
 This document explains how New Relic is integrated in this repository for both server-side APM and browser monitoring, and why the browser path uses a request-time Node loader route instead of calling the New Relic browser API at layout render time.
 
+## Critical Constraints — Read Before Changing Anything
+
+### Snippet env var size limit — Vercel
+
+The NR Browser SPA snippet is approximately 88 KB. Vercel documents a per-variable limit of 64 KB for Node deployments and 5 KB for Edge/Middleware.
+
+Do NOT recommend or attempt to set `NEW_RELIC_BROWSER_SNIPPET_BASE64` or `NEW_RELIC_BROWSER_SNIPPET` as Vercel environment variables. It will not work and was already ruled out during the `2026-04-05-nr-browser-spa` task.
+
+Local `.env.local` transport remains valid for dev fallback only.
+
+### Primary delivery model — request-time Node route
+
+The browser loader is served at request time from `/observability/new-relic-browser.js` via `getBrowserAgentScriptSafe()` which calls `getBrowserTimingHeaderSafe()` which calls the NR APM Node agent `getBrowserTimingHeader()`. No snippet env var is required on Vercel.
+
+### SPA vs rum/lite — browser agent type
+
+`getBrowserTimingHeaderSafe()` returns whichever loader type the APM app is configured for in the NR UI. If the APM app browser monitoring type is set to rum/lite, only the initial hard page load is tracked — App Router client-side navigations are invisible. To get full SPA monitoring, change the type to SPA in the NR UI: Browser → App → Application settings → Browser agent type → SPA.
+
+### Prior task — mandatory reading
+
+Full implementation history, constraints, and operational decisions are in `.copilot/tasks/2026-04-05-nr-browser-spa/`.
+
+Any agent working on NR Browser must read that task folder BEFORE making any recommendations or code changes.
+
 ## Integration split
 
 There are two separate concerns:

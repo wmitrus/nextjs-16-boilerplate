@@ -11,17 +11,4 @@ declare global {
       timezone?: string;
     };
   }
-
-  interface NewRelicBrowserInteraction {
-    setName(name: string): NewRelicBrowserInteraction;
-    save(): NewRelicBrowserInteraction;
-  }
-
-  interface NewRelicBrowserAgent {
-    interaction(): NewRelicBrowserInteraction;
-  }
-
-  interface Window {
-    newrelic?: NewRelicBrowserAgent;
-  }
 }

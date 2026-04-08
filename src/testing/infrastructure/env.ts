@@ -73,8 +73,6 @@ const defaultEnv: MutableEnv = {
   NEW_RELIC_NERDGRAPH_API_URL: undefined,
   NEW_RELIC_USER_API_KEY: undefined,
   NEW_RELIC_ACCOUNT_ID: undefined,
-  NEW_RELIC_BROWSER_SNIPPET: undefined,
-  NEW_RELIC_BROWSER_SNIPPET_BASE64: undefined,
 };
 
 /**

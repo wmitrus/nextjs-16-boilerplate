@@ -9,6 +9,7 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
+    NODE_OPTIONS: z.string().optional(),
     CHROMATIC_PROJECT_TOKEN: z.string().optional(),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -120,6 +121,7 @@ export const env = createEnv({
    */
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
+    NODE_OPTIONS: process.env.NODE_OPTIONS,
     CHROMATIC_PROJECT_TOKEN: process.env.CHROMATIC_PROJECT_TOKEN,
     LOG_LEVEL: process.env.LOG_LEVEL,
     LOG_DIR: process.env.LOG_DIR,
@@ -240,12 +242,30 @@ export function validateTenancyConfigValues(
 export function validateNewRelicConfigValues(
   newRelicEnabled: boolean | string | undefined,
   newRelicLicenseKey: string | undefined,
+  nodeOptions?: string | undefined,
+  nodeEnv?: string | undefined,
 ): void {
   const isNewRelicEnabled =
     newRelicEnabled === true || newRelicEnabled === 'true';
+  const normalizedLicenseKey = newRelicLicenseKey?.trim() ?? '';
 
-  if (isNewRelicEnabled && !newRelicLicenseKey) {
+  if (isNewRelicEnabled && normalizedLicenseKey.length === 0) {
     throw new Error('NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY.');
+  }
+
+  if (!isNewRelicEnabled || nodeEnv !== 'production') {
+    return;
+  }
+
+  const normalizedNodeOptions = nodeOptions?.trim() ?? '';
+  const preloadsNewRelic = /(^|\s)(-r|--require)\s+newrelic(\s|$)/u.test(
+    normalizedNodeOptions,
+  );
+
+  if (!preloadsNewRelic) {
+    throw new Error(
+      'NEW_RELIC_ENABLED=true in production requires NODE_OPTIONS to preload the agent with "--require newrelic".',
+    );
   }
 }
 

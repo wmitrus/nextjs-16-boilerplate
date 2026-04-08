@@ -205,6 +205,7 @@ These commands are intentionally separate from the Next.js runtime integration:
 Verify all of the following:
 
 - `NEW_RELIC_ENABLED=true`
+- `NEW_RELIC_LICENSE_KEY` is present in the deployment environment
 - server rendered `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
 - `/observability/new-relic-browser.js` returns `200` with JavaScript content (non-empty)
 - Vercel logs show no `[NR Browser] Returning empty browser script.` warning, or if they do, check `agentConnected` field
@@ -218,6 +219,17 @@ Verify all of the following:
 ### Empty browser script on Vercel (EROFS)
 
 If `newrelic.js` does not have `logging.filepath: 'stdout'`, the NR agent crashes on startup trying to write a log file to the read-only Vercel filesystem. This causes both backend APM and browser monitoring to fail. Verify `newrelic.js` has `logging: { level: 'info', filepath: 'stdout' }`.
+
+### Deploy validation rule
+
+If `NEW_RELIC_ENABLED=true`, the deployment must also provide
+`NEW_RELIC_LICENSE_KEY`.
+
+This repository now treats that as a deploy-time cross-field requirement:
+
+- `pnpm env:validate` fails when New Relic is enabled without a license key
+- the root layout does not inject the browser loader unless both values are present
+- `/env-summary` and `/api/internal/env-check` report the misconfiguration
 
 ### Empty browser script on cold start (`agentConnected: false`)
 

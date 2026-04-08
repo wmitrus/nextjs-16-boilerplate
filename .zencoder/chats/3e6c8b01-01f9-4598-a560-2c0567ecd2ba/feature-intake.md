@@ -183,17 +183,17 @@ Document final status for:
 
 ## Acceptance Criteria
 
-- [ ] Agent ownership decision is documented and justified.
-- [ ] A new or updated governing Leantime flow document exists in `docs/ai/general/`.
-- [ ] All three agent extensions are updated to require Leantime steps.
-- [ ] `AGENTS.md` references the governing Leantime flow document.
-- [ ] All workflow files (`.zenflow/`, `.github/prompts/`, `.agents/skills/`) include Leantime steps.
-- [ ] `retrospectives.*` CLI alias is implemented and smoke-tested.
-- [ ] Production Leantime task authoring template exists.
-- [ ] Time tracking policy is documented in the governing flow doc.
-- [ ] At least one production Blueprint board and one Retrospective board seeded.
-- [ ] Deferred canvas families task updated in Leantime.
-- [ ] Secondary area decisions documented.
+- [x] Agent ownership decision is documented and justified.
+- [x] A new or updated governing Leantime flow document exists in `docs/ai/general/`.
+- [x] All three agent extensions are updated to require Leantime steps.
+- [x] `AGENTS.md` references the governing Leantime flow document.
+- [x] All workflow files (`.zenflow/`, `.github/prompts/`, `.agents/skills/`) include Leantime steps.
+- [x] `retrospectives.*` CLI alias is implemented and smoke-tested.
+- [x] Production Leantime task authoring template exists.
+- [x] Time tracking policy is documented in the governing flow doc.
+- [x] At least one production Blueprint board and one Retrospective board seeded.
+- [x] Deferred canvas families task updated in Leantime.
+- [x] Secondary area decisions documented.
 
 ---
 
@@ -244,5 +244,13 @@ Document final status for:
 - [x] Agent extension locations confirmed (three systems).
 - [x] `pnpm lt` CLI verified operational in prior sessions.
 - [x] AutomationApi plugin with `boardType=retros` confirmed.
-- [ ] Final agent ownership decision made.
-- [ ] Production seeding environment confirmed ready.
+- [x] Final agent ownership decision made. — 10 - Leantime Integration Agent created in all three extension systems.
+- [x] Production seeding environment confirmed ready. — Blueprint board #14 and Retrospective board #15 seeded.
+
+---
+
+## Closure
+
+**Status**: Complete — 2026-04-07
+
+All acceptance criteria met. All readiness prerequisites satisfied. Task closed in Leantime as `#36 Zrobione`. 3.0h logged.

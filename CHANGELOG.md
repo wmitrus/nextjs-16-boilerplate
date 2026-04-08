@@ -1,3 +1,17 @@
+# [1.22.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.21.0...v1.22.0) (2026-04-08)
+
+
+### Bug Fixes
+
+* **newrelic:** enhance router transition tracking with New Relic ([8b85e64](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8b85e64bb8c31162c5a87884cf0e3aae32196571))
+* **newrelic:** update logging configuration to use stdout ([953e33f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/953e33f3804a861c83c046f28b3d6ef89e361b58))
+* **observability:** suppress noisy logs in production environments ([69ae0ca](https://github.com/wmitrus/nextjs-16-boilerplate/commit/69ae0ca158d5a01c656c0668df17cd3ab9c0200d))
+
+
+### Features
+
+* **newrelic:** add New Relic browser agent and interaction types ([a4e8756](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a4e8756ff195b4de27ae2116e5fb36d7842feb37))
+
 # [1.21.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.20.0...v1.21.0) (2026-04-08)
 
 

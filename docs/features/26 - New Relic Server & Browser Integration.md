@@ -113,16 +113,9 @@ The active implementation uses `/observability/new-relic-browser.js` so it is tr
 
 `getBrowserAgentScriptSafe()` supports two deployment paths:
 
-1. Preferred for deployments: request-time `getBrowserTimingHeader()` generation from the Node agent
-2. Fallback for local/dev compatibility: env-backed snippet resolution
+Request-time `getBrowserTimingHeader()` generation from the Node APM agent is the only delivery mechanism.
 
-The env-backed fallback still supports three realities:
-
-1. Preferred local transport: `NEW_RELIC_BROWSER_SNIPPET_BASE64`
-2. Fallback: `NEW_RELIC_BROWSER_SNIPPET`
-3. Recovery path: re-read `.env.local` or `.env` when dotenv truncates the raw snippet at `#`
-
-The helper also strips optional outer `<script>` tags so either raw JavaScript or a copied HTML wrapper can be tolerated.
+`NEW_RELIC_BROWSER_SNIPPET` and `NEW_RELIC_BROWSER_SNIPPET_BASE64` env vars have been **removed**. The full copy/paste snippet is ~88 KB — exceeding Vercel's 64 KB per-variable limit. Env-var delivery is not viable for deployment environments. All related helper functions (`getBrowserSnippetSafe`, `resolveBrowserSnippetSource`, `readRawSnippetFromEnvFiles`) have also been removed.
 
 ## Environment variables
 
@@ -134,20 +127,6 @@ Server-only env vars involved in this integration:
 - `NEW_RELIC_NERDGRAPH_API_URL`
 - `NEW_RELIC_USER_API_KEY`
 - `NEW_RELIC_ACCOUNT_ID`
-- `NEW_RELIC_BROWSER_SNIPPET`
-- `NEW_RELIC_BROWSER_SNIPPET_BASE64`
-
-### Preferred deployment path
-
-For Vercel and other hosted deployments, prefer the request-time Node loader route and do not rely on storing the full browser copy/paste snippet in env vars.
-
-Reason: the full snippet can exceed practical deployment env-var limits and is awkward to manage operationally.
-
-### Preferred local transport
-
-Use `NEW_RELIC_BROWSER_SNIPPET_BASE64` for local dotenv files.
-
-Reason: raw New Relic browser snippets can contain `#`, and dotenv treats that as a comment delimiter. That can truncate the value and produce broken JavaScript at runtime.
 
 ## CSP requirements
 
@@ -197,28 +176,28 @@ These commands are intentionally separate from the Next.js runtime integration:
 - they are meant for debugging, CI diagnostics, and human investigation
 - they do not expose arbitrary NRQL execution to browser code or public routes
 
-### Browser snippet loads but breaks in the console
-
-Most likely cause: truncated raw env content.
-
-Check whether the snippet was stored in `NEW_RELIC_BROWSER_SNIPPET` inside a dotenv file and contains `#`. If so, move it to `NEW_RELIC_BROWSER_SNIPPET_BASE64`.
-
-### `_BASE64` variable contains raw JavaScript
-
-The resolver tolerates this for compatibility, but it is still the wrong storage format. Use actual base64 for stable transport.
-
 ### No browser data arrives in New Relic
 
 Verify all of the following:
 
 - `NEW_RELIC_ENABLED=true`
-- server rendered the `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
-- `/observability/new-relic-browser.js` returns `200` with JavaScript, not `401` or JSON
-- the route runs in the Node runtime, not Edge
-- when New Relic is intentionally disabled, `/observability/new-relic-browser.js` still resolves as a harmless empty JavaScript asset
+- server rendered `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
+- `/observability/new-relic-browser.js` returns `200` with JavaScript content (non-empty)
+- Vercel logs show no `[NR Browser] Returning empty browser script.` warning, or if they do, check `agentConnected` field
+- NR APM entity has browser monitoring **enabled** in NR UI (APM → Applications → your app → Settings → Application)
+- Browser monitoring type is set to **Pro + SPA** in NR UI
+- `logging.filepath: 'stdout'` is set in `newrelic.js` (prevents EROFS crash on Vercel)
+- The route runs in the Node runtime, not Edge
 - CSP `connect-src` allows the NR beacon host
-- if you use the env fallback locally, the copied snippet is for the correct app
-- enough ingest time has passed for data to appear
+- Enough ingest time has passed (NR can take 5-15 minutes to display new browser data)
+
+### Empty browser script on Vercel (EROFS)
+
+If `newrelic.js` does not have `logging.filepath: 'stdout'`, the NR agent crashes on startup trying to write a log file to the read-only Vercel filesystem. This causes both backend APM and browser monitoring to fail. Verify `newrelic.js` has `logging: { level: 'info', filepath: 'stdout' }`.
+
+### Empty browser script on cold start (`agentConnected: false`)
+
+The NR APM agent needs ~1-3 seconds after cold start to connect to the NR collector. Until connected, `isConnected()` = false and the browser route returns an empty script. This is expected for the first request after a cold start. Subsequent warm requests will return the full snippet.
 
 ## Guardrails
 
@@ -226,5 +205,5 @@ Verify all of the following:
 - Keep custom SDK usage isolated in `src/core/observability/new-relic.ts`.
 - Keep browser injection request-time, Node-only, and layout-safe.
 - Keep browser loader delivery on a public non-API route unless proxy behavior is intentionally redesigned.
-- Prefer base64 snippet transport only for local dotenv fallback.
+- Do NOT add `NEW_RELIC_BROWSER_SNIPPET` or `NEW_RELIC_BROWSER_SNIPPET_BASE64` env vars back — they are removed. The snippet is ~88 KB, exceeding Vercel's 64 KB per-variable limit.
 - Treat vendor-host instrumentation suggestions as out of scope unless a separate task justifies them.

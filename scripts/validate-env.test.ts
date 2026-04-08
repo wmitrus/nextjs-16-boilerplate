@@ -29,6 +29,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -43,6 +45,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('CLERK_SECRET_KEY');
@@ -58,6 +62,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
@@ -73,6 +79,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -89,6 +97,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('DEFAULT_TENANT_ID');
@@ -104,6 +114,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -118,6 +130,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('TENANT_CONTEXT_SOURCE');
@@ -133,6 +147,8 @@ describe('validate-env: runValidation', () => {
         'provider',
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -149,6 +165,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         false,
         undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(2);
       expect(errors.some((e) => e.includes('CLERK_SECRET_KEY'))).toBe(true);
@@ -167,6 +185,8 @@ describe('validate-env: runValidation', () => {
         undefined,
         'true',
         undefined,
+        undefined,
+        'production',
       );
 
       expect(errors).toHaveLength(1);
@@ -183,6 +203,61 @@ describe('validate-env: runValidation', () => {
         undefined,
         'true',
         'nr_license_key',
+        '--require newrelic',
+        'production',
+      );
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('returns an error when New Relic is enabled in production without NODE_OPTIONS preload', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        'nr_license_key',
+        undefined,
+        'production',
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NODE_OPTIONS');
+    });
+
+    it('returns an error when NEW_RELIC_LICENSE_KEY is whitespace only', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        '   ',
+        '--require newrelic',
+        'production',
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NEW_RELIC_LICENSE_KEY');
+    });
+
+    it('accepts the short -r preload form for backward compatibility', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        'nr_license_key',
+        '-r newrelic',
+        'production',
       );
 
       expect(errors).toHaveLength(0);

@@ -131,6 +131,7 @@ Commonly required:
 Optional observability note:
 
 - `NEW_RELIC_BROWSER_SNIPPET` and `NEW_RELIC_BROWSER_SNIPPET_BASE64` are local/dev fallback inputs, not the preferred hosted deployment path for browser monitoring.
+- If `NEW_RELIC_ENABLED=true`, `NEW_RELIC_LICENSE_KEY` must also be set for deploy validation to pass and for telemetry to start.
 
 Security and ops vars remain optional with defaults unless your deployment policy requires strict values.
 

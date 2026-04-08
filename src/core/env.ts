@@ -43,8 +43,6 @@ export const env = createEnv({
     NEW_RELIC_NERDGRAPH_API_URL: z.url().optional(),
     NEW_RELIC_USER_API_KEY: z.string().optional(),
     NEW_RELIC_ACCOUNT_ID: z.coerce.number().int().positive().optional(),
-    NEW_RELIC_BROWSER_SNIPPET: z.string().optional(),
-    NEW_RELIC_BROWSER_SNIPPET_BASE64: z.string().optional(),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
@@ -144,9 +142,6 @@ export const env = createEnv({
     NEW_RELIC_NERDGRAPH_API_URL: process.env.NEW_RELIC_NERDGRAPH_API_URL,
     NEW_RELIC_USER_API_KEY: process.env.NEW_RELIC_USER_API_KEY,
     NEW_RELIC_ACCOUNT_ID: process.env.NEW_RELIC_ACCOUNT_ID,
-    NEW_RELIC_BROWSER_SNIPPET: process.env.NEW_RELIC_BROWSER_SNIPPET,
-    NEW_RELIC_BROWSER_SNIPPET_BASE64:
-      process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,

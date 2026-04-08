@@ -1,8 +1,5 @@
 import 'server-only';
 
-import fs from 'node:fs';
-import path from 'node:path';
-
 export type ContainerExecutionContext =
   | 'rsc'
   | 'server_action'
@@ -27,93 +24,6 @@ interface NewRelicApi {
 }
 
 let _newrelic: NewRelicApi | null | undefined = undefined;
-
-function stripOptionalScriptWrapper(snippet: string): string {
-  const trimmedSnippet = snippet.trim();
-
-  if (!/^<script\b/i.test(trimmedSnippet)) {
-    return trimmedSnippet;
-  }
-
-  const startTagEndIndex = trimmedSnippet.indexOf('>');
-  const lowerCasedSnippet = trimmedSnippet.toLowerCase();
-  const endTagStartIndex = lowerCasedSnippet.lastIndexOf('</script>');
-
-  if (
-    startTagEndIndex === -1 ||
-    endTagStartIndex === -1 ||
-    endTagStartIndex <= startTagEndIndex
-  ) {
-    return trimmedSnippet;
-  }
-
-  return trimmedSnippet.slice(startTagEndIndex + 1, endTagStartIndex).trim();
-}
-
-function readRawSnippetFromEnvFiles(): string {
-  const envLocalPath = path.resolve(process.cwd(), '.env.local');
-  if (fs.existsSync(envLocalPath)) {
-    const envLocalContent = fs.readFileSync(envLocalPath, 'utf8');
-    const envLocalLine = envLocalContent
-      .split(/\r?\n/u)
-      .find((line) => line.startsWith('NEW_RELIC_BROWSER_SNIPPET='));
-
-    if (envLocalLine) {
-      return envLocalLine.slice('NEW_RELIC_BROWSER_SNIPPET='.length).trim();
-    }
-  }
-
-  const envPath = path.resolve(process.cwd(), '.env');
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    const envLine = envContent
-      .split(/\r?\n/u)
-      .find((line) => line.startsWith('NEW_RELIC_BROWSER_SNIPPET='));
-
-    if (envLine) {
-      return envLine.slice('NEW_RELIC_BROWSER_SNIPPET='.length).trim();
-    }
-  }
-
-  return '';
-}
-
-export function resolveBrowserSnippetSource(options: {
-  base64Snippet?: string;
-  rawSnippet?: string;
-  rawEnvFileSnippet?: string;
-}): string {
-  const trimmedBase64Snippet = options.base64Snippet?.trim() ?? '';
-
-  if (trimmedBase64Snippet) {
-    const normalizedBase64Snippet = trimmedBase64Snippet.replace(/\s+/gu, '');
-    const looksLikeBase64 =
-      normalizedBase64Snippet.length > 0 &&
-      normalizedBase64Snippet.length % 4 === 0 &&
-      /^[A-Za-z0-9+/=]+$/u.test(normalizedBase64Snippet);
-
-    if (looksLikeBase64) {
-      return Buffer.from(normalizedBase64Snippet, 'base64')
-        .toString('utf8')
-        .trim();
-    }
-
-    return trimmedBase64Snippet;
-  }
-
-  const trimmedRawSnippet = options.rawSnippet?.trim() ?? '';
-  const trimmedRawEnvFileSnippet = options.rawEnvFileSnippet?.trim() ?? '';
-
-  if (
-    trimmedRawSnippet &&
-    trimmedRawEnvFileSnippet.length > trimmedRawSnippet.length &&
-    trimmedRawEnvFileSnippet.startsWith(trimmedRawSnippet)
-  ) {
-    return trimmedRawEnvFileSnippet;
-  }
-
-  return trimmedRawSnippet;
-}
 
 function tryGetNewRelic(): NewRelicApi | null {
   if (_newrelic !== undefined) return _newrelic;
@@ -156,8 +66,8 @@ export function recordContainerCreated(
  * getBrowserTimingHeader(), which triggers the Next.js prerender dynamic
  * data access check and throws at build time.
  *
- * If you need browser monitoring in a layout, use getBrowserSnippetSafe()
- * instead, which reads from an env var and never calls the NR API.
+ * Browser monitoring is delivered via the /observability/new-relic-browser.js
+ * route handler which calls this function at request time (after connection()).
  */
 export function getBrowserTimingHeaderSafe(): string {
   const nr = tryGetNewRelic();
@@ -176,64 +86,29 @@ export function getBrowserTimingHeaderSafe(): string {
 }
 
 /**
- * Returns the browser script to serve from a request-time Node route.
+ * Returns the NR Browser SPA snippet for the /observability/new-relic-browser.js
+ * route. Requires the NR APM agent to be loaded and connected (isConnected() = true).
  *
- * Prefer the runtime-generated APM loader because it avoids shipping the full
- * browser snippet through deployment env vars. Fall back to the env-backed
- * snippet only for local/dev compatibility or when the agent is unavailable.
- */
-export function resolveBrowserAgentScriptSource(options: {
-  agentSnippet?: string;
-  base64Snippet?: string;
-  rawSnippet?: string;
-  rawEnvFileSnippet?: string;
-}): string {
-  const trimmedAgentSnippet = stripOptionalScriptWrapper(
-    options.agentSnippet?.trim() ?? '',
-  );
-
-  if (trimmedAgentSnippet) {
-    return trimmedAgentSnippet;
-  }
-
-  return stripOptionalScriptWrapper(
-    resolveBrowserSnippetSource({
-      base64Snippet: options.base64Snippet,
-      rawSnippet: options.rawSnippet,
-      rawEnvFileSnippet: options.rawEnvFileSnippet,
-    }),
-  );
-}
-
-/**
- * Returns the NR Browser SPA snippet for injection into the root layout.
- *
- * Uses NEW_RELIC_BROWSER_SNIPPET_BASE64 when present, otherwise falls back to
- * NEW_RELIC_BROWSER_SNIPPET. When local dotenv parsing truncates the raw
- * snippet at `#`, this helper recovers the full raw line from `.env.local` or
- * `.env`. Returns empty string when no snippet is configured — does NOT fall
- * back to getBrowserTimingHeaderSafe() to avoid the Next.js 16 prerender
- * Date.now() constraint.
- */
-export function getBrowserSnippetSafe(): string {
-  return resolveBrowserAgentScriptSource({
-    base64Snippet: process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
-    rawSnippet: process.env.NEW_RELIC_BROWSER_SNIPPET,
-    rawEnvFileSnippet: readRawSnippetFromEnvFiles(),
-  });
-}
-
-/**
- * Request-time loader source for the public browser JS route.
- *
- * Safe in Node route handlers because it executes at request time instead of
- * during layout prerender. Do not call this from prerenderable layouts.
+ * Returns empty string when the agent is unavailable or not yet connected —
+ * this is expected on cold starts. Do not call from prerenderable layouts.
  */
 export function getBrowserAgentScriptSafe(): string {
-  return resolveBrowserAgentScriptSource({
-    agentSnippet: getBrowserTimingHeaderSafe(),
-    base64Snippet: process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
-    rawSnippet: process.env.NEW_RELIC_BROWSER_SNIPPET,
-    rawEnvFileSnippet: readRawSnippetFromEnvFiles(),
-  });
+  return getBrowserTimingHeaderSafe();
+}
+
+/**
+ * Returns diagnostic state for the NR browser script delivery.
+ * Used only for server-side diagnostic logging — never exposed to the client.
+ */
+export function getNrBrowserDiagnostics(): Record<string, boolean> {
+  const nr = tryGetNewRelic();
+  const agentLoaded = nr !== null;
+  const agentConnected = agentLoaded
+    ? Boolean(nr.agent?.collector?.isConnected())
+    : false;
+
+  return {
+    agentLoaded,
+    agentConnected,
+  };
 }

@@ -111,23 +111,25 @@ Next.js 16 prerender mode throws a hard error if `Date.now()` is accessed before
 **Rule**: If a helper function wraps any NR API call (or any library that calls `Date.now()` / `new Date()` internally), it **must not** be called from `layout.tsx` or any page/component that may be prerendered. Use an env-var–based approach instead:
 
 ```typescript
-// ✅ Safe — reads env var, never calls NR API
-export function getBrowserSnippetSafe(): string {
-  return resolveBrowserSnippetSource({
-    base64Snippet: process.env.NEW_RELIC_BROWSER_SNIPPET_BASE64,
-    rawSnippet: process.env.NEW_RELIC_BROWSER_SNIPPET,
-  });
+// ✅ Safe — route handler runs at request time, after await connection()
+// src/app/observability/new-relic-browser.js/route.ts
+export async function GET(): Promise<Response> {
+  await connection();
+  const snippet = getBrowserAgentScriptSafe(); // calls getBrowserTimingHeaderSafe() at request time
+  // ...
 }
 
 // ❌ Unsafe in prerendered layouts — NR records Date.now() internally
 export function getBrowserTimingHeaderSafe(): string {
-  return nr.getBrowserTimingHeader(...); // triggers prerender error
+  return nr.getBrowserTimingHeader(...); // triggers prerender error if called from layout
 }
 ```
 
 **Diagnostic signal**: Error message will reference `new Date()` or the current time, plus the call-stack path through `layout.tsx`. The root cause is always a library recording timestamps — not the layout itself.
 
-**Fix pattern**: If you must inject third-party browser monitoring scripts in a layout, store the full inert snippet string in a server-only env var and inject it as a raw string — never call the third-party SDK API from the layout.
+**Fix pattern**: NR browser monitoring is delivered via the `/observability/new-relic-browser.js` route handler which calls `getBrowserAgentScriptSafe()` at request time (after `await connection()`). Do **not** call any NR API from `layout.tsx` or any prerenderable RSC — use the route-based delivery instead.
+
+`getBrowserSnippetSafe()`, `resolveBrowserSnippetSource()`, `readRawSnippetFromEnvFiles()`, and the `NEW_RELIC_BROWSER_SNIPPET` / `NEW_RELIC_BROWSER_SNIPPET_BASE64` env vars have been **removed**. The snippet was ~88 KB (exceeding Vercel's 64 KB per-variable limit) and the env var approach was not usable in deployment. The APM-linked route is the only delivery mechanism.
 
 ## New Relic Browser — `allowTransactionlessInjection` Is Banned
 

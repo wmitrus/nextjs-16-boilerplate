@@ -13,27 +13,12 @@ declare global {
   }
 
   interface NewRelicBrowserInteraction {
-    setName(name: string): NewRelicBrowserInteraction;
-    setAttribute(
-      key: string,
-      value: string | number | boolean,
-    ): NewRelicBrowserInteraction;
-    save(): NewRelicBrowserInteraction;
-    end(): void;
+    setName?: (name: string) => NewRelicBrowserInteraction;
+    save?: () => NewRelicBrowserInteraction;
   }
 
   interface NewRelicBrowserAgent {
-    interaction(): NewRelicBrowserInteraction;
-    setCurrentRouteName(name: string): void;
-    setCustomAttribute(name: string, value: string | number | boolean): void;
-    addPageAction(
-      name: string,
-      attributes?: Record<string, string | number | boolean>,
-    ): void;
-    noticeError(
-      error: Error | string,
-      customAttributes?: Record<string, string | number | boolean>,
-    ): void;
+    interaction?: (() => NewRelicBrowserInteraction) | undefined;
   }
 
   interface Window {

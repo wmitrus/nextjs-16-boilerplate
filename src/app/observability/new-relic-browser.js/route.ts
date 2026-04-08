@@ -2,7 +2,10 @@ import { connection } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { env } from '@/core/env';
-import { getBrowserAgentScriptSafe } from '@/core/observability/new-relic';
+import {
+  getBrowserAgentScriptSafe,
+  getNrBrowserDiagnostics,
+} from '@/core/observability/new-relic';
 
 function createEmptyScriptResponse(): NextResponse {
   return new NextResponse('', {
@@ -23,6 +26,8 @@ export async function GET(): Promise<Response> {
 
   const snippet = getBrowserAgentScriptSafe();
   if (!snippet) {
+    const diag = getNrBrowserDiagnostics();
+    console.warn('[NR Browser] Returning empty browser script.', diag);
     return createEmptyScriptResponse();
   }
 

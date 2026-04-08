@@ -232,6 +232,24 @@ export function validateTenancyConfigValues(
 }
 
 /**
+ * Cross-field observability validation against explicit values.
+ *
+ * Rules:
+ * - NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY
+ */
+export function validateNewRelicConfigValues(
+  newRelicEnabled: boolean | string | undefined,
+  newRelicLicenseKey: string | undefined,
+): void {
+  const isNewRelicEnabled =
+    newRelicEnabled === true || newRelicEnabled === 'true';
+
+  if (isNewRelicEnabled && !newRelicLicenseKey) {
+    throw new Error('NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY.');
+  }
+}
+
+/**
  * Cross-field auth provider configuration validation against explicit values.
  *
  * Rules:

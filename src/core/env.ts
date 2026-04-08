@@ -1,8 +1,6 @@
 import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
 
-import { nodeOptionsPreloadsNewRelic } from '@/core/observability/new-relic-node-options';
-
 export const env = createEnv({
   /**
    * Server-side environment variables schema.
@@ -244,8 +242,8 @@ export function validateTenancyConfigValues(
 export function validateNewRelicConfigValues(
   newRelicEnabled: boolean | string | undefined,
   newRelicLicenseKey: string | undefined,
-  nodeOptions?: string | undefined,
-  nodeEnv?: string | undefined,
+  _nodeOptions?: string | undefined,
+  _nodeEnv?: string | undefined,
 ): void {
   const isNewRelicEnabled =
     newRelicEnabled === true || newRelicEnabled === 'true';
@@ -253,16 +251,6 @@ export function validateNewRelicConfigValues(
 
   if (isNewRelicEnabled && normalizedLicenseKey.length === 0) {
     throw new Error('NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY.');
-  }
-
-  if (!isNewRelicEnabled || nodeEnv !== 'production') {
-    return;
-  }
-
-  if (!nodeOptionsPreloadsNewRelic(nodeOptions)) {
-    throw new Error(
-      'NEW_RELIC_ENABLED=true in production requires NODE_OPTIONS to preload New Relic. Use "--require ./scripts/new-relic/preload.cjs".',
-    );
   }
 }
 

@@ -481,26 +481,16 @@ describe('validateNewRelicConfigValues', () => {
     const { validateNewRelicConfigValues } = await import('./env');
 
     expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        'nr_license_key',
-        '--require ./scripts/new-relic/preload.cjs',
-        'production',
-      ),
+      validateNewRelicConfigValues(true, 'nr_license_key'),
     ).not.toThrow();
   });
 
-  it('passes when enabled uses string true and preload is present', async () => {
+  it('passes when enabled uses string true and a license key is present', async () => {
     vi.resetModules();
     const { validateNewRelicConfigValues } = await import('./env');
 
     expect(() =>
-      validateNewRelicConfigValues(
-        'true',
-        'nr_license_key',
-        '--require ./scripts/new-relic/preload.cjs',
-        'production',
-      ),
+      validateNewRelicConfigValues('true', 'nr_license_key'),
     ).not.toThrow();
   });
 
@@ -509,12 +499,7 @@ describe('validateNewRelicConfigValues', () => {
     const { validateNewRelicConfigValues } = await import('./env');
 
     expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        '  nr_license_key  ',
-        '--require ./scripts/new-relic/preload.cjs',
-        'production',
-      ),
+      validateNewRelicConfigValues(true, '  nr_license_key  '),
     ).not.toThrow();
   });
 
@@ -522,78 +507,8 @@ describe('validateNewRelicConfigValues', () => {
     vi.resetModules();
     const { validateNewRelicConfigValues } = await import('./env');
 
-    expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        '   ',
-        '--require ./scripts/new-relic/preload.cjs',
-        'production',
-      ),
-    ).toThrow('NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY');
-  });
-
-  it('accepts the repo-local preload shim', async () => {
-    vi.resetModules();
-    const { validateNewRelicConfigValues } = await import('./env');
-
-    expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        'nr_license_key',
-        '--require ./scripts/new-relic/preload.cjs',
-        'production',
-      ),
-    ).not.toThrow();
-  });
-
-  it('also accepts direct package preload forms for backward compatibility', async () => {
-    vi.resetModules();
-    const { validateNewRelicConfigValues } = await import('./env');
-
-    expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        'nr_license_key',
-        '--require newrelic',
-        'production',
-      ),
-    ).not.toThrow();
-
-    expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        'nr_license_key',
-        '-r newrelic',
-        'production',
-      ),
-    ).not.toThrow();
-  });
-
-  it('throws in production when NODE_OPTIONS does not preload newrelic', async () => {
-    vi.resetModules();
-    const { validateNewRelicConfigValues } = await import('./env');
-
-    expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        'nr_license_key',
-        undefined,
-        'production',
-      ),
-    ).toThrow('NODE_OPTIONS');
-  });
-
-  it('does not require NODE_OPTIONS preload outside production', async () => {
-    vi.resetModules();
-    const { validateNewRelicConfigValues } = await import('./env');
-
-    expect(() =>
-      validateNewRelicConfigValues(
-        true,
-        'nr_license_key',
-        undefined,
-        'development',
-      ),
-    ).not.toThrow();
+    expect(() => validateNewRelicConfigValues(true, '   ')).toThrow(
+      'NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY',
+    );
   });
 });

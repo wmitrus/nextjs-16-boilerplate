@@ -20,7 +20,7 @@ function createEmptyScriptResponse(): NextResponse {
 export async function GET(): Promise<Response> {
   await connection();
 
-  if (!env.NEW_RELIC_ENABLED) {
+  if (!env.NEW_RELIC_ENABLED || !env.NEW_RELIC_LICENSE_KEY) {
     return createEmptyScriptResponse();
   }
 

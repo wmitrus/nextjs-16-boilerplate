@@ -99,6 +99,10 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     'https://bam.eu01.nr-data.net',
   ];
 
+  const betterStackDomains = env.BETTERSTACK_ENABLED
+    ? ['https://in.logs.betterstack.com']
+    : [];
+
   const connectSrc = [
     "'self'",
     ...clerkDomains,
@@ -107,6 +111,7 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     'https://clerk-telemetry.com',
     ...sentryDomains,
     ...newRelicBeaconDomains,
+    ...betterStackDomains,
     isPreview ? 'https://vercel.live wss://vercel.live wss://*.pusher.com' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_CONNECT_EXTRA),
   ]

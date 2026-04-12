@@ -35,6 +35,7 @@ describe('GET /observability/new-relic-browser.js', () => {
   beforeEach(() => {
     mockEnv.NEW_RELIC_ENABLED = false;
     mockEnv.NEW_RELIC_LICENSE_KEY = undefined;
+    mockEnv.VERCEL_ENV = undefined;
     mockGetBrowserAgentScriptSafe.mockReset();
     mockGetNrBrowserDiagnostics.mockReturnValue({
       agentLoaded: false,
@@ -65,6 +66,39 @@ describe('GET /observability/new-relic-browser.js', () => {
     expect(await response.text()).toBe('');
     expect(mockGetBrowserAgentScriptSafe).toHaveBeenCalledTimes(1);
     expect(mockGetNrBrowserDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits console.warn when agent is unavailable outside Vercel', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockEnv.NEW_RELIC_ENABLED = true;
+    mockEnv.NEW_RELIC_LICENSE_KEY = 'nr_license_key';
+    mockEnv.VERCEL_ENV = undefined;
+    mockGetBrowserAgentScriptSafe.mockReturnValue('');
+
+    await GET();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[NR Browser] Empty script'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('emits console.info (not warn) when agent is unavailable on Vercel', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    mockEnv.NEW_RELIC_ENABLED = true;
+    mockEnv.NEW_RELIC_LICENSE_KEY = 'nr_license_key';
+    mockEnv.VERCEL_ENV = 'preview';
+    mockGetBrowserAgentScriptSafe.mockReturnValue('');
+
+    await GET();
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[NR Browser] Empty script'),
+    );
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 
   it('returns the resolved browser script when available', async () => {

@@ -5,6 +5,7 @@ import type { DestinationStream, StreamEntry } from 'pino';
 import { env } from '@/core/env';
 
 import {
+  createBetterStackStream,
   createConsoleStream,
   createFileStream,
   createLogflareWriteStream,
@@ -36,8 +37,11 @@ export function getLogStreams(): StreamEntry[] {
     // 2. File stream (if enabled)
     shouldLogToFile ? createFileStream(logFile, logDir) : undefined,
 
-    // 3. External service stream (if enabled)
+    // 3. Logflare stream (if enabled)
     env.LOGFLARE_SERVER_ENABLED ? createLogflareWriteStream() : undefined,
+
+    // 4. Better Stack stream (if enabled)
+    env.BETTERSTACK_ENABLED ? createBetterStackStream() : undefined,
   ];
 
   // Filter out any null or undefined streams

@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   serverExternalPackages: [
     '@electric-sql/pglite',
-    '@logtail/next',
     '@logtail/pino',
     'newrelic',
     'pino',

@@ -1,4 +1,5 @@
 import { ClerkProvider } from '@clerk/nextjs';
+import { BetterStackWebVitals } from '@logtail/next/webVitals';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
@@ -59,8 +60,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isNewRelicEnabled =
+  const isNewRelicApmBrowserEnabled =
     env.NEW_RELIC_ENABLED && Boolean(env.NEW_RELIC_LICENSE_KEY);
+  const isNewRelicCdnBrowserEnabled =
+    env.NEW_RELIC_BROWSER_ENABLED &&
+    Boolean(env.NEW_RELIC_BROWSER_LICENSE_KEY) &&
+    Boolean(env.NEW_RELIC_BROWSER_APP_ID);
+  const isNewRelicEnabled =
+    isNewRelicApmBrowserEnabled || isNewRelicCdnBrowserEnabled;
+  const isBetterStackWebVitalsEnabled =
+    env.BETTERSTACK_ENABLED && env.BETTERSTACK_WEB_VITALS_ENABLED;
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
   const signInFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
     env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
@@ -93,6 +102,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {isBetterStackWebVitalsEnabled && <BetterStackWebVitals />}
         {isClerkProvider ? (
           <Suspense fallback={<RootLayoutShell />}>
             <ClerkProvider

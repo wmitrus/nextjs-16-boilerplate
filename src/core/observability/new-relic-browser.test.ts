@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+/** @vitest-environment node */
+import '@/testing/infrastructure/env';
+
+import { beforeEach, describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@/core/env', () => ({ env: {} }));
 
 import {
   getNrBrowserCdnSnippet,
@@ -12,6 +14,12 @@ import {
 import { mockEnv } from '@/testing/infrastructure/env';
 
 describe('getNrBrowserCdnSnippet', () => {
+  beforeEach(() => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
+    mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
+    mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
+  });
+
   it('returns empty string when NEW_RELIC_BROWSER_ENABLED is false', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
@@ -46,6 +54,12 @@ describe('getNrBrowserCdnSnippet', () => {
 });
 
 describe('isNrBrowserCdnEnabled', () => {
+  beforeEach(() => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
+    mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
+    mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
+  });
+
   it('returns false when disabled', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';

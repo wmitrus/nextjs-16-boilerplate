@@ -121,3 +121,51 @@ export function createLogflareWriteStream(): DestinationStream | null {
     return null;
   }
 }
+
+/**
+ * Creates a Better Stack write stream using the @logtail/pino transport via
+ * pino.transport() worker thread. The worker thread is non-blocking and does
+ * not affect request processing performance.
+ *
+ * Returns null when Better Stack is disabled or the source token is missing.
+ * Enable/disable via BETTERSTACK_ENABLED env flag.
+ */
+export function createBetterStackStream(): DestinationStream | null {
+  if (!env.BETTERSTACK_ENABLED || !env.BETTER_STACK_SOURCE_TOKEN) {
+    console.warn(
+      'Better Stack stream disabled: BETTERSTACK_ENABLED=true and BETTER_STACK_SOURCE_TOKEN are required',
+    );
+    return null;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pino = require('pino') as {
+      transport: (opts: {
+        target: string;
+        options?: Record<string, unknown>;
+      }) => DestinationStream;
+    };
+
+    const transportOptions: Record<string, unknown> = {
+      sourceToken: env.BETTER_STACK_SOURCE_TOKEN,
+    };
+
+    if (env.BETTER_STACK_INGESTING_URL) {
+      transportOptions.options = { endpoint: env.BETTER_STACK_INGESTING_URL };
+    }
+
+    const stream = pino.transport({
+      target: '@logtail/pino',
+      options: transportOptions,
+    });
+
+    return stream;
+  } catch (err) {
+    console.error(
+      'Failed to initialize Better Stack stream:',
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}

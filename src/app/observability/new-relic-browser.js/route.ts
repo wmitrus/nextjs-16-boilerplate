@@ -27,9 +27,15 @@ export async function GET(): Promise<Response> {
   const snippet = getBrowserAgentScriptSafe();
   if (!snippet) {
     const diag = getNrBrowserDiagnostics();
-    console.warn(
-      `[NR Browser] Empty script loaded=${diag.agentLoaded} connected=${diag.agentConnected} tx=${diag.hasActiveTransaction} appId=${diag.hasApplicationId}`,
-    );
+
+    const logLine = `[NR Browser] Empty script loaded=${diag.agentLoaded} connected=${diag.agentConnected} tx=${diag.hasActiveTransaction} appId=${diag.hasApplicationId}`;
+
+    if (env.VERCEL_ENV) {
+      console.info(logLine);
+    } else {
+      console.warn(logLine);
+    }
+
     return createEmptyScriptResponse();
   }
 

@@ -82,9 +82,9 @@ const defaultEnv: MutableEnv = {
   BETTERSTACK_ENABLED: false,
   BETTER_STACK_SOURCE_TOKEN: undefined,
   BETTERSTACK_WEB_VITALS_ENABLED: false,
-  BETTER_STACK_INGESTING_URL: undefined,
+  BETTER_STACK_INGESTING_URL: 'https://in.logs.betterstack.com',
   NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN: undefined,
-  NEXT_PUBLIC_BETTER_STACK_INGESTING_URL: undefined,
+  NEXT_PUBLIC_BETTER_STACK_INGESTING_URL: 'https://in.logs.betterstack.com',
 };
 
 /**

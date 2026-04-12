@@ -22,9 +22,17 @@ vi.mock('next/server', async () => {
   };
 });
 
+const { mockGetNrBrowserCdnSnippet } = vi.hoisted(() => ({
+  mockGetNrBrowserCdnSnippet: vi.fn().mockReturnValue(''),
+}));
+
 vi.mock('@/core/observability/new-relic', () => ({
   getBrowserAgentScriptSafe: mockGetBrowserAgentScriptSafe,
   getNrBrowserDiagnostics: mockGetNrBrowserDiagnostics,
+}));
+
+vi.mock('@/core/observability/new-relic-browser', () => ({
+  getNrBrowserCdnSnippet: mockGetNrBrowserCdnSnippet,
 }));
 
 import { GET } from './route';
@@ -35,8 +43,11 @@ describe('GET /observability/new-relic-browser.js', () => {
   beforeEach(() => {
     mockEnv.NEW_RELIC_ENABLED = false;
     mockEnv.NEW_RELIC_LICENSE_KEY = undefined;
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.VERCEL_ENV = undefined;
     mockGetBrowserAgentScriptSafe.mockReset();
+    mockGetNrBrowserCdnSnippet.mockReset();
+    mockGetNrBrowserCdnSnippet.mockReturnValue('');
     mockGetNrBrowserDiagnostics.mockReturnValue({
       agentLoaded: false,
       agentConnected: false,
@@ -114,5 +125,44 @@ describe('GET /observability/new-relic-browser.js', () => {
       ';window.NREUM||(NREUM={});NREUM.init={};',
     );
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
+
+  it('returns CDN snippet when NEW_RELIC_BROWSER_ENABLED is true and snippet is available', async () => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
+    mockGetNrBrowserCdnSnippet.mockReturnValue(
+      '(function(){window.NREUM={};})();',
+    );
+
+    const response = await GET();
+
+    expect(await response.text()).toBe('(function(){window.NREUM={};})();');
+    expect(response.headers.get('Content-Type')).toBe(
+      'application/javascript; charset=utf-8',
+    );
+    expect(mockGetBrowserAgentScriptSafe).not.toHaveBeenCalled();
+  });
+
+  it('falls through to APM mode when CDN snippet is empty', async () => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
+    mockEnv.NEW_RELIC_ENABLED = true;
+    mockEnv.NEW_RELIC_LICENSE_KEY = 'nr_license_key';
+    mockGetNrBrowserCdnSnippet.mockReset();
+    mockGetNrBrowserCdnSnippet.mockReturnValue('');
+    mockGetBrowserAgentScriptSafe.mockReturnValue(';window.NREUM||(NREUM={});');
+
+    const response = await GET();
+
+    expect(await response.text()).toBe(';window.NREUM||(NREUM={});');
+  });
+
+  it('returns empty when both modes disabled', async () => {
+    mockEnv.NEW_RELIC_ENABLED = false;
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
+
+    const response = await GET();
+
+    expect(await response.text()).toBe('');
+    expect(mockGetNrBrowserCdnSnippet).not.toHaveBeenCalled();
+    expect(mockGetBrowserAgentScriptSafe).not.toHaveBeenCalled();
   });
 });

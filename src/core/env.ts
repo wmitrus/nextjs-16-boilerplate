@@ -58,11 +58,11 @@ export const env = createEnv({
     BETTERSTACK_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    BETTERSTACK_SOURCE_TOKEN: z.string().optional(),
+    BETTER_STACK_SOURCE_TOKEN: z.string().optional(),
     BETTERSTACK_WEB_VITALS_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    BETTERSTACK_INGESTING_URL: z.url().optional(),
+    BETTER_STACK_INGESTING_URL: z.url().optional(),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
@@ -113,8 +113,8 @@ export const env = createEnv({
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    NEXT_PUBLIC_BETTERSTACK_SOURCE_TOKEN: z.string().optional(),
-    NEXT_PUBLIC_BETTERSTACK_INGESTING_URL: z.url().optional(),
+    NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN: z.string().optional(),
+    NEXT_PUBLIC_BETTER_STACK_INGESTING_URL: z.url().optional(),
     NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
@@ -171,9 +171,9 @@ export const env = createEnv({
     NEW_RELIC_LOG_DRAIN_ENABLED: process.env.NEW_RELIC_LOG_DRAIN_ENABLED,
     NEW_RELIC_OTEL_ENABLED: process.env.NEW_RELIC_OTEL_ENABLED,
     BETTERSTACK_ENABLED: process.env.BETTERSTACK_ENABLED,
-    BETTERSTACK_SOURCE_TOKEN: process.env.BETTERSTACK_SOURCE_TOKEN,
+    BETTER_STACK_SOURCE_TOKEN: process.env.BETTER_STACK_SOURCE_TOKEN,
     BETTERSTACK_WEB_VITALS_ENABLED: process.env.BETTERSTACK_WEB_VITALS_ENABLED,
-    BETTERSTACK_INGESTING_URL: process.env.BETTERSTACK_INGESTING_URL,
+    BETTER_STACK_INGESTING_URL: process.env.BETTER_STACK_INGESTING_URL,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
@@ -200,10 +200,10 @@ export const env = createEnv({
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:
       process.env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED,
-    NEXT_PUBLIC_BETTERSTACK_SOURCE_TOKEN:
-      process.env.NEXT_PUBLIC_BETTERSTACK_SOURCE_TOKEN,
-    NEXT_PUBLIC_BETTERSTACK_INGESTING_URL:
-      process.env.NEXT_PUBLIC_BETTERSTACK_INGESTING_URL,
+    NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN:
+      process.env.NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN,
+    NEXT_PUBLIC_BETTER_STACK_INGESTING_URL:
+      process.env.NEXT_PUBLIC_BETTER_STACK_INGESTING_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,

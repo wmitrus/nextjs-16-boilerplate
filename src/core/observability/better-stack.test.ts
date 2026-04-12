@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+/** @vitest-environment node */
+import '@/testing/infrastructure/env';
+
+import { beforeEach, describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@/core/env', () => ({ env: {} }));
 
 import {
   getBetterStackIngestingUrl,
@@ -14,6 +16,11 @@ import {
 import { mockEnv } from '@/testing/infrastructure/env';
 
 describe('isBetterStackEnabled', () => {
+  beforeEach(() => {
+    mockEnv.BETTERSTACK_ENABLED = false;
+    mockEnv.BETTER_STACK_SOURCE_TOKEN = undefined;
+  });
+
   it('returns false when disabled', () => {
     mockEnv.BETTERSTACK_ENABLED = false;
     mockEnv.BETTER_STACK_SOURCE_TOKEN = 'token123';
@@ -34,6 +41,11 @@ describe('isBetterStackEnabled', () => {
 });
 
 describe('getBetterStackSourceToken', () => {
+  beforeEach(() => {
+    mockEnv.BETTERSTACK_ENABLED = false;
+    mockEnv.BETTER_STACK_SOURCE_TOKEN = undefined;
+  });
+
   it('returns null when disabled', () => {
     mockEnv.BETTERSTACK_ENABLED = false;
     mockEnv.BETTER_STACK_SOURCE_TOKEN = 'token123';
@@ -48,6 +60,10 @@ describe('getBetterStackSourceToken', () => {
 });
 
 describe('getBetterStackIngestingUrl', () => {
+  beforeEach(() => {
+    mockEnv.BETTER_STACK_INGESTING_URL = undefined;
+  });
+
   it('returns default URL when not set', () => {
     mockEnv.BETTER_STACK_INGESTING_URL = undefined;
     expect(getBetterStackIngestingUrl()).toBe(
@@ -62,6 +78,12 @@ describe('getBetterStackIngestingUrl', () => {
 });
 
 describe('isBetterStackWebVitalsEnabled', () => {
+  beforeEach(() => {
+    mockEnv.BETTERSTACK_ENABLED = false;
+    mockEnv.BETTER_STACK_SOURCE_TOKEN = undefined;
+    mockEnv.BETTERSTACK_WEB_VITALS_ENABLED = false;
+  });
+
   it('returns false when better stack disabled', () => {
     mockEnv.BETTERSTACK_ENABLED = false;
     mockEnv.BETTER_STACK_SOURCE_TOKEN = 'token123';

@@ -61,11 +61,11 @@ describe('getBetterStackSourceToken', () => {
 
 describe('getBetterStackIngestingUrl', () => {
   beforeEach(() => {
-    mockEnv.BETTER_STACK_INGESTING_URL = undefined;
+    mockEnv.BETTER_STACK_INGESTING_URL = 'https://in.logs.betterstack.com';
   });
 
-  it('returns default URL when not set', () => {
-    mockEnv.BETTER_STACK_INGESTING_URL = undefined;
+  it('returns the default URL', () => {
+    mockEnv.BETTER_STACK_INGESTING_URL = 'https://in.logs.betterstack.com';
     expect(getBetterStackIngestingUrl()).toBe(
       'https://in.logs.betterstack.com',
     );

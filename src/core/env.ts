@@ -50,6 +50,7 @@ export const env = createEnv({
     NEW_RELIC_BROWSER_LICENSE_KEY: z.string().optional(),
     NEW_RELIC_BROWSER_APP_ID: z.string().optional(),
     NEW_RELIC_BROWSER_ACCOUNT_ID: z.string().optional(),
+    NEW_RELIC_BROWSER_AGENT_URL: z.url().optional(),
     NEW_RELIC_LOG_DRAIN_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
@@ -174,6 +175,7 @@ export const env = createEnv({
     NEW_RELIC_BROWSER_LICENSE_KEY: process.env.NEW_RELIC_BROWSER_LICENSE_KEY,
     NEW_RELIC_BROWSER_ACCOUNT_ID: process.env.NEW_RELIC_BROWSER_ACCOUNT_ID,
     NEW_RELIC_BROWSER_APP_ID: process.env.NEW_RELIC_BROWSER_APP_ID,
+    NEW_RELIC_BROWSER_AGENT_URL: process.env.NEW_RELIC_BROWSER_AGENT_URL,
     NEW_RELIC_LOG_DRAIN_ENABLED: process.env.NEW_RELIC_LOG_DRAIN_ENABLED,
     NEW_RELIC_OTEL_ENABLED: process.env.NEW_RELIC_OTEL_ENABLED,
     BETTERSTACK_ENABLED: process.env.BETTERSTACK_ENABLED,

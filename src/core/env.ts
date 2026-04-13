@@ -49,6 +49,7 @@ export const env = createEnv({
       .default(false),
     NEW_RELIC_BROWSER_LICENSE_KEY: z.string().optional(),
     NEW_RELIC_BROWSER_APP_ID: z.string().optional(),
+    NEW_RELIC_BROWSER_ACCOUNT_ID: z.string().optional(),
     NEW_RELIC_LOG_DRAIN_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
@@ -62,7 +63,9 @@ export const env = createEnv({
     BETTERSTACK_WEB_VITALS_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    BETTER_STACK_INGESTING_URL: z.url().optional(),
+    BETTER_STACK_INGESTING_URL: z
+      .url()
+      .default('https://in.logs.betterstack.com'),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
@@ -114,7 +117,9 @@ export const env = createEnv({
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
     NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN: z.string().optional(),
-    NEXT_PUBLIC_BETTER_STACK_INGESTING_URL: z.url().optional(),
+    NEXT_PUBLIC_BETTER_STACK_INGESTING_URL: z
+      .url()
+      .default('https://in.logs.betterstack.com'),
     NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
@@ -167,6 +172,7 @@ export const env = createEnv({
     NEW_RELIC_ACCOUNT_ID: process.env.NEW_RELIC_ACCOUNT_ID,
     NEW_RELIC_BROWSER_ENABLED: process.env.NEW_RELIC_BROWSER_ENABLED,
     NEW_RELIC_BROWSER_LICENSE_KEY: process.env.NEW_RELIC_BROWSER_LICENSE_KEY,
+    NEW_RELIC_BROWSER_ACCOUNT_ID: process.env.NEW_RELIC_BROWSER_ACCOUNT_ID,
     NEW_RELIC_BROWSER_APP_ID: process.env.NEW_RELIC_BROWSER_APP_ID,
     NEW_RELIC_LOG_DRAIN_ENABLED: process.env.NEW_RELIC_LOG_DRAIN_ENABLED,
     NEW_RELIC_OTEL_ENABLED: process.env.NEW_RELIC_OTEL_ENABLED,

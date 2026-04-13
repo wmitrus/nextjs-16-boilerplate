@@ -27,7 +27,7 @@ export function getBetterStackSourceToken(): string | null {
  * Falls back to the default Better Stack endpoint when not set.
  */
 export function getBetterStackIngestingUrl(): string {
-  return env.BETTER_STACK_INGESTING_URL ?? 'https://in.logs.betterstack.com';
+  return env.BETTER_STACK_INGESTING_URL;
 }
 
 /**

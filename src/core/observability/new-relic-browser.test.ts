@@ -7,49 +7,63 @@ import { vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import {
-  getNrBrowserCdnSnippet,
+  getNrBrowserCdnConfig,
   isNrBrowserCdnEnabled,
 } from './new-relic-browser';
 
 import { mockEnv } from '@/testing/infrastructure/env';
 
-describe('getNrBrowserCdnSnippet', () => {
+describe('getNrBrowserCdnConfig', () => {
   beforeEach(() => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
     mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
   });
 
-  it('returns empty string when NEW_RELIC_BROWSER_ENABLED is false', () => {
+  it('returns null when NEW_RELIC_BROWSER_ENABLED is false', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
-    expect(getNrBrowserCdnSnippet()).toBe('');
+    expect(getNrBrowserCdnConfig()).toBeNull();
   });
 
-  it('returns empty string when license key is missing', () => {
+  it('returns null when license key is missing', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
-    expect(getNrBrowserCdnSnippet()).toBe('');
+    expect(getNrBrowserCdnConfig()).toBeNull();
   });
 
-  it('returns empty string when app ID is missing', () => {
+  it('returns null when app ID is missing', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
-    expect(getNrBrowserCdnSnippet()).toBe('');
+    expect(getNrBrowserCdnConfig()).toBeNull();
   });
 
-  it('returns a CDN config snippet when fully configured', () => {
+  it('returns config object when fully configured', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '99887766';
-    const snippet = getNrBrowserCdnSnippet();
-    expect(snippet).toContain('NREUM');
-    expect(snippet).toContain('"license123"');
-    expect(snippet).toContain('"99887766"');
-    expect(snippet).toContain('bam.nr-data.net');
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
+    const config = getNrBrowserCdnConfig();
+    expect(config).not.toBeNull();
+    expect(config?.licenseKey).toBe('license123');
+    expect(config?.appId).toBe('99887766');
+    expect(config?.accountId).toBe('6443682');
+    expect(config?.init.distributed_tracing.enabled).toBe(true);
+    expect(config?.init.privacy.cookies_enabled).toBe(true);
+    expect(config?.init.ajax.deny_list).toContain('bam.nr-data.net');
+  });
+
+  it('defaults accountId to empty string when ACCOUNT_ID is missing', () => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
+    mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
+    mockEnv.NEW_RELIC_BROWSER_APP_ID = '99887766';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
+    const config = getNrBrowserCdnConfig();
+    expect(config?.accountId).toBe('');
   });
 });
 

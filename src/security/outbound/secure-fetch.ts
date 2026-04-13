@@ -22,13 +22,24 @@ export async function secureFetch(
     h.trim(),
   );
 
-  // Auto-allow Clerk domains in any environment to ensure core functionality
+  // Detect development/preview Clerk instance — mirrors the CSP guard in with-headers.ts
+  const isDevClerkKey =
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith('pk_test_') === true ||
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith('pk_development_') ===
+      true;
+  const isPreview = env.VERCEL_ENV === 'preview';
+  const isDev = env.NODE_ENV === 'development';
+
+  // Auto-allow Clerk domains required for core functionality.
+  // clerk.accounts.dev is only included for dev/preview environments or when
+  // a development Clerk key is detected — it is never reachable from a
+  // production Clerk application.
   const coreAllowed = [
     'clerk.com',
     'api.clerk.com',
     'clerk.services',
     'clerk-telemetry.com',
-    'clerk.accounts.dev',
+    ...(isDev || isPreview || isDevClerkKey ? ['clerk.accounts.dev'] : []),
     'api.github.com',
   ];
 

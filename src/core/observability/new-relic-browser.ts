@@ -7,6 +7,7 @@ export interface NrBrowserCdnConfig {
   appId: string;
   licenseKey: string;
   agentUrl: string;
+  beacon: string;
   init: {
     distributed_tracing: { enabled: boolean };
     privacy: { cookies_enabled: boolean };
@@ -20,15 +21,18 @@ export function getNrBrowserCdnConfig(): NrBrowserCdnConfig | null {
     return null;
   if (!env.NEW_RELIC_BROWSER_AGENT_URL) return null;
 
+  const beacon = env.NEW_RELIC_BROWSER_BEACON ?? 'bam.eu01.nr-data.net';
+
   return {
     accountId: env.NEW_RELIC_BROWSER_ACCOUNT_ID ?? '',
     appId: env.NEW_RELIC_BROWSER_APP_ID,
     licenseKey: env.NEW_RELIC_BROWSER_LICENSE_KEY,
     agentUrl: env.NEW_RELIC_BROWSER_AGENT_URL,
+    beacon,
     init: {
       distributed_tracing: { enabled: true },
       privacy: { cookies_enabled: true },
-      ajax: { deny_list: ['bam.nr-data.net'] },
+      ajax: { deny_list: [beacon] },
     },
   };
 }

@@ -93,7 +93,7 @@ export default function RootLayout({
               id="nr-browser-cdn-config"
               strategy="beforeInteractive"
               dangerouslySetInnerHTML={{
-                __html: `window.NREUM||(NREUM={});NREUM.init=${JSON.stringify(cdnConfig.init)};NREUM.loader_config={accountID:${JSON.stringify(cdnConfig.accountId)},trustKey:${JSON.stringify(cdnConfig.accountId)},agentID:${JSON.stringify(cdnConfig.appId)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.appId)}};NREUM.info={beacon:"bam.nr-data.net",errorBeacon:"bam.nr-data.net",licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.appId)},sa:1};`,
+                __html: `window.NREUM||(NREUM={});NREUM.init=${JSON.stringify(cdnConfig.init)};NREUM.loader_config={accountID:${JSON.stringify(cdnConfig.accountId)},trustKey:${JSON.stringify(cdnConfig.accountId)},agentID:${JSON.stringify(cdnConfig.appId)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.appId)}};NREUM.info={beacon:${JSON.stringify(cdnConfig.beacon)},errorBeacon:${JSON.stringify(cdnConfig.beacon)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.appId)},sa:1};`,
               }}
             />
             <Script

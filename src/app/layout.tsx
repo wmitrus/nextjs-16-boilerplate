@@ -96,7 +96,7 @@ export default function RootLayout({
             />
             <Script
               id="nr-browser-cdn"
-              src="https://js-agent.newrelic.com/nr-spa.min.js"
+              src={cdnConfig.agentUrl}
               strategy="beforeInteractive"
             />
           </>

@@ -1,5 +1,4 @@
 import { ClerkProvider } from '@clerk/nextjs';
-import { BetterStackWebVitals } from '@logtail/next/webVitals';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
@@ -7,6 +6,8 @@ import Script from 'next/script';
 import { Suspense } from 'react';
 
 import { env } from '@/core/env';
+import { BetterStackWebVitalsProvider } from '@/core/observability/better-stack-web-vitals';
+import { getNrBrowserCdnConfig } from '@/core/observability/new-relic-browser';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
@@ -62,12 +63,7 @@ export default function RootLayout({
 }>) {
   const isNewRelicApmBrowserEnabled =
     env.NEW_RELIC_ENABLED && Boolean(env.NEW_RELIC_LICENSE_KEY);
-  const isNewRelicCdnBrowserEnabled =
-    env.NEW_RELIC_BROWSER_ENABLED &&
-    Boolean(env.NEW_RELIC_BROWSER_LICENSE_KEY) &&
-    Boolean(env.NEW_RELIC_BROWSER_APP_ID);
-  const isNewRelicEnabled =
-    isNewRelicApmBrowserEnabled || isNewRelicCdnBrowserEnabled;
+  const cdnConfig = getNrBrowserCdnConfig();
   const isBetterStackWebVitalsEnabled =
     env.BETTERSTACK_ENABLED && env.BETTERSTACK_WEB_VITALS_ENABLED;
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
@@ -91,27 +87,38 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {isNewRelicEnabled && (
+        {cdnConfig && (
+          <>
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `window.NREUM||(NREUM={});NREUM.init=${JSON.stringify(cdnConfig.init)};NREUM.loader_config={accountID:${JSON.stringify(cdnConfig.accountId)},trustKey:${JSON.stringify(cdnConfig.accountId)},agentID:${JSON.stringify(cdnConfig.appId)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.appId)}};NREUM.info={beacon:"bam.nr-data.net",errorBeacon:"bam.nr-data.net",licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.appId)},sa:1};`,
+              }}
+            />
+            <Script
+              id="nr-browser-cdn"
+              src="https://js-agent.newrelic.com/nr-spa.min.js"
+              strategy="beforeInteractive"
+            />
+          </>
+        )}
+        {isNewRelicApmBrowserEnabled && !cdnConfig && (
           <Script
             id="nr-browser-agent"
             src="/observability/new-relic-browser.js"
-            strategy="beforeInteractive"
+            strategy="afterInteractive"
           />
         )}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {isBetterStackWebVitalsEnabled && <BetterStackWebVitals />}
+        {isBetterStackWebVitalsEnabled && <BetterStackWebVitalsProvider />}
         {isClerkProvider ? (
           <Suspense fallback={<RootLayoutShell />}>
             <ClerkProvider
               signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
               signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
               waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
-              // Land on a stable app route after auth. Server guards own any
-              // follow-up redirect into bootstrap or onboarding. Normalize
-              // post-auth targets to absolute same-origin URLs for Clerk.
               signInFallbackRedirectUrl={signInFallbackRedirectUrl}
               signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
               signInForceRedirectUrl={signInForceRedirectUrl}

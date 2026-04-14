@@ -1,261 +1,339 @@
 # New Relic Server & Browser Integration
 
-## Purpose
+## Overview
 
-This document explains how New Relic is integrated in this repository for both server-side APM and browser monitoring, and why the browser path uses a request-time Node loader route instead of calling the New Relic browser API at layout render time.
+This repository integrates New Relic for both server-side APM and browser monitoring. The two concerns are **fully decoupled** — browser monitoring works independently of the APM Node.js agent.
 
-## Root Cause Note — Hosted Vercel Runtime
+| Concern                                | Mechanism                                          | Works on Vercel?          |
+| -------------------------------------- | -------------------------------------------------- | ------------------------- |
+| Browser monitoring                     | CDN standalone agent (`NEW_RELIC_BROWSER_ENABLED`) | ✅ Yes                    |
+| Server APM (custom attributes, errors) | `instrumentation.ts` late-load                     | ⚠️ Partial                |
+| Server APM (full HTTP transactions)    | `NODE_OPTIONS=-r newrelic` preload                 | ❌ Crashes Vercel builder |
+| Log forwarding                         | Vercel log drain integration                       | ✅ Yes                    |
+| Distributed traces                     | Vercel OTel traces (Beta)                          | ✅ Yes (experimental)     |
 
-New Relic's official Node.js install guidance for Next.js says the agent should be preloaded via `NODE_OPTIONS='--require newrelic'` at process start.
+---
 
-In this repository, forcing that preload through Vercel environment variables was tested and rejected:
+## Browser Monitoring — CDN Standalone Agent (Primary Path)
 
-- raw `NODE_OPTIONS='--require newrelic'` crashes the remote preview build before dependencies are installed
-- repo-local preload file paths are not resolved reliably by Vercel's remote builder bootstrap
+### How it works
 
-For this deployment model, `NODE_OPTIONS` should not be treated as a required New Relic configuration path.
+Browser monitoring is delivered via the **New Relic Browser standalone CDN agent**, completely independent of the APM Node.js agent. This is the only reliable browser monitoring path on Vercel.
 
-## Critical Constraints — Read Before Changing Anything
+The root layout (`src/app/layout.tsx`) injects two items directly into `<head>` when CDN mode is configured:
 
-### Snippet env var size limit — Vercel
+1. An **inline `<script>`** that sets the NREUM configuration object (`loader_config`, `info`, `init`)
+2. A **`<Script strategy="beforeInteractive">`** pointing directly to the versioned NR CDN agent URL
 
-The NR Browser SPA snippet is approximately 88 KB. Vercel documents a per-variable limit of 64 KB for Node deployments and 5 KB for Edge/Middleware.
-
-Do NOT recommend or attempt to set `NEW_RELIC_BROWSER_SNIPPET_BASE64` or `NEW_RELIC_BROWSER_SNIPPET` as Vercel environment variables. It will not work and was already ruled out during the `2026-04-05-nr-browser-spa` task.
-
-Local `.env.local` transport remains valid for dev fallback only.
-
-### Primary delivery model — request-time Node route
-
-The browser loader is served at request time from `/observability/new-relic-browser.js` via `getBrowserAgentScriptSafe()` which calls `getBrowserTimingHeaderSafe()` which calls the NR APM Node agent `getBrowserTimingHeader()`. No snippet env var is required on Vercel.
-
-### SPA vs rum/lite — browser agent type
-
-`getBrowserTimingHeaderSafe()` returns whichever loader type the APM app is configured for in the NR UI. If the APM app browser monitoring type is set to rum/lite, only the initial hard page load is tracked — App Router client-side navigations are invisible. To get full SPA monitoring, change the type to SPA in the NR UI: Browser → App → Application settings → Browser agent type → SPA.
-
-### Prior task — mandatory reading
-
-Full implementation history, constraints, and operational decisions are in `.copilot/tasks/2026-04-05-nr-browser-spa/`.
-
-Any agent working on NR Browser must read that task folder BEFORE making any recommendations or code changes.
-
-## Integration split
-
-There are two separate concerns:
-
-1. Server-side APM for the Node.js runtime
-2. Browser monitoring snippet injection for the root layout
-
-They share New Relic as a vendor, but they do not use the same integration path.
-
-## Server-side integration
-
-### Files
-
-- `newrelic.js`
-- `src/instrumentation.ts`
-- `src/core/observability/new-relic.ts`
-- `src/core/runtime/bootstrap.ts`
-
-### Boot sequence
-
-`src/instrumentation.ts` conditionally loads the module during the Node runtime bootstrap.
-
-```typescript
-if (process.env.NEXT_RUNTIME === 'nodejs') {
-  if (
-    process.env.NEW_RELIC_ENABLED === 'true' &&
-    process.env.NEW_RELIC_LICENSE_KEY
-  ) {
-    require('newrelic');
-  }
-
-  await import('../sentry.server.config');
+```tsx
+{
+  cdnConfig && (
+    <>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `window.NREUM||(NREUM={});NREUM.init=...;NREUM.loader_config=...;NREUM.info=...;`,
+        }}
+      />
+      <Script
+        id="nr-browser-cdn"
+        src={cdnConfig.agentUrl}
+        strategy="beforeInteractive"
+      />
+    </>
+  );
 }
 ```
 
-This keeps the agent disabled by default and avoids loading it when no license key is configured.
+### Why `beforeInteractive`
+
+Browser monitoring agents must load **before React hydration** to capture:
+
+- Page load timing (LCP, FCP, TTFB)
+- Initial XHR/Fetch requests
+- JavaScript errors during bootstrap
+- The first `PageView` with accurate timing
+
+`afterInteractive` (the previous approach) caused the agent to load 3–8 seconds after navigation — after all meaningful lifecycle events had already fired.
+
+### Why inline config + direct CDN (not a route handler)
+
+The previous implementation routed CDN initialization through `/observability/new-relic-browser.js`, which returned a JS file that dynamically created a second `<script>` element pointing to the NR CDN. This caused a **double-hop loading problem**:
+
+```
+afterInteractive → fetch route handler → parse IIFE → createElement('script') → fetch CDN agent
+```
+
+The fix: the layout injects the NREUM config **inline** and points **directly** to the NR CDN agent URL. Zero intermediate hops.
+
+### Why `NREUM.init` is required
+
+The NR Browser CDN agent requires `NREUM.init` to configure:
+
+- `distributed_tracing.enabled` — links browser sessions to backend APM traces
+- `privacy.cookies_enabled` — controls session cookie behaviour
+- `ajax.deny_list: ["bam.nr-data.net"]` — prevents the agent from instrumenting its own beacon calls (avoids infinite loops)
+
+Without `NREUM.init` the agent uses internal defaults that may not match the NR application settings.
+
+### Why `NEW_RELIC_BROWSER_AGENT_URL` is required
+
+The NR CDN **only serves versioned files**. There is no publicly accessible unversioned `latest` alias — an unversioned URL (e.g. `nr-spa.min.js`) returns **403 Forbidden**. The correct versioned URL must be copied from the NR UI.
+
+### Required env vars for CDN browser mode
+
+| Variable                        | Description                                                                                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `NEW_RELIC_BROWSER_ENABLED`     | `true` to enable CDN mode                                                                       |
+| `NEW_RELIC_BROWSER_LICENSE_KEY` | Browser application license key (from NR UI Browser app settings — **not** the APM license key) |
+| `NEW_RELIC_BROWSER_APP_ID`      | Numeric application ID (from NR UI Browser app settings)                                        |
+| `NEW_RELIC_BROWSER_ACCOUNT_ID`  | Your NR account ID (e.g. `6443682`)                                                             |
+| `NEW_RELIC_BROWSER_AGENT_URL`   | Versioned CDN URL — see below                                                                   |
+
+### How to get `NEW_RELIC_BROWSER_AGENT_URL`
+
+1. In NR UI → **Browser** → your app → **Application settings**
+2. Select **Copy/Paste JavaScript snippet**
+3. Find the `<script src="...">` line
+4. Copy the full URL, e.g.: `https://js-agent.newrelic.com/nr-spa-1.312.1.min.js`
+5. Set it as `NEW_RELIC_BROWSER_AGENT_URL` in Vercel and `.env.local`
+
+### Setting up a NR Browser application
+
+1. NR UI → **Browser** → **Add application**
+2. Select **Copy/Paste JavaScript snippet** as the deployment method
+3. Name it (e.g. `nextjs-16-boilerplate-browser`)
+4. Copy the `licenseKey` and `applicationID` values from the generated snippet
+5. In **Application settings** → set **Browser agent type** to **Pro + SPA** for full SPA monitoring
+6. Copy the `<script src="...">` URL for `NEW_RELIC_BROWSER_AGENT_URL`
+
+### CSP requirements for CDN mode
+
+The following domains are already in `src/security/middleware/with-headers.ts`:
+
+- `script-src` / `script-src-elem`: `https://js-agent.newrelic.com` ✓
+- `connect-src`: `https://bam.nr-data.net`, `https://bam.eu01.nr-data.net` ✓
+
+---
+
+## APM Route Handler — Local Dev Fallback
+
+The route `/observability/new-relic-browser.js` still exists and serves the **APM-linked browser timing header** for local development, where the NR Node.js agent connects properly.
+
+**File**: `src/app/observability/new-relic-browser.js/route.ts`
+
+This route:
+
+- Calls `await connection()` to opt into dynamic rendering under `cacheComponents: true`
+- Returns `getBrowserAgentScriptSafe()` — the APM-linked timing header — when the agent is connected
+- Returns an empty `application/javascript` response when the agent is not connected (Vercel)
+- Logs `console.info` on Vercel (expected, not an error) vs `console.warn` locally (actionable)
+
+**On Vercel**: This route always returns empty because the APM agent never fully connects (see APM section below). This is expected and not an error when CDN mode is active.
+
+**Layout integration**: The APM route is only loaded when `NEW_RELIC_ENABLED=true && NEW_RELIC_LICENSE_KEY` is set **and** CDN mode is NOT active. In practice, on Vercel with CDN mode configured, the APM route is never requested.
+
+---
+
+## Server APM — `instrumentation.ts`
+
+### Current state
+
+The NR Node.js APM agent is loaded via `src/instrumentation.ts` → `src/monitoring/server-init.ts`:
+
+```typescript
+// instrumentation.ts
+if (process.env.NEXT_RUNTIME === 'nodejs') {
+  await import('./monitoring/server-init').then((m) =>
+    m.initializeServerObservability(),
+  );
+}
+```
+
+`initializeServerObservability()` calls `require('newrelic')` when `NEW_RELIC_ENABLED=true` and `NEW_RELIC_LICENSE_KEY` is present.
+
+### What works on Vercel via `instrumentation.ts`
+
+| Feature                                  | Works?     | Notes                                                          |
+| ---------------------------------------- | ---------- | -------------------------------------------------------------- |
+| Custom attributes (`addCustomAttribute`) | ⚠️ Partial | Requires agent to connect — happens on warm invocations        |
+| Custom segments (`startSegment`)         | ⚠️ Partial | Same connectivity requirement                                  |
+| Error tracking                           | ⚠️ Partial | Sentry (`instrumentation.ts`) is more reliable                 |
+| Full HTTP transaction tracing            | ❌ No      | Requires `--require newrelic` preload (crashes Vercel builder) |
+| `getBrowserTimingHeader()`               | ❌ No      | Requires connected agent + active transaction                  |
+
+### Why `NODE_OPTIONS=-r newrelic` cannot be used on Vercel
+
+`NODE_OPTIONS=-r newrelic` was **tested and permanently rejected** across two investigation tasks:
+
+- Crashes the Vercel remote builder before `node_modules` is installed
+- Repo-local preload paths are not resolved by Vercel's builder bootstrap
+
+Do NOT re-introduce `NODE_OPTIONS` targeting the NR preload. This is a Vercel platform constraint, not a code issue.
+
+### What changes with CDN browser active
+
+**Before CDN**: APM was required for browser monitoring (via `getBrowserTimingHeader()`). APM failure on Vercel = no browser data.
+
+**After CDN**: Browser monitoring is fully independent. APM can be enabled or disabled without affecting browser data. The value of APM on Vercel is limited to partial custom attributes/segments on warm invocations.
+
+### APM is already in place — no code changes needed
+
+`instrumentation.ts` already loads the NR agent. The current setup is the best achievable without `NODE_OPTIONS`. No changes to `instrumentation.ts` or `server-init.ts` are needed.
+
+If full APM transaction tracing is required on Vercel in the future, the options are:
+
+1. **`@vercel/otel` + NR OTLP endpoint** — OTel-native tracing forwarded to NR
+2. **Vercel OTel traces (Beta)** — via the Vercel log drain integration UI
+3. **Self-hosted deployment** — where `NODE_OPTIONS` works correctly
+
+---
+
+## Vercel Log Drain (Log Forwarding)
+
+Configure via the Vercel marketplace integration — no code required:
+
+1. NR UI → **Add Data** → search "Vercel" → **Add integration**
+2. Connect Vercel account → select projects
+3. Enter `NEW_RELIC_LICENSE_KEY`
+4. Enable **Traces (Beta)** if OTel distributed tracing is desired
+
+Set `NEW_RELIC_LOG_DRAIN_ENABLED=true` in env to document the expected state (informational only — the actual drain is configured in Vercel UI).
+
+---
+
+## Module Architecture
 
 ### Provider isolation
 
-The rest of the app does not import the `newrelic` SDK directly. All custom usage is isolated behind `src/core/observability/new-relic.ts`.
+No feature, module, or UI delivery layer imports the `newrelic` SDK directly. All custom usage is behind `src/core/observability/new-relic.ts`:
 
-That facade:
-
-- uses lazy `require('newrelic')`
-- no-ops safely when the agent is absent
-- wraps container creation in `di.container.create`
-- adds custom attributes for request-scoped container creation
-
-This preserves modular boundaries and keeps provider-specific code out of features, modules, and UI delivery layers.
-
-## Browser integration
-
-### Files
-
-- `src/app/layout.tsx`
-- `src/app/observability/new-relic-browser.js/route.ts`
-- `src/core/observability/new-relic.ts`
-- `src/core/env.ts`
-- `.env.example`
-- `src/security/middleware/with-headers.ts`
-- `src/proxy.ts`
-
-### Why the layout does not call `getBrowserTimingHeader()`
-
-In Next.js 16, calling the New Relic browser timing API during a prerenderable layout is unsafe. The underlying SDK records timestamps internally, which triggers the prerender dynamic-access constraint.
-
-Because of that, the layout only loads a public script route. The actual browser loader is generated later in a request-time Node route, not during layout render.
-
-### Active browser path
-
-`src/app/layout.tsx` loads the browser snippet through a public JavaScript route whenever New Relic is enabled.
-
-```tsx
-<head>
-  {env.NEW_RELIC_ENABLED && (
-    <Script
-      id="nr-browser-agent"
-      src="/observability/new-relic-browser.js"
-      strategy="beforeInteractive"
-    />
-  )}
-</head>
+```
+src/core/observability/new-relic.ts       — APM facade (lazy require, server-only)
+src/core/observability/new-relic-browser.ts — CDN config generator (server-only)
+src/app/observability/new-relic-browser.js/route.ts — APM fallback route (local dev)
+src/app/layout.tsx                        — CDN injection (head, beforeInteractive)
+src/monitoring/server-init.ts             — APM bootstrap (instrumentation.ts only)
+newrelic.js                               — NR agent config (app_name, logging)
 ```
 
-The script body is served by `src/app/observability/new-relic-browser.js/route.ts`.
+### Dependency direction
 
-That route:
+```
+layout.tsx → new-relic-browser.ts (CDN config, server component import)
+instrumentation.ts → server-init.ts → require('newrelic') (APM bootstrap)
+route handler → new-relic.ts → require('newrelic') (APM facade, local dev)
+```
 
-- uses `await connection()` for request-time execution under `cacheComponents: true`
-- prefers `getBrowserTimingHeader()` at request time through `getBrowserAgentScriptSafe()`
-- returns an empty JavaScript response when New Relic is disabled or no browser snippet is configured
-- returns `application/javascript` with `Cache-Control: no-store`
-- sets `X-Content-Type-Options: nosniff`
+No cross-module boundary violations. All NR code stays in `src/core/observability/` and `src/monitoring/`.
 
-This keeps the layout prerender-safe while avoiding oversized deployment env vars for the full browser copy/paste snippet.
+---
 
-### Why the loader route is not under `/api`
+## Environment Variables
 
-This repository runs a global proxy and security pipeline for `/api/*` routes.
+### CDN Browser mode
 
-An earlier implementation used `/api/observability/new-relic-browser`, but that path was intercepted by auth and rate-limit middleware and returned JSON instead of JavaScript. The browser then refused to execute it.
+| Variable                        | Type      | Default | Description                                                                    |
+| ------------------------------- | --------- | ------- | ------------------------------------------------------------------------------ |
+| `NEW_RELIC_BROWSER_ENABLED`     | `boolean` | `false` | Enable CDN browser mode                                                        |
+| `NEW_RELIC_BROWSER_LICENSE_KEY` | `string`  | —       | Browser app license key (from NR UI, not APM key)                              |
+| `NEW_RELIC_BROWSER_APP_ID`      | `string`  | —       | Numeric browser app ID                                                         |
+| `NEW_RELIC_BROWSER_ACCOUNT_ID`  | `string`  | —       | NR account ID                                                                  |
+| `NEW_RELIC_BROWSER_AGENT_URL`   | `url`     | —       | Versioned CDN URL (e.g. `https://js-agent.newrelic.com/nr-spa-1.312.1.min.js`) |
 
-The active implementation uses `/observability/new-relic-browser.js` so it is treated like a public script resource rather than a protected API endpoint. This works with the proxy matcher in `src/proxy.ts`, which excludes `.js` paths from the generic non-API matcher while still handling real `/api/*` routes separately.
+### APM (server-side)
 
-### Snippet resolution logic
+| Variable                | Type      | Default                 | Description                                                   |
+| ----------------------- | --------- | ----------------------- | ------------------------------------------------------------- |
+| `NEW_RELIC_ENABLED`     | `boolean` | `false`                 | Enable APM agent loading                                      |
+| `NEW_RELIC_LICENSE_KEY` | `string`  | —                       | APM ingest license key                                        |
+| `NEW_RELIC_APP_NAME`    | `string`  | `nextjs-16-boilerplate` | APM application name                                          |
+| `NODE_OPTIONS`          | `string`  | _(blank)_               | **Must remain blank on Vercel** — do not set to `-r newrelic` |
 
-`getBrowserAgentScriptSafe()` supports two deployment paths:
+### Operational / documentation flags
 
-Request-time `getBrowserTimingHeader()` generation from the Node APM agent is the only delivery mechanism.
+| Variable                      | Type      | Default | Description                                       |
+| ----------------------------- | --------- | ------- | ------------------------------------------------- |
+| `NEW_RELIC_LOG_DRAIN_ENABLED` | `boolean` | `false` | Documents active log drain (Vercel integration)   |
+| `NEW_RELIC_OTEL_ENABLED`      | `boolean` | `false` | Documents active OTel traces (Vercel integration) |
 
-`NEW_RELIC_BROWSER_SNIPPET` and `NEW_RELIC_BROWSER_SNIPPET_BASE64` env vars have been **removed**. The full copy/paste snippet is ~88 KB — exceeding Vercel's 64 KB per-variable limit. Env-var delivery is not viable for deployment environments. All related helper functions (`getBrowserSnippetSafe`, `resolveBrowserSnippetSource`, `readRawSnippetFromEnvFiles`) have also been removed.
-
-## Environment variables
-
-Server-only env vars involved in this integration:
-
-- `NEW_RELIC_ENABLED`
-- `NEW_RELIC_LICENSE_KEY`
-- `NEW_RELIC_APP_NAME`
-- `NEW_RELIC_NERDGRAPH_API_URL`
-- `NEW_RELIC_USER_API_KEY`
-- `NEW_RELIC_ACCOUNT_ID`
-
-## CSP requirements
-
-Browser monitoring needs the New Relic beacon domains in `connect-src`. This repository already allows the required domains through the security header path in `src/security/middleware/with-headers.ts`.
-
-## What we intentionally do not do
-
-- We do not call the browser SDK API from `layout.tsx`.
-- We do not commit raw browser snippet files into the repository.
-- We do not instrument vendor-owned hosts just because New Relic suggests them.
-- We do not spread raw `newrelic` imports across features or business logic.
-
-Examples of intentionally ignored vendor-host suggestions include SaaS sinks such as Sentry ingest, Clerk traffic, Upstash, GrowthBook, or Logflare endpoints. If app-owned contract instrumentation is needed later, it should be scoped as its own task.
+---
 
 ## Troubleshooting
 
-## NerdGraph debug scripts
+### Browser: No PageView events in NR after deploy
 
-For local debugging and operational inspection, this repository now includes
-a curated read-only NerdGraph / NRQL catalog:
+1. Verify Vercel env vars are set: `NEW_RELIC_BROWSER_ENABLED=true`, all `NEW_RELIC_BROWSER_*` vars
+2. Open browser DevTools → **Elements** → `<head>` — confirm inline NREUM config script is present
+3. DevTools → **Network** — confirm `nr-spa-*.min.js` loads with **200** (not 403, not empty)
+4. DevTools → **Console** — no CSP errors, no NR init errors
+5. Wait 2–5 minutes — NR has ingest latency
+6. Verify **Browser agent type** is **Pro + SPA** in NR UI (not rum/lite)
 
-- `pnpm nr -- list`
-- `pnpm nr -- run baseline`
-- `pnpm nr -- run baseline --view=compact`
-- `pnpm nr -- run golden-signals`
-- `pnpm nr -- run throughput.rate`
-- `pnpm nr:query -- "SELECT count(*) FROM Transaction SINCE 1 hour ago"`
+### Browser: 403 on CDN agent URL
 
-Optional flags:
+The NR CDN only serves versioned files. An unversioned URL (`nr-spa.min.js`) returns 403. Get the correct versioned URL from NR UI → Browser app → Application settings → Copy/Paste snippet.
 
-- `--format=json` for machine-readable output
-- `--account=1234567` to override `NEW_RELIC_ACCOUNT_ID`
-- `--view=compact` for an operator-friendly bundle summary
+### Browser: `NREUM` config missing from `<head>`
 
-Design notes:
+`getNrBrowserCdnConfig()` returns `null` when any required var is unset. Check:
 
-- `pnpm nr` is the professional day-to-day entrypoint
-- query definitions live in `scripts/new-relic/catalog.ts`
-- bundles keep `package.json` small while preserving a rich query set
-- compact view turns baseline-style bundles into a one-row summary plus short highlights
-- `pnpm nr:query` remains the escape hatch for one-off or advanced NRQL
+- `NEW_RELIC_BROWSER_ENABLED=true`
+- `NEW_RELIC_BROWSER_LICENSE_KEY` is set
+- `NEW_RELIC_BROWSER_APP_ID` is set
+- `NEW_RELIC_BROWSER_AGENT_URL` is set and is a valid URL
 
-These commands are intentionally separate from the Next.js runtime integration:
+### APM: `connected=false` in Vercel logs
 
-- they run only from `scripts/new-relic/*`
-- they use a user API key, not the APM license key
-- they are meant for debugging, CI diagnostics, and human investigation
-- they do not expose arbitrary NRQL execution to browser code or public routes
+Expected on cold starts. The NR agent connects asynchronously after boot. The log line `[New Relic] Server init loaded connected=false` is normal on Vercel — the agent has not yet completed the collector handshake at the time `instrumentation.ts` runs. This does not affect browser monitoring (CDN mode is independent).
 
-### No browser data arrives in New Relic
+### APM: No Transaction events in NR from Vercel
 
-Verify all of the following:
+Expected. Full HTTP transaction tracing requires `NODE_OPTIONS=-r newrelic` which crashes the Vercel builder. APM transaction data from Vercel is not achievable with the current setup. Use Sentry for error tracking and the Vercel log drain for log-level observability.
 
-- `NEW_RELIC_ENABLED=true`
-- `NEW_RELIC_LICENSE_KEY` is present in the deployment environment
-- server rendered `<script id="nr-browser-agent" src="/observability/new-relic-browser.js">`
-- `/observability/new-relic-browser.js` returns `200` with JavaScript content (non-empty)
-- Vercel logs show no `[NR Browser] Empty script ...` warning, or if they do, check `loaded=`, `connected=`, `tx=`, and `appId=` values
-- NR APM entity has browser monitoring **enabled** in NR UI (APM → Applications → your app → Settings → Application)
-- Browser monitoring type is set to **Pro + SPA** in NR UI
-- `logging.filepath: 'stdout'` is set in `newrelic.js` (prevents EROFS crash on Vercel)
-- The route runs in the Node runtime, not Edge
-- CSP `connect-src` allows the NR beacon host
-- Enough ingest time has passed (NR can take 5-15 minutes to display new browser data)
+### APM: `[NR Browser] Empty script` warning in route logs
 
-### Empty browser script on Vercel (EROFS)
+On Vercel, the APM route (`/observability/new-relic-browser.js`) always returns empty because the APM agent never fully connects. This is expected when CDN mode is active — the warning is downgraded to `console.info` on Vercel. No action needed.
 
-If `newrelic.js` does not have `logging.filepath: 'stdout'`, the NR agent crashes on startup trying to write a log file to the read-only Vercel filesystem. This causes both backend APM and browser monitoring to fail. Verify `newrelic.js` has `logging: { level: 'info', filepath: 'stdout' }`.
+### APM: EROFS crash on startup
 
-### Deploy validation rule
+`newrelic.js` must have `logging: { filepath: 'stdout' }`. Without it the agent crashes trying to write a log file to Vercel's read-only filesystem. This is already set in the repository `newrelic.js`.
 
-If `NEW_RELIC_ENABLED=true`, the deployment must also provide
-`NEW_RELIC_LICENSE_KEY`.
-
-This repository now treats that as a deploy-time cross-field requirement:
-
-- `pnpm env:validate` fails when New Relic is enabled without a license key
-- the root layout does not inject the browser loader unless both values are present
-- `/env-summary` and `/api/internal/env-check` report the misconfiguration
-
-### Empty browser script on cold start (`agentConnected: false`)
-
-The NR APM agent needs ~1-3 seconds after cold start to connect to the NR collector. Until connected, `isConnected()` = false and the browser route returns an empty script. This is expected for the first request after a cold start. Subsequent warm requests will return the full snippet.
-
-### Empty browser script with `tx=false` or `appId=false`
-
-If the warning shows `tx=false`, the browser timing API is being called without an active instrumented web transaction.
-
-If it shows `appId=false`, the agent still has not completed the collector handshake and does not have `application_id` yet.
+---
 
 ## Guardrails
 
-- Keep server APM initialization in `src/instrumentation.ts`.
-- Keep custom SDK usage isolated in `src/core/observability/new-relic.ts`.
-- Keep browser injection request-time, Node-only, and layout-safe.
-- Keep browser loader delivery on a public non-API route unless proxy behavior is intentionally redesigned.
-- Do NOT add `NEW_RELIC_BROWSER_SNIPPET` or `NEW_RELIC_BROWSER_SNIPPET_BASE64` env vars back — they are removed. The snippet is ~88 KB, exceeding Vercel's 64 KB per-variable limit.
-- Treat vendor-host instrumentation suggestions as out of scope unless a separate task justifies them.
+- **Do NOT** set `NODE_OPTIONS=-r newrelic` on Vercel — it crashes the builder.
+- **Do NOT** use `NEW_RELIC_BROWSER_SNIPPET` or `NEW_RELIC_BROWSER_SNIPPET_BASE64` env vars — removed, snippet is ~88 KB, exceeds Vercel's 64 KB per-variable limit.
+- **Do NOT** call `getBrowserTimingHeader()` from `layout.tsx` or any prerenderable RSC — triggers Next.js prerender dynamic-access error.
+- **Do NOT** use `nr-spa.min.js` (unversioned) as the CDN URL — returns 403.
+- **Do NOT** import `newrelic` directly in features, modules, or UI components — use `src/core/observability/new-relic.ts`.
+- **Do NOT** move CDN delivery back through a route handler — it reintroduces the double-hop timing problem.
+- Keep `strategy="beforeInteractive"` for the CDN agent — `afterInteractive` causes the agent to miss page load timing.
+
+---
+
+## NerdGraph Debug Scripts
+
+For local operational inspection and debugging:
+
+```shell
+pnpm nr -- list
+pnpm nr -- run baseline
+pnpm nr -- run baseline --view=compact
+pnpm nr -- run golden-signals
+pnpm nr:query -- "SELECT count(*) FROM PageView SINCE 1 hour ago"
+pnpm nr:query -- "SELECT count(*) FROM Transaction SINCE 1 hour ago"
+```
+
+These scripts use a NerdGraph user API key (`NEW_RELIC_USER_API_KEY`), not the APM license key. They are local-only and not exposed to any runtime code.
+
+---
+
+## Prior Investigation Tasks
+
+| Task                                      | Finding                                                                                                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `2026-04-05-nr-browser-spa`               | NR Browser SPA snippet ~88 KB exceeds Vercel 64 KB env var limit — env var approach permanently rejected                                                            |
+| `2026-04-08-vercel-newrelic-incident`     | `NODE_OPTIONS=-r newrelic` crashes Vercel builder — permanently rejected; late load via `instrumentation.ts` misses HTTP transaction context                        |
+| `2026-04-12-vercel-nr-proper-integration` | Decision: CDN standalone browser agent, Vercel log drain, OTel traces; APM deferred                                                                                 |
+| `2026-04-13` (chat `80f77b48`)            | Root cause of CDN failure: wrong script strategy (`afterInteractive`), double-hop architecture, missing `NREUM.init`, invalid unversioned CDN URL (403) — all fixed |

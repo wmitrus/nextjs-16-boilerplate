@@ -137,7 +137,7 @@ export function getBrowserTimingHeaderSafe(): string {
 
 **Primary delivery model** (Vercel + local dev): CDN standalone agent via inline NREUM config + `<Script strategy="beforeInteractive">` in `src/app/layout.tsx`. Requires `NEW_RELIC_BROWSER_ENABLED=true` + `NEW_RELIC_BROWSER_LICENSE_KEY` + `NEW_RELIC_BROWSER_APP_ID` + `NEW_RELIC_BROWSER_ACCOUNT_ID` + `NEW_RELIC_BROWSER_AGENT_URL`.
 
-**`NEW_RELIC_BROWSER_AGENT_URL` is required and must be versioned.** The NR CDN does not expose an unversioned latest alias — `nr-spa.min.js` returns **403 Forbidden**. Get the exact versioned URL from NR UI → Browser app → Application settings → Copy/Paste JavaScript snippet → `<script src="...">`.
+**`NEW_RELIC_BROWSER_AGENT_URL` must use `nr-loader-spa-X.min.js`, NOT `nr-spa-X.min.js`.** Critical distinction: `nr-spa-X.min.js` is a webpack module chunk — it requires the NR loader webpack runtime to be loaded first. Loading it directly causes the agent code to be stored in a plain array and **never executed** (zero beacon requests). The NR CDN does not expose an unversioned alias — `nr-spa.min.js` returns **403 Forbidden**. Use the exact versioned **loader** URL: `https://js-agent.newrelic.com/nr-loader-spa-X.min.js`. The loader automatically loads `nr-spa-X.min.js` as a dynamic webpack chunk when the first harvest is needed.
 
 **`strategy="beforeInteractive"` is mandatory** for the CDN agent. `afterInteractive` causes the agent to load after React hydration, missing page load timing (LCP, FCP, TTFB), initial XHR/Fetch, and errors during bootstrap.
 

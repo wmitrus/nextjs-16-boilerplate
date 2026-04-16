@@ -37,6 +37,7 @@ describe('getNrBrowserCdnConfig', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
     mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
+    mockEnv.NEW_RELIC_BROWSER_APPLICATION_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = undefined;
     mockEnv.NEW_RELIC_BROWSER_BEACON = undefined;
@@ -87,20 +88,34 @@ describe('getNrBrowserCdnConfig', () => {
     expect(getNrBrowserCdnConfig()).toBeNull();
   });
 
-  it('returns config object when fully configured', () => {
+  it('returns config with agentId equal to APP_ID and applicationId falling back to APP_ID when APPLICATION_ID is not set', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '99887766';
+    mockEnv.NEW_RELIC_BROWSER_APPLICATION_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
     const config = getNrBrowserCdnConfig();
     expect(config).not.toBeNull();
+    expect(config?.agentId).toBe('99887766');
+    expect(config?.applicationId).toBe('99887766');
     expect(config?.licenseKey).toBe('license123');
-    expect(config?.appId).toBe('99887766');
     expect(config?.accountId).toBe('6443682');
     expect(config?.agentUrl).toBe(VALID_AGENT_URL);
     expect(config?.init.distributed_tracing.enabled).toBe(true);
     expect(config?.init.privacy.cookies_enabled).toBe(true);
+  });
+
+  it('returns config with separate agentId and applicationId when APPLICATION_ID is explicitly set', () => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
+    mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
+    mockEnv.NEW_RELIC_BROWSER_APP_ID = '538838547';
+    mockEnv.NEW_RELIC_BROWSER_APPLICATION_ID = '421415380';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
+    mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
+    const config = getNrBrowserCdnConfig();
+    expect(config?.agentId).toBe('538838547');
+    expect(config?.applicationId).toBe('421415380');
   });
 
   it('uses EU beacon fallback when BEACON env var is not set', () => {

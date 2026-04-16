@@ -79,6 +79,7 @@ const defaultEnv: MutableEnv = {
   NEW_RELIC_BROWSER_APP_ID: undefined,
   NEW_RELIC_BROWSER_ACCOUNT_ID: undefined,
   NEW_RELIC_BROWSER_AGENT_URL: undefined,
+  NEW_RELIC_BROWSER_BEACON: undefined,
   NEW_RELIC_LOG_DRAIN_ENABLED: false,
   NEW_RELIC_OTEL_ENABLED: false,
   BETTERSTACK_ENABLED: false,

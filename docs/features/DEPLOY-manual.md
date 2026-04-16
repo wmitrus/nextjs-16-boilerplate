@@ -95,9 +95,9 @@ Opening or updating a PR to `main` triggers a **Preview Deployment** (see `previ
 
 Merging into `main` triggers a **Production Deployment** (see `prod-deploy.yml`). Production remains GitHub Actions controlled and uses an explicit migration step before the prebuilt deployment.
 
-After successful production deployment, the separate release workflow runs. If semantic-release publishes a new version, that release workflow emits the New Relic production deployment event using the semantic version as the visible release identifier and the deployed Git SHA as commit metadata.
+After successful production deployment, the separate release workflow runs. If semantic-release publishes a new version, the final `new-relic-change-tracking.yml` workflow runs from that published release and emits the New Relic production deployment event using the semantic version as the visible release identifier and the tagged Git commit as commit metadata.
 
-The GitHub release workflow remains in a separate file, but it is now triggered only after the production deployment workflow succeeds. This preserves separation of concerns while enforcing deploy-before-release ordering and makes New Relic reflect the final versioned release state.
+The GitHub release workflow remains in a separate file, but it is now triggered only after the production deployment workflow succeeds. The final New Relic workflow remains separate again, but only runs from the published release, which preserves deploy-before-release-before-marker ordering while restoring independent retryability of the New Relic step.
 
 ### Manual CLI Deployment (Emergency only)
 
@@ -116,7 +116,7 @@ vercel deploy --prod
 1. Verify the site loads and redirects to the Clerk login if protected.
 2. Check the **GitHub Actions** tab to ensure all validation checks (Lint, Typecheck, Tests) passed.
 3. Review the **Lighthouse** report in the PR comments or CI logs.
-4. Confirm the **Production Deployment** workflow completed successfully and, when a versioned release is expected, confirm the downstream **Release** workflow created both the GitHub Release and the New Relic deployment event.
+4. Confirm the **Production Deployment** workflow completed successfully and, when a versioned release is expected, confirm the downstream **Release** workflow created the GitHub Release and the final **New Relic Change Tracking** workflow created the New Relic deployment event.
 
 ## 7. Troubleshooting
 

@@ -33,8 +33,8 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 
 - **PR Validation** runs on pull requests to `main` and blocks PRs originating from `main`.
 - **Preview Deploy** validates preview env in GitHub Actions, then triggers a normal `vercel deploy` so Vercel builds remotely and runs preview DB migrations against Neon deployment-scoped branch variables before LHCI audits the resulting preview URL.
-- **Production Deploy** runs on pushes to `main` and skips docs-only changes.
-- **Release** runs semantic-release on `main` using a GitHub App token.
+- **Production Deploy** runs on pushes to `main`, skips docs-only changes, and owns the real Vercel production rollout.
+- **Release** runs semantic-release in a separate workflow file only after the `Production Deployment` workflow completes successfully on `main`, and emits the New Relic production deployment event only when a semantic release is actually published.
 - **Security Scan** runs on `main`, PRs, and weekly schedules.
 - **Lighthouse Schedule** runs weekly (and manually) against a configured production URL.
 - **Chromatic** runs on changes to Storybook and UI code; auto-accepts changes on `main`.
@@ -46,6 +46,7 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 Configure these in your GitHub repository settings:
 
 - **Vercel:** `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `VERCEL_TOKEN`.
+- **New Relic deployment marker:** `NEW_RELIC_API_KEY`, `NEW_RELIC_DEPLOYMENT_ENTITY_GUID`.
 - **Vercel bypass (preview audits):** `VERCEL_AUTOMATION_BYPASS_SECRET`.
 - **LHCI:** `LHCI_TOKEN` (build token from LHCI server).
 - **Chromatic:** `CHROMATIC_PROJECT_TOKEN`.
@@ -76,6 +77,7 @@ This repository uses two different deployment ownership models:
    - GitHub Actions remains the deployment authority.
    - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
    - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
+   - The downstream release workflow emits the New Relic production deployment event only when semantic-release publishes a version, so New Relic shows semver while production rollout truth still comes from the deploy workflow.
 
 Why the split exists:
 

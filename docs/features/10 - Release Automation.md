@@ -1,15 +1,19 @@
 # Release Automation
 
-This project uses a GitHub Actions workflow to create releases on every push to `main` via **semantic-release**. The workflow is defined in `.github/workflows/release.yml` and uses a GitHub App token for permissioned release creation.
+This project uses a GitHub Actions workflow to create releases via **semantic-release** only after the production deployment workflow succeeds on `main`. The workflow is defined in `.github/workflows/release.yml` and uses a GitHub App token for permissioned release creation.
 
 ---
 
 ## How the Release Workflow Works
 
-- Trigger: every push to `main`.
+- Trigger: successful completion of the `Production Deployment` workflow for `main`.
 - Token: generated from a GitHub App (not a personal access token).
+- Checkout target: the exact deployed commit via `github.event.workflow_run.head_sha`.
 - Action: `pnpm run release` (semantic-release decides the next version based on commit messages).
 - Output: GitHub Release + tag (no package publishing).
+- New Relic: after semantic-release publishes a new version, the workflow emits the production deployment event using semantic version as `version` and the deployed commit SHA as `commit`.
+
+This keeps release creation in a separate workflow file while ensuring a release is attempted only after production deployment succeeds, and New Relic is notified only after both stages are successful.
 
 ---
 
@@ -124,11 +128,16 @@ Add these two secrets:
 ## Validate the Workflow
 
 1. Merge to `main` with a conventional commit message (e.g. `feat: add feature`).
-2. Open **Actions** → **Release** workflow run.
-3. Confirm steps:
+2. Confirm the **Production Deployment** workflow completes successfully.
+3. Open **Actions** → **Release** workflow run.
+4. Confirm steps:
    - Token generation succeeds
-   - Dependencies install
-   - `pnpm run release` completes
+
+- Repository checks out the deployed commit SHA from the triggering production workflow
+- Dependencies install
+- `pnpm run release` completes
+- New Relic deployment event runs only when semantic-release publishes a new version
+
 4. Check **Releases** tab for a new version and changelog.
 
 ---
@@ -157,3 +166,6 @@ Add these two secrets:
 
 - This pipeline does **not** publish packages to npm.
 - If you later want npm publishing, add `NPM_TOKEN` and the appropriate semantic-release plugin.
+- This pipeline is not the source of truth for production deployment. Production rollout is still owned by `prod-deploy.yml`.
+- New Relic production deployment tracking is emitted from the release workflow only after successful production deployment and successful semantic-release publication.
+- The visible New Relic `version` is the semantic-release version, while `commit` remains the exact deployed Git SHA.

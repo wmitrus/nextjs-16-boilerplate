@@ -249,6 +249,37 @@ Set `NEW_RELIC_LOG_DRAIN_ENABLED=true` in env to document the expected state (in
 
 ---
 
+## Production Deployment Change Tracking
+
+Production deployment change tracking is ordered behind both the GitHub Actions production deploy workflow and the semantic-release workflow.
+
+Current repository behavior:
+
+- `prod-deploy.yml` is the production deployment authority
+- `release.yml` remains a separate GitHub release / changelog workflow, but now runs only after successful production deployment
+- the New Relic production deployment event is emitted from `release.yml` only when semantic-release actually publishes a version
+- New Relic `version` uses the semantic-release version, while `commit` uses the deployed commit SHA from `github.event.workflow_run.head_sha`
+
+This separation is intentional. A published GitHub release is not treated as proof that production successfully received the artifact.
+
+### Marker identity
+
+The production deployment marker currently uses `github.sha` as the canonical deployment identity.
+
+Why SHA is used:
+
+- it is guaranteed to be available on the deploy-success path
+- it identifies the exact artifact lineage shipped to production
+- it avoids race conditions between semantic-release publication and deployment success
+
+If semantic version metadata is required later, that should be added through an explicit release/deploy version-propagation design rather than inferred implicitly from release publication.
+
+### Rerun behavior
+
+Manual reruns of a successful production deployment workflow emit another New Relic deployment event by design. The repository currently prefers correct deployment truth over dedupe complexity.
+
+---
+
 ## Module Architecture
 
 ```
@@ -366,6 +397,7 @@ On Vercel, the APM route always returns empty because the APM agent never fully 
 - **Do NOT** set `NEW_RELIC_BROWSER_APPLICATION_ID` to "All Environments" in Vercel — this routes all beacon traffic to a single NR entity, breaking environment isolation. Always set it per-environment (Production, Preview separately).
 - **Do NOT** share one NR Browser entity across Vercel Production and Preview — use separate entities with separate env var sets per Vercel environment target.
 - **Do NOT** attempt to rename Browser entities via `NEW_RELIC_APP_NAME` — that env var controls only the APM Node.js agent name. Browser entity names are edited directly in the NR UI entity header.
+- **Do NOT** emit a production deployment marker from `release.published` while production deployment is owned by `prod-deploy.yml` — release publication and production deployment are separate event classes in this repository.
 
 ---
 

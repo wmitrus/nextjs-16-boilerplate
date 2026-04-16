@@ -44,8 +44,8 @@ Determine the production-safe workflow design for New Relic change tracking in t
 
 - `prod-deploy.yml` is the repository's production deployment workflow and performs the actual Vercel production deployment.
 - `release.yml` is now a separate workflow triggered by successful completion of `Production Deployment` on `main`.
-- `new-relic-change-tracking.yml` has been removed.
-- Release and production deployment remain in separate files, and New Relic now runs last from the release workflow.
+- `new-relic-change-tracking.yml` has been restored as the final workflow, triggered by published releases.
+- Production deploy, release, and New Relic change tracking now remain in separate files with explicit ordering.
 - `prod-deploy.yml` ignores docs-only and markdown-only changes, and release no longer runs for those changes because it is downstream of `Production Deployment`.
 - Repository docs indicate protection is intended to come from PR validation and rulesets, not from runtime coupling between release and deployment workflows.
 
@@ -82,9 +82,9 @@ Determine the production-safe workflow design for New Relic change tracking in t
 - Architecture Guard confirmed the release/deploy split is structurally acceptable, but the current New Relic marker attachment to `release.published` is architecturally drift-prone.
 - Validation Strategy confirmed this should stay a narrow workflow-semantics validation problem, not a broad test-expansion task.
 - The implementation plan now contains an execution-ready default proposal: move the marker to the successful end of `prod-deploy.yml` and use `github.sha` as the canonical deployment identity.
-- Option A has now been implemented: the marker lives on the production deploy success path, and the release-triggered production marker workflow has been removed.
-- The stronger workflow ordering model has now been finalized: release runs only after successful production deployment, and New Relic runs last from the release workflow using semantic version metadata.
+- The initial inline-marker implementation was superseded after retryability review, and the final design now uses a separate published-release New Relic workflow.
+- The stronger workflow ordering model has now been corrected for retryability: release runs only after successful production deployment, and a separate final New Relic workflow runs from the published release using semantic version metadata.
 - Repository docs now reflect the new ownership model across CI/CD, observability, release, and deployment documentation.
 - The user explicitly declined follow-up work to pin the New Relic action to a verified full SHA in this task.
-- The semantic decision has been resolved: the New Relic event now represents successful ordered completion of deployment and release publication.
+- The semantic decision has been resolved: the New Relic event now represents successful ordered completion of deployment and release publication, emitted from a retryable final workflow.
 - The remaining orchestration blocker is the Leantime open step, which cannot be completed in this session without command execution support.

@@ -30,7 +30,7 @@ Refined implementation result:
 - Production deployment remains in `prod-deploy.yml`
 - Release remains in a separate workflow file
 - Release is now ordered after successful production deployment via `workflow_run`
-- New Relic now runs last from the release workflow success path and uses semantic version metadata.
+- New Relic now runs last from its own dedicated workflow triggered by the published release and uses semantic version metadata.
 
 ## Recommended implementation options
 
@@ -225,4 +225,4 @@ For any selected implementation:
 
 ## Recommended next implementation action
 
-Implement the final ordered model: deploy in `prod-deploy.yml`, release in `release.yml`, and emit the New Relic event only after semantic-release publishes a version, using semver for `version` and Git SHA for `commit`.
+Implement the final ordered model: deploy in `prod-deploy.yml`, release in `release.yml`, and emit the New Relic event from a separate final workflow triggered by the published release, using semver for `version` and the tagged Git SHA for `commit`.

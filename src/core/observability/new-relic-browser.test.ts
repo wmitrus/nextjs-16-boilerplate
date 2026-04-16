@@ -7,6 +7,9 @@ import { vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import {
+  NR_BEACON_EU,
+  NR_BEACON_FALLBACK,
+  NR_BEACON_US,
   getNrBrowserCdnConfig,
   isNrBrowserCdnEnabled,
 } from './new-relic-browser';
@@ -15,6 +18,20 @@ import { mockEnv } from '@/testing/infrastructure/env';
 
 const VALID_AGENT_URL = 'https://js-agent.newrelic.com/nr-spa-1.272.0.min.js';
 
+describe('NR beacon constants', () => {
+  it('exports correct EU beacon', () => {
+    expect(NR_BEACON_EU).toBe('bam.eu01.nr-data.net');
+  });
+
+  it('exports correct US beacon', () => {
+    expect(NR_BEACON_US).toBe('bam.nr-data.net');
+  });
+
+  it('fallback is the EU beacon', () => {
+    expect(NR_BEACON_FALLBACK).toBe(NR_BEACON_EU);
+  });
+});
+
 describe('getNrBrowserCdnConfig', () => {
   beforeEach(() => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
@@ -22,12 +39,14 @@ describe('getNrBrowserCdnConfig', () => {
     mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = undefined;
+    mockEnv.NEW_RELIC_BROWSER_BEACON = undefined;
   });
 
   it('returns null when NEW_RELIC_BROWSER_ENABLED is false', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
     expect(getNrBrowserCdnConfig()).toBeNull();
   });
@@ -36,6 +55,7 @@ describe('getNrBrowserCdnConfig', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
     expect(getNrBrowserCdnConfig()).toBeNull();
   });
@@ -44,6 +64,16 @@ describe('getNrBrowserCdnConfig', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
+    mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
+    expect(getNrBrowserCdnConfig()).toBeNull();
+  });
+
+  it('returns null when account ID is missing', () => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
+    mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
+    mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
     expect(getNrBrowserCdnConfig()).toBeNull();
   });
@@ -52,6 +82,7 @@ describe('getNrBrowserCdnConfig', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = undefined;
     expect(getNrBrowserCdnConfig()).toBeNull();
   });
@@ -70,17 +101,31 @@ describe('getNrBrowserCdnConfig', () => {
     expect(config?.agentUrl).toBe(VALID_AGENT_URL);
     expect(config?.init.distributed_tracing.enabled).toBe(true);
     expect(config?.init.privacy.cookies_enabled).toBe(true);
-    expect(config?.init.ajax.deny_list).toContain('bam.nr-data.net');
   });
 
-  it('defaults accountId to empty string when ACCOUNT_ID is missing', () => {
+  it('uses EU beacon fallback when BEACON env var is not set', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '99887766';
-    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
+    mockEnv.NEW_RELIC_BROWSER_BEACON = undefined;
     const config = getNrBrowserCdnConfig();
-    expect(config?.accountId).toBe('');
+    expect(config?.beacon).toBe(NR_BEACON_EU);
+    expect(config?.init.ajax.deny_list).toContain(NR_BEACON_EU);
+  });
+
+  it('uses explicit beacon when BEACON env var is set', () => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
+    mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
+    mockEnv.NEW_RELIC_BROWSER_APP_ID = '99887766';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
+    mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
+    mockEnv.NEW_RELIC_BROWSER_BEACON = NR_BEACON_US;
+    const config = getNrBrowserCdnConfig();
+    expect(config?.beacon).toBe(NR_BEACON_US);
+    expect(config?.init.ajax.deny_list).toContain(NR_BEACON_US);
+    expect(config?.init.ajax.deny_list).not.toContain(NR_BEACON_EU);
   });
 });
 
@@ -89,6 +134,7 @@ describe('isNrBrowserCdnEnabled', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
     mockEnv.NEW_RELIC_BROWSER_APP_ID = undefined;
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = undefined;
   });
 
@@ -96,6 +142,7 @@ describe('isNrBrowserCdnEnabled', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = false;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
     expect(isNrBrowserCdnEnabled()).toBe(false);
   });
@@ -104,6 +151,16 @@ describe('isNrBrowserCdnEnabled', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = undefined;
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
+    mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
+    expect(isNrBrowserCdnEnabled()).toBe(false);
+  });
+
+  it('returns false when account ID is missing', () => {
+    mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
+    mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
+    mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = undefined;
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
     expect(isNrBrowserCdnEnabled()).toBe(false);
   });
@@ -112,6 +169,7 @@ describe('isNrBrowserCdnEnabled', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = undefined;
     expect(isNrBrowserCdnEnabled()).toBe(false);
   });
@@ -120,6 +178,7 @@ describe('isNrBrowserCdnEnabled', () => {
     mockEnv.NEW_RELIC_BROWSER_ENABLED = true;
     mockEnv.NEW_RELIC_BROWSER_LICENSE_KEY = 'license123';
     mockEnv.NEW_RELIC_BROWSER_APP_ID = '12345678';
+    mockEnv.NEW_RELIC_BROWSER_ACCOUNT_ID = '6443682';
     mockEnv.NEW_RELIC_BROWSER_AGENT_URL = VALID_AGENT_URL;
     expect(isNrBrowserCdnEnabled()).toBe(true);
   });

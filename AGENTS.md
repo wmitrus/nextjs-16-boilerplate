@@ -182,6 +182,36 @@ nr.getBrowserTimingHeader({
 });
 ```
 
+## New Relic Browser — `agentID` vs `applicationID`
+
+For **standalone NR Browser apps** (Copy/Paste snippet, not APM-linked), `agentID === applicationID` in the NR snippet. `NEW_RELIC_BROWSER_APP_ID` is used as both fields via the fallback `applicationId = APPLICATION_ID ?? APP_ID` in `new-relic-browser.ts`.
+
+`NEW_RELIC_BROWSER_APPLICATION_ID` is only needed when `agentID !== applicationID` in the NR snippet (APM-linked apps). When needed, **set it per-environment (Production, Preview) — never "All Environments"**. Setting it to "All Environments" routes all beacon traffic to a single NR entity, breaking environment isolation.
+
+When in doubt: omit `NEW_RELIC_BROWSER_APPLICATION_ID` entirely. The per-env `APP_ID` fallback is correct for standalone browser apps.
+
+## New Relic — Per-Environment Browser Entity Setup
+
+Each Vercel deployment environment (Production, Preview) must have its **own separate NR Browser application** with its own `agentID`, `applicationID`, `licenseKey`, and agent URL. Sharing a single NR Browser entity across environments mixes production and preview data.
+
+**Entity names** (e.g. `beacon:421415380`) are **not** controlled by env vars. `NEW_RELIC_APP_NAME` applies only to the Node.js APM agent. Browser entity display names are edited directly in the NR UI entity header.
+
+**Full integration guide**: `docs/features/26 - New Relic Server & Browser Integration.md` — read before making any changes to NR integration.
+
+## Rate Limiting — Edge-Log Loop Prevention
+
+`checkRateLimit()` accepts an optional second argument `meta?: { path?: string }`. **Always pass it** from any request-aware context:
+
+```typescript
+const result = await checkRateLimit(ip, { path: pathname });
+```
+
+**Why this matters**: When Upstash times out, `checkRateLimit()` logs a WARN via the edge logger. The edge logger's loop prevention guard (`edge-utils.ts`) suppresses forwarding to `/api/logs` only when `payload.context.path === '/api/logs'`. Without `path` in the WARN context, the guard cannot fire → WARN is forwarded to `/api/logs` → another rate-limit check → another WARN → infinite recursive log flood.
+
+**Never** add a bypass list (`SELF_RATE_LIMITED_PATHS` or similar) to skip rate limiting on internal endpoints. The bypass removes protection without solving the loop. The correct fix is always propagating `path` in the log context.
+
+See also: SEC-17 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
 ## Dependencies
 
 **Main Dependencies**:
@@ -745,6 +775,7 @@ Key rules currently in effect:
 | SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                               |
 | SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map` |
 | SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                           |
+| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead  |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

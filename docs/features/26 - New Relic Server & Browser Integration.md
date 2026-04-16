@@ -356,7 +356,7 @@ On Vercel, the APM route always returns empty because the APM agent never fully 
 - **Do NOT** import `newrelic` directly in features, modules, or UI components — all APM usage goes through `src/core/observability/new-relic.ts`.
 - **Do NOT** move CDN delivery back through a route handler — reintroduces double-hop loading and breaks `beforeInteractive` strategy.
 - **Do NOT** set `strategy="afterInteractive"` for the CDN agent — misses page load timing events.
-- **Do NOT** use the same `NEW_RELIC_BROWSER_APP_ID` value for `applicationID` without verifying they differ in the NR snippet — they are usually different numbers.
+- **Do NOT** set `NEW_RELIC_BROWSER_APPLICATION_ID` to "All Environments" in Vercel — this overrides the per-env `APP_ID` fallback and routes all beacon traffic to a single NR entity. Set it per-environment only when the NR snippet shows `agentID !== applicationID` (APM-linked apps). For standalone browser apps, omit it entirely and rely on the `APP_ID` fallback.
 - **Do NOT** share one NR Browser entity across Vercel Production and Preview — use separate entities with separate env var sets per Vercel environment target.
 - **Do NOT** attempt to rename Browser entities via `NEW_RELIC_APP_NAME` — that env var controls only the APM Node.js agent name. Browser entity names are edited directly in the NR UI entity header.
 

@@ -1,0 +1,46 @@
+name: New Relic Change Tracking
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  create-production-change-event:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ''
+      RELEASE_COMMIT: ''
+    steps:
+      - name: Checkout repository at release tag
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
+          fetch-depth: 1
+
+      - name: Normalize release version
+        shell: bash
+        run: |
+          version='${{ github.event.release.tag_name }}'
+          echo "RELEASE_VERSION=${version#v}" >> "$GITHUB_ENV"
+
+      - name: Resolve tagged release commit
+        shell: bash
+        run: |
+          echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Create New Relic production deployment event
+        uses: newrelic/deployment-marker-action@v2.6.2
+        with:
+          apiKey: ${{ secrets.NEW_RELIC_API_KEY }}
+          commandType: changeTrackingCreateEvent
+          entitySearch: "id='${{ secrets.NEW_RELIC_DEPLOYMENT_ENTITY_GUID }}'"
+          category: Deployment
+          type: Basic
+          version: ${{ env.RELEASE_VERSION }}
+          commit: ${{ env.RELEASE_COMMIT }}
+          description: Automated production deployment release via GitHub Actions
+          user: ${{ github.actor }}
+          region: EU

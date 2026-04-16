@@ -21,6 +21,7 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 - Preview deployment: [Vercel preview + LHCI audit](.github/workflows/preview-deploy.yml).
 - Production deployment: [Vercel production deploy](.github/workflows/prod-deploy.yml).
 - Release automation: [semantic-release on main](.github/workflows/release.yml).
+- New Relic change tracking: [published release -> New Relic deployment event](.github/workflows/new-relic-change-tracking.yml).
 - Security scan: [dependency + secrets scan](.github/workflows/security-scan.yml).
 - Lighthouse schedule: [scheduled production audit](.github/workflows/lighthouse.yml).
 - Chromatic: [visual regression on Storybook](.github/workflows/deployChromatic.yml).
@@ -34,7 +35,8 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 - **PR Validation** runs on pull requests to `main` and blocks PRs originating from `main`.
 - **Preview Deploy** validates preview env in GitHub Actions, then triggers a normal `vercel deploy` so Vercel builds remotely and runs preview DB migrations against Neon deployment-scoped branch variables before LHCI audits the resulting preview URL.
 - **Production Deploy** runs on pushes to `main`, skips docs-only changes, and owns the real Vercel production rollout.
-- **Release** runs semantic-release in a separate workflow file only after the `Production Deployment` workflow completes successfully on `main`, and emits the New Relic production deployment event only when a semantic release is actually published.
+- **Release** runs semantic-release in a separate workflow file only after the `Production Deployment` workflow completes successfully on `main`.
+- **New Relic Change Tracking** runs as the final workflow on published releases, resolves the released semantic version and tagged commit, and emits the production deployment event independently of the release workflow rerun path.
 - **Security Scan** runs on `main`, PRs, and weekly schedules.
 - **Lighthouse Schedule** runs weekly (and manually) against a configured production URL.
 - **Chromatic** runs on changes to Storybook and UI code; auto-accepts changes on `main`.
@@ -77,7 +79,7 @@ This repository uses two different deployment ownership models:
    - GitHub Actions remains the deployment authority.
    - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
    - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
-   - The downstream release workflow emits the New Relic production deployment event only when semantic-release publishes a version, so New Relic shows semver while production rollout truth still comes from the deploy workflow.
+   - The downstream release workflow publishes the GitHub Release, and the final `new-relic-change-tracking.yml` workflow emits the New Relic production deployment event from that published release so New Relic shows semver while production rollout truth still comes from the deploy workflow.
 
 Why the split exists:
 

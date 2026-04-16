@@ -251,32 +251,33 @@ Set `NEW_RELIC_LOG_DRAIN_ENABLED=true` in env to document the expected state (in
 
 ## Production Deployment Change Tracking
 
-Production deployment change tracking is ordered behind both the GitHub Actions production deploy workflow and the semantic-release workflow.
+Production deployment change tracking is ordered behind both the GitHub Actions production deploy workflow and the semantic-release workflow, but it is emitted from its own final retryable workflow.
 
 Current repository behavior:
 
 - `prod-deploy.yml` is the production deployment authority
 - `release.yml` remains a separate GitHub release / changelog workflow, but now runs only after successful production deployment
-- the New Relic production deployment event is emitted from `release.yml` only when semantic-release actually publishes a version
-- New Relic `version` uses the semantic-release version, while `commit` uses the deployed commit SHA from `github.event.workflow_run.head_sha`
+- `new-relic-change-tracking.yml` is triggered by the published GitHub Release that was created downstream of successful production deployment
+- New Relic `version` uses the semantic-release version normalized from the published tag, while `commit` is resolved from that release tag
+- keeping New Relic in its own final workflow restores retryability if only the marker step fails
 
-This separation is intentional. A published GitHub release is not treated as proof that production successfully received the artifact.
+This separation is intentional. Production deployment is still the upstream truth gate, release remains the version-management stage, and the final New Relic workflow provides a retryable observability signal after the published release exists.
 
 ### Marker identity
 
-The production deployment marker currently uses `github.sha` as the canonical deployment identity.
+The production deployment marker currently uses semantic version as the visible release identifier and the tagged Git SHA as the commit identity.
 
-Why SHA is used:
+Why this split is used:
 
-- it is guaranteed to be available on the deploy-success path
-- it identifies the exact artifact lineage shipped to production
-- it avoids race conditions between semantic-release publication and deployment success
+- the semantic version is human-readable in New Relic and matches the published release
+- the tagged Git SHA still identifies the exact artifact lineage shipped to production
+- the published release event provides a stable downstream source for the final marker workflow
 
-If semantic version metadata is required later, that should be added through an explicit release/deploy version-propagation design rather than inferred implicitly from release publication.
+If the repository ever changes tag formatting away from `v<semver>`, the version-normalization step in the final workflow must be updated explicitly.
 
 ### Rerun behavior
 
-Manual reruns of a successful production deployment workflow emit another New Relic deployment event by design. The repository currently prefers correct deployment truth over dedupe complexity.
+Manual reruns of the final New Relic workflow reuse the same published release payload, which restores retryability if only the marker step fails. Manual publication of GitHub releases outside the ordered deploy -> release path would still emit a marker unless governance prevents it.
 
 ---
 

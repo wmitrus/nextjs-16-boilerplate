@@ -4,7 +4,8 @@ import { env } from '@/core/env';
 
 export interface NrBrowserCdnConfig {
   accountId: string;
-  appId: string;
+  agentId: string;
+  applicationId: string;
   licenseKey: string;
   agentUrl: string;
   beacon: string;
@@ -35,7 +36,9 @@ export function getNrBrowserCdnConfig(): NrBrowserCdnConfig | null {
 
   return {
     accountId: env.NEW_RELIC_BROWSER_ACCOUNT_ID,
-    appId: env.NEW_RELIC_BROWSER_APP_ID,
+    agentId: env.NEW_RELIC_BROWSER_APP_ID,
+    applicationId:
+      env.NEW_RELIC_BROWSER_APPLICATION_ID ?? env.NEW_RELIC_BROWSER_APP_ID,
     licenseKey: env.NEW_RELIC_BROWSER_LICENSE_KEY,
     agentUrl: env.NEW_RELIC_BROWSER_AGENT_URL,
     beacon,

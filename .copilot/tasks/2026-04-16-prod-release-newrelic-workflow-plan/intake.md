@@ -68,9 +68,9 @@ Supporting docs:
 
 - The repository's real production deployment happens in `prod-deploy.yml` through the Vercel production deploy flow.
 - `release.yml` is a separate semantic-release workflow triggered by the same `push` event, not a downstream step of successful production deployment.
-- The current New Relic workflow is bound to GitHub release publication, not successful production deployment.
-- The current design can therefore publish a deployment/change marker that does not strictly prove a successful production rollout.
-- If semantic version is required for the marker, a deploy-driven workflow must solve version availability explicitly.
+- The original release-published New Relic workflow was unsafe when release and deployment were independent.
+- After release was chained behind successful production deployment, release publication became a valid downstream signal for a final New Relic workflow.
+- A dedicated final New Relic workflow restores retryability if the marker step fails after release publication.
 
 ## Readiness Checklist
 
@@ -86,17 +86,17 @@ Supporting docs:
 
 ## Open Questions
 
-1. Must the deployment marker show semantic-release version, or is deployed commit SHA acceptable?
-2. Should the marker represent GitHub release publication, successful production deployment, or both as separate signals?
-3. Does the repository owner want a minimal fix to New Relic marker placement or a stronger release/deploy coupling model?
+1. Are manual GitHub releases outside the release workflow operationally disallowed, or is that drift risk accepted?
+2. Should the New Relic event continue to normalize tag names like `v1.2.3` to `1.2.3`, or should the raw tag be preserved?
+3. Is any extra governance needed to guarantee that published releases always originate from the ordered deploy -> release path?
 
 ## Initial Recommendation Direction
 
-Prefer treating successful production deployment as the source of truth for deployment/change markers. Treat semantic-release publication as a separate release-management concern unless the repository is intentionally redesigned so release creation happens only after confirmed production deployment success.
+Prefer treating successful production deployment as the upstream truth gate, then triggering release after that gate, then emitting the final New Relic deployment event from a dedicated published-release workflow for retryability and readable semver metadata.
 
 ## Specialist-backed status
 
 - Architecture Guard summary recorded in `01 - Architecture Guard - Summary.md`
 - Validation Strategy summary recorded in `05 - Validation Strategy - Summary.md`
 - Implementation summary recorded in `04 - Implementation Agent - Summary.md`
-- Current recommended implementation default: attach the production marker to the successful production deploy path unless a stricter semantic-version coupling requirement is later confirmed
+- Current recommended implementation default: keep three explicit stages: deploy, release, and final New Relic change tracking

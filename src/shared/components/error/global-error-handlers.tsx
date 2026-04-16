@@ -25,6 +25,7 @@ import {
  * - Ignores non-critical patterns to prevent log spam
  * - Integrates with Sentry for error tracking
  * - Adds breadcrumbs for debugging context
+ * - Auto-reloads on UnrecognizedActionError (stale bundle after HMR/redeployment)
  */
 export function GlobalErrorHandlers() {
   useEffect(() => {
@@ -117,6 +118,20 @@ export function GlobalErrorHandlers() {
     const handleRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
       const message = reason instanceof Error ? reason.message : String(reason);
+
+      // UnrecognizedActionError: Next.js Server Action hash is stale — the client bundle
+      // is outdated relative to the server (caused by HMR in dev or a new production
+      // deployment while the user still has the old bundle loaded). Recovery: reload to
+      // fetch the current bundle. Do not report to Sentry — this is a deployment artifact,
+      // not a code defect.
+      if (
+        reason instanceof Error &&
+        reason.name === 'UnrecognizedActionError'
+      ) {
+        event.preventDefault();
+        window.location.reload();
+        return;
+      }
 
       if (
         IGNORED_REJECTION_PATTERNS.some((pattern) => message.includes(pattern))

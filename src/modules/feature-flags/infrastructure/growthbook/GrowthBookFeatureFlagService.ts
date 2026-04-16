@@ -16,9 +16,7 @@ function getOrCreateClient(clientKey: string, apiHost: string): ClientEntry {
   if (existing) return existing;
 
   const client = new GrowthBookClient({ clientKey, apiHost });
-  const ready = client
-    .init({ timeout: 2000, streaming: true })
-    .then(() => undefined);
+  const ready = client.init({ timeout: 2000 }).then(() => undefined);
   const entry: ClientEntry = { client, ready };
   clientCache.set(cacheKey, entry);
   return entry;
@@ -44,7 +42,6 @@ export class GrowthBookFeatureFlagService implements FeatureFlagService {
   ): Promise<boolean> {
     const { client, ready } = getOrCreateClient(this.clientKey, this.apiHost);
     await ready;
-    await client.refreshFeatures();
     return client.isOn(flag, {
       attributes: {
         id: context.subject.id,

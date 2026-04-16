@@ -10,6 +10,7 @@ export const PUBLIC_ROUTE_PREFIXES = [
   '/feature-flags-demo',
   '/api/security-test/ssrf',
   '/api/logs',
+  '/_betterstack',
 ] as const;
 
 export function matchesRoutePrefix(path: string, prefix: string): boolean {

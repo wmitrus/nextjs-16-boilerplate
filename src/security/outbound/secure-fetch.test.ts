@@ -76,6 +76,20 @@ describe('Secure Fetch (SSRF Protection)', () => {
     );
   });
 
+  it('should allow requests to clerk.accounts.dev when using a dev Clerk key', async () => {
+    mockEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_test_devkey123';
+    await expect(
+      secureFetch('https://frontend-api.clerk.accounts.dev/v1'),
+    ).resolves.toBeDefined();
+  });
+
+  it('should block requests to clerk.accounts.dev when using a production Clerk key', async () => {
+    mockEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_live_prodkey123';
+    await expect(
+      secureFetch('https://frontend-api.clerk.accounts.dev/v1'),
+    ).rejects.toThrow('SSRF Protection');
+    expect(mockChildLogger.error).toHaveBeenCalled();
+  });
   it('should allow subdomains of allowed hosts', async () => {
     await expect(secureFetch('https://api.example.com')).resolves.toBeDefined();
   });

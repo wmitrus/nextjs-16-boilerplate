@@ -17,25 +17,37 @@ function createEmptyScriptResponse(): NextResponse {
   });
 }
 
-export async function GET(): Promise<Response> {
-  await connection();
-
-  if (!env.NEW_RELIC_ENABLED) {
-    return createEmptyScriptResponse();
-  }
-
-  const snippet = getBrowserAgentScriptSafe();
-  if (!snippet) {
-    const diag = getNrBrowserDiagnostics();
-    console.warn('[NR Browser] Returning empty browser script.', diag);
-    return createEmptyScriptResponse();
-  }
-
-  return new NextResponse(snippet, {
+function createScriptResponse(body: string): NextResponse {
+  return new NextResponse(body, {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
     },
   });
+}
+
+export async function GET(): Promise<Response> {
+  await connection();
+
+  if (!env.NEW_RELIC_ENABLED || !env.NEW_RELIC_LICENSE_KEY) {
+    return createEmptyScriptResponse();
+  }
+
+  const snippet = getBrowserAgentScriptSafe();
+  if (!snippet) {
+    const diag = getNrBrowserDiagnostics();
+
+    const logLine = `[NR Browser] Empty script loaded=${diag.agentLoaded} connected=${diag.agentConnected} tx=${diag.hasActiveTransaction} appId=${diag.hasApplicationId}`;
+
+    if (env.VERCEL_ENV) {
+      console.info(logLine);
+    } else {
+      console.warn(logLine);
+    }
+
+    return createEmptyScriptResponse();
+  }
+
+  return createScriptResponse(snippet);
 }

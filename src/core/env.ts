@@ -9,6 +9,7 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
+    NODE_OPTIONS: z.string().optional(),
     CHROMATIC_PROJECT_TOKEN: z.string().optional(),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -43,6 +44,31 @@ export const env = createEnv({
     NEW_RELIC_NERDGRAPH_API_URL: z.url().optional(),
     NEW_RELIC_USER_API_KEY: z.string().optional(),
     NEW_RELIC_ACCOUNT_ID: z.coerce.number().int().positive().optional(),
+    NEW_RELIC_BROWSER_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    NEW_RELIC_BROWSER_LICENSE_KEY: z.string().optional(),
+    NEW_RELIC_BROWSER_APP_ID: z.string().optional(),
+    NEW_RELIC_BROWSER_APPLICATION_ID: z.string().optional(),
+    NEW_RELIC_BROWSER_ACCOUNT_ID: z.string().optional(),
+    NEW_RELIC_BROWSER_AGENT_URL: z.url().optional(),
+    NEW_RELIC_BROWSER_BEACON: z.string().optional(),
+    NEW_RELIC_LOG_DRAIN_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    NEW_RELIC_OTEL_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    BETTERSTACK_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    BETTER_STACK_SOURCE_TOKEN: z.string().optional(),
+    BETTERSTACK_WEB_VITALS_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    BETTER_STACK_INGESTING_URL: z
+      .url()
+      .default('https://in.logs.betterstack.com'),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
@@ -93,6 +119,10 @@ export const env = createEnv({
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
+    NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN: z.string().optional(),
+    NEXT_PUBLIC_BETTER_STACK_INGESTING_URL: z
+      .url()
+      .default('https://in.logs.betterstack.com'),
     NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
@@ -120,6 +150,7 @@ export const env = createEnv({
    */
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
+    NODE_OPTIONS: process.env.NODE_OPTIONS,
     CHROMATIC_PROJECT_TOKEN: process.env.CHROMATIC_PROJECT_TOKEN,
     LOG_LEVEL: process.env.LOG_LEVEL,
     LOG_DIR: process.env.LOG_DIR,
@@ -142,6 +173,20 @@ export const env = createEnv({
     NEW_RELIC_NERDGRAPH_API_URL: process.env.NEW_RELIC_NERDGRAPH_API_URL,
     NEW_RELIC_USER_API_KEY: process.env.NEW_RELIC_USER_API_KEY,
     NEW_RELIC_ACCOUNT_ID: process.env.NEW_RELIC_ACCOUNT_ID,
+    NEW_RELIC_BROWSER_ENABLED: process.env.NEW_RELIC_BROWSER_ENABLED,
+    NEW_RELIC_BROWSER_LICENSE_KEY: process.env.NEW_RELIC_BROWSER_LICENSE_KEY,
+    NEW_RELIC_BROWSER_ACCOUNT_ID: process.env.NEW_RELIC_BROWSER_ACCOUNT_ID,
+    NEW_RELIC_BROWSER_APP_ID: process.env.NEW_RELIC_BROWSER_APP_ID,
+    NEW_RELIC_BROWSER_APPLICATION_ID:
+      process.env.NEW_RELIC_BROWSER_APPLICATION_ID,
+    NEW_RELIC_BROWSER_AGENT_URL: process.env.NEW_RELIC_BROWSER_AGENT_URL,
+    NEW_RELIC_BROWSER_BEACON: process.env.NEW_RELIC_BROWSER_BEACON,
+    NEW_RELIC_LOG_DRAIN_ENABLED: process.env.NEW_RELIC_LOG_DRAIN_ENABLED,
+    NEW_RELIC_OTEL_ENABLED: process.env.NEW_RELIC_OTEL_ENABLED,
+    BETTERSTACK_ENABLED: process.env.BETTERSTACK_ENABLED,
+    BETTER_STACK_SOURCE_TOKEN: process.env.BETTER_STACK_SOURCE_TOKEN,
+    BETTERSTACK_WEB_VITALS_ENABLED: process.env.BETTERSTACK_WEB_VITALS_ENABLED,
+    BETTER_STACK_INGESTING_URL: process.env.BETTER_STACK_INGESTING_URL,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
@@ -168,6 +213,10 @@ export const env = createEnv({
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:
       process.env.NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED,
+    NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN:
+      process.env.NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN,
+    NEXT_PUBLIC_BETTER_STACK_INGESTING_URL:
+      process.env.NEXT_PUBLIC_BETTER_STACK_INGESTING_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
@@ -228,6 +277,27 @@ export function validateTenancyConfigValues(
       '[env] TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE to be set (provider|db). ' +
         'Set TENANT_CONTEXT_SOURCE=provider for Clerk Organizations, or TENANT_CONTEXT_SOURCE=db for app-level tenant selection.',
     );
+  }
+}
+
+/**
+ * Cross-field observability validation against explicit values.
+ *
+ * Rules:
+ * - NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY
+ */
+export function validateNewRelicConfigValues(
+  newRelicEnabled: boolean | string | undefined,
+  newRelicLicenseKey: string | undefined,
+  _nodeOptions?: string | undefined,
+  _nodeEnv?: string | undefined,
+): void {
+  const isNewRelicEnabled =
+    newRelicEnabled === true || newRelicEnabled === 'true';
+  const normalizedLicenseKey = newRelicLicenseKey?.trim() ?? '';
+
+  if (isNewRelicEnabled && normalizedLicenseKey.length === 0) {
+    throw new Error('NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY.');
   }
 }
 

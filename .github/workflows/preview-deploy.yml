@@ -57,8 +57,18 @@ jobs:
       - name: Deploy to Vercel
         id: vercel_deploy
         run: |
-          DEPLOY_URL=$(vercel deploy --token=${{ secrets.VERCEL_TOKEN }})
+          set +e
+          DEPLOY_URL=$(vercel deploy --logs --token=${{ secrets.VERCEL_TOKEN }})
+          DEPLOY_EXIT=$?
+          set -e
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          if [ $DEPLOY_EXIT -ne 0 ]; then
+            exit $DEPLOY_EXIT
+          fi
+
+      - name: Print Vercel Build Logs On Failure
+        if: failure() && steps.vercel_deploy.outputs.preview_url != ''
+        run: vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
 
       - name: Run Lighthouse Audit
         if: success()

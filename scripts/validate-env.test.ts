@@ -27,6 +27,10 @@ describe('validate-env: runValidation', () => {
         'single',
         VALID_UUID,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -39,6 +43,10 @@ describe('validate-env: runValidation', () => {
         'single',
         VALID_UUID,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('CLERK_SECRET_KEY');
@@ -52,6 +60,10 @@ describe('validate-env: runValidation', () => {
         'single',
         VALID_UUID,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
@@ -65,6 +77,10 @@ describe('validate-env: runValidation', () => {
         'personal',
         undefined,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -79,6 +95,10 @@ describe('validate-env: runValidation', () => {
         'single',
         undefined,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('DEFAULT_TENANT_ID');
@@ -92,6 +112,10 @@ describe('validate-env: runValidation', () => {
         'single',
         VALID_UUID,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -104,6 +128,10 @@ describe('validate-env: runValidation', () => {
         'org',
         undefined,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('TENANT_CONTEXT_SOURCE');
@@ -117,6 +145,10 @@ describe('validate-env: runValidation', () => {
         'org',
         undefined,
         'provider',
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(0);
     });
@@ -131,10 +163,69 @@ describe('validate-env: runValidation', () => {
         'single',
         undefined,
         undefined,
+        false,
+        undefined,
+        undefined,
+        'test',
       );
       expect(errors).toHaveLength(2);
       expect(errors.some((e) => e.includes('CLERK_SECRET_KEY'))).toBe(true);
       expect(errors.some((e) => e.includes('DEFAULT_TENANT_ID'))).toBe(true);
+    });
+  });
+
+  describe('new relic validation', () => {
+    it('returns an error when NEW_RELIC_ENABLED=true without NEW_RELIC_LICENSE_KEY', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        undefined,
+        undefined,
+        'production',
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NEW_RELIC_LICENSE_KEY');
+    });
+
+    it('returns no error when NEW_RELIC_ENABLED=true with NEW_RELIC_LICENSE_KEY', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        'nr_license_key',
+        undefined,
+        'production',
+      );
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('returns an error when NEW_RELIC_LICENSE_KEY is whitespace only', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        'true',
+        '   ',
+        undefined,
+        'production',
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NEW_RELIC_LICENSE_KEY');
     });
   });
 });

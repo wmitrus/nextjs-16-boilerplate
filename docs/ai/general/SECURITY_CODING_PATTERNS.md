@@ -22,6 +22,7 @@ Update it after every security review group.
 | SEC-11 | Caching           | SDK client cache key missing differentiating config  | Real risk → fixed         | Module-level SDK adapters |
 | SEC-15 | Object access     | User-controlled key lookup via `key in object`       | Latent risk               | Auth/bootstrap UI mapping |
 | SEC-16 | File access       | Reusable helper fs paths lack sink confinement       | Latent risk               | Runtime logger helpers    |
+| SEC-17 | Observability     | Rate-limit WARN missing `path` causes edge-log loop  | Real risk → fixed         | Rate-limit middleware     |
 
 ---
 
@@ -876,3 +877,62 @@ function ensureLogDirectory(logDir: string): boolean {
 **DO** resolve and confine path-like arguments inside the helper immediately before the `fs.*` sink.
 
 **Relationship to SEC-05 / SEC-12**: SEC-05 covers true false positives for static literal paths. SEC-12 sets the repository script convention to use `path.resolve`. SEC-16 adds the missing sink-level rule for reusable helpers that accept dynamic path arguments.
+
+---
+
+## SEC-17 — Rate-Limit WARN Must Propagate `path` for Edge-Log Loop Prevention
+
+**ID**: SEC-17
+**Category**: Observability / Rate Limiting
+**Classification**: Real risk → fixed
+**Affected area**: `src/shared/lib/rate-limit/rate-limit-helper.ts`, `src/security/middleware/with-rate-limit.ts`
+
+### Problem
+
+`checkRateLimit()` originally logged its Upstash timeout WARN without a `path` field in the context object. The edge-log forwarding guard in `src/core/logger/edge-utils.ts` suppresses forwarding when `payload.context.path === '/api/logs'`. Without `path`, this evaluates to `undefined === '/api/logs'` → **false** → the WARN is forwarded to `/api/logs` → which triggers another rate-limit check → another WARN → infinite recursive log flood.
+
+During a sustained Upstash outage this cascade can exhaust BetterStack, New Relic, and Upstash request quotas in minutes.
+
+### Incorrect Fix (Rejected)
+
+Adding a `SELF_RATE_LIMITED_PATHS = ['/api/logs']` bypass that skips rate limiting entirely for `/api/logs`. This removes protection from a high-frequency endpoint and was reverted.
+
+### Correct Pattern
+
+`checkRateLimit()` accepts `meta?: { path?: string }` and includes `path` in the WARN context:
+
+```typescript
+export async function checkRateLimit(
+  identifier: string,
+  meta?: { path?: string },
+): Promise<RateLimitResult> {
+  // ...
+  getLogger().warn(
+    {
+      provider: 'upstash',
+      identifier,
+      timeoutMs: UPSTASH_RATE_LIMIT_TIMEOUT_MS,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      ...(meta?.path !== undefined ? { path: meta.path } : {}),
+    },
+    'Rate limit provider unavailable, using local fallback',
+  );
+}
+```
+
+`withRateLimit` passes the request pathname unconditionally:
+
+```typescript
+const result = await checkRateLimit(ip, { path: pathname });
+```
+
+### Rule for Agents
+
+**DO NOT** add a bypass list (`SELF_RATE_LIMITED_PATHS` or equivalent) for internal endpoints to work around log forwarding loops. The correct fix is propagating `path` in the log context so the existing loop-prevention guard can function correctly.
+
+**DO** always pass `meta.path` when calling `checkRateLimit()` from a request-aware context. Omitting it silently re-opens the loop prevention gap.
+
+**DO NOT** use raw `error` objects in WARN context — extract `errorMessage: error.message` and `errorName: error.name` as separate string fields (SEC-10).
+
+**Relationship to SEC-10**: The WARN context fix also brings this call site into compliance with SEC-10 (no raw error objects in logger calls).

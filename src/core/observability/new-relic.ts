@@ -9,8 +9,14 @@ interface NewRelicAgentCollector {
   isConnected(): boolean;
 }
 
+interface NewRelicAgentConfig {
+  application_id?: string | null;
+}
+
 interface NewRelicAgent {
   collector: NewRelicAgentCollector;
+  config?: NewRelicAgentConfig;
+  getTransaction?(): unknown;
 }
 
 interface NewRelicApi {
@@ -100,15 +106,28 @@ export function getBrowserAgentScriptSafe(): string {
  * Returns diagnostic state for the NR browser script delivery.
  * Used only for server-side diagnostic logging — never exposed to the client.
  */
-export function getNrBrowserDiagnostics(): Record<string, boolean> {
+export function getNrBrowserDiagnostics(): {
+  agentLoaded: boolean;
+  agentConnected: boolean;
+  hasActiveTransaction: boolean;
+  hasApplicationId: boolean;
+} {
   const nr = tryGetNewRelic();
   const agentLoaded = nr !== null;
   const agentConnected = agentLoaded
     ? Boolean(nr.agent?.collector?.isConnected())
     : false;
+  const hasActiveTransaction = agentLoaded
+    ? Boolean(nr.agent?.getTransaction?.())
+    : false;
+  const hasApplicationId = agentLoaded
+    ? Boolean(nr.agent?.config?.application_id)
+    : false;
 
   return {
     agentLoaded,
     agentConnected,
+    hasActiveTransaction,
+    hasApplicationId,
   };
 }

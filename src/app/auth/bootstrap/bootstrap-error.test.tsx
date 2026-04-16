@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const signOutMock = vi.fn();
 const pushMock = vi.fn();
@@ -63,5 +64,65 @@ describe('BootstrapErrorUI', () => {
     render(<BootstrapErrorUI error="tenant_config" />);
 
     expect(screen.queryByText(internalDetail)).not.toBeInTheDocument();
+  });
+
+  describe('db_error adapter-aware messages', () => {
+    it('shows pglite reset instructions when dbDriver is pglite', () => {
+      render(<BootstrapErrorUI error="db_error" dbDriver="pglite" />);
+      expect(screen.getByText(/pnpm db:reset:pglite/)).toBeInTheDocument();
+      expect(screen.queryByText(/pnpm db:dev:up/)).not.toBeInTheDocument();
+    });
+
+    it('shows container instructions when dbDriver is postgres', () => {
+      render(<BootstrapErrorUI error="db_error" dbDriver="postgres" />);
+      expect(screen.getByText(/pnpm db:dev:up/)).toBeInTheDocument();
+      expect(screen.getByText(/pnpm db:dev:migrate/)).toBeInTheDocument();
+      expect(
+        screen.queryByText(/pnpm db:reset:pglite/),
+      ).not.toBeInTheDocument();
+    });
+
+    it('defaults to pglite instructions when dbDriver is undefined', () => {
+      render(<BootstrapErrorUI error="db_error" />);
+      expect(screen.getByText(/pnpm db:reset:pglite/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Sign Out button', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('calls signOut and navigates to sign-in on success', async () => {
+      signOutMock.mockResolvedValueOnce(undefined);
+      render(<BootstrapErrorUI error="db_error" />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
+
+      expect(signOutMock).toHaveBeenCalled();
+      expect(pushMock).toHaveBeenCalledWith('/sign-in');
+    });
+
+    it('falls back to hard redirect when signOut throws (stale Server Action)', async () => {
+      signOutMock.mockRejectedValueOnce(new Error('UnrecognizedActionError'));
+
+      const originalLocation = window.location;
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        value: { href: '' },
+      });
+
+      render(<BootstrapErrorUI error="db_error" />);
+      await userEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
+
+      expect(signOutMock).toHaveBeenCalled();
+      expect(pushMock).not.toHaveBeenCalled();
+      expect(window.location.href).toBe('/sign-in');
+
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        value: originalLocation,
+      });
+    });
   });
 });

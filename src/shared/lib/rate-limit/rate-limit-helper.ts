@@ -69,7 +69,7 @@ export function parseDurationToMs(duration: string): number {
     case 'days':
       return numValue * 24 * 60 * 60 * 1000;
     default:
-      return numValue * 1000; // Default to seconds
+      return numValue * 1000;
   }
 }
 
@@ -78,14 +78,17 @@ export function parseDurationToMs(duration: string): number {
  * Automatically switches between Upstash (production) and In-memory (local).
  *
  * @param identifier - Unique identifier for the client (e.g., IP)
+ * @param meta - Optional metadata for logging context. Include `path` so that
+ *   the edge-log loop prevention in `edge-utils.ts` can suppress forwarding
+ *   this WARN back into the very endpoint being rate-limited (e.g. /api/logs).
  * @returns RateLimitResult
  */
 export async function checkRateLimit(
   identifier: string,
+  meta?: { path?: string },
 ): Promise<RateLimitResult> {
   const windowMs = parseDurationToMs(env.API_RATE_LIMIT_WINDOW);
 
-  // If Upstash is configured and available, use it (Production)
   if (apiRateLimit) {
     try {
       return await withTimeout(
@@ -98,7 +101,9 @@ export async function checkRateLimit(
           provider: 'upstash',
           identifier,
           timeoutMs: UPSTASH_RATE_LIMIT_TIMEOUT_MS,
-          error: error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          ...(meta?.path !== undefined ? { path: meta.path } : {}),
         },
         'Rate limit provider unavailable, using local fallback',
       );
@@ -106,6 +111,5 @@ export async function checkRateLimit(
     }
   }
 
-  // Fallback to local in-memory rate limiting (Development/Test)
   return localRateLimit(identifier, env.API_RATE_LIMIT_REQUESTS, windowMs);
 }

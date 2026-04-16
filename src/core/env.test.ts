@@ -449,3 +449,66 @@ describe('validateAuthProviderConfigValues', () => {
     ).not.toThrow();
   });
 });
+
+describe('validateNewRelicConfigValues', () => {
+  it('passes when New Relic is disabled', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() => validateNewRelicConfigValues(false, undefined)).not.toThrow();
+  });
+
+  it('throws when New Relic is enabled via string without a license key', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() => validateNewRelicConfigValues('true', undefined)).toThrow(
+      'NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY',
+    );
+  });
+
+  it('throws when New Relic is enabled without a license key', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() => validateNewRelicConfigValues(true, undefined)).toThrow(
+      'NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY',
+    );
+  });
+
+  it('passes when New Relic is enabled with a license key', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues(true, 'nr_license_key'),
+    ).not.toThrow();
+  });
+
+  it('passes when enabled uses string true and a license key is present', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues('true', 'nr_license_key'),
+    ).not.toThrow();
+  });
+
+  it('passes when New Relic license key has surrounding whitespace', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues(true, '  nr_license_key  '),
+    ).not.toThrow();
+  });
+
+  it('throws when New Relic license key is whitespace only', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() => validateNewRelicConfigValues(true, '   ')).toThrow(
+      'NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY',
+    );
+  });
+});

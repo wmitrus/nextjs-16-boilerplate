@@ -9,6 +9,7 @@ type MutableEnv = {
 
 const defaultEnv: MutableEnv = {
   NODE_ENV: 'test',
+  NODE_OPTIONS: undefined,
   LOG_LEVEL: 'info',
   INTERNAL_API_KEY: 'test-secret',
   SECURITY_ALLOWED_OUTBOUND_HOSTS:
@@ -73,6 +74,20 @@ const defaultEnv: MutableEnv = {
   NEW_RELIC_NERDGRAPH_API_URL: undefined,
   NEW_RELIC_USER_API_KEY: undefined,
   NEW_RELIC_ACCOUNT_ID: undefined,
+  NEW_RELIC_BROWSER_ENABLED: false,
+  NEW_RELIC_BROWSER_LICENSE_KEY: undefined,
+  NEW_RELIC_BROWSER_APP_ID: undefined,
+  NEW_RELIC_BROWSER_ACCOUNT_ID: undefined,
+  NEW_RELIC_BROWSER_AGENT_URL: undefined,
+  NEW_RELIC_BROWSER_BEACON: undefined,
+  NEW_RELIC_LOG_DRAIN_ENABLED: false,
+  NEW_RELIC_OTEL_ENABLED: false,
+  BETTERSTACK_ENABLED: false,
+  BETTER_STACK_SOURCE_TOKEN: undefined,
+  BETTERSTACK_WEB_VITALS_ENABLED: false,
+  BETTER_STACK_INGESTING_URL: 'https://in.logs.betterstack.com',
+  NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN: undefined,
+  NEXT_PUBLIC_BETTER_STACK_INGESTING_URL: 'https://in.logs.betterstack.com',
 };
 
 /**

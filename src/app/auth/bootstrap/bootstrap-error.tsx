@@ -3,6 +3,15 @@
 import { useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 
+type DbDriver = 'pglite' | 'postgres';
+
+const DB_ERROR_MESSAGES: Record<DbDriver, string> = {
+  pglite:
+    'Local database error — the dev database may be corrupted. Run `pnpm db:reset:pglite` and restart the dev server (`pnpm dev`), then try signing in again.',
+  postgres:
+    'Database error during sign-in. Ensure the dev database container is running (`pnpm db:dev:up`) and migrations are applied (`pnpm db:dev:migrate`), then try signing in again. Check the dev server logs for the full error.',
+};
+
 const ERROR_MESSAGES: Record<
   'cross_provider_linking' | 'quota_exceeded' | 'tenant_config' | 'db_error',
   string
@@ -13,8 +22,7 @@ const ERROR_MESSAGES: Record<
     'This workspace has reached its user limit. Please contact your workspace administrator to upgrade the plan.',
   tenant_config:
     'Workspace configuration is incomplete or missing. Please contact your administrator.',
-  db_error:
-    'Local database error — the dev database may be corrupted. Run `pnpm db:reset:pglite` and restart the dev server (`pnpm dev`), then try signing in again.',
+  db_error: DB_ERROR_MESSAGES.pglite,
 };
 
 interface BootstrapErrorUIProps {
@@ -23,16 +31,27 @@ interface BootstrapErrorUIProps {
     | 'quota_exceeded'
     | 'tenant_config'
     | 'db_error';
+  dbDriver?: DbDriver;
 }
 
-export function BootstrapErrorUI({ error }: BootstrapErrorUIProps) {
+export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
   const { signOut } = useClerk();
   const router = useRouter();
 
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/sign-in');
+    try {
+      await signOut();
+      router.push('/sign-in');
+    } catch {
+      window.location.href = '/sign-in';
+    }
   };
+
+  const message =
+    error === 'db_error'
+      ? DB_ERROR_MESSAGES[dbDriver ?? 'pglite']
+      : // eslint-disable-next-line security/detect-object-injection -- error is typed as a finite union; ERROR_MESSAGES keys match exactly
+        ERROR_MESSAGES[error];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -55,8 +74,7 @@ export function BootstrapErrorUI({ error }: BootstrapErrorUIProps) {
         <h1 className="mb-2 text-xl font-semibold text-gray-900">
           Sign-in could not be completed
         </h1>
-        {/* eslint-disable-next-line security/detect-object-injection -- error is typed as a finite union; ERROR_MESSAGES keys match exactly */}
-        <p className="mb-6 text-sm text-gray-600">{ERROR_MESSAGES[error]}</p>
+        <p className="mb-6 text-sm text-gray-600">{message}</p>
         <div className="flex gap-3">
           <button
             onClick={() => window.location.reload()}

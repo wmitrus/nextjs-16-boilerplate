@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   validateAuthProviderConfigValues,
+  validateNewRelicConfigValues,
   validateTenancyConfigValues,
 } from '@/core/env';
 
@@ -14,6 +15,10 @@ export function runValidation(
   tenancyMode: string | undefined,
   defaultTenantId: string | undefined,
   tenantContextSource: string | undefined,
+  newRelicEnabled: boolean | string | undefined,
+  newRelicLicenseKey: string | undefined,
+  nodeOptions: string | undefined,
+  nodeEnv: string | undefined,
 ): string[] {
   const errors: string[] = [];
 
@@ -32,6 +37,17 @@ export function runValidation(
       tenancyMode,
       defaultTenantId,
       tenantContextSource,
+    );
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    validateNewRelicConfigValues(
+      newRelicEnabled,
+      newRelicLicenseKey,
+      nodeOptions,
+      nodeEnv,
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
@@ -59,6 +75,10 @@ function main(): void {
     tenancyMode,
     process.env.DEFAULT_TENANT_ID,
     process.env.TENANT_CONTEXT_SOURCE,
+    process.env.NEW_RELIC_ENABLED,
+    process.env.NEW_RELIC_LICENSE_KEY,
+    process.env.NODE_OPTIONS,
+    process.env.NODE_ENV,
   );
 
   if (errors.length > 0) {

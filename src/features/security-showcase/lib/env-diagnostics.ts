@@ -128,6 +128,18 @@ export function getEnvDiagnostics(): EnvDiagnostics {
     });
   }
 
+  if (
+    getEnv('NEW_RELIC_ENABLED') === 'true' &&
+    !getEnv('NEW_RELIC_LICENSE_KEY')
+  ) {
+    conditionalIssues.push({
+      condition: 'NEW_RELIC_ENABLED=true',
+      missing: ['NEW_RELIC_LICENSE_KEY'],
+      issue:
+        'New Relic is enabled but the server license key is missing, so backend and browser telemetry cannot start.',
+    });
+  }
+
   return {
     ok:
       missingRequired.length === 0 &&
@@ -142,6 +154,7 @@ export function getEnvDiagnostics(): EnvDiagnostics {
       'If using Upstash, set both URL and TOKEN or unset both.',
       'If LOGFLARE_SERVER_ENABLED=true, set LOGFLARE_API_KEY and SOURCE_TOKEN or SOURCE_NAME.',
       'If LOGFLARE_EDGE_ENABLED=true, set NEXT_PUBLIC_APP_URL to your deployment URL.',
+      'If NEW_RELIC_ENABLED=true, set NEW_RELIC_LICENSE_KEY for server and browser telemetry.',
       'Keep INTERNAL_API_KEY aligned with any internal clients/tests.',
     ],
   };

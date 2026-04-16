@@ -1,5 +1,7 @@
 import { Suspense } from 'react';
 
+import { env } from '@/core/env';
+
 import { BootstrapErrorUI } from './bootstrap-error';
 import { BootstrapOrgRequired } from './bootstrap-org-required';
 
@@ -83,5 +85,10 @@ export async function BootstrapPageContent({
     return <BootstrapOrgRequired redirectUrl={redirect_url} />;
   }
 
-  return <BootstrapErrorUI error={resolveBootstrapError(error, reason)} />;
+  return (
+    <BootstrapErrorUI
+      error={resolveBootstrapError(error, reason)}
+      dbDriver={env.DB_DRIVER}
+    />
+  );
 }

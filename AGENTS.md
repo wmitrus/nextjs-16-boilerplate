@@ -184,11 +184,16 @@ nr.getBrowserTimingHeader({
 
 ## New Relic Browser — `agentID` vs `applicationID`
 
-For **standalone NR Browser apps** (Copy/Paste snippet, not APM-linked), `agentID === applicationID` in the NR snippet. `NEW_RELIC_BROWSER_APP_ID` is used as both fields via the fallback `applicationId = APPLICATION_ID ?? APP_ID` in `new-relic-browser.ts`.
+NR Browser entities have **two distinct numeric IDs**:
 
-`NEW_RELIC_BROWSER_APPLICATION_ID` is only needed when `agentID !== applicationID` in the NR snippet (APM-linked apps). When needed, **set it per-environment (Production, Preview) — never "All Environments"**. Setting it to "All Environments" routes all beacon traffic to a single NR entity, breaking environment isolation.
+- `agentID` (in `loader_config`) → `NEW_RELIC_BROWSER_APP_ID`
+- `applicationID` (in `info`) → `NEW_RELIC_BROWSER_APPLICATION_ID`
 
-When in doubt: omit `NEW_RELIC_BROWSER_APPLICATION_ID` entirely. The per-env `APP_ID` fallback is correct for standalone browser apps.
+These are **always different numbers** in NR Browser. `applicationID` controls which NR entity receives the beacon data. If `APPLICATION_ID` is unset, the code falls back to `APP_ID` — but this routes beacons to the wrong entity (or creates an unnamed `beacon:XXXXXXX` entity in NR).
+
+**Always set both `APP_ID` and `APPLICATION_ID` per-environment (Production, Preview) in Vercel — never "All Environments".** Get both values from the NR entity's snippet: NR UI → Browser entity → Application settings → Copy/Paste JavaScript snippet → `loader_config.agentID` and `info.applicationID`.
+
+Setting `APPLICATION_ID` to "All Environments" routes all beacon traffic to a single entity regardless of environment, breaking isolation. Setting it incorrectly or omitting it creates unnamed `beacon:XXXXXXX` entities.
 
 ## New Relic — Per-Environment Browser Entity Setup
 

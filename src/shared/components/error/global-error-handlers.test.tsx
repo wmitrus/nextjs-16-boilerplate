@@ -232,6 +232,31 @@ describe('GlobalErrorHandlers', () => {
     expect(mockLogger.error.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('auto-reloads on UnrecognizedActionError (stale bundle recovery)', () => {
+    const reloadMock = vi.fn();
+    const locationSpy = vi.spyOn(window, 'location', 'get');
+    locationSpy.mockReturnValue({ reload: reloadMock } as unknown as Location);
+
+    render(<GlobalErrorHandlers />);
+
+    const staleError = new Error(
+      'Server Action "abc123" was not found on the server.',
+    );
+    staleError.name = 'UnrecognizedActionError';
+    const event = new PromiseRejectionEvent('unhandledrejection', {
+      promise: Promise.resolve(),
+      reason: staleError,
+    });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    window.dispatchEvent(event);
+
+    expect(preventDefaultSpy).toHaveBeenCalled();
+    expect(reloadMock).toHaveBeenCalled();
+    expect(mockLogger.error).not.toHaveBeenCalled();
+
+    locationSpy.mockRestore();
+  });
+
   it('handles non-Error rejection reasons', () => {
     render(<GlobalErrorHandlers />);
 

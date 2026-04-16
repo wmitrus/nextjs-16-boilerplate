@@ -1,3 +1,12 @@
+# [1.25.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.24.0...v1.25.0) (2026-04-16)
+
+
+### Features
+
+* **ci:** add New Relic deployment event tracking to production workflow ([013343d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/013343d2bcc23ba8e18936130af149f4ae1cf475))
+* **ci:** implement New Relic deployment tracking workflow ([c229a9d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c229a9d2225a3ec76f0f3173bf2734a433ce7846))
+* **ci:** update release workflow for New Relic deployment tracking ([2ed116c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2ed116c38c95d40433f3f523bf7e084903f2be62))
+
 # [1.24.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.23.0...v1.24.0) (2026-04-16)
 
 

@@ -17,7 +17,6 @@ let _logger:
 const E2E_RATE_LIMIT_BYPASS_API_PREFIXES = [
   '/api/users',
   '/api/me/provisioning-status',
-  '/api/logs',
 ] as const;
 
 function getLogger() {
@@ -35,6 +34,7 @@ function isE2eRateLimitBypassRoute(pathname: string): boolean {
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
+
 /**
  * Enforces rate limiting on API routes.
  */
@@ -42,15 +42,18 @@ export function withRateLimit(
   handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
 ) {
   return async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
+    const pathname = req.nextUrl.pathname;
     const isE2eBypassRoute =
-      env.E2E_ENABLED && isE2eRateLimitBypassRoute(req.nextUrl.pathname);
+      env.E2E_ENABLED && isE2eRateLimitBypassRoute(pathname);
 
     if (!ctx.isApi || ctx.isWebhook || isE2eBypassRoute) {
       return handler(req, ctx);
     }
 
     const ip = await getIP(req.headers);
-    const result: RateLimitResult = await checkRateLimit(ip);
+    const result: RateLimitResult = await checkRateLimit(ip, {
+      path: pathname,
+    });
 
     if (!result.success) {
       getLogger().warn(
@@ -59,7 +62,7 @@ export function withRateLimit(
           category: 'rate-limit',
           ip,
           correlationId: ctx.correlationId,
-          path: req.nextUrl.pathname,
+          path: pathname,
           limit: result.limit,
           reset: result.reset,
         },

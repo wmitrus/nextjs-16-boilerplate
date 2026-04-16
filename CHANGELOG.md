@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.25.0...v1.26.0) (2026-04-16)
+
+
+### Features
+
+* **ci:** add New Relic change tracking workflow ([c1b13ae](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c1b13ae0f71273e7b8a8440bce8be3f94dd8e969))
+
 # [1.25.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.24.0...v1.25.0) (2026-04-16)
 
 

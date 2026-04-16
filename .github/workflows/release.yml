@@ -1,7 +1,9 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: ['Production Deployment']
+    types: [completed]
     branches:
       - main
 
@@ -10,7 +12,11 @@ permissions:
 
 jobs:
   release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    env:
+      RELEASED: '0'
+      NEW_VERSION: ''
     steps:
       - name: 'Generate token'
         id: generate_token
@@ -21,6 +27,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
       - name: Install pnpm
@@ -41,3 +48,18 @@ jobs:
           HUSKY: 0
           HUSKY_SKIP_HOOKS: 1
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+
+      - name: Create New Relic production deployment event
+        if: ${{ env.RELEASED == '1' && env.NEW_VERSION != '' }}
+        uses: newrelic/deployment-marker-action@v2.6.2
+        with:
+          apiKey: ${{ secrets.NEW_RELIC_API_KEY }}
+          commandType: changeTrackingCreateEvent
+          entitySearch: "id='${{ secrets.NEW_RELIC_DEPLOYMENT_ENTITY_GUID }}'"
+          category: Deployment
+          type: Basic
+          version: ${{ env.NEW_VERSION }}
+          commit: ${{ github.event.workflow_run.head_sha }}
+          description: Automated production deployment and release via GitHub Actions
+          user: ${{ github.actor }}
+          region: EU

@@ -13,7 +13,6 @@ import type { AuthorizationContext } from '@/core/contracts/authorization';
  */
 const mockClient = vi.hoisted(() => ({
   init: vi.fn().mockResolvedValue({}),
-  refreshFeatures: vi.fn().mockResolvedValue(undefined),
   isOn: vi.fn().mockReturnValue(false),
 }));
 
@@ -39,15 +38,13 @@ const ctx: AuthorizationContext = {
 describe('GrowthBookFeatureFlagService', () => {
   beforeEach(() => {
     mockClient.init.mockClear();
-    mockClient.refreshFeatures.mockClear();
     mockClient.isOn.mockClear();
     GrowthBookClientMock.mockClear();
     mockClient.init.mockResolvedValue({});
-    mockClient.refreshFeatures.mockResolvedValue(undefined);
     mockClient.isOn.mockReturnValue(false);
   });
 
-  it('calls init on the GrowthBookClient instance', async () => {
+  it('calls init without streaming to avoid persistent SSE connections in server context', async () => {
     const svc = new GrowthBookFeatureFlagService({
       clientKey: 'sdk-key-init-test',
       apiHost: 'https://cdn.growthbook.io',
@@ -57,22 +54,22 @@ describe('GrowthBookFeatureFlagService', () => {
 
     expect(mockClient.init).toHaveBeenCalledWith({
       timeout: 2000,
-      streaming: true,
     });
+    expect(mockClient.init).not.toHaveBeenCalledWith(
+      expect.objectContaining({ streaming: true }),
+    );
   });
 
-  it('calls refreshFeatures before isOn to ensure feature freshness', async () => {
+  it('does not call refreshFeatures on each evaluation — flags are served from init cache', async () => {
     const svc = new GrowthBookFeatureFlagService({
-      clientKey: 'sdk-key-refresh-test',
+      clientKey: 'sdk-key-no-refresh-test',
       apiHost: 'https://cdn.growthbook.io',
     });
 
     await svc.isEnabled('some-flag', ctx);
 
-    expect(mockClient.refreshFeatures).toHaveBeenCalledOnce();
-    const refreshOrder = mockClient.refreshFeatures.mock.invocationCallOrder[0];
-    const isOnOrder = mockClient.isOn.mock.invocationCallOrder[0];
-    expect(refreshOrder).toBeLessThan(isOnOrder);
+    expect('refreshFeatures' in mockClient).toBe(false);
+    expect(mockClient.isOn).toHaveBeenCalledOnce();
   });
 
   it('returns false when GrowthBook reports flag is off', async () => {

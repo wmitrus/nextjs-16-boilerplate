@@ -40,11 +40,12 @@ Future validation artifacts should document:
 - Which scenarios were checked conceptually or validated in workflow logic
 - Why release publication alone is insufficient
 - The exact post-change path that emits the deployment marker
+- Whether the final marker path remains retryable after partial downstream failure
 
 ## Blockers / unknowns
 
-- If the final design requires semver version propagation across workflows, validation must also prove that the version source cannot race or drift from the deployed artifact.
+- If the final design uses `release.published` again, validation must also prove that release publication is already downstream of successful production deployment and note any residual manual-release drift risk.
 
 ## Handoff notes
 
-Keep validation focused on workflow semantics and event wiring. Do not add broad tests unless the implementation surface expands materially beyond workflow logic.
+Keep validation focused on workflow semantics and event wiring. Do not add broad tests unless the implementation surface expands materially beyond workflow logic. Explicitly check retryability whenever a downstream workflow depends on upstream release state.

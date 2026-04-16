@@ -136,4 +136,93 @@ describe('rate-limit-helper', () => {
       expect(parseDurationToMs('10 unknown')).toBe(10000);
     });
   });
+  describe('checkRateLimit meta.path propagation', () => {
+    it('should include path in warn log context when Upstash times out and meta.path is provided', async () => {
+      vi.useFakeTimers();
+
+      const mockWarn = vi.fn();
+      vi.doMock('@/core/logger/di-edge', () => ({
+        resolveEdgeLogger: () => ({ warn: mockWarn }),
+      }));
+      vi.doMock('./rate-limit', () => ({
+        apiRateLimit: {},
+        checkUpstashRateLimit: vi.fn(() => new Promise(() => {})),
+      }));
+
+      const { checkRateLimit, UPSTASH_RATE_LIMIT_TIMEOUT_MS } =
+        await import('./rate-limit-helper');
+
+      const pending = checkRateLimit('192.168.1.1', { path: '/api/logs' });
+      await vi.advanceTimersByTimeAsync(UPSTASH_RATE_LIMIT_TIMEOUT_MS + 1);
+      await pending;
+
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ path: '/api/logs' }),
+        expect.any(String),
+      );
+
+      vi.useRealTimers();
+    });
+
+    it('should not include path in warn log context when meta is omitted', async () => {
+      vi.useFakeTimers();
+
+      const mockWarn = vi.fn();
+      vi.doMock('@/core/logger/di-edge', () => ({
+        resolveEdgeLogger: () => ({ warn: mockWarn }),
+      }));
+      vi.doMock('./rate-limit', () => ({
+        apiRateLimit: {},
+        checkUpstashRateLimit: vi.fn(() => new Promise(() => {})),
+      }));
+
+      const { checkRateLimit, UPSTASH_RATE_LIMIT_TIMEOUT_MS } =
+        await import('./rate-limit-helper');
+
+      const pending = checkRateLimit('192.168.1.2');
+      await vi.advanceTimersByTimeAsync(UPSTASH_RATE_LIMIT_TIMEOUT_MS + 1);
+      await pending;
+
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.not.objectContaining({ path: expect.anything() }),
+        expect.any(String),
+      );
+
+      vi.useRealTimers();
+    });
+
+    it('should log errorMessage and errorName instead of raw error object', async () => {
+      vi.useFakeTimers();
+
+      const mockWarn = vi.fn();
+      vi.doMock('@/core/logger/di-edge', () => ({
+        resolveEdgeLogger: () => ({ warn: mockWarn }),
+      }));
+      vi.doMock('./rate-limit', () => ({
+        apiRateLimit: {},
+        checkUpstashRateLimit: vi.fn(() => new Promise(() => {})),
+      }));
+
+      const { checkRateLimit, UPSTASH_RATE_LIMIT_TIMEOUT_MS } =
+        await import('./rate-limit-helper');
+
+      const pending = checkRateLimit('192.168.1.3', { path: '/api/data' });
+      await vi.advanceTimersByTimeAsync(UPSTASH_RATE_LIMIT_TIMEOUT_MS + 1);
+      await pending;
+
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorMessage: expect.any(String),
+          errorName: expect.any(String),
+        }),
+        expect.any(String),
+      );
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.not.objectContaining({ error: expect.anything() }),
+        expect.any(String),
+      );
+
+      vi.useRealTimers();
+    });
+  });
 });

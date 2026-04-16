@@ -323,9 +323,16 @@ The NR CDN only serves versioned files. Unversioned URLs return 403. Copy the co
 
 `getNrBrowserCdnConfig()` returns `null` when any required var is unset. All five `NEW_RELIC_BROWSER_*` vars must be set: `ENABLED`, `LICENSE_KEY`, `APP_ID`, `ACCOUNT_ID`, `AGENT_URL`.
 
-### Browser: Data arrives in wrong NR entity / mixed environments
+### Browser: Data arrives in wrong NR entity / mixed environments (preview data in local entity)
 
-Each Vercel environment (Production, Preview) must have separate `NEW_RELIC_BROWSER_APP_ID` and `NEW_RELIC_BROWSER_APPLICATION_ID` values pointing to separate NR Browser entities. Sharing IDs across environments mixes data.
+**Cause**: `NEW_RELIC_BROWSER_APPLICATION_ID` is set to "All Environments" in Vercel. This overrides the per-env `APP_ID` fallback and routes all beacon traffic to a single entity.
+
+**Fix**: Delete `NEW_RELIC_BROWSER_APPLICATION_ID` from Vercel entirely (for standalone browser apps). The fallback `applicationID = APP_ID` will then use the correct per-environment entity:
+
+- Production (`APP_ID=538837591`) → production entity ✓
+- Preview (`APP_ID=538838564`) → preview entity ✓
+
+Only set `NEW_RELIC_BROWSER_APPLICATION_ID` if the NR snippet for a specific entity shows `agentID !== applicationID`, and set it **per-environment** (not "All Environments").
 
 ### APM: `connected=false` in Vercel logs
 

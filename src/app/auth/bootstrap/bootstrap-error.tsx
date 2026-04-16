@@ -39,8 +39,12 @@ export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
   const router = useRouter();
 
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/sign-in');
+    try {
+      await signOut();
+      router.push('/sign-in');
+    } catch {
+      window.location.href = '/sign-in';
+    }
   };
 
   const message =

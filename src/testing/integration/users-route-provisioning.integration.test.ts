@@ -55,7 +55,7 @@ describe('/api/users node provisioning guard integration', () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'ALLOWED',
       identity: { id: 'u-1' },
-      tenant: { tenantId: 't-1', userId: 'u-1' },
+      tenant: { organizationId: 't-1', tenantId: 't-1', userId: 'u-1' },
       user: { id: 'u-1', onboardingComplete: true },
     });
 

@@ -14,7 +14,7 @@ if (
   throw new Error(
     '[drizzle.dev.postgres] DATABASE_URL must be a postgres:// or postgresql:// URL.\n' +
       `  Got: ${databaseUrl}\n` +
-      '  For PGlite dev, use: pnpm db:migrate:dev\n' +
+      '  For PGlite dev, use: pnpm db:pglite:migrate\n' +
       '  For prod, use: pnpm db:migrate:prod',
   );
 }

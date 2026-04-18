@@ -60,7 +60,7 @@ describe('createPglite', () => {
     }
     expect(caught).toBeInstanceOf(PGliteWasmAbortError);
     expect((caught as PGliteWasmAbortError).message).toMatch(
-      /pnpm db:reset:pglite/,
+      /pnpm db:pglite:reset/,
     );
   });
 

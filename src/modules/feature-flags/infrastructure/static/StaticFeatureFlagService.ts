@@ -6,7 +6,7 @@ export function parseStaticFlagsEnv(
 ): Record<string, boolean> {
   if (!raw) return {};
 
-  const result: Record<string, boolean> = {};
+  const entries: Array<[string, boolean]> = [];
 
   for (const pair of raw.split(',')) {
     const trimmed = pair.trim();
@@ -20,10 +20,10 @@ export function parseStaticFlagsEnv(
 
     if (!key) continue;
 
-    result[key] = value === 'true';
+    entries.push([key, value === 'true']);
   }
 
-  return result;
+  return Object.fromEntries(entries) as Record<string, boolean>;
 }
 
 export class StaticFeatureFlagService implements FeatureFlagService {

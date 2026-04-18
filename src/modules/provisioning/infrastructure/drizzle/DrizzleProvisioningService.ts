@@ -32,9 +32,10 @@ import {
 } from '../../policy/templates';
 
 import {
-  authTenantIdentitiesTable,
+  authOrganizationIdentitiesTable,
   authUserIdentitiesTable,
   membershipsTable,
+  organizationsTable,
   policiesTable,
   rolesTable,
   tenantAttributesTable,
@@ -159,7 +160,7 @@ function buildProvisioningSingleFlightKey(
     emailVerified: input.emailVerified ?? null,
     tenancyMode: input.tenancyMode,
     tenantContextSource: input.tenantContextSource ?? null,
-    tenantExternalId: input.tenantExternalId ?? null,
+    orgExternalId: input.orgExternalId ?? null,
     tenantRole: input.tenantRole ?? null,
     activeTenantId: input.activeTenantId ?? null,
     freeTierMaxUsers,
@@ -240,7 +241,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
       runId,
       provider,
       externalUserId,
-      externalTenantId: input.tenantExternalId,
+      externalOrgId: input.orgExternalId,
       tenancyMode: input.tenancyMode,
       tenantContextSource: input.tenantContextSource,
       activeTenantId: input.activeTenantId,
@@ -381,18 +382,15 @@ export class DrizzleProvisioningService implements ProvisioningService {
             'Provisioning tenant resolution/upsert starting',
           );
 
-          const { internalTenantId, tenantCreatedNow } = await resolveTenant(
-            db,
-            input,
-            internalUserId,
-          );
+          const { internalOrganizationId, tenantCreatedNow, _parentTenantId } =
+            await resolveOrganization(db, input, internalUserId);
 
           logger.debug(
             {
               event: 'provisioning:ensure:tenant_upsert_success',
               ...baseLogFields,
               internalUserId,
-              internalTenantId,
+              internalOrganizationId,
               tenantCreatedNow,
             },
             'Provisioning tenant resolution/upsert completed',
@@ -404,7 +402,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
               event: 'provisioning:ensure:membership_upsert_start',
               ...baseLogFields,
               internalUserId,
-              internalTenantId,
+              internalOrganizationId,
             },
             'Provisioning membership upsert starting',
           );
@@ -416,7 +414,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
             const existing = await getMembership(
               db,
               internalUserId,
-              internalTenantId,
+              internalOrganizationId,
             );
             if (!existing) {
               throw new TenantMembershipRequiredError();
@@ -427,7 +425,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
                 event: 'provisioning:ensure:membership_upsert_success',
                 ...baseLogFields,
                 internalUserId,
-                internalTenantId,
+                internalOrganizationId: internalOrganizationId,
                 membershipRole: existing.roleName,
                 membershipOperation: 'existing_membership',
               },
@@ -446,7 +444,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
                 event: 'provisioning:ensure:onboarding_state_check',
                 ...baseLogFields,
                 internalUserId,
-                internalTenantId,
+                internalOrganizationId,
                 onboardingStateExists: Boolean(onboardingState[0]),
                 onboardingComplete: onboardingState[0]?.onboardingComplete,
               },
@@ -455,7 +453,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
 
             return {
               internalUserId,
-              internalTenantId,
+              internalOrganizationId: internalOrganizationId,
               membershipRole: existing.roleName as 'owner' | 'member',
               tenantCreatedNow,
               userCreatedNow,
@@ -464,21 +462,26 @@ export class DrizzleProvisioningService implements ProvisioningService {
 
           await upsertTenantAttributesDefaults(
             db,
-            internalTenantId,
+            _parentTenantId,
             this.freeTierMaxUsers,
           );
 
           await db.execute(
-            sql`SELECT tenant_id FROM tenant_attributes WHERE tenant_id = ${internalTenantId} FOR UPDATE`,
+            sql`SELECT tenant_id FROM tenant_attributes WHERE tenant_id = ${_parentTenantId} FOR UPDATE`,
           );
 
-          const roleMap = await ensureRoles(db, internalTenantId);
-          await applyPolicyTemplateVersion(db, internalTenantId, roleMap);
+          const roleMap = await ensureRoles(db, internalOrganizationId);
+          await applyPolicyTemplateVersion(
+            db,
+            _parentTenantId,
+            internalOrganizationId,
+            roleMap,
+          );
 
           const existing = await getMembership(
             db,
             internalUserId,
-            internalTenantId,
+            internalOrganizationId,
           );
           if (existing) {
             logger.debug(
@@ -486,7 +489,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
                 event: 'provisioning:ensure:membership_upsert_success',
                 ...baseLogFields,
                 internalUserId,
-                internalTenantId,
+                internalOrganizationId: internalOrganizationId,
                 membershipRole: existing.roleName,
                 membershipOperation: 'existing_membership',
               },
@@ -505,7 +508,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
                 event: 'provisioning:ensure:onboarding_state_check',
                 ...baseLogFields,
                 internalUserId,
-                internalTenantId,
+                internalOrganizationId,
                 onboardingStateExists: Boolean(onboardingState[0]),
                 onboardingComplete: onboardingState[0]?.onboardingComplete,
               },
@@ -514,7 +517,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
 
             return {
               internalUserId,
-              internalTenantId,
+              internalOrganizationId: internalOrganizationId,
               membershipRole: existing.roleName as 'owner' | 'member',
               tenantCreatedNow,
               userCreatedNow,
@@ -525,7 +528,10 @@ export class DrizzleProvisioningService implements ProvisioningService {
             input,
             tenantCreatedNow,
           );
-          const memberCount = await getActiveMemberCount(db, internalTenantId);
+          const memberCount = await getActiveMemberCount(
+            db,
+            internalOrganizationId,
+          );
           if (memberCount >= this.freeTierMaxUsers) {
             throw new TenantUserLimitReachedError();
           }
@@ -533,7 +539,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
           const roleId = roleMap.get(membershipRole);
           if (!roleId) {
             throw new Error(
-              `[provisioning] Role '${membershipRole}' not found in tenant '${internalTenantId}'`,
+              `[provisioning] Role '${membershipRole}' not found in organization '${internalOrganizationId}'`,
             );
           }
 
@@ -541,7 +547,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
             .insert(membershipsTable)
             .values({
               userId: internalUserId,
-              tenantId: internalTenantId,
+              organizationId: internalOrganizationId,
               roleId,
             })
             .onConflictDoNothing();
@@ -551,7 +557,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
               event: 'provisioning:ensure:membership_upsert_success',
               ...baseLogFields,
               internalUserId,
-              internalTenantId,
+              internalOrganizationId: internalOrganizationId,
               membershipRole,
               memberCountBeforeInsert: memberCount,
               membershipOperation: 'insert_or_conflict_noop',
@@ -571,7 +577,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
               event: 'provisioning:ensure:onboarding_state_check',
               ...baseLogFields,
               internalUserId,
-              internalTenantId,
+              internalOrganizationId,
               onboardingStateExists: Boolean(onboardingState[0]),
               onboardingComplete: onboardingState[0]?.onboardingComplete,
             },
@@ -580,7 +586,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
 
           return {
             internalUserId,
-            internalTenantId,
+            internalOrganizationId: internalOrganizationId,
             membershipRole,
             tenantCreatedNow,
             userCreatedNow,
@@ -593,7 +599,7 @@ export class DrizzleProvisioningService implements ProvisioningService {
             event: 'provisioning:ensure:complete',
             ...baseLogFields,
             internalUserId: result.internalUserId,
-            internalTenantId: result.internalTenantId,
+            internalOrganizationId: result.internalOrganizationId,
             membershipRole: result.membershipRole,
             userCreatedNow: result.userCreatedNow,
             tenantCreatedNow: result.tenantCreatedNow,
@@ -871,11 +877,15 @@ async function resolveOrCreateUser(
   };
 }
 
-async function resolveTenant(
+async function resolveOrganization(
   db: DrizzleDb,
   input: ProvisioningInput,
   internalUserId: string,
-): Promise<{ internalTenantId: string; tenantCreatedNow: boolean }> {
+): Promise<{
+  internalOrganizationId: string;
+  tenantCreatedNow: boolean;
+  _parentTenantId: string;
+}> {
   const { tenancyMode, tenantContextSource, provider } = input;
 
   if (tenancyMode === 'single') {
@@ -884,32 +894,39 @@ async function resolveTenant(
         'TENANCY_MODE=single requires activeTenantId (DEFAULT_TENANT_ID) in ProvisioningInput.',
       );
     }
-    const rows = await db
-      .select({ id: tenantsTable.id })
-      .from(tenantsTable)
-      .where(eq(tenantsTable.id, input.activeTenantId))
+    const orgRows = await db
+      .select({
+        id: organizationsTable.id,
+        tenantId: organizationsTable.tenantId,
+      })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.tenantId, input.activeTenantId))
       .limit(1);
 
-    if (!rows[0]) {
+    if (!orgRows[0]) {
       throw new TenantNotProvisionedError(
-        `Single tenant '${input.activeTenantId}' does not exist. Ensure DEFAULT_TENANT_ID is seeded.`,
+        `No organization found for tenant '${input.activeTenantId}'. Ensure DEFAULT_TENANT_ID is seeded with an organization.`,
       );
     }
-    return { internalTenantId: rows[0].id, tenantCreatedNow: false };
+    return {
+      internalOrganizationId: orgRows[0].id,
+      tenantCreatedNow: false,
+      _parentTenantId: orgRows[0].tenantId,
+    };
   }
 
   if (tenancyMode === 'personal') {
-    return resolveOrCreatePersonalTenant(db, internalUserId);
+    return resolveOrCreatePersonalOrganization(db, internalUserId);
   }
 
   if (tenancyMode === 'org') {
     if (tenantContextSource === 'provider') {
-      if (!input.tenantExternalId) {
+      if (!input.orgExternalId) {
         throw new TenantContextRequiredError(
           'TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider requires tenantExternalId in ProvisioningInput.',
         );
       }
-      return resolveOrCreateOrgTenant(db, provider, input.tenantExternalId);
+      return resolveOrCreateOrgOrganization(db, provider, input.orgExternalId);
     }
 
     if (tenantContextSource === 'db') {
@@ -918,18 +935,25 @@ async function resolveTenant(
           'TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=db requires activeTenantId in ProvisioningInput.',
         );
       }
-      const rows = await db
-        .select({ id: tenantsTable.id })
-        .from(tenantsTable)
-        .where(eq(tenantsTable.id, input.activeTenantId))
+      const orgRows = await db
+        .select({
+          id: organizationsTable.id,
+          tenantId: organizationsTable.tenantId,
+        })
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, input.activeTenantId))
         .limit(1);
 
-      if (!rows[0]) {
+      if (!orgRows[0]) {
         throw new TenantNotProvisionedError(
-          `Tenant '${input.activeTenantId}' does not exist in database.`,
+          `Organization '${input.activeTenantId}' does not exist in database.`,
         );
       }
-      return { internalTenantId: rows[0].id, tenantCreatedNow: false };
+      return {
+        internalOrganizationId: orgRows[0].id,
+        tenantCreatedNow: false,
+        _parentTenantId: orgRows[0].tenantId,
+      };
     }
 
     throw new Error(
@@ -951,76 +975,104 @@ async function resolveTenant(
  * Race-safety: uses a deterministic tenant UUID for new tenants so concurrent transactions
  * compute the same ID and both INSERT with ON CONFLICT DO NOTHING — no orphaned rows.
  */
-async function resolveOrCreatePersonalTenant(
+async function resolveOrCreatePersonalOrganization(
   db: DrizzleDb,
   internalUserId: string,
-): Promise<{ internalTenantId: string; tenantCreatedNow: boolean }> {
-  // Check for pre-existing mapping first (handles legacy random-UUID tenants)
+): Promise<{
+  internalOrganizationId: string;
+  tenantCreatedNow: boolean;
+  _parentTenantId: string;
+}> {
+  // Check for pre-existing mapping first (handles legacy random-UUID orgs)
   const existingMapping = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
+    .select({
+      organizationId: authOrganizationIdentitiesTable.organizationId,
+      tenantId: organizationsTable.tenantId,
+    })
+    .from(authOrganizationIdentitiesTable)
+    .innerJoin(
+      organizationsTable,
+      eq(organizationsTable.id, authOrganizationIdentitiesTable.organizationId),
+    )
     .where(
       and(
-        eq(authTenantIdentitiesTable.provider, 'personal'),
-        eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
+        eq(authOrganizationIdentitiesTable.provider, 'personal'),
+        eq(authOrganizationIdentitiesTable.externalOrgId, internalUserId),
       ),
     )
     .limit(1);
 
-  if (existingMapping[0]?.tenantId) {
+  if (existingMapping[0]?.organizationId) {
     return {
-      internalTenantId: existingMapping[0].tenantId,
+      internalOrganizationId: existingMapping[0].organizationId,
       tenantCreatedNow: false,
+      _parentTenantId: existingMapping[0].tenantId,
     };
   }
 
-  const tenantId = deterministicTenantId(`personal:${internalUserId}`);
+  const parentTenantId = deterministicTenantId(
+    `personal:tenant:${internalUserId}`,
+  );
+  const orgId = deterministicTenantId(`personal:org:${internalUserId}`);
 
   const tenantRows = await db
     .insert(tenantsTable)
-    .values({ id: tenantId, name: 'Personal Workspace' })
+    .values({ id: parentTenantId, name: 'Personal Workspace' })
     .onConflictDoNothing()
     .returning();
 
   await db
-    .insert(authTenantIdentitiesTable)
+    .insert(organizationsTable)
+    .values({ id: orgId, tenantId: parentTenantId, name: 'Personal Workspace' })
+    .onConflictDoNothing();
+
+  await db
+    .insert(authOrganizationIdentitiesTable)
     .values({
       provider: 'personal',
-      externalTenantId: internalUserId,
-      tenantId,
+      externalOrgId: internalUserId,
+      organizationId: orgId,
     })
     .onConflictDoNothing();
 
   // Re-read the mapping as the authoritative source of truth.
-  // Both concurrent transactions compute the same deterministic tenantId, so the
+  // Both concurrent transactions compute the same deterministic IDs, so the
   // re-read is always consistent — but it closes the theoretical gap where an
   // in-flight mapping insert conflicts with a committed one.
   const canonicalMapping = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
+    .select({
+      organizationId: authOrganizationIdentitiesTable.organizationId,
+      tenantId: organizationsTable.tenantId,
+    })
+    .from(authOrganizationIdentitiesTable)
+    .innerJoin(
+      organizationsTable,
+      eq(organizationsTable.id, authOrganizationIdentitiesTable.organizationId),
+    )
     .where(
       and(
-        eq(authTenantIdentitiesTable.provider, 'personal'),
-        eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
+        eq(authOrganizationIdentitiesTable.provider, 'personal'),
+        eq(authOrganizationIdentitiesTable.externalOrgId, internalUserId),
       ),
     )
     .limit(1);
 
-  if (!canonicalMapping[0]?.tenantId) {
+  if (!canonicalMapping[0]?.organizationId) {
     throw new Error(
-      '[provisioning] Failed to resolve personal tenant mapping after insert.',
+      '[provisioning] Failed to resolve personal org mapping after insert.',
     );
   }
 
   return {
-    internalTenantId: canonicalMapping[0].tenantId,
+    internalOrganizationId: canonicalMapping[0].organizationId,
     tenantCreatedNow:
-      tenantRows.length > 0 && canonicalMapping[0].tenantId === tenantId,
+      tenantRows.length > 0 && canonicalMapping[0].organizationId === orgId,
+    _parentTenantId: canonicalMapping[0].tenantId,
   };
 }
 
 /**
- * Resolves or creates an org tenant identified by (provider, externalTenantId).
+ * Resolves or creates an org tenant identified by (provider, externalOrgId).
  *
  * Legacy compatibility: always reads the existing auth_tenant_identities mapping first.
  * Tenants created before the deterministic UUID migration retain their original random UUID.
@@ -1028,67 +1080,99 @@ async function resolveOrCreatePersonalTenant(
  * Race-safety: uses a deterministic tenant UUID for new tenants so concurrent transactions
  * compute the same ID and both INSERT with ON CONFLICT DO NOTHING — no orphaned rows.
  */
-async function resolveOrCreateOrgTenant(
+async function resolveOrCreateOrgOrganization(
   db: DrizzleDb,
   provider: ExternalAuthProvider,
-  externalTenantId: string,
-): Promise<{ internalTenantId: string; tenantCreatedNow: boolean }> {
-  // Check for pre-existing mapping first (handles legacy random-UUID tenants)
+  externalOrgId: string,
+): Promise<{
+  internalOrganizationId: string;
+  tenantCreatedNow: boolean;
+  _parentTenantId: string;
+}> {
+  // Check for pre-existing mapping first (handles legacy random-UUID orgs)
   const existingMapping = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
+    .select({
+      organizationId: authOrganizationIdentitiesTable.organizationId,
+      tenantId: organizationsTable.tenantId,
+    })
+    .from(authOrganizationIdentitiesTable)
+    .innerJoin(
+      organizationsTable,
+      eq(organizationsTable.id, authOrganizationIdentitiesTable.organizationId),
+    )
     .where(
       and(
-        eq(authTenantIdentitiesTable.provider, provider),
-        eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
+        eq(authOrganizationIdentitiesTable.provider, provider),
+        eq(authOrganizationIdentitiesTable.externalOrgId, externalOrgId),
       ),
     )
     .limit(1);
 
-  if (existingMapping[0]?.tenantId) {
+  if (existingMapping[0]?.organizationId) {
     return {
-      internalTenantId: existingMapping[0].tenantId,
+      internalOrganizationId: existingMapping[0].organizationId,
       tenantCreatedNow: false,
+      _parentTenantId: existingMapping[0].tenantId,
     };
   }
 
-  const tenantId = deterministicTenantId(`${provider}:${externalTenantId}`);
+  const parentTenantId = deterministicTenantId(
+    `${provider}:tenant:${externalOrgId}`,
+  );
+  const orgId = deterministicTenantId(`${provider}:org:${externalOrgId}`);
 
   const tenantRows = await db
     .insert(tenantsTable)
-    .values({ id: tenantId, name: `Tenant ${externalTenantId.slice(0, 16)}` })
+    .values({ id: parentTenantId, name: `Org ${externalOrgId.slice(0, 16)}` })
     .onConflictDoNothing()
     .returning();
 
   await db
-    .insert(authTenantIdentitiesTable)
-    .values({ provider, externalTenantId, tenantId })
+    .insert(organizationsTable)
+    .values({
+      id: orgId,
+      tenantId: parentTenantId,
+      name: `Org ${externalOrgId.slice(0, 16)}`,
+    })
+    .onConflictDoNothing();
+
+  await db
+    .insert(authOrganizationIdentitiesTable)
+    .values({ provider, externalOrgId, organizationId: orgId })
     .onConflictDoNothing();
 
   // Re-read the mapping as the authoritative source of truth.
-  // Concurrent transactions computing the same deterministic tenantId will both
+  // Concurrent transactions computing the same deterministic IDs will both
   // conflict-resolve cleanly — but re-reading ensures the returned ID is canonical.
   const canonicalMapping = await db
-    .select({ tenantId: authTenantIdentitiesTable.tenantId })
-    .from(authTenantIdentitiesTable)
+    .select({
+      organizationId: authOrganizationIdentitiesTable.organizationId,
+      tenantId: organizationsTable.tenantId,
+    })
+    .from(authOrganizationIdentitiesTable)
+    .innerJoin(
+      organizationsTable,
+      eq(organizationsTable.id, authOrganizationIdentitiesTable.organizationId),
+    )
     .where(
       and(
-        eq(authTenantIdentitiesTable.provider, provider),
-        eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
+        eq(authOrganizationIdentitiesTable.provider, provider),
+        eq(authOrganizationIdentitiesTable.externalOrgId, externalOrgId),
       ),
     )
     .limit(1);
 
-  if (!canonicalMapping[0]?.tenantId) {
+  if (!canonicalMapping[0]?.organizationId) {
     throw new Error(
-      '[provisioning] Failed to resolve org tenant mapping after insert.',
+      '[provisioning] Failed to resolve org mapping after insert.',
     );
   }
 
   return {
-    internalTenantId: canonicalMapping[0].tenantId,
+    internalOrganizationId: canonicalMapping[0].organizationId,
     tenantCreatedNow:
-      tenantRows.length > 0 && canonicalMapping[0].tenantId === tenantId,
+      tenantRows.length > 0 && canonicalMapping[0].organizationId === orgId,
+    _parentTenantId: canonicalMapping[0].tenantId,
   };
 }
 
@@ -1119,8 +1203,18 @@ async function ensureRoles(
   await db
     .insert(rolesTable)
     .values([
-      { id: ownerPreId, tenantId, name: 'owner', isSystem: true },
-      { id: memberPreId, tenantId, name: 'member', isSystem: true },
+      {
+        id: ownerPreId,
+        organizationId: tenantId,
+        name: 'owner',
+        isSystem: true,
+      },
+      {
+        id: memberPreId,
+        organizationId: tenantId,
+        name: 'member',
+        isSystem: true,
+      },
     ])
     .onConflictDoNothing();
 
@@ -1129,7 +1223,7 @@ async function ensureRoles(
     .from(rolesTable)
     .where(
       and(
-        eq(rolesTable.tenantId, tenantId),
+        eq(rolesTable.organizationId, tenantId),
         inArray(rolesTable.name, ['owner', 'member']),
       ),
     );
@@ -1153,7 +1247,7 @@ async function getMembership(
     .where(
       and(
         eq(membershipsTable.userId, userId),
-        eq(membershipsTable.tenantId, tenantId),
+        eq(membershipsTable.organizationId, tenantId),
       ),
     )
     .limit(1);
@@ -1168,7 +1262,7 @@ async function getActiveMemberCount(
   const rows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(membershipsTable)
-    .where(eq(membershipsTable.tenantId, tenantId));
+    .where(eq(membershipsTable.organizationId, tenantId));
 
   return rows[0]?.count ?? 0;
 }
@@ -1186,7 +1280,8 @@ async function getActiveMemberCount(
  */
 async function applyPolicyTemplateVersion(
   db: DrizzleDb,
-  tenantId: string,
+  parentTenantId: string,
+  orgId: string,
   roleMap: Map<string, string>,
 ): Promise<void> {
   const attrRows = await db
@@ -1194,7 +1289,7 @@ async function applyPolicyTemplateVersion(
       policyTemplateVersion: tenantAttributesTable.policyTemplateVersion,
     })
     .from(tenantAttributesTable)
-    .where(eq(tenantAttributesTable.tenantId, tenantId))
+    .where(eq(tenantAttributesTable.tenantId, parentTenantId))
     .limit(1);
 
   const currentVersion = attrRows[0]?.policyTemplateVersion ?? 0;
@@ -1211,7 +1306,7 @@ async function applyPolicyTemplateVersion(
         .insert(policiesTable)
         .values({
           id: crypto.randomUUID(),
-          tenantId,
+          organizationId: orgId,
           roleId: ownerRoleId,
           effect: policy.effect,
           resource: policy.resource,
@@ -1228,7 +1323,7 @@ async function applyPolicyTemplateVersion(
         .insert(policiesTable)
         .values({
           id: crypto.randomUUID(),
-          tenantId,
+          organizationId: orgId,
           roleId: memberRoleId,
           effect: policy.effect,
           resource: policy.resource,
@@ -1242,5 +1337,5 @@ async function applyPolicyTemplateVersion(
   await db
     .update(tenantAttributesTable)
     .set({ policyTemplateVersion: POLICY_TEMPLATE_VERSION })
-    .where(eq(tenantAttributesTable.tenantId, tenantId));
+    .where(eq(tenantAttributesTable.tenantId, parentTenantId));
 }

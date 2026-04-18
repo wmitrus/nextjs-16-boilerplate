@@ -239,6 +239,13 @@ const eslintConfig = defineConfig([
     },
   },
   security.configs.recommended,
+  {
+    files: ['scripts/lib/fs-guards-shared.ts', 'scripts/lib/fs-guards.mjs'],
+    rules: {
+      'no-restricted-syntax': 'off',
+      'security/detect-non-literal-fs-filename': 'off',
+    },
+  },
   globalIgnores([
     '.git/**',
     '.next/**',

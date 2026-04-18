@@ -56,16 +56,18 @@ function redactAuditInput(
   }
 
   if (typeof FormData !== 'undefined' && value instanceof FormData) {
-    const entries = Object.create(null) as Record<string, unknown>;
+    const entries: Array<[string, unknown]> = [];
     for (const [key, entryValue] of value.entries()) {
-      // eslint-disable-next-line security/detect-object-injection -- entries uses Object.create(null); key is a FormData field name, sensitive fields are redacted by isSensitiveAuditField
-      entries[key] = isSensitiveAuditField(key)
-        ? REDACTED_AUDIT_VALUE
-        : typeof entryValue === 'string'
-          ? entryValue
-          : BINARY_AUDIT_VALUE;
+      entries.push([
+        key,
+        isSensitiveAuditField(key)
+          ? REDACTED_AUDIT_VALUE
+          : typeof entryValue === 'string'
+            ? entryValue
+            : BINARY_AUDIT_VALUE,
+      ]);
     }
-    return entries;
+    return Object.fromEntries(entries);
   }
 
   if (
@@ -94,15 +96,17 @@ function redactAuditInput(
 
   seen.add(value);
 
-  const redacted = Object.create(null) as Record<string, unknown>;
+  const redactedEntries: Array<[string, unknown]> = [];
   for (const [key, entryValue] of Object.entries(value)) {
-    // eslint-disable-next-line security/detect-object-injection -- redacted uses Object.create(null); key is from Object.entries (own props only), sensitive fields are redacted
-    redacted[key] = isSensitiveAuditField(key)
-      ? REDACTED_AUDIT_VALUE
-      : redactAuditInput(entryValue, seen);
+    redactedEntries.push([
+      key,
+      isSensitiveAuditField(key)
+        ? REDACTED_AUDIT_VALUE
+        : redactAuditInput(entryValue, seen),
+    ]);
   }
 
-  return redacted;
+  return Object.fromEntries(redactedEntries);
 }
 
 /**

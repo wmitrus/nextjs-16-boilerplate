@@ -7,9 +7,9 @@ type DbDriver = 'pglite' | 'postgres';
 
 const DB_ERROR_MESSAGES: Record<DbDriver, string> = {
   pglite:
-    'Local database error — the dev database may be corrupted. Run `pnpm db:reset:pglite` and restart the dev server (`pnpm dev`), then try signing in again.',
+    'Local database error — the dev database may be corrupted. Run `pnpm db:pglite:reset` and restart the dev server (`pnpm dev`), then try signing in again.',
   postgres:
-    'Database error during sign-in. Ensure the dev database container is running (`pnpm db:dev:up`) and migrations are applied (`pnpm db:dev:migrate`), then try signing in again. Check the dev server logs for the full error.',
+    'Database error during sign-in. Ensure the dev database container is running (`pnpm db:dev:up`) and migrations are applied (`pnpm db:dev:migrate`). If migrations already report success but sign-in still fails, rebuild the local dev database with `pnpm db:dev:reset --force`, then try again. Check the dev server logs for the full error.',
 };
 
 const ERROR_MESSAGES: Record<

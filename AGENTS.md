@@ -529,6 +529,7 @@ Always:
 - keep risky behavioral changes separate from unrelated cleanup when possible
 - document residual risk if a task is only partially complete or intentionally deferred
 - **run `pnpm lint --fix`, never plain `pnpm lint`** — the linter auto-fixes import order and formatting; running without `--fix` only reports fixable errors and wastes tokens
+- for substantial phase-based implementation work, use focused validation during the phase and run repo-wide `pnpm lint --fix` plus `pnpm typecheck` before marking the phase complete
 - when shifting recurring scanner findings into local lint, record a baseline in task artifacts and compare local ESLint coverage versus Codacy findings on later PRs
 
 Never:

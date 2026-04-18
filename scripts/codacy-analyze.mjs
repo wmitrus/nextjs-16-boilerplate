@@ -135,9 +135,9 @@ console.log(`   Binary: ${BINARY_PATH}\n`);
 function removeIfExists(filePath) {
   const resolvedFilePath = resolve(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed repository-owned report path
-  if (existsSync(path.resolve(resolvedFilePath))) {
+  if (existsSync(resolve(resolvedFilePath))) {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- same rationale; resolved repository-owned report path
-    unlinkSync(path.resolve(resolvedFilePath));
+    unlinkSync(resolve(resolvedFilePath));
   }
 }
 

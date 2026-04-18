@@ -56,9 +56,9 @@ export async function performPgliteReset(config, deps) {
   }
 
   log('[reset-pglite] Removed.');
-  log('[reset-pglite] Running: pnpm db:migrate:dev');
+  log('[reset-pglite] Running: pnpm db:pglite:migrate');
 
-  const result = spawnSyncFn('pnpm', ['db:migrate:dev'], {
+  const result = spawnSyncFn('pnpm', ['db:pglite:migrate'], {
     stdio: 'inherit',
     env: process.env,
   });
@@ -66,20 +66,20 @@ export async function performPgliteReset(config, deps) {
   if (result.error) {
     return {
       success: false,
-      message: `[reset-pglite] Failed to spawn pnpm db:migrate:dev: ${result.error.message}`,
+      message: `[reset-pglite] Failed to spawn pnpm db:pglite:migrate: ${result.error.message}`,
     };
   }
 
   if (result.status !== 0) {
     return {
       success: false,
-      message: `[reset-pglite] pnpm db:migrate:dev exited with status ${result.status ?? 'unknown'}.`,
+      message: `[reset-pglite] pnpm db:pglite:migrate exited with status ${result.status ?? 'unknown'}.`,
     };
   }
 
-  log('[reset-pglite] Running: pnpm db:seed');
+  log('[reset-pglite] Running: pnpm db:pglite:seed');
 
-  const seedResult = spawnSyncFn('pnpm', ['db:seed'], {
+  const seedResult = spawnSyncFn('pnpm', ['db:pglite:seed'], {
     stdio: 'inherit',
     env: process.env,
   });
@@ -87,14 +87,14 @@ export async function performPgliteReset(config, deps) {
   if (seedResult.error) {
     return {
       success: false,
-      message: `[reset-pglite] Failed to spawn pnpm db:seed: ${seedResult.error.message}`,
+      message: `[reset-pglite] Failed to spawn pnpm db:pglite:seed: ${seedResult.error.message}`,
     };
   }
 
   if (seedResult.status !== 0) {
     return {
       success: false,
-      message: `[reset-pglite] pnpm db:seed exited with status ${seedResult.status ?? 'unknown'}.`,
+      message: `[reset-pglite] pnpm db:pglite:seed exited with status ${seedResult.status ?? 'unknown'}.`,
     };
   }
 

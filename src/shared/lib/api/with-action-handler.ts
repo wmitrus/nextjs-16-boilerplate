@@ -13,22 +13,30 @@ const logger = resolveServerLogger().child({
   module: 'with-action-handler',
 });
 
+function buildValidationErrors(error: ZodError): Record<string, string[]> {
+  const errorMap = new Map<string, string[]>();
+
+  error.issues.forEach((issue) => {
+    const path = issue.path.join('.');
+    const existingErrors = errorMap.get(path);
+
+    if (existingErrors) {
+      existingErrors.push(issue.message);
+      return;
+    }
+
+    errorMap.set(path, [issue.message]);
+  });
+
+  return Object.fromEntries(errorMap);
+}
+
 /**
  * Maps external errors (like Zod or DB errors) to AppError
  */
 function mapToAppError(error: unknown): unknown {
   if (error instanceof ZodError) {
-    const errors = Object.create(null) as Record<string, string[]>;
-    error.issues.forEach((err) => {
-      const path = err.path.join('.');
-      // eslint-disable-next-line security/detect-object-injection -- errors uses Object.create(null); path is a Zod field path string, not user-controlled
-      if (!errors[path]) {
-        // eslint-disable-next-line security/detect-object-injection -- same as above
-        errors[path] = [];
-      }
-      // eslint-disable-next-line security/detect-object-injection -- same as above
-      errors[path].push(err.message);
-    });
+    const errors = buildValidationErrors(error);
     return new AppError('Validation failed', 400, 'VALIDATION_ERROR', errors);
   }
 

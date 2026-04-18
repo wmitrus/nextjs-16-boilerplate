@@ -2,6 +2,12 @@
  * Utility to sanitize data before sending it to the client from an RSC.
  * Prevents accidental leakage of sensitive fields (e.g., passwords, internal IDs).
  */
+function isBlacklistedKey(key: string, blacklistedKeys: string[]): boolean {
+  return blacklistedKeys.some((blockedKey) =>
+    key.toLowerCase().includes(blockedKey),
+  );
+}
+
 export function sanitizeData<T>(
   data: T,
   blacklistedKeys: string[] = ['password', 'secret', 'token', 'key'],
@@ -19,22 +25,22 @@ export function sanitizeData<T>(
 
   // Handle Objects
   const source = data as Record<string, unknown>;
-  const sanitized = Object.create(null) as Record<string, unknown>;
+  const sanitizedEntries: Array<[string, unknown]> = [];
 
-  for (const key of Object.keys(source)) {
-    if (blacklistedKeys.some((b) => key.toLowerCase().includes(b))) {
+  for (const [key, value] of Object.entries(source)) {
+    if (isBlacklistedKey(key, blacklistedKeys)) {
       continue;
-      // eslint-disable-next-line security/detect-object-injection -- key is from Object.keys(source) (own props); source is a user-supplied object but keys are enumerated safely; blacklisted keys already skipped
-    } else if (typeof source[key] === 'object' && source[key] !== null) {
-      // eslint-disable-next-line security/detect-object-injection -- same as above; sanitized uses Object.create(null)
-      sanitized[key] = sanitizeData(source[key], blacklistedKeys);
-    } else {
-      // eslint-disable-next-line security/detect-object-injection -- same as above
-      sanitized[key] = source[key];
     }
+
+    sanitizedEntries.push([
+      key,
+      typeof value === 'object' && value !== null
+        ? sanitizeData(value, blacklistedKeys)
+        : value,
+    ]);
   }
 
-  return sanitized as unknown as T;
+  return Object.fromEntries(sanitizedEntries) as T;
 }
 
 /**
@@ -44,10 +50,13 @@ export function toDTO<T, K extends keyof T>(
   data: T,
   allowedFields: K[],
 ): Pick<T, K> {
-  const dto = Object.create(null) as Pick<T, K>;
-  allowedFields.forEach((field) => {
-    // eslint-disable-next-line security/detect-object-injection -- field is K extends keyof T (TypeScript-constrained); dto uses Object.create(null)
-    dto[field] = data[field];
-  });
-  return dto;
+  const allowedFieldSet = new Set<PropertyKey>(
+    allowedFields as readonly PropertyKey[],
+  );
+
+  return Object.fromEntries(
+    Object.entries(data as Record<string, unknown>).filter(([key]) =>
+      allowedFieldSet.has(key),
+    ),
+  ) as Pick<T, K>;
 }

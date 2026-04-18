@@ -103,9 +103,12 @@ Always follow the repository's mandatory coding patterns from
 - `Map<symbol, unknown>` for DI mock token resolution
 - `sanitizeRedirectUrl()` before forwarding redirect-style params
 - `Record<AllowedKeys, fn>` dispatch maps instead of `obj[dynamicKey]()`
+- `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers instead of repeated `result[key] = ...` mutation chains in `src/**` runtime helpers
 - `path.resolve()` plus sink-level confinement for dynamic `fs` paths
 - URL parsing and hostname/protocol validation before HTTP calls
 - `pnpm lint --fix`, never plain `pnpm lint`
+
+For substantial multi-step work, keep validation cheap while the phase is in progress, then run repo-wide `pnpm lint --fix` and `pnpm typecheck` before marking that phase complete.
 
 Do not:
 

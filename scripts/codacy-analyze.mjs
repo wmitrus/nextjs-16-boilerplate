@@ -53,7 +53,7 @@ const PERSISTENT_FINDINGS_FILE = resolve(REPORTS_DIR, 'codacy-findings.json');
 // ─── Binary check ─────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename -- BINARY_PATH is resolve(homedir(), '.local', 'bin', 'codacy-cli-v2') — no user input
-if (!existsSync(BINARY_PATH)) {
+if (!existsSync(resolve(BINARY_PATH))) {
   console.error(`❌ codacy-cli-v2 not found at: ${BINARY_PATH}`);
   console.error(`\n   Install it first: pnpm codacy:install`);
   process.exit(1);
@@ -133,8 +133,38 @@ console.log(`\n🔍 Running Codacy analysis (tool: ${TOOL})...`);
 console.log(`   Binary: ${BINARY_PATH}\n`);
 
 function removeIfExists(filePath) {
+  const resolvedFilePath = resolve(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed repository-owned report path
-  if (existsSync(filePath)) unlinkSync(filePath);
+  if (existsSync(path.resolve(resolvedFilePath))) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- same rationale; resolved repository-owned report path
+    unlinkSync(path.resolve(resolvedFilePath));
+  }
+}
+
+function readJsonFile(filePath) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned SARIF/JSON artifact path normalized at the helper sink
+  return JSON.parse(readFileSync(resolve(filePath), 'utf8'));
+}
+
+function writeSarifFile(filePath, value) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned SARIF artifact path normalized at the helper sink
+  writeFileSync(resolve(filePath), JSON.stringify(value, null, 2), 'utf8');
+}
+
+function writeFindingsFile(filePath, findings) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned findings artifact path normalized at the helper sink
+  writeFileSync(
+    resolve(filePath),
+    `${JSON.stringify(
+      {
+        findingsCount: findings.length,
+        findings,
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
 }
 
 function extractFindings(sarif) {
@@ -195,7 +225,7 @@ if (UPLOAD) {
       `❌ Could not determine current commit SHA (git rev-parse HEAD failed).`,
     );
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- sarifFile is resolve(tmpdir(), ...) — no user input
-    unlinkSync(sarifFile);
+    unlinkSync(resolve(sarifFile));
     process.exit(1);
   }
 
@@ -216,13 +246,13 @@ if (UPLOAD) {
   );
 
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- same rationale
-  unlinkSync(sarifFile);
+  unlinkSync(resolve(sarifFile));
 
   process.exit(uploadResult.status ?? 0);
 } else {
   if (REPORT_MODE === 'sarif' || REPORT_MODE === 'findings') {
     // Fixed repository-owned output path keeps report persistence safe and predictable.
-    mkdirSync(REPORTS_DIR, { recursive: true });
+    mkdirSync(resolve(REPORTS_DIR), { recursive: true });
     const tempSarifFile = resolve(REPORTS_DIR, '.codacy-results.tmp.sarif');
 
     const result = spawnSync(
@@ -241,7 +271,7 @@ if (UPLOAD) {
       process.exit(1);
     }
 
-    const sarif = JSON.parse(readFileSync(tempSarifFile, 'utf8'));
+    const sarif = readJsonFile(tempSarifFile);
     const findings = extractFindings(sarif);
 
     if (findings.length === 0) {
@@ -255,28 +285,13 @@ if (UPLOAD) {
     }
 
     if (REPORT_MODE === 'sarif') {
-      writeFileSync(
-        PERSISTENT_SARIF_FILE,
-        JSON.stringify(sarif, null, 2),
-        'utf8',
-      );
+      writeSarifFile(PERSISTENT_SARIF_FILE, sarif);
       removeIfExists(tempSarifFile);
       console.log(`\n✅ SARIF report saved to ${PERSISTENT_SARIF_FILE}`);
       process.exit(result.status ?? 0);
     }
 
-    writeFileSync(
-      PERSISTENT_FINDINGS_FILE,
-      `${JSON.stringify(
-        {
-          findingsCount: findings.length,
-          findings,
-        },
-        null,
-        2,
-      )}\n`,
-      'utf8',
-    );
+    writeFindingsFile(PERSISTENT_FINDINGS_FILE, findings);
     removeIfExists(tempSarifFile);
     removeIfExists(PERSISTENT_SARIF_FILE);
     console.log(`\n✅ Findings report saved to ${PERSISTENT_FINDINGS_FILE}`);

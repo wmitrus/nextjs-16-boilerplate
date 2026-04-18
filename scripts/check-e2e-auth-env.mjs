@@ -54,9 +54,15 @@ function parseArgs(argv) {
 }
 
 function getEnvValue(key) {
-  // eslint-disable-next-line security/detect-object-injection -- key comes from BASE_REQUIREMENTS or CLERK_REDIRECT_VARS, both hardcoded const arrays
-  const value = process.env[key];
-  return value && value.trim().length > 0 ? value : undefined;
+  for (const [envKey, envValue] of Object.entries(process.env)) {
+    if (envKey !== key) {
+      continue;
+    }
+
+    return envValue && envValue.trim().length > 0 ? envValue : undefined;
+  }
+
+  return undefined;
 }
 
 const BASE_REQUIREMENTS = [

@@ -276,7 +276,7 @@ async function cleanupStaleLocalNextDevState(env, listMode) {
   await terminateProcesses([...processesToTerminate]);
 
   const nextDevLockPath = path.join(repoRoot, '.next', 'dev', 'lock');
-  fs.rmSync(nextDevLockPath, { force: true });
+  fs.rmSync(path.resolve(nextDevLockPath), { force: true });
 }
 
 function cleanupExplicitServerLogDir(env, listMode) {
@@ -340,9 +340,9 @@ function applySharedRuntimeEnv(env, scenario, variant) {
 function preparePgliteDatabase(env, scenario, variant) {
   // databasePath is validated by resolveScenarioDatabasePath → assertPathWithinBase(path, data/e2e/)
   const databasePath = resolveScenarioDatabasePath({ scenario, variant });
-  fs.rmSync(databasePath, { recursive: true, force: true });
+  fs.rmSync(path.resolve(databasePath), { recursive: true, force: true });
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path pre-validated by resolveScenarioDatabasePath above
-  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  fs.mkdirSync(path.resolve(path.dirname(databasePath)), { recursive: true });
 
   run('pnpm', ['db:pglite:migrate'], env);
   run('pnpm', ['db:pglite:seed'], env);

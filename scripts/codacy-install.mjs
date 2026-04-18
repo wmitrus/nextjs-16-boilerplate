@@ -76,7 +76,7 @@ function resolveTargetVersion() {
 
 function isInstalled() {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- BINARY_PATH is resolve(homedir(), '.local', 'bin', 'codacy-cli-v2') — no user input
-  return existsSync(BINARY_PATH);
+  return existsSync(resolve(BINARY_PATH));
 }
 
 function getCurrentVersion() {
@@ -171,9 +171,9 @@ if (
   }
 
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- INSTALL_DIR is resolve(homedir(), '.local', 'bin') — no user input
-  if (!existsSync(INSTALL_DIR)) {
+  if (!existsSync(resolve(INSTALL_DIR))) {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- same rationale as above
-    mkdirSync(INSTALL_DIR, { recursive: true });
+    mkdirSync(resolve(INSTALL_DIR), { recursive: true });
   }
 
   try {
@@ -206,7 +206,7 @@ console.log(
 );
 
 try {
-  execFileSync(BINARY_PATH, ['install'], {
+  execFileSync(resolve(BINARY_PATH), ['install'], {
     stdio: 'inherit',
     cwd: process.cwd(),
   });

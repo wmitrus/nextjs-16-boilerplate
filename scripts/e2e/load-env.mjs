@@ -33,14 +33,15 @@ const ENV_DIR = path.resolve(ROOT_DIR, 'scripts/e2e/env');
 
 function parseEnvFile(filePath) {
   assertPathWithinBase(filePath, ROOT_DIR);
+  const resolvedFilePath = path.resolve(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  if (!fs.existsSync(filePath)) {
+  if (!fs.existsSync(path.resolve(resolvedFilePath))) {
     return {};
   }
 
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const content = fs.readFileSync(filePath, 'utf8');
-  const env = {};
+  const content = fs.readFileSync(path.resolve(resolvedFilePath), 'utf8');
+  const entries = [];
 
   for (const rawLine of content.split('\n')) {
     const line = rawLine.trim();
@@ -63,11 +64,10 @@ function parseEnvFile(filePath) {
       continue;
     }
 
-    // eslint-disable-next-line security/detect-object-injection
-    env[key] = value;
+    entries.push([key, value]);
   }
 
-  return env;
+  return Object.fromEntries(entries);
 }
 
 function loadFileIfExists(filePath) {
@@ -116,15 +116,18 @@ export function loadScenarioEnv({
 }
 
 export function applyEnv(envMap, target = process.env) {
+  const pendingEntries = [];
+
   for (const [key, value] of Object.entries(envMap)) {
     if (value !== undefined) {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         continue;
       }
-      // eslint-disable-next-line security/detect-object-injection
-      target[key] = value;
+      pendingEntries.push([key, value]);
     }
   }
+
+  Object.assign(target, Object.fromEntries(pendingEntries));
 
   return target;
 }

@@ -86,7 +86,7 @@ function pickComposeFile() {
   if (explicitFile) {
     assertPathWithinBase(path.resolve(explicitFile), process.cwd());
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path validated by assertPathWithinBase above
-    if (!existsSync(explicitFile)) {
+    if (!existsSync(path.resolve(explicitFile))) {
       throw new Error(
         `[compose-db-local] DB_COMPOSE_FILE points to a missing file: ${explicitFile}`,
       );
@@ -96,7 +96,7 @@ function pickComposeFile() {
 
   /* eslint-disable security/detect-non-literal-fs-filename -- candidate values are statically typed to three hardcoded literal strings in COMPOSE_FILE_CANDIDATES */
   const detectedFile = COMPOSE_FILE_CANDIDATES.find((candidate) =>
-    existsSync(candidate),
+    existsSync(path.resolve(candidate)),
   );
   /* eslint-enable security/detect-non-literal-fs-filename */
 

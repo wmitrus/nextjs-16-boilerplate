@@ -114,8 +114,10 @@ vi.mock('next/image', () => {
       priority: _priority,
       ...props
     }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean }) {
-      // eslint-disable-next-line @next/next/no-img-element
-      return <img {...props} alt={props.alt || ''} />;
+      return React.createElement('img', {
+        ...props,
+        alt: props.alt || '',
+      });
     },
   };
 });

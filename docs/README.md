@@ -18,6 +18,7 @@
 
 ## Usage & Operations
 
+- [Database Commands & Local Database Guide](./local-db.md)
 - [Logger Usage Standards](./usage/01%20-%20Logger%20Usage%20Standards.md)
 - [Dependency Upgrade Safety Policy](./usage/02%20-%20Dependency%20Upgrade%20Safety%20Policy.md)
 - [Testing Usage & DB Workflows](./usage/03%20-%20Testing%20Usage%20%26%20DB%20Workflows.md)

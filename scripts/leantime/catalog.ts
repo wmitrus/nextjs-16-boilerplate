@@ -1900,6 +1900,33 @@ const OPERATIONS: OperationDefinition[] = [
     },
   },
   {
+    id: 'retrospectives.milestone.link-existing',
+    title: 'Link Existing Milestone To Retrospective Item',
+    category: 'retrospectives',
+    description:
+      'Link an existing milestone to a Retrospective item (boardType=retros) through AutomationApi Canvas RPC. Use this to associate actionable retro items (especially startdoing) with phase milestones.',
+    execute: async ({ config, input }) => {
+      const record = asRecord(
+        input,
+        'retrospectives.milestone.link-existing input',
+      );
+
+      return runLeantimeRpc(
+        config,
+        'leantime.rpc.AutomationApi.Canvas.linkMilestone',
+        {
+          boardType: 'retros',
+          itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
+          milestoneId: requirePositiveIdFromKeys(
+            record,
+            ['milestoneId', 'milestone'],
+            'milestoneId',
+          ),
+        },
+      );
+    },
+  },
+  {
     id: 'ideas.board.create',
     title: 'Create Idea Board',
     category: 'ideas',

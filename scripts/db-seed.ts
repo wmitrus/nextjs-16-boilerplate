@@ -39,17 +39,17 @@ async function run(): Promise<void> {
 
   if (provider === 'prisma') {
     console.error(
-      '[db:seed] DB_PROVIDER=prisma is configured, but Prisma seed provider is not implemented yet.',
+      '[db-seed] DB_PROVIDER=prisma is configured, but Prisma seed provider is not implemented yet.',
     );
     process.exit(1);
   }
 
   if (driver === 'postgres' && !url) {
-    console.error('[db:seed] DATABASE_URL is required for postgres driver');
+    console.error('[db-seed] DATABASE_URL is required for postgres driver');
     process.exit(1);
   }
 
-  console.log('[db:seed] Starting seed');
+  console.log('[db-seed] Starting seed');
   console.log(`  provider : ${provider}`);
   console.log(`  driver : ${driver}`);
   console.log(
@@ -65,7 +65,7 @@ async function run(): Promise<void> {
     await dbRuntime.close?.();
   }
 
-  console.log('[db:seed] Seed complete');
+  console.log('[db-seed] Seed complete');
   console.log(`  users         : ${Object.keys(result.users).join(', ')}`);
   console.log(
     `  tenants       : ${Object.keys(result.authorization.tenants).join(', ')}`,
@@ -79,6 +79,6 @@ async function run(): Promise<void> {
 }
 
 run().catch((err: unknown) => {
-  console.error('[db:seed] Fatal error:', err);
+  console.error('[db-seed] Fatal error:', err);
   process.exit(1);
 });

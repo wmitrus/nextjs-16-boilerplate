@@ -198,8 +198,8 @@ Execution model:
 1. Use chained mode (`A -> B -> C -> D`) with one DB state and one browser session.
 2. Run setup once:
    - `pnpm env:check`
-   - `pnpm db:migrate:dev`
-   - `pnpm db:seed`
+   - `pnpm db:pglite:migrate`
+   - `pnpm db:pglite:seed`
    - `pnpm dev`
 3. Validate positive/negative paths on `/users` and `/api/users`.
 4. Validate provisioning truth on `/api/me/provisioning-status` (authoritative probe).

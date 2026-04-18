@@ -1,14 +1,21 @@
 ## DEV – PGLite
 
 ```bash
-pnpm db:migrate:dev
+pnpm db:pglite:migrate
 ```
 
 ## LOCAL – Postgres container
 
 ```bash
-pnpm db:local:up
-pnpm db:migrate:local
+pnpm db:dev:up
+pnpm db:dev:migrate
+```
+
+## TEST – Postgres container
+
+```bash
+pnpm db:test:up
+pnpm db:test:migrate
 ```
 
 ## PROD – Supabase

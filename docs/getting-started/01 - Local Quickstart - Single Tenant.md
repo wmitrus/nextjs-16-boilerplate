@@ -48,8 +48,8 @@ pnpm env:check
 ## 3. Prepare DB
 
 ```bash
-pnpm db:migrate:dev
-pnpm db:seed
+pnpm db:pglite:migrate
+pnpm db:pglite:seed
 ```
 
 ## 4. Run app

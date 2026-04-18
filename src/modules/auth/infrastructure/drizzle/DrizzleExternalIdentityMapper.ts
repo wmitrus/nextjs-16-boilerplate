@@ -3,7 +3,10 @@ import { and, eq } from 'drizzle-orm';
 import type { ExternalAuthProvider } from '@/core/contracts/identity';
 import type { DrizzleDb } from '@/core/db';
 
-import { authTenantIdentitiesTable, authUserIdentitiesTable } from './schema';
+import {
+  authOrganizationIdentitiesTable,
+  authUserIdentitiesTable,
+} from './schema';
 
 /**
  * @deprecated Use DrizzleInternalIdentityLookup for read-only ID resolution.
@@ -32,21 +35,23 @@ export class DrizzleExternalIdentityMapper {
     return result[0]?.userId ?? null;
   }
 
-  async resolveInternalTenantId(
+  async resolveInternalOrganizationId(
     provider: ExternalAuthProvider,
-    externalTenantId: string,
+    externalOrgId: string,
   ): Promise<string | null> {
     const result = await this.db
-      .select({ tenantId: authTenantIdentitiesTable.tenantId })
-      .from(authTenantIdentitiesTable)
+      .select({
+        organizationId: authOrganizationIdentitiesTable.organizationId,
+      })
+      .from(authOrganizationIdentitiesTable)
       .where(
         and(
-          eq(authTenantIdentitiesTable.provider, provider),
-          eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
+          eq(authOrganizationIdentitiesTable.provider, provider),
+          eq(authOrganizationIdentitiesTable.externalOrgId, externalOrgId),
         ),
       )
       .limit(1);
 
-    return result[0]?.tenantId ?? null;
+    return result[0]?.organizationId ?? null;
   }
 }

@@ -11,11 +11,11 @@ export interface ExternalIdentityMapper {
 
   resolveOrCreateInternalTenantId(args: {
     provider: ExternalAuthProvider;
-    externalTenantId: string;
+    externalOrgId: string;
   }): Promise<string>;
 
   ensureTenantAccess(args: {
     internalUserId: string;
-    internalTenantId: string;
+    internalOrganizationId: string;
   }): Promise<void>;
 }

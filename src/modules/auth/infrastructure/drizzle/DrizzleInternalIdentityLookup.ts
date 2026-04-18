@@ -6,7 +6,10 @@ import type {
 } from '@/core/contracts/identity';
 import type { DrizzleDb } from '@/core/db';
 
-import { authTenantIdentitiesTable, authUserIdentitiesTable } from './schema';
+import {
+  authOrganizationIdentitiesTable,
+  authUserIdentitiesTable,
+} from './schema';
 
 /**
  * SELECT-only implementation of InternalIdentityLookup.
@@ -33,38 +36,42 @@ export class DrizzleInternalIdentityLookup implements InternalIdentityLookup {
     return result[0]?.userId ?? null;
   }
 
-  async findInternalTenantId(
+  async findInternalOrganizationId(
     provider: ExternalAuthProvider,
-    externalTenantId: string,
+    externalOrgId: string,
   ): Promise<string | null> {
     const result = await this.db
-      .select({ tenantId: authTenantIdentitiesTable.tenantId })
-      .from(authTenantIdentitiesTable)
+      .select({
+        organizationId: authOrganizationIdentitiesTable.organizationId,
+      })
+      .from(authOrganizationIdentitiesTable)
       .where(
         and(
-          eq(authTenantIdentitiesTable.provider, provider),
-          eq(authTenantIdentitiesTable.externalTenantId, externalTenantId),
+          eq(authOrganizationIdentitiesTable.provider, provider),
+          eq(authOrganizationIdentitiesTable.externalOrgId, externalOrgId),
         ),
       )
       .limit(1);
 
-    return result[0]?.tenantId ?? null;
+    return result[0]?.organizationId ?? null;
   }
 
-  async findPersonalTenantId(internalUserId: string): Promise<string | null> {
-    // Personal tenants are stored with provider='personal' and externalTenantId=internalUserId.
-    // This convention is established by ProvisioningService.ensureProvisioned() in PR-2.
+  async findPersonalOrganizationId(
+    internalUserId: string,
+  ): Promise<string | null> {
     const result = await this.db
-      .select({ tenantId: authTenantIdentitiesTable.tenantId })
-      .from(authTenantIdentitiesTable)
+      .select({
+        organizationId: authOrganizationIdentitiesTable.organizationId,
+      })
+      .from(authOrganizationIdentitiesTable)
       .where(
         and(
-          eq(authTenantIdentitiesTable.provider, 'personal'),
-          eq(authTenantIdentitiesTable.externalTenantId, internalUserId),
+          eq(authOrganizationIdentitiesTable.provider, 'personal'),
+          eq(authOrganizationIdentitiesTable.externalOrgId, internalUserId),
         ),
       )
       .limit(1);
 
-    return result[0]?.tenantId ?? null;
+    return result[0]?.organizationId ?? null;
   }
 }

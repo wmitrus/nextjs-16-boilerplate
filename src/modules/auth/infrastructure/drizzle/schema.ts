@@ -8,7 +8,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import {
-  tenantsReferenceTable,
+  organizationsReferenceTable,
   usersReferenceTable,
 } from '@/core/db/schema/references';
 
@@ -30,20 +30,22 @@ export const authUserIdentitiesTable = pgTable(
   ],
 );
 
-export const authTenantIdentitiesTable = pgTable(
-  'auth_tenant_identities',
+export const authOrganizationIdentitiesTable = pgTable(
+  'auth_organization_identities',
   {
     provider: text('provider').notNull(),
-    externalTenantId: text('external_tenant_id').notNull(),
-    tenantId: uuid('tenant_id')
+    externalOrgId: text('external_org_id').notNull(),
+    organizationId: uuid('organization_id')
       .notNull()
-      .references(() => tenantsReferenceTable.id, { onDelete: 'cascade' }),
+      .references(() => organizationsReferenceTable.id, {
+        onDelete: 'cascade',
+      }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.provider, t.externalTenantId] }),
-    index('idx_auth_tenant_identities_tenant').on(t.tenantId),
+    primaryKey({ columns: [t.provider, t.externalOrgId] }),
+    index('idx_auth_org_identities_org').on(t.organizationId),
   ],
 );

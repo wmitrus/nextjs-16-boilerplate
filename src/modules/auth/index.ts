@@ -22,9 +22,9 @@ import { SystemIdentitySource } from './infrastructure/system/SystemIdentitySour
 
 import type { TenancyMode } from '@/modules/provisioning/domain/tenancy-mode';
 import type { TenantContextSource } from '@/modules/provisioning/domain/tenant-context-source';
-import { OrgDbTenantResolver } from '@/modules/provisioning/infrastructure/OrgDbTenantResolver';
-import { OrgProviderTenantResolver } from '@/modules/provisioning/infrastructure/OrgProviderTenantResolver';
-import { PersonalTenantResolver } from '@/modules/provisioning/infrastructure/PersonalTenantResolver';
+import { OrgDbOrganizationResolver } from '@/modules/provisioning/infrastructure/OrgDbOrganizationResolver';
+import { PersonalOrganizationResolver } from '@/modules/provisioning/infrastructure/PersonalOrganizationResolver';
+import { ProviderOrganizationResolver } from '@/modules/provisioning/infrastructure/ProviderOrganizationResolver';
 import { CompositeActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/CompositeActiveTenantSource';
 import { CookieActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/CookieActiveTenantSource';
 import { HeaderActiveTenantSource } from '@/modules/provisioning/infrastructure/request-context/HeaderActiveTenantSource';
@@ -81,7 +81,7 @@ function buildTenantResolver(
           '[authModule] TENANCY_MODE=personal requires a database connection (InternalIdentityLookup).',
         );
       }
-      return new PersonalTenantResolver(lookup);
+      return new PersonalOrganizationResolver(lookup);
     }
 
     case 'org': {
@@ -102,7 +102,7 @@ function buildTenantResolver(
           new HeaderActiveTenantSource(headers, config.tenantContextHeader),
           new CookieActiveTenantSource(cookies, config.tenantContextCookie),
         ]);
-        return new OrgDbTenantResolver(
+        return new OrgDbOrganizationResolver(
           activeTenantSource,
           config.membershipRepository,
         );
@@ -114,7 +114,7 @@ function buildTenantResolver(
             '[authModule] TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider requires a database connection.',
           );
         }
-        return new OrgProviderTenantResolver(
+        return new ProviderOrganizationResolver(
           identitySource,
           lookup,
           config.authProvider as ExternalAuthProvider,

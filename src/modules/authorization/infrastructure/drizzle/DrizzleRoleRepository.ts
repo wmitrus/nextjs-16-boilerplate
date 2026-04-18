@@ -20,7 +20,7 @@ export class DrizzleRoleRepository implements RoleRepository {
       .where(
         and(
           eq(membershipsTable.userId, subjectId),
-          eq(membershipsTable.tenantId, tenantId),
+          eq(membershipsTable.organizationId, tenantId),
         ),
       );
 

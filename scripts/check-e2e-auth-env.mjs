@@ -13,31 +13,28 @@ function parseArgs(argv) {
   let variant;
   let withOauth = false;
 
-  for (let index = 0; index < argv.length; index += 1) {
-    // eslint-disable-next-line security/detect-object-injection -- numeric index into a bounded argv array
-    const value = argv[index];
+  const values = argv[Symbol.iterator]();
 
+  for (const value of values) {
     if (value === '--scenario') {
-      const nextValue = argv[index + 1];
+      const nextValue = values.next().value;
       if (!nextValue || !SCENARIO_NAMES.includes(nextValue)) {
         throw new Error(
           `Missing or invalid scenario. Expected one of: ${SCENARIO_NAMES.join(', ')}`,
         );
       }
       scenario = nextValue;
-      index += 1;
       continue;
     }
 
     if (value === '--variant') {
-      const nextValue = argv[index + 1];
+      const nextValue = values.next().value;
       if (!nextValue || !VARIANT_NAMES.includes(nextValue)) {
         throw new Error(
           `Missing or invalid variant. Expected one of: ${VARIANT_NAMES.join(', ')}`,
         );
       }
       variant = nextValue;
-      index += 1;
       continue;
     }
 
@@ -136,6 +133,34 @@ const REQUIRED_ORGS = {
     key: 'E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG',
   },
 };
+
+function findRecordByKey(record, key) {
+  for (const [entryKey, entryValue] of Object.entries(record)) {
+    if (entryKey === key) {
+      return entryValue;
+    }
+  }
+
+  return undefined;
+}
+
+function getRequiredGroup(groupName) {
+  const group = findRecordByKey(REQUIRED_GROUPS, groupName);
+  if (!group) {
+    throw new Error(`Unsupported requirement group: ${groupName}`);
+  }
+
+  return group;
+}
+
+function getRequiredOrg(orgName) {
+  const organization = findRecordByKey(REQUIRED_ORGS, orgName);
+  if (!organization) {
+    throw new Error(`Unsupported organization requirement: ${orgName}`);
+  }
+
+  return organization;
+}
 
 function resolveAlias(keys) {
   for (const key of keys) {
@@ -272,8 +297,7 @@ export function main() {
   });
 
   for (const groupName of groups) {
-    // eslint-disable-next-line security/detect-object-injection -- groupName iterates over a Set populated exclusively with hardcoded string literals from collectRequirements
-    const group = REQUIRED_GROUPS[groupName];
+    const group = getRequiredGroup(groupName);
     const username = resolveAlias(group.username);
     const password = resolveAlias(group.password);
 
@@ -305,8 +329,7 @@ export function main() {
       continue;
     }
 
-    // eslint-disable-next-line security/detect-object-injection -- orgName iterates over a Set populated exclusively with hardcoded string literals from collectRequirements
-    const organization = REQUIRED_ORGS[orgName];
+    const organization = getRequiredOrg(orgName);
     if (!getEnvValue(organization.key)) {
       missing.push(`${organization.label}: ${organization.key}`);
     }

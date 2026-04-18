@@ -52,13 +52,26 @@ export interface OperationDefinition {
   title: string;
 }
 
+function getOwnField(
+  record: Record<string, unknown>,
+  key: string,
+): { found: boolean; value: unknown } {
+  for (const [entryKey, entryValue] of Object.entries(record)) {
+    if (entryKey === key) {
+      return { found: true, value: entryValue };
+    }
+  }
+
+  return { found: false, value: undefined };
+}
+
 function requireId(record: Record<string, unknown>, key = 'id'): number {
-  if (!Object.hasOwn(record, key)) {
+  const field = getOwnField(record, key);
+  if (!field.found) {
     throw new Error(`"${key}" must be a positive integer.`);
   }
 
-  // eslint-disable-next-line security/detect-object-injection -- key is selected by local wrapper code and guarded with Object.hasOwn before lookup
-  const value = record[key];
+  const { value } = field;
   const numeric =
     typeof value === 'number'
       ? value
@@ -99,12 +112,12 @@ function getOptionalPositiveInt(
   record: Record<string, unknown>,
   key: string,
 ): number | undefined {
-  if (!Object.hasOwn(record, key)) {
+  const field = getOwnField(record, key);
+  if (!field.found) {
     return undefined;
   }
 
-  // eslint-disable-next-line security/detect-object-injection -- key is a validated local CLI field name
-  const value = record[key];
+  const { value } = field;
   if (value === undefined || value === null || value === '') return undefined;
 
   const numeric =
@@ -125,12 +138,12 @@ function getOptionalNonNegativeInt(
   record: Record<string, unknown>,
   key: string,
 ): number | undefined {
-  if (!Object.hasOwn(record, key)) {
+  const field = getOwnField(record, key);
+  if (!field.found) {
     return undefined;
   }
 
-  // eslint-disable-next-line security/detect-object-injection -- key is selected by local wrapper code and guarded with Object.hasOwn before lookup
-  const value = record[key];
+  const { value } = field;
   if (value === undefined || value === null || value === '') return undefined;
 
   const numeric =
@@ -151,12 +164,12 @@ function getOptionalBoolean(
   record: Record<string, unknown>,
   key: string,
 ): boolean | undefined {
-  if (!Object.hasOwn(record, key)) {
+  const field = getOwnField(record, key);
+  if (!field.found) {
     return undefined;
   }
 
-  // eslint-disable-next-line security/detect-object-injection -- key is selected by local wrapper code and guarded with Object.hasOwn before lookup
-  const value = record[key];
+  const { value } = field;
 
   if (typeof value === 'boolean') {
     return value;
@@ -177,14 +190,15 @@ function getRecordField(
   key: string,
   fallbackKeys: string[] = [],
 ): Record<string, unknown> | undefined {
-  if (!Object.hasOwn(record, key)) {
+  const directField = getOwnField(record, key);
+  if (!directField.found) {
     for (const fallbackKey of fallbackKeys) {
-      if (!Object.hasOwn(record, fallbackKey)) {
+      const fallbackField = getOwnField(record, fallbackKey);
+      if (!fallbackField.found) {
         continue;
       }
 
-      // eslint-disable-next-line security/detect-object-injection -- fallbackKey is selected from a local static list
-      const candidate = record[fallbackKey];
+      const { value: candidate } = fallbackField;
       if (candidate !== undefined) {
         return asRecord(candidate, `"${fallbackKey}"`);
       }
@@ -193,8 +207,7 @@ function getRecordField(
     return undefined;
   }
 
-  // eslint-disable-next-line security/detect-object-injection -- key is a validated local CLI field name
-  const direct = record[key];
+  const { value: direct } = directField;
   if (direct !== undefined) {
     return asRecord(direct, `"${key}"`);
   }
@@ -449,12 +462,12 @@ function getStringValue(
   keys: string[],
 ): string | undefined {
   for (const key of keys) {
-    if (!Object.hasOwn(record, key)) {
+    const field = getOwnField(record, key);
+    if (!field.found) {
       continue;
     }
 
-    // eslint-disable-next-line security/detect-object-injection -- key is selected from local static alias lists and guarded with Object.hasOwn before lookup
-    const value = record[key];
+    const { value } = field;
     if (typeof value !== 'string') {
       continue;
     }
@@ -1919,7 +1932,12 @@ const OPERATIONS: OperationDefinition[] = [
           itemId: requirePositiveIdFromKeys(record, ['itemId', 'id'], 'itemId'),
           milestoneId: requirePositiveIdFromKeys(
             record,
-            ['milestoneId', 'milestone'],
+            [
+              'milestoneId',
+              'milestone',
+              'existingMilestoneId',
+              'existingMilestone',
+            ],
             'milestoneId',
           ),
         },

@@ -121,8 +121,13 @@ async function run(): Promise<void> {
     }
   } catch (err) {
     if (isSchemaNotFoundError(err)) {
+      const migrationCommand =
+        driver === 'postgres'
+          ? 'pnpm db:dev:migrate'
+          : 'pnpm db:pglite:migrate';
+
       console.error(
-        "[flags:migrate] DB schema not ready. Run 'pnpm db:pglite:migrate' first to apply the feature_flags migration.",
+        `[flags:migrate] DB schema not ready. Run '${migrationCommand}' first to apply the feature_flags migration.`,
       );
       process.exit(1);
     }

@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-object-injection -- E2E test file; all lookups use typed const Record keys or controlled env var names, no user input */
 import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright';
 import type { Page } from '@playwright/test';
 
@@ -89,6 +88,36 @@ const ORGANIZATION_ENV: Record<ClerkE2EOrganization, string> = {
   providerMember: 'E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG',
 };
 
+function getIdentityEnvConfig(identity: ClerkE2EIdentity): EnvAliasPair {
+  switch (identity) {
+    case 'singleNewUser':
+      return IDENTITY_ENV.singleNewUser;
+    case 'singleProvisionedUser':
+      return IDENTITY_ENV.singleProvisionedUser;
+    case 'incompleteUser':
+      return IDENTITY_ENV.incompleteUser;
+    case 'personalNewUser':
+      return IDENTITY_ENV.personalNewUser;
+    case 'orgProviderOwner':
+      return IDENTITY_ENV.orgProviderOwner;
+    case 'orgProviderMember':
+      return IDENTITY_ENV.orgProviderMember;
+    case 'orgDbSeededMember':
+      return IDENTITY_ENV.orgDbSeededMember;
+    case 'linkingBlockedUnverified':
+      return IDENTITY_ENV.linkingBlockedUnverified;
+  }
+}
+
+function getOrganizationEnvName(organization: ClerkE2EOrganization): string {
+  switch (organization) {
+    case 'providerOwner':
+      return ORGANIZATION_ENV.providerOwner;
+    case 'providerMember':
+      return ORGANIZATION_ENV.providerMember;
+  }
+}
+
 function required(value: string | undefined, variableName: string): string {
   if (!value) {
     throw new Error(
@@ -99,9 +128,23 @@ function required(value: string | undefined, variableName: string): string {
   return value;
 }
 
+function readEnvValue(name: string): string | undefined {
+  for (const [envName, envValue] of Object.entries(process.env)) {
+    if (envName !== name) {
+      continue;
+    }
+
+    if (typeof envValue === 'string' && envValue.trim().length > 0) {
+      return envValue;
+    }
+  }
+
+  return undefined;
+}
+
 function firstDefined(names: readonly string[]): string | undefined {
   for (const name of names) {
-    const value = process.env[name];
+    const value = readEnvValue(name);
     if (value && value.trim().length > 0) {
       return value;
     }
@@ -125,7 +168,7 @@ export function getClerkE2ECredentials(identity: ClerkE2EIdentity): {
   username: string;
   password: string;
 } {
-  const envConfig = IDENTITY_ENV[identity];
+  const envConfig = getIdentityEnvConfig(identity);
 
   return {
     username: requiredFromAliases(envConfig.username),
@@ -136,7 +179,7 @@ export function getClerkE2ECredentials(identity: ClerkE2EIdentity): {
 export function hasClerkIdentityE2ECredentials(
   identity: ClerkE2EIdentity,
 ): boolean {
-  const credentials = IDENTITY_ENV[identity];
+  const credentials = getIdentityEnvConfig(identity);
   return Boolean(
     firstDefined(credentials.username) && firstDefined(credentials.password),
   );
@@ -338,13 +381,13 @@ export async function signInClerkLinkingBlockedUnverifiedE2E(
 export function hasClerkE2EOrganizationSlug(
   organization: ClerkE2EOrganization,
 ): boolean {
-  const value = process.env[ORGANIZATION_ENV[organization]];
+  const value = readEnvValue(getOrganizationEnvName(organization));
   return Boolean(value && value.trim().length > 0);
 }
 
 export function getClerkE2EOrganizationSlug(
   organization: ClerkE2EOrganization,
 ): string {
-  const variableName = ORGANIZATION_ENV[organization];
-  return required(process.env[variableName], variableName);
+  const variableName = getOrganizationEnvName(organization);
+  return required(readEnvValue(variableName), variableName);
 }

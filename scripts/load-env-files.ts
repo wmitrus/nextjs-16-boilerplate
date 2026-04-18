@@ -1,5 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import {
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+} from './lib/fs-guards-shared';
 
 /**
  * Side-effect module: loads .env, .env.local, and Vercel-pulled env files into
@@ -24,12 +28,13 @@ export const loadedFiles: string[] = [];
 
 function applyEnvFile(filePath: string): void {
   const resolvedFilePath = resolve(filePath);
-  // filePath is always resolve(process.cwd(), '<static-literal or safe env-derived path>').
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  if (!existsSync(resolve(resolvedFilePath))) return;
+  if (!pathExistsWithinBase(resolvedFilePath, ROOT, 'environment file')) return;
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const content = readFileSync(resolve(resolvedFilePath), 'utf8');
+  const content = readTextFileWithinBase(
+    resolvedFilePath,
+    ROOT,
+    'environment file',
+  );
   const pendingEntries: Array<[string, string]> = [];
 
   for (const rawLine of content.split('\n')) {

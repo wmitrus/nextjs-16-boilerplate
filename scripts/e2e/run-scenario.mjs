@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { TEST_DEFAULT_URL } from '../lib/db-guard.mjs';
+import { ensureDirectoryWithinBase } from '../lib/fs-guards.mjs';
 
 import {
   applyEnv,
@@ -26,20 +27,17 @@ function parseArgs(argv) {
   let variant;
   let withOauth = false;
   const forwarded = [];
+  const values = rest[Symbol.iterator]();
 
-  for (let index = 0; index < rest.length; index += 1) {
-    // eslint-disable-next-line security/detect-object-injection -- numeric index into a bounded rest array
-    const value = rest[index];
-
+  for (const value of values) {
     if (value === '--variant') {
-      const nextValue = rest[index + 1];
+      const nextValue = values.next().value;
       if (!nextValue || !VARIANT_NAMES.includes(nextValue)) {
         throw new Error(
           `Missing or invalid variant. Expected one of: ${VARIANT_NAMES.join(', ')}`,
         );
       }
       variant = nextValue;
-      index += 1;
       continue;
     }
 
@@ -49,7 +47,9 @@ function parseArgs(argv) {
     }
 
     if (value === '--') {
-      forwarded.push(...rest.slice(index + 1));
+      for (const forwardedValue of values) {
+        forwarded.push(forwardedValue);
+      }
       break;
     }
 
@@ -341,8 +341,11 @@ function preparePgliteDatabase(env, scenario, variant) {
   // databasePath is validated by resolveScenarioDatabasePath → assertPathWithinBase(path, data/e2e/)
   const databasePath = resolveScenarioDatabasePath({ scenario, variant });
   fs.rmSync(path.resolve(databasePath), { recursive: true, force: true });
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path pre-validated by resolveScenarioDatabasePath above
-  fs.mkdirSync(path.resolve(path.dirname(databasePath)), { recursive: true });
+  ensureDirectoryWithinBase(
+    path.dirname(databasePath),
+    path.resolve(process.cwd(), 'data/e2e'),
+    'E2E database directory',
+  );
 
   run('pnpm', ['db:pglite:migrate'], env);
   run('pnpm', ['db:pglite:seed'], env);

@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+} from '../lib/fs-guards.mjs';
+
 export const SCENARIO_NAMES = ['single', 'personal', 'org-provider', 'org-db'];
 export const E2E_BACKEND_MODES = ['pglite', 'container'];
 
@@ -34,13 +39,15 @@ const ENV_DIR = path.resolve(ROOT_DIR, 'scripts/e2e/env');
 function parseEnvFile(filePath) {
   assertPathWithinBase(filePath, ROOT_DIR);
   const resolvedFilePath = path.resolve(filePath);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  if (!fs.existsSync(path.resolve(resolvedFilePath))) {
+  if (!pathExistsWithinBase(resolvedFilePath, ROOT_DIR, 'E2E env file')) {
     return {};
   }
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const content = fs.readFileSync(path.resolve(resolvedFilePath), 'utf8');
+  const content = readTextFileWithinBase(
+    resolvedFilePath,
+    ROOT_DIR,
+    'E2E env file',
+  );
   const entries = [];
 
   for (const rawLine of content.split('\n')) {

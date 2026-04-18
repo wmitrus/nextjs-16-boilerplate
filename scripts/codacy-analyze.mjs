@@ -25,15 +25,17 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import {} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+
+import {
+  ensureDirectoryWithinBase,
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+  removeFileWithinBase,
+  writeTextFileWithinBase,
+} from './lib/fs-guards.mjs';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -46,14 +48,15 @@ const REPOSITORY = process.env.CODACY_REPOSITORY;
 const UPLOAD = process.env.CODACY_UPLOAD === 'true';
 const REPORT_MODE = process.env.CODACY_REPORT_MODE ?? 'stdout';
 const TOOL = process.env.CODACY_TOOL ?? 'eslint';
+const LOCAL_BIN_DIR = resolve(homedir(), '.local', 'bin');
+const CODACY_DIR = resolve(PROJECT_DIR, '.codacy');
 const REPORTS_DIR = resolve(PROJECT_DIR, '.codacy', 'reports');
 const PERSISTENT_SARIF_FILE = resolve(REPORTS_DIR, 'codacy-results.sarif');
 const PERSISTENT_FINDINGS_FILE = resolve(REPORTS_DIR, 'codacy-findings.json');
 
 // ─── Binary check ─────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename -- BINARY_PATH is resolve(homedir(), '.local', 'bin', 'codacy-cli-v2') — no user input
-if (!existsSync(resolve(BINARY_PATH))) {
+if (!pathExistsWithinBase(BINARY_PATH, LOCAL_BIN_DIR, 'Codacy CLI binary')) {
   console.error(`❌ codacy-cli-v2 not found at: ${BINARY_PATH}`);
   console.error(`\n   Install it first: pnpm codacy:install`);
   process.exit(1);
@@ -133,28 +136,28 @@ console.log(`\n🔍 Running Codacy analysis (tool: ${TOOL})...`);
 console.log(`   Binary: ${BINARY_PATH}\n`);
 
 function removeIfExists(filePath) {
-  const resolvedFilePath = resolve(filePath);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed repository-owned report path
-  if (existsSync(resolve(resolvedFilePath))) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- same rationale; resolved repository-owned report path
-    unlinkSync(resolve(resolvedFilePath));
-  }
+  removeFileWithinBase(filePath, dirname(resolve(filePath)), 'Codacy artifact');
 }
 
 function readJsonFile(filePath) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned SARIF/JSON artifact path normalized at the helper sink
-  return JSON.parse(readFileSync(resolve(filePath), 'utf8'));
+  return JSON.parse(
+    readTextFileWithinBase(filePath, dirname(resolve(filePath)), 'Codacy JSON'),
+  );
 }
 
 function writeSarifFile(filePath, value) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned SARIF artifact path normalized at the helper sink
-  writeFileSync(resolve(filePath), JSON.stringify(value, null, 2), 'utf8');
+  writeTextFileWithinBase(
+    filePath,
+    dirname(resolve(filePath)),
+    JSON.stringify(value, null, 2),
+    'Codacy SARIF output',
+  );
 }
 
 function writeFindingsFile(filePath, findings) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned findings artifact path normalized at the helper sink
-  writeFileSync(
-    resolve(filePath),
+  writeTextFileWithinBase(
+    filePath,
+    dirname(resolve(filePath)),
     `${JSON.stringify(
       {
         findingsCount: findings.length,
@@ -163,7 +166,7 @@ function writeFindingsFile(filePath, findings) {
       null,
       2,
     )}\n`,
-    'utf8',
+    'Codacy findings output',
   );
 }
 
@@ -224,8 +227,7 @@ if (UPLOAD) {
     console.error(
       `❌ Could not determine current commit SHA (git rev-parse HEAD failed).`,
     );
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- sarifFile is resolve(tmpdir(), ...) — no user input
-    unlinkSync(resolve(sarifFile));
+    removeFileWithinBase(sarifFile, tmpdir(), 'temporary SARIF file');
     process.exit(1);
   }
 
@@ -245,14 +247,17 @@ if (UPLOAD) {
     { stdio: 'inherit', cwd: PROJECT_DIR },
   );
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- same rationale
-  unlinkSync(resolve(sarifFile));
+  removeFileWithinBase(sarifFile, tmpdir(), 'temporary SARIF file');
 
   process.exit(uploadResult.status ?? 0);
 } else {
   if (REPORT_MODE === 'sarif' || REPORT_MODE === 'findings') {
     // Fixed repository-owned output path keeps report persistence safe and predictable.
-    mkdirSync(resolve(REPORTS_DIR), { recursive: true });
+    ensureDirectoryWithinBase(
+      REPORTS_DIR,
+      CODACY_DIR,
+      'Codacy reports directory',
+    );
     const tempSarifFile = resolve(REPORTS_DIR, '.codacy-results.tmp.sarif');
 
     const result = spawnSync(

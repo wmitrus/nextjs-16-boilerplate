@@ -365,8 +365,10 @@ Every non-trivial AI agent task MUST include Leantime steps at task open and tas
 
 **Governing reference**: `docs/ai/general/LEANTIME_AUTOMATION.md`
 
-**Responsible agent**: `10 - Leantime Integration Agent`
-(`docs/ai/general/10 - Leantime Integration Agent.md`)
+**Responsible agents**:
+
+- `10 - Leantime Integration Agent` (`docs/ai/general/10 - Leantime Integration Agent.md`) — task lifecycle (open/close)
+- `11 - Leantime Strategy Agent` (`docs/ai/general/11 - Leantime Strategy Agent.md`) — project structure for large multi-phase tasks
 
 ### When Leantime steps are required
 
@@ -728,6 +730,7 @@ Full correspondence table and process ownership rules: `docs/ai/general/REPOSITO
 | 08  | Workflow Orchestrator | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | `.github/agents/workflow-orchestrator.agent.md` | `.agents/skills/workflow-orchestrator/SKILL.md` | —                           |
 | 09  | Task Brief Authoring  | `docs/ai/general/09 - Task Brief Authoring.md`        | —                                               | `.agents/skills/task-brief-authoring/SKILL.md`  | —                           |
 | 10  | Leantime Integration  | `docs/ai/general/10 - Leantime Integration Agent.md`  | `.github/agents/leantime-integration.agent.md`  | `.agents/skills/leantime-integration/SKILL.md`  | —                           |
+| 11  | Leantime Strategy     | `docs/ai/general/11 - Leantime Strategy Agent.md`     | —                                               | —                                               | —                           |
 
 ### Workflow Entry Point Correspondence
 

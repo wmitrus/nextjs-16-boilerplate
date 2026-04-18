@@ -26,7 +26,11 @@ export function makeAllowedProvisioningAccess(
   return {
     status: 'ALLOWED',
     identity: { id: 'user_test_1', email: 'user@test.dev' },
-    tenant: { tenantId: 'tenant_test_1', userId: 'user_test_1' },
+    tenant: {
+      organizationId: 'tenant_test_1',
+      tenantId: 'tenant_test_1',
+      userId: 'user_test_1',
+    },
     user: {
       id: 'user_test_1',
       email: 'user@test.dev',

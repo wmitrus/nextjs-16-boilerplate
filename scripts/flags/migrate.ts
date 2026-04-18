@@ -122,7 +122,7 @@ async function run(): Promise<void> {
   } catch (err) {
     if (isSchemaNotFoundError(err)) {
       console.error(
-        "[flags:migrate] DB schema not ready. Run 'pnpm db:migrate:dev' first to apply the feature_flags migration.",
+        "[flags:migrate] DB schema not ready. Run 'pnpm db:pglite:migrate' first to apply the feature_flags migration.",
       );
       process.exit(1);
     }

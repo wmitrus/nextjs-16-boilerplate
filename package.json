@@ -87,7 +87,7 @@
     "db:migrate:prod:local": "node --env-file=.env.production node_modules/drizzle-kit/bin.cjs migrate --config=src/core/db/migrations/config/drizzle.prod.ts",
     "db:export:sql": "mkdir -p exports/sql && drizzle-kit export --config=src/core/db/migrations/config/drizzle.dev.ts > exports/sql/schema.sql",
     "db:pglite:studio": "drizzle-kit studio --config=src/core/db/migrations/config/drizzle.dev.ts",
-    "db:pglite:seed": "DB_DRIVER=pglite DATABASE_URL=file:./data/pglite tsx scripts/db-seed.ts",
+    "db:pglite:seed": "DB_DRIVER=pglite tsx scripts/db-seed.ts",
     "db:pglite:reset": "node scripts/reset-pglite.mjs",
     "db:dev:up": "node scripts/compose-db-local.mjs up -d dev-db",
     "db:dev:down": "node scripts/compose-db-local.mjs stop dev-db",
@@ -122,7 +122,7 @@
     ]
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.39.0",
+    "@clerk/nextjs": "^6.39.2",
     "@electric-sql/pglite": "^0.3.15",
     "@growthbook/growthbook": "^1.6.5",
     "@logtail/next": "^0.3.1",
@@ -220,6 +220,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@clerk/shared": "^3.47.4",
       "@isaacs/brace-expansion": "^5.0.1",
       "@typescript-eslint/utils": "^8.56.1",
       "minimatch": ">=10.2.3",
@@ -231,6 +232,7 @@
       "flatted": ">=3.4.2",
       "effect": ">=3.20.0",
       "picomatch": ">=4.0.4",
+      "protobufjs": "^7.5.5",
       "micromatch>picomatch": "^2.3.2",
       "readdirp>picomatch": "^2.3.2",
       "esbuild": ">=0.25.0",

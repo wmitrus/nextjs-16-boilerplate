@@ -24,7 +24,7 @@ export class PGliteWasmAbortError extends Error {
 
   constructor(path: string) {
     super(
-      `PGlite WASM abort at '${path}'. The local database may be corrupted.\nRun: pnpm db:reset:pglite`,
+      `PGlite WASM abort at '${path}'. The local database may be corrupted.\nRun: pnpm db:pglite:reset`,
     );
     this.name = 'PGliteWasmAbortError';
     this.path = path;

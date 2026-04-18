@@ -344,8 +344,8 @@ function preparePgliteDatabase(env, scenario, variant) {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path pre-validated by resolveScenarioDatabasePath above
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
-  run('pnpm', ['db:migrate:dev'], env);
-  run('pnpm', ['db:seed'], env);
+  run('pnpm', ['db:pglite:migrate'], env);
+  run('pnpm', ['db:pglite:seed'], env);
 }
 
 function prepareContainerDatabase(env) {

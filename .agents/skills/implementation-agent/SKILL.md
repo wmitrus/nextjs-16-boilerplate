@@ -20,8 +20,9 @@ Before implementation work:
 1. Read `AGENTS.md`.
 2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
 3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/04 - Implementation Agents.md`.
-5. Read `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+4. Read `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md`.
+5. Read `docs/ai/general/04 - Implementation Agents.md`.
+6. Read `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
 Then adopt the Implementation Agent role defined there.
 
@@ -104,9 +105,13 @@ Always follow the repository's mandatory coding patterns from
 - `sanitizeRedirectUrl()` before forwarding redirect-style params
 - `Record<AllowedKeys, fn>` dispatch maps instead of `obj[dynamicKey]()`
 - `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers instead of repeated `result[key] = ...` mutation chains in `src/**` runtime helpers
+- shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats
 - `path.resolve()` plus sink-level confinement for dynamic `fs` paths
 - URL parsing and hostname/protocol validation before HTTP calls
 - `pnpm lint --fix`, never plain `pnpm lint`
+
+Also avoid the recurring repository-wide anti-patterns listed in
+`docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` before introducing new implementation shapes.
 
 For substantial multi-step work, keep validation cheap while the phase is in progress, then run repo-wide `pnpm lint --fix` and `pnpm typecheck` before marking that phase complete.
 

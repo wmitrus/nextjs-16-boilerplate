@@ -220,7 +220,7 @@ Neon requires TLS on all connections. The connection strings injected by the int
 
 ## 7. No Seed Required
 
-Do not run `pnpm db:seed` against production or preview databases.
+Do not run any local seed command against production or preview databases.
 
 All RBAC data (tenants, roles, policies, tenant attributes) is provisioned automatically by `DrizzleProvisioningService.ensureProvisioned()` on first sign-in. See `src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.ts`.
 

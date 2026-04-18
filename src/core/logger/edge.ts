@@ -6,33 +6,51 @@ import { env } from '@/core/env';
 import { buildClientLogPayload } from './client-transport';
 import { forwardEdgeLogEvent } from './edge-utils';
 
-const LEVEL_VALUES: Record<Level, number> = {
-  trace: 10,
-  debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50,
-  fatal: 60,
-};
+function getLevelValue(level: Level): number {
+  switch (level) {
+    case 'trace':
+      return 10;
+    case 'debug':
+      return 20;
+    case 'info':
+      return 30;
+    case 'warn':
+      return 40;
+    case 'error':
+      return 50;
+    case 'fatal':
+      return 60;
+  }
+}
 
-const LOG_LEVEL_THRESHOLDS: Record<typeof env.LOG_LEVEL, number> = {
-  trace: LEVEL_VALUES.trace,
-  debug: LEVEL_VALUES.debug,
-  info: LEVEL_VALUES.info,
-  warn: LEVEL_VALUES.warn,
-  error: LEVEL_VALUES.error,
-  fatal: LEVEL_VALUES.fatal,
-  silent: Number.POSITIVE_INFINITY,
-};
+function getLogLevelThreshold(level: typeof env.LOG_LEVEL): number {
+  switch (level) {
+    case 'trace':
+    case 'debug':
+    case 'info':
+    case 'warn':
+    case 'error':
+    case 'fatal':
+      return getLevelValue(level);
+    case 'silent':
+      return Number.POSITIVE_INFINITY;
+  }
+}
 
-const CONSOLE_METHOD_BY_LEVEL: Record<Level, keyof Console> = {
-  trace: 'debug',
-  debug: 'debug',
-  info: 'log',
-  warn: 'warn',
-  error: 'error',
-  fatal: 'error',
-};
+function getConsoleMethod(level: Level): 'debug' | 'log' | 'warn' | 'error' {
+  switch (level) {
+    case 'trace':
+    case 'debug':
+      return 'debug';
+    case 'info':
+      return 'log';
+    case 'warn':
+      return 'warn';
+    case 'error':
+    case 'fatal':
+      return 'error';
+  }
+}
 
 class EdgeRuntimeLogger implements AppLogger {
   constructor(private readonly bindings: Record<string, unknown>[] = []) {}
@@ -106,16 +124,14 @@ function createLogEvent(
     bindings,
     level: {
       label: level,
-      // eslint-disable-next-line security/detect-object-injection -- level is typed as Level (finite union); LEVEL_VALUES is Record<Level, number>
-      value: LEVEL_VALUES[level],
+      value: getLevelValue(level),
     },
     ts: timestamp,
   } as LogEvent;
 }
 
 function isLevelEnabled(level: Level): boolean {
-  // eslint-disable-next-line security/detect-object-injection -- both lookups use finite typed union keys (Level / LOG_LEVEL enum)
-  return LEVEL_VALUES[level] >= LOG_LEVEL_THRESHOLDS[env.LOG_LEVEL];
+  return getLevelValue(level) >= getLogLevelThreshold(env.LOG_LEVEL);
 }
 
 function writeConsoleLog(
@@ -124,8 +140,7 @@ function writeConsoleLog(
   timestamp: number,
 ): void {
   const record = {
-    // eslint-disable-next-line security/detect-object-injection -- level is typed as Level (finite union)
-    level: LEVEL_VALUES[level],
+    level: getLevelValue(level),
     time: timestamp,
     env:
       typeof process !== 'undefined'
@@ -141,8 +156,7 @@ function writeConsoleLog(
 
   const line = JSON.stringify(record);
 
-  // eslint-disable-next-line security/detect-object-injection -- level is typed as Level (finite union); CONSOLE_METHOD_BY_LEVEL is Record<Level, keyof Console>
-  switch (CONSOLE_METHOD_BY_LEVEL[level]) {
+  switch (getConsoleMethod(level)) {
     case 'debug':
       console.debug(line);
       return;

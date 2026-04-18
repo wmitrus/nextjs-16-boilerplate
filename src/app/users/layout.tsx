@@ -81,7 +81,7 @@ export async function UsersLayoutGuard({
       pathname: '/users',
       authenticatedExternalUserId: access.diagnostics.externalUserId,
       internalIdentityId: access.diagnostics.internalIdentityId,
-      internalTenantId: access.diagnostics.internalTenantId,
+      internalOrganizationId: access.diagnostics.internalOrganizationId,
       tenancyMode: access.diagnostics.tenancyMode,
       userRecordExists: access.diagnostics.userRecordExists,
       tenantRecordExists: access.diagnostics.tenantRecordExists,

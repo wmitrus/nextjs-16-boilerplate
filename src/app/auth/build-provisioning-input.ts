@@ -32,7 +32,7 @@ export async function buildProvisioningInput(
     externalUserId: rawIdentity.userId!,
     email: rawIdentity.email,
     emailVerified: rawIdentity.emailVerified,
-    tenantExternalId: rawIdentity.tenantExternalId,
+    orgExternalId: rawIdentity.orgExternalId,
     tenantRole: rawIdentity.tenantRole,
     activeTenantId,
     tenancyMode: env.TENANCY_MODE,

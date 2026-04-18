@@ -43,7 +43,7 @@ export async function resolveBootstrapOutcome(
   if (
     env.TENANCY_MODE === 'org' &&
     env.TENANT_CONTEXT_SOURCE === 'provider' &&
-    !rawIdentity.tenantExternalId
+    !rawIdentity.orgExternalId
   ) {
     return { type: 'org_required' };
   }

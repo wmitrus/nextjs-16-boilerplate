@@ -1,10 +1,15 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { PgliteDatabase } from 'drizzle-orm/pglite';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+
 import type { DbDriver, DrizzleDb } from '@/core/db/types';
 import { resolveServerLogger } from '@/core/logger/di';
 
 import { getRuntimeDiagnosticState } from '@/shared/lib/observability/runtime-diagnostic-state';
+
+type MigrationSchema = Record<string, never>;
 
 function resolveMigrationsFolder(): string {
   const moduleUrl = import.meta.url;
@@ -56,8 +61,9 @@ export async function runMigrations(
   try {
     if (driver === 'pglite') {
       const { migrate } = await import('drizzle-orm/pglite/migrator');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await migrate(db as any, { migrationsFolder: MIGRATIONS_FOLDER });
+      await migrate(db as PgliteDatabase<MigrationSchema>, {
+        migrationsFolder: MIGRATIONS_FOLDER,
+      });
 
       logger.info(
         {
@@ -72,8 +78,9 @@ export async function runMigrations(
     }
 
     const { migrate } = await import('drizzle-orm/postgres-js/migrator');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await migrate(db as any, { migrationsFolder: MIGRATIONS_FOLDER });
+    await migrate(db as PostgresJsDatabase<MigrationSchema>, {
+      migrationsFolder: MIGRATIONS_FOLDER,
+    });
 
     logger.info(
       {

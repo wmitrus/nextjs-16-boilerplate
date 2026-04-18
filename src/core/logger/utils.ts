@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { createRequire } from 'node:module';
 import path from 'path';
 
 import type { DestinationStream } from 'pino';
@@ -8,6 +8,8 @@ import type { PrettyStream } from 'pino-pretty';
 import pretty from 'pino-pretty';
 
 import { env } from '@/core/env';
+
+const cjsRequire = createRequire(import.meta.url);
 
 function assertPathWithinBase(resolvedPath: string, baseDir: string) {
   const normalizedBase = path.resolve(baseDir);
@@ -26,6 +28,12 @@ function assertPathWithinBase(resolvedPath: string, baseDir: string) {
   }
 }
 
+function resolvePathWithinBase(targetPath: string, baseDir: string): string {
+  const resolvedPath = path.resolve(baseDir, targetPath);
+  assertPathWithinBase(resolvedPath, baseDir);
+  return resolvedPath;
+}
+
 /**
  * Ensures that the log directory exists.
  */
@@ -33,14 +41,7 @@ export function ensureLogDirectory(logDir: string): boolean {
   const baseDir = process.cwd();
 
   try {
-    const logDirectory = path.resolve(baseDir, logDir);
-    assertPathWithinBase(logDirectory, baseDir);
-
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- logDirectory is resolved and confined to process.cwd() at the sink (SEC-16)
-    if (!fs.existsSync(logDirectory)) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- same as above; resolved and confined before fs access
-      fs.mkdirSync(logDirectory, { recursive: true });
-    }
+    resolvePathWithinBase(logDir, baseDir);
   } catch (err) {
     console.error('Error setting up log directory:', err);
     return false;
@@ -71,7 +72,8 @@ export function createFileStream(
     return null;
   }
 
-  const stream = destination({ dest: logFile, sync: true, mkdir: true });
+  const safeLogFile = resolvePathWithinBase(logFile, process.cwd());
+  const stream = destination({ dest: safeLogFile, sync: true, mkdir: true });
 
   stream.on('error', (err: Error) => {
     console.error('File stream error:', err);
@@ -139,8 +141,7 @@ export function createBetterStackStream(): DestinationStream | null {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pino = require('pino') as {
+    const pino = cjsRequire('pino') as {
       transport: (opts: {
         target: string;
         options?: Record<string, unknown>;

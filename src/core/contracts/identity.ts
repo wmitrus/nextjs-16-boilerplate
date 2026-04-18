@@ -160,5 +160,5 @@ export interface InternalIdentityLookup {
    * Used in TENANCY_MODE=personal where each user has exactly one personal organization.
    * Returns null if no personal organization has been provisioned for this user yet.
    */
-  findPersonalTenantId(internalUserId: string): Promise<string | null>;
+  findPersonalOrganizationId(internalUserId: string): Promise<string | null>;
 }

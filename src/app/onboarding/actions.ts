@@ -60,7 +60,7 @@ export const completeOnboarding = async (formData: FormData) => {
         provider: env.AUTH_PROVIDER,
         tenancyMode: env.TENANCY_MODE,
         internalUserId: provisioningResult.internalUserId,
-        internalTenantId: provisioningResult.internalTenantId,
+        internalOrganizationId: provisioningResult.internalOrganizationId,
         membershipRole: provisioningResult.membershipRole,
         userCreatedNow: provisioningResult.userCreatedNow,
         tenantCreatedNow: provisioningResult.tenantCreatedNow,

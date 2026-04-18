@@ -18,7 +18,7 @@ export type ProvisioningApiErrorCode =
 export interface ProvisioningStatusSnapshot {
   readonly authenticated: true;
   readonly internalUserId: string;
-  readonly internalTenantId: string;
+  readonly internalOrganizationId: string;
   readonly onboardingComplete: boolean;
   readonly tenancyMode: 'single' | 'personal' | 'org';
   readonly tenantContextSource: 'provider' | 'db' | null;

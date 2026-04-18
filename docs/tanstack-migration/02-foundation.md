@@ -367,7 +367,7 @@ commitlint --edit $1
     "e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio",
+    "db:pglite:studio": "drizzle-kit studio",
     "env:init": "node scripts/env-init.mjs",
     "env:check": "node scripts/env-check.mjs",
     "storybook": "storybook dev -p 6006",

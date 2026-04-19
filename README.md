@@ -97,7 +97,7 @@ Rules:
 - Never run migrations automatically in production runtime.
 - Commit migration files to the repository.
 - Keep `DATABASE_URL` server-side only.
-- Use only the explicit command families: `db:pglite:*`, `db:dev:*`, and `db:test:*`.
+- Use only the explicit command families: `db:pglite:*`, `db:dev:*`, and `db:test:*`, except for the explicitly permitted prod migration commands `db:migrate:prod` and `db:migrate:prod:local`.
 
 ## Local DB CI Test Mode (Podman-first)
 

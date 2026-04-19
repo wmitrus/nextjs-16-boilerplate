@@ -137,12 +137,12 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/app_dev
 
 ## Safety guards
 
-All destructive operations (`migrate`, `seed`, `reset`) have runtime guards that verify the target URL before opening any database connection.
+The guarded destructive local Postgres flows verify the target URL before opening any database connection. This safety contract applies to the `db:dev:*` and `db:test:*` command families; it does not claim that every ad hoc or unguarded script path in the repository is covered.
 
 - `db:dev:*` operations require port **5432** and reject the `app_test` database
 - `db:test:*` operations require port **5433** and require the `app_test` database
-- All operations are blocked when `NODE_ENV=production`
-- `reset` requires typing `yes` interactively, or pass `--force` for automation
+- These guarded flows are blocked when `NODE_ENV=production`
+- `reset` in the guarded flows requires typing `yes` interactively, or pass `--force` for automation
 
 If you run the wrong script against the wrong database, you will see a clear error with a hint pointing to the correct command.
 

@@ -366,7 +366,7 @@ commitlint --edit $1
     "test:coverage": "vitest run --config vitest.unit.config.ts --coverage",
     "e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:pglite:migrate": "drizzle-kit migrate",
     "db:pglite:studio": "drizzle-kit studio",
     "env:init": "node scripts/env-init.mjs",
     "env:check": "node scripts/env-check.mjs",

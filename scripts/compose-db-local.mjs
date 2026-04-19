@@ -85,13 +85,17 @@ function pickComposeCommand() {
 function pickComposeFile() {
   const explicitFile = process.env.DB_COMPOSE_FILE?.trim();
   if (explicitFile) {
-    assertPathWithinBase(path.resolve(explicitFile), process.cwd());
-    if (!pathExistsWithinBase(explicitFile, process.cwd(), 'compose file')) {
+    const resolvedExplicitFile = path.resolve(explicitFile);
+
+    assertPathWithinBase(resolvedExplicitFile, process.cwd());
+    if (
+      !pathExistsWithinBase(resolvedExplicitFile, process.cwd(), 'compose file')
+    ) {
       throw new Error(
         `[compose-db-local] DB_COMPOSE_FILE points to a missing file: ${explicitFile}`,
       );
     }
-    return explicitFile;
+    return resolvedExplicitFile;
   }
 
   const detectedFile = COMPOSE_FILE_CANDIDATES.find((candidate) =>

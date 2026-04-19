@@ -14,7 +14,7 @@ describe('ClerkRequestIdentitySource', () => {
     vi.clearAllMocks();
   });
 
-  it('returns userId, tenantExternalId, tenantRole, email, and emailVerified from auth()', async () => {
+  it('returns userId, orgExternalId, tenantRole, email, and emailVerified from auth()', async () => {
     vi.mocked(auth).mockResolvedValue({
       userId: 'user_123',
       orgId: 'org_456',
@@ -27,7 +27,7 @@ describe('ClerkRequestIdentitySource', () => {
 
     expect(data).toEqual({
       userId: 'user_123',
-      tenantExternalId: 'org_456',
+      orgExternalId: 'org_456',
       tenantRole: 'org:admin',
       email: 'test@example.com',
       emailVerified: true,
@@ -74,7 +74,7 @@ describe('ClerkRequestIdentitySource', () => {
     const data = await source.get();
 
     expect(data.userId).toBeUndefined();
-    expect(data.tenantExternalId).toBeUndefined();
+    expect(data.orgExternalId).toBeUndefined();
     expect(data.tenantRole).toBeUndefined();
     expect(data.email).toBeUndefined();
   });
@@ -92,7 +92,7 @@ describe('ClerkRequestIdentitySource', () => {
 
     expect(data.userId).toBe('user_123');
     expect(data.email).toBeUndefined();
-    expect(data.tenantExternalId).toBeUndefined();
+    expect(data.orgExternalId).toBeUndefined();
     expect(data.tenantRole).toBeUndefined();
   });
 
@@ -139,7 +139,7 @@ describe('ClerkRequestIdentitySource', () => {
     const source = new ClerkRequestIdentitySource();
     const data = await source.get();
 
-    expect(data.tenantExternalId).toBe('org_456');
+    expect(data.orgExternalId).toBe('org_456');
     expect(data.tenantRole).toBeUndefined();
   });
 

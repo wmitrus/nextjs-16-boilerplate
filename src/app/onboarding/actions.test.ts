@@ -88,13 +88,13 @@ describe('completeOnboarding', () => {
       userId: 'user_ext_1',
       email: 'user@example.com',
       emailVerified: true,
-      tenantExternalId: undefined,
+      orgExternalId: undefined,
       tenantRole: undefined,
     });
 
     provisioningService.ensureProvisioned.mockResolvedValue({
       internalUserId: 'u-1',
-      internalTenantId: 't-1',
+      internalOrganizationId: 't-1',
       membershipRole: 'member',
       userCreatedNow: true,
       tenantCreatedNow: false,

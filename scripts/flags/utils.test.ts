@@ -93,13 +93,13 @@ describe('assertPathWithinBase', () => {
     const base = process.cwd();
     expect(() =>
       assertPathWithinBase(path.join(base, '..', 'outside.json'), base),
-    ).toThrow(/Security: file path escapes/);
+    ).toThrow(/Security: .* escapes the allowed directory/);
   });
 
   it('throws for an absolute path outside the base directory', () => {
     const base = process.cwd();
     expect(() => assertPathWithinBase('/etc/passwd', base)).toThrow(
-      /Security: file path escapes/,
+      /Security: .* escapes the allowed directory/,
     );
   });
 
@@ -110,6 +110,6 @@ describe('assertPathWithinBase', () => {
         path.join(base, 'sub', '..', '..', '..', 'secret.txt'),
         base,
       ),
-    ).toThrow(/Security: file path escapes/);
+    ).toThrow(/Security: .* escapes the allowed directory/);
   });
 });

@@ -14,9 +14,10 @@ import { POLICY_TEMPLATE_VERSION } from '../../policy/templates';
 
 import { DrizzleProvisioningService } from './DrizzleProvisioningService';
 import {
-  authTenantIdentitiesTable,
+  authOrganizationIdentitiesTable,
   authUserIdentitiesTable,
   membershipsTable,
+  organizationsTable,
   policiesTable,
   rolesTable,
   tenantAttributesTable,
@@ -64,6 +65,14 @@ describe('DrizzleProvisioningService (real DB)', () => {
         name: 'Singleflight Tenant',
       })
       .onConflictDoNothing();
+    await testDb.db
+      .insert(organizationsTable)
+      .values({
+        id: '11000000-0000-4000-8000-000000000001',
+        tenantId: '10000000-0000-4000-8000-000000000001',
+        name: 'Singleflight Org',
+      })
+      .onConflictDoNothing();
 
     const [first, second, third] = await Promise.all([
       makeService().ensureProvisioned(input),
@@ -73,8 +82,8 @@ describe('DrizzleProvisioningService (real DB)', () => {
 
     expect(second.internalUserId).toBe(first.internalUserId);
     expect(third.internalUserId).toBe(first.internalUserId);
-    expect(second.internalTenantId).toBe(first.internalTenantId);
-    expect(third.internalTenantId).toBe(first.internalTenantId);
+    expect(second.internalOrganizationId).toBe(first.internalOrganizationId);
+    expect(third.internalOrganizationId).toBe(first.internalOrganizationId);
 
     const userIdentityRows = await testDb.db
       .select({ count: sql<number>`count(*)::int` })
@@ -92,7 +101,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       .where(
         and(
           eq(membershipsTable.userId, first.internalUserId),
-          eq(membershipsTable.tenantId, first.internalTenantId),
+          eq(membershipsTable.organizationId, first.internalOrganizationId),
         ),
       );
 
@@ -111,7 +120,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       });
 
       expect(result.internalUserId).toBeTruthy();
-      expect(result.internalTenantId).toBeTruthy();
+      expect(result.internalOrganizationId).toBeTruthy();
       expect(result.membershipRole).toBe('owner');
       expect(result.userCreatedNow).toBe(true);
       expect(result.tenantCreatedNow).toBe(true);
@@ -134,7 +143,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       });
 
       expect(second.internalUserId).toBe(first.internalUserId);
-      expect(second.internalTenantId).toBe(first.internalTenantId);
+      expect(second.internalOrganizationId).toBe(first.internalOrganizationId);
       expect(second.membershipRole).toBe('owner');
       expect(second.userCreatedNow).toBe(false);
       expect(second.tenantCreatedNow).toBe(false);
@@ -152,8 +161,8 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const second = await svc.ensureProvisioned(input);
       const third = await svc.ensureProvisioned(input);
 
-      expect(first.internalTenantId).toBe(second.internalTenantId);
-      expect(second.internalTenantId).toBe(third.internalTenantId);
+      expect(first.internalOrganizationId).toBe(second.internalOrganizationId);
+      expect(second.internalOrganizationId).toBe(third.internalOrganizationId);
     });
 
     it('creates backing records on first bootstrap and does not duplicate them on repeat', async () => {
@@ -183,18 +192,18 @@ describe('DrizzleProvisioningService (real DB)', () => {
             ),
           ),
         );
-      const tenantRowsAfterFirst = await testDb.db
+      const orgRowsAfterFirst = await testDb.db
         .select({ count: sql<number>`count(*)::int` })
-        .from(tenantsTable)
-        .where(eq(tenantsTable.id, first.internalTenantId));
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, first.internalOrganizationId));
       const tenantIdentityRowsAfterFirst = await testDb.db
         .select({ count: sql<number>`count(*)::int` })
-        .from(authTenantIdentitiesTable)
+        .from(authOrganizationIdentitiesTable)
         .where(
           and(
-            eq(authTenantIdentitiesTable.provider, 'personal'),
+            eq(authOrganizationIdentitiesTable.provider, 'personal'),
             eq(
-              authTenantIdentitiesTable.externalTenantId,
+              authOrganizationIdentitiesTable.externalOrgId,
               first.internalUserId,
             ),
           ),
@@ -205,20 +214,20 @@ describe('DrizzleProvisioningService (real DB)', () => {
         .where(
           and(
             eq(membershipsTable.userId, first.internalUserId),
-            eq(membershipsTable.tenantId, first.internalTenantId),
+            eq(membershipsTable.organizationId, first.internalOrganizationId),
           ),
         );
 
       expect(userRowsAfterFirst[0]?.count).toBe(1);
       expect(userIdentityRowsAfterFirst[0]?.count).toBe(1);
-      expect(tenantRowsAfterFirst[0]?.count).toBe(1);
+      expect(orgRowsAfterFirst[0]?.count).toBe(1);
       expect(tenantIdentityRowsAfterFirst[0]?.count).toBe(1);
       expect(membershipRowsAfterFirst[0]?.count).toBe(1);
 
       const second = await svc.ensureProvisioned(input);
 
       expect(second.internalUserId).toBe(first.internalUserId);
-      expect(second.internalTenantId).toBe(first.internalTenantId);
+      expect(second.internalOrganizationId).toBe(first.internalOrganizationId);
 
       const userIdentityRowsAfterSecond = await testDb.db
         .select({ count: sql<number>`count(*)::int` })
@@ -234,12 +243,12 @@ describe('DrizzleProvisioningService (real DB)', () => {
         );
       const tenantIdentityRowsAfterSecond = await testDb.db
         .select({ count: sql<number>`count(*)::int` })
-        .from(authTenantIdentitiesTable)
+        .from(authOrganizationIdentitiesTable)
         .where(
           and(
-            eq(authTenantIdentitiesTable.provider, 'personal'),
+            eq(authOrganizationIdentitiesTable.provider, 'personal'),
             eq(
-              authTenantIdentitiesTable.externalTenantId,
+              authOrganizationIdentitiesTable.externalOrgId,
               first.internalUserId,
             ),
           ),
@@ -250,7 +259,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
         .where(
           and(
             eq(membershipsTable.userId, first.internalUserId),
-            eq(membershipsTable.tenantId, first.internalTenantId),
+            eq(membershipsTable.organizationId, first.internalOrganizationId),
           ),
         );
 
@@ -268,6 +277,14 @@ describe('DrizzleProvisioningService (real DB)', () => {
         .values({
           id: '10000000-0000-4000-8000-000000000001',
           name: 'Single Tenant Repair',
+        })
+        .onConflictDoNothing();
+      await testDb.db
+        .insert(organizationsTable)
+        .values({
+          id: '11000000-0000-4000-8000-000000000001',
+          tenantId: '10000000-0000-4000-8000-000000000001',
+          name: 'Single Tenant Repair Org',
         })
         .onConflictDoNothing();
 
@@ -314,14 +331,14 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const result = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_org_001',
-        tenantExternalId: 'org_001',
+        orgExternalId: 'org_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
       });
 
       expect(result.internalUserId).toBeTruthy();
-      expect(result.internalTenantId).toBeTruthy();
+      expect(result.internalOrganizationId).toBeTruthy();
       expect(result.membershipRole).toBe('owner');
       expect(result.tenantCreatedNow).toBe(true);
     });
@@ -331,7 +348,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const result = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_org_002',
-        tenantExternalId: 'org_002',
+        orgExternalId: 'org_002',
         tenantRole: 'org:member',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -345,7 +362,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const input = {
         provider: 'clerk' as const,
         externalUserId: 'user_org_003',
-        tenantExternalId: 'org_003',
+        orgExternalId: 'org_003',
         tenantRole: 'org:member',
         tenancyMode: 'org' as const,
         tenantContextSource: 'provider' as const,
@@ -361,10 +378,10 @@ describe('DrizzleProvisioningService (real DB)', () => {
 
       expect(second.membershipRole).toBe('member');
       expect(second.internalUserId).toBe(first.internalUserId);
-      expect(second.internalTenantId).toBe(first.internalTenantId);
+      expect(second.internalOrganizationId).toBe(first.internalOrganizationId);
     });
 
-    it('throws TenantContextRequiredError when tenantExternalId is missing', async () => {
+    it('throws TenantContextRequiredError when orgExternalId is missing', async () => {
       const svc = makeService();
       await expect(
         svc.ensureProvisioned({
@@ -381,7 +398,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const result = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_org_005',
-        tenantExternalId: 'org_005',
+        orgExternalId: 'org_005',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -397,7 +414,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_org_db_001',
-        tenantExternalId: 'org_db_001',
+        orgExternalId: 'org_db_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -412,7 +429,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const orgResult = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_org_db_001',
-        tenantExternalId: 'org_db_001',
+        orgExternalId: 'org_db_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -422,7 +439,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
         svc.ensureProvisioned({
           provider: 'clerk',
           externalUserId: 'user_org_db_002',
-          activeTenantId: orgResult.internalTenantId,
+          activeTenantId: orgResult.internalOrganizationId,
           tenancyMode: 'org',
           tenantContextSource: 'db',
         }),
@@ -451,7 +468,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_limit_001',
-        tenantExternalId: 'org_limit_001',
+        orgExternalId: 'org_limit_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -460,7 +477,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_limit_002',
-        tenantExternalId: 'org_limit_001',
+        orgExternalId: 'org_limit_001',
         tenantRole: 'org:member',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -470,7 +487,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
         svc.ensureProvisioned({
           provider: 'clerk',
           externalUserId: 'user_limit_003',
-          tenantExternalId: 'org_limit_001',
+          orgExternalId: 'org_limit_001',
           tenantRole: 'org:member',
           tenancyMode: 'org',
           tenantContextSource: 'provider',
@@ -485,7 +502,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_policy_001',
-        tenantExternalId: 'org_policy_001',
+        orgExternalId: 'org_policy_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -625,13 +642,19 @@ describe('DrizzleProvisioningService (real DB)', () => {
         externalUserId: 'user_legacy_personal_ext',
         userId: legacyUserId,
       });
+      const legacyOrgId = crypto.randomUUID();
       await db
         .insert(tenantsTable)
         .values({ id: legacyTenantId, name: 'Legacy Personal Workspace' });
-      await db.insert(authTenantIdentitiesTable).values({
-        provider: 'personal',
-        externalTenantId: legacyUserId,
+      await db.insert(organizationsTable).values({
+        id: legacyOrgId,
         tenantId: legacyTenantId,
+        name: 'Legacy Personal Workspace',
+      });
+      await db.insert(authOrganizationIdentitiesTable).values({
+        provider: 'personal',
+        externalOrgId: legacyUserId,
+        organizationId: legacyOrgId,
       });
 
       const svc = makeService();
@@ -643,7 +666,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       });
 
       expect(result.internalUserId).toBe(legacyUserId);
-      expect(result.internalTenantId).toBe(legacyTenantId);
+      expect(result.internalOrganizationId).toBe(legacyOrgId);
       expect(result.tenantCreatedNow).toBe(false);
     });
 
@@ -651,26 +674,32 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const db = testDb.db;
       const legacyTenantId = crypto.randomUUID();
 
+      const legacyOrgId = crypto.randomUUID();
       await db
         .insert(tenantsTable)
         .values({ id: legacyTenantId, name: 'Legacy Org Tenant' });
-      await db.insert(authTenantIdentitiesTable).values({
-        provider: 'clerk',
-        externalTenantId: 'org_legacy_ext_001',
+      await db.insert(organizationsTable).values({
+        id: legacyOrgId,
         tenantId: legacyTenantId,
+        name: 'Legacy Org Tenant',
+      });
+      await db.insert(authOrganizationIdentitiesTable).values({
+        provider: 'clerk',
+        externalOrgId: 'org_legacy_ext_001',
+        organizationId: legacyOrgId,
       });
 
       const svc = makeService();
       const result = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_legacy_org_ext_001',
-        tenantExternalId: 'org_legacy_ext_001',
+        orgExternalId: 'org_legacy_ext_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
       });
 
-      expect(result.internalTenantId).toBe(legacyTenantId);
+      expect(result.internalOrganizationId).toBe(legacyOrgId);
       expect(result.tenantCreatedNow).toBe(false);
     });
   });
@@ -789,7 +818,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       expect(result.internalUserId).toBe(mapping[0]?.userId);
     });
 
-    it('returned internalTenantId always matches auth_tenant_identities row for personal tenant (canonical re-read)', async () => {
+    it('returned internalOrganizationId always matches auth_tenant_identities row for personal tenant (canonical re-read)', async () => {
       const svc = makeService();
       const result = await svc.ensureProvisioned({
         provider: 'clerk',
@@ -799,50 +828,54 @@ describe('DrizzleProvisioningService (real DB)', () => {
       });
 
       const mapping = await testDb.db
-        .select({ tenantId: authTenantIdentitiesTable.tenantId })
-        .from(authTenantIdentitiesTable)
+        .select({
+          organizationId: authOrganizationIdentitiesTable.organizationId,
+        })
+        .from(authOrganizationIdentitiesTable)
         .where(
           and(
-            eq(authTenantIdentitiesTable.provider, 'personal'),
+            eq(authOrganizationIdentitiesTable.provider, 'personal'),
             eq(
-              authTenantIdentitiesTable.externalTenantId,
+              authOrganizationIdentitiesTable.externalOrgId,
               result.internalUserId,
             ),
           ),
         )
         .limit(1);
 
-      expect(mapping[0]?.tenantId).toBeTruthy();
-      expect(result.internalTenantId).toBe(mapping[0]?.tenantId);
+      expect(mapping[0]?.organizationId).toBeTruthy();
+      expect(result.internalOrganizationId).toBe(mapping[0]?.organizationId);
     });
 
-    it('returned internalTenantId always matches auth_tenant_identities row for org/provider tenant (canonical re-read)', async () => {
+    it('returned internalOrganizationId always matches auth_tenant_identities row for org/provider tenant (canonical re-read)', async () => {
       const svc = makeService();
       const result = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_canonical_org_reread_001',
-        tenantExternalId: 'org_canonical_reread_001',
+        orgExternalId: 'org_canonical_reread_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
       });
 
       const mapping = await testDb.db
-        .select({ tenantId: authTenantIdentitiesTable.tenantId })
-        .from(authTenantIdentitiesTable)
+        .select({
+          organizationId: authOrganizationIdentitiesTable.organizationId,
+        })
+        .from(authOrganizationIdentitiesTable)
         .where(
           and(
-            eq(authTenantIdentitiesTable.provider, 'clerk'),
+            eq(authOrganizationIdentitiesTable.provider, 'clerk'),
             eq(
-              authTenantIdentitiesTable.externalTenantId,
+              authOrganizationIdentitiesTable.externalOrgId,
               'org_canonical_reread_001',
             ),
           ),
         )
         .limit(1);
 
-      expect(mapping[0]?.tenantId).toBeTruthy();
-      expect(result.internalTenantId).toBe(mapping[0]?.tenantId);
+      expect(mapping[0]?.organizationId).toBeTruthy();
+      expect(result.internalOrganizationId).toBe(mapping[0]?.organizationId);
     });
   });
 
@@ -853,7 +886,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const first = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_noescalate_001',
-        tenantExternalId: 'org_noescalate_001',
+        orgExternalId: 'org_noescalate_001',
         tenantRole: 'org:member',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -864,7 +897,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const second = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_noescalate_001',
-        tenantExternalId: 'org_noescalate_001',
+        orgExternalId: 'org_noescalate_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -872,7 +905,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
 
       expect(second.membershipRole).toBe('member');
       expect(second.internalUserId).toBe(first.internalUserId);
-      expect(second.internalTenantId).toBe(first.internalTenantId);
+      expect(second.internalOrganizationId).toBe(first.internalOrganizationId);
     });
   });
 
@@ -882,29 +915,36 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const provisioned = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_policy_idempotence_001',
-        tenantExternalId: 'org_policy_idempotence_001',
+        orgExternalId: 'org_policy_idempotence_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
       });
 
-      const tenantId = provisioned.internalTenantId;
+      const orgId = provisioned.internalOrganizationId;
       const beforeRows = await testDb.db
         .select({ count: sql<number>`count(*)::int` })
         .from(policiesTable)
-        .where(eq(policiesTable.tenantId, tenantId));
+        .where(eq(policiesTable.organizationId, orgId));
       const beforeCount = beforeRows[0]?.count ?? 0;
       expect(beforeCount).toBeGreaterThan(0);
+
+      const orgRow = await testDb.db
+        .select({ tenantId: organizationsTable.tenantId })
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, orgId))
+        .limit(1);
+      const parentTenantId = orgRow[0]!.tenantId;
 
       await testDb.db
         .update(tenantAttributesTable)
         .set({ policyTemplateVersion: 0 })
-        .where(eq(tenantAttributesTable.tenantId, tenantId));
+        .where(eq(tenantAttributesTable.tenantId, parentTenantId));
 
       await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_policy_idempotence_001',
-        tenantExternalId: 'org_policy_idempotence_001',
+        orgExternalId: 'org_policy_idempotence_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -913,7 +953,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const afterRows = await testDb.db
         .select({ count: sql<number>`count(*)::int` })
         .from(policiesTable)
-        .where(eq(policiesTable.tenantId, tenantId));
+        .where(eq(policiesTable.organizationId, orgId));
       const afterCount = afterRows[0]?.count ?? 0;
 
       expect(afterCount).toBe(beforeCount);
@@ -923,7 +963,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
           policyTemplateVersion: tenantAttributesTable.policyTemplateVersion,
         })
         .from(tenantAttributesTable)
-        .where(eq(tenantAttributesTable.tenantId, tenantId))
+        .where(eq(tenantAttributesTable.tenantId, parentTenantId))
         .limit(1);
 
       expect(attrs[0]?.policyTemplateVersion).toBe(POLICY_TEMPLATE_VERSION);
@@ -934,7 +974,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const provisioned = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_role_uniqueness_001',
-        tenantExternalId: 'org_role_uniqueness_001',
+        orgExternalId: 'org_role_uniqueness_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -945,7 +985,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
         .from(rolesTable)
         .where(
           and(
-            eq(rolesTable.tenantId, provisioned.internalTenantId),
+            eq(rolesTable.organizationId, provisioned.internalOrganizationId),
             sql`${rolesTable.name} IN ('owner', 'member')`,
           ),
         );
@@ -961,7 +1001,7 @@ describe('DrizzleProvisioningService (real DB)', () => {
       const orgResult = await svc.ensureProvisioned({
         provider: 'clerk',
         externalUserId: 'user_orgdb_writecheck_owner',
-        tenantExternalId: 'org_writecheck_001',
+        orgExternalId: 'org_writecheck_001',
         tenantRole: 'org:admin',
         tenancyMode: 'org',
         tenantContextSource: 'provider',
@@ -977,13 +1017,13 @@ describe('DrizzleProvisioningService (real DB)', () => {
         svc.ensureProvisioned({
           provider: 'clerk',
           externalUserId: 'user_orgdb_writecheck_nomember',
-          activeTenantId: orgResult.internalTenantId,
+          activeTenantId: orgResult.internalOrganizationId,
           tenancyMode: 'org',
           tenantContextSource: 'db',
         }),
       ).rejects.toThrow(TenantMembershipRequiredError);
 
-      expect(orgResult.internalTenantId).toBeTruthy();
+      expect(orgResult.internalOrganizationId).toBeTruthy();
       expect(orgResult.membershipRole).toBe('owner');
     });
   });

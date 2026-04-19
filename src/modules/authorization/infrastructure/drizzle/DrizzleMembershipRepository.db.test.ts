@@ -9,8 +9,8 @@ import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
 let aliceId: string;
-let acmeTenantId: string;
-let globexTenantId: string;
+let acmeOrgId: string;
+let globexOrgId: string;
 let bobId: string;
 
 beforeAll(async () => {
@@ -20,8 +20,8 @@ beforeAll(async () => {
 
   aliceId = users.alice.id;
   bobId = users.bob.id;
-  acmeTenantId = auth.tenants.acme.id;
-  globexTenantId = auth.tenants.globex.id;
+  acmeOrgId = auth.orgs.acmeHq.id;
+  globexOrgId = auth.orgs.globexHq.id;
 });
 
 afterAll(async () => {
@@ -31,25 +31,25 @@ afterAll(async () => {
 describe('DrizzleMembershipRepository (real DB)', () => {
   it('returns true when alice is a member of acme', async () => {
     const repo = new DrizzleMembershipRepository(testDb.db);
-    const result = await repo.isMember(aliceId, acmeTenantId);
+    const result = await repo.isMember(aliceId, acmeOrgId);
     expect(result).toBe(true);
   });
 
   it('returns true when alice is a member of globex', async () => {
     const repo = new DrizzleMembershipRepository(testDb.db);
-    const result = await repo.isMember(aliceId, globexTenantId);
+    const result = await repo.isMember(aliceId, globexOrgId);
     expect(result).toBe(true);
   });
 
   it('returns true when bob is a member of acme', async () => {
     const repo = new DrizzleMembershipRepository(testDb.db);
-    const result = await repo.isMember(bobId, acmeTenantId);
+    const result = await repo.isMember(bobId, acmeOrgId);
     expect(result).toBe(true);
   });
 
   it('returns false when bob is NOT a member of globex', async () => {
     const repo = new DrizzleMembershipRepository(testDb.db);
-    const result = await repo.isMember(bobId, globexTenantId);
+    const result = await repo.isMember(bobId, globexOrgId);
     expect(result).toBe(false);
   });
 
@@ -57,7 +57,7 @@ describe('DrizzleMembershipRepository (real DB)', () => {
     const repo = new DrizzleMembershipRepository(testDb.db);
     const result = await repo.isMember(
       'ffffffff-ffff-ffff-ffff-ffffffffffff',
-      acmeTenantId,
+      acmeOrgId,
     );
     expect(result).toBe(false);
   });

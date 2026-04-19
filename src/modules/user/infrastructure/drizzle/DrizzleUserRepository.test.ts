@@ -10,10 +10,15 @@ function createMockDb(result: unknown[] = []) {
   chain.then = (resolve: (v: unknown) => void) =>
     Promise.resolve(result).then(resolve);
 
-  ['from', 'where', 'limit', 'set', 'update'].forEach((m) => {
-    // eslint-disable-next-line security/detect-object-injection -- test mock; m is always a known method name from a static literal array
-    chain[m] = vi.fn().mockReturnValue(chain);
-  });
+  Object.assign(
+    chain,
+    Object.fromEntries(
+      ['from', 'where', 'limit', 'set', 'update'].map((methodName) => [
+        methodName,
+        vi.fn().mockReturnValue(chain),
+      ]),
+    ),
+  );
 
   return {
     select: vi.fn().mockReturnValue(chain),

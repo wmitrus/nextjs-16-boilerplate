@@ -18,7 +18,7 @@ import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 let testDb: TestDb;
 let aliceId: string;
 let bobId: string;
-let acmeTenantId: string;
+let acmeOrgId: string;
 
 function createService(): DefaultAuthorizationService {
   return new DefaultAuthorizationService(
@@ -37,7 +37,7 @@ beforeAll(async () => {
 
   aliceId = users.alice.id;
   bobId = users.bob.id;
-  acmeTenantId = auth.tenants.acme.id;
+  acmeOrgId = auth.orgs.acmeHq.id;
 });
 
 afterAll(async () => {
@@ -49,7 +49,7 @@ describe('DefaultAuthorizationService (real DB)', () => {
     const service = createService();
 
     const allowed = await service.can({
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: aliceId },
       resource: { type: RESOURCES.USER, id: bobId },
       action: ACTIONS.USER_INVITE,
@@ -62,7 +62,7 @@ describe('DefaultAuthorizationService (real DB)', () => {
     const service = createService();
 
     const allowed = await service.can({
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: bobId },
       resource: { type: RESOURCES.USER, id: aliceId },
       action: ACTIONS.USER_INVITE,
@@ -75,7 +75,7 @@ describe('DefaultAuthorizationService (real DB)', () => {
     const service = createService();
 
     const allowed = await service.can({
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: bobId },
       resource: { type: RESOURCES.USER, id: bobId },
       action: ACTIONS.USER_READ,
@@ -88,7 +88,7 @@ describe('DefaultAuthorizationService (real DB)', () => {
     const service = createService();
 
     const allowed = await service.can({
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: bobId },
       resource: { type: RESOURCES.USER, id: aliceId },
       action: ACTIONS.USER_READ,

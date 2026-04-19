@@ -83,6 +83,7 @@ describe('Security Context', () => {
       email: 'test@example.com',
     });
     vi.mocked(tenantResolver.resolve).mockResolvedValue({
+      organizationId: 'tenant_123',
       tenantId: 'tenant_123',
       userId: 'user_123',
     });
@@ -113,6 +114,7 @@ describe('Security Context', () => {
       id: 'admin_1',
     });
     vi.mocked(tenantResolver.resolve).mockResolvedValue({
+      organizationId: 't1',
       tenantId: 't1',
       userId: 'admin_1',
     });
@@ -176,6 +178,7 @@ describe('Security Context', () => {
       id: 'user_multi',
     });
     vi.mocked(tenantResolver.resolve).mockResolvedValue({
+      organizationId: 'org_abc',
       tenantId: 'org_abc',
       userId: 'user_multi',
     });

@@ -2,10 +2,22 @@ import { describe, expect, it } from 'vitest';
 
 import { HeaderActiveTenantSource } from './HeaderActiveTenantSource';
 
+function getEntryValue(
+  entries: Record<string, string>,
+  targetName: string,
+): string | null {
+  for (const [entryName, entryValue] of Object.entries(entries)) {
+    if (entryName === targetName) {
+      return entryValue;
+    }
+  }
+
+  return null;
+}
+
 function makeHeaders(entries: Record<string, string>): Headers {
   return {
-    // eslint-disable-next-line security/detect-object-injection -- test helper; name is a controlled header key passed from test cases
-    get: (name: string) => entries[name] ?? null,
+    get: (name: string) => getEntryValue(entries, name),
   } as unknown as Headers;
 }
 

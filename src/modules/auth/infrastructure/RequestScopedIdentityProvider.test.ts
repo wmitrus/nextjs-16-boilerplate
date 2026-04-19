@@ -9,7 +9,7 @@ import { RequestScopedIdentityProvider } from './RequestScopedIdentityProvider';
 function makeSource(data: {
   userId?: string;
   email?: string;
-  tenantExternalId?: string;
+  orgExternalId?: string;
   tenantRole?: string;
 }): RequestIdentitySource {
   return { get: vi.fn().mockResolvedValue(data) };
@@ -51,8 +51,8 @@ describe('RequestScopedIdentityProvider', () => {
       findInternalUserId: vi
         .fn()
         .mockResolvedValue('00000000-0000-0000-0000-000000000123'),
-      findInternalTenantId: vi.fn(),
-      findPersonalTenantId: vi.fn(),
+      findInternalOrganizationId: vi.fn(),
+      findPersonalOrganizationId: vi.fn(),
     };
 
     const provider = new RequestScopedIdentityProvider(
@@ -72,8 +72,8 @@ describe('RequestScopedIdentityProvider', () => {
   it('throws UserNotProvisionedError when lookup returns null (user not provisioned)', async () => {
     const lookup = {
       findInternalUserId: vi.fn().mockResolvedValue(null),
-      findInternalTenantId: vi.fn(),
-      findPersonalTenantId: vi.fn(),
+      findInternalOrganizationId: vi.fn(),
+      findPersonalOrganizationId: vi.fn(),
     };
 
     const provider = new RequestScopedIdentityProvider(
@@ -89,8 +89,8 @@ describe('RequestScopedIdentityProvider', () => {
   it('does not call any write-path methods — lookup is read-only', async () => {
     const lookup = {
       findInternalUserId: vi.fn().mockResolvedValue(null),
-      findInternalTenantId: vi.fn(),
-      findPersonalTenantId: vi.fn(),
+      findInternalOrganizationId: vi.fn(),
+      findPersonalOrganizationId: vi.fn(),
     };
     const insert = vi.fn();
 
@@ -102,6 +102,6 @@ describe('RequestScopedIdentityProvider', () => {
     await provider.getCurrentIdentity().catch(() => {});
 
     expect(insert).not.toHaveBeenCalled();
-    expect(lookup.findInternalTenantId).not.toHaveBeenCalled();
+    expect(lookup.findInternalOrganizationId).not.toHaveBeenCalled();
   });
 });

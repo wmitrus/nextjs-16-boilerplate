@@ -15,7 +15,11 @@ function createDeps() {
       getCurrentIdentity: vi.fn().mockResolvedValue({ id: 'u-1' }),
     },
     tenantResolver: {
-      resolve: vi.fn().mockResolvedValue({ tenantId: 't-1', userId: 'u-1' }),
+      resolve: vi.fn().mockResolvedValue({
+        organizationId: 't-1',
+        tenantId: 't-1',
+        userId: 'u-1',
+      }),
     },
     userRepository: {
       findById: vi

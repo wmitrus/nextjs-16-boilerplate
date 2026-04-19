@@ -35,10 +35,11 @@ export function parseEnvFile(content: string): Record<string, string> {
   return Object.fromEntries(entries) as Record<string, string>;
 }
 
-const envFile = path.resolve(process.cwd(), '.env.local');
-
 try {
-  const content = fs.readFileSync(path.resolve(envFile), 'utf8');
+  const content = fs.readFileSync(
+    path.resolve(process.cwd(), '.env.local'),
+    'utf8',
+  );
   const parsed = parseEnvFile(content);
   const pendingEntries: Array<[string, string]> = [];
 

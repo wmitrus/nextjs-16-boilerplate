@@ -66,6 +66,38 @@ CI equivalents:
 - Auth-matrix E2E in CI: `pnpm e2e:auth-matrix:ci`
 - Full scenario-matrix E2E in CI: `pnpm e2e:ci`
 
+## Continue Checks
+
+Repository-specific AI checks live in `.continue/checks/` and run in CI through `.github/workflows/continue-checks.yml`.
+
+CI requirements:
+
+- Add the `CONTINUE_API_KEY` Actions secret before enabling the workflow on PRs.
+- The workflow uploads JSON and stderr artifacts for prompt tuning and rerun triage.
+
+Local iteration loop:
+
+```bash
+npm install -g @continuedev/cli
+cn review --base main --format json
+```
+
+Notes:
+
+- `cn login` authenticates with Continue and then opens the interactive TUI. Use `Ctrl+C` to leave it after login.
+- `cn check` is not the correct entrypoint in the current CLI used by this repository; use `cn review` for local automation.
+
+If you prefer API-key-based auth locally or in CI:
+
+```bash
+export CONTINUE_API_KEY=your-key-here
+cn review --base main --format json
+```
+
+If Continue returns `402` / out-of-credits, authentication succeeded but the selected Continue-backed model cannot run until you add credits or configure your own provider key in Continue.
+
+Use this loop when refining `.continue/checks/*.md` prompts before relying on PR automation.
+
 GitHub Actions E2E entrypoints:
 
 - Auth-matrix workflow: PR label `run-e2e` or manual dispatch in the Actions tab.

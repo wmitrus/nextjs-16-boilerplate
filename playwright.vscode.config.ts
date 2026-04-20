@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { resolveInternalApiKey } from './e2e/internal-api-key';
+
 export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global.setup.ts',
@@ -16,7 +18,7 @@ export default defineConfig({
     env: {
       PORT: '3000',
       E2E_ENABLED: 'true',
-      INTERNAL_API_KEY: 'demo-internal-key',
+      INTERNAL_API_KEY: resolveInternalApiKey(process.env),
       NEXT_PUBLIC_E2E_ENABLED: 'true',
       NEXT_DISABLE_DEV_OVERLAY: '1',
     },

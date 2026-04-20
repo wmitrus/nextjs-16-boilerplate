@@ -1,25 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { test, expect } from '@playwright/test';
 
-function resolveInternalApiKey(): string {
-  const fromProcess = process.env.INTERNAL_API_KEY?.trim();
-  if (fromProcess) {
-    return fromProcess;
-  }
-
-  const envLocalPath = path.resolve(process.cwd(), '.env.local');
-  if (fs.existsSync(envLocalPath)) {
-    const content = fs.readFileSync(envLocalPath, 'utf8');
-    const match = content.match(/^INTERNAL_API_KEY\s*=\s*(.+)$/m);
-    if (match?.[1]) {
-      return match[1].trim().replace(/^['"]|['"]$/g, '');
-    }
-  }
-
-  return 'test-internal-api-key';
-}
+import { resolveInternalApiKey } from './internal-api-key';
 
 test.describe('Security Architecture E2E', () => {
   test('should have security headers on home page', async ({ page }) => {

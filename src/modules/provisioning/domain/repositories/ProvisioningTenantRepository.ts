@@ -1,7 +1,7 @@
 import type { ExternalAuthProvider } from '@/core/contracts/identity';
 
 export interface ResolvedTenant {
-  readonly internalTenantId: string;
+  readonly internalOrganizationId: string;
   readonly created: boolean;
 }
 
@@ -12,7 +12,7 @@ export interface ResolvedTenant {
 export interface ProvisioningTenantRepository {
   resolveOrCreateTenant(
     provider: ExternalAuthProvider,
-    externalTenantId: string,
+    externalOrgId: string,
   ): Promise<ResolvedTenant>;
 
   resolveSingleTenant(tenantId: string): Promise<ResolvedTenant>;

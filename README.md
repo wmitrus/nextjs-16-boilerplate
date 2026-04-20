@@ -52,10 +52,10 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - DB tests (local Postgres, Podman-first):
 
   ```bash
-  pnpm db:local:up
-  pnpm db:migrate:local
+  pnpm db:test:up
+  pnpm db:test:migrate
   pnpm test:db:local
-  pnpm db:local:down
+  pnpm db:test:down
   ```
 
 - E2E tests: `pnpm e2e`
@@ -75,11 +75,21 @@ GitHub Actions E2E entrypoints:
 For the full testing matrix, config mapping, CI flow, and troubleshooting, see:
 
 - [docs/usage/03 - Testing Usage & DB Workflows.md](./docs/usage/03%20-%20Testing%20Usage%20%26%20DB%20Workflows.md)
+- [docs/local-db.md](./docs/local-db.md)
 
 ## Database Migrations
 
+Canonical DB command reference:
+
+- [docs/local-db.md](./docs/local-db.md)
+
 - `pnpm db:generate` → generate migration files (dev config)
-- `pnpm db:migrate:dev` → apply migrations to local PGLite
+- `pnpm db:pglite:migrate` → apply migrations to local PGLite
+- `pnpm db:pglite:seed` → seed local PGLite
+- `pnpm db:pglite:studio` → open Drizzle Studio for local PGLite
+- `pnpm db:pglite:reset` → reset local PGLite (wipe + migrate + seed)
+- `pnpm db:dev:migrate` → apply migrations to the local dev Postgres container (`app_dev` on `127.0.0.1:5432`)
+- `pnpm db:test:migrate` → apply migrations to the local test Postgres container (`app_test` on `127.0.0.1:5433`)
 - `pnpm db:migrate:prod` → apply migrations to Postgres using `DATABASE_URL`
 
 Rules:
@@ -87,16 +97,17 @@ Rules:
 - Never run migrations automatically in production runtime.
 - Commit migration files to the repository.
 - Keep `DATABASE_URL` server-side only.
+- Use only the explicit command families: `db:pglite:*`, `db:dev:*`, and `db:test:*`, except for the explicitly permitted prod migration commands `db:migrate:prod` and `db:migrate:prod:local`.
 
 ## Local DB CI Test Mode (Podman-first)
 
 This repo defaults local compose operations to Podman.
 
 ```bash
-pnpm db:local:up
-pnpm db:migrate:local
+pnpm db:test:up
+pnpm db:test:migrate
 pnpm test:db:local
-pnpm db:local:down
+pnpm db:test:down
 ```
 
 DB URL used by local DB tests:
@@ -106,13 +117,13 @@ DB URL used by local DB tests:
 Docker users can opt in with one env var:
 
 ```bash
-DB_COMPOSE_ENGINE=docker pnpm db:local:up
+DB_COMPOSE_ENGINE=docker pnpm db:test:up
 ```
 
 Compose file selection is automatic (`compose.yml`, `podman-compose.yml`, `docker-compose.yml`) and can be overridden with:
 
 ```bash
-DB_COMPOSE_FILE=podman-compose.yml pnpm db:local:up
+DB_COMPOSE_FILE=podman-compose.yml pnpm db:test:up
 ```
 
 ## Architecture PR Gate (Modular Monolith)

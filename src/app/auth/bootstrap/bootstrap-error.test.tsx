@@ -69,7 +69,7 @@ describe('BootstrapErrorUI', () => {
   describe('db_error adapter-aware messages', () => {
     it('shows pglite reset instructions when dbDriver is pglite', () => {
       render(<BootstrapErrorUI error="db_error" dbDriver="pglite" />);
-      expect(screen.getByText(/pnpm db:reset:pglite/)).toBeInTheDocument();
+      expect(screen.getByText(/pnpm db:pglite:reset/)).toBeInTheDocument();
       expect(screen.queryByText(/pnpm db:dev:up/)).not.toBeInTheDocument();
     });
 
@@ -77,14 +77,15 @@ describe('BootstrapErrorUI', () => {
       render(<BootstrapErrorUI error="db_error" dbDriver="postgres" />);
       expect(screen.getByText(/pnpm db:dev:up/)).toBeInTheDocument();
       expect(screen.getByText(/pnpm db:dev:migrate/)).toBeInTheDocument();
+      expect(screen.getByText(/pnpm db:dev:reset --force/)).toBeInTheDocument();
       expect(
-        screen.queryByText(/pnpm db:reset:pglite/),
+        screen.queryByText(/pnpm db:pglite:reset/),
       ).not.toBeInTheDocument();
     });
 
     it('defaults to pglite instructions when dbDriver is undefined', () => {
       render(<BootstrapErrorUI error="db_error" />);
-      expect(screen.getByText(/pnpm db:reset:pglite/)).toBeInTheDocument();
+      expect(screen.getByText(/pnpm db:pglite:reset/)).toBeInTheDocument();
     });
   });
 

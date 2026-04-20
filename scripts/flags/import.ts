@@ -10,9 +10,9 @@ import type { DrizzleDb } from '@/core/db/types';
 
 import type { FlagsFile } from './types';
 import {
-  assertPathWithinBase,
   isSchemaNotFoundError,
   parseArg,
+  readTextFileWithinBase,
   resolveDriver,
   resolveProvider,
 } from './utils';
@@ -71,8 +71,7 @@ function readInput(filePath: string | undefined): FlagsFile {
 
   if (filePath) {
     const resolved = path.resolve(filePath);
-    assertPathWithinBase(resolved, process.cwd());
-    raw = fs.readFileSync(resolved, 'utf8');
+    raw = readTextFileWithinBase(resolved, process.cwd());
   } else {
     raw = fs.readFileSync('/dev/stdin', 'utf8');
   }
@@ -161,8 +160,13 @@ async function run(): Promise<void> {
     await upsertFlags(dbRuntime.db, data);
   } catch (err) {
     if (isSchemaNotFoundError(err)) {
+      const migrationCommand =
+        driver === 'postgres'
+          ? 'pnpm db:dev:migrate'
+          : 'pnpm db:pglite:migrate';
+
       console.error(
-        "[flags:import] DB schema not ready. Run 'pnpm db:migrate:dev' first to apply the feature_flags migration.",
+        `[flags:import] DB schema not ready. Run '${migrationCommand}' first to apply the feature_flags migration.`,
       );
       process.exit(1);
     }

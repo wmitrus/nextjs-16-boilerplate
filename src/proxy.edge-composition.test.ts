@@ -117,7 +117,11 @@ describe('Proxy edge composition root', () => {
       getCurrentIdentity: vi.fn().mockResolvedValue(null),
     };
     const tenantResolver = {
-      resolve: vi.fn().mockResolvedValue({ tenantId: 't1', userId: 'u1' }),
+      resolve: vi.fn().mockResolvedValue({
+        organizationId: 't1',
+        tenantId: 't1',
+        userId: 'u1',
+      }),
     };
     const userRepository = {
       findById: vi.fn().mockResolvedValue(null),

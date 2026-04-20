@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import path from 'node:path';
+
+import { pathExistsWithinBase } from './lib/fs-guards.mjs';
 
 function assertPathWithinBase(resolvedPath, baseDir) {
   const normalizedBase = path.resolve(baseDir);
@@ -84,21 +85,22 @@ function pickComposeCommand() {
 function pickComposeFile() {
   const explicitFile = process.env.DB_COMPOSE_FILE?.trim();
   if (explicitFile) {
-    assertPathWithinBase(path.resolve(explicitFile), process.cwd());
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path validated by assertPathWithinBase above
-    if (!existsSync(explicitFile)) {
+    const resolvedExplicitFile = path.resolve(explicitFile);
+
+    assertPathWithinBase(resolvedExplicitFile, process.cwd());
+    if (
+      !pathExistsWithinBase(resolvedExplicitFile, process.cwd(), 'compose file')
+    ) {
       throw new Error(
         `[compose-db-local] DB_COMPOSE_FILE points to a missing file: ${explicitFile}`,
       );
     }
-    return explicitFile;
+    return resolvedExplicitFile;
   }
 
-  /* eslint-disable security/detect-non-literal-fs-filename -- candidate values are statically typed to three hardcoded literal strings in COMPOSE_FILE_CANDIDATES */
   const detectedFile = COMPOSE_FILE_CANDIDATES.find((candidate) =>
-    existsSync(candidate),
+    pathExistsWithinBase(candidate, process.cwd(), 'compose file candidate'),
   );
-  /* eslint-enable security/detect-non-literal-fs-filename */
 
   if (!detectedFile) {
     throw new Error(

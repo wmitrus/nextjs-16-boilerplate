@@ -40,8 +40,8 @@ DATABASE_URL=file:./data/pglite
 
 ```bash
 pnpm env:check
-pnpm db:migrate:dev
-pnpm db:seed
+pnpm db:pglite:migrate
+pnpm db:pglite:seed
 pnpm dev
 ```
 

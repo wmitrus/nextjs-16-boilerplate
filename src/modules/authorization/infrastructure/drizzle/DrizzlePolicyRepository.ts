@@ -32,8 +32,8 @@ export class DrizzlePolicyRepository implements PolicyRepository {
       .where(
         and(
           or(
-            eq(policiesTable.tenantId, tenantId),
-            isNull(policiesTable.tenantId),
+            eq(policiesTable.organizationId, tenantId),
+            isNull(policiesTable.organizationId),
           ),
           roleScopeFilter,
         ),

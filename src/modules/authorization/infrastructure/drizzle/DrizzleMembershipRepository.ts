@@ -2,8 +2,8 @@ import { and, eq } from 'drizzle-orm';
 
 import type {
   MembershipRepository,
+  OrganizationId,
   SubjectId,
-  TenantId,
 } from '@/core/contracts/repositories';
 import type { DrizzleDb } from '@/core/db';
 
@@ -19,11 +19,11 @@ function isUuid(value: string): boolean {
 export class DrizzleMembershipRepository implements MembershipRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async isMember(subjectId: SubjectId, tenantId: TenantId): Promise<boolean> {
-    // External identity providers (e.g. Clerk) may emit non-UUID identifiers.
-    // This repository is backed by UUID columns, so invalid identifiers cannot
-    // be members of the persisted authorization graph.
-    if (!isUuid(subjectId) || !isUuid(tenantId)) {
+  async isMember(
+    subjectId: SubjectId,
+    organizationId: OrganizationId,
+  ): Promise<boolean> {
+    if (!isUuid(subjectId) || !isUuid(organizationId)) {
       return false;
     }
 
@@ -33,7 +33,7 @@ export class DrizzleMembershipRepository implements MembershipRepository {
       .where(
         and(
           eq(membershipsTable.userId, subjectId),
-          eq(membershipsTable.tenantId, tenantId),
+          eq(membershipsTable.organizationId, organizationId),
         ),
       )
       .limit(1);

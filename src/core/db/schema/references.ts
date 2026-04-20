@@ -7,3 +7,7 @@ export const usersReferenceTable = pgTable('users', {
 export const tenantsReferenceTable = pgTable('tenants', {
   id: uuid('id').primaryKey(),
 });
+
+export const organizationsReferenceTable = pgTable('organizations', {
+  id: uuid('id').primaryKey(),
+});

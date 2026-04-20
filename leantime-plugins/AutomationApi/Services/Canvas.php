@@ -44,6 +44,10 @@ class Canvas
         'currentValue',
         'data',
         'data1',
+        'data2',
+        'data3',
+        'data4',
+        'data5',
         'description',
         'effort',
         'endDate',
@@ -446,6 +450,19 @@ class Canvas
         if (! array_key_exists('status', $payload)) {
             $statusLabels = $this->repository($boardType)->getStatusLabels();
             $payload['status'] = $statusLabels === [] ? '' : array_key_first($statusLabels);
+        }
+
+        if (array_key_exists('relates', $payload) === false) {
+            $relatesLabels = $this->repository($boardType)->getRelatesLabels();
+            $payload['relates'] = $relatesLabels === [] ? '' : array_key_first($relatesLabels);
+        }
+
+        // Ensure all optional text fields are empty strings (not NULL) to prevent
+        // canvas renderer errors when the UI performs string operations on these values.
+        foreach (['assumptions', 'conclusion', 'data', 'data1', 'data2', 'data3', 'data4', 'data5', 'action', 'setting', 'tags', 'kpi'] as $textField) {
+            if (array_key_exists($textField, $payload) === false || $payload[$textField] === null) {
+                $payload[$textField] = '';
+            }
         }
 
         return $payload;

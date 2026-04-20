@@ -1,8 +1,3 @@
-/* eslint-disable security/detect-unsafe-regex -- E2E test URL matchers; patterns are static Playwright assertions, no user-controlled input, no production exposure */
-/* eslint-disable security/detect-non-literal-fs-filename -- filePath is always path.join(process.cwd(), static-literal); no user input, E2E test only (SEC-05) */
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
 import { createPageObjects } from '@clerk/testing/playwright/unstable';
 import {
   test,
@@ -23,6 +18,7 @@ import {
   signInClerkPersonalNewUserE2E,
   signInSingleNewUserE2E,
 } from './clerk-auth';
+import { readProjectTextFileIfExists, resolveProjectPath } from './env-files';
 import {
   getRuntimeProfile,
   isMissingSeededDefaultTenant,
@@ -247,31 +243,66 @@ function createBrowserObservabilityRecorder(
 }
 
 function getServerLogFilePath(): string {
-  return path.join(process.cwd(), process.env.LOG_DIR ?? 'logs', 'server.log');
+  return resolveProjectPath(process.env.LOG_DIR ?? 'logs', 'server.log');
 }
 
 async function readServerLogEntries(): Promise<ServerLogEntry[]> {
-  try {
-    const fileContents = await readFile(getServerLogFilePath(), 'utf8');
+  const fileContents = readProjectTextFileIfExists(
+    getServerLogFilePath(),
+    'server log file',
+  );
 
-    return fileContents
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .flatMap((line) => {
-        try {
-          return [JSON.parse(line) as ServerLogEntry];
-        } catch {
-          return [];
-        }
-      });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
-    }
-
-    throw error;
+  if (!fileContents) {
+    return [];
   }
+
+  return fileContents
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as ServerLogEntry];
+      } catch {
+        return [];
+      }
+    });
+}
+
+async function waitForPathnameIn(
+  page: Page,
+  expectedPathnames: readonly string[],
+): Promise<void> {
+  await page.waitForFunction(
+    (pathnames) => pathnames.includes(window.location.pathname),
+    expectedPathnames,
+  );
+}
+
+async function expectPathname(
+  page: Page,
+  expectedPathname: string,
+): Promise<void> {
+  await expect
+    .poll(() => getPathname(page.url()), {
+      message: `Expected pathname to be ${expectedPathname}`,
+    })
+    .toBe(expectedPathname);
+}
+
+async function expectOptionalRedirectUrlParam(
+  page: Page,
+  expectedValues: readonly (string | null)[],
+): Promise<void> {
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('redirect_url'))
+    .toContain(
+      new URL(page.url()).searchParams.get('redirect_url') as string | null,
+    );
+
+  expect(expectedValues).toContain(
+    new URL(page.url()).searchParams.get('redirect_url'),
+  );
 }
 
 function matchesConsoleEvent(
@@ -433,13 +464,13 @@ async function createCompletedSingleUserState(page: Page): Promise<void> {
   await signInSingleNewUserE2E(page);
 
   await page.goto('/auth/bootstrap/start?redirect_url=/users');
-  await page.waitForURL(/\/(?:onboarding(?:\?.*)?|users)$/);
+  await waitForPathnameIn(page, ['/onboarding', '/users']);
 
   if (getPathname(page.url()) === '/onboarding') {
     await completeOnboarding(page);
   }
 
-  await expect(page).toHaveURL(/\/users$/);
+  await expectPathname(page, '/users');
 }
 
 async function expectProvisioningReady(
@@ -707,7 +738,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await page.goto('/users');
 
-    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectPathname(page, '/onboarding');
     await expectOnboardingIncomplete(page);
   });
 
@@ -727,7 +758,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await page.goto('/users');
 
-    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectPathname(page, '/onboarding');
     await expectOnboardingIncomplete(page);
   });
 
@@ -826,7 +857,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await page.goto('/dashboard');
 
-    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectPathname(page, '/onboarding');
     await expectOnboardingIncomplete(page);
   });
 
@@ -848,7 +879,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await page.goto('/users');
 
-    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectPathname(page, '/onboarding');
     await expectOnboardingIncomplete(page);
   });
 
@@ -1073,10 +1104,10 @@ test.describe('Provisioning Runtime E2E', () => {
     await createIncompleteSingleUserState(page);
     const runtimeSignals = createRuntimeSignalRecorder(page);
 
-    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectPathname(page, '/onboarding');
     await page.reload();
 
-    await expect(page).toHaveURL(/\/onboarding(?:\?.*)?$/);
+    await expectPathname(page, '/onboarding');
     await expectOnboardingIncomplete(page);
     await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
     await waitForRouteToSettle(page);
@@ -1139,7 +1170,8 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await page.goto('/users');
 
-    await expect(page).toHaveURL(/\/sign-in(?:\?.*redirect_url=%2Fusers.*)?$/);
+    await expectPathname(page, '/sign-in');
+    await expectOptionalRedirectUrlParam(page, [null, '/users']);
     await expect(page.getByText(/sign in/i).first()).toBeVisible();
     await expect(page.getByText(/user management/i)).not.toBeVisible();
     await waitForRouteToSettle(page);

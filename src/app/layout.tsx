@@ -114,7 +114,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {isBetterStackWebVitalsEnabled && <BetterStackWebVitalsProvider />}
+        {isBetterStackWebVitalsEnabled && (
+          <Suspense fallback={null}>
+            <BetterStackWebVitalsProvider />
+          </Suspense>
+        )}
         {isClerkProvider ? (
           <Suspense fallback={<RootLayoutShell />}>
             <ClerkProvider

@@ -8,7 +8,7 @@ describe('decideNewMembershipRole (unit: role mapping)', () => {
     externalUserId: 'user_001',
     tenancyMode: 'org' as const,
     tenantContextSource: 'provider' as const,
-    tenantExternalId: 'org_001',
+    orgExternalId: 'org_001',
   };
 
   it('maps org:admin claim to owner', () => {

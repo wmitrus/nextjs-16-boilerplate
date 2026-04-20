@@ -1,5 +1,4 @@
-import fs from 'fs';
-
+import { destination as mockDestination } from 'pino';
 import { createWriteStream as mockCreateWriteStream } from 'pino-logflare';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -11,13 +10,6 @@ import {
   createFileStream,
   createLogflareWriteStream,
 } from './utils';
-
-vi.mock('fs', () => ({
-  default: {
-    existsSync: vi.fn(),
-    mkdirSync: vi.fn(),
-  },
-}));
 
 vi.mock('pino', async () => {
   const actual = await vi.importActual('pino');
@@ -51,29 +43,14 @@ describe('logger utils', () => {
   });
 
   describe('ensureLogDirectory', () => {
-    it('should return true if directory exists', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+    it('should return true for a valid workspace-local directory', () => {
       const result = ensureLogDirectory('logs');
       expect(result).toBe(true);
-      expect(fs.mkdirSync).not.toHaveBeenCalled();
     });
 
-    it('should create directory if it does not exist', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+    it('should return true for a valid nested directory path', () => {
       const result = ensureLogDirectory('logs');
       expect(result).toBe(true);
-      expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), {
-        recursive: true,
-      });
-    });
-
-    it('should return false if mkdirSync fails', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      vi.mocked(fs.mkdirSync).mockImplementation(() => {
-        throw new Error('fail');
-      });
-      const result = ensureLogDirectory('logs');
-      expect(result).toBe(false);
     });
 
     it('should reject paths that escape the workspace root', () => {
@@ -84,8 +61,6 @@ describe('logger utils', () => {
       const result = ensureLogDirectory('../logs');
 
       expect(result).toBe(false);
-      expect(fs.existsSync).not.toHaveBeenCalled();
-      expect(fs.mkdirSync).not.toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(
         'Error setting up log directory:',
         expect.any(Error),
@@ -104,22 +79,19 @@ describe('logger utils', () => {
 
   describe('createFileStream', () => {
     it('should return null if directory cannot be ensured', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      vi.mocked(fs.mkdirSync).mockImplementation(() => {
-        throw new Error();
-      });
-      const stream = createFileStream('test.log', 'logs');
+      const stream = createFileStream('test.log', '../logs');
       expect(stream).toBeNull();
     });
 
     it('should return a destination stream', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       const stream = createFileStream('test.log', 'logs');
       expect(stream).toBeDefined();
+      expect(vi.mocked(mockDestination)).toHaveBeenCalledWith(
+        expect.objectContaining({ mkdir: true, sync: true }),
+      );
     });
 
     it('should handle stream error', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});

@@ -18,6 +18,7 @@ This folder contains practical runbooks for deterministic local setup and runtim
 
 ## Recommended Companion Reading
 
+- [Database Commands & Local Database Guide](../local-db.md)
 - [Environment Requirements](../features/ENV-requirements.md)
 - [Clerk Authentication](../features/15%20-%20Clerk%20Authentication.md)
 - [Clerk Onboarding](../features/17%20-%20Clerk%20Onboarding.md)

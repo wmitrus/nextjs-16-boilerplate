@@ -1,5 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import {
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+} from './lib/fs-guards-shared';
 
 /**
  * Side-effect module: loads .env, .env.local, and Vercel-pulled env files into
@@ -23,12 +27,16 @@ const ROOT = process.cwd();
 export const loadedFiles: string[] = [];
 
 function applyEnvFile(filePath: string): void {
-  // filePath is always resolve(process.cwd(), '<static-literal or safe env-derived path>').
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  if (!existsSync(filePath)) return;
+  const resolvedFilePath = resolve(filePath);
+  if (!pathExistsWithinBase(resolvedFilePath, ROOT, 'environment file')) return;
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const content = readFileSync(filePath, 'utf8');
+  const content = readTextFileWithinBase(
+    resolvedFilePath,
+    ROOT,
+    'environment file',
+  );
+  const pendingEntries: Array<[string, string]> = [];
+
   for (const rawLine of content.split('\n')) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
@@ -41,10 +49,11 @@ function applyEnvFile(filePath: string): void {
     const val = rawVal.trim().replace(/^(['"])([\s\S]*)\1$/, '$2');
 
     if (key && !(key in process.env)) {
-      // eslint-disable-next-line security/detect-object-injection -- key is parsed from a local env file on disk, not from user/request input
-      process.env[key] = val;
+      pendingEntries.push([key, val]);
     }
   }
+
+  Object.assign(process.env, Object.fromEntries(pendingEntries));
 
   loadedFiles.push(filePath.replace(ROOT, '.'));
 }

@@ -2,11 +2,23 @@ import { describe, expect, it } from 'vitest';
 
 import { CookieActiveTenantSource } from './CookieActiveTenantSource';
 
+function getEntryValue(
+  entries: Record<string, string>,
+  targetName: string,
+): string | undefined {
+  for (const [entryName, entryValue] of Object.entries(entries)) {
+    if (entryName === targetName) {
+      return entryValue;
+    }
+  }
+
+  return undefined;
+}
+
 function makeCookies(entries: Record<string, string>) {
   return {
     get: (name: string) => {
-      // eslint-disable-next-line security/detect-object-injection -- test helper; name is a controlled cookie key from test cases, not user input
-      const entry = entries[name];
+      const entry = getEntryValue(entries, name);
       return entry ? { value: entry } : undefined;
     },
   };

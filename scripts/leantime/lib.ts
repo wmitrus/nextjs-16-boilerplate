@@ -1,5 +1,9 @@
-import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
+
+import {
+  readTextFileWithinBase,
+  statPathWithinBase,
+} from '../lib/fs-guards-shared';
 
 export interface LeantimeConfigInput {
   apiKey?: string;
@@ -65,9 +69,15 @@ const DEFAULT_RPC_PATH = 'api/jsonrpc';
 const DEFAULT_TIMEOUT_MS = 30000;
 
 function readEnv(name: string): string | undefined {
-  // eslint-disable-next-line security/detect-object-injection -- name is selected from static Leantime CLI env var names in this script
-  const value = process.env[name];
-  return value && value.trim() !== '' ? value.trim() : undefined;
+  for (const [envName, envValue] of Object.entries(process.env)) {
+    if (envName !== name) {
+      continue;
+    }
+
+    return envValue && envValue.trim() !== '' ? envValue.trim() : undefined;
+  }
+
+  return undefined;
 }
 
 function normalizeCliArgv(argv: string[]): string[] {
@@ -297,18 +307,21 @@ function readInputFile(filePath: string): string {
   const resolvedPath = isAbsolute(filePath)
     ? filePath
     : resolve(process.cwd(), filePath);
-  // resolvedPath is normalized from CLI input and used only after verifying the
-  // target exists and is a regular file.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const stats = statSync(resolvedPath);
+  const stats = statPathWithinBase(
+    resolvedPath,
+    process.cwd(),
+    'Leantime input file',
+  );
 
-  if (!stats.isFile()) {
+  if (!stats || !stats.isFile()) {
     throw new Error(`Input path "${filePath}" must point to a file.`);
   }
 
-  // resolvedPath is normalized and checked as an existing regular file above.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  return readFileSync(resolvedPath, 'utf8');
+  return readTextFileWithinBase(
+    resolvedPath,
+    process.cwd(),
+    'Leantime input file',
+  );
 }
 
 export function readStructuredInput(argv: string[]): unknown {

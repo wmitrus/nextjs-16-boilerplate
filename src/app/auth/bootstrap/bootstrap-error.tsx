@@ -7,9 +7,9 @@ type DbDriver = 'pglite' | 'postgres';
 
 const DB_ERROR_MESSAGES: Record<DbDriver, string> = {
   pglite:
-    'Local database error — the dev database may be corrupted. Run `pnpm db:reset:pglite` and restart the dev server (`pnpm dev`), then try signing in again.',
+    'Local database error — the dev database may be corrupted. Run `pnpm db:pglite:reset` and restart the dev server (`pnpm dev`), then try signing in again.',
   postgres:
-    'Database error during sign-in. Ensure the dev database container is running (`pnpm db:dev:up`) and migrations are applied (`pnpm db:dev:migrate`), then try signing in again. Check the dev server logs for the full error.',
+    'Database error during sign-in. Ensure the dev database container is running (`pnpm db:dev:up`) and migrations are applied (`pnpm db:dev:migrate`). If migrations already report success but sign-in still fails, rebuild the local dev database with `pnpm db:dev:reset --force`, then try again. Check the dev server logs for the full error.',
 };
 
 const ERROR_MESSAGES: Record<
@@ -34,6 +34,24 @@ interface BootstrapErrorUIProps {
   dbDriver?: DbDriver;
 }
 
+function getBootstrapErrorMessage(
+  error: BootstrapErrorUIProps['error'],
+  dbDriver: DbDriver | undefined,
+): string {
+  switch (error) {
+    case 'db_error':
+      return dbDriver === 'postgres'
+        ? DB_ERROR_MESSAGES.postgres
+        : DB_ERROR_MESSAGES.pglite;
+    case 'cross_provider_linking':
+      return ERROR_MESSAGES.cross_provider_linking;
+    case 'quota_exceeded':
+      return ERROR_MESSAGES.quota_exceeded;
+    case 'tenant_config':
+      return ERROR_MESSAGES.tenant_config;
+  }
+}
+
 export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
   const { signOut } = useClerk();
   const router = useRouter();
@@ -47,11 +65,7 @@ export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
     }
   };
 
-  const message =
-    error === 'db_error'
-      ? DB_ERROR_MESSAGES[dbDriver ?? 'pglite']
-      : // eslint-disable-next-line security/detect-object-injection -- error is typed as a finite union; ERROR_MESSAGES keys match exactly
-        ERROR_MESSAGES[error];
+  const message = getBootstrapErrorMessage(error, dbDriver);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">

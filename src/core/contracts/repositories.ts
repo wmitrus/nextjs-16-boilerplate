@@ -3,7 +3,7 @@ import type {
   AuthorizationContext,
   TenantAttributes,
 } from './authorization';
-import type { RoleId, SubjectId, TenantId } from './primitives';
+import type { OrganizationId, RoleId, SubjectId, TenantId } from './primitives';
 
 /**
  * Re-export for convenience.
@@ -26,10 +26,11 @@ export type { AuthorizationContext };
  *
  * Domain semantics:
  * - SubjectId: actor attempting an action (user, service account, system job).
- * - TenantId: multi-tenant organizational boundary; must be validated upstream.
- * - RoleRepository: maps subject → role within a tenant; must not know permissions or policies.
+ * - TenantId: top-level isolation boundary.
+ * - OrganizationId: operational unit within a tenant; owns memberships, roles, policies.
+ * - RoleRepository: maps subject → role within an organization; must not know permissions or policies.
  * - PermissionRepository: maps role → permission; must not make decisions.
- * - MembershipRepository: determines tenant memberships; must not return roles or policies.
+ * - MembershipRepository: determines organization memberships; must not return roles or policies.
  * - Policy: atomic rule; pure, side-effect free; evaluated by PolicyEngine.
  * - PolicyRepository: supplies policies; must not resolve allow/deny.
  *
@@ -40,7 +41,7 @@ export type { AuthorizationContext };
  * This file defines contracts only.
  */
 
-export type { SubjectId, TenantId, RoleId };
+export type { OrganizationId, SubjectId, TenantId, RoleId };
 
 /**
  * Resolves roles assigned to a subject within a tenant.
@@ -55,14 +56,17 @@ export interface RoleRepository {
 }
 
 /**
- * Resolves tenant membership for a subject.
+ * Resolves organization membership for a subject.
  *
  * Used for multi-tenant boundary validation.
- * Asking directly whether a subject is a member of a specific tenant is
+ * Asking directly whether a subject is a member of a specific organization is
  * more efficient and natural than fetching the full membership list.
  */
 export interface MembershipRepository {
-  isMember(subjectId: SubjectId, tenantId: TenantId): Promise<boolean>;
+  isMember(
+    subjectId: SubjectId,
+    organizationId: OrganizationId,
+  ): Promise<boolean>;
 }
 
 /**

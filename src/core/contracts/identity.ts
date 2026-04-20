@@ -57,7 +57,7 @@ export interface IdentityProvider {
  * INVARIANT: All fields are external provider claims — never internal DB IDs.
  * - userId: external user ID from the provider (e.g. Clerk user_xxx)
  * - email: email claim from the provider session
- * - tenantExternalId: external organization/tenant ID from the provider (e.g. Clerk org_xxx)
+ * - orgExternalId: external organization ID from the provider (e.g. Clerk org_xxx)
  * - tenantRole: role claim from the provider (e.g. 'org:admin', 'org:member')
  *
  * Must remain framework-agnostic — populated by infrastructure adapters (e.g. Clerk).
@@ -73,7 +73,11 @@ export interface RequestIdentitySourceData {
    * Used by ProvisioningService to gate cross-provider email-based account linking.
    */
   readonly emailVerified?: boolean;
-  readonly tenantExternalId?: string;
+  /**
+   * External organization ID from the auth provider (e.g. Clerk org_xxx).
+   * Replaces tenantExternalId — organizations are the canonical operational unit.
+   */
+  readonly orgExternalId?: string;
   readonly tenantRole?: string;
 }
 
@@ -129,7 +133,7 @@ export type ExternalAuthProvider = 'clerk' | 'authjs' | 'supabase' | 'neon';
  * INVARIANT: Pure read-path — zero write side-effects (no INSERT/UPDATE/UPSERT).
  * Returns null when no mapping exists. Never auto-creates records.
  *
- * Write-path (create/link user, tenant, membership, role) belongs exclusively
+ * Write-path (create/link user, organization, membership, role) belongs exclusively
  * to ProvisioningService.ensureProvisioned().
  */
 export interface InternalIdentityLookup {
@@ -143,18 +147,18 @@ export interface InternalIdentityLookup {
   ): Promise<string | null>;
 
   /**
-   * Looks up the internal tenant UUID for a given provider + external tenant ID pair.
-   * Returns null if no mapping exists (tenant not yet provisioned).
+   * Looks up the internal organization UUID for a given provider + external org ID pair.
+   * Returns null if no mapping exists (organization not yet provisioned).
    */
-  findInternalTenantId(
+  findInternalOrganizationId(
     provider: ExternalAuthProvider,
-    externalTenantId: string,
+    externalOrgId: string,
   ): Promise<string | null>;
 
   /**
-   * Looks up the personal tenant UUID for a given internal user UUID.
-   * Used in TENANCY_MODE=personal where each user has exactly one personal tenant.
-   * Returns null if no personal tenant has been provisioned for this user yet.
+   * Looks up the personal organization UUID for a given internal user UUID.
+   * Used in TENANCY_MODE=personal where each user has exactly one personal organization.
+   * Returns null if no personal organization has been provisioned for this user yet.
    */
-  findPersonalTenantId(internalUserId: string): Promise<string | null>;
+  findPersonalOrganizationId(internalUserId: string): Promise<string | null>;
 }

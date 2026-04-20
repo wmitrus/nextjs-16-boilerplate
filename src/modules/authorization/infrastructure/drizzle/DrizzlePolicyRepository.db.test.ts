@@ -10,7 +10,7 @@ import { seedUsers } from '@/modules/user/infrastructure/drizzle/seed';
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
-let acmeTenantId: string;
+let acmeOrgId: string;
 let acmeOwnerRoleId: string;
 let acmeMemberRoleId: string;
 
@@ -18,7 +18,7 @@ beforeAll(async () => {
   testDb = await resolveTestDb();
   const users = await seedUsers(testDb.db);
   const auth = await seedAuthorization(testDb.db, { users });
-  acmeTenantId = auth.tenants.acme.id;
+  acmeOrgId = auth.orgs.acmeHq.id;
   acmeOwnerRoleId = auth.roles.acmeOwner.id;
   acmeMemberRoleId = auth.roles.acmeMember.id;
 });
@@ -28,18 +28,18 @@ afterAll(async () => {
 });
 
 const baseContext: AuthorizationContext = {
-  tenant: { tenantId: '10000000-0000-4000-8000-000000000001' },
+  tenant: { tenantId: '15000000-0000-4000-8000-000000000001' },
   subject: { id: '00000000-0000-0000-0000-000000000001' },
   resource: { type: 'user' },
   action: 'user:read',
 };
 
 describe('DrizzlePolicyRepository (real DB)', () => {
-  it('returns policies for a known tenant + assigned role', async () => {
+  it('returns policies for a known org + assigned role', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies({
       ...baseContext,
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
     });
 
@@ -50,7 +50,7 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies({
       ...baseContext,
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
     });
 
@@ -62,7 +62,7 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     expect(wildcardActions).toBeUndefined();
   });
 
-  it('returns empty array for unknown tenant', async () => {
+  it('returns empty array for unknown org', async () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies({
       ...baseContext,
@@ -77,7 +77,7 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies({
       ...baseContext,
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: baseContext.subject.id, roles: [acmeOwnerRoleId] },
       action: 'user:invite',
     });
@@ -95,7 +95,7 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies({
       ...baseContext,
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: baseContext.subject.id, roles: [acmeMemberRoleId] },
       action: 'user:invite',
     });
@@ -113,7 +113,7 @@ describe('DrizzlePolicyRepository (real DB)', () => {
     const repo = new DrizzlePolicyRepository(testDb.db);
     const policies = await repo.getPolicies({
       ...baseContext,
-      tenant: { tenantId: acmeTenantId },
+      tenant: { tenantId: acmeOrgId },
       subject: { id: baseContext.subject.id, roles: [acmeMemberRoleId] },
     });
 

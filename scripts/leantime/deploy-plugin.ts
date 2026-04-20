@@ -1,8 +1,14 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import {
+  createReadStreamWithinBase,
+  ensureDirectoryWithinBase,
+  readDirentsWithinBase,
+  statWithinBase,
+  writeTextFileWithinBase,
+} from '../lib/fs-guards-shared';
 
 interface DeployConfig {
   backupRoot: string;
@@ -49,9 +55,15 @@ const DEFAULT_SOURCE_DIR = 'leantime-plugins/AutomationApi';
 const DEFAULT_SSH_PORT = 22;
 
 function readEnv(name: string): string | undefined {
-  // eslint-disable-next-line security/detect-object-injection -- name is selected from local static env var names in this deploy script
-  const value = process.env[name];
-  return value && value.trim() !== '' ? value.trim() : undefined;
+  for (const [envName, envValue] of Object.entries(process.env)) {
+    if (envName !== name) {
+      continue;
+    }
+
+    return envValue && envValue.trim() !== '' ? envValue.trim() : undefined;
+  }
+
+  return undefined;
 }
 
 function requireEnv(name: string): string {
@@ -338,12 +350,13 @@ export async function sha256File(
   filePath: string,
   baseDir: string,
 ): Promise<string> {
-  const safePath = assertWithinBase(filePath, baseDir, 'sha256 file path');
-
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256');
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- safePath is confined with assertWithinBase at the sink
-    const stream = createReadStream(safePath);
+    const stream = createReadStreamWithinBase(
+      filePath,
+      baseDir,
+      'sha256 file path',
+    );
 
     stream.on('error', reject);
     stream.on('data', (chunk) => hash.update(chunk));
@@ -363,8 +376,11 @@ export async function listPluginFiles(
       sourceRoot,
       'plugin source directory',
     );
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- safeDir is confined with assertWithinBase at the sink
-    const entries = await readdir(safeDir, { withFileTypes: true });
+    const entries = await readDirentsWithinBase(
+      safeDir,
+      sourceRoot,
+      'plugin source directory',
+    );
 
     for (const entry of entries) {
       const absolute = assertWithinBase(
@@ -390,8 +406,11 @@ export async function listPluginFiles(
       }
 
       const safeFile = assertWithinBase(absolute, sourceRoot, 'plugin file');
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- safeFile is confined with assertWithinBase at the sink
-      const fileStat = await stat(safeFile);
+      const fileStat = await statWithinBase(
+        safeFile,
+        sourceRoot,
+        'plugin file',
+      );
       files.push({
         hash: await sha256File(safeFile, sourceRoot),
         localPath: safeFile,
@@ -431,8 +450,11 @@ async function writeManifest(
     process.cwd(),
     'manifest directory',
   );
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- safeManifestDir is confined to the workspace with assertWithinBase at the sink
-  await mkdir(safeManifestDir, { recursive: true });
+  await ensureDirectoryWithinBase(
+    safeManifestDir,
+    process.cwd(),
+    'manifest directory',
+  );
   const manifestPath = assertWithinBase(
     path.join(
       safeManifestDir,
@@ -452,11 +474,11 @@ async function writeManifest(
     user: config.user,
   };
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- manifestPath is confined to the manifest directory with assertWithinBase at the sink
-  await writeFile(
+  await writeTextFileWithinBase(
     manifestPath,
+    safeManifestDir,
     `${JSON.stringify(manifest, null, 2)}\n`,
-    'utf8',
+    'manifest path',
   );
   return manifestPath;
 }

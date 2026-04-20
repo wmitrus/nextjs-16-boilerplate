@@ -9,7 +9,9 @@
     "@chromatic-com/storybook",
     "@commitlint/cli",
     "@commitlint/config-conventional",
+    "@continuedev/cli",
     "@eslint/eslintrc",
+    "@logtail/pino",
     "@semantic-release/changelog",
     "@semantic-release/commit-analyzer",
     "@semantic-release/exec",
@@ -21,10 +23,12 @@
     "@storybook/addon-onboarding",
     "@tailwindcss/postcss",
     "@testing-library/user-event",
+    "@types/newrelic",
     "@types/node",
     "@types/react",
     "@types/react-dom",
     "@vitest/coverage-v8",
+    "cross-env",
     "eslint-plugin-jsx-a11y",
     "jest-environment-jsdom",
     "prettier-plugin-tailwindcss",
@@ -34,6 +38,7 @@
     "tsx",
     "undici",
     "drizzle-kit",
+    "newrelic",
     "postgres"
   ]
 }

@@ -69,6 +69,7 @@ describe('Middleware Integration', () => {
       onboardingComplete: true,
     });
     mockTenantResolver.resolve.mockResolvedValue({
+      organizationId: 't1',
       tenantId: 't1',
       userId: 'user_1',
     });

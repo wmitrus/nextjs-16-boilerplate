@@ -13,13 +13,18 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
+import {
+  ensureDirectoryWithinBase,
+  pathExistsWithinBase,
+} from './lib/fs-guards.mjs';
+
 const BINARY_NAME = 'codacy-cli-v2';
 const GITHUB_REPO = 'codacy/codacy-cli-v2';
+const LOCAL_ROOT = resolve(homedir(), '.local');
 const INSTALL_DIR = resolve(homedir(), '.local', 'bin');
 const BINARY_PATH = resolve(INSTALL_DIR, BINARY_NAME);
 const REQUESTED_VERSION = process.env.CODACY_CLI_V2_VERSION?.trim();
@@ -32,16 +37,26 @@ function detectPlatformSuffix() {
   const platform = process.platform;
   const arch = process.arch;
 
-  const map = {
-    'linux-x64': 'linux_amd64',
-    'linux-arm64': 'linux_arm64',
-    'darwin-x64': 'darwin_amd64',
-    'darwin-arm64': 'darwin_arm64',
-  };
-
   const key = `${platform}-${arch}`;
-  // eslint-disable-next-line security/detect-object-injection -- key is derived from process.platform + process.arch (Node.js constants), not user input
-  const suffix = map[key];
+  let suffix;
+
+  switch (key) {
+    case 'linux-x64':
+      suffix = 'linux_amd64';
+      break;
+    case 'linux-arm64':
+      suffix = 'linux_arm64';
+      break;
+    case 'darwin-x64':
+      suffix = 'darwin_amd64';
+      break;
+    case 'darwin-arm64':
+      suffix = 'darwin_arm64';
+      break;
+    default:
+      suffix = undefined;
+      break;
+  }
 
   if (!suffix) {
     console.error(
@@ -75,8 +90,7 @@ function resolveTargetVersion() {
 }
 
 function isInstalled() {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- BINARY_PATH is resolve(homedir(), '.local', 'bin', 'codacy-cli-v2') — no user input
-  return existsSync(BINARY_PATH);
+  return pathExistsWithinBase(BINARY_PATH, INSTALL_DIR, 'Codacy CLI binary');
 }
 
 function getCurrentVersion() {
@@ -170,10 +184,14 @@ if (
     console.log(`   Replacing installed version: ${installedVersion}`);
   }
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- INSTALL_DIR is resolve(homedir(), '.local', 'bin') — no user input
-  if (!existsSync(INSTALL_DIR)) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- same rationale as above
-    mkdirSync(INSTALL_DIR, { recursive: true });
+  if (
+    !pathExistsWithinBase(INSTALL_DIR, LOCAL_ROOT, 'Codacy install directory')
+  ) {
+    ensureDirectoryWithinBase(
+      INSTALL_DIR,
+      LOCAL_ROOT,
+      'Codacy install directory',
+    );
   }
 
   try {
@@ -206,7 +224,7 @@ console.log(
 );
 
 try {
-  execFileSync(BINARY_PATH, ['install'], {
+  execFileSync(resolve(BINARY_PATH), ['install'], {
     stdio: 'inherit',
     cwd: process.cwd(),
   });

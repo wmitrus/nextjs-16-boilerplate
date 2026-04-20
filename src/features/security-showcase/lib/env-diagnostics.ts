@@ -27,14 +27,20 @@ export interface EnvDiagnostics {
 }
 
 function getEnv(name: string): EnvValue {
-  // eslint-disable-next-line security/detect-object-injection -- name is always a hardcoded env var key from the call sites in this file
-  const value = process.env[name];
-  if (!value) {
-    return undefined;
+  for (const [envName, envValue] of Object.entries(process.env)) {
+    if (envName !== name) {
+      continue;
+    }
+
+    if (!envValue) {
+      return undefined;
+    }
+
+    const trimmed = envValue.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return undefined;
 }
 
 function maskValue(value: EnvValue): string | null {

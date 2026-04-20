@@ -15,13 +15,13 @@ import {
  * TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider
  *
  * Org context comes from the auth provider's org claim (e.g. Clerk Organizations).
- * Reads tenantExternalId from RequestIdentitySource, then resolves internal tenant UUID via DB lookup.
+ * Reads orgExternalId from RequestIdentitySource, then resolves internal organization UUID via DB lookup.
  *
  * Throws:
- * - MissingTenantContextError: if no tenantExternalId in provider claims
+ * - MissingTenantContextError: if no orgExternalId in provider claims
  * - TenantNotProvisionedError: if no internal mapping exists (onboarding required)
  */
-export class OrgProviderTenantResolver implements TenantResolver {
+export class ProviderOrganizationResolver implements TenantResolver {
   constructor(
     private readonly source: RequestIdentitySource,
     private readonly lookup: InternalIdentityLookup,
@@ -29,21 +29,21 @@ export class OrgProviderTenantResolver implements TenantResolver {
   ) {}
 
   async resolve(identity: Identity): Promise<TenantContext> {
-    const { tenantExternalId } = await this.source.get();
+    const { orgExternalId } = await this.source.get();
 
-    if (!tenantExternalId) {
+    if (!orgExternalId) {
       throw new MissingTenantContextError(
-        'Missing tenant context: auth provider did not supply tenantExternalId claim. ' +
+        'Missing tenant context: auth provider did not supply orgExternalId claim. ' +
           'Ensure the user belongs to an organization in the auth provider.',
       );
     }
 
-    const internalTenantId = await this.lookup.findInternalTenantId(
+    const internalOrganizationId = await this.lookup.findInternalOrganizationId(
       this.provider,
-      tenantExternalId,
+      orgExternalId,
     );
 
-    if (!internalTenantId) {
+    if (!internalOrganizationId) {
       throw new TenantNotProvisionedError(
         'Tenant not provisioned. The organization exists in the auth provider but has no internal mapping. ' +
           'Complete onboarding to provision the tenant.',
@@ -51,7 +51,8 @@ export class OrgProviderTenantResolver implements TenantResolver {
     }
 
     return {
-      tenantId: internalTenantId,
+      organizationId: internalOrganizationId,
+      tenantId: internalOrganizationId,
       userId: identity.id,
     };
   }

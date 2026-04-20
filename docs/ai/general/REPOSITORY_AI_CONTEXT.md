@@ -87,6 +87,24 @@ If code and docs disagree:
 
 ---
 
+## Project-Wide Implementation Anti-Patterns
+
+Project-wide implementation anti-patterns are maintained in:
+
+- `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md`
+
+Use that document when the work is a feature, fix, refactor, script change, or tooling change and the question is how to avoid reintroducing repository-wide cleanup classes.
+
+The anti-patterns document is for durable implementation guardrails such as:
+
+- boundary leaks into `shared/*` or delivery layers
+- dynamic dispatch and dynamic object mutation shapes that repeatedly create scanner churn
+- repeated direct `fs.*` usage in scripts instead of shared sink-confined wrappers
+- broad refactors hidden inside behavior changes
+- phase-close validation being skipped
+
+---
+
 ## Agent Infrastructure — Complete Location Map
 
 This is the authoritative map of every place agent rules must be propagated.
@@ -294,6 +312,8 @@ Unit tests are co-located with source files.
 | Env consistency    | `pnpm env:check`        |
 
 **Lint rule**: Always run `pnpm lint --fix`, never plain `pnpm lint`. The linter auto-fixes import ordering and formatting issues on save; running without `--fix` only reports fixable errors and wastes tokens. If unfixable errors remain after `--fix`, report them.
+
+**Phase-close rule**: For substantial phase-based implementation work, use narrower validation during the phase and run repo-wide `pnpm lint --fix` plus `pnpm typecheck` before declaring the phase complete. Do not run both after every tiny code edit unless the task specifically requires it.
 
 Pre-push hook runs: typecheck -> skott -> depcheck -> madge.
 

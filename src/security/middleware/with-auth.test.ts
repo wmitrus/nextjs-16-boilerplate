@@ -70,6 +70,7 @@ describe('Auth Middleware', () => {
     mockAuthorizationService.can.mockReset();
 
     mockTenantResolver.resolve.mockResolvedValue({
+      organizationId: 't1',
       tenantId: 't1',
       userId: 'user_1',
     });
@@ -434,6 +435,7 @@ describe('Auth Middleware', () => {
       onboardingComplete: true,
     });
     mockTenantResolver.resolve.mockResolvedValue({
+      organizationId: 'org_abc',
       tenantId: 'org_abc',
       userId: 'user_1',
     });

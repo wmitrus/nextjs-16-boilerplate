@@ -19,7 +19,11 @@ export interface ProvisioningInput {
    * Undefined or false → treated as unverified.
    */
   readonly emailVerified?: boolean;
-  readonly tenantExternalId?: string;
+  /**
+   * External organization ID from the auth provider (e.g. Clerk org_xxx).
+   * Replaces tenantExternalId — organizations are the canonical operational unit.
+   */
+  readonly orgExternalId?: string;
   readonly tenantRole?: string;
   readonly activeTenantId?: string;
   readonly tenancyMode: TenancyMode;
@@ -32,14 +36,14 @@ export interface ProvisioningInput {
  */
 export interface ProvisioningResult {
   readonly internalUserId: string;
-  readonly internalTenantId: string;
+  readonly internalOrganizationId: string;
   readonly membershipRole: 'owner' | 'member';
   readonly tenantCreatedNow: boolean;
   readonly userCreatedNow: boolean;
 }
 
 /**
- * Write-path service that idempotently provisions users, tenants, and memberships.
+ * Write-path service that idempotently provisions users, organizations, and memberships.
  *
  * INVARIANT: Must run all steps in a single atomic transaction.
  * INVARIANT: Never escalates an existing membership role.

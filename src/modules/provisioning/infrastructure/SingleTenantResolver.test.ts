@@ -9,13 +9,13 @@ describe('SingleTenantResolver', () => {
   it('always returns the fixed default tenant for any identity', async () => {
     const resolver = new SingleTenantResolver(defaultTenantId);
     const context = await resolver.resolve(identity);
-    expect(context.tenantId).toBe(defaultTenantId);
+    expect(context.organizationId).toBe(defaultTenantId);
     expect(context.userId).toBe(identity.id);
   });
 
   it('does not require provider claims', async () => {
     const resolver = new SingleTenantResolver(defaultTenantId);
     const context = await resolver.resolve({ id: 'some-user-uuid' });
-    expect(context.tenantId).toBe(defaultTenantId);
+    expect(context.organizationId).toBe(defaultTenantId);
   });
 });

@@ -4,24 +4,27 @@ import { TenantNotProvisionedError } from '@/core/contracts/identity';
 import type { TenantContext, TenantResolver } from '@/core/contracts/tenancy';
 
 /**
- * TENANCY_MODE=personal: each user has exactly one personal tenant.
- * Looks up the personal tenant via InternalIdentityLookup.findPersonalTenantId().
- * Throws TenantNotProvisionedError if no personal tenant exists yet (onboarding required).
+ * TENANCY_MODE=personal: each user has exactly one personal organization.
+ * Looks up the personal organization via InternalIdentityLookup.findPersonalOrganizationId().
+ * Throws TenantNotProvisionedError if no personal organization exists yet (onboarding required).
  */
-export class PersonalTenantResolver implements TenantResolver {
+export class PersonalOrganizationResolver implements TenantResolver {
   constructor(private readonly lookup: InternalIdentityLookup) {}
 
   async resolve(identity: Identity): Promise<TenantContext> {
-    const tenantId = await this.lookup.findPersonalTenantId(identity.id);
+    const organizationId = await this.lookup.findPersonalOrganizationId(
+      identity.id,
+    );
 
-    if (!tenantId) {
+    if (!organizationId) {
       throw new TenantNotProvisionedError(
         'Personal tenant not provisioned. Complete onboarding to create your personal tenant.',
       );
     }
 
     return {
-      tenantId,
+      organizationId,
+      tenantId: organizationId,
       userId: identity.id,
     };
   }

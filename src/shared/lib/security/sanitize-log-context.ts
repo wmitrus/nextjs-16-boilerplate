@@ -18,7 +18,7 @@ export function sanitizeLogContext(
 ): Record<string, unknown> {
   if (depth >= MAX_CONTEXT_DEPTH) return {};
 
-  const result: Record<string, unknown> = Object.create(null);
+  const sanitizedEntries: Array<[string, unknown]> = [];
 
   for (const [key, value] of Object.entries(obj)) {
     if (depth === 0 && key === 'source') continue;
@@ -26,47 +26,51 @@ export function sanitizeLogContext(
     if (SECRET_KEY_PATTERN.test(key)) continue;
 
     if (typeof value === 'string') {
-      // eslint-disable-next-line security/detect-object-injection -- result uses Object.create(null); key is from Object.entries (own props only); secret keys already filtered above
-      result[key] =
+      sanitizedEntries.push([
+        key,
         value.length > MAX_STRING_LENGTH
           ? `${value.slice(0, MAX_STRING_LENGTH)}[truncated]`
-          : value;
+          : value,
+      ]);
     } else if (
       typeof value === 'number' ||
       typeof value === 'boolean' ||
       value === null
     ) {
-      // eslint-disable-next-line security/detect-object-injection -- same as above
-      result[key] = value;
+      sanitizedEntries.push([key, value]);
     } else if (
       typeof value === 'object' &&
       value !== null &&
       !Array.isArray(value)
     ) {
-      // eslint-disable-next-line security/detect-object-injection -- same as above
-      result[key] = sanitizeLogContext(
-        value as Record<string, unknown>,
-        depth + 1,
-        trusted,
-      );
+      sanitizedEntries.push([
+        key,
+        sanitizeLogContext(
+          value as Record<string, unknown>,
+          depth + 1,
+          trusted,
+        ),
+      ]);
     } else if (Array.isArray(value)) {
-      // eslint-disable-next-line security/detect-object-injection -- same as above
-      result[key] = value
-        .slice(0, 10)
-        .map((v) =>
-          typeof v === 'string' && v.length > MAX_STRING_LENGTH
-            ? `${v.slice(0, MAX_STRING_LENGTH)}[truncated]`
-            : v,
-        )
-        .filter(
-          (v) =>
-            typeof v === 'string' ||
-            typeof v === 'number' ||
-            typeof v === 'boolean' ||
-            v === null,
-        );
+      sanitizedEntries.push([
+        key,
+        value
+          .slice(0, 10)
+          .map((v) =>
+            typeof v === 'string' && v.length > MAX_STRING_LENGTH
+              ? `${v.slice(0, MAX_STRING_LENGTH)}[truncated]`
+              : v,
+          )
+          .filter(
+            (v) =>
+              typeof v === 'string' ||
+              typeof v === 'number' ||
+              typeof v === 'boolean' ||
+              v === null,
+          ),
+      ]);
     }
   }
 
-  return result;
+  return Object.fromEntries(sanitizedEntries);
 }

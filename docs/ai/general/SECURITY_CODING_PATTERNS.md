@@ -11,18 +11,21 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category          | Vulnerability Class                                  | Classification            | Affected Contexts         |
-| ------ | ----------------- | ---------------------------------------------------- | ------------------------- | ------------------------- |
-| SEC-01 | Cryptography      | Timing attack — Symbol `===` in DI mocks             | False positive            | Unit test files           |
-| SEC-02 | Routes            | Open redirect — hardcoded path via `req.url` origin  | False positive            | Middleware                |
-| SEC-03 | Routes            | Open redirect — forwarded `redirect_url` query param | Latent risk → fixed       | Middleware                |
-| SEC-04 | Command injection | Dynamic logger dispatch `logger[level]()`            | False positive → hardened | API route                 |
-| SEC-05 | File access       | Dynamic `fs.*` with static literal paths             | False positive            | E2E helpers               |
-| SEC-06 | Cryptography      | `Math.random()` for test email uniqueness            | False positive            | E2E specs                 |
-| SEC-11 | Caching           | SDK client cache key missing differentiating config  | Real risk → fixed         | Module-level SDK adapters |
-| SEC-15 | Object access     | User-controlled key lookup via `key in object`       | Latent risk               | Auth/bootstrap UI mapping |
-| SEC-16 | File access       | Reusable helper fs paths lack sink confinement       | Latent risk               | Runtime logger helpers    |
-| SEC-17 | Observability     | Rate-limit WARN missing `path` causes edge-log loop  | Real risk → fixed         | Rate-limit middleware     |
+| #      | Category           | Vulnerability Class                                   | Classification             | Affected Contexts         |
+| ------ | ------------------ | ----------------------------------------------------- | -------------------------- | ------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks              | False positive             | Unit test files           |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin   | False positive             | Middleware                |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param  | Latent risk → fixed        | Middleware                |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`             | False positive → hardened  | API route                 |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths              | False positive             | E2E helpers               |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness             | False positive             | E2E specs                 |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config   | Real risk → fixed          | Module-level SDK adapters |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`        | Latent risk                | Auth/bootstrap UI mapping |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement        | Latent risk                | Runtime logger helpers    |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop   | Real risk → fixed          | Rate-limit middleware     |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers         | Local lint-backed workflow | Scripts, E2E helpers      |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling   | Local lint-backed workflow | Scripts, E2E helpers      |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers  |
 
 ---
 
@@ -254,6 +257,11 @@ Benefits:
 
 **DO NOT** use `obj[dynamicKey]()` to call methods even when `dynamicKey` is validated upstream.
 **DO** use an explicit `Record<AllowedKeys, fn>` dispatch map.
+
+### Local Lint Workflow
+
+The repository now uses a narrow local ESLint warning for `obj[dynamicKey]()` bracket-dispatch.
+The goal is not broad parity with Codacy's object-injection heuristics. The goal is to catch the highest-signal SEC-04 shape locally before review.
 
 This applies to loggers, event handlers, strategy objects, and any pattern where a validated
 string selects a method to call.
@@ -936,3 +944,266 @@ const result = await checkRateLimit(ip, { path: pathname });
 **DO NOT** use raw `error` objects in WARN context — extract `errorMessage: error.message` and `errorName: error.name` as separate string fields (SEC-10).
 
 **Relationship to SEC-10**: The WARN context fix also brings this call site into compliance with SEC-10 (no raw error objects in logger calls).
+
+---
+
+## SEC-18 — Tooling Env Access: Dynamic `process.env[key]` Must Be Shifted Left
+
+**ID**: SEC-18
+**Category**: Tooling / Environment Access
+**Classification**: Local lint-backed workflow
+**Affected area**: `scripts/**`, `e2e/**`
+
+### Problem
+
+Recurring Codacy `security/detect-object-injection` findings in `scripts/**` and `e2e/**` often come from dynamic environment lookups such as:
+
+```typescript
+const value = process.env[key];
+const value = process.env[name];
+```
+
+These cases are usually not a direct exploit by themselves, but they hide which environment variables are intentionally allowed and repeatedly burn review time.
+
+### Correct Pattern
+
+Prefer a typed or allowlisted helper so the env contract stays visible in code review:
+
+```typescript
+const REQUIRED_ENV = {
+  clerkSecretKey: 'CLERK_SECRET_KEY',
+  clerkPublishableKey: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
+} as const;
+
+function readRequiredEnv(key: keyof typeof REQUIRED_ENV): string {
+  const value = process.env[REQUIRED_ENV[key]];
+  if (!value) throw new Error(`Missing env: ${REQUIRED_ENV[key]}`);
+  return value;
+}
+```
+
+Or, when dynamic access is still required, contain it behind a narrow typed resolver:
+
+```typescript
+type AllowedEnvName = 'LEANTIME_HOST' | 'LEANTIME_API_KEY';
+
+function readEnv(name: AllowedEnvName): string | undefined {
+  return process.env[name];
+}
+```
+
+### Local Lint Workflow
+
+The repository now uses a scoped local ESLint rule in `eslint.config.mjs` for `scripts/**` and `e2e/**` to surface dynamic `process.env[key]` access before PR review.
+
+This rule is intentionally narrower than Codacy. The goal is not scanner parity. The goal is to catch recurring review churn locally when the AST signal is stable and low-noise.
+
+### Gain Tracking
+
+When this rule is involved, track these metrics in the active task artifact package:
+
+- number of local ESLint warnings from the covered class
+- number of Codacy findings from the same class on the PR
+- number of new inline suppressions added for security rules
+
+### Rule for Agents
+
+**DO NOT** introduce raw `process.env[key]` or `process.env[name]` in `scripts/**` and `e2e/**` when a typed or allowlisted helper is practical.
+
+**DO** prefer a narrow helper that makes the allowed env contract visible in local lint and code review.
+
+---
+
+## SEC-19 — File Access: Scripts And E2E Must Prefer Shared Sink-Confined Fs Helpers
+
+**ID**: SEC-19
+
+### Scanner Finding
+
+> The application dynamically constructs file or path information.
+
+### Why This Pattern Needs More Than Another ESLint Selector
+
+The remaining `security/detect-non-literal-fs-filename` findings in this repository are not concentrated in one AST shape. They appear across:
+
+- `existsSync(resolve(path))`
+- `readFileSync(resolvedPath)`
+- `writeFile(...)` / `mkdir(...)` in `node:fs/promises`
+- `createReadStream(safePath)` after prior confinement
+
+A broader local ESLint selector would be noisy and would still fail to distinguish:
+
+- static repository-owned paths
+- cwd-confined dynamic paths
+- tempdir-confined artifacts
+- test-only temp fixtures
+
+The durable repository pattern is therefore:
+
+1. keep the current narrow local lint for bare identifier fs sinks
+2. move repeated direct fs access in `scripts/**` and `e2e/**` into shared helper wrappers
+3. enforce sink-level `path.resolve()` + confinement inside those helpers
+4. scope local ESLint exceptions only to the approved helper sink modules themselves
+
+### Correct Pattern
+
+Prefer small shared wrappers such as:
+
+```typescript
+const safePath = assertPathWithinBase(filePath, baseDir, 'artifact path');
+return readFileSync(safePath, 'utf8');
+```
+
+and call them from scripts instead of repeating raw `fs.*` access at each call site.
+
+This keeps path validation at the sink and collapses scanner noise into a small number of reviewed helper locations.
+
+Approved helper sink modules may disable the local broad fs-sink warnings for themselves, but only when they are the centralized reviewed wrapper layer. Call sites should continue to be linted.
+
+### Rule for Agents
+
+In `scripts/**` and `e2e/**`:
+
+- **DO** prefer shared fs helper wrappers with sink confinement for repeated file access patterns
+- **DO** keep the path guard at the helper sink, not only at CLI intake
+- **DO NOT** add a broader local ESLint selector for all non-literal fs arguments unless a future finding set shows one high-signal repeated AST shape
+- **DO NOT** scatter new raw `fs.*` calls with ad hoc safety comments when an existing helper shape already fits
+  **Category**: File Access / Tooling
+  **Classification**: Local lint-backed workflow
+  **Affected area**: `scripts/**`, `e2e/**`
+
+### Problem
+
+Recurring Codacy `security/detect-non-literal-fs-filename` findings in `scripts/**` and `e2e/**` collapse many different situations into one noisy bucket. The repository needs a narrower local signal that highlights the sink shape reviewers repeatedly inspect:
+
+```typescript
+fs.readFileSync(filePath, 'utf8');
+fs.existsSync(resolved);
+readFileSync(filePath, 'utf8');
+```
+
+This pattern alone does not prove path traversal. In this repository it is frequently safe because the path is already confined.
+
+### Correct Pattern
+
+Before any dynamic `fs.*Sync(...)` sink in scripts or E2E helpers:
+
+1. resolve the path from a controlled base
+2. confine it at the sink or immediately before the sink
+3. keep the confinement helper visible in the same code path
+
+```typescript
+const resolved = path.resolve(ROOT_DIR, relativePath);
+assertPathWithinBase(resolved, ROOT_DIR);
+
+if (!fs.existsSync(resolved)) {
+  return null;
+}
+
+const content = fs.readFileSync(resolved, 'utf8');
+```
+
+### Local Lint Workflow
+
+The repository now uses a scoped local ESLint rule in `eslint.config.mjs` for `scripts/**` and `e2e/**` to flag bare identifier arguments at `fs.*Sync(...)` sinks.
+
+This is intentionally narrower than Codacy. It exists to surface review-heavy path provenance cases locally, not to replace sink-level confinement rules such as SEC-16.
+
+### Gain Tracking
+
+When this rule is involved, track these metrics in the active task artifact package:
+
+- number of local ESLint warnings from the covered fs-sink class
+- number of Codacy `security/detect-non-literal-fs-filename` findings still left after the local warning is introduced
+- number of new helper-level suppressions versus actual path-hardening edits
+
+### Rule for Agents
+
+**DO NOT** treat a local fs-sink warning as automatic proof of vulnerability.
+
+**DO** make path provenance and sink confinement explicit before suppressing or ignoring the warning.
+
+---
+
+## SEC-20 — Dynamic Object Transformation In `src/**` Should Favor Entries, Maps, Or Explicit Switches
+
+**ID**: SEC-20
+**Category**: Object Access / Runtime Helper Design
+**Classification**: AI-pattern backed workflow
+**Affected area**: `src/**` runtime helpers, sanitizers, adapters, wrappers
+
+### Problem
+
+The heaviest Phase 2 Codacy noise in `src/**` came from repeated patterns like:
+
+```typescript
+result[key] = value;
+errors[path].push(message);
+const label = LEVEL_VALUES[level];
+```
+
+Many of these are not direct vulnerabilities by themselves. The real problem is that repeated bracket reads and writes on plain objects produce high scanner noise and force repeated manual review of the same safe shapes.
+
+### Correct Pattern
+
+When transforming objects with dynamic or derived keys in runtime helpers:
+
+1. prefer `Object.entries(...)` plus `Object.fromEntries(...)` for shape-preserving transforms
+2. prefer `Map` for keyed accumulation such as grouped validation errors
+3. prefer explicit `switch` helpers for finite unions when selecting values or behavior
+
+Examples:
+
+```typescript
+const sanitizedEntries: Array<[string, unknown]> = [];
+
+for (const [key, value] of Object.entries(source)) {
+  if (isBlocked(key)) continue;
+  sanitizedEntries.push([key, transform(value)]);
+}
+
+return Object.fromEntries(sanitizedEntries);
+```
+
+```typescript
+const errorMap = new Map<string, string[]>();
+
+for (const issue of error.issues) {
+  const path = issue.path.join('.');
+  const existing = errorMap.get(path);
+  if (existing) existing.push(issue.message);
+  else errorMap.set(path, [issue.message]);
+}
+
+return Object.fromEntries(errorMap);
+```
+
+```typescript
+function getLevelValue(level: Level): number {
+  switch (level) {
+    case 'trace':
+      return 10;
+    case 'debug':
+      return 20;
+    case 'info':
+      return 30;
+    case 'warn':
+      return 40;
+    case 'error':
+      return 50;
+    case 'fatal':
+      return 60;
+  }
+}
+```
+
+### Do Not Overreach
+
+Do **not** add a broad local ESLint ban on every `obj[key]` read or write in `src/**`.
+That would recreate Codacy noise locally. This pattern is enforced primarily through AI instructions and review discipline, not a generic AST ban.
+
+### Rule for Agents
+
+**DO NOT** default to repeated `result[key] = ...` or `plainObject[key]` mutation chains in `src/**` runtime helpers when an entries-based transform, `Map`, or explicit `switch` would express the same behavior more clearly.
+
+**DO** use entries-based transforms, `Map`, or explicit `switch` helpers to keep Phase 2 object-access churn out of future Codacy runs.

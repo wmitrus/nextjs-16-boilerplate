@@ -26,12 +26,12 @@ Reason: Scenario D positive-path membership reuses setup from earlier scenarios.
 
 ## Quick Setup (Once)
 
-| Done | Step | Command / Action      | Expected                         |
-| ---- | ---- | --------------------- | -------------------------------- |
-| [ ]  | Q-1  | `pnpm env:check`      | env validation passes            |
-| [ ]  | Q-2  | `pnpm db:migrate:dev` | migrations applied               |
-| [ ]  | Q-3  | `pnpm db:seed`        | seed complete                    |
-| [ ]  | Q-4  | `pnpm dev`            | app boots without startup errors |
+| Done | Step | Command / Action         | Expected                         |
+| ---- | ---- | ------------------------ | -------------------------------- |
+| [ ]  | Q-1  | `pnpm env:check`         | env validation passes            |
+| [ ]  | Q-2  | `pnpm db:pglite:migrate` | migrations applied               |
+| [ ]  | Q-3  | `pnpm db:pglite:seed`    | seed complete                    |
+| [ ]  | Q-4  | `pnpm dev`               | app boots without startup errors |
 
 ## Baseline Auth Gate (Before Scenario Tests)
 

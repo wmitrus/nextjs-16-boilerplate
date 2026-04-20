@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { createRequire } from 'node:module';
+
 export type ContainerExecutionContext =
   | 'rsc'
   | 'server_action'
@@ -30,13 +32,13 @@ interface NewRelicApi {
 }
 
 let _newrelic: NewRelicApi | null | undefined = undefined;
+const cjsRequire = createRequire(import.meta.url);
 
 function tryGetNewRelic(): NewRelicApi | null {
   if (_newrelic !== undefined) return _newrelic;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _newrelic = require('newrelic') as NewRelicApi;
+    _newrelic = cjsRequire('newrelic') as NewRelicApi;
   } catch {
     _newrelic = null;
   }

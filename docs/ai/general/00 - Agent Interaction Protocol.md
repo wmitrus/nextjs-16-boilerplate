@@ -50,7 +50,8 @@ Before any non-trivial task, agents must read:
 1. This file (`00 - Agent Interaction Protocol.md`)
 2. `AGENTS.md`
 3. `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
-4. Domain-specific reference files listed in their own Startup Rules
+4. `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` for implementation, refactor, script, or tooling work
+5. Domain-specific reference files listed in their own Startup Rules
 
 ---
 

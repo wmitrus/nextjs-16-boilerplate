@@ -17,9 +17,14 @@ function readStringClaim(
   sessionClaims: ClerkSessionClaims,
   claimNames: readonly string[],
 ): string | undefined {
+  const claimMap = new Map<string, unknown>(
+    sessionClaims && typeof sessionClaims === 'object'
+      ? Object.entries(sessionClaims)
+      : [],
+  );
+
   for (const claimName of claimNames) {
-    // eslint-disable-next-line security/detect-object-injection -- read-only; claimNames is a readonly literal array, not user input
-    const value = sessionClaims?.[claimName];
+    const value = claimMap.get(claimName);
     if (typeof value === 'string' && value.length > 0) {
       return value;
     }
@@ -112,7 +117,7 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
                 ? sessionClaims.v
                 : undefined,
             activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
-            tenantExternalIdPresent: Boolean(orgId),
+            orgExternalIdPresent: Boolean(orgId),
             tenantRole: orgRole ?? undefined,
           },
           'Resolved Clerk identity claims from auth()',
@@ -123,7 +128,7 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
           email,
           emailVerified:
             sessionClaims?.email_verified === true ? true : undefined,
-          tenantExternalId: orgId ?? undefined,
+          orgExternalId: orgId ?? undefined,
           tenantRole: orgRole ?? undefined,
         };
       });

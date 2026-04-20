@@ -33,6 +33,7 @@ This index provides the recommended reading order for the DB architecture packag
 
 ## Command map (drizzle-kit only)
 
-- PGLite dev: `pnpm db:migrate:dev`, `pnpm db:studio`
-- Local Postgres: `pnpm db:migrate:local`, `pnpm db:studio:local`
+- PGLite dev: `pnpm db:pglite:migrate`, `pnpm db:pglite:studio`
+- Dev Postgres: `pnpm db:dev:migrate`, `pnpm db:dev:studio`
+- Test Postgres: `pnpm db:test:migrate`, `pnpm db:test:studio`
 - Production target: `pnpm db:migrate:prod`

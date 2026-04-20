@@ -17,7 +17,7 @@ const stubIdentity: RequestIdentitySourceData = {
   userId: 'user_ext_1',
   email: 'user@example.com',
   emailVerified: true,
-  tenantExternalId: undefined,
+  orgExternalId: undefined,
   tenantRole: undefined,
 };
 

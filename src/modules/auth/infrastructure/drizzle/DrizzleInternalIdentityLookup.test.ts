@@ -47,12 +47,17 @@ describe('DrizzleInternalIdentityLookup', () => {
     });
   });
 
-  describe('findInternalTenantId', () => {
-    it('returns internal tenant ID when mapping exists', async () => {
-      const db = makeDb([{ tenantId: '10000000-0000-4000-8000-000000000001' }]);
+  describe('findInternalOrganizationId', () => {
+    it('returns internal org ID when mapping exists', async () => {
+      const db = makeDb([
+        { organizationId: '10000000-0000-4000-8000-000000000001' },
+      ]);
       const lookup = new DrizzleInternalIdentityLookup(db as never);
 
-      const result = await lookup.findInternalTenantId('clerk', 'org_ext_456');
+      const result = await lookup.findInternalOrganizationId(
+        'clerk',
+        'org_ext_456',
+      );
 
       expect(result).toBe('10000000-0000-4000-8000-000000000001');
     });
@@ -61,7 +66,10 @@ describe('DrizzleInternalIdentityLookup', () => {
       const db = makeDb([]);
       const lookup = new DrizzleInternalIdentityLookup(db as never);
 
-      const result = await lookup.findInternalTenantId('clerk', 'org_unknown');
+      const result = await lookup.findInternalOrganizationId(
+        'clerk',
+        'org_unknown',
+      );
 
       expect(result).toBeNull();
     });
@@ -72,29 +80,31 @@ describe('DrizzleInternalIdentityLookup', () => {
       (db as Record<string, unknown>).insert = insert;
       const lookup = new DrizzleInternalIdentityLookup(db as never);
 
-      await lookup.findInternalTenantId('clerk', 'org_unknown');
+      await lookup.findInternalOrganizationId('clerk', 'org_unknown');
 
       expect(insert).not.toHaveBeenCalled();
     });
   });
 
-  describe('findPersonalTenantId', () => {
-    it('returns personal tenant ID when mapping exists', async () => {
-      const db = makeDb([{ tenantId: '20000000-0000-0000-0000-000000000001' }]);
+  describe('findPersonalOrganizationId', () => {
+    it('returns personal org ID when mapping exists', async () => {
+      const db = makeDb([
+        { organizationId: '20000000-0000-0000-0000-000000000001' },
+      ]);
       const lookup = new DrizzleInternalIdentityLookup(db as never);
 
-      const result = await lookup.findPersonalTenantId(
+      const result = await lookup.findPersonalOrganizationId(
         '00000000-0000-0000-0000-000000000001',
       );
 
       expect(result).toBe('20000000-0000-0000-0000-000000000001');
     });
 
-    it('returns null when no personal tenant exists', async () => {
+    it('returns null when no personal org exists', async () => {
       const db = makeDb([]);
       const lookup = new DrizzleInternalIdentityLookup(db as never);
 
-      const result = await lookup.findPersonalTenantId(
+      const result = await lookup.findPersonalOrganizationId(
         '00000000-0000-0000-0000-000000000001',
       );
 
@@ -107,7 +117,9 @@ describe('DrizzleInternalIdentityLookup', () => {
       (db as Record<string, unknown>).insert = insert;
       const lookup = new DrizzleInternalIdentityLookup(db as never);
 
-      await lookup.findPersonalTenantId('00000000-0000-0000-0000-000000000001');
+      await lookup.findPersonalOrganizationId(
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(insert).not.toHaveBeenCalled();
     });

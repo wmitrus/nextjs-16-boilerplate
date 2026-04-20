@@ -3,28 +3,50 @@ const cp = require('child_process');
 const vscode = require('vscode');
 
 /**
- * Executes a shell command asynchronously in the workspace root.
- * @param {string} cmd
+ * Executes one of the extension's allowlisted git commands in the workspace root.
+ * @param {{ executable: string, args: string[] } | null} command
  * @returns {Promise<string>}
  */
-function runAsync(cmd) {
+function runAsync(command) {
   return new Promise((resolve) => {
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
 
-    if (!cwd) {
+    if (!cwd || !command) {
       resolve('');
       return;
     }
 
-    // eslint-disable-next-line security/detect-child-process -- local VS Code extension; cmd is always a hardcoded git command string from internal callers, never user input
-    cp.exec(cmd, { encoding: 'utf8', cwd }, (error, stdout) => {
-      if (error) {
-        resolve('');
-      } else {
-        resolve(stdout.trim());
-      }
-    });
+    cp.execFile(
+      command.executable,
+      command.args,
+      { encoding: 'utf8', cwd },
+      (error, stdout) => {
+        if (error) {
+          resolve('');
+        } else {
+          resolve(stdout.trim());
+        }
+      },
+    );
   });
+}
+
+function getCurrentBranchCommand() {
+  return {
+    executable: 'git',
+    args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+  };
+}
+
+function getBranchOriginCommand(branch) {
+  if (typeof branch !== 'string' || branch.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    executable: 'git',
+    args: ['branch-origin', 'show', branch],
+  };
 }
 
 function activate(context) {
@@ -45,7 +67,7 @@ function activate(context) {
     }
 
     // Get current branch
-    const branch = await runAsync('git rev-parse --abbrev-ref HEAD');
+    const branch = await runAsync(getCurrentBranchCommand());
 
     if (!branch || branch === 'HEAD') {
       item.text = '$(git-branch) Parent: <detached>';
@@ -53,7 +75,7 @@ function activate(context) {
     }
 
     // Get metadata in one call
-    const output = await runAsync(`git branch-origin show ${branch}`);
+    const output = await runAsync(getBranchOriginCommand(branch));
 
     if (!output) {
       item.text = `$(git-branch) Parent: <none>`;

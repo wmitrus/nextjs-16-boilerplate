@@ -135,19 +135,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const logger = resolveServerLogger().child(childBindings);
   const level = validation.data.level;
-  const logDispatch: Record<
-    (typeof LOG_LEVELS)[number],
-    (ctx: Record<string, unknown>, msg: string) => void
-  > = {
-    fatal: (ctx, msg) => logger.fatal(ctx, msg),
-    error: (ctx, msg) => logger.error(ctx, msg),
-    warn: (ctx, msg) => logger.warn(ctx, msg),
-    info: (ctx, msg) => logger.info(ctx, msg),
-    debug: (ctx, msg) => logger.debug(ctx, msg),
-    trace: (ctx, msg) => logger.trace(ctx, msg),
-  };
-  // eslint-disable-next-line security/detect-object-injection -- level is Zod-validated against LOG_LEVELS enum; logDispatch is a static Record<LogLevel, fn>
-  logDispatch[level]({ ...logContext, ip }, validation.data.message);
+
+  switch (level) {
+    case 'fatal':
+      logger.fatal({ ...logContext, ip }, validation.data.message);
+      break;
+    case 'error':
+      logger.error({ ...logContext, ip }, validation.data.message);
+      break;
+    case 'warn':
+      logger.warn({ ...logContext, ip }, validation.data.message);
+      break;
+    case 'info':
+      logger.info({ ...logContext, ip }, validation.data.message);
+      break;
+    case 'debug':
+      logger.debug({ ...logContext, ip }, validation.data.message);
+      break;
+    case 'trace':
+      logger.trace({ ...logContext, ip }, validation.data.message);
+      break;
+  }
 
   return new NextResponse(null, { status: 204 });
 }

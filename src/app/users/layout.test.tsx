@@ -126,7 +126,7 @@ describe('UsersLayout node provisioning guard', () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'ALLOWED',
       identity: { id: 'u-1' },
-      tenant: { tenantId: 't-1', userId: 'u-1' },
+      tenant: { organizationId: 't-1', tenantId: 't-1', userId: 'u-1' },
       user: {
         id: 'u-1',
         onboardingComplete: true,
@@ -134,7 +134,7 @@ describe('UsersLayout node provisioning guard', () => {
       diagnostics: {
         ...diagnostics,
         internalIdentityId: 'u-1',
-        internalTenantId: 't-1',
+        internalOrganizationId: 't-1',
         userRecordExists: true,
         tenantRecordExists: true,
         membershipExists: true,

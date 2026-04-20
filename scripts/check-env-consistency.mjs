@@ -34,6 +34,16 @@ const CLERK_REDIRECT_VARS = [
 
 const EXPECTED_BOOTSTRAP_PATH = '/auth/bootstrap/start?redirect_url=/users';
 
+function findRecordValue(record, key) {
+  for (const [entryKey, entryValue] of Object.entries(record)) {
+    if (entryKey === key) {
+      return entryValue;
+    }
+  }
+
+  return undefined;
+}
+
 export function checkClerkRedirectUrls(effectiveEnv, nodeEnv = 'development') {
   if (nodeEnv === 'production') {
     return { warnings: [] };
@@ -41,8 +51,7 @@ export function checkClerkRedirectUrls(effectiveEnv, nodeEnv = 'development') {
 
   const warnings = [];
   for (const key of CLERK_REDIRECT_VARS) {
-    // eslint-disable-next-line security/detect-object-injection -- key iterates over CLERK_REDIRECT_VARS, a hardcoded const array of known strings
-    const value = effectiveEnv[key];
+    const value = findRecordValue(effectiveEnv, key);
     if (value !== undefined && value !== EXPECTED_BOOTSTRAP_PATH) {
       warnings.push(`  ${key}=${value} (expected ${EXPECTED_BOOTSTRAP_PATH})`);
     }
@@ -54,13 +63,16 @@ function checkEnvConsistency() {
   const envTsPath = path.join(ROOT, 'src/core/env.ts');
   const examplePath = path.join(ROOT, '.env.example');
 
-  if (!fs.existsSync(envTsPath) || !fs.existsSync(examplePath)) {
+  if (
+    !fs.existsSync(path.resolve(envTsPath)) ||
+    !fs.existsSync(path.resolve(examplePath))
+  ) {
     console.error('❌ Missing src/core/env.ts or .env.example');
     process.exit(1);
   }
 
-  const envTsContent = fs.readFileSync(envTsPath, 'utf8');
-  const exampleContent = fs.readFileSync(examplePath, 'utf8');
+  const envTsContent = fs.readFileSync(path.resolve(envTsPath), 'utf8');
+  const exampleContent = fs.readFileSync(path.resolve(examplePath), 'utf8');
 
   const missingKeys = getMissingKeys(envTsContent, exampleContent);
 

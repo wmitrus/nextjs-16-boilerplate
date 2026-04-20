@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { resolveInternalApiKey } from './e2e/internal-api-key';
+
 function parseBoolean(value: string | undefined): boolean | undefined {
   if (value === 'true') {
     return true;
@@ -69,7 +71,7 @@ export default defineConfig({
       ...process.env,
       PORT: '3000',
       E2E_ENABLED: process.env.E2E_ENABLED ?? 'true',
-      INTERNAL_API_KEY: process.env.INTERNAL_API_KEY ?? 'test-internal-api-key',
+      INTERNAL_API_KEY: resolveInternalApiKey(process.env),
       LOG_DIR: hasExplicitServerLogDir
         ? serverLogDir
         : (process.env.LOG_DIR ?? serverLogDir),

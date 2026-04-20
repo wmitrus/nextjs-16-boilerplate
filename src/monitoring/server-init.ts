@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 interface NewRelicAgentCollector {
   isConnected(): boolean;
 }
@@ -15,6 +17,8 @@ interface NewRelicAgent {
 interface NewRelicApi {
   agent?: NewRelicAgent;
 }
+
+const cjsRequire = createRequire(import.meta.url);
 
 function getBootstrapDiagnostics(nr: NewRelicApi) {
   return {
@@ -49,8 +53,7 @@ export async function initializeServerObservability(): Promise<void> {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nr = require('newrelic') as NewRelicApi;
+    const nr = cjsRequire('newrelic') as NewRelicApi;
     const diag = getBootstrapDiagnostics(nr);
 
     console.info(

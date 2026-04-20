@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export function parseEnvFile(content: string): Record<string, string> {
-  const result: Record<string, string> = {};
+  const entries: Array<[string, string]> = [];
 
   for (const rawLine of content.split('\n')) {
     const line = rawLine.trim();
@@ -29,24 +29,27 @@ export function parseEnvFile(content: string): Record<string, string> {
       }
     }
 
-    result[key] = value;
+    entries.push([key, value]);
   }
 
-  return result;
+  return Object.fromEntries(entries) as Record<string, string>;
 }
 
-const envFile = path.resolve(process.cwd(), '.env.local');
-
 try {
-  const content = fs.readFileSync(envFile, 'utf8');
+  const content = fs.readFileSync(
+    path.resolve(process.cwd(), '.env.local'),
+    'utf8',
+  );
   const parsed = parseEnvFile(content);
+  const pendingEntries: Array<[string, string]> = [];
 
   for (const [key, value] of Object.entries(parsed)) {
     if (!(key in process.env)) {
-      // eslint-disable-next-line security/detect-object-injection
-      process.env[key] = value;
+      pendingEntries.push([key, value]);
     }
   }
+
+  Object.assign(process.env, Object.fromEntries(pendingEntries));
 } catch (err) {
   if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
     throw err;

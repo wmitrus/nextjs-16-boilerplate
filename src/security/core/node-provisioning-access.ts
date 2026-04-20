@@ -46,9 +46,9 @@ export type UsersGuardDecisionReason =
 
 export interface NodeProvisioningAccessDiagnostics {
   readonly externalUserId?: string;
-  readonly externalTenantId?: string;
+  readonly externalOrgId?: string;
   readonly internalIdentityId?: string;
-  readonly internalTenantId?: string;
+  readonly internalOrganizationId?: string;
   readonly tenancyMode: ProvisioningTenancyMode;
   readonly userRecordExists: boolean | null;
   readonly tenantRecordExists: boolean | null;
@@ -96,7 +96,7 @@ export async function evaluateNodeProvisioningAccess(
   deps: NodeProvisioningAccessDependencies,
 ): Promise<NodeProvisioningAccessOutcome> {
   const externalUserId = deps.rawIdentity?.userId;
-  const externalTenantId = deps.rawIdentity?.tenantExternalId;
+  const externalOrgId = deps.rawIdentity?.orgExternalId;
 
   let identity: Identity | null;
 
@@ -111,7 +111,7 @@ export async function evaluateNodeProvisioningAccess(
           'User is authenticated externally but not provisioned internally. Bootstrap required.',
         diagnostics: {
           externalUserId,
-          externalTenantId,
+          externalOrgId,
           tenancyMode: deps.tenancyMode,
           userRecordExists: false,
           tenantRecordExists: null,
@@ -133,7 +133,7 @@ export async function evaluateNodeProvisioningAccess(
       message: 'Authentication required.',
       diagnostics: {
         externalUserId,
-        externalTenantId,
+        externalOrgId,
         tenancyMode: deps.tenancyMode,
         userRecordExists: null,
         tenantRecordExists: null,
@@ -156,7 +156,7 @@ export async function evaluateNodeProvisioningAccess(
         'User record is missing in internal database. Bootstrap required.',
       diagnostics: {
         externalUserId,
-        externalTenantId,
+        externalOrgId,
         internalIdentityId: identity.id,
         tenancyMode: deps.tenancyMode,
         userRecordExists: false,
@@ -178,7 +178,7 @@ export async function evaluateNodeProvisioningAccess(
         'Onboarding must be completed before accessing protected resources.',
       diagnostics: {
         externalUserId,
-        externalTenantId,
+        externalOrgId,
         internalIdentityId: identity.id,
         tenancyMode: deps.tenancyMode,
         userRecordExists: true,
@@ -206,7 +206,7 @@ export async function evaluateNodeProvisioningAccess(
         message: 'Tenant context required.',
         diagnostics: {
           externalUserId,
-          externalTenantId,
+          externalOrgId,
           internalIdentityId: identity.id,
           tenancyMode: deps.tenancyMode,
           userRecordExists: true,
@@ -227,7 +227,7 @@ export async function evaluateNodeProvisioningAccess(
         message: 'Tenant membership required.',
         diagnostics: {
           externalUserId,
-          externalTenantId,
+          externalOrgId,
           internalIdentityId: identity.id,
           tenancyMode: deps.tenancyMode,
           userRecordExists: true,
@@ -254,9 +254,9 @@ export async function evaluateNodeProvisioningAccess(
           'Default tenant from configuration does not exist in database. Fix DEFAULT_TENANT_ID seed/config mismatch.',
         diagnostics: {
           externalUserId,
-          externalTenantId,
+          externalOrgId,
           internalIdentityId: identity.id,
-          internalTenantId: tenant.tenantId,
+          internalOrganizationId: tenant.organizationId,
           tenancyMode: deps.tenancyMode,
           userRecordExists: true,
           tenantRecordExists: false,
@@ -279,9 +279,9 @@ export async function evaluateNodeProvisioningAccess(
         message: 'Forbidden.',
         diagnostics: {
           externalUserId,
-          externalTenantId,
+          externalOrgId,
           internalIdentityId: identity.id,
-          internalTenantId: tenant.tenantId,
+          internalOrganizationId: tenant.organizationId,
           tenancyMode: deps.tenancyMode,
           userRecordExists: true,
           tenantRecordExists: true,
@@ -302,9 +302,9 @@ export async function evaluateNodeProvisioningAccess(
     user,
     diagnostics: {
       externalUserId,
-      externalTenantId,
+      externalOrgId,
       internalIdentityId: identity.id,
-      internalTenantId: tenant.tenantId,
+      internalOrganizationId: tenant.organizationId,
       tenancyMode: deps.tenancyMode,
       userRecordExists: true,
       tenantRecordExists: true,

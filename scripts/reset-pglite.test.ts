@@ -75,7 +75,7 @@ describe('performPgliteReset', () => {
     expect(result.message).toMatch(/seeded/);
   });
 
-  it('calls spawnSync with pnpm db:migrate:dev on success', async () => {
+  it('calls spawnSync with pnpm db:pglite:migrate on success', async () => {
     const deps = makeDeps();
     await performPgliteReset(
       { nodeEnv: 'development', databaseUrl: 'file:./data/pglite' },
@@ -84,12 +84,12 @@ describe('performPgliteReset', () => {
 
     expect(deps.spawnSync).toHaveBeenCalledWith(
       'pnpm',
-      ['db:migrate:dev'],
+      ['db:pglite:migrate'],
       expect.objectContaining({ stdio: 'inherit' }),
     );
   });
 
-  it('calls spawnSync with pnpm db:seed after successful migrate', async () => {
+  it('calls spawnSync with pnpm db:pglite:seed after successful migrate', async () => {
     const deps = makeDeps();
     await performPgliteReset(
       { nodeEnv: 'development', databaseUrl: 'file:./data/pglite' },
@@ -98,7 +98,7 @@ describe('performPgliteReset', () => {
 
     expect(deps.spawnSync).toHaveBeenCalledWith(
       'pnpm',
-      ['db:seed'],
+      ['db:pglite:seed'],
       expect.objectContaining({ stdio: 'inherit' }),
     );
     expect(deps.spawnSync).toHaveBeenCalledTimes(2);
@@ -116,7 +116,7 @@ describe('performPgliteReset', () => {
     expect(deps.spawnSync).toHaveBeenCalledTimes(1);
     expect(deps.spawnSync).not.toHaveBeenCalledWith(
       'pnpm',
-      ['db:seed'],
+      ['db:pglite:seed'],
       expect.anything(),
     );
   });
@@ -134,7 +134,7 @@ describe('performPgliteReset', () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/db:seed exited with status 1/);
+    expect(result.message).toMatch(/db:pglite:seed exited with status 1/);
   });
 
   it('returns failure when seed yields an error object', async () => {

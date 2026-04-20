@@ -3,6 +3,7 @@ import type { DrizzleDb } from '@/core/db';
 
 import {
   membershipsTable,
+  organizationsTable,
   policiesTable,
   rolesTable,
   tenantAttributesTable,
@@ -17,9 +18,15 @@ export interface TenantRecord {
   name: string;
 }
 
-export interface RoleRecord {
+export interface OrgRecord {
   id: string;
   tenantId: string;
+  name: string;
+}
+
+export interface RoleRecord {
+  id: string;
+  organizationId: string;
   name: string;
 }
 
@@ -27,6 +34,10 @@ export interface AuthSeedResult {
   tenants: {
     acme: TenantRecord;
     globex: TenantRecord;
+  };
+  orgs: {
+    acmeHq: OrgRecord;
+    globexHq: OrgRecord;
   };
   roles: {
     acmeOwner: RoleRecord;
@@ -46,22 +57,37 @@ const TENANTS = {
   },
 } satisfies Record<string, TenantRecord>;
 
+const ORGS = {
+  acmeHq: {
+    id: '15000000-0000-4000-8000-000000000001',
+    tenantId: TENANTS.acme.id,
+    name: 'Acme Corp HQ',
+    slug: 'acme-hq',
+  },
+  globexHq: {
+    id: '15000000-0000-4000-8000-000000000002',
+    tenantId: TENANTS.globex.id,
+    name: 'Globex Inc HQ',
+    slug: 'globex-hq',
+  },
+};
+
 const ROLES = {
   acmeOwner: {
     id: '20000000-0000-0000-0000-000000000001',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     name: 'owner',
     isSystem: true,
   },
   acmeMember: {
     id: '20000000-0000-0000-0000-000000000002',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     name: 'member',
     isSystem: true,
   },
   globexOwner: {
     id: '20000000-0000-0000-0000-000000000003',
-    tenantId: TENANTS.globex.id,
+    organizationId: ORGS.globexHq.id,
     name: 'owner',
     isSystem: true,
   },
@@ -70,7 +96,7 @@ const ROLES = {
 const POLICIES = [
   {
     id: '30000000-0000-0000-0000-000000000001',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.ROUTE,
@@ -79,7 +105,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000002',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.USER,
@@ -93,7 +119,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000003',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.TENANT,
@@ -106,7 +132,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000004',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.BILLING,
@@ -115,7 +141,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000005',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.SECURITY,
@@ -124,7 +150,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000006',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
     resource: RESOURCES.ROUTE,
@@ -133,7 +159,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000007',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
     resource: RESOURCES.USER,
@@ -142,7 +168,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000008',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
     resource: RESOURCES.USER,
@@ -151,7 +177,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000009',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
     resource: RESOURCES.TENANT,
@@ -160,7 +186,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000010',
-    tenantId: TENANTS.acme.id,
+    organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
     resource: RESOURCES.BILLING,
@@ -169,7 +195,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000011',
-    tenantId: TENANTS.globex.id,
+    organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.ROUTE,
@@ -178,7 +204,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000012',
-    tenantId: TENANTS.globex.id,
+    organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.USER,
@@ -192,7 +218,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000013',
-    tenantId: TENANTS.globex.id,
+    organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.TENANT,
@@ -205,7 +231,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000014',
-    tenantId: TENANTS.globex.id,
+    organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.BILLING,
@@ -214,7 +240,7 @@ const POLICIES = [
   },
   {
     id: '30000000-0000-0000-0000-000000000015',
-    tenantId: TENANTS.globex.id,
+    organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
     resource: RESOURCES.SECURITY,
@@ -254,6 +280,11 @@ export async function seedAuthorization(
     .onConflictDoNothing();
 
   await db
+    .insert(organizationsTable)
+    .values(Object.values(ORGS))
+    .onConflictDoNothing();
+
+  await db
     .insert(rolesTable)
     .values(Object.values(ROLES))
     .onConflictDoNothing();
@@ -263,17 +294,17 @@ export async function seedAuthorization(
     .values([
       {
         userId: alice.id,
-        tenantId: TENANTS.acme.id,
+        organizationId: ORGS.acmeHq.id,
         roleId: ROLES.acmeOwner.id,
       },
       {
         userId: alice.id,
-        tenantId: TENANTS.globex.id,
+        organizationId: ORGS.globexHq.id,
         roleId: ROLES.globexOwner.id,
       },
       {
         userId: bob.id,
-        tenantId: TENANTS.acme.id,
+        organizationId: ORGS.acmeHq.id,
         roleId: ROLES.acmeMember.id,
       },
     ])
@@ -288,6 +319,10 @@ export async function seedAuthorization(
 
   return {
     tenants: TENANTS,
+    orgs: {
+      acmeHq: ORGS.acmeHq,
+      globexHq: ORGS.globexHq,
+    },
     roles: {
       acmeOwner: ROLES.acmeOwner,
       acmeMember: ROLES.acmeMember,

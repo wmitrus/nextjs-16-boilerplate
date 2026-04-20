@@ -5,6 +5,8 @@
 This guide is the operational reference for running tests in this repository.
 It consolidates test commands, Vitest config intent, local/CI DB workflows, and migration config paths used by the modular monolith.
 
+For the canonical `package.json` database command map, use [../local-db.md](../local-db.md).
+
 ## Testing Matrix
 
 | Scope                        | Command                   | Config                         | Notes                                                            |
@@ -108,17 +110,18 @@ This keeps `*.db.test.ts` files driver-agnostic.
 ### Standard flow
 
 ```bash
-pnpm db:local:up
-pnpm db:migrate:local
+pnpm db:test:up
+pnpm db:test:migrate
 pnpm test:db:local
-pnpm db:local:down
+pnpm db:test:down
 ```
 
 ### Compose engine policy
 
 - Default engine is Podman for this repository.
 - Compose execution is centralized in `scripts/compose-db-local.mjs`.
-- `db:local:up` / `db:local:down` scripts call this runner.
+- `db:test:up` / `db:test:down` are the canonical scripts for this runner.
+- `db:local:*` aliases were removed; use `db:test:*` directly.
 
 Supported overrides:
 
@@ -128,8 +131,8 @@ Supported overrides:
 Examples:
 
 ```bash
-DB_COMPOSE_ENGINE=docker pnpm db:local:up
-DB_COMPOSE_FILE=podman-compose.yml pnpm db:local:up
+DB_COMPOSE_ENGINE=docker pnpm db:test:up
+DB_COMPOSE_FILE=podman-compose.yml pnpm db:test:up
 ```
 
 ## Drizzle Configs (Modular Monolith Pathing)
@@ -153,10 +156,13 @@ Schema and migration output are centralized by these configs:
 Operational commands:
 
 - `pnpm db:generate` → uses dev config
-- `pnpm db:migrate:dev` → uses dev config
-- `pnpm db:migrate:local` → uses local config against local Postgres on `127.0.0.1:5433`
-- `pnpm db:studio` → opens studio for dev/PGLite config
-- `pnpm db:studio:local` → opens studio for local Postgres config
+- `pnpm db:pglite:migrate` → uses the PGlite dev config
+- `pnpm db:pglite:seed` → seeds the canonical PGlite local database
+- `pnpm db:pglite:studio` → opens studio for the canonical PGlite local database
+- `pnpm db:dev:migrate` → uses the dev Postgres config against `127.0.0.1:5432/app_dev`
+- `pnpm db:test:migrate` → uses the test Postgres config against `127.0.0.1:5433/app_test`
+- `pnpm db:dev:studio` → opens studio for the dev Postgres config
+- `pnpm db:test:studio` → opens studio for the test Postgres config
 - `pnpm db:migrate:prod` → uses prod config (`DATABASE_URL` required)
 
 ## CI Guidance
@@ -188,9 +194,9 @@ Authoritative runtime probe for internal state is `/api/me/provisioning-status`.
 - `podman compose` calls `docker-compose` unexpectedly
   - Set `DB_COMPOSE_ENGINE=podman` in command invocation for this repo scripts.
 
-- `db:local:up` fails with missing compose file
+- `db:test:up` fails with missing compose file
   - Ensure one of `compose.yml`, `podman-compose.yml`, `docker-compose.yml` exists,
     or set `DB_COMPOSE_FILE` explicitly.
 
 - `test:db:local` fails to connect
-  - Verify Postgres is running on `127.0.0.1:5433` and run `pnpm db:migrate:local` first.
+  - Verify Postgres is running on `127.0.0.1:5433` and run `pnpm db:test:migrate` first.

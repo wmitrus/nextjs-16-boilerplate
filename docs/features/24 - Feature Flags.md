@@ -125,7 +125,7 @@ Unique constraint: `(key, tenant_id)` with `NULLS NOT DISTINCT` — each `(key, 
 The `feature_flags` table is created by a Drizzle migration. Apply it before switching to the `db` provider:
 
 ```bash
-pnpm db:migrate:dev
+pnpm db:pglite:migrate
 ```
 
 ### Behavior
@@ -285,7 +285,7 @@ pnpm flags:export --adapter=static | pnpm flags:import
 
 ```bash
 # 1. Apply DB migration (once)
-pnpm db:migrate:dev
+pnpm db:pglite:migrate
 
 # 2. Seed the DB from current static config
 pnpm flags:migrate --from=static --to=db

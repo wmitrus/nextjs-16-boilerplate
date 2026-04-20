@@ -11,6 +11,7 @@ export class SingleTenantResolver implements TenantResolver {
 
   async resolve(identity: Identity): Promise<TenantContext> {
     return {
+      organizationId: this.defaultTenantId,
       tenantId: this.defaultTenantId,
       userId: identity.id,
     };

@@ -5,6 +5,13 @@ description: 'Use during implementation work to keep validation focused and requ
 
 During implementation work, prefer focused validation over broad test expansion.
 
+For substantial multi-step or phase-based implementation work:
+
+- use focused validation while the phase is in progress
+- before marking a major phase complete, run `pnpm lint --fix` and `pnpm typecheck`
+- do not pay the full repo-wide lint/typecheck cost after every tiny interim edit unless the task explicitly requires it
+- if repo-wide lint/typecheck is blocked by unrelated pre-existing issues, record that explicitly in the task artifacts before closing the phase
+
 For any change touching Clerk auth, bootstrap routing, onboarding redirects, auth middleware, root auth layout boundaries, or `/users` access control:
 
 - read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first

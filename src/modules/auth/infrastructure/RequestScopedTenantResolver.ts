@@ -24,30 +24,33 @@ export class RequestScopedTenantResolver implements TenantResolver {
   ) {}
 
   async resolve(identity: Identity): Promise<TenantContext> {
-    const { tenantExternalId } = await this.source.get();
+    const { orgExternalId } = await this.source.get();
 
-    if (!tenantExternalId) {
+    if (!orgExternalId) {
       throw new MissingTenantContextError();
     }
 
     if (this.options.lookup && this.options.provider) {
-      const internalTenantId = await this.options.lookup.findInternalTenantId(
-        this.options.provider,
-        tenantExternalId,
-      );
+      const internalOrganizationId =
+        await this.options.lookup.findInternalOrganizationId(
+          this.options.provider,
+          orgExternalId,
+        );
 
-      if (internalTenantId === null) {
+      if (internalOrganizationId === null) {
         throw new TenantNotProvisionedError();
       }
 
       return {
-        tenantId: internalTenantId,
+        organizationId: internalOrganizationId,
+        tenantId: internalOrganizationId,
         userId: identity.id,
       };
     }
 
     return {
-      tenantId: tenantExternalId,
+      organizationId: orgExternalId,
+      tenantId: orgExternalId,
       userId: identity.id,
     };
   }

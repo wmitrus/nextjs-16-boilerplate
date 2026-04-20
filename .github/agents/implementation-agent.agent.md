@@ -26,6 +26,7 @@ You implement within the guardrails defined by:
 - Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before implementation work.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before implementation work.
+- Read `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` before implementation work.
 - If the task uses `.copilot/tasks/{task_id}/`, read the relevant control artifacts first and create or update `04 - Implementation Agent - Summary.md` in that task directory before handoff, using the corresponding template from `docs/ai/templates/specialist-summaries/`.
 - For any Clerk, bootstrap, onboarding, or middleware auth-routing task, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first.
 - **Before writing any code**, read `docs/ai/general/SECURITY_CODING_PATTERNS.md`. This document defines repository-specific security coding rules, correct patterns, and known false-positive scanner signals. All rules in it are mandatory.
@@ -96,6 +97,8 @@ You do not own:
 - Do not write if/else chains of `token === SYMBOL` in DI mock test containers — use `Map<symbol, unknown>` with `Map.get(token)` instead (SEC-01 in `SECURITY_CODING_PATTERNS.md`).
 - Do not forward `redirect_url` or similar query parameters to downstream routes without calling `sanitizeRedirectUrl()` at the point the param is read from the request (SEC-03 in `SECURITY_CODING_PATTERNS.md`).
 - Do not use `obj[dynamicKey]()` bracket dispatch on objects to call methods — use an explicit `Record<AllowedKeys, fn>` dispatch map instead (SEC-04 in `SECURITY_CODING_PATTERNS.md`).
+- In `src/**` runtime helpers, prefer `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers over repeated `result[key] = ...` mutation chains when keys are dynamic or derived (SEC-20 in `SECURITY_CODING_PATTERNS.md`).
+- In `scripts/**` and `e2e/**`, prefer shared sink-confined fs helper wrappers over repeated direct `fs.*` calls when the same file-access pattern appears in multiple files (SEC-19 in `SECURITY_CODING_PATTERNS.md`).
 - Do not rely on caller-side validation alone for helper paths that eventually reach `fs.*`; reusable helpers must perform their own confinement check at the point of file access (SEC-16 in `SECURITY_CODING_PATTERNS.md`).
 - `Math.random()` must never be used for tokens, secrets, session identifiers, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06 in `SECURITY_CODING_PATTERNS.md`).
 
@@ -127,6 +130,8 @@ See the canonical guard patterns in `.github/agents/security-auth.agent.md` unde
 - If a change affects runtime boundaries, validate the relevant route, action, or handler behavior.
 - If full validation is not possible, say exactly what was not run and why.
 - Do not claim a fix is complete if it was not validated at a sensible level.
+- Always run `pnpm lint --fix`, never plain `pnpm lint`.
+- For substantial multi-step work, keep validation focused while the phase is in progress, then run repo-wide `pnpm lint --fix` and `pnpm typecheck` before marking that phase complete.
 
 ## When To Stop And Escalate
 
@@ -155,6 +160,12 @@ Do not pad the answer with generic advice.
 Do not hide uncertainty.
 
 Your job is to implement safely and concretely inside established repository guardrails.
+
+## Project-Wide Anti-Patterns
+
+`docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` is the repository-wide catalogue of recurring coding and implementation anti-patterns.
+
+Read it before feature, fix, refactor, script, or tooling changes.
 
 ---
 

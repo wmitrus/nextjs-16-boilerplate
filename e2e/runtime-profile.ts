@@ -1,5 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { readEnvFileMap, resolveProjectPath } from './env-files';
 
 export const SEEDED_TENANT_IDS = {
   acme: '10000000-0000-4000-8000-000000000001',
@@ -21,46 +20,8 @@ interface RuntimeProfile {
   readonly oauthProvider?: string;
 }
 
-const ENV_VAR_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
-
 function readEnvFile(filePath: string): Map<string, string> {
-  const cwd = process.cwd();
-  const resolved = path.resolve(filePath);
-
-  if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
-    return new Map();
-  }
-
-  // resolved is confined to cwd; path.resolve() always produces an absolute path from a static literal
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  if (!fs.existsSync(resolved)) {
-    return new Map();
-  }
-
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const content = fs.readFileSync(resolved, 'utf8');
-  const env = new Map<string, string>();
-
-  for (const rawLine of content.split('\n')) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) {
-      continue;
-    }
-
-    const equalsIndex = line.indexOf('=');
-    if (equalsIndex === -1) {
-      continue;
-    }
-
-    const key = line.slice(0, equalsIndex).trim();
-    if (!ENV_VAR_KEY_PATTERN.test(key)) {
-      continue;
-    }
-    const value = line.slice(equalsIndex + 1).trim();
-    env.set(key, value.replace(/^['"]|['"]$/g, ''));
-  }
-
-  return env;
+  return readEnvFileMap(filePath, `runtime profile env file: ${filePath}`);
 }
 
 const processEnvSnapshot = new Map<string, string>(
@@ -69,9 +30,9 @@ const processEnvSnapshot = new Map<string, string>(
   ),
 );
 
-const envE2ELocal = readEnvFile(path.resolve(process.cwd(), '.env.e2e.local'));
-const envE2E = readEnvFile(path.resolve(process.cwd(), '.env.e2e'));
-const envLocal = readEnvFile(path.resolve(process.cwd(), '.env.local'));
+const envE2ELocal = readEnvFile(resolveProjectPath('.env.e2e.local'));
+const envE2E = readEnvFile(resolveProjectPath('.env.e2e'));
+const envLocal = readEnvFile(resolveProjectPath('.env.local'));
 
 function readValue(name: string): string | undefined {
   const processValue = processEnvSnapshot.get(name);

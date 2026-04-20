@@ -1,0 +1,166 @@
+name: Continue Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: continue-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  continue-checks:
+    name: Continue Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FORCE_NO_TTY: 'true'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Validate Continue API key
+        env:
+          CONTINUE_API_KEY: ${{ secrets.CONTINUE_API_KEY }}
+        run: |
+          if [ -z "$CONTINUE_API_KEY" ]; then
+            echo "Missing required Actions secret: CONTINUE_API_KEY"
+            exit 1
+          fi
+
+      - name: Install Continue CLI
+        run: npm install -g @continuedev/cli
+
+      - name: Fetch base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          target_ref="${BASE_REF:-main}"
+          git fetch --no-tags origin "$target_ref:$target_ref" || git fetch --no-tags origin "$target_ref"
+
+      - name: Run Continue reviews
+        id: run-checks
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          CONTINUE_API_KEY: ${{ secrets.CONTINUE_API_KEY }}
+        run: |
+          mkdir -p artifacts/continue
+          target_ref="${BASE_REF:-main}"
+
+          set +e
+          cn review --base "$target_ref" --format json \
+            > artifacts/continue/reviews.json \
+            2> artifacts/continue/reviews.stderr
+          exit_code=$?
+          set -e
+
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$target_ref" > artifacts/continue/base-ref.txt
+
+      - name: Build Continue summary
+        if: always()
+        env:
+          CONTINUE_EXIT_CODE: ${{ steps.run-checks.outputs.exit_code }}
+        run: |
+          node <<'EOF'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const artifactsDir = path.join(process.cwd(), 'artifacts', 'continue');
+          const jsonPath = path.join(artifactsDir, 'reviews.json');
+          const summaryPath = path.join(artifactsDir, 'summary.md');
+          const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY;
+          const exitCode = Number(process.env.CONTINUE_EXIT_CODE || '1');
+
+          const lines = ['## Continue Checks'];
+
+          if (!fs.existsSync(jsonPath)) {
+            lines.push('');
+            lines.push(`- Exit code: ${exitCode}`);
+            lines.push('- JSON report was not produced. See `reviews.stderr` in the workflow artifacts.');
+            fs.writeFileSync(summaryPath, `${lines.join('\n')}\n`);
+            if (stepSummaryPath) {
+              fs.appendFileSync(stepSummaryPath, `${lines.join('\n')}\n`);
+            }
+            process.exit(0);
+          }
+
+          try {
+            const payload = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+            const reviews = Array.isArray(payload.reviews)
+              ? payload.reviews
+              : Array.isArray(payload.checks)
+                ? payload.checks
+                : [];
+            const summary = payload.summary ?? {};
+            const passed = Number(summary.passed ?? reviews.filter((review) => review.status === 'pass').length);
+            const failed = Number(summary.failed ?? reviews.filter((review) => review.status === 'fail').length);
+            const errored = Number(summary.errored ?? reviews.filter((review) => review.status === 'error').length);
+            const total = Number(summary.total ?? reviews.length);
+
+            lines.push('');
+            lines.push(`- Exit code: ${exitCode}`);
+            lines.push(`- Total checks: ${total}`);
+            lines.push(`- Passed: ${passed}`);
+            lines.push(`- Failed: ${failed}`);
+            lines.push(`- Errored: ${errored}`);
+
+            if (reviews.length > 0) {
+              lines.push('');
+              lines.push('| Review | Status | Duration |');
+              lines.push('| --- | --- | --- |');
+
+              for (const review of reviews) {
+                const name = typeof review.name === 'string' ? review.name : 'unknown';
+                const status = typeof review.status === 'string' ? review.status : 'unknown';
+                const duration = typeof review.duration === 'number' ? `${review.duration.toFixed(1)}s` : '-';
+                lines.push(`| ${name} | ${status} | ${duration} |`);
+              }
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            lines.push('');
+            lines.push(`- Exit code: ${exitCode}`);
+            lines.push(`- Failed to parse Continue JSON output: ${message}`);
+          }
+
+          const markdown = `${lines.join('\n')}\n`;
+          fs.writeFileSync(summaryPath, markdown);
+          if (stepSummaryPath) {
+            fs.appendFileSync(stepSummaryPath, markdown);
+          }
+          EOF
+
+      - name: Upload Continue artifacts
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # actions/upload-artifact@v4.3.3
+        with:
+          name: continue-checks-${{ github.run_id }}
+          path: artifacts/continue/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail when Continue checks fail
+        if: always() && steps.run-checks.outputs.exit_code != '0'
+        run: |
+          echo "Continue reviews failed with exit code ${{ steps.run-checks.outputs.exit_code }}"
+          exit 1

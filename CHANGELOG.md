@@ -1,3 +1,48 @@
+# [1.27.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.26.0...v1.27.0) (2026-04-20)
+
+
+### Bug Fixes
+
+* **ai:** update responsible agents in documentation ([f5a7d94](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f5a7d9447b90678606679fc67b274d8a8205e043))
+* **canvas:** correct payload key existence checks ([007ba78](https://github.com/wmitrus/nextjs-16-boilerplate/commit/007ba787f8407e25f1a2feaff42aec4b9a1248eb))
+* **codacy:** resolve path handling for report file deletion ([ca49aec](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ca49aec301b1bff863c3faf77e12bb72ae78748d))
+* **db:** correct database error messages for clarity ([4c651f1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4c651f1b8757af5b477410366702c018e742276d))
+* **db:** correct database migration and seeding commands ([04a2ff9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/04a2ff94837f6db693cd97a1ac73c8c3246cb573))
+* **db:** improve error messages in db-seed script ([5480226](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5480226f6c5fff71479b2df3dfee93e644f33217))
+* **db:** resolve explicit compose file path handling ([43681a8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/43681a8bcdb66cd1f50f9e0015bf1de4c3338875))
+* **db:** update .depcheckrc to include missing dependencies ([f0f170d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f0f170de7d5e3bf927e403d12064a41e2e065f1c))
+* **db:** update database migration and seeding commands for pglite ([b6abf94](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b6abf946891b864543a4b716a12f3ddb5578587d))
+* **db:** update database studio command ([bb766be](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bb766be3d7281ff050c8d24d0d83ca7b76bb259b))
+* **db:** update migration and seed commands in tests ([47507b0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/47507b0f6b42071ae0436c3dc542d9db7bcb659f))
+* **db:** update migration command in error message ([053e4d6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/053e4d64a4d12b7bdcb1522e06708ec1129eb49a))
+* **db:** update migration command in error message ([0370a83](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0370a8378bcb95da058b954eb2e60ceda574cc26))
+* **db:** update PGlite migration command in error message ([a407231](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a4072315bc09f8e5d03beaf67830dd455fc0ae84))
+* **db:** update PGlite WASM abort error message command ([c3e5414](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c3e5414477cfcf408950048edf712cbef2e18128))
+* **db:** update pnpm-lock.yaml for dependency versions ([4f89952](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4f899523704a120ee5dd6a23095ea2152ea6e018))
+* **db:** update seed script to remove unnecessary DATABASE_URL ([1ba71a5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1ba71a5a61577d6dd772b9581e80de45588cfd76))
+* **db:** update seed script to use cross-env for environment variable ([8af366b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8af366b6804d55c43e0031104bc7120bd7f31832))
+* **env:** resolve path issues in environment file handling ([23587d5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/23587d5a1c886964f983719ed2e7ab6140ae2c87))
+* **eslint:** add rules to restrict dynamic key access and fs path usage ([a050f1c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a050f1c804becd841baafe4a0bfaf8a3cade7602))
+* **implementation-agent:** update coding patterns for runtime helpers ([ededc92](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ededc92e748f19ccba05be01bc633e37166e3b22))
+* **playwright:** resolve internal API key handling in config ([481335b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/481335bae2925cc50626921afa4326e6175a03fd))
+* **playwright:** resolve internal API key handling in config ([e7a6f6c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e7a6f6cbe49f221d831b079cc1cb31f2809aa6e9))
+* **tests:** update database error messages in BootstrapErrorUI tests ([72736b8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/72736b86a5511ea5356288e0140df12831aa5b08))
+* **tests:** update error message regex in PGliteWasmAbortError test ([7ef50ff](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7ef50ffd2e6a993b069737d87170408834c75f50))
+* **tests:** update mock tenant resolver to include organizationId ([cc6a856](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cc6a856f4de66c86fb720570c4d69513fb7fac60))
+* **tests:** update tenant mock to include organizationId ([004664c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/004664c035f4d2b60efd31702134be59a9b765c7))
+* **tests:** update tenant mock to include organizationId ([c1d85b3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c1d85b33e94e9b4b6ea46450a28c9bc4c1b084ba))
+
+
+### Features
+
+* **canvas:** add optional fields and relates handling ([9ac3fd6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9ac3fd64f45706275ed7a3baaf35e328bfd76435))
+* **db:** add OrgDbOrganizationResolver for tenant management ([446176a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/446176a5a2ca932d0d9e51b039c6d00ba9c8ffc5))
+* **db:** enhance database schema for organizations and roles ([a4a92f8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a4a92f8bd44555e4ecb27a9a2c34a1b69c6b7ff6))
+* **db:** finalize DB script taxonomy and remove deprecated aliases ([d90371a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d90371a74149ec3d017c7d18dde3b343aa4a29a1))
+* **db:** redesign organization and tenant structure ([87b6dc8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/87b6dc81a6be6f76eb59348dbeed349f01b6b6df))
+* **env:** add environment file handling utilities ([db9c97a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db9c97a81954ed52fef51f1cbc3bd956812e5a4d))
+* **infra:** add PersonalOrganizationResolver for tenant management ([7346fe1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7346fe1811dba47eb1c9ed99c7b12816ce6c41ff))
+
 # [1.26.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.25.0...v1.26.0) (2026-04-16)
 
 

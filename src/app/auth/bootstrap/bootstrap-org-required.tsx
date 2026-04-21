@@ -1,6 +1,6 @@
 'use client';
 
-import { OrganizationSwitcher } from '@clerk/nextjs';
+import { WorkspaceSwitcher } from '@/modules/auth/ui/WorkspaceSwitcher';
 
 interface BootstrapOrgRequiredProps {
   redirectUrl?: string;
@@ -23,7 +23,7 @@ export function BootstrapOrgRequired({
           This application requires a workspace. Select an existing workspace or
           create a new one to continue.
         </p>
-        <OrganizationSwitcher
+        <WorkspaceSwitcher
           hidePersonal
           createOrganizationMode="modal"
           afterSelectOrganizationUrl={continueUrl}

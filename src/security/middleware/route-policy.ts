@@ -1,4 +1,13 @@
-export const AUTH_ROUTE_PREFIXES = ['/sign-in', '/sign-up'] as const;
+export const AUTH_ROUTE_PREFIXES = [
+  '/sign-in',
+  '/sign-up',
+  '/auth/signin',
+  '/auth/signup',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/verify-email',
+  '/auth/verify-email-pending',
+] as const;
 
 export const PUBLIC_ROUTE_PREFIXES = [
   '/',
@@ -10,6 +19,7 @@ export const PUBLIC_ROUTE_PREFIXES = [
   '/feature-flags-demo',
   '/api/security-test/ssrf',
   '/api/logs',
+  '/api/auth',
   '/_betterstack',
 ] as const;
 

@@ -6,11 +6,14 @@ import { useState } from 'react';
 interface SignInClientProps {
   callbackUrl?: string;
   error?: string;
+  verified?: boolean;
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
   CredentialsSignin: 'Incorrect email or password.',
   NoCredentials: 'Incorrect email or password.',
+  EmailNotVerified:
+    'Your email address has not been verified. Please check your inbox or request a new verification link.',
   Default: 'Something went wrong. Please try again.',
 };
 
@@ -25,7 +28,11 @@ function resolveErrorMessage(error: string | undefined): string | null {
   return ERROR_MESSAGES.Default ?? 'An error occurred.';
 }
 
-export function SignInClient({ callbackUrl, error }: SignInClientProps) {
+export function SignInClient({
+  callbackUrl,
+  error,
+  verified,
+}: SignInClientProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(
     resolveErrorMessage(error),
@@ -48,7 +55,12 @@ export function SignInClient({ callbackUrl, error }: SignInClientProps) {
     });
 
     if (result?.error) {
-      setFormError(resolveErrorMessage(result.error));
+      const errorMsg = resolveErrorMessage(result.error);
+      if (result.error === 'EmailNotVerified') {
+        window.location.href = '/auth/verify-email-pending';
+        return;
+      }
+      setFormError(errorMsg);
       setIsLoading(false);
     } else if (result?.url) {
       window.location.href = result.url;
@@ -57,6 +69,13 @@ export function SignInClient({ callbackUrl, error }: SignInClientProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {verified && !formError && (
+        <div className="rounded-md bg-green-50 p-3 dark:bg-green-950">
+          <p className="text-sm text-green-700 dark:text-green-300">
+            Your email has been verified. You can now sign in.
+          </p>
+        </div>
+      )}
       {formError && (
         <div className="rounded-md bg-red-50 p-3 dark:bg-red-950">
           <p className="text-sm text-red-700 dark:text-red-300">{formError}</p>

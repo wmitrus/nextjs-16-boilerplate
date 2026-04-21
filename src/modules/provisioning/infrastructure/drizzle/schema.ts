@@ -1,6 +1,7 @@
 export {
   authOrganizationIdentitiesTable,
   authUserIdentitiesTable,
+  userCredentialsTable,
 } from '@/modules/auth/infrastructure/drizzle/schema';
 export {
   invitationsTable,

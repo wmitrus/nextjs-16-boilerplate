@@ -53,6 +53,12 @@
   - request-time runtime fix diff matched `connection-before-di.md`
   - SEC-17 rate-limit fix diff matched `rate-limit-path-propagation.md`
 - Next phase can move to CI integration planning rather than more blind prompt shaping.
+  - Phase 3 CI rollout is now implemented:
+    - chosen pattern: repo-local `cn review` workflow against local `.continue/checks/*.md` rather than hosted-only integration assumptions
+    - workflow added at `.github/workflows/continue-checks.yml`
+    - workflow uploads JSON/stderr artifacts and writes a markdown job summary for prompt-tuning review
+    - workflow uses single-runner concurrency with stale-run cancellation
+    - local iteration loop is documented in `README.md`
 
 ### Phase 2: Optional Expansion
 
@@ -62,9 +68,9 @@
 
 ### Phase 3: CI Integration
 
-- [ ] Choose the CI integration pattern
-- [ ] Add workflow with artifact retention and stale-run cancellation
-- [ ] Document local iteration workflow for check refinement
+- [x] Choose the CI integration pattern
+- [x] Add workflow with artifact retention and stale-run cancellation
+- [x] Document local iteration workflow for check refinement
 
 ## Proposed Rule Files
 
@@ -201,3 +207,9 @@
 - Save full check outputs as artifacts for prompt tuning.
 - Run deterministic checks first; Continue checks should see a cleaner diff state.
 - Review false positives weekly and prune aggressively if acceptance rate is weak.
+- CI pattern selected for this repository:
+  - use `.github/workflows/continue-checks.yml` as a standalone PR workflow
+  - authenticate Continue CLI via `CONTINUE_API_KEY` environment variable in headless mode
+  - run `cn review --base <base-branch> --format json`
+  - upload JSON and stderr artifacts even on failure
+  - fail the job on any non-zero Continue exit code after artifact upload

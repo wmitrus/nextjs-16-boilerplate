@@ -2,7 +2,6 @@ import type { Container, Module } from '@/core/container';
 import { AUTH } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 
-import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
 import { NeonRequestIdentitySource } from './infrastructure/neon/NeonRequestIdentitySource';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
@@ -22,7 +21,9 @@ function buildIdentitySource(
     case 'clerk':
       return new ClerkRequestIdentitySource();
     case 'authjs':
-      return new AuthJsRequestIdentitySource();
+      return {
+        get: async () => ({}),
+      };
     case 'supabase':
       return new SupabaseRequestIdentitySource();
     case 'neon':

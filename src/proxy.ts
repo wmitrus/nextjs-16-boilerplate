@@ -12,6 +12,7 @@ import type { TenantResolver } from '@/core/contracts/tenancy';
 import { env } from '@/core/env';
 import { createEdgeRequestContainer } from '@/core/runtime/edge';
 
+import { AuthJsEdgeIdentitySource } from '@/modules/auth/infrastructure/authjs/AuthJsEdgeIdentitySource';
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
 import type { EdgeSecurityDependencies } from '@/security/core/security-dependencies';
@@ -19,6 +20,7 @@ import type { RouteContext } from '@/security/middleware/route-classification';
 import { withAuth } from '@/security/middleware/with-auth';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
+import { withRegistrationMode } from '@/security/middleware/with-registration-mode';
 import { withSecurity } from '@/security/middleware/with-security';
 
 type ProxyHandler = (
@@ -108,6 +110,7 @@ function createSecurityPipeline(
     [
       withInternalApiGuard,
       withRateLimit,
+      withRegistrationMode,
       (next: ProxyHandler) =>
         withAuth(next, {
           dependencies: securityDependencies,
@@ -152,6 +155,12 @@ async function runSecurityPipeline(
 }
 
 async function nonClerkProxy(request: NextRequest): Promise<NextResponse> {
+  if (env.AUTH_PROVIDER === 'authjs') {
+    const identitySource = new AuthJsEdgeIdentitySource(request);
+    const requestContainer = createRequestContainer(identitySource);
+    return runSecurityPipeline(request, requestContainer);
+  }
+
   const requestContainer = createEdgeRequestContainer({
     auth: {
       authProvider: env.AUTH_PROVIDER,

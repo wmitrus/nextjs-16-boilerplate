@@ -1,0 +1,10 @@
+{
+  "projectId": 2,
+  "milestoneId": 52,
+  "headline": "Phase 7.2: Email Verification + Brute Force Protection + E2E Specs",
+  "description": "<h2>Objective</h2><p>Complete the AuthJS credential auth implementation by hardening the three remaining security gaps and adding Playwright E2E specs for all auth pages.</p><h2>Background</h2><p>Phase 7.1 delivered a fully working credential auth flow (sign-up, sign-in, sign-out, forgot-password, reset-password) validated end-to-end. 1059 tests passing, typecheck and lint clean.</p><h2>Three Remaining Gaps</h2><ul><li><strong>Gap 1 (HIGH)</strong>: No email verification flow — email_verified always false; unverified users can sign in without restriction</li><li><strong>Gap 2 (HIGH)</strong>: No brute-force protection on sign-in — unlimited password guessing</li><li><strong>Gap 3 (MEDIUM)</strong>: No session invalidation after password reset — stolen sessions remain valid</li></ul><h2>Email Verification Policy (User Input)</h2><p>Strict model: unverified email blocks full sign-in. User gets only verification-pending restricted state. Dev-mode bypass via AUTH_DEV_AUTO_VERIFY env flag. Never silently auto-verify in production.</p><h2>Acceptance Criteria</h2><ul><li>email_verified set to true only after token verification</li><li>Unverified users blocked from full app session</li><li>Brute-force rate limiting active on sign-in</li><li>AUTH_DEV_AUTO_VERIFY bypass works only in non-production</li><li>All new routes covered by unit tests</li><li>1059+ tests passing, coverage at or above 75%</li><li>Playwright E2E specs for all 5 auth pages</li></ul><h2>Task Workspace</h2><p>.copilot/tasks/2026-04-21-authjs-phase72/</p>",
+  "tags": "auth,security,email-verification,brute-force",
+  "priority": "2",
+  "status": 4,
+  "planHours": 8
+}

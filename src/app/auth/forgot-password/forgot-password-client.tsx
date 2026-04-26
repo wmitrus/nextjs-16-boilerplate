@@ -53,7 +53,10 @@ export function ForgotPasswordClient() {
   if (submitted) {
     return (
       <div className="space-y-4">
-        <div className="rounded-md bg-green-50 p-4 dark:bg-green-950">
+        <div
+          role="status"
+          className="rounded-md bg-green-50 p-4 dark:bg-green-950"
+        >
           <p className="text-sm text-green-700 dark:text-green-300">
             If an account with this email exists, a reset link has been sent.
             Please check your inbox.

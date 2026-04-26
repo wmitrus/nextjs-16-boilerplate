@@ -60,7 +60,10 @@ export function SignUpClient() {
 
   if (success) {
     return (
-      <div className="rounded-md bg-green-50 p-4 dark:bg-green-950">
+      <div
+        role="status"
+        className="rounded-md bg-green-50 p-4 dark:bg-green-950"
+      >
         <p className="text-sm text-green-700 dark:text-green-300">
           Account created. Email verification is required before sign-in.
           Redirecting…
@@ -72,7 +75,7 @@ export function SignUpClient() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="rounded-md bg-red-50 p-3 dark:bg-red-950">
+        <div role="alert" className="rounded-md bg-red-50 p-3 dark:bg-red-950">
           <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
           {errorStatus === 409 && (
             <p className="mt-1 text-sm text-red-700 dark:text-red-300">

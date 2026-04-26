@@ -52,6 +52,7 @@ export function AuthJsWorkspaceSwitcher({
         className="flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-label="Select workspace"
       >
         <span>{activeOrg?.name ?? 'Select organization'}</span>
         <svg

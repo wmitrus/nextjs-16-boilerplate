@@ -61,7 +61,10 @@ export function ResetPasswordClient({
 
   if (success) {
     return (
-      <div className="rounded-md bg-green-50 p-4 dark:bg-green-950">
+      <div
+        role="status"
+        className="rounded-md bg-green-50 p-4 dark:bg-green-950"
+      >
         <p className="text-sm text-green-700 dark:text-green-300">
           Password reset successfully! Redirecting to sign in…
         </p>
@@ -78,7 +81,7 @@ export function ResetPasswordClient({
         </span>
       </p>
       {error && (
-        <div className="rounded-md bg-red-50 p-3 dark:bg-red-950">
+        <div role="alert" className="rounded-md bg-red-50 p-3 dark:bg-red-950">
           <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
           <p className="mt-1 text-sm text-red-700 dark:text-red-300">
             <a
@@ -141,7 +144,7 @@ interface InvalidTokenProps {
 export function InvalidToken({ message }: InvalidTokenProps) {
   return (
     <div className="space-y-4">
-      <div className="rounded-md bg-red-50 p-4 dark:bg-red-950">
+      <div role="alert" className="rounded-md bg-red-50 p-4 dark:bg-red-950">
         <p className="text-sm text-red-700 dark:text-red-300">{message}</p>
       </div>
       <p className="text-center text-sm text-gray-600 dark:text-gray-400">

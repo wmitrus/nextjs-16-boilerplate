@@ -9,7 +9,11 @@ export function HeaderAuthControlsAuthjs() {
 
   if (status === 'loading') {
     return (
-      <div className="h-9 w-20 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-800" />
+      <div
+        className="h-9 w-20 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-800"
+        role="status"
+        aria-label="Loading authentication status"
+      />
     );
   }
 

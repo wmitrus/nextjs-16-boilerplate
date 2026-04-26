@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthJsWorkspaceSwitcher } from './AuthJsWorkspaceSwitcher';
 
+const workspaceButtonName = /select workspace/i;
+
 describe('AuthJsWorkspaceSwitcher', () => {
   const mockFetch = vi.fn();
 
@@ -54,7 +56,7 @@ describe('AuthJsWorkspaceSwitcher', () => {
         activeOrganizationId="org-1"
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /acme/i }));
+    fireEvent.click(screen.getByRole('button', { name: workspaceButtonName }));
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     expect(screen.getByText('Beta Corp')).toBeInTheDocument();
   });
@@ -69,7 +71,7 @@ describe('AuthJsWorkspaceSwitcher', () => {
         activeOrganizationId="org-1"
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /acme/i }));
+    fireEvent.click(screen.getByRole('button', { name: workspaceButtonName }));
     fireEvent.click(screen.getByText('Beta Corp'));
 
     await waitFor(() => {

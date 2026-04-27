@@ -70,6 +70,7 @@ export const env = createEnv({
       .url()
       .default('https://in.logs.betterstack.com'),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
+    NEXTAUTH_SECRET: z.string().min(1).optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
     SECURITY_AUDIT_LOG_ENABLED: z
@@ -98,6 +99,18 @@ export const env = createEnv({
     CROSS_PROVIDER_EMAIL_LINKING: z
       .enum(['disabled', 'verified-only'])
       .default('verified-only'),
+    REGISTRATION_MODE: z
+      .enum(['open', 'invite-only', 'disabled'])
+      .default('open'),
+    AUTH_EXPOSE_RESET_TOKEN_IN_DEV: z.coerce
+      .boolean()
+      .optional()
+      .default(false),
+    AUTH_DEV_AUTO_VERIFY: z.coerce.boolean().optional().default(false),
+    AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV: z.coerce
+      .boolean()
+      .optional()
+      .default(false),
     FEATURE_FLAG_PROVIDER: z
       .enum(['static', 'db', 'growthbook'])
       .default('static'),
@@ -188,6 +201,7 @@ export const env = createEnv({
     BETTERSTACK_WEB_VITALS_ENABLED: process.env.BETTERSTACK_WEB_VITALS_ENABLED,
     BETTER_STACK_INGESTING_URL: process.env.BETTER_STACK_INGESTING_URL,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
@@ -205,6 +219,11 @@ export const env = createEnv({
     TENANT_CONTEXT_COOKIE: process.env.TENANT_CONTEXT_COOKIE,
     FREE_TIER_MAX_USERS: process.env.FREE_TIER_MAX_USERS,
     CROSS_PROVIDER_EMAIL_LINKING: process.env.CROSS_PROVIDER_EMAIL_LINKING,
+    REGISTRATION_MODE: process.env.REGISTRATION_MODE,
+    AUTH_EXPOSE_RESET_TOKEN_IN_DEV: process.env.AUTH_EXPOSE_RESET_TOKEN_IN_DEV,
+    AUTH_DEV_AUTO_VERIFY: process.env.AUTH_DEV_AUTO_VERIFY,
+    AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV:
+      process.env.AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV,
     FEATURE_FLAG_PROVIDER: process.env.FEATURE_FLAG_PROVIDER,
     FEATURE_FLAGS_STATIC: process.env.FEATURE_FLAGS_STATIC,
     GROWTHBOOK_CLIENT_KEY: process.env.GROWTHBOOK_CLIENT_KEY,
@@ -350,5 +369,63 @@ export function validateTenancyConfig(): void {
     env.TENANCY_MODE,
     env.DEFAULT_TENANT_ID,
     env.TENANT_CONTEXT_SOURCE,
+  );
+}
+
+/**
+ * Cross-field email verification configuration validation against explicit values.
+ *
+ * Rules enforced (C-ENV-1 from constraints.md):
+ * - Both bypass flags simultaneously → error (ambiguous config)
+ * - Production + any bypass flag → error (bypasses banned in production)
+ * - Production + REGISTRATION_MODE=open → error (no mailer exists, dead-end signup)
+ * - Non-production + REGISTRATION_MODE=open + no bypass path → error (dead-end signup)
+ */
+export function validateVerificationConfigValues(
+  nodeEnv: string | undefined,
+  registrationMode: string | undefined,
+  devAutoVerify: boolean | undefined,
+  exposeVerificationToken: boolean | undefined,
+): void {
+  const isProduction = nodeEnv === 'production';
+  const isOpen = registrationMode === 'open';
+  const autoVerify = devAutoVerify === true;
+  const exposeToken = exposeVerificationToken === true;
+
+  if (autoVerify && exposeToken) {
+    throw new Error(
+      '[env] AUTH_DEV_AUTO_VERIFY and AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV cannot both be true. Choose one bypass path.',
+    );
+  }
+
+  if (isProduction && (autoVerify || exposeToken)) {
+    throw new Error(
+      '[env] AUTH_DEV_AUTO_VERIFY and AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV are banned in production.',
+    );
+  }
+
+  if (isProduction && isOpen) {
+    throw new Error(
+      '[env] REGISTRATION_MODE=open is not allowed in production without a real email delivery adapter. Set REGISTRATION_MODE=closed.',
+    );
+  }
+
+  if (!isProduction && isOpen && !autoVerify && !exposeToken) {
+    throw new Error(
+      '[env] REGISTRATION_MODE=open in non-production requires either AUTH_DEV_AUTO_VERIFY=true or AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV=true. Without a bypass path, users cannot complete email verification.',
+    );
+  }
+}
+
+/**
+ * Cross-field email verification configuration validation from global env.
+ * Convenience wrapper around validateVerificationConfigValues for bootstrap/startup.
+ */
+export function validateVerificationConfig(): void {
+  validateVerificationConfigValues(
+    env.NODE_ENV,
+    env.REGISTRATION_MODE,
+    env.AUTH_DEV_AUTO_VERIFY,
+    env.AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV,
   );
 }

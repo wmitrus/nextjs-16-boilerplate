@@ -3,9 +3,9 @@
 ## Task Context
 
 - Task ID: `2026-04-18-continue-checks-plan`
-- Objective: design and begin implementing a repository-specific Continue checks and rules rollout for PR review, with per-check severity, phased rollout, and clear separation from deterministic tooling.
-- Status: IN PROGRESS
-- Scope: phase 1 rules implementation plus first check implementation; CI workflow remains out of scope.
+- Objective: design and implement a repository-specific Continue checks and rules rollout for PR review, with per-check severity, phased rollout, and clear separation from deterministic tooling.
+- Status: COMPLETED
+- Scope: phase 1 rules/check implementation plus repo-local CI workflow wiring and local iteration documentation.
 
 ## Progress Checklist
 
@@ -17,7 +17,7 @@
 - [x] Define phased rollout and anti-noise constraints.
 - [x] Implement `.continue/rules/*.md`.
 - [x] Implement `.continue/checks/*.md`.
-- [ ] Add or adapt CI workflow for Continue checks.
+- [x] Add or adapt CI workflow for Continue checks.
 - [x] Trial-run checks locally on representative diffs.
 
 ## Likely Affected Areas
@@ -42,7 +42,7 @@
 - Security & Auth: completed for auth/trust-boundary relevance
 - Next.js Runtime: completed for App Router and `connection()` constraints
 - Validation Strategy: completed for check-vs-tool separation and rollout scope
-- Implementation Agent: in progress for approved phase 1 rollout
+- Implementation Agent: completed for phase 1 rollout plus CI workflow wiring
 
 ## Known Risks / Unknowns
 
@@ -72,4 +72,5 @@
 - Phase 1 rules are now implemented.
 - All 4 phase 1 blocking checks are now implemented: `auth-flow-change-review.md`, `connection-before-di.md`, `redirect-sanitization.md`, and `rate-limit-path-propagation.md`.
 - Local representative-diff trial is complete for all 4 phase 1 checks.
-- Next rollout step is CI integration design and workflow wiring.
+- CI integration is now implemented through `.github/workflows/continue-checks.yml` using `cn review --format json`, stale-run cancellation, and artifact retention for prompt tuning.
+- Local iteration workflow is now documented in `README.md`.

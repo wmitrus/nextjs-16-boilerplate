@@ -64,6 +64,34 @@
       "when": 1745490000000,
       "tag": "0008_auth_foundation_redesign",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776695066080,
+      "tag": "0009_authjs_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776770000000,
+      "tag": "0010_password_reset_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776860000000,
+      "tag": "0011_email_verification_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777235000000,
+      "tag": "0014_pending_invitation_unique",
+      "breakpoints": true
     }
   ]
 }

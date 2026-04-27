@@ -108,6 +108,10 @@ Always follow the repository's mandatory coding patterns from
 - shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats
 - `path.resolve()` plus sink-level confinement for dynamic `fs` paths
 - URL parsing and hostname/protocol validation before HTTP calls
+- DB-level unique constraints or partial unique indexes for duplicate-sensitive writes, with repository-level translation of the exact uniqueness violation into the domain duplicate error
+- hashed or masked email metadata in logs instead of raw addresses, and no token-bearing URLs in operational logs
+- sanitized email headers, escaped HTML template interpolation, and URL normalization before outbound email rendering
+- no silent noop email-provider fallback in production
 - `pnpm lint --fix`, never plain `pnpm lint`
 
 Also avoid the recurring repository-wide anti-patterns listed in

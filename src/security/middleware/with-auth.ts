@@ -56,6 +56,10 @@ const CLERK_CALLBACK_QUERY_PARAMS = new Set([
   '__session',
 ]);
 
+function getSignInPath(): string {
+  return env.AUTH_PROVIDER === 'authjs' ? '/auth/signin' : '/sign-in';
+}
+
 function isNodeMode(options: WithAuthOptions): options is WithAuthNodeOptions {
   return 'userRepository' in options;
 }
@@ -184,7 +188,7 @@ function rejectUnauthenticatedPrivateRoute(
     );
   }
 
-  const signInUrl = new URL('/sign-in', req.url);
+  const signInUrl = new URL(getSignInPath(), req.url);
   const requestedPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
   signInUrl.searchParams.set('redirect_url', requestedPath);
   return NextResponse.redirect(signInUrl);
@@ -294,7 +298,7 @@ export function withAuth(
         throw err;
       }
       if (!bootstrapUserId) {
-        return NextResponse.redirect(new URL('/sign-in', req.url));
+        return NextResponse.redirect(new URL(getSignInPath(), req.url));
       }
       return handler(req, ctx);
     }

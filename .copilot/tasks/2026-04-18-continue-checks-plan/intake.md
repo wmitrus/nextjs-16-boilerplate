@@ -22,9 +22,8 @@ Design a professional, repository-specific Continue PR review setup for this Nex
 
 ## Non-Goals
 
-- do not implement CI workflow yet
-- do not add a new CI workflow yet
 - do not rewrite existing ESLint, test, or Codacy configuration in this task
+- do not widen the phase 1 check set beyond the approved four blocking checks
 
 ## Acceptance Criteria
 
@@ -73,3 +72,8 @@ Design a professional, repository-specific Continue PR review setup for this Nex
 - whether the eventual CI runtime should use Continue-native infrastructure only or a custom workflow wrapper
 - whether the team wants blocking checks only, or a mix of blocking and advisory checks
 - whether auth-flow checks should link directly to matrix scenario IDs in their prompt bodies
+
+## Approval Addendum
+
+- 2026-04-19: user approved moving past planning/local trial into CI workflow wiring (`"ok dodaj"`)
+- chosen rollout shape: repo-local GitHub Actions workflow using `cn check` against `.continue/checks/`, with artifact retention and stale-run cancellation

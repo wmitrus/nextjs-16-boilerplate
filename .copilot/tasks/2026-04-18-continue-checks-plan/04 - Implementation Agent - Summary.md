@@ -3,8 +3,8 @@
 ## Task Context
 
 - Task ID: `2026-04-18-continue-checks-plan`
-- Task Objective: implement approved phase 1 Continue rule files and then begin the check rollout with `auth-flow-change-review.md`.
-- Current Run Scope: `.continue/rules/*.md` implementation, auth-flow check refinement, full phase 1 check implementation, and representative-diff local trial
+- Task Objective: implement approved phase 1 Continue rule files and complete the first Continue rollout through repo-local CI wiring.
+- Current Run Scope: `.continue/rules/*.md` implementation, auth-flow check refinement, full phase 1 check implementation, representative-diff local trial, and repo-local CI workflow wiring
 - Status: COMPLETED
 - Last Updated: 2026-04-18
 - Related Control Artifacts:
@@ -20,13 +20,15 @@
   - `.continue/rules/nextjs-runtime.md`
   - `.continue/rules/security-coding-patterns.md`
   - `.continue/rules/validation-and-tool-boundaries.md`
+  - `.github/workflows/continue-checks.yml`
+  - `README.md`
   - `.continue/checks/auth-flow-change-review.md`
 - implementation goals in scope:
   - encode repo-specific Continue codebase awareness
   - start check rollout with the highest-value auth-flow check
+  - wire the first repo-local CI workflow for the implemented checks
 - constraints applied:
   - minimal scope
-  - no CI workflow yet
   - no duplicate deterministic enforcement
 
 ## Inputs Reviewed
@@ -56,6 +58,9 @@
   - created `redirect-sanitization.md` with trust-boundary gating for request-controlled `redirect_url` reads and forwarding chains
   - created `rate-limit-path-propagation.md` with request-context gating for `checkRateLimit(...)` call sites that must propagate `meta.path`
   - completed representative-diff local trial for all 4 phase 1 checks and recorded the outcomes in a dedicated validation artifact
+  - added `.github/workflows/continue-checks.yml` as the first repo-local Continue CI workflow using `cn review --format json`
+  - added workflow summary/artifact capture so failed runs still preserve prompt-tuning evidence
+  - documented the local `cn check` iteration loop in `README.md`
 - tests or supporting files updated:
   - updated task artifacts to reflect approved rollout and implemented files
 - focused validation executed:
@@ -66,6 +71,7 @@
   - live-code review of `redirect_url` read/forward sites in auth and onboarding flows so `redirect-sanitization.md` keys on the request-controlled input boundary instead of flagging all redirects mechanically
   - live-code review of `checkRateLimit(...)` call sites, helper behavior, and path-propagation tests so `rate-limit-path-propagation.md` keys on request-aware production call sites instead of helper internals, mocks, or tests
   - manual representative-diff trial for low-signal auth copy changes, redirect sanitization, `/users` onboarding routing, request-time runtime opt-in, and SEC-17 path propagation
+  - workflow-level validation by repository error checks after adding `.github/workflows/continue-checks.yml`
 
 ## Files Changed
 
@@ -79,6 +85,8 @@
   - `.continue/checks/connection-before-di.md`
   - `.continue/checks/redirect-sanitization.md`
   - `.continue/checks/rate-limit-path-propagation.md`
+  - `.github/workflows/continue-checks.yml`
+  - `README.md`
 - test files:
   - none
 - docs / artifact files:
@@ -99,22 +107,26 @@
   - repository now has a dedicated security check for `SEC-03`, requiring `sanitizeRedirectUrl()` at the request-controlled redirect input boundary
   - repository now has a dedicated operational-security check for `SEC-17`, requiring `meta.path` propagation on request-aware `checkRateLimit(...)` call sites
   - repository now has artifact-backed local trial evidence for all four phase 1 checks
+  - repository now has a standalone PR workflow that runs the local Continue checks through `cn review`
+  - Continue CI now preserves JSON/stderr artifacts and a markdown summary even when a check run fails
+  - local prompt-refinement workflow is documented in `README.md`
 - intentional non-changes:
-  - no CI workflow added
   - no application code changed
-  - CI workflow wiring is still not implemented
+  - no application runtime/test behavior changed
 
 ## Implementation Decisions / Constraints
 
 - implementation choices made:
   - kept rules short and authoritative rather than copying large docs wholesale
   - made the first check fail only on code-level auth-flow contract violations, not merely on missing browser validation
+  - chose a repo-local `cn review` workflow instead of assuming hosted-only GitHub integration, because the task explicitly required workflow wiring, artifact retention, and stale-run cancellation
 - constraints preserved:
   - deterministic tool ownership
   - auth/runtime/security specialist constraints
   - low blast radius
 - tradeoffs accepted:
-  - validation is still manual because there is no Continue runner or CI/runtime wired yet
+  - the first rollout uses one aggregated workflow job rather than per-check job fan-out
+  - end-to-end hosted-run proof remains deferred until the workflow executes with real secrets in GitHub Actions
 
 ## Validation Performed
 
@@ -128,6 +140,7 @@
   - `rg "getAppContainer\(|createChild\(|await connection\(|await headers\(|await cookies\(|searchParams" src/app`
   - `rg "sanitizeRedirectUrl|redirect_url" src`
   - `rg "checkRateLimit\(|meta\.path|SEC-17" src docs/ai/general/SECURITY_CODING_PATTERNS.md`
+  - workflow validation via editor/problem checks after adding `.github/workflows/continue-checks.yml`
 - results:
   - unrelated diff correctly satisfied the intended early-exit condition
   - auth-adjacent copy/error-message diff revealed false-positive pressure in the original prompt scope
@@ -137,11 +150,12 @@
   - `redirect-sanitization.md` was scoped to changed request/form redirect-input reads and distinguishes raw request values from values already sanitized earlier in the same flow
   - `rate-limit-path-propagation.md` was scoped to changed production request-aware `checkRateLimit(...)` call sites and distinguishes those from helper tests, mocks, and non-request-aware contexts
   - full local trial coverage now exists for all four phase 1 checks, with one representative applicable diff per check plus low-signal early-exit evidence
+  - the repository now contains a valid GitHub Actions workflow for Continue checks with base-branch fetch, API-key-based auth, JSON artifact capture, and stale-run cancellation
 - validation not run:
-  - no Continue runner invocation; trial was manual because the repository has no local Continue execution workflow yet
+  - no live GitHub Actions execution of the new workflow in this session
   - no `pnpm lint --fix` or `pnpm typecheck` because only markdown task/config files changed
 - residual risk from validation gaps:
-  - representative-diff validation is complete, but real-world false-positive rate across live PRs remains unproven until CI rollout
+  - representative-diff validation is complete, but real-world false-positive rate across live PRs remains unproven until the workflow runs on real PRs
 
 ## Artifact Synchronization
 
@@ -157,7 +171,7 @@
 - blockers:
   - none
 - follow-up needed:
-  - design and wire CI execution for the already trialed phase 1 checks
+  - observe first live PR runs and tighten prompt wording only if artifact evidence shows recurring noise
 
 ## Handoff Notes
 
@@ -168,10 +182,11 @@
   - `connection-before-di.md` should remain explicit-evidence-based and must not degrade into a blanket grep rule for every `getAppContainer()` occurrence
   - `redirect-sanitization.md` should remain trust-boundary-based and must not degrade into a generic redirect-style review of literal safe routes
   - `rate-limit-path-propagation.md` should remain request-context-based and must not degrade into a blanket review of helper internals or test-only omissions of `meta.path`
+  - `.github/workflows/continue-checks.yml` is the current source of truth for repo-local Continue CI and should remain single-runner until real PR evidence justifies job fan-out
 - residual risks for review:
-  - prompt noise level is still unproven until local trials happen
+  - prompt noise level across live PRs is still unproven
 - recommended next specialist or step:
-  - move to CI integration planning and workflow wiring
+  - review the first live workflow artifacts and decide whether any check should be pruned, tightened, or split out
 
 ## Update Log
 
@@ -216,3 +231,10 @@
 - Trigger: user selected the full local trial package for all four phase-1 checks
 - Summary of change: validated all four phase 1 checks against representative historical diffs, recorded pass and early-exit expectations in a dedicated validation report, and synchronized the rollout artifacts to reflect that phase 1 local trial is complete
 - Sections refreshed: Task Context, Actions Performed, Files Changed, Behavior Change Summary, Validation Performed, Open Questions / Blockers, Handoff Notes, Update Log
+
+### Update Entry
+
+- Date: 2026-04-19
+- Trigger: user approved adding the missing Continue CI workflow
+- Summary of change: added `.github/workflows/continue-checks.yml`, corrected the rollout to use supported `cn review` automation with API-key-based auth, captured JSON/stderr artifacts plus markdown summaries for failed runs, documented the local review loop in `README.md`, and synchronized the task artifacts to mark phase 3 complete
+- Sections refreshed: Task Context, Scope Handled, Actions Performed, Files Changed, Behavior Change Summary, Implementation Decisions / Constraints, Validation Performed, Open Questions / Blockers, Handoff Notes, Update Log

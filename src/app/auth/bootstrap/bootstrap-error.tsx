@@ -1,7 +1,6 @@
 'use client';
 
-import { useClerk } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
+import { useSignOut } from '@/modules/auth/ui/hooks/useSignOut';
 
 type DbDriver = 'pglite' | 'postgres';
 
@@ -53,16 +52,10 @@ function getBootstrapErrorMessage(
 }
 
 export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
-  const { signOut } = useClerk();
-  const router = useRouter();
+  const signOut = useSignOut();
 
   const handleSignOut = async () => {
-    try {
-      await signOut();
-      router.push('/sign-in');
-    } catch {
-      window.location.href = '/sign-in';
-    }
+    await signOut();
   };
 
   const message = getBootstrapErrorMessage(error, dbDriver);
@@ -76,6 +69,7 @@ export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"

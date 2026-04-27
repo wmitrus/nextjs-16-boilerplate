@@ -3,17 +3,19 @@
 ## Scope
 
 - task: `2026-04-18-continue-checks-plan`
-- mode: local manual prompt-trial validation
-- target: phase 1 Continue rules and 4 blocking checks before any CI integration
+- mode: local manual prompt-trial validation plus CI wiring validation
+- target: phase 1 Continue rules, 4 blocking checks, and the first repo-local CI workflow
 
 ## Validation Method
 
-- no local Continue runner or CI workflow exists in this repository yet
-- validation therefore used representative historical diffs plus direct live-code review of the affected surfaces
+- representative-diff validation used historical diffs plus direct live-code review of the affected surfaces
+- CI rollout validation used workflow file inspection plus repository error checks after wiring `.github/workflows/continue-checks.yml`
 - success criteria:
   - each phase 1 check must match at least one representative diff
   - non-applicable checks should early-exit quietly on the same diff
   - auth-scoped low-signal changes should not trigger full contract review after prompt refinement
+  - CI workflow should run the local `.continue/checks/*.md` set through `cn review`
+  - CI workflow should retain outputs as artifacts and cancel stale runs
 
 ## Representative Diff Trials
 
@@ -98,7 +100,7 @@
 
 ## CI Rollout Readiness
 
-- ready for phase 3 CI integration: yes, at planning level
+- ready for phase 3 CI integration: implemented
 - recommended rollout order:
   1. run deterministic checks first
   2. run Continue checks on the cleaner post-lint/post-typecheck diff state
@@ -107,6 +109,22 @@
 - still not proven:
   - real-world false-positive rate across multiple live PRs
   - operator ergonomics of reviewing all 4 checks in one CI run
+
+## CI Wiring Validation
+
+- implemented workflow:
+  - `.github/workflows/continue-checks.yml`
+- workflow guarantees confirmed by inspection:
+  - single-runner PR workflow with stale-run cancellation
+  - explicit `CONTINUE_API_KEY` validation before execution
+  - Continue CLI install with API-key-based headless auth via environment variable
+  - `cn review --base <base-branch> --format json` against repo-local `.continue/checks/*.md`
+  - JSON, stderr, base-ref, and markdown summary artifacts retained even on failure
+  - job fails only after artifact upload, preserving debugging evidence
+- documentation added:
+  - `README.md` local iteration section for `cn check`
+- validation limits:
+  - no live end-to-end workflow execution was possible in this session because GitHub Actions secrets and hosted runner execution are unavailable locally
 
 ## Commands Used
 

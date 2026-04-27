@@ -93,52 +93,52 @@ Redesign the authentication and tenancy foundation of the Next.js 16 boilerplate
 
 ### Phase 4: Remove Dead Code + Fix Clerk-specific Coupling
 
-- [ ] Step 4.1: Remove `ClerkUserRepository` entirely (never wired, security violation)
-- [ ] Step 4.2: Fix `bootstrap-error.tsx` — remove `useClerk()` hard dependency
-- [ ] Step 4.3: Fix `OrganizationSwitcher` — add provider-agnostic placeholder
-- [ ] Step 4.4: Fix waitlist page — add `AUTH_PROVIDER` guard
-- [ ] Step 4.5: Audit all `@clerk/nextjs` imports outside Clerk infrastructure
-- [ ] **Validation**: grep for remaining Clerk-only imports outside clerk/ directory
+- [x] Step 4.1: Remove `ClerkUserRepository` entirely (never wired, security violation)
+- [x] Step 4.2: Fix `bootstrap-error.tsx` — remove `useClerk()` hard dependency
+- [x] Step 4.3: Fix `OrganizationSwitcher` — add provider-agnostic placeholder
+- [x] Step 4.4: Fix waitlist page — add `AUTH_PROVIDER` guard
+- [x] Step 4.5: Audit all `@clerk/nextjs` imports outside Clerk infrastructure
+- [x] **Validation**: grep for remaining Clerk-only imports outside clerk/ directory
 
 ### Phase 5: Invitation System (Provider-Agnostic)
 
-- [ ] Step 5.1: Domain contracts — `InvitationService`, `InvitationRepository`
-- [ ] Step 5.2: `DrizzleInvitationRepository` implementation
-- [ ] Step 5.3: `DefaultInvitationService` implementation
-- [ ] Step 5.4: Invitation token generation (crypto-safe)
-- [ ] Step 5.5: Route handler: `POST /api/auth/invite`
-- [ ] Step 5.6: Route handler: `GET /api/auth/invite/[token]` (validate + accept)
-- [ ] Step 5.7: Email sending abstraction (Resend/SMTP provider-agnostic)
-- [ ] Step 5.8: Clerk invitation bridge (delegate to Clerk API when `AUTH_PROVIDER=clerk`)
-- [ ] Step 5.9: UI: Invite member form (organization settings)
-- [ ] **Validation**: unit + integration tests for invitation flow
+- [x] Step 5.1: Domain contracts — `InvitationService`, `InvitationRepository`
+- [x] Step 5.2: `DrizzleInvitationRepository` implementation
+- [x] Step 5.3: `DefaultInvitationService` implementation
+- [x] Step 5.4: Invitation token generation (crypto-safe)
+- [x] Step 5.5: Route handler: `POST /api/auth/invite`
+- [x] Step 5.6: Route handler: `GET /api/auth/invite/[token]` (validate + accept)
+- [x] Step 5.7: Email sending abstraction (Resend/SMTP provider-agnostic)
+- [x] Step 5.8: Clerk invitation bridge (delegate to Clerk API when `AUTH_PROVIDER=clerk`)
+- [x] Step 5.9: UI: Invite member form (organization settings)
+- [ ] - [x] **Validation**: unit + integration tests for invitation flow
 
 ### Phase 6: Registration Mode + Waitlist (Provider-Agnostic)
 
-- [ ] Step 6.1: Add `REGISTRATION_MODE=open|invite-only|disabled` env var
-- [ ] Step 6.2: Enforce registration mode in proxy.ts (Edge guard)
-- [ ] Step 6.3: Domain: `WaitlistService`, `WaitlistRepository`
-- [ ] Step 6.4: `DrizzleWaitlistRepository` implementation
-- [ ] Step 6.5: Route handler: `POST /api/auth/waitlist` (join waitlist)
-- [ ] Step 6.6: Custom waitlist page (replaces Clerk Waitlist component)
-- [ ] Step 6.7: Admin: approve/reject waitlist entries
-- [ ] Step 6.8: Clerk waitlist bridge (mode=invite-only → Clerk waitlist)
+- [x] Step 6.1: Add `REGISTRATION_MODE=open|invite-only|disabled` env var
+- [x] Step 6.2: Enforce registration mode in proxy.ts (Edge guard)
+- [x] Step 6.3: Domain: `WaitlistService`, `WaitlistRepository`
+- [x] Step 6.4: `DrizzleWaitlistRepository` implementation
+- [x] Step 6.5: Route handler: `POST /api/auth/waitlist` (join waitlist)
+- [x] Step 6.6: Custom waitlist page (replaces Clerk Waitlist component)
+- [x] Step 6.7: Admin: approve/reject waitlist entries
+- [x] Step 6.8: Clerk waitlist bridge (mode=invite-only → Clerk waitlist)
 - [ ] **Validation**: E2E tests for registration mode gating
 
 ### Phase 7: AuthJS Adapter Implementation
 
-- [ ] Step 7.1: Install `next-auth` package
-- [ ] Step 7.2: Create `src/modules/auth/infrastructure/authjs/auth.config.ts` (Edge-safe)
-- [ ] Step 7.3: Create `src/modules/auth/infrastructure/authjs/auth.ts` (Node-only)
-- [ ] Step 7.4: Create `AuthJsRequestIdentitySource` (real implementation)
-- [ ] Step 7.5: Create `AuthJsEdgeIdentitySource` for proxy.ts
-- [ ] Step 7.6: Auth.js route handler (`/api/auth/[...nextauth]/route.ts`)
-- [ ] Step 7.7: `SessionProvider` wrapper component
-- [ ] Step 7.8: Custom sign-in page (`/auth/signin`)
-- [ ] Step 7.9: Custom sign-up page (`/auth/signup`)
-- [ ] Step 7.10: Custom organization switcher (DB-based)
-- [ ] Step 7.11: Wire into auth module factory
-- [ ] **Validation**: Full auth flow tests
+- [x] Step 7.1: Install `next-auth` package
+- [x] Step 7.2: Create `src/modules/auth/infrastructure/authjs/auth.config.ts` (Edge-safe)
+- [x] Step 7.3: Create `src/modules/auth/infrastructure/authjs/auth.ts` (Node-only)
+- [x] Step 7.4: Create `AuthJsRequestIdentitySource` (real implementation)
+- [x] Step 7.5: Create `AuthJsEdgeIdentitySource` for proxy.ts
+- [x] Step 7.6: Auth.js route handler (`/api/auth/[...nextauth]/route.ts`)
+- [x] Step 7.7: `SessionProvider` wrapper component
+- [x] Step 7.8: Custom sign-in page (`/auth/signin`)
+- [x] Step 7.9: Custom sign-up page (`/auth/signup`)
+- [x] Step 7.10: Custom organization switcher (DB-based)
+- [x] Step 7.11: Wire into auth module factory
+- [x] **Validation**: Full auth flow tests — 1040 unit tests passing, 0 typecheck/lint errors
 
 ### Phase 8: Variant C Sample App (EduGroup → Schools)
 

@@ -12,6 +12,7 @@ import { getNrBrowserCdnConfig } from '@/core/observability/new-relic-browser';
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
 import { normalizeClerkPostAuthRedirect } from '@/modules/auth/lib/clerk-redirects';
+import { SessionProvider } from '@/modules/auth/ui/authjs/SessionProvider';
 import { HeaderWithAuth } from '@/modules/auth/ui/HeaderWithAuth';
 
 import './globals.css';
@@ -67,6 +68,7 @@ export default function RootLayout({
   const isBetterStackWebVitalsEnabled =
     env.BETTERSTACK_ENABLED && env.BETTERSTACK_WEB_VITALS_ENABLED;
   const isClerkProvider = env.AUTH_PROVIDER === 'clerk';
+  const isAuthJsProvider = env.AUTH_PROVIDER === 'authjs';
   const signInFallbackRedirectUrl = normalizeClerkPostAuthRedirect(
     env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL,
     env.NEXT_PUBLIC_APP_URL,
@@ -133,6 +135,10 @@ export default function RootLayout({
               <AppLayoutContent>{children}</AppLayoutContent>
             </ClerkProvider>
           </Suspense>
+        ) : isAuthJsProvider ? (
+          <SessionProvider>
+            <AppLayoutContent>{children}</AppLayoutContent>
+          </SessionProvider>
         ) : (
           <AppLayoutContent>{children}</AppLayoutContent>
         )}

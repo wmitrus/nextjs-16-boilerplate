@@ -26,6 +26,8 @@ Update it after every security review group.
 | SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers         | Local lint-backed workflow | Scripts, E2E helpers      |
 | SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling   | Local lint-backed workflow | Scripts, E2E helpers      |
 | SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers  |
+| SEC-21 | Data integrity     | Preflight duplicate check without DB uniqueness       | Real risk -> fixed         | Invitations, write paths  |
+| SEC-22 | Sensitive data     | Raw email/token-bearing values in logs and mail paths | Real risk -> fixed         | Logging, email transports |
 
 ---
 
@@ -1207,3 +1209,112 @@ That would recreate Codacy noise locally. This pattern is enforced primarily thr
 **DO NOT** default to repeated `result[key] = ...` or `plainObject[key]` mutation chains in `src/**` runtime helpers when an entries-based transform, `Map`, or explicit `switch` would express the same behavior more clearly.
 
 **DO** use entries-based transforms, `Map`, or explicit `switch` helpers to keep Phase 2 object-access churn out of future Codacy runs.
+
+---
+
+## SEC-21 — Duplicate-Sensitive Writes Need DB-Enforced Uniqueness
+
+**ID**: SEC-21
+**Category**: Data Integrity / Concurrency
+**Classification**: Real risk -> fixed
+**Affected area**: invitation, waitlist, membership, token, and other duplicate-sensitive write paths
+
+### Problem
+
+Application-level duplicate checks like `findPendingByEmailAndOrg()` are raceable. Two concurrent requests can both observe "no existing row" and then both insert.
+
+This is a correctness and security-hardening issue whenever the invariant matters for downstream auth, organization membership, or user-facing invite state.
+
+### Dangerous Pattern
+
+```typescript
+const existing = await repository.findPendingByEmailAndOrg(email, organizationId);
+if (existing) throw new DuplicateInvitationError();
+
+await repository.create({ email, organizationId, status: 'pending' });
+```
+
+### Correct Pattern
+
+Keep the preflight read if it improves UX, but enforce the real invariant in the database:
+
+1. Add a unique constraint or partial unique index for the exact invariant.
+2. Catch the exact DB uniqueness violation in the repository adapter.
+3. Translate it into the existing domain duplicate error.
+
+Example for pending invitations:
+
+```typescript
+uniqueIndex('uq_invitations_org_email_pending')
+  .on(t.organizationId, t.email)
+  .where(sql`${t.status} = 'pending'`);
+```
+
+Then map the `23505` violation for that constraint back to `DuplicateInvitationError` in the Drizzle repository.
+
+### Rule for Agents
+
+**DO NOT** rely on read-before-write duplicate checks as the only invariant for duplicate-sensitive writes.
+
+**DO** keep the DB as the source of truth with a uniqueness constraint or partial unique index, and translate the exact persistence error back into the domain-level duplicate error.
+
+---
+
+## SEC-22 — Logs And Email Paths Must Not Expose Raw Email Or Token URLs
+
+**ID**: SEC-22
+**Category**: Sensitive Data / Operational Exposure
+**Classification**: Real risk -> fixed
+**Affected area**: invitation, waitlist, verification, reset, and noop email flows
+
+### Problem
+
+Raw email addresses, token-bearing URLs, and unsanitized user-controlled values often leak through:
+
+- structured logs
+- noop email transports that print to stdout
+- email subjects and headers
+- HTML email template interpolation
+
+These values do not need to appear verbatim in operational traces, and logging token URLs turns logs into credential material.
+
+### Dangerous Pattern
+
+```typescript
+logger.warn({ email, inviteUrl }, 'Invitation failed');
+console.info('[NoOpEmailService]', { to: input.to, resetUrl: input.resetUrl });
+subject: `You've been invited to join ${organizationName}`;
+html: `<p>${invitedByName}</p>`;
+```
+
+### Correct Pattern
+
+- log `emailHash` or masked recipient previews instead of raw addresses
+- never log invite, reset, or verification URLs
+- do not silently fall back to noop email providers in production
+- sanitize subject/header values, escape HTML content, and normalize URLs with `new URL()` before interpolation
+
+Example:
+
+```typescript
+logger.info({ emailHash: hashEmailForLogs(email) }, 'Invitation created');
+
+this.logger.info(
+  { recipientPreview: maskEmail(input.to) },
+  'Password reset email skipped by NoOpEmailService',
+);
+
+const safeOrganizationName = sanitizeEmailHeaderValue(input.organizationName);
+const safeInviteUrl = validateUrlForEmail(input.inviteUrl);
+const safeInvitedByName = escapeHtml(input.invitedByName ?? 'Someone');
+```
+
+### Rule for Agents
+
+**DO NOT** log raw emails when a hash or masked preview is sufficient.
+
+**DO NOT** log invite, reset, or verification URLs.
+
+**DO NOT** allow production to silently select a noop email provider.
+
+**DO** sanitize dynamic email headers, escape HTML template content, and normalize outbound URLs before rendering them into email content.

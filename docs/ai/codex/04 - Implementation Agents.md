@@ -32,6 +32,8 @@ The skill reads the shared authority docs first:
 - `docs/ai/general/04 - Implementation Agents.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md`
 
+Implementation work must also inherit the repository rules that duplicate-sensitive writes need DB-backed uniqueness and that invitation/reset/waitlist logging or mail fallbacks must not expose raw emails or token-bearing URLs (SEC-21, SEC-22).
+
 ## Output Shape
 
 For close-out output, the skill reports:

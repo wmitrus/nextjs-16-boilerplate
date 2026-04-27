@@ -48,6 +48,19 @@ describe('NodemailerEmailService', () => {
         }),
       );
     });
+
+    it('escapes verification URLs before rendering html', async () => {
+      await service.sendVerificationEmail({
+        to: 'user@example.com',
+        verifyUrl: 'https://example.com/auth/verify-email?token=<abc>',
+      });
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('%3Cabc%3E'),
+        }),
+      );
+    });
   });
 
   describe('sendInvitationEmail', () => {
@@ -80,6 +93,29 @@ describe('NodemailerEmailService', () => {
       expect(mockSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           html: expect.stringContaining('Someone'),
+        }),
+      );
+    });
+
+    it('sanitizes header values and escapes html content', async () => {
+      await service.sendInvitationEmail({
+        to: 'invitee@example.com',
+        organizationName: 'Acme\r\nBcc:evil@example.com <Admin>',
+        invitedByName: 'Bob <script>',
+        inviteUrl: 'https://example.com/invite/<xyz>',
+        expiresAt: new Date('2026-12-31T12:00:00.000Z'),
+      });
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject:
+            "You've been invited to join Acme Bcc:evil@example.com <Admin>",
+          html: expect.stringContaining('Bob &lt;script&gt;'),
+        }),
+      );
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('2026-12-31'),
         }),
       );
     });

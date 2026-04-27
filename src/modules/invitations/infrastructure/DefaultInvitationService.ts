@@ -1,5 +1,7 @@
 import { resolveServerLogger } from '@/core/logger/di';
 
+import { hashEmailForLogs } from '@/shared/lib/security/email-safety';
+
 import type { EmailService } from '../domain/EmailService';
 import {
   DuplicateInvitationError,
@@ -46,9 +48,11 @@ export class DefaultInvitationService implements InvitationService {
     );
     if (existing) {
       throw new DuplicateInvitationError(
-        `A pending invitation already exists for ${input.email} in this organization`,
+        'A pending invitation already exists for this organization',
       );
     }
+
+    const emailHash = hashEmailForLogs(input.email);
 
     const token = generateInvitationToken();
     const expiresAt = buildInvitationExpiry(input.expiresInHours);
@@ -77,7 +81,8 @@ export class DefaultInvitationService implements InvitationService {
         {
           event: 'invitation:email_send_failed',
           invitationId: invitation.id,
-          email: input.email,
+          organizationId: input.organizationId,
+          emailHash,
           errorMessage: error instanceof Error ? error.message : String(error),
           errorName: error instanceof Error ? error.name : 'UnknownError',
         },
@@ -90,7 +95,7 @@ export class DefaultInvitationService implements InvitationService {
         event: 'invitation:created',
         invitationId: invitation.id,
         organizationId: input.organizationId,
-        email: input.email,
+        emailHash,
       },
       'Invitation created',
     );
@@ -134,7 +139,7 @@ export class DefaultInvitationService implements InvitationService {
         event: 'invitation:accepted',
         invitationId: invitation.id,
         organizationId: invitation.organizationId,
-        email: invitation.email,
+        emailHash: hashEmailForLogs(invitation.email),
       },
       'Invitation accepted',
     );

@@ -125,6 +125,10 @@ Always flag these if present:
 - using `obj[dynamicKey]()` bracket dispatch on objects to call methods — use explicit `Record<AllowedKeys, fn>` dispatch maps; the Zod guard upstream is invisible to static analysis (SEC-04)
 - `Math.random()` for tokens, secrets, session identifiers, API keys, nonces, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06)
 - keying module-level SDK client caches by a subset of the client's configuration — always include ALL differentiating config fields (e.g., both `clientKey` and `apiHost`) in the cache key to prevent silent wrong-backend selection (SEC-11)
+- duplicate-sensitive write paths that rely only on a preflight read-before-write check and do not enforce the invariant in the DB (SEC-21)
+- raw email addresses or token-bearing URLs in logs, stdout, or noop email transports when hashed or masked metadata would suffice (SEC-22)
+- silent production fallback to noop email providers for `EMAIL_PROVIDER=none` or unknown providers (SEC-22)
+- email subjects, headers, or HTML templates that interpolate user-controlled values without sanitization or URL normalization (SEC-22)
 - real credential-shaped values (API keys, tokens, license keys, passwords, secrets) written verbatim into task artifact markdown files (`.copilot/tasks/{task_id}/*.md`) — always replace with `[REDACTED]`; gitleaks scans all committed markdown and will fail the `security-scan` CI workflow
 
 ## Hard Security Rules
@@ -141,6 +145,7 @@ Never approve a design that relies on:
 - route handlers returning tenant- or user-sensitive data without explicit checks
 - cache behavior that could leak user- or tenant-scoped data
 - logs or telemetry that expose secrets, tokens, or unnecessary private data
+- duplicate-sensitive persistence invariants enforced only at the service layer, without a DB-backed uniqueness guarantee
 - upstream allowlist validation of CLI args or config values as a substitute for point-of-use guards in file path construction or HTTP calls
 - inherited-key checks on plain objects as a substitute for own-key validation on untrusted input
 

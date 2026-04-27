@@ -93,6 +93,9 @@ You do not own:
 - In `scripts/**` and `e2e/**`, prefer shared sink-confined fs helper wrappers over repeated direct `fs.*` calls when the same file-access pattern appears in multiple files (SEC-19 in `SECURITY_CODING_PATTERNS.md`).
 - Do not rely on caller-side validation alone for helper paths that eventually reach `fs.*`; reusable helpers must perform their own confinement check at the point of file access (SEC-16 in `SECURITY_CODING_PATTERNS.md`).
 - `Math.random()` must never be used for tokens, secrets, session identifiers, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06 in `SECURITY_CODING_PATTERNS.md`).
+- For duplicate-sensitive writes, do not rely on a read-before-write existence check as the only invariant. Add a DB-level unique constraint or partial unique index and translate the exact uniqueness violation back into the domain duplicate error (SEC-21 in `SECURITY_CODING_PATTERNS.md`).
+- Do not log raw emails or token-bearing URLs in invitation, waitlist, verification, or password-reset paths. Use hashed or masked metadata in logs, and never silently select a noop email provider in production (SEC-22 in `SECURITY_CODING_PATTERNS.md`).
+- Sanitize user-controlled email subject/header values, escape dynamic HTML template content, and normalize URLs with `new URL()` before interpolating them into outbound email content (SEC-22 in `SECURITY_CODING_PATTERNS.md`).
 
 ## Script and Tooling Security Rules
 

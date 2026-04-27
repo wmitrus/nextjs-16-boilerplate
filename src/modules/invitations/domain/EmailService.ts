@@ -30,7 +30,7 @@ export interface SendWaitlistRejectionEmailInput {
  * Provider-agnostic email delivery abstraction.
  *
  * Implementations:
- * - NoOpEmailService: dev stub (logs to console, no real send)
+ * - NoOpEmailService: dev/test stub (structured logs, no real send)
  * - ResendEmailService: Resend API (EMAIL_PROVIDER=resend)
  * - NodemailerEmailService: SMTP transport (EMAIL_PROVIDER=smtp)
  *

@@ -1,5 +1,12 @@
 import nodemailer from 'nodemailer';
 
+import {
+  escapeHtml,
+  formatEmailDate,
+  sanitizeEmailHeaderValue,
+  validateUrlForEmail,
+} from '@/shared/lib/security/email-safety';
+
 import type {
   EmailService,
   SendInvitationEmailInput,
@@ -37,12 +44,15 @@ export class NodemailerEmailService implements EmailService {
 
   async sendInvitationEmail(input: SendInvitationEmailInput): Promise<void> {
     const invitedBy = input.invitedByName ?? 'Someone';
+    const safeOrganizationName = sanitizeEmailHeaderValue(
+      input.organizationName,
+    );
     await this.transporter.sendMail({
       from: this.fromEmail,
       to: input.to,
-      subject: `You've been invited to join ${input.organizationName}`,
+      subject: `You've been invited to join ${safeOrganizationName}`,
       html: buildInvitationHtml({
-        organizationName: input.organizationName,
+        organizationName: safeOrganizationName,
         invitedByName: invitedBy,
         inviteUrl: input.inviteUrl,
         expiresAt: input.expiresAt,
@@ -96,6 +106,7 @@ export class NodemailerEmailService implements EmailService {
 }
 
 function buildVerificationHtml({ verifyUrl }: { verifyUrl: string }): string {
+  const safeVerifyUrl = validateUrlForEmail(verifyUrl);
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Verify your email</title></head>
@@ -103,17 +114,18 @@ function buildVerificationHtml({ verifyUrl }: { verifyUrl: string }): string {
   <h2>Verify your email address</h2>
   <p>Click the button below to verify your email and activate your account.</p>
   <p>
-    <a href="${verifyUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">
+    <a href="${safeVerifyUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">
       Verify Email
     </a>
   </p>
   <p style="color:#6b7280;font-size:14px">This link expires in 24 hours. If you did not create an account, you can ignore this email.</p>
-  <p style="color:#6b7280;font-size:12px">If the button does not work, copy this URL into your browser:<br>${verifyUrl}</p>
+  <p style="color:#6b7280;font-size:12px">If the button does not work, copy this URL into your browser:<br>${safeVerifyUrl}</p>
 </body>
 </html>`;
 }
 
 function buildPasswordResetHtml({ resetUrl }: { resetUrl: string }): string {
+  const safeResetUrl = validateUrlForEmail(resetUrl);
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Reset your password</title></head>
@@ -121,12 +133,12 @@ function buildPasswordResetHtml({ resetUrl }: { resetUrl: string }): string {
   <h2>Reset your password</h2>
   <p>We received a request to reset your password. Click the button below to choose a new password.</p>
   <p>
-    <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">
+    <a href="${safeResetUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">
       Reset Password
     </a>
   </p>
   <p style="color:#6b7280;font-size:14px">This link expires in 15 minutes. If you did not request a password reset, you can ignore this email.</p>
-  <p style="color:#6b7280;font-size:12px">If the button does not work, copy this URL into your browser:<br>${resetUrl}</p>
+  <p style="color:#6b7280;font-size:12px">If the button does not work, copy this URL into your browser:<br>${safeResetUrl}</p>
 </body>
 </html>`;
 }
@@ -136,7 +148,7 @@ function buildWaitlistConfirmationHtml({
 }: {
   name: string | null;
 }): string {
-  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>You're on the waitlist!</title></head>
@@ -150,7 +162,7 @@ function buildWaitlistConfirmationHtml({
 }
 
 function buildWaitlistRejectionHtml({ name }: { name: string | null }): string {
-  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Waitlist update</title></head>
@@ -174,19 +186,23 @@ function buildInvitationHtml({
   inviteUrl: string;
   expiresAt: Date;
 }): string {
+  const safeOrganizationName = escapeHtml(organizationName);
+  const safeInvitedByName = escapeHtml(invitedByName);
+  const safeInviteUrl = validateUrlForEmail(inviteUrl);
+
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Invitation to ${organizationName}</title></head>
+<head><meta charset="utf-8"><title>Invitation to ${safeOrganizationName}</title></head>
 <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
-  <h2>You've been invited to join ${organizationName}</h2>
-  <p>${invitedByName} has invited you to join <strong>${organizationName}</strong>.</p>
+  <h2>You've been invited to join ${safeOrganizationName}</h2>
+  <p>${safeInvitedByName} has invited you to join <strong>${safeOrganizationName}</strong>.</p>
   <p>
-    <a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">
+    <a href="${safeInviteUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">
       Accept Invitation
     </a>
   </p>
-  <p style="color:#6b7280;font-size:14px">This invitation expires on ${expiresAt.toLocaleDateString()}.</p>
-  <p style="color:#6b7280;font-size:12px">If the button does not work, copy this URL into your browser:<br>${inviteUrl}</p>
+  <p style="color:#6b7280;font-size:14px">This invitation expires on ${formatEmailDate(expiresAt)}.</p>
+  <p style="color:#6b7280;font-size:12px">If the button does not work, copy this URL into your browser:<br>${safeInviteUrl}</p>
 </body>
 </html>`;
 }

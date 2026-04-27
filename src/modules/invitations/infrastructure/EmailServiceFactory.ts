@@ -1,8 +1,16 @@
+import { resolveServerLogger } from '@/core/logger/di';
+
 import type { EmailService } from '../domain/EmailService';
 
 import { NoOpEmailService } from './NoOpEmailService';
 import { ResendEmailService } from './resend/ResendEmailService';
 import { NodemailerEmailService } from './smtp/NodemailerEmailService';
+
+const logger = resolveServerLogger().child({
+  type: 'API',
+  category: 'invitations',
+  module: 'email-service-factory',
+});
 
 export interface EmailServiceFactoryOptions {
   provider: 'none' | 'resend' | 'smtp';
@@ -19,6 +27,8 @@ export interface EmailServiceFactoryOptions {
 export function createEmailService(
   opts: EmailServiceFactoryOptions,
 ): EmailService {
+  const nodeEnv = process.env.NODE_ENV;
+
   switch (opts.provider) {
     case 'resend': {
       if (!opts.resendApiKey) {
@@ -68,7 +78,33 @@ export function createEmailService(
       });
     }
 
-    default:
+    case 'none': {
+      if (nodeEnv === 'production') {
+        throw new Error(
+          '[email] EMAIL_PROVIDER=none is not allowed in production.',
+        );
+      }
+
+      logger.warn(
+        { event: 'email:noop:selected', provider: 'none', nodeEnv },
+        'Using NoOpEmailService because EMAIL_PROVIDER=none',
+      );
       return new NoOpEmailService();
+    }
+
+    default: {
+      const provider = String(opts.provider);
+      if (nodeEnv === 'production') {
+        throw new Error(
+          `[email] Unknown EMAIL_PROVIDER "${provider}" is not allowed in production.`,
+        );
+      }
+
+      logger.warn(
+        { event: 'email:noop:selected', provider, nodeEnv },
+        'Falling back to NoOpEmailService for an unknown EMAIL_PROVIDER',
+      );
+      return new NoOpEmailService();
+    }
   }
 }

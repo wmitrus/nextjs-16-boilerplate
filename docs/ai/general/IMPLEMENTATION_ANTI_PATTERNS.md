@@ -162,6 +162,27 @@ Preferred pattern:
 
 - validate at intake and again at the helper sink when the helper performs file or network access
 
+### 3.4 PII And Token Leakage In Operational Paths
+
+Do not:
+
+- log raw email addresses when a hash or masked preview is sufficient
+- emit invite, reset, or verification URLs into logs or stdout
+- silently route production email flows through noop transports
+- interpolate user-controlled strings into email subjects or HTML without sanitization
+
+Why this is banned:
+
+- it turns logs and fallback tooling into a sensitive-data sink
+- it creates repeated security-review churn across invitation, waitlist, and auth-recovery flows
+
+Preferred pattern:
+
+- use hashed or masked recipient metadata in logs
+- keep token-bearing URLs out of logs entirely
+- reject noop email-provider selection in production
+- sanitize header values, escape HTML, and normalize URLs before interpolation
+
 ---
 
 ## 4. Implementation Shape Anti-Patterns
@@ -241,6 +262,24 @@ Preferred pattern:
 
 - add `*.db.test.ts` for Drizzle adapters
 - use `Map<symbol, unknown>` for DI token resolution in tests
+
+### 4.6 Duplicate-Sensitive Writes Without DB Backstop
+
+Do not:
+
+- rely on read-before-write duplicate checks as the only invariant for invitation, waitlist, token, or membership writes
+- assume a passing preflight lookup means the write path is concurrency-safe
+
+Why this is banned:
+
+- concurrent requests can bypass preflight checks and create duplicate rows
+- cleanup later becomes data repair instead of code repair
+
+Preferred pattern:
+
+- keep preflight duplicate reads only as UX optimization
+- enforce the invariant in the database with a unique constraint or partial unique index
+- translate the exact DB uniqueness violation into the domain-level duplicate error
 
 ---
 

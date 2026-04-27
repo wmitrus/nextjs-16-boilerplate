@@ -1,3 +1,7 @@
+import { resolveServerLogger } from '@/core/logger/di';
+
+import { maskEmail } from '@/shared/lib/security/email-safety';
+
 import type {
   EmailService,
   SendInvitationEmailInput,
@@ -9,53 +13,83 @@ import type {
 
 /**
  * No-op email service for development and environments without email config.
- * Logs email details to stdout instead of sending.
+ * Logs redacted metadata instead of sending.
  *
  * Replace with ResendEmailService or NodemailerEmailService via EMAIL_PROVIDER.
  */
 export class NoOpEmailService implements EmailService {
+  private readonly logger = resolveServerLogger().child({
+    type: 'API',
+    category: 'invitations',
+    module: 'noop-email-service',
+  });
+
+  constructor() {
+    if (process.env.NODE_ENV === 'production') {
+      this.logger.warn(
+        { event: 'email:noop:production' },
+        'NoOpEmailService instantiated in production — verify email provider selection',
+      );
+    }
+  }
+
   async sendInvitationEmail(input: SendInvitationEmailInput): Promise<void> {
-    console.info('[NoOpEmailService] Invitation email (not sent):', {
-      to: input.to,
-      organization: input.organizationName,
-      inviteUrl: input.inviteUrl,
-      expiresAt: input.expiresAt.toISOString(),
-    });
+    this.logger.info(
+      {
+        event: 'email:noop:invitation',
+        recipientPreview: maskEmail(input.to),
+        organizationName: input.organizationName,
+        expiresAt: input.expiresAt.toISOString(),
+      },
+      'Invitation email skipped by NoOpEmailService',
+    );
   }
 
   async sendVerificationEmail(
     input: SendVerificationEmailInput,
   ): Promise<void> {
-    console.info('[NoOpEmailService] Verification email (not sent):', {
-      to: input.to,
-      verifyUrl: input.verifyUrl,
-    });
+    this.logger.info(
+      {
+        event: 'email:noop:verification',
+        recipientPreview: maskEmail(input.to),
+      },
+      'Verification email skipped by NoOpEmailService',
+    );
   }
 
   async sendPasswordResetEmail(
     input: SendPasswordResetEmailInput,
   ): Promise<void> {
-    console.info('[NoOpEmailService] Password reset email (not sent):', {
-      to: input.to,
-      resetUrl: input.resetUrl,
-    });
+    this.logger.info(
+      {
+        event: 'email:noop:password_reset',
+        recipientPreview: maskEmail(input.to),
+      },
+      'Password reset email skipped by NoOpEmailService',
+    );
   }
 
   async sendWaitlistConfirmationEmail(
     input: SendWaitlistConfirmationEmailInput,
   ): Promise<void> {
-    console.info('[NoOpEmailService] Waitlist confirmation email (not sent):', {
-      to: input.to,
-      name: input.name,
-    });
+    this.logger.info(
+      {
+        event: 'email:noop:waitlist_confirmation',
+        recipientPreview: maskEmail(input.to),
+      },
+      'Waitlist confirmation email skipped by NoOpEmailService',
+    );
   }
 
   async sendWaitlistRejectionEmail(
     input: SendWaitlistRejectionEmailInput,
   ): Promise<void> {
-    console.info('[NoOpEmailService] Waitlist rejection email (not sent):', {
-      to: input.to,
-      name: input.name,
-    });
+    this.logger.info(
+      {
+        event: 'email:noop:waitlist_rejection',
+        recipientPreview: maskEmail(input.to),
+      },
+      'Waitlist rejection email skipped by NoOpEmailService',
+    );
   }
 }

@@ -21,12 +21,24 @@ import { DefaultInvitationService } from '@/modules/invitations/infrastructure/D
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
-import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
 const createBodySchema = z.object({
   email: z.email(),
   roleId: z.uuid(),
 });
+
+function isEnvBasedPlatformAdmin(email: string | undefined): boolean {
+  if (!email) return false;
+
+  const rawEmails = process.env.ADMIN_USER_EMAILS;
+  if (!rawEmails) return false;
+
+  return rawEmails
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email.toLowerCase());
+}
 
 async function checkAdminAccess(
   email: string | undefined,
@@ -52,16 +64,20 @@ async function checkAdminAccess(
 }
 
 function resolveServices(db: DrizzleDb) {
+  const emailProvider = process.env.EMAIL_PROVIDER;
   const emailService = createEmailService({
-    provider: env.EMAIL_PROVIDER,
-    resendApiKey: env.RESEND_API_KEY,
-    resendFromEmail: env.RESEND_FROM_EMAIL,
-    smtpHost: env.SMTP_HOST,
-    smtpPort: env.SMTP_PORT,
-    smtpSecure: env.SMTP_SECURE,
-    smtpUser: env.SMTP_USER,
-    smtpPass: env.SMTP_PASS,
-    smtpFromEmail: env.SMTP_FROM_EMAIL,
+    provider:
+      emailProvider === 'resend' || emailProvider === 'smtp'
+        ? emailProvider
+        : 'none',
+    resendApiKey: process.env.RESEND_API_KEY,
+    resendFromEmail: process.env.RESEND_FROM_EMAIL,
+    smtpHost: process.env.SMTP_HOST,
+    smtpPort: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined,
+    smtpSecure: process.env.SMTP_SECURE === 'true',
+    smtpUser: process.env.SMTP_USER,
+    smtpPass: process.env.SMTP_PASS,
+    smtpFromEmail: process.env.SMTP_FROM_EMAIL,
   });
   return new DefaultInvitationService(
     new DrizzleInvitationRepository(db),

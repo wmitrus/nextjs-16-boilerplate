@@ -16,6 +16,7 @@ export const usersTable = pgTable(
     displayName: text('display_name'),
     locale: text('locale'),
     timezone: text('timezone'),
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

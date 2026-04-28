@@ -19,6 +19,7 @@ export const PUBLIC_ROUTE_PREFIXES = [
   '/feature-flags-demo',
   '/api/security-test/ssrf',
   '/api/logs',
+  '/auth/invite',
   '/api/auth',
   '/_betterstack',
 ] as const;

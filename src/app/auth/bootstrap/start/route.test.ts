@@ -20,6 +20,7 @@ vi.mock('@/core/env', async (importOriginal) => {
     ...actual,
     env: {
       ...actual.env,
+      AUTH_PROVIDER: 'authjs',
       NODE_ENV: 'test',
     },
   };
@@ -45,14 +46,14 @@ describe('GET /auth/bootstrap/start', () => {
     vi.clearAllMocks();
   });
 
-  it('redirects to /sign-in when unauthenticated', async () => {
+  it('redirects to /auth/signin when unauthenticated under AuthJS', async () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({ type: 'unauthenticated' });
     const req = new NextRequest(
       `${BASE}/auth/bootstrap/start?redirect_url=%2Fusers`,
     );
     const res = await GET(req);
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toContain('/sign-in');
+    expect(res.headers.get('location')).toContain('/auth/signin');
   });
 
   it('redirects to /auth/bootstrap?state=org-required when org_required', async () => {
@@ -169,26 +170,26 @@ describe('GET /auth/bootstrap/start', () => {
     expect(loc).toContain('error=db_error');
   });
 
-  it('falls back to /users when redirect_url is missing and user is ready', async () => {
+  it('falls back to /dashboard when redirect_url is missing and user is ready', async () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({
       type: 'ready',
-      safeTarget: '/users',
+      safeTarget: '/dashboard',
     });
     const req = new NextRequest(`${BASE}/auth/bootstrap/start`);
     const res = await GET(req);
-    expect(res.headers.get('location')).toContain('/users');
+    expect(res.headers.get('location')).toContain('/dashboard');
   });
 
-  it('sanitizes external redirect_url to /users', async () => {
+  it('sanitizes external redirect_url to /dashboard', async () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({
       type: 'ready',
-      safeTarget: '/users',
+      safeTarget: '/dashboard',
     });
     const req = new NextRequest(
       `${BASE}/auth/bootstrap/start?redirect_url=https%3A%2F%2Fevil.example%2Fsteal`,
     );
     const res = await GET(req);
-    expect(res.headers.get('location')).toContain('/users');
+    expect(res.headers.get('location')).toContain('/dashboard');
     expect(res.headers.get('location')).not.toContain('evil.example');
   });
 });

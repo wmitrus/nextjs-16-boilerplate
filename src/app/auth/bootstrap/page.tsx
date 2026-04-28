@@ -89,6 +89,7 @@ export async function BootstrapPageContent({
     <BootstrapErrorUI
       error={resolveBootstrapError(error, reason)}
       dbDriver={env.DB_DRIVER}
+      authProvider={env.AUTH_PROVIDER}
     />
   );
 }

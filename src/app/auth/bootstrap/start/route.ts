@@ -5,9 +5,12 @@ import { NextResponse } from 'next/server';
 import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 
+import { getSignInPath } from '@/shared/lib/routing/auth-entry';
 import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
 import { resolveBootstrapOutcome } from '../resolve-bootstrap-outcome';
+
+import { DEFAULT_APP_ENTRY_URL } from '@/app/auth/post-auth-redirect';
 
 const logger = resolveServerLogger().child({
   type: 'API',
@@ -17,7 +20,7 @@ const logger = resolveServerLogger().child({
 
 export async function GET(request: NextRequest) {
   const rawRedirectUrl = request.nextUrl.searchParams.get('redirect_url') ?? '';
-  const safeTarget = sanitizeRedirectUrl(rawRedirectUrl, '/users');
+  const safeTarget = sanitizeRedirectUrl(rawRedirectUrl, DEFAULT_APP_ENTRY_URL);
 
   logger.info(
     {
@@ -33,11 +36,13 @@ export async function GET(request: NextRequest) {
   try {
     outcome = await resolveBootstrapOutcome(safeTarget);
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
       {
         event: 'bootstrap_start:error',
         pathname: '/auth/bootstrap/start',
-        err,
+        errorMessage: error.message,
+        errorName: error.name,
       },
       'Unexpected error during bootstrap outcome resolution',
     );
@@ -58,7 +63,7 @@ export async function GET(request: NextRequest) {
 
   switch (outcome.type) {
     case 'unauthenticated':
-      return NextResponse.redirect(new URL('/sign-in', request.url));
+      return NextResponse.redirect(new URL(getSignInPath(), request.url));
 
     case 'org_required': {
       const target = new URL('/auth/bootstrap', request.url);

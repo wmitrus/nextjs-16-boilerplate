@@ -1,5 +1,8 @@
 'use client';
 
+import Link from 'next/link';
+import { signOut as signOutAuthjs } from 'next-auth/react';
+
 import { useSignOut } from '@/modules/auth/ui/hooks/useSignOut';
 
 type DbDriver = 'pglite' | 'postgres';
@@ -31,6 +34,7 @@ interface BootstrapErrorUIProps {
     | 'tenant_config'
     | 'db_error';
   dbDriver?: DbDriver;
+  authProvider?: 'clerk' | 'authjs' | 'supabase' | 'neon';
 }
 
 function getBootstrapErrorMessage(
@@ -51,13 +55,46 @@ function getBootstrapErrorMessage(
   }
 }
 
-export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
+function ClerkSignOutButton() {
   const signOut = useSignOut();
 
-  const handleSignOut = async () => {
-    await signOut();
-  };
+  return (
+    <button
+      onClick={() => void signOut()}
+      className="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+    >
+      Sign Out
+    </button>
+  );
+}
 
+function AuthJsSignOutButton() {
+  return (
+    <button
+      onClick={() => void signOutAuthjs({ callbackUrl: '/auth/signin' })}
+      className="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+    >
+      Sign Out
+    </button>
+  );
+}
+
+function FallbackSignOutButton() {
+  return (
+    <Link
+      href="/"
+      className="flex-1 rounded-md bg-red-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-red-700"
+    >
+      Return Home
+    </Link>
+  );
+}
+
+export function BootstrapErrorUI({
+  error,
+  dbDriver,
+  authProvider,
+}: BootstrapErrorUIProps) {
   const message = getBootstrapErrorMessage(error, dbDriver);
 
   return (
@@ -69,7 +106,6 @@ export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
-            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -90,12 +126,13 @@ export function BootstrapErrorUI({ error, dbDriver }: BootstrapErrorUIProps) {
           >
             Try Again
           </button>
-          <button
-            onClick={handleSignOut}
-            className="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-          >
-            Sign Out
-          </button>
+          {authProvider === 'clerk' ? (
+            <ClerkSignOutButton />
+          ) : authProvider === 'authjs' ? (
+            <AuthJsSignOutButton />
+          ) : (
+            <FallbackSignOutButton />
+          )}
         </div>
       </div>
     </div>

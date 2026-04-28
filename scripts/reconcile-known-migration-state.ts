@@ -320,16 +320,30 @@ export async function reconcileKnownMigrationState(options: {
           continue;
         }
 
-        await sql`
-          insert into drizzle.__drizzle_migrations (hash, created_at)
-          select ${decision.hash}, ${decision.createdAt}
-          where not exists (
-            select 1
-            from drizzle.__drizzle_migrations
-            where hash = ${decision.hash}
-          )
-        `;
-        appliedTags.push(decision.tag);
+        await sql.begin('SERIALIZABLE', async (tx) => {
+          const existing = await tx.unsafe<{ present: number }[]>(
+            `
+              select 1 as present
+              from drizzle.__drizzle_migrations
+              where hash = $1
+              limit 1
+            `,
+            [decision.hash],
+          );
+
+          if (existing[0]) {
+            return;
+          }
+
+          await tx.unsafe(
+            `
+              insert into drizzle.__drizzle_migrations (hash, created_at)
+              values ($1, $2)
+            `,
+            [decision.hash, decision.createdAt],
+          );
+          appliedTags.push(decision.tag);
+        });
       }
     }
 

@@ -5,6 +5,7 @@ import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
+import { getSignInPath } from '@/shared/lib/routing/auth-entry';
 
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
 
@@ -39,6 +40,7 @@ export async function UsersLayoutGuard({
   try {
     access = await resolveNodeProvisioningAccess(getAppContainer());
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
       {
         event: 'users_guard:decision',
@@ -53,7 +55,8 @@ export async function UsersLayoutGuard({
         provisioningRequired: true,
         decision: 'redirect:/auth/bootstrap',
         reason: 'unsupported_state',
-        err,
+        errorMessage: error.message,
+        errorName: error.name,
       },
       'Users guard failed while resolving provisioning access and redirected to bootstrap recovery route',
     );
@@ -66,7 +69,7 @@ export async function UsersLayoutGuard({
       : access.status === 'ONBOARDING_REQUIRED'
         ? 'redirect:/onboarding'
         : access.status === 'UNAUTHENTICATED'
-          ? 'redirect:/sign-in'
+          ? `redirect:${getSignInPath()}`
           : access.status === 'BOOTSTRAP_REQUIRED'
             ? 'redirect:/auth/bootstrap/start'
             : access.status === 'TENANT_CONTEXT_REQUIRED'
@@ -98,7 +101,7 @@ export async function UsersLayoutGuard({
   );
 
   if (access.status === 'UNAUTHENTICATED') {
-    redirect('/sign-in?redirect_url=/users');
+    redirect(`${getSignInPath()}?redirect_url=/users`);
   }
 
   if (access.status === 'BOOTSTRAP_REQUIRED') {

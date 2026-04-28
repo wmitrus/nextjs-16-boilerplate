@@ -109,17 +109,17 @@ describe('completeOnboarding', () => {
     userRepository.updateOnboardingStatus.mockResolvedValue(undefined);
   });
 
-  it('executes provisioning before writing profile and onboarding status, then redirects to /users', async () => {
+  it('executes provisioning before writing profile and onboarding status, then redirects to /dashboard', async () => {
     const formData = new FormData();
     formData.set('displayName', 'Alice');
     formData.set('locale', 'pl-PL');
     formData.set('timezone', 'Europe/Warsaw');
 
     await expect(completeOnboarding(formData)).rejects.toThrow(
-      'REDIRECT:/users',
+      'REDIRECT:/dashboard',
     );
 
-    expect(redirectMock).toHaveBeenCalledWith('/users');
+    expect(redirectMock).toHaveBeenCalledWith('/dashboard');
     expect(provisioningService.ensureProvisioned).toHaveBeenCalledTimes(1);
     expect(userRepository.updateProfile).toHaveBeenCalledWith('u-1', {
       displayName: 'Alice',
@@ -143,7 +143,7 @@ describe('completeOnboarding', () => {
     formData.set('displayName', 'Alice');
 
     await expect(completeOnboarding(formData)).rejects.toThrow(
-      'REDIRECT:/users',
+      'REDIRECT:/dashboard',
     );
 
     expect(mockCookieDelete).toHaveBeenCalledWith('__onboarding_pending');

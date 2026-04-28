@@ -1,3 +1,16 @@
+# [1.29.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.28.0...v1.29.0) (2026-04-28)
+
+
+### Features
+
+* **api:** implement invitations management endpoints ([6404594](https://github.com/wmitrus/nextjs-16-boilerplate/commit/640459410f64a18204b261f5f46007746d8f14af))
+* **vercel:** implement CLI for Vercel commands ([bc18d20](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bc18d204d8bd1ad00ff7a6704b3c9bd7eb86347d))
+
+
+### Reverts
+
+* **api:** remove accidental invitations route from pr1 ([80b415e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/80b415ecd41a7a2a31737625884898dc06ba7609))
+
 # [1.28.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.27.0...v1.28.0) (2026-04-27)
 
 

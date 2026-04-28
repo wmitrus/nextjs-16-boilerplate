@@ -102,15 +102,37 @@ export const env = createEnv({
     REGISTRATION_MODE: z
       .enum(['open', 'invite-only', 'disabled'])
       .default('open'),
-    AUTH_EXPOSE_RESET_TOKEN_IN_DEV: z.coerce
-      .boolean()
+    AUTH_EXPOSE_RESET_TOKEN_IN_DEV: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
       .optional()
       .default(false),
-    AUTH_DEV_AUTO_VERIFY: z.coerce.boolean().optional().default(false),
-    AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV: z.coerce
-      .boolean()
+    AUTH_DEV_AUTO_VERIFY: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
       .optional()
       .default(false),
+    AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .optional()
+      .default(false),
+    EMAIL_PROVIDER: z.enum(['none', 'resend', 'smtp']).default('none'),
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM_EMAIL: z.string().optional(),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().positive().optional(),
+    SMTP_SECURE: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .optional()
+      .default(false),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_FROM_EMAIL: z.string().optional(),
+    WAITLIST_INVITE_ORGANIZATION_ID: z.uuid().optional(),
+    WAITLIST_INVITE_ROLE_ID: z.uuid().optional(),
+    WAITLIST_SEND_REJECTION_EMAIL: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .optional()
+      .default(true),
+    ADMIN_USER_EMAILS: z.string().optional(),
     FEATURE_FLAG_PROVIDER: z
       .enum(['static', 'db', 'growthbook'])
       .default('static'),
@@ -224,6 +246,20 @@ export const env = createEnv({
     AUTH_DEV_AUTO_VERIFY: process.env.AUTH_DEV_AUTO_VERIFY,
     AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV:
       process.env.AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV,
+    EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT,
+    SMTP_SECURE: process.env.SMTP_SECURE,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS,
+    SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL,
+    WAITLIST_INVITE_ORGANIZATION_ID:
+      process.env.WAITLIST_INVITE_ORGANIZATION_ID,
+    WAITLIST_INVITE_ROLE_ID: process.env.WAITLIST_INVITE_ROLE_ID,
+    WAITLIST_SEND_REJECTION_EMAIL: process.env.WAITLIST_SEND_REJECTION_EMAIL,
+    ADMIN_USER_EMAILS: process.env.ADMIN_USER_EMAILS,
     FEATURE_FLAG_PROVIDER: process.env.FEATURE_FLAG_PROVIDER,
     FEATURE_FLAGS_STATIC: process.env.FEATURE_FLAGS_STATIC,
     GROWTHBOOK_CLIENT_KEY: process.env.GROWTHBOOK_CLIENT_KEY,

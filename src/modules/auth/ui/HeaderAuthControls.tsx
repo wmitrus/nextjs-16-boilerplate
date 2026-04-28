@@ -71,7 +71,15 @@ export function HeaderAuthControls() {
             </SignUpButton>
           </SignedOut>
           <SignedIn>
-            <UserButton />
+            <div className="flex items-center gap-3">
+              <a
+                href="/admin"
+                className="text-sm font-medium text-zinc-600 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
+              >
+                Administration
+              </a>
+              <UserButton />
+            </div>
           </SignedIn>
         </>
       )}

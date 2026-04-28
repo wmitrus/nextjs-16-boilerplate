@@ -13,6 +13,7 @@ import {
 import type { UserRepository } from '@/core/contracts/user';
 import { env } from '@/core/env';
 
+import { getSignInPath } from '@/shared/lib/routing/auth-entry';
 import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
 import {
@@ -55,10 +56,6 @@ const CLERK_CALLBACK_QUERY_PARAMS = new Set([
   '__clerk_handshake_nonce',
   '__session',
 ]);
-
-function getSignInPath(): string {
-  return env.AUTH_PROVIDER === 'authjs' ? '/auth/signin' : '/sign-in';
-}
 
 function isNodeMode(options: WithAuthOptions): options is WithAuthNodeOptions {
   return 'userRepository' in options;
@@ -137,6 +134,17 @@ function redirectAuthenticatedFromAuthRoute(
   return NextResponse.redirect(bootstrapUrl);
 }
 
+function isProvisioningGuardedRoute(pathname: string): boolean {
+  return (
+    pathname === '/users' ||
+    pathname.startsWith('/users/') ||
+    pathname === '/dashboard' ||
+    pathname.startsWith('/dashboard/') ||
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/')
+  );
+}
+
 function redirectForIncompleteOnboarding(
   req: NextRequest,
   ctx: RouteContext,
@@ -147,13 +155,9 @@ function redirectForIncompleteOnboarding(
     return null;
   }
 
-  const isUsersRoute =
-    req.nextUrl.pathname === '/users' ||
-    req.nextUrl.pathname.startsWith('/users/');
-
   // Keep the edge cookie as a routing hint for general private routes, but
-  // let the DB-backed users layout remain authoritative for /users.
-  if (isUsersRoute) {
+  // let DB-backed entry guards remain authoritative for their own routes.
+  if (isProvisioningGuardedRoute(req.nextUrl.pathname)) {
     return null;
   }
 

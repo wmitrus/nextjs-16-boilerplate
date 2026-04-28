@@ -14,6 +14,7 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
 import { buildProvisioningInput } from '../auth/build-provisioning-input';
+import { DEFAULT_APP_ENTRY_URL } from '../auth/post-auth-redirect';
 
 import {
   CrossProviderLinkingNotAllowedError,
@@ -135,7 +136,7 @@ export const completeOnboarding = async (formData: FormData) => {
 
   const safeRedirectUrl = sanitizeRedirectUrl(
     typeof rawRedirectUrl === 'string' ? rawRedirectUrl : '',
-    '/users',
+    DEFAULT_APP_ENTRY_URL,
   );
 
   const internalUserId = provisioningResult.internalUserId;

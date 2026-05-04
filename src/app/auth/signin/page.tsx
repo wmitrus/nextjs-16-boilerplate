@@ -5,6 +5,8 @@ import { Suspense } from 'react';
 
 import { env } from '@/core/env';
 
+import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
+
 import { buildBootstrapRedirectUrl } from '../post-auth-redirect';
 
 import { SignInClient } from './sign-in-client';
@@ -28,12 +30,15 @@ async function SignInPageContent({
   }
 
   const session = await getServerSession(authOptions);
-  if (session) {
-    const { callbackUrl, redirect_url } = await searchParams;
-    redirect(buildBootstrapRedirectUrl(callbackUrl ?? redirect_url));
-  }
-
   const { callbackUrl, redirect_url, error, verified } = await searchParams;
+  const safeRedirect = sanitizeRedirectUrl(
+    callbackUrl ?? redirect_url ?? '',
+    '/dashboard',
+  );
+
+  if (session) {
+    redirect(buildBootstrapRedirectUrl(safeRedirect));
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
@@ -47,7 +52,7 @@ async function SignInPageContent({
           </p>
         </div>
         <SignInClient
-          callbackUrl={callbackUrl ?? redirect_url}
+          callbackUrl={safeRedirect}
           error={error}
           verified={verified === 'true'}
         />

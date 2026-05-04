@@ -24,4 +24,12 @@ describe('buildBootstrapRedirectUrl', () => {
       buildBootstrapRedirectUrl('/auth/bootstrap/start?redirect_url=%2Fadmin'),
     ).toBe('/auth/bootstrap/start?redirect_url=%2Fadmin');
   });
+
+  it('sanitizes nested redirect_url values on bootstrap passthrough URLs', () => {
+    expect(
+      buildBootstrapRedirectUrl(
+        '/auth/bootstrap/start?redirect_url=https://evil.example.com/phish',
+      ),
+    ).toBe('/auth/bootstrap/start?redirect_url=%2Fdashboard');
+  });
 });

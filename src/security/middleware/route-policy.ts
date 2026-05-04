@@ -24,12 +24,24 @@ export const PUBLIC_ROUTE_PREFIXES = [
   '/_betterstack',
 ] as const;
 
+function normalizeRoutePath(path: string): string {
+  const queryIndex = path.indexOf('?');
+  const hashIndex = path.indexOf('#');
+  const cutIndex = [queryIndex, hashIndex]
+    .filter((index) => index >= 0)
+    .reduce((min, index) => Math.min(min, index), path.length);
+
+  return path.slice(0, cutIndex) || '/';
+}
+
 export function matchesRoutePrefix(path: string, prefix: string): boolean {
+  const normalizedPath = normalizeRoutePath(path);
+
   if (prefix === '/') {
-    return path === '/';
+    return normalizedPath === '/';
   }
 
-  return path === prefix || path.startsWith(`${prefix}/`);
+  return normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`);
 }
 
 export function matchesAnyRoutePrefix(

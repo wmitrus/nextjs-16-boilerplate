@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { cookies, headers } from 'next/headers';
 
 import type { Container, Module } from '@/core/container';
@@ -82,6 +82,7 @@ function buildTenantResolver(
             .select({ id: organizationsTable.id })
             .from(organizationsTable)
             .where(eq(organizationsTable.tenantId, tenantId))
+            .orderBy(asc(organizationsTable.id))
             .limit(1);
 
           return organization?.id ?? null;

@@ -10,7 +10,17 @@ export function buildBootstrapRedirectUrl(
   const safeTarget = sanitizeRedirectUrl(requestedUrl ?? fallback, fallback);
 
   if (safeTarget.startsWith(BOOTSTRAP_START_PATH)) {
-    return safeTarget;
+    const url = new URL(safeTarget, 'http://localhost');
+    const nestedRedirect = url.searchParams.get('redirect_url');
+
+    if (nestedRedirect !== null) {
+      url.searchParams.set(
+        'redirect_url',
+        sanitizeRedirectUrl(nestedRedirect, fallback),
+      );
+    }
+
+    return `${url.pathname}${url.search}`;
   }
 
   const params = new URLSearchParams({ redirect_url: safeTarget });

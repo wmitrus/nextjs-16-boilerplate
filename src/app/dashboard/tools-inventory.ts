@@ -262,7 +262,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
       description:
         'Performance auditing runs in GitHub Actions for hosted deployments, including preview URLs.',
       dashboardHref:
-        process.env.LHCI_SERVER_BASE_URL?.trim() ||
+        env.LHCI_SERVER_BASE_URL ||
         'https://github.com/GoogleChrome/lighthouse-ci',
       dashboardLabel: 'Open Lighthouse CI',
       signals: ['workflow', 'ci', 'performance'],
@@ -302,8 +302,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
       statusTone: 'local',
       description:
         'On-prem task lifecycle integration is automated through repository CLI commands and local compose services.',
-      dashboardHref:
-        process.env.LEANTIME_LOCAL_APP_URL?.trim() || 'http://localhost:8080',
+      dashboardHref: env.LEANTIME_LOCAL_APP_URL || 'http://localhost:8080',
       dashboardLabel: 'Open Leantime',
       signals: ['script', 'local', 'ops'],
     }),

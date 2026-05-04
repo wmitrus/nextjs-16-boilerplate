@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 
 import { AUTH } from '@/core/contracts';
@@ -39,6 +40,8 @@ export async function OnboardingGuard({
 }: {
   children: React.ReactNode;
 }) {
+  await connection();
+
   const requestContext = await getServerRequestLogContext({
     pathname: '/onboarding',
   });

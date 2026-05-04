@@ -110,10 +110,6 @@ Always flag these when present:
 - `obj[dynamicKey]()` dispatch instead of explicit `Record<AllowedKeys, fn>` maps
   (SEC-04)
 - `Math.random()` for security-sensitive values (SEC-06)
-- duplicate-sensitive write paths enforced only by preflight reads instead of DB-backed uniqueness (SEC-21)
-- raw email addresses or token-bearing URLs in logs, noop transports, or operational traces (SEC-22)
-- silent production fallback to noop email providers (SEC-22)
-- user-controlled email header or HTML interpolation without sanitization and URL normalization (SEC-22)
 - real credential-shaped values written verbatim into `.copilot/tasks/{task_id}/*.md`
 
 Use `docs/ai/general/SECURITY_CODING_PATTERNS.md` as the canonical rule catalogue and

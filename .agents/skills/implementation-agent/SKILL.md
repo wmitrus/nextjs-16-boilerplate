@@ -108,11 +108,12 @@ Always follow the repository's mandatory coding patterns from
 - shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats
 - `path.resolve()` plus sink-level confinement for dynamic `fs` paths
 - URL parsing and hostname/protocol validation before HTTP calls
-- DB-level unique constraints or partial unique indexes for duplicate-sensitive writes, with repository-level translation of the exact uniqueness violation into the domain duplicate error
-- hashed or masked email metadata in logs instead of raw addresses, and no token-bearing URLs in operational logs
-- sanitized email headers, escaped HTML template interpolation, and URL normalization before outbound email rendering
-- no silent noop email-provider fallback in production
 - `pnpm lint --fix`, never plain `pnpm lint`
+- `node scripts/e2e/run-scenario.mjs ...` or a package script built on it for Playwright validation when scenario env or DB setup matters
+- `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`
+- `--reporter=line` for interactive terminal Playwright runs instead of the HTML reporter
+- `pnpm e2e:authjs:core` as the preferred focused browser proof for AuthJS auth-flow regressions
+- explicit incomplete-user onboarding coverage before signing off an AuthJS onboarding fix
 
 Also avoid the recurring repository-wide anti-patterns listed in
 `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` before introducing new implementation shapes.

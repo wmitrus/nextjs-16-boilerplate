@@ -30,6 +30,8 @@ anti-patterns and verification matrix before implementation or sign-off.
 Review auth-flow changes against anti-patterns and the verification matrix before
 implementation or sign-off.
 
+For AuthJS-focused regressions, do not treat completed-user browser proof as sufficient by itself. The review must account for incomplete-user onboarding settlement too.
+
 ## Working Sequence
 
 1. Change intake

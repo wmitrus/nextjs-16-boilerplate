@@ -203,6 +203,75 @@ Each Vercel deployment environment (Production, Preview) must have its **own sep
 
 **Full integration guide**: `docs/features/26 - New Relic Server & Browser Integration.md` — read before making any changes to NR integration.
 
+## AuthJS — Module-Level NextAuth Call Banned In Shared Modules
+
+**Never call `NextAuth(options)` at module level in shared auth configuration files (`auth.ts` or similar).**
+
+The correct pattern is to call `NextAuth(req, ctx, options)` **inside the route handler function only**.
+
+```typescript
+// ❌ BANNED — causes CLIENT_FETCH_ERROR regression
+// src/modules/auth/infrastructure/authjs/auth.ts
+const handler = NextAuth(authOptions);
+export { handler };
+
+// ✅ CORRECT — call inside the route handler
+// src/app/api/auth/[...nextauth]/route.ts
+async function handler(req, ctx) {
+  await connection();
+  return NextAuth(req, ctx, authOptions);
+}
+export { handler as GET, handler as POST };
+```
+
+**Why this is critical**: Turbopack's filesystem cache (`turbopackFileSystemCacheForDev: true`) does NOT always invalidate compiled route handler caches when only a transitive dependency (`auth.ts`) changes. If `auth.ts` has the module-level call and is compiled into the cache, all `/api/auth/*` routes will return **404 HTML** on the next dev server start, triggering:
+
+- `CLIENT_FETCH_ERROR` in the browser console
+- Session showing `null` / unauthenticated on the client
+- Admin or protected route guards redirecting to home or sign-in
+
+**Recovery procedure** when CLIENT_FETCH_ERROR recurs in development:
+
+1. `curl http://localhost:3000/api/auth/session` — if it returns HTML (`<!DOCTYPE`), the route is broken
+2. `touch src/app/api/auth/[...nextauth]/route.ts` — forces Turbopack to recompile with current source
+3. If that does not fix it: `rm -rf .next` and restart `pnpm dev`
+4. Verify no module-level `NextAuth()`, `withAuth()`, or similar initializer calls in `auth.ts`
+
+**Regression guards added** (do not remove):
+
+- `auth.test.ts` has a test verifying `auth.ts` does NOT export `handler`, `GET`, or `POST`
+- `e2e/authjs-session.spec.ts` verifies `/api/auth/session` returns `application/json`
+- `e2e/authjs-dashboard-entry.spec.ts` verifies AuthJS default landing and unauthenticated `/dashboard` redirect behavior
+- `e2e/authjs-onboarding-entry.spec.ts` verifies an incomplete AuthJS user goes through `/onboarding` and then settles on `/dashboard`
+
+## AuthJS E2E Provisioning — Completed-User Blind Spot Is Banned
+
+**Do not keep AuthJS E2E provisioning helpers hard-coded to `onboardingComplete: true` when the task or regression history involves onboarding routing.**
+
+That shape creates a validation blind spot: session-route health and completed-user dashboard entry can still pass while the incomplete-user path (`/auth/signin -> /onboarding -> ready route`) silently regresses.
+
+**Required pattern**:
+
+- AuthJS E2E provisioning helpers must support an explicit onboarding-state override
+- auth-flow sign-off for AuthJS must include browser proof for both:
+  - session/dashboard health
+  - incomplete-user onboarding settlement
+- prefer the focused package script `pnpm e2e:authjs:core` for this proof set before widening to broader matrix coverage
+
+**Minimum required AuthJS browser proof for focused auth-flow regressions**:
+
+```shell
+pnpm e2e:authjs:core
+```
+
+This script must cover:
+
+- `e2e/authjs-session.spec.ts`
+- `e2e/authjs-dashboard-entry.spec.ts`
+- `e2e/authjs-onboarding-entry.spec.ts`
+
+**Prior incidents**: Tasks `2026-04-21-admin-access-regression` (Session 3: RC1+RC2), `2026-04-25-admin-access-regression` (Session 5: recurred due to missing documentation).
+
 ## Rate Limiting — Edge-Log Loop Prevention
 
 `checkRateLimit()` accepts an optional second argument `meta?: { path?: string }`. **Always pass it** from any request-aware context:
@@ -575,6 +644,16 @@ Prefer:
 - focused validation with strong signal
 - explicit coverage of invariants and failure modes
 - realistic integration coverage for security-sensitive behavior
+
+### Playwright E2E Execution Rules
+
+- The authoritative local E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or a package script built on top of it (`pnpm e2e`, `pnpm e2e:auth`, `pnpm e2e:auth-matrix:*`, `pnpm e2e:scenario:*`).
+- Do not treat raw `playwright test` or `pnpm e2e:raw` as authoritative for auth, bootstrap, onboarding, AuthJS admin, or container-backed investigations. Raw Playwright bypasses scenario DB setup and will use the current app runtime env, which can point at `.env.local` / the dev database.
+- When `E2E_BACKEND_MODE=container`, the expected isolated database is always `postgres://postgres:postgres@127.0.0.1:5433/app_test`. If E2E-created users appear in the dev DB, suspect a raw Playwright run or another non-scenario entrypoint first.
+- For interactive terminal runs, always pass `--reporter=line`. Do not use the HTML reporter for agent-driven E2E runs because it hides the console evidence needed for debugging.
+- For longer local container-backed AuthJS admin investigations, prefer `PLAYWRIGHT_REUSE_EXISTING_SERVER=false` together with the scenario runner.
+- For focused AuthJS auth-flow regressions, prefer `pnpm e2e:authjs:core` before broader suites.
+- Do not sign off an AuthJS onboarding fix with only completed-user browser coverage; the run must include an incomplete-user onboarding path that proves `/auth/signin -> /onboarding -> /dashboard` (or the current ready route) still settles correctly.
 
 ---
 

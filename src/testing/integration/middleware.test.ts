@@ -119,6 +119,20 @@ describe('Middleware Integration', () => {
     expect(res.headers.get('location')).toContain('/sign-in');
   });
 
+  it('should redirect unauthenticated access to private routes to the AuthJS sign-in route when AUTH_PROVIDER=authjs', async () => {
+    mockEnv.AUTH_PROVIDER = 'authjs';
+    const pipeline = createPipeline();
+
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue(null);
+    const req = createMockRequest({ path: '/dashboard' });
+
+    const res = await pipeline(req);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/auth/signin');
+    expect(res.headers.get('location')).not.toContain('/sign-in');
+  });
+
   it('should block external access to internal APIs', async () => {
     const pipeline = createPipeline();
 
@@ -187,14 +201,14 @@ describe('Middleware Integration', () => {
     expect(res.headers.get('location')).toBeNull();
   });
 
-  it('should redirect authenticated users to onboarding if not complete', async () => {
+  it('should redirect authenticated users to onboarding on general private routes if not complete', async () => {
     const pipeline = createPipeline();
 
     mockUserRepository.findById.mockResolvedValue({
       id: 'user_1',
       onboardingComplete: false,
     });
-    const req = createMockRequest({ path: '/dashboard' });
+    const req = createMockRequest({ path: '/settings' });
 
     const res = await pipeline(req);
 

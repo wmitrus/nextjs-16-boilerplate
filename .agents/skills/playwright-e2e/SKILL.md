@@ -37,6 +37,7 @@ For auth/bootstrap/onboarding E2E work:
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory scenario
   checklist
 - use `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md` for the run artifact
+- for focused AuthJS auth-flow regressions, prefer `pnpm e2e:authjs:core` before widening to larger suites
 
 For artifact-backed work under `.copilot/tasks/{task_id}/`:
 
@@ -58,6 +59,11 @@ redirects, hydration, network behavior, and runtime interaction.
 
 - Read the relevant matrix or scenario checklist first.
 - Run the smallest sensible Playwright scope that covers the affected scenarios.
+- Prefer `node scripts/e2e/run-scenario.mjs ...` or a package script built on it over raw `playwright test` whenever scenario env or DB setup matters.
+- Treat `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`.
+- For interactive terminal runs, require `--reporter=line`; do not rely on the HTML reporter for debugging evidence.
+- When the provider under test is `authjs`, do not sign off with only completed-user coverage; include an incomplete-user onboarding path.
+- If the existing AuthJS E2E provisioning helper cannot create an incomplete user, treat that as a validation gap and fix the helper or add a dedicated setup path before sign-off.
 - Prefer targeted specs over the entire suite unless broader coverage is justified.
 - Capture concrete evidence: final URL, key logs, trace/report references, and scenario
   mapping.

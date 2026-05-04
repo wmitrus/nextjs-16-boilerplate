@@ -129,7 +129,7 @@
     ]
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.39.2",
+    "@clerk/nextjs": "^6.39.3",
     "@electric-sql/pglite": "^0.3.15",
     "@growthbook/growthbook": "^1.6.5",
     "@logtail/next": "^0.3.1",
@@ -236,11 +236,14 @@
   },
   "pnpm": {
     "overrides": {
-      "@clerk/shared": "^3.47.4",
+      "@clerk/backend": "^2.33.3",
+      "@clerk/clerk-react": "^5.61.6",
+      "@clerk/shared": "^3.47.5",
       "@isaacs/brace-expansion": "^5.0.1",
       "@typescript-eslint/utils": "^8.56.1",
       "minimatch": ">=10.2.3",
       "lodash": ">=4.18.0",
+      "postcss": ">=8.5.10",
       "rollup": "^4.59.0",
       "serialize-javascript": ">=7.0.5",
       "undici": ">=7.24.0",
@@ -249,6 +252,7 @@
       "effect": ">=3.20.0",
       "picomatch": ">=4.0.4",
       "protobufjs": "^7.5.5",
+      "uuid": ">=14.0.0",
       "micromatch>picomatch": "^2.3.2",
       "readdirp>picomatch": "^2.3.2",
       "esbuild": ">=0.25.0",

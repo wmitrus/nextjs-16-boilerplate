@@ -31,7 +31,7 @@ function toRows(result: QueryResultLike): unknown[] {
 function createTenantExistsProbe(db: DrizzleDb) {
   return async (tenantId: string): Promise<boolean> => {
     const result = (await db.execute(
-      sql`SELECT id FROM tenants WHERE id = ${tenantId} LIMIT 1`,
+      sql`SELECT id FROM organizations WHERE id = ${tenantId} LIMIT 1`,
     )) as QueryResultLike;
 
     return toRows(result).length > 0;

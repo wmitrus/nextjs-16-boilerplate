@@ -1,35 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import * as React from 'react';
+
+import { UserAvatarMenu } from './UserAvatarMenu';
 
 export function HeaderAuthControlsAuthjs() {
   const { data: session, status } = useSession();
 
   if (status === 'loading') {
     return (
-      <div
-        className="h-9 w-20 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-800"
-        role="status"
-        aria-label="Loading authentication status"
-      />
+      <div className="h-9 w-9 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-800" />
     );
   }
 
   if (session) {
     return (
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">
-          {session.user?.email}
-        </span>
-        <button
-          onClick={() => signOut({ callbackUrl: '/' })}
-          className="text-sm font-medium text-zinc-600 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
-        >
-          Sign Out
-        </button>
-      </div>
+      <UserAvatarMenu
+        name={session.user?.name}
+        email={session.user?.email}
+        imageUrl={session.user?.image}
+      />
     );
   }
 

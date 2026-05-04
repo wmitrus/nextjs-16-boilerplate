@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useSession } from 'next-auth/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -46,7 +47,7 @@ describe('HeaderAuthControlsAuthjs', () => {
     expect(screen.getByText('Sign Up')).toBeInTheDocument();
   });
 
-  it('shows user email and sign out button when authenticated', () => {
+  it('shows user email and sign out button when avatar menu is opened', async () => {
     mockUseSession.mockReturnValue({
       data: {
         user: { email: 'user@example.com', id: 'abc', emailVerified: false },
@@ -57,7 +58,11 @@ describe('HeaderAuthControlsAuthjs', () => {
     });
     render(<HeaderAuthControlsAuthjs />);
 
+    const avatarButton = screen.getByRole('button', { expanded: false });
+    await userEvent.click(avatarButton);
+
     expect(screen.getByText('user@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Administration')).toBeInTheDocument();
     expect(screen.getByText('Sign Out')).toBeInTheDocument();
   });
 });

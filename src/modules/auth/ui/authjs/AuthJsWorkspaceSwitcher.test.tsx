@@ -4,8 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthJsWorkspaceSwitcher } from './AuthJsWorkspaceSwitcher';
 
-const workspaceButtonName = /select workspace/i;
-
 describe('AuthJsWorkspaceSwitcher', () => {
   const mockFetch = vi.fn();
 
@@ -56,7 +54,7 @@ describe('AuthJsWorkspaceSwitcher', () => {
         activeOrganizationId="org-1"
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: workspaceButtonName }));
+    fireEvent.click(screen.getByRole('button', { name: /acme/i }));
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     expect(screen.getByText('Beta Corp')).toBeInTheDocument();
   });
@@ -71,7 +69,7 @@ describe('AuthJsWorkspaceSwitcher', () => {
         activeOrganizationId="org-1"
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: workspaceButtonName }));
+    fireEvent.click(screen.getByRole('button', { name: /acme/i }));
     fireEvent.click(screen.getByText('Beta Corp'));
 
     await waitFor(() => {
@@ -83,5 +81,34 @@ describe('AuthJsWorkspaceSwitcher', () => {
         }),
       );
     });
+  });
+
+  it('shows an error when the active-org API rejects the switch', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: vi
+        .fn()
+        .mockResolvedValue({ error: 'Organization membership required' }),
+    });
+
+    render(
+      <AuthJsWorkspaceSwitcher
+        organizations={[
+          { id: 'org-1', name: 'Acme' },
+          { id: 'org-2', name: 'Beta Corp' },
+        ]}
+        activeOrganizationId="org-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /acme/i }));
+    fireEvent.click(screen.getByText('Beta Corp'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Organization membership required'),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /acme/i })).toBeInTheDocument();
   });
 });

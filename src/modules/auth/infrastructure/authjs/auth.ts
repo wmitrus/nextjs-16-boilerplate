@@ -2,7 +2,6 @@ import { compare } from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { AuthOptions, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
-import NextAuth from 'next-auth/next';
 import Credentials from 'next-auth/providers/credentials';
 import { z } from 'zod';
 
@@ -18,11 +17,13 @@ import { authConfig } from './auth.config';
 
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 
-const logger = resolveServerLogger().child({
-  type: 'API',
-  category: 'auth',
-  module: 'authjs',
-});
+function getLogger() {
+  return resolveServerLogger().child({
+    type: 'API',
+    category: 'auth',
+    module: 'authjs',
+  });
+}
 
 const credentialsSchema = z.object({
   email: z.email(),
@@ -99,7 +100,7 @@ export const authOptions: AuthOptions = {
             throw new Error('EmailNotVerified');
           }
 
-          logger.debug(
+          getLogger().debug(
             {
               event: 'auth:credentials_sign_in',
               provider: 'authjs',
@@ -109,7 +110,7 @@ export const authOptions: AuthOptions = {
           );
 
           return {
-            id: email,
+            id: user.email,
             email: user.email,
             emailVerified: credRecord.emailVerified,
           };
@@ -123,7 +124,7 @@ export const authOptions: AuthOptions = {
             throw error;
           }
 
-          logger.error(
+          getLogger().error(
             {
               event: 'auth:credentials_sign_in_error',
               errorMessage: error.message,
@@ -162,7 +163,3 @@ export const authOptions: AuthOptions = {
       ? 'dev-secret-change-in-production'
       : undefined),
 };
-
-const handler = NextAuth(authOptions);
-
-export { handler };

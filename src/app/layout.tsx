@@ -137,7 +137,9 @@ export default function RootLayout({
           </Suspense>
         ) : isAuthJsProvider ? (
           <SessionProvider>
-            <AppLayoutContent>{children}</AppLayoutContent>
+            <Suspense fallback={<RootLayoutShell />}>
+              <AppLayoutContent>{children}</AppLayoutContent>
+            </Suspense>
           </SessionProvider>
         ) : (
           <AppLayoutContent>{children}</AppLayoutContent>

@@ -24,20 +24,43 @@ export function AuthJsWorkspaceSwitcher({
 }: AuthJsWorkspaceSwitcherProps) {
   const [active, setActive] = useState(activeOrganizationId);
   const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const activeOrg = organizations.find((o) => o.id === active);
 
   async function handleSelect(orgId: string) {
-    setActive(orgId);
+    if (orgId === active) {
+      setIsOpen(false);
+      return;
+    }
+
+    setErrorMessage(null);
     setIsOpen(false);
+    setIsSubmitting(true);
 
-    await fetch('/api/auth/active-org', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ organizationId: orgId }),
-    });
+    try {
+      const response = await fetch('/api/auth/active-org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgId }),
+      });
 
-    window.location.reload();
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error ?? 'Failed to switch organization');
+      }
+
+      setActive(orgId);
+      window.location.reload();
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      setErrorMessage(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (organizations.length === 0) {
@@ -46,13 +69,18 @@ export function AuthJsWorkspaceSwitcher({
 
   return (
     <div className="relative">
+      {errorMessage ? (
+        <p className="mb-2 text-sm text-red-600 dark:text-red-400">
+          {errorMessage}
+        </p>
+      ) : null}
       <button
         type="button"
+        disabled={isSubmitting}
         onClick={() => setIsOpen((prev) => !prev)}
         className="flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-label="Select workspace"
       >
         <span>{activeOrg?.name ?? 'Select organization'}</span>
         <svg
@@ -80,6 +108,7 @@ export function AuthJsWorkspaceSwitcher({
             <li key={org.id} role="option" aria-selected={org.id === active}>
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => handleSelect(org.id)}
                 className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
               >

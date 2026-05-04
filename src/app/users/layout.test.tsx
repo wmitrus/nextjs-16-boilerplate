@@ -8,14 +8,34 @@ const redirectMock = vi.hoisted(() =>
 
 const resolveNodeProvisioningAccessMock = vi.hoisted(() => vi.fn());
 const getAppContainerMock = vi.hoisted(() => vi.fn(() => ({ mocked: true })));
+const connectionMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('next/navigation', () => ({
   redirect: redirectMock,
 }));
 
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return {
+    ...actual,
+    connection: connectionMock,
+  };
+});
+
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: getAppContainerMock,
 }));
+
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      AUTH_PROVIDER: 'authjs',
+    },
+  };
+});
 
 vi.mock('@/security/core/node-provisioning-runtime', () => ({
   resolveNodeProvisioningAccess: resolveNodeProvisioningAccessMock,
@@ -40,7 +60,7 @@ describe('UsersLayout node provisioning guard', () => {
     resolveNodeProvisioningAccessMock.mockReset();
   });
 
-  it('redirects unauthenticated user to sign-in', async () => {
+  it('redirects unauthenticated user to the AuthJS sign-in route', async () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'UNAUTHENTICATED',
       code: 'UNAUTHENTICATED',
@@ -53,7 +73,7 @@ describe('UsersLayout node provisioning guard', () => {
 
     await expect(
       UsersLayoutGuard({ children: <div>content</div> }),
-    ).rejects.toThrow('REDIRECT:/sign-in?redirect_url=/users');
+    ).rejects.toThrow('REDIRECT:/auth/signin?redirect_url=/users');
   });
 
   it('redirects bootstrap-required user to /auth/bootstrap/start with preserved target', async () => {

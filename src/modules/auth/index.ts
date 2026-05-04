@@ -1,3 +1,4 @@
+import { asc, eq } from 'drizzle-orm';
 import { cookies, headers } from 'next/headers';
 
 import type { Container, Module } from '@/core/container';
@@ -20,6 +21,7 @@ import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIde
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
 import { SystemIdentitySource } from './infrastructure/system/SystemIdentitySource';
 
+import { organizationsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
 import type { TenancyMode } from '@/modules/provisioning/domain/tenancy-mode';
 import type { TenantContextSource } from '@/modules/provisioning/domain/tenant-context-source';
 import { OrgDbOrganizationResolver } from '@/modules/provisioning/infrastructure/OrgDbOrganizationResolver';
@@ -64,6 +66,7 @@ function buildTenantResolver(
   config: AuthModuleConfig,
   identitySource: RequestIdentitySource,
   lookup: InternalIdentityLookup | undefined,
+  db: DrizzleDb,
 ): TenantResolver {
   switch (config.tenancyMode) {
     case 'single': {
@@ -72,7 +75,19 @@ function buildTenantResolver(
           '[authModule] TENANCY_MODE=single requires DEFAULT_TENANT_ID to be set.',
         );
       }
-      return new SingleTenantResolver(config.defaultTenantId);
+      return new SingleTenantResolver(
+        config.defaultTenantId,
+        async (tenantId) => {
+          const [organization] = await db
+            .select({ id: organizationsTable.id })
+            .from(organizationsTable)
+            .where(eq(organizationsTable.tenantId, tenantId))
+            .orderBy(asc(organizationsTable.id))
+            .limit(1);
+
+          return organization?.id ?? null;
+        },
+      );
     }
 
     case 'personal': {
@@ -151,6 +166,7 @@ export function createAuthModule(config: AuthModuleConfig): Module {
         config,
         identitySource,
         lookup,
+        db,
       );
 
       container.register(AUTH.IDENTITY_SOURCE, identitySource);

@@ -8,11 +8,13 @@ import { resolveServerLogger } from '@/core/logger/di';
 
 import { authOptions } from './auth';
 
-const logger = resolveServerLogger().child({
-  type: 'API',
-  category: 'auth',
-  module: 'authjs-request-identity-source',
-});
+function getLogger() {
+  return resolveServerLogger().child({
+    type: 'API',
+    category: 'auth',
+    module: 'authjs-request-identity-source',
+  });
+}
 
 export class AuthJsRequestIdentitySource implements RequestIdentitySource {
   private cached?: Promise<RequestIdentitySourceData>;
@@ -29,7 +31,7 @@ export class AuthJsRequestIdentitySource implements RequestIdentitySource {
       const session = await getServerSession(authOptions);
 
       if (!session?.user) {
-        logger.debug(
+        getLogger().debug(
           { event: 'auth:identity_unauthenticated', provider: 'authjs' },
           'AuthJS session not found — unauthenticated request',
         );
@@ -40,7 +42,7 @@ export class AuthJsRequestIdentitySource implements RequestIdentitySource {
       const email = session.user.email ?? undefined;
       const emailVerified = session.user.emailVerified === true;
 
-      logger.debug(
+      getLogger().debug(
         {
           event: 'auth:identity_claims_resolved',
           provider: 'authjs',
@@ -58,7 +60,7 @@ export class AuthJsRequestIdentitySource implements RequestIdentitySource {
       };
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      logger.error(
+      getLogger().error(
         {
           event: 'auth:identity_resolution_error',
           provider: 'authjs',

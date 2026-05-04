@@ -14,6 +14,7 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
 import { buildProvisioningInput } from '../auth/build-provisioning-input';
+import { DEFAULT_APP_ENTRY_URL } from '../auth/post-auth-redirect';
 
 import {
   CrossProviderLinkingNotAllowedError,
@@ -68,13 +69,15 @@ export const completeOnboarding = async (formData: FormData) => {
       'provisioning:ensure succeeded',
     );
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
       {
         event: 'provisioning:ensure',
         status: 'failure',
         provider: env.AUTH_PROVIDER,
         tenancyMode: env.TENANCY_MODE,
-        err,
+        errorMessage: error.message,
+        errorName: error.name,
       },
       'provisioning:ensure failed — aborting onboarding',
     );
@@ -135,7 +138,7 @@ export const completeOnboarding = async (formData: FormData) => {
 
   const safeRedirectUrl = sanitizeRedirectUrl(
     typeof rawRedirectUrl === 'string' ? rawRedirectUrl : '',
-    '/users',
+    DEFAULT_APP_ENTRY_URL,
   );
 
   const internalUserId = provisioningResult.internalUserId;
@@ -144,8 +147,13 @@ export const completeOnboarding = async (formData: FormData) => {
   try {
     existingUser = await userRepository.findById(internalUserId);
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
-      { err, userId: internalUserId },
+      {
+        userId: internalUserId,
+        errorMessage: error.message,
+        errorName: error.name,
+      },
       'Onboarding: userRepository.findById threw after successful provisioning',
     );
     return { error: 'A database error occurred. Please try again.' };
@@ -173,8 +181,13 @@ export const completeOnboarding = async (formData: FormData) => {
       'User profile and onboarding status updated successfully',
     );
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
-      { err, userId: internalUserId },
+      {
+        userId: internalUserId,
+        errorMessage: error.message,
+        errorName: error.name,
+      },
       'Error updating user metadata during onboarding',
     );
     return { error: 'There was an error updating your profile.' };

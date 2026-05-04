@@ -10,14 +10,34 @@ const redirectMock = vi.hoisted(() =>
 );
 
 const getAppContainerMock = vi.hoisted(() => vi.fn());
+const connectionMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('next/navigation', () => ({
   redirect: redirectMock,
 }));
 
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return {
+    ...actual,
+    connection: connectionMock,
+  };
+});
+
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: getAppContainerMock,
 }));
+
+vi.mock('@/core/env', async (importOriginal) => {
+  const actual = (await importOriginal()) as { env: Record<string, unknown> };
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      AUTH_PROVIDER: 'authjs',
+    },
+  };
+});
 
 import { OnboardingGuard } from './layout';
 
@@ -53,7 +73,9 @@ describe('OnboardingGuard', () => {
 
     await expect(
       OnboardingGuard({ children: <div>content</div> }),
-    ).rejects.toThrow('REDIRECT:/auth/bootstrap/start?redirect_url=/users');
+    ).rejects.toThrow(
+      'REDIRECT:/auth/bootstrap/start?redirect_url=%2Fdashboard',
+    );
   });
 
   it('redirects to bootstrap db-error when getCurrentIdentity throws a non-UserNotProvisionedError', async () => {
@@ -75,12 +97,12 @@ describe('OnboardingGuard', () => {
     ).rejects.toThrow('REDIRECT:/auth/bootstrap?reason=db-error');
   });
 
-  it('redirects unauthenticated users to sign-in', async () => {
+  it('redirects unauthenticated users to the AuthJS sign-in route', async () => {
     identityProvider.getCurrentIdentity.mockResolvedValue(null);
 
     await expect(
       OnboardingGuard({ children: <div>content</div> }),
-    ).rejects.toThrow('REDIRECT:/sign-in');
+    ).rejects.toThrow('REDIRECT:/auth/signin');
   });
 
   it('redirects to bootstrap start when the internal user row is missing', async () => {
@@ -89,10 +111,12 @@ describe('OnboardingGuard', () => {
 
     await expect(
       OnboardingGuard({ children: <div>content</div> }),
-    ).rejects.toThrow('REDIRECT:/auth/bootstrap/start?redirect_url=/users');
+    ).rejects.toThrow(
+      'REDIRECT:/auth/bootstrap/start?redirect_url=%2Fdashboard',
+    );
   });
 
-  it('redirects onboarded users to /users', async () => {
+  it('redirects onboarded users to /dashboard', async () => {
     identityProvider.getCurrentIdentity.mockResolvedValue({ id: 'u-1' });
     userRepository.findById.mockResolvedValue({
       id: 'u-1',
@@ -101,7 +125,7 @@ describe('OnboardingGuard', () => {
 
     await expect(
       OnboardingGuard({ children: <div>content</div> }),
-    ).rejects.toThrow('REDIRECT:/users');
+    ).rejects.toThrow('REDIRECT:/dashboard');
   });
 
   it('renders children for provisioned users with incomplete onboarding', async () => {

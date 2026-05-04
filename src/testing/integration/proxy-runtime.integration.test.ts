@@ -7,6 +7,7 @@ import * as getIp from '@/shared/lib/network/get-ip';
 import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import proxy from '@/proxy';
+import { mockEnv, resetEnvMocks } from '@/testing/infrastructure/env';
 
 const mockProtect = vi.fn();
 const mockAuthResult = {
@@ -59,20 +60,7 @@ vi.mock('@/core/env', async (importOriginal) => {
 
   return {
     ...actual,
-    env: {
-      ...actual.env,
-      NODE_ENV: 'test',
-      VERCEL_ENV: 'test',
-      INTERNAL_API_KEY: 'test-key',
-      E2E_ENABLED: false,
-      SECURITY_ALLOWED_OUTBOUND_HOSTS: '',
-      NEXT_PUBLIC_CSP_SCRIPT_EXTRA: '',
-      NEXT_PUBLIC_CSP_CONNECT_EXTRA: '',
-      NEXT_PUBLIC_CSP_FRAME_EXTRA: '',
-      NEXT_PUBLIC_CSP_IMG_EXTRA: '',
-      NEXT_PUBLIC_CSP_STYLE_EXTRA: '',
-      NEXT_PUBLIC_CSP_FONT_EXTRA: '',
-    },
+    env: mockEnv,
   };
 });
 
@@ -110,10 +98,23 @@ vi.mock('@/shared/lib/network/get-ip', () => ({
 describe('Proxy Runtime Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEnvMocks();
     mockProtect.mockReset();
     mockGlobalAuth.mockClear();
     mockAuthResult.userId = null;
     mockAuthResult.sessionClaims = null;
+
+    mockEnv.NODE_ENV = 'test';
+    mockEnv.VERCEL_ENV = 'development';
+    mockEnv.INTERNAL_API_KEY = 'test-key';
+    mockEnv.E2E_ENABLED = false;
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '';
+    mockEnv.NEXT_PUBLIC_CSP_SCRIPT_EXTRA = '';
+    mockEnv.NEXT_PUBLIC_CSP_CONNECT_EXTRA = '';
+    mockEnv.NEXT_PUBLIC_CSP_FRAME_EXTRA = '';
+    mockEnv.NEXT_PUBLIC_CSP_IMG_EXTRA = '';
+    mockEnv.NEXT_PUBLIC_CSP_STYLE_EXTRA = '';
+    mockEnv.NEXT_PUBLIC_CSP_FONT_EXTRA = '';
 
     vi.mocked(getIp.getIP).mockResolvedValue('127.0.0.1');
     vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
@@ -184,6 +185,19 @@ describe('Proxy Runtime Integration', () => {
     expect(response).toBeDefined();
     expect(response!.status).toBe(307);
     expect(response!.headers.get('location')).toContain('/sign-in');
+    expect(mockProtect).not.toHaveBeenCalled();
+  });
+
+  it('redirects unauthenticated users on non-public non-internal routes to the AuthJS sign-in route when AUTH_PROVIDER=authjs', async () => {
+    mockEnv.AUTH_PROVIDER = 'authjs';
+    const request = new NextRequest(new URL('http://localhost/dashboard'));
+
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
+
+    expect(response).toBeDefined();
+    expect(response!.status).toBe(307);
+    expect(response!.headers.get('location')).toContain('/auth/signin');
+    expect(response!.headers.get('location')).not.toContain('/sign-in');
     expect(mockProtect).not.toHaveBeenCalled();
   });
 

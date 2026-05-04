@@ -2,19 +2,17 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const signOutMock = vi.fn();
-const pushMock = vi.fn();
-
-vi.mock('@clerk/nextjs', () => ({
-  useClerk: () => ({
-    signOut: signOutMock,
-  }),
+const { clerkSignOutMock, authJsSignOutMock } = vi.hoisted(() => ({
+  clerkSignOutMock: vi.fn(),
+  authJsSignOutMock: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: pushMock,
-  }),
+vi.mock('@/modules/auth/ui/hooks/useSignOut', () => ({
+  useSignOut: () => clerkSignOutMock,
+}));
+
+vi.mock('next-auth/react', () => ({
+  signOut: authJsSignOutMock,
 }));
 
 import { BootstrapErrorUI } from './bootstrap-error';
@@ -36,7 +34,7 @@ describe('BootstrapErrorUI', () => {
   ] as const)(
     'renders the correct user-facing message for %s',
     (error, expectedMessage) => {
-      render(<BootstrapErrorUI error={error} />);
+      render(<BootstrapErrorUI error={error} authProvider="clerk" />);
 
       expect(
         screen.getByRole('heading', {
@@ -61,20 +59,32 @@ describe('BootstrapErrorUI', () => {
     'auth_user_identities',
     'tenant_attributes',
   ])('does not expose internal error details: %s', (internalDetail) => {
-    render(<BootstrapErrorUI error="tenant_config" />);
+    render(<BootstrapErrorUI error="tenant_config" authProvider="clerk" />);
 
     expect(screen.queryByText(internalDetail)).not.toBeInTheDocument();
   });
 
   describe('db_error adapter-aware messages', () => {
     it('shows pglite reset instructions when dbDriver is pglite', () => {
-      render(<BootstrapErrorUI error="db_error" dbDriver="pglite" />);
+      render(
+        <BootstrapErrorUI
+          error="db_error"
+          dbDriver="pglite"
+          authProvider="clerk"
+        />,
+      );
       expect(screen.getByText(/pnpm db:pglite:reset/)).toBeInTheDocument();
       expect(screen.queryByText(/pnpm db:dev:up/)).not.toBeInTheDocument();
     });
 
     it('shows container instructions when dbDriver is postgres', () => {
-      render(<BootstrapErrorUI error="db_error" dbDriver="postgres" />);
+      render(
+        <BootstrapErrorUI
+          error="db_error"
+          dbDriver="postgres"
+          authProvider="clerk"
+        />,
+      );
       expect(screen.getByText(/pnpm db:dev:up/)).toBeInTheDocument();
       expect(screen.getByText(/pnpm db:dev:migrate/)).toBeInTheDocument();
       expect(screen.getByText(/pnpm db:dev:reset --force/)).toBeInTheDocument();
@@ -84,7 +94,7 @@ describe('BootstrapErrorUI', () => {
     });
 
     it('defaults to pglite instructions when dbDriver is undefined', () => {
-      render(<BootstrapErrorUI error="db_error" />);
+      render(<BootstrapErrorUI error="db_error" authProvider="clerk" />);
       expect(screen.getByText(/pnpm db:pglite:reset/)).toBeInTheDocument();
     });
   });
@@ -94,36 +104,25 @@ describe('BootstrapErrorUI', () => {
       vi.clearAllMocks();
     });
 
-    it('calls signOut and navigates to sign-in on success', async () => {
-      signOutMock.mockResolvedValueOnce(undefined);
-      render(<BootstrapErrorUI error="db_error" />);
+    it('uses the Clerk sign-out path when authProvider is clerk', async () => {
+      clerkSignOutMock.mockResolvedValueOnce(undefined);
+      render(<BootstrapErrorUI error="db_error" authProvider="clerk" />);
 
       await userEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
 
-      expect(signOutMock).toHaveBeenCalled();
-      expect(pushMock).toHaveBeenCalledWith('/sign-in');
+      expect(clerkSignOutMock).toHaveBeenCalled();
+      expect(authJsSignOutMock).not.toHaveBeenCalled();
     });
 
-    it('falls back to hard redirect when signOut throws (stale Server Action)', async () => {
-      signOutMock.mockRejectedValueOnce(new Error('UnrecognizedActionError'));
-
-      const originalLocation = window.location;
-      Object.defineProperty(window, 'location', {
-        writable: true,
-        value: { href: '' },
-      });
-
-      render(<BootstrapErrorUI error="db_error" />);
+    it('uses the AuthJS sign-out path when authProvider is authjs', async () => {
+      authJsSignOutMock.mockResolvedValueOnce(undefined);
+      render(<BootstrapErrorUI error="db_error" authProvider="authjs" />);
       await userEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
 
-      expect(signOutMock).toHaveBeenCalled();
-      expect(pushMock).not.toHaveBeenCalled();
-      expect(window.location.href).toBe('/sign-in');
-
-      Object.defineProperty(window, 'location', {
-        writable: true,
-        value: originalLocation,
+      expect(authJsSignOutMock).toHaveBeenCalledWith({
+        callbackUrl: '/auth/signin',
       });
+      expect(clerkSignOutMock).not.toHaveBeenCalled();
     });
   });
 });

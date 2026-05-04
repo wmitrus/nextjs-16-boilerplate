@@ -159,9 +159,27 @@ describe('authOptions', () => {
         password: 'correctpass',
       });
       expect(result).toMatchObject({
+        id: 'user@example.com',
         email: 'user@example.com',
         emailVerified: true,
       });
+    });
+
+    it('throws EmailNotVerified when email is not verified', async () => {
+      mockLimit
+        .mockResolvedValueOnce([
+          {
+            userId: 'uid-1',
+            hashedPassword: '$hashed',
+            emailVerified: false,
+          },
+        ])
+        .mockResolvedValueOnce([{ id: 'uid-1', email: 'user@example.com' }]);
+      mockCompare.mockResolvedValueOnce(true);
+      const authorize = await getAuthorize();
+      await expect(
+        authorize({ email: 'user@example.com', password: 'correctpass' }),
+      ).rejects.toThrow('EmailNotVerified');
     });
 
     it('returns null and does not throw on DB error', async () => {
@@ -184,14 +202,14 @@ describe('authOptions', () => {
       const { jwt } = mod.authOptions.callbacks ?? {};
       if (!jwt) throw new Error('jwt callback not defined');
       const token = { sub: 'u1' };
-      const user = { id: 'email@test.com', emailVerified: true };
+      const user = { id: 'user@example.com', emailVerified: true };
       const result = await (
         jwt as (args: {
           token: unknown;
           user: unknown;
         }) => Record<string, unknown>
       )({ token, user });
-      expect(result['id']).toBe('email@test.com');
+      expect(result['id']).toBe('user@example.com');
       expect(result['emailVerified']).toBe(true);
     });
 
@@ -224,6 +242,18 @@ describe('authOptions', () => {
       const resultUser = result['user'] as Record<string, unknown>;
       expect(resultUser['id']).toBe('tok-id');
       expect(resultUser['emailVerified']).toBe(true);
+    });
+  });
+
+  describe('module-level exports safety (App Router regression guard)', () => {
+    it('exports authOptions but NOT a module-level handler, GET, or POST', async () => {
+      vi.resetModules();
+      const mod = await import('./auth');
+      expect(mod.authOptions).toBeDefined();
+      const safetyCheck = mod as Record<string, unknown>;
+      expect(safetyCheck['handler']).toBeUndefined();
+      expect(safetyCheck['GET']).toBeUndefined();
+      expect(safetyCheck['POST']).toBeUndefined();
     });
   });
 });

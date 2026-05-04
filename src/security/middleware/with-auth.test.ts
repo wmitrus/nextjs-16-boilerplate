@@ -306,7 +306,53 @@ describe('Auth Middleware', () => {
     expect(mockHandler).toHaveBeenCalledTimes(1);
   });
 
-  it('should redirect to onboarding for private routes if onboarding is incomplete', async () => {
+  it('should not redirect authenticated dashboard subpaths through bootstrap', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+
+    const req = createMockRequest({ path: '/dashboard/settings' });
+    const ctx = createMockRouteContext({ isPublicRoute: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(mockHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not redirect authenticated admin subpaths through bootstrap', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+    mockUserRepository.findById.mockResolvedValue({
+      id: 'user_1',
+      onboardingComplete: true,
+    });
+
+    const req = createMockRequest({ path: '/admin/users' });
+    const ctx = createMockRouteContext({ isPublicRoute: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: securityDependencies,
+      userRepository: mockUserRepository,
+    });
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(mockHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('should redirect to onboarding for general private routes if onboarding is incomplete', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',
     });
@@ -315,7 +361,7 @@ describe('Auth Middleware', () => {
       onboardingComplete: false,
     });
 
-    const req = createMockRequest({ path: '/dashboard' });
+    const req = createMockRequest({ path: '/settings' });
     const ctx = createMockRouteContext({ isPublicRoute: false });
 
     const middleware = withAuth(mockHandler, {
@@ -515,13 +561,13 @@ describe('Auth Middleware', () => {
     expect(mockHandler).toHaveBeenCalled();
   });
 
-  it('should redirect to /onboarding in edge mode when __onboarding_pending cookie is set', async () => {
+  it('should redirect a general private route to /onboarding in edge mode when __onboarding_pending cookie is set', async () => {
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
       id: 'user_1',
     });
 
     const req = createMockRequest({
-      path: '/dashboard',
+      path: '/settings',
       headers: { Cookie: '__onboarding_pending=1' },
     });
     const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
@@ -588,6 +634,48 @@ describe('Auth Middleware', () => {
 
     const req = createMockRequest({
       path: '/users',
+      headers: { Cookie: '__onboarding_pending=1' },
+    });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+
+    await middleware(req, ctx);
+
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
+  it('should not redirect /dashboard in edge mode when __onboarding_pending cookie is set', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({
+      path: '/dashboard',
+      headers: { Cookie: '__onboarding_pending=1' },
+    });
+    const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });
+
+    const middleware = withAuth(mockHandler, {
+      dependencies: edgeSecurityDependencies,
+      enforceResourceAuthorization: false,
+    });
+
+    await middleware(req, ctx);
+
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
+  it('should not redirect /admin in edge mode when __onboarding_pending cookie is set', async () => {
+    mockIdentityProvider.getCurrentIdentity.mockResolvedValue({
+      id: 'user_1',
+    });
+
+    const req = createMockRequest({
+      path: '/admin',
       headers: { Cookie: '__onboarding_pending=1' },
     });
     const ctx = createMockRouteContext({ isPublicRoute: false, isApi: false });

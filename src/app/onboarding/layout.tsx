@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 
 import { AUTH } from '@/core/contracts';
@@ -9,6 +10,12 @@ import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
+import { getSignInPath } from '@/shared/lib/routing/auth-entry';
+
+import {
+  buildBootstrapRedirectUrl,
+  DEFAULT_APP_ENTRY_URL,
+} from '../auth/post-auth-redirect';
 
 const logger = resolveServerLogger().child({
   type: 'API',
@@ -33,6 +40,8 @@ export async function OnboardingGuard({
 }: {
   children: React.ReactNode;
 }) {
+  await connection();
+
   const requestContext = await getServerRequestLogContext({
     pathname: '/onboarding',
   });
@@ -67,8 +76,9 @@ export async function OnboardingGuard({
         },
         'OnboardingGuard: identity not provisioned, redirecting to bootstrap',
       );
-      redirect('/auth/bootstrap/start?redirect_url=/users');
+      redirect(buildBootstrapRedirectUrl());
     }
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
       {
         event: 'onboarding_guard:identity_lookup',
@@ -76,7 +86,8 @@ export async function OnboardingGuard({
         correlationId: requestContext.correlationId,
         requestId: requestContext.requestId,
         decision: 'redirect:/auth/bootstrap',
-        err,
+        errorMessage: error.message,
+        errorName: error.name,
       },
       'OnboardingGuard: identity lookup failed, redirecting to bootstrap',
     );
@@ -84,17 +95,18 @@ export async function OnboardingGuard({
   }
 
   if (!identity) {
+    const signInPath = getSignInPath();
     logger.warn(
       {
         event: 'onboarding_guard:identity_lookup',
         status: 'no_identity',
         correlationId: requestContext.correlationId,
         requestId: requestContext.requestId,
-        decision: 'redirect:/sign-in',
+        decision: `redirect:${signInPath}`,
       },
       'OnboardingGuard: no identity found, redirecting to sign-in',
     );
-    redirect('/sign-in');
+    redirect(signInPath);
   }
 
   logger.debug(
@@ -116,6 +128,7 @@ export async function OnboardingGuard({
   try {
     user = await userRepository.findById(identity.id);
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
       {
         event: 'onboarding_guard:user_lookup',
@@ -124,7 +137,8 @@ export async function OnboardingGuard({
         requestId: requestContext.requestId,
         internalIdentityId: identity.id,
         decision: 'redirect:/auth/bootstrap',
-        err,
+        errorMessage: error.message,
+        errorName: error.name,
       },
       'OnboardingGuard: user lookup failed, redirecting to bootstrap',
     );
@@ -143,7 +157,7 @@ export async function OnboardingGuard({
       },
       'OnboardingGuard: user not found after identity lookup, redirecting to bootstrap',
     );
-    redirect('/auth/bootstrap/start?redirect_url=/users');
+    redirect(buildBootstrapRedirectUrl());
   }
 
   if (user.onboardingComplete) {
@@ -154,11 +168,11 @@ export async function OnboardingGuard({
         correlationId: requestContext.correlationId,
         requestId: requestContext.requestId,
         internalIdentityId: identity.id,
-        decision: 'redirect:/users',
+        decision: `redirect:${DEFAULT_APP_ENTRY_URL}`,
       },
-      'OnboardingGuard: onboarding already complete, redirecting to users',
+      'OnboardingGuard: onboarding already complete, redirecting to the authenticated app entry route',
     );
-    redirect('/users');
+    redirect(DEFAULT_APP_ENTRY_URL);
   }
 
   logger.info(

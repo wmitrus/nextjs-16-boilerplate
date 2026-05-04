@@ -3,6 +3,8 @@
 import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 
+import { buildBootstrapRedirectUrl } from '../post-auth-redirect';
+
 interface SignInClientProps {
   callbackUrl?: string;
   error?: string;
@@ -33,6 +35,7 @@ export function SignInClient({
   error,
   verified,
 }: SignInClientProps) {
+  const postAuthRedirectUrl = buildBootstrapRedirectUrl(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(
     resolveErrorMessage(error),
@@ -50,7 +53,7 @@ export function SignInClient({
     const result = await signIn('credentials', {
       email,
       password,
-      callbackUrl: callbackUrl ?? '/',
+      callbackUrl: postAuthRedirectUrl,
       redirect: false,
     });
 
@@ -64,6 +67,9 @@ export function SignInClient({
       setIsLoading(false);
     } else if (result?.url) {
       window.location.href = result.url;
+    } else {
+      setFormError(ERROR_MESSAGES.Default);
+      setIsLoading(false);
     }
   }
 
@@ -72,6 +78,8 @@ export function SignInClient({
       {verified && !formError && (
         <div
           role="status"
+          aria-live="polite"
+          aria-atomic="true"
           className="rounded-md bg-green-50 p-3 dark:bg-green-950"
         >
           <p className="text-sm text-green-700 dark:text-green-300">
@@ -80,7 +88,12 @@ export function SignInClient({
         </div>
       )}
       {formError && (
-        <div role="alert" className="rounded-md bg-red-50 p-3 dark:bg-red-950">
+        <div
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="rounded-md bg-red-50 p-3 dark:bg-red-950"
+        >
           <p className="text-sm text-red-700 dark:text-red-300">{formError}</p>
         </div>
       )}
@@ -101,20 +114,12 @@ export function SignInClient({
         />
       </div>
       <div>
-        <div className="flex items-center justify-between">
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-          >
-            Password
-          </label>
-          <a
-            href="/auth/forgot-password"
-            className="text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
-          >
-            Forgot password?
-          </a>
-        </div>
+        <label
+          htmlFor="password"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
+          Password
+        </label>
         <input
           id="password"
           name="password"

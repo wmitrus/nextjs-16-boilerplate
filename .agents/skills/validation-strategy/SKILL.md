@@ -125,6 +125,8 @@ Always flag these when present:
 - duplicated validation that adds cost without increasing confidence
 - broad e2e recommendations where narrower validation would provide equal or better
   signal
+- raw `playwright test` treated as authoritative evidence for auth/bootstrap/admin/container-backed behavior when the repository scenario runner exists
+- HTML-reporter Playwright terminal runs treated as sufficient debugging evidence when `--reporter=line` was available
 
 ## Response Shape
 

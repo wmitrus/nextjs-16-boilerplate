@@ -110,7 +110,7 @@ export const authOptions: AuthOptions = {
           );
 
           return {
-            id: user.id,
+            id: user.email,
             email: user.email,
             emailVerified: credRecord.emailVerified,
           };

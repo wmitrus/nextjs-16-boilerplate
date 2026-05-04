@@ -2,7 +2,7 @@
 
 **Task**: Auth Foundation Redesign (`2026-04-17-auth-foundation-redesign`)
 **Agent**: 11 — Leantime Strategy Agent
-**Status**: Phase 0 Leantime structure complete; blueprint boards fully populated; retro patched
+**Status**: Phase 0 Leantime structure complete; blueprint boards fully populated; retro patched. Audit update on 2026-04-25 reconciled completed phase statuses in Leantime for milestones 45-52 and tasks 60-66; phases 8-9 remain open.
 
 ---
 
@@ -167,8 +167,8 @@ For each implementation phase:
 | 0.3 New provider implementation checklist   | ✅ DONE                                        |
 | 0.4 Agent 11 — Leantime Strategy Agent spec | ✅ DONE                                        |
 | 0.5 Leantime project structure              | ✅ DONE (all boards populated, all bugs fixed) |
-| 0.6 User approval of complete design        | ⏳ PENDING — awaiting user review              |
-| 0.7 Create Leantime tasks for Phases 1–9    | ⏳ PENDING — after user approval               |
+| 0.6 User approval of complete design        | ✅ DONE                                        |
+| 0.7 Create Leantime tasks for Phases 1–9    | ✅ DONE                                        |
 
 ---
 
@@ -187,6 +187,14 @@ For each implementation phase:
 | 68  | 9     | Phase 9: Documentation + Finalization                     | 54        |
 
 All tasks created with `status: 3` (Todo) and linked to the correct phase milestone.
+
+## Audit Update — 2026-04-25
+
+- Leantime cleanup audit reconciled the completed auth-foundation execution state with live task status.
+- Milestones `45-52` were patched to `Zrobione (0)` based on repository completion evidence.
+- Tasks `60`, `62`, `63`, `64`, `65`, and `66` were patched to `Zrobione (0)`; tasks `61` and `69` were already closed.
+- Tasks `67` and `68` remain intentionally open as future phases.
+- Follow-up audit task `76` tracks the remaining metadata cleanup around milestone linkage and note placement.
 
 ## Session 3 Changes (2026-04-17)
 

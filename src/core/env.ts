@@ -11,6 +11,8 @@ export const env = createEnv({
       .default('development'),
     NODE_OPTIONS: z.string().optional(),
     CHROMATIC_PROJECT_TOKEN: z.string().optional(),
+    LHCI_SERVER_BASE_URL: z.url().optional(),
+    LEANTIME_LOCAL_APP_URL: z.url().optional(),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
@@ -187,6 +189,8 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     NODE_OPTIONS: process.env.NODE_OPTIONS,
     CHROMATIC_PROJECT_TOKEN: process.env.CHROMATIC_PROJECT_TOKEN,
+    LHCI_SERVER_BASE_URL: process.env.LHCI_SERVER_BASE_URL,
+    LEANTIME_LOCAL_APP_URL: process.env.LEANTIME_LOCAL_APP_URL,
     LOG_LEVEL: process.env.LOG_LEVEL,
     LOG_DIR: process.env.LOG_DIR,
     LOG_TO_FILE_DEV: process.env.LOG_TO_FILE_DEV,

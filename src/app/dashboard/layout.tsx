@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 
 import { resolveServerLogger } from '@/core/logger/di';
@@ -33,6 +34,8 @@ export async function DashboardLayoutGuard({
 }: {
   children: React.ReactNode;
 }) {
+  await connection();
+
   const requestContext = await getServerRequestLogContext({
     pathname: '/dashboard',
   });
@@ -41,6 +44,7 @@ export async function DashboardLayoutGuard({
   try {
     access = await resolveNodeProvisioningAccess(getAppContainer());
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
       {
         event: 'dashboard_guard:decision',
@@ -49,7 +53,8 @@ export async function DashboardLayoutGuard({
         pathname: '/dashboard',
         decision: 'redirect:/auth/bootstrap',
         reason: 'unsupported_state',
-        err,
+        errorMessage: error.message,
+        errorName: error.name,
       },
       'Dashboard guard failed while resolving provisioning access and redirected to bootstrap recovery route',
     );

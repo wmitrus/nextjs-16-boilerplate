@@ -62,6 +62,7 @@ describe('HeaderAuthControlsAuthjs', () => {
     await userEvent.click(avatarButton);
 
     expect(screen.getByText('user@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Administration')).toBeInTheDocument();
     expect(screen.getByText('Sign Out')).toBeInTheDocument();
   });
 });

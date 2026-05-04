@@ -159,7 +159,7 @@ describe('authOptions', () => {
         password: 'correctpass',
       });
       expect(result).toMatchObject({
-        id: 'uid-1',
+        id: 'user@example.com',
         email: 'user@example.com',
         emailVerified: true,
       });
@@ -202,14 +202,14 @@ describe('authOptions', () => {
       const { jwt } = mod.authOptions.callbacks ?? {};
       if (!jwt) throw new Error('jwt callback not defined');
       const token = { sub: 'u1' };
-      const user = { id: 'uid-1', emailVerified: true };
+      const user = { id: 'user@example.com', emailVerified: true };
       const result = await (
         jwt as (args: {
           token: unknown;
           user: unknown;
         }) => Record<string, unknown>
       )({ token, user });
-      expect(result['id']).toBe('uid-1');
+      expect(result['id']).toBe('user@example.com');
       expect(result['emailVerified']).toBe(true);
     });
 

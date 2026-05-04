@@ -1,3 +1,58 @@
+# [1.30.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.29.0...v1.30.0) (2026-05-04)
+
+
+### Bug Fixes
+
+* **auth:** correct bootstrap redirect URL handling ([75cd92b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/75cd92b824b09bbb8d4c44757f64389ed47687f7))
+* **auth:** correct organization selection order in tenant resolver ([0aa10bc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0aa10bcbad9e9d6eb15474d1688b63e0cb5b4f55))
+* **auth:** correct redirect_url handling for org_required case ([db2efe2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db2efe2724f99a0e75fe83b2ce634d05a9f943cf))
+* **auth:** correct tenant existence check query ([0b72e90](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0b72e90a374c6544170571b6b627853c55699ab3))
+* **auth:** correct user ID assignment in auth options ([6548670](https://github.com/wmitrus/nextjs-16-boilerplate/commit/65486706b2e3a2a862da0b8c87158379e058acdd))
+* **auth:** correct user ID in authorization tests ([46b441e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/46b441ed4e4919605618bfe51d659c2154e6dc8c))
+* **auth:** establish connection in UsersLayoutGuard ([374d0d4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/374d0d4ec74b9db225201c2f0180efbe5546e249))
+* **auth:** improve error messaging for sign-in feedback ([b3bb9ce](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b3bb9cec217e4dc5caeb5ea8e6261839ec9fde30))
+* **auth:** improve redirect handling in sign-in page ([5b18e4f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5b18e4f4e196cd16782db5263077c76f011f49c2))
+* **auth:** update sign-out callback URL and improve event handling ([1b3c10c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1b3c10ca7edf60ac82b23dd0b8fbf83bd90d7120))
+* **dashboard:** improve error handling in layout guard ([e0f2a01](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e0f2a0191b0ee74b6437edcc39659bba55a0b523))
+* **dashboard:** update environment variable access for dashboard links ([af8e4b1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/af8e4b1e9f732252e3dfaf55ec36703c77d39c5f))
+* **onboarding:** establish connection in onboarding guard ([3e05f3d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3e05f3d7c28fbe16df3d07376922964b776d81c6))
+* **onboarding:** improve error logging during onboarding process ([a9524c8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a9524c89ac270b63164791264bc5e4da621b869c))
+* **users:** improve error handling in users layout guard ([333a7e5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/333a7e5876aeca935f97bb2c5ab3d9996109638d))
+
+
+### Features
+
+* **auth:** add administration link to user controls ([a795840](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a795840ee0877d69c4664b92ef26948de561b0f6))
+* **auth:** add authProvider to BootstrapErrorUI ([d71eb95](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d71eb9536363ae9ad235e61bfe98b2519b9b73d2))
+* **auth:** add sign-in path retrieval function ([ef6f30d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ef6f30d9d62fbadd8aaf38f4b7a406d0144111ae))
+* **auth:** add user avatar menu component ([30e02f9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/30e02f976c04c4b3e42f7b243aba2f8610878b26))
+* **auth:** enhance bootstrap start route functionality ([b6862a1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b6862a16816041665c8802483b873d65c49a2103))
+* **auth:** enhance BootstrapErrorUI with sign-out functionality ([51e577f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/51e577f184a0cb80d450345124f6571304ab8c9e))
+* **auth:** enhance organization switching with error handling ([508af75](https://github.com/wmitrus/nextjs-16-boilerplate/commit/508af75c1aee7ee2ab5e0b5585987bf7f755979b))
+* **auth:** enhance registration mode handling ([7162f23](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7162f23901b1a881704572bc5a8662d6d40fdd9f))
+* **auth:** enhance routing for user provisioning ([dd1536d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dd1536d74782fe5c1bb876d6d18095978bd45c13))
+* **auth:** enhance single tenancy resolver with organization lookup ([8e727ce](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8e727ce2a2d82bc95881770e763dbfd6c024b878))
+* **auth:** implement credentials sign-in handler ([ed114f1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ed114f1a0886388af9e058bf2b5b0dbc874770de))
+* **auth:** implement E2E authentication utilities ([4531e59](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4531e59192441943cd32f87eb246173c624d0208))
+* **auth:** implement invitation acceptance and sign-out functionality ([10ed212](https://github.com/wmitrus/nextjs-16-boilerplate/commit/10ed212a6d0619b352a0ed646f3d7ab19d3a024f))
+* **auth:** implement invitation acceptance flow ([96954d0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/96954d0c08299a4e6aa403efe29f4d125191ae44))
+* **auth:** implement organization membership validation ([08e100d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/08e100dc85b7c2097938fe63192eaa00294fbcb0))
+* **auth:** implement sign-in page functionality ([0a26987](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0a269875fb019e48fb8955cef2a92b9a702b8a23))
+* **auth:** implement user registration and onboarding process ([0b0e7cf](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0b0e7cf0b69a9bf78b6d3ea49bed3b006e3e142a))
+* **auth:** update sign-in client to use post-auth redirect URL ([6c70c0b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6c70c0bd089dbd30a95faccefe8522f95c64d912))
+* **dashboard:** add dashboard tool inventory functionality ([e2398e3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e2398e3359ddc1b6eb2b41487166eaaf8bec3bfa))
+* **dashboard:** implement DashboardLayout and DashboardLayoutGuard ([c36144e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c36144ec5de4d2e8ddcb07a98f8ce0eaddb16c4c))
+* **dashboard:** implement DashboardPage with tool inventory display ([dd946b5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dd946b59e925a63753e38f34312bbb2a502278d5))
+* **db:** add deactivatedAt timestamp to users table ([ece5f06](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ece5f06a3ea680a82585010dbd4e197488dc9f5b))
+* **env:** add new environment variables for LHCI and Leantime ([d49c711](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d49c711b5f8fc9055cda39d9c6613db26ff17183))
+* **env:** enhance environment variable configuration ([dd2b422](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dd2b42200e93d24efbcaf670831d0f0bb8afd436))
+* **infra:** add email configuration options to default environment ([6870b9f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6870b9f654e4cddd5683494d3946c8a101359f6e))
+* **layout:** add suspense fallback for auth provider ([20dcb45](https://github.com/wmitrus/nextjs-16-boilerplate/commit/20dcb454f14ef28e5c67f9f3fb1627514cb4d9ca))
+* **onboarding:** enhance onboarding guard redirect logic ([dcc6c97](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dcc6c97c75ea5e2b14d51f038cbddec254a0e634))
+* **onboarding:** update redirect URL to use default entry point ([ffad150](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ffad150f07b902b80b5623a5e7a1886cdf6dac6e))
+* **ui:** add Avatar component for user profile display ([90731ff](https://github.com/wmitrus/nextjs-16-boilerplate/commit/90731ffc250de37d76709521ff96a9aac181af7c))
+* **ui:** implement DashboardToolsTable component ([74400c7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/74400c7d2cc5bcb0994e46f2e445d669874712cb))
+
 # [1.29.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.28.0...v1.29.0) (2026-04-28)
 
 

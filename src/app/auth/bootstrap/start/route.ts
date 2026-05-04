@@ -68,8 +68,8 @@ export async function GET(request: NextRequest) {
     case 'org_required': {
       const target = new URL('/auth/bootstrap', request.url);
       target.searchParams.set('state', 'org-required');
-      if (rawRedirectUrl)
-        target.searchParams.set('redirect_url', rawRedirectUrl);
+      if (safeTarget !== DEFAULT_APP_ENTRY_URL)
+        target.searchParams.set('redirect_url', safeTarget);
       return NextResponse.redirect(target);
     }
 

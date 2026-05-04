@@ -6,6 +6,8 @@ import * as React from 'react';
 
 import { Avatar } from '@/shared/components/ui/avatar';
 
+import { DEFAULT_APP_ENTRY_URL } from '@/app/auth/post-auth-redirect';
+
 interface UserAvatarMenuProps {
   name?: string | null;
   email?: string | null;
@@ -22,8 +24,20 @@ export function UserAvatarMenu({ name, email, imageUrl }: UserAvatarMenuProps) {
         setOpen(false);
       }
     }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   const displayName = name ?? email ?? 'Account';
@@ -92,7 +106,7 @@ export function UserAvatarMenu({ name, email, imageUrl }: UserAvatarMenuProps) {
               role="menuitem"
               onClick={() => {
                 setOpen(false);
-                void signOut({ callbackUrl: '/' });
+                void signOut({ callbackUrl: DEFAULT_APP_ENTRY_URL });
               }}
               className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >

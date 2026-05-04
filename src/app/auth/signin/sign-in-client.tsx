@@ -76,14 +76,24 @@ export function SignInClient({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {verified && !formError && (
-        <div className="rounded-md bg-green-50 p-3 dark:bg-green-950">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="rounded-md bg-green-50 p-3 dark:bg-green-950"
+        >
           <p className="text-sm text-green-700 dark:text-green-300">
             Your email has been verified. You can now sign in.
           </p>
         </div>
       )}
       {formError && (
-        <div className="rounded-md bg-red-50 p-3 dark:bg-red-950">
+        <div
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="rounded-md bg-red-50 p-3 dark:bg-red-950"
+        >
           <p className="text-sm text-red-700 dark:text-red-300">{formError}</p>
         </div>
       )}

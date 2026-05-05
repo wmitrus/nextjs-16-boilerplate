@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { connection } from 'next/server';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db/types';
@@ -41,6 +42,7 @@ function resolveWaitlistService() {
 }
 
 export default async function WaitlistAdminPage() {
+  await connection();
   await getServerRequestLogContext({ pathname: '/admin/waitlist' });
 
   const service = resolveWaitlistService();

@@ -176,101 +176,103 @@ export async function run(): Promise<void> {
     const ownerRoleId = randomUUID();
     const memberRoleId = randomUUID();
 
-    await dbRuntime.db
-      .insert(tenantsTable)
-      .values({ id: tenantId, name: orgName })
-      .onConflictDoNothing();
+    await dbRuntime.db.transaction(async (tx) => {
+      await tx
+        .insert(tenantsTable)
+        .values({ id: tenantId, name: orgName })
+        .onConflictDoNothing();
 
-    await dbRuntime.db
-      .insert(organizationsTable)
-      .values({ id: orgId, tenantId, name: orgName })
-      .onConflictDoNothing();
+      await tx
+        .insert(organizationsTable)
+        .values({ id: orgId, tenantId, name: orgName })
+        .onConflictDoNothing();
 
-    await dbRuntime.db
-      .insert(tenantAttributesTable)
-      .values({
-        tenantId,
-        plan: 'standard',
-        contractType: 'standard',
-        features: [],
-        maxUsers: 100,
-        maxOrganizations: 1,
-        policyTemplateVersion: 0,
-      })
-      .onConflictDoNothing();
-
-    await dbRuntime.db
-      .insert(usersTable)
-      .values({ id: userId, email, onboardingComplete: true })
-      .onConflictDoNothing();
-
-    await dbRuntime.db
-      .insert(userCredentialsTable)
-      .values({ userId, email, hashedPassword, emailVerified: true })
-      .onConflictDoNothing();
-
-    await dbRuntime.db
-      .insert(authUserIdentitiesTable)
-      .values({ provider: 'authjs', externalUserId: userId, userId })
-      .onConflictDoNothing();
-
-    await dbRuntime.db
-      .insert(rolesTable)
-      .values([
-        {
-          id: ownerRoleId,
-          organizationId: orgId,
-          name: 'owner',
-          isSystem: true,
-        },
-        {
-          id: memberRoleId,
-          organizationId: orgId,
-          name: 'member',
-          isSystem: true,
-        },
-      ])
-      .onConflictDoNothing();
-
-    for (const policy of ownerPolicies) {
-      await dbRuntime.db
-        .insert(policiesTable)
+      await tx
+        .insert(tenantAttributesTable)
         .values({
-          id: randomUUID(),
-          organizationId: orgId,
-          roleId: ownerRoleId,
-          effect: policy.effect,
-          resource: policy.resource,
-          actions: policy.actions,
-          conditions: policy.conditions ?? {},
+          tenantId,
+          plan: 'standard',
+          contractType: 'standard',
+          features: [],
+          maxUsers: 100,
+          maxOrganizations: 1,
+          policyTemplateVersion: 0,
         })
         .onConflictDoNothing();
-    }
 
-    for (const policy of memberPolicies) {
-      await dbRuntime.db
-        .insert(policiesTable)
-        .values({
-          id: randomUUID(),
-          organizationId: orgId,
-          roleId: memberRoleId,
-          effect: policy.effect,
-          resource: policy.resource,
-          actions: policy.actions,
-          conditions: policy.conditions ?? {},
-        })
+      await tx
+        .insert(usersTable)
+        .values({ id: userId, email, onboardingComplete: true })
         .onConflictDoNothing();
-    }
 
-    await dbRuntime.db
-      .update(tenantAttributesTable)
-      .set({ policyTemplateVersion: POLICY_TEMPLATE_VERSION })
-      .where(eq(tenantAttributesTable.tenantId, tenantId));
+      await tx
+        .insert(userCredentialsTable)
+        .values({ userId, email, hashedPassword, emailVerified: true })
+        .onConflictDoNothing();
 
-    await dbRuntime.db
-      .insert(membershipsTable)
-      .values({ userId, organizationId: orgId, roleId: ownerRoleId })
-      .onConflictDoNothing();
+      await tx
+        .insert(authUserIdentitiesTable)
+        .values({ provider: 'authjs', externalUserId: userId, userId })
+        .onConflictDoNothing();
+
+      await tx
+        .insert(rolesTable)
+        .values([
+          {
+            id: ownerRoleId,
+            organizationId: orgId,
+            name: 'owner',
+            isSystem: true,
+          },
+          {
+            id: memberRoleId,
+            organizationId: orgId,
+            name: 'member',
+            isSystem: true,
+          },
+        ])
+        .onConflictDoNothing();
+
+      for (const policy of ownerPolicies) {
+        await tx
+          .insert(policiesTable)
+          .values({
+            id: randomUUID(),
+            organizationId: orgId,
+            roleId: ownerRoleId,
+            effect: policy.effect,
+            resource: policy.resource,
+            actions: policy.actions,
+            conditions: policy.conditions ?? {},
+          })
+          .onConflictDoNothing();
+      }
+
+      for (const policy of memberPolicies) {
+        await tx
+          .insert(policiesTable)
+          .values({
+            id: randomUUID(),
+            organizationId: orgId,
+            roleId: memberRoleId,
+            effect: policy.effect,
+            resource: policy.resource,
+            actions: policy.actions,
+            conditions: policy.conditions ?? {},
+          })
+          .onConflictDoNothing();
+      }
+
+      await tx
+        .update(tenantAttributesTable)
+        .set({ policyTemplateVersion: POLICY_TEMPLATE_VERSION })
+        .where(eq(tenantAttributesTable.tenantId, tenantId));
+
+      await tx
+        .insert(membershipsTable)
+        .values({ userId, organizationId: orgId, roleId: ownerRoleId })
+        .onConflictDoNothing();
+    });
 
     console.log('');
     console.log('[bootstrap-admin] ✅  Bootstrap complete');

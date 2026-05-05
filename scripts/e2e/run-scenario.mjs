@@ -301,6 +301,22 @@ function cleanupExplicitServerLogDir(env, listMode) {
 
 function applySharedRuntimeEnv(env, scenario, variant) {
   const backendMode = resolveE2EBackendMode(env);
+
+  if (
+    backendMode === 'container' &&
+    !env.CI &&
+    (typeof env.PLAYWRIGHT_SERVER_LOG_DIR !== 'string' ||
+      env.PLAYWRIGHT_SERVER_LOG_DIR.trim().length === 0)
+  ) {
+    const variantSuffix = variant ? `-${variant}` : '';
+    const runSuffix = `${Date.now()}-${process.pid}`;
+    env.PLAYWRIGHT_SERVER_LOG_DIR = path.join(
+      'logs',
+      'playwright',
+      `${scenario}${variantSuffix}-${runSuffix}`,
+    );
+  }
+
   const hasExplicitServerLogDir =
     typeof env.PLAYWRIGHT_SERVER_LOG_DIR === 'string' &&
     env.PLAYWRIGHT_SERVER_LOG_DIR.trim().length > 0;

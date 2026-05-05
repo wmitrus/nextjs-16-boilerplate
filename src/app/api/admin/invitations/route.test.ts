@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
+
 import { DuplicateInvitationError } from '@/modules/invitations/domain/errors';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
@@ -19,8 +21,9 @@ const mocks = vi.hoisted(() => ({
     where: vi.fn(),
     limit: vi.fn(),
   },
+  registry: new Map<symbol, unknown>(),
   container: {
-    resolve: vi.fn(),
+    resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
 }));
 
@@ -84,7 +87,8 @@ describe('POST /api/admin/invitations', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.container.resolve.mockReturnValue(mocks.db);
+    mocks.registry.clear();
+    mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
     mocks.db.select.mockReturnValue(mocks.db);
     mocks.db.from.mockReturnValue(mocks.db);
     mocks.db.where.mockReturnValue(mocks.db);
@@ -124,9 +128,9 @@ describe('POST /api/admin/invitations', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
-    mocks.container.resolve.mockImplementation(() => ({
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(false),
-    }));
+    });
 
     const { POST } = await import('./route');
     const res = await POST(
@@ -264,7 +268,8 @@ describe('GET /api/admin/invitations', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.container.resolve.mockReturnValue(mocks.db);
+    mocks.registry.clear();
+    mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
     mocks.db.select.mockReturnValue(mocks.db);
     mocks.db.from.mockReturnValue(mocks.db);
     mocks.db.where.mockReturnValue(mocks.db);
@@ -288,9 +293,9 @@ describe('GET /api/admin/invitations', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
-    mocks.container.resolve.mockImplementation(() => ({
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(false),
-    }));
+    });
 
     const { GET } = await import('./route');
     const res = await GET(

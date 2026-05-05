@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { count, eq, ilike, or } from 'drizzle-orm';
 
 import type { SubjectId } from '@/core/contracts/primitives';
 import type { User, UserRepository } from '@/core/contracts/user';
@@ -18,6 +18,8 @@ export class DrizzleUserRepository implements UserRepository {
         displayName: usersTable.displayName,
         locale: usersTable.locale,
         timezone: usersTable.timezone,
+        deactivatedAt: usersTable.deactivatedAt,
+        createdAt: usersTable.createdAt,
       })
       .from(usersTable)
       .where(eq(usersTable.id, id))
@@ -35,6 +37,8 @@ export class DrizzleUserRepository implements UserRepository {
       displayName: row.displayName ?? undefined,
       locale: row.locale ?? undefined,
       timezone: row.timezone ?? undefined,
+      deactivatedAt: row.deactivatedAt ?? undefined,
+      createdAt: row.createdAt,
     };
   }
 
@@ -81,6 +85,69 @@ export class DrizzleUserRepository implements UserRepository {
     await this.db
       .update(usersTable)
       .set(updatePayload)
+      .where(eq(usersTable.id, id));
+  }
+
+  async listAll(options?: {
+    readonly limit?: number;
+    readonly offset?: number;
+    readonly search?: string;
+  }): Promise<{ users: User[]; total: number }> {
+    const limit = Math.min(options?.limit ?? 50, 100);
+    const offset = Math.max(options?.offset ?? 0, 0);
+    const search = options?.search?.trim();
+
+    const whereClause = search
+      ? or(
+          ilike(usersTable.email, `%${search}%`),
+          ilike(usersTable.displayName, `%${search}%`),
+        )
+      : undefined;
+
+    const [rows, countRows] = await Promise.all([
+      this.db
+        .select({
+          id: usersTable.id,
+          email: usersTable.email,
+          onboardingComplete: usersTable.onboardingComplete,
+          displayName: usersTable.displayName,
+          locale: usersTable.locale,
+          timezone: usersTable.timezone,
+          deactivatedAt: usersTable.deactivatedAt,
+          createdAt: usersTable.createdAt,
+        })
+        .from(usersTable)
+        .where(whereClause)
+        .limit(limit)
+        .offset(offset)
+        .orderBy(usersTable.createdAt),
+      this.db.select({ total: count() }).from(usersTable).where(whereClause),
+    ]);
+
+    const total = countRows[0]?.total ?? 0;
+
+    return {
+      users: rows.map((row) => ({
+        id: row.id,
+        email: row.email,
+        onboardingComplete: row.onboardingComplete,
+        displayName: row.displayName ?? undefined,
+        locale: row.locale ?? undefined,
+        timezone: row.timezone ?? undefined,
+        deactivatedAt: row.deactivatedAt ?? undefined,
+        createdAt: row.createdAt,
+      })),
+      total,
+    };
+  }
+
+  async deactivate(id: SubjectId, deactivatedAt: Date): Promise<void> {
+    await this.db
+      .update(usersTable)
+      .set({
+        deactivatedAt,
+        updatedAt: new Date(),
+      })
       .where(eq(usersTable.id, id));
   }
 }

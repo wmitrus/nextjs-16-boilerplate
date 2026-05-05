@@ -11,6 +11,8 @@ import {
   createServerErrorResponse,
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
+import { getIP } from '@/shared/lib/network/get-ip';
+import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { DuplicateWaitlistEntryError } from '@/modules/waitlist/domain/errors';
@@ -24,6 +26,8 @@ const bodySchema = z.object({
   organizationId: z.uuid().optional(),
 });
 
+const WAITLIST_PATH = '/api/auth/waitlist';
+
 /**
  * POST /api/auth/waitlist
  * Adds an email to the waitlist and sends a confirmation email.
@@ -32,6 +36,19 @@ const bodySchema = z.object({
  */
 export const POST = withErrorHandler(async (request) => {
   await connection();
+
+  const ip = await getIP(new Headers(request.headers));
+  const rateLimitResult = await checkRateLimit(`waitlist:${ip}`, {
+    path: WAITLIST_PATH,
+  });
+
+  if (!rateLimitResult.success) {
+    return createServerErrorResponse(
+      'Too many requests. Please wait before trying again.',
+      429,
+      'RATE_LIMITED',
+    );
+  }
 
   if (env.REGISTRATION_MODE !== 'invite-only') {
     return createServerErrorResponse(

@@ -2,8 +2,6 @@ import { clerkClient } from '@clerk/nextjs/server';
 
 import { resolveServerLogger } from '@/core/logger/di';
 
-import { hashEmailForLogs } from '@/shared/lib/security/email-safety';
-
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'invitations',
@@ -27,11 +25,9 @@ export class ClerkInvitationBridge {
     role: 'org:admin' | 'org:member';
     redirectUrl: string;
   }): Promise<void> {
-    const emailHash = hashEmailForLogs(args.email);
+    const client = await clerkClient();
 
     try {
-      const client = await clerkClient();
-
       await client.organizations.createOrganizationInvitation({
         organizationId: args.clerkOrganizationId,
         emailAddress: args.email,
@@ -42,7 +38,7 @@ export class ClerkInvitationBridge {
       logger.debug(
         {
           event: 'invitation:clerk:sent',
-          emailHash,
+          email: args.email,
           clerkOrganizationId: args.clerkOrganizationId,
         },
         'Clerk organization invitation sent',
@@ -51,8 +47,7 @@ export class ClerkInvitationBridge {
       logger.warn(
         {
           event: 'invitation:clerk:send_failed',
-          emailHash,
-          clerkOrganizationId: args.clerkOrganizationId,
+          email: args.email,
           errorMessage: error instanceof Error ? error.message : String(error),
           errorName: error instanceof Error ? error.name : 'UnknownError',
         },

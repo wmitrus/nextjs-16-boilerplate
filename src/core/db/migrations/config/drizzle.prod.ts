@@ -20,20 +20,23 @@ if (
   );
 }
 
+const isPoolerUrl =
+  unpooled.includes('pgbouncer') || unpooled.includes('-pooler.');
+
+if (isPoolerUrl) {
+  throw new Error(
+    '[drizzle.prod] DATABASE_URL_UNPOOLED appears to be a pooled/PgBouncer URL.\n' +
+      'Migrations MUST use the direct connection (no -pooler. in the hostname).',
+  );
+}
+
 if (
   pooled &&
   (unpooled === pooled ||
     pooled.includes('pgbouncer') ||
     pooled.includes('-pooler.'))
 ) {
-  const isPoolerUrl =
-    unpooled.includes('pgbouncer') || unpooled.includes('-pooler.');
-  if (isPoolerUrl) {
-    throw new Error(
-      '[drizzle.prod] DATABASE_URL_UNPOOLED appears to be a pooled/PgBouncer URL.\n' +
-        'Migrations MUST use the direct connection (no -pooler. in the hostname).',
-    );
-  }
+  // pooled and unpooled may still be equal, which is also invalid for DDL.
 }
 
 export default defineConfig({

@@ -1,7 +1,5 @@
 import { resolveServerLogger } from '@/core/logger/di';
 
-import { hashEmailForLogs } from '@/shared/lib/security/email-safety';
-
 import type { EmailService } from '../domain/EmailService';
 import {
   DuplicateInvitationError,
@@ -48,11 +46,9 @@ export class DefaultInvitationService implements InvitationService {
     );
     if (existing) {
       throw new DuplicateInvitationError(
-        'A pending invitation already exists for this organization',
+        `A pending invitation already exists for ${input.email} in this organization`,
       );
     }
-
-    const emailHash = hashEmailForLogs(input.email);
 
     const token = generateInvitationToken();
     const expiresAt = buildInvitationExpiry(input.expiresInHours);
@@ -81,8 +77,7 @@ export class DefaultInvitationService implements InvitationService {
         {
           event: 'invitation:email_send_failed',
           invitationId: invitation.id,
-          organizationId: input.organizationId,
-          emailHash,
+          email: input.email,
           errorMessage: error instanceof Error ? error.message : String(error),
           errorName: error instanceof Error ? error.name : 'UnknownError',
         },
@@ -95,7 +90,7 @@ export class DefaultInvitationService implements InvitationService {
         event: 'invitation:created',
         invitationId: invitation.id,
         organizationId: input.organizationId,
-        emailHash,
+        email: input.email,
       },
       'Invitation created',
     );
@@ -132,19 +127,25 @@ export class DefaultInvitationService implements InvitationService {
     const invitation = await this.validateToken(input.token);
     const acceptedAt = input.acceptedAt ?? new Date();
 
-    await this.repository.markAccepted(invitation.id, acceptedAt);
+    const acceptedInvitation = await this.repository.markAccepted(
+      invitation.id,
+      acceptedAt,
+    );
+    if (!acceptedInvitation) {
+      throw new InvitationAlreadyUsedError();
+    }
 
     logger.info(
       {
         event: 'invitation:accepted',
-        invitationId: invitation.id,
-        organizationId: invitation.organizationId,
-        emailHash: hashEmailForLogs(invitation.email),
+        invitationId: acceptedInvitation.id,
+        organizationId: acceptedInvitation.organizationId,
+        email: acceptedInvitation.email,
       },
       'Invitation accepted',
     );
 
-    return { ...invitation, status: 'accepted', acceptedAt };
+    return acceptedInvitation;
   }
 
   async revokeInvitation(id: string): Promise<void> {

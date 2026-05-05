@@ -43,6 +43,16 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
+function buildAdminUsersRequestUrl(offset: number, search: string): string {
+  const url = new URL('/api/admin/users', window.location.origin);
+  url.searchParams.set('limit', '50');
+  url.searchParams.set('offset', String(offset));
+  if (search) {
+    url.searchParams.set('search', search);
+  }
+  return `${url.pathname}${url.search}`;
+}
+
 export function UsersClient() {
   const [state, setState] = React.useState<FetchState>({ status: 'idle' });
   const [search, setSearch] = React.useState('');
@@ -60,13 +70,7 @@ export function UsersClient() {
   const fetchUsers = React.useCallback(async (offset: number, q: string) => {
     setState({ status: 'loading' });
     try {
-      const params = new URLSearchParams({
-        limit: String(limit),
-        offset: String(offset),
-      });
-      if (q) params.set('search', q);
-
-      const res = await fetch(`/api/admin/users?${params.toString()}`);
+      const res = await fetch(buildAdminUsersRequestUrl(offset, q));
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setState({

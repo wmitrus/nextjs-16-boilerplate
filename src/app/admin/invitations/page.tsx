@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { connection } from 'next/server';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db/types';
@@ -25,6 +26,7 @@ export const metadata: Metadata = {
 };
 
 export default async function InvitationsAdminPage() {
+  await connection();
   await getServerRequestLogContext({ pathname: '/admin/invitations' });
 
   const container = getAppContainer();

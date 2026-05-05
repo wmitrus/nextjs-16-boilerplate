@@ -19,6 +19,12 @@ import { DefaultInvitationService } from './DefaultInvitationService';
 import type { EmailService } from '@/modules/invitations/domain/EmailService';
 import { resetAllInfrastructureMocks } from '@/testing';
 
+function daysFromNow(days: number): Date {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date;
+}
+
 function buildInvitation(overrides: Partial<Invitation> = {}): Invitation {
   return {
     id: 'inv-1',
@@ -28,9 +34,9 @@ function buildInvitation(overrides: Partial<Invitation> = {}): Invitation {
     roleId: 'role-1',
     token: 'invite-token',
     status: 'pending',
-    expiresAt: new Date('2026-05-01T00:00:00.000Z'),
+    expiresAt: daysFromNow(7),
     acceptedAt: null,
-    createdAt: new Date('2026-04-27T00:00:00.000Z'),
+    createdAt: daysFromNow(-1),
     ...overrides,
   };
 }
@@ -98,7 +104,7 @@ describe('DefaultInvitationService', () => {
 
   it('marks overdue pending invitations as expired during validation', async () => {
     const expiredInvitation = buildInvitation({
-      expiresAt: new Date('2026-04-01T00:00:00.000Z'),
+      expiresAt: daysFromNow(-30),
     });
     vi.mocked(repository.findByToken).mockResolvedValue(expiredInvitation);
 

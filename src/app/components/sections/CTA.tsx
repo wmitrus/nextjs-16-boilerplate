@@ -10,6 +10,7 @@ const CTA = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
       <PolymorphicElement
         as="section"
         ref={ref}
+        id="pricing"
         className={cn(
           'relative isolate overflow-hidden bg-black py-24 sm:py-32 dark:bg-white',
           className,

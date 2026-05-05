@@ -1,7 +1,5 @@
 import { resolveServerLogger } from '@/core/logger/di';
 
-import { hashEmailForLogs } from '@/shared/lib/security/email-safety';
-
 const logger = resolveServerLogger().child({
   module: 'ClerkWaitlistBridge',
   type: 'AUTH',
@@ -22,10 +20,7 @@ const logger = resolveServerLogger().child({
 export class ClerkWaitlistBridge {
   async addToWaitlist(email: string): Promise<void> {
     logger.debug(
-      {
-        emailHash: hashEmailForLogs(email),
-        event: 'waitlist:clerk:noop',
-      },
+      { email },
       '[ClerkWaitlistBridge] Clerk waitlist is managed via UI component — no server-side API call needed',
     );
   }

@@ -11,13 +11,15 @@ import type {
   SendWaitlistRejectionEmailInput,
 } from '../domain/EmailService';
 
-const logger = resolveServerLogger().child({
-  type: 'API',
-  category: 'email',
-  module: 'noop-email-service',
-});
-
 let hasWarnedAboutNoOp = false;
+
+function getLogger() {
+  return resolveServerLogger().child({
+    type: 'API',
+    category: 'email',
+    module: 'noop-email-service',
+  });
+}
 
 function maskEmail(email: string): string {
   const [localPart, domain] = email.split('@');
@@ -52,6 +54,8 @@ function summarizeLink(url: string): {
  */
 export class NoOpEmailService implements EmailService {
   constructor() {
+    const logger = getLogger();
+
     if (!hasWarnedAboutNoOp) {
       logger.warn(
         {
@@ -65,6 +69,8 @@ export class NoOpEmailService implements EmailService {
   }
 
   async sendInvitationEmail(input: SendInvitationEmailInput): Promise<void> {
+    const logger = getLogger();
+
     logger.debug(
       {
         event: 'email:invitation:noop',
@@ -80,6 +86,8 @@ export class NoOpEmailService implements EmailService {
   async sendVerificationEmail(
     input: SendVerificationEmailInput,
   ): Promise<void> {
+    const logger = getLogger();
+
     logger.debug(
       {
         event: 'email:verification:noop',
@@ -93,6 +101,8 @@ export class NoOpEmailService implements EmailService {
   async sendPasswordResetEmail(
     input: SendPasswordResetEmailInput,
   ): Promise<void> {
+    const logger = getLogger();
+
     logger.debug(
       {
         event: 'email:password_reset:noop',
@@ -106,6 +116,8 @@ export class NoOpEmailService implements EmailService {
   async sendWaitlistConfirmationEmail(
     input: SendWaitlistConfirmationEmailInput,
   ): Promise<void> {
+    const logger = getLogger();
+
     logger.debug(
       {
         event: 'email:waitlist_confirmation:noop',
@@ -119,6 +131,8 @@ export class NoOpEmailService implements EmailService {
   async sendWaitlistRejectionEmail(
     input: SendWaitlistRejectionEmailInput,
   ): Promise<void> {
+    const logger = getLogger();
+
     logger.debug(
       {
         event: 'email:waitlist_rejection:noop',

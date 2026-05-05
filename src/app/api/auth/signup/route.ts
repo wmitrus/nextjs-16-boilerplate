@@ -16,6 +16,12 @@ import {
   emailVerificationTokensTable,
   userCredentialsTable,
 } from '@/modules/auth/infrastructure/drizzle/schema';
+import {
+  InvitationAlreadyUsedError,
+  InvitationExpiredError,
+  InvitationNotFoundError,
+  InvitationRevokedError,
+} from '@/modules/invitations/domain/errors';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
@@ -188,6 +194,9 @@ export async function POST(request: Request): Promise<Response> {
           tokenHash,
           expiresAt,
         });
+      } else if (invitationToken) {
+        const invitationService = resolveInvitationService(tx as DrizzleDb);
+        await invitationService.acceptInvitation({ token: invitationToken });
       }
     });
 
@@ -231,24 +240,6 @@ export async function POST(request: Request): Promise<Response> {
       'AuthJS credentials sign-up successful',
     );
 
-    if (invitationToken) {
-      try {
-        const invitationService = resolveInvitationService(db);
-        await invitationService.acceptInvitation({ token: invitationToken });
-      } catch (inviteErr) {
-        const invErr =
-          inviteErr instanceof Error ? inviteErr : new Error(String(inviteErr));
-        logger.warn(
-          {
-            event: 'auth:signup_invitation_accept_failed',
-            errorMessage: invErr.message,
-            errorName: invErr.name,
-          },
-          'Account created but invitation acceptance failed — token may be expired or already used',
-        );
-      }
-    }
-
     if (emailVerified) {
       return Response.json(
         { success: true, message: 'Account created. You can now sign in.' },
@@ -287,6 +278,18 @@ export async function POST(request: Request): Promise<Response> {
       { status: 201 },
     );
   } catch (err) {
+    if (
+      err instanceof InvitationNotFoundError ||
+      err instanceof InvitationExpiredError ||
+      err instanceof InvitationAlreadyUsedError ||
+      err instanceof InvitationRevokedError
+    ) {
+      return Response.json(
+        { error: 'This invitation link is invalid or has expired.' },
+        { status: 410 },
+      );
+    }
+
     if (isUniqueConstraintViolation(err)) {
       return Response.json(
         { error: 'An account with this email already exists.' },

@@ -18,10 +18,22 @@ import {
 
 type VerifyResult =
   | { status: 'verified' }
+  | { status: 'ready'; token: string }
   | { status: 'already_used' }
   | { status: 'expired' }
   | { status: 'invalid' }
   | { status: 'no_token' };
+
+function isStatusResult(
+  status: string | undefined,
+): status is 'already_used' | 'expired' | 'invalid' | 'no_token' {
+  return (
+    status === 'already_used' ||
+    status === 'expired' ||
+    status === 'invalid' ||
+    status === 'no_token'
+  );
+}
 
 async function consumeVerificationToken(token: string): Promise<VerifyResult> {
   const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -77,6 +89,25 @@ async function consumeVerificationToken(token: string): Promise<VerifyResult> {
 }
 
 function StatusMessage({ result }: { result: VerifyResult }) {
+  if (result.status === 'ready') {
+    return (
+      <div className="space-y-4 text-center">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Confirm your email address to finish account activation.
+        </p>
+        <form action={submitVerification} className="space-y-3">
+          <input type="hidden" name="token" value={result.token} />
+          <button
+            type="submit"
+            className="block w-full rounded-md bg-blue-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Verify Email
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   if (result.status === 'verified') {
     return (
       <div className="space-y-4 text-center">
@@ -109,7 +140,7 @@ function StatusMessage({ result }: { result: VerifyResult }) {
   }
 
   const messages: Record<
-    Exclude<VerifyResult['status'], 'verified'>,
+    Exclude<VerifyResult['status'], 'verified' | 'ready'>,
     string
   > = {
     already_used:
@@ -135,10 +166,32 @@ function StatusMessage({ result }: { result: VerifyResult }) {
   );
 }
 
+async function submitVerification(formData: FormData): Promise<void> {
+  'use server';
+
+  await connection();
+
+  if (env.AUTH_PROVIDER !== 'authjs') {
+    redirect('/');
+  }
+
+  const token = formData.get('token');
+  if (typeof token !== 'string' || token.length === 0) {
+    redirect('/auth/verify-email?status=no_token');
+  }
+
+  const result = await consumeVerificationToken(token);
+  if (result.status === 'verified') {
+    redirect('/auth/signin?verified=true');
+  }
+
+  redirect(`/auth/verify-email?status=${result.status}`);
+}
+
 async function VerifyEmailPageContent({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; status?: string }>;
 }) {
   await connection();
 
@@ -146,17 +199,15 @@ async function VerifyEmailPageContent({
     redirect('/');
   }
 
-  const { token } = await searchParams;
+  const { token, status } = await searchParams;
 
   let result: VerifyResult;
-  if (!token) {
+  if (isStatusResult(status)) {
+    result = { status };
+  } else if (!token) {
     result = { status: 'no_token' };
   } else {
-    result = await consumeVerificationToken(token);
-  }
-
-  if (result.status === 'verified') {
-    redirect('/auth/signin?verified=true');
+    result = { status: 'ready', token };
   }
 
   return (
@@ -184,7 +235,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
 export default function VerifyEmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; status?: string }>;
 }) {
   return (
     <Suspense fallback={null}>

@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
+
 import { InvitationNotFoundError } from '@/modules/invitations/domain/errors';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
@@ -12,8 +14,9 @@ const mocks = vi.hoisted(() => ({
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
   revokeInvitation: vi.fn(),
+  registry: new Map<symbol, unknown>(),
   container: {
-    resolve: vi.fn(),
+    resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
 }));
 
@@ -75,6 +78,8 @@ describe('DELETE /api/admin/invitations/[id]', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
+    mocks.registry.clear();
+    mocks.registry.set(INFRASTRUCTURE.DB, {});
     vi.mocked(DefaultInvitationService).mockImplementation(function () {
       return {
         revokeInvitation: mocks.revokeInvitation,
@@ -108,9 +113,9 @@ describe('DELETE /api/admin/invitations/[id]', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
-    mocks.container.resolve.mockImplementation(() => ({
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(false),
-    }));
+    });
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest(), {

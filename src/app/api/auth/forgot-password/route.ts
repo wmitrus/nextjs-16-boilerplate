@@ -14,6 +14,7 @@ import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { passwordResetTokensTable } from '@/modules/auth/infrastructure/drizzle/schema';
+import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 
 const forgotPasswordSchema = z.object({
@@ -134,9 +135,38 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    const resetUrl = `${env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/auth/reset-password?token=${rawToken}`;
+    const emailService = createEmailService({
+      provider: env.EMAIL_PROVIDER,
+      resendApiKey: env.RESEND_API_KEY,
+      resendFromEmail: env.RESEND_FROM_EMAIL,
+      smtpHost: env.SMTP_HOST,
+      smtpPort: env.SMTP_PORT,
+      smtpSecure: env.SMTP_SECURE,
+      smtpUser: env.SMTP_USER,
+      smtpPass: env.SMTP_PASS,
+      smtpFromEmail: env.SMTP_FROM_EMAIL,
+    });
+
+    try {
+      await emailService.sendPasswordResetEmail({ to: email, resetUrl });
+    } catch (emailErr) {
+      const emailError =
+        emailErr instanceof Error ? emailErr : new Error(String(emailErr));
+      logger.error(
+        {
+          event: 'auth:reset_email_send_error',
+          errorMessage: emailError.message,
+          errorName: emailError.name,
+        },
+        'Failed to send password reset email',
+      );
+    }
+
     return Response.json(SAFE_RESPONSE, { status: 200 });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
+    const cause = error.cause instanceof Error ? error.cause : undefined;
     resolveServerLogger()
       .child({
         type: 'API',
@@ -148,6 +178,7 @@ export async function POST(request: Request): Promise<Response> {
           event: 'auth:reset_token_error',
           errorMessage: error.message,
           errorName: error.name,
+          ...(cause && { causeMessage: cause.message, causeName: cause.name }),
         },
         'Password reset token generation error',
       );

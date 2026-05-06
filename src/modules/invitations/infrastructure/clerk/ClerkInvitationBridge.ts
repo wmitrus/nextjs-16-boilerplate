@@ -31,9 +31,9 @@ export class ClerkInvitationBridge {
     role: 'org:admin' | 'org:member';
     redirectUrl: string;
   }): Promise<void> {
-    const client = await clerkClient();
-
     try {
+      const client = await clerkClient();
+
       await client.organizations.createOrganizationInvitation({
         organizationId: args.clerkOrganizationId,
         emailAddress: args.email,

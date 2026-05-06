@@ -11,23 +11,23 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                   | Classification             | Affected Contexts         |
-| ------ | ------------------ | ----------------------------------------------------- | -------------------------- | ------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks              | False positive             | Unit test files           |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin   | False positive             | Middleware                |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param  | Latent risk → fixed        | Middleware                |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`             | False positive → hardened  | API route                 |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths              | False positive             | E2E helpers               |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness             | False positive             | E2E specs                 |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config   | Real risk → fixed          | Module-level SDK adapters |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`        | Latent risk                | Auth/bootstrap UI mapping |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement        | Latent risk                | Runtime logger helpers    |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop   | Real risk → fixed          | Rate-limit middleware     |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers         | Local lint-backed workflow | Scripts, E2E helpers      |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling   | Local lint-backed workflow | Scripts, E2E helpers      |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers  |
-| SEC-21 | Data integrity     | Preflight duplicate check without DB uniqueness       | Real risk -> fixed         | Invitations, write paths  |
-| SEC-22 | Sensitive data     | Raw email/token-bearing values in logs and mail paths | Real risk -> fixed         | Logging, email transports |
+| #      | Category           | Vulnerability Class                                   | Classification             | Affected Contexts            |
+| ------ | ------------------ | ----------------------------------------------------- | -------------------------- | ---------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks              | False positive             | Unit test files              |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin   | False positive             | Middleware                   |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param  | Latent risk → fixed        | Middleware                   |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`             | False positive → hardened  | API route                    |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths              | False positive             | E2E helpers                  |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness             | False positive             | E2E specs                    |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config   | Real risk → fixed          | Module-level SDK adapters    |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`        | Latent risk                | Auth/bootstrap UI mapping    |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement        | Latent risk                | Runtime logger helpers       |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop   | Real risk → fixed          | Rate-limit middleware        |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers         | Local lint-backed workflow | Scripts, E2E helpers         |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling   | Local lint-backed workflow | Scripts, E2E helpers         |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers     |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting    | Real risk → fixed          | Public auth route handlers   |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges | Real risk → fixed          | Email adapters, auth bridges |
 
 ---
 
@@ -120,6 +120,108 @@ return NextResponse.redirect(new URL('/', req.url));
 
 `new URL('/literal-path', req.url)` is **safe**. It is not an open redirect.
 Do not introduce scanner suppression comments for this pattern — it is architecturally sound.
+
+---
+
+## SEC-21 — Public Email / Write Endpoints Must Be Rate Limited
+
+### Scanner Finding
+
+> Public unauthenticated endpoint accepts attacker-controlled input, writes to storage, or triggers outbound email without rate limiting.
+
+### Context
+
+Examples in this repository include public auth endpoints such as waitlist join, resend verification, and forgot password.
+
+### Why This Is A Real Risk
+
+- anonymous callers can spam mailbox targets controlled by third parties
+- attackers can grow internal storage tables cheaply
+- abuse can trigger outbound provider costs and noisy operational logs
+- missing rate limiting on one public endpoint breaks the repository's otherwise consistent abuse boundary
+
+### Correct Pattern
+
+For any unauthenticated route handler that:
+
+- accepts arbitrary caller input
+- writes to the database, or
+- sends email / external side effects
+
+apply `checkRateLimit()` before body processing, keyed by IP (and optionally a normalized identifier), and always pass `meta.path`:
+
+```typescript
+const path = '/api/auth/waitlist';
+const ip = await getIP(new Headers(request.headers));
+const rateLimitResult = await checkRateLimit(`waitlist:${ip}`, {
+  path,
+});
+
+if (!rateLimitResult.success) {
+  return createServerErrorResponse(
+    'Too many requests. Please wait before trying again.',
+    429,
+    'RATE_LIMITED',
+  );
+}
+```
+
+### Rule for Agents
+
+**DO** add rate limiting to public write/email auth endpoints.
+**DO** pass `meta.path` to `checkRateLimit()`.
+**DO NOT** ship anonymous email-triggering endpoints without abuse throttling.
+
+---
+
+## SEC-22 — Never Log Raw Emails, Tokens, Or Full One-Time URLs
+
+### Scanner Finding
+
+> Logging code emits raw email addresses, single-use links, or token-bearing URLs to stdout or structured logs.
+
+### Context
+
+This risk appears most often in:
+
+- `NoOpEmailService`
+- provider bridges such as Clerk invitation or waitlist adapters
+- auth verification / reset flows that generate single-use links
+
+### Why This Is A Real Risk
+
+- raw emails are PII
+- one-time URLs and tokens are credential material
+- stdout logs are often shipped to external providers and retained longer than intended
+- no-op adapters used in development often leak the exact data that later appears in shared preview logs
+
+### Correct Pattern
+
+- use structured Pino logging, not `console.info`
+- mask emails or log a deterministic email hash
+- never log full invitation / verification / reset URLs
+- if correlation is needed, log a short hash plus token length, not the token value
+
+```typescript
+logger.debug(
+  {
+    event: 'email:verification:noop',
+    emailPreview: 'a***@example.com',
+    verifyLink: {
+      path: '/auth/verify-email',
+      tokenHash: 'ab12cd34ef56',
+      tokenLength: 43,
+    },
+  },
+  'Verification email suppressed by NoOpEmailService',
+);
+```
+
+### Rule for Agents
+
+**DO** mask or hash emails in logs.
+**DO NOT** log raw one-time URLs or tokens.
+**DO** prefer structured logger fields over stdout dumping.
 
 ---
 
@@ -1209,112 +1311,3 @@ That would recreate Codacy noise locally. This pattern is enforced primarily thr
 **DO NOT** default to repeated `result[key] = ...` or `plainObject[key]` mutation chains in `src/**` runtime helpers when an entries-based transform, `Map`, or explicit `switch` would express the same behavior more clearly.
 
 **DO** use entries-based transforms, `Map`, or explicit `switch` helpers to keep Phase 2 object-access churn out of future Codacy runs.
-
----
-
-## SEC-21 — Duplicate-Sensitive Writes Need DB-Enforced Uniqueness
-
-**ID**: SEC-21
-**Category**: Data Integrity / Concurrency
-**Classification**: Real risk -> fixed
-**Affected area**: invitation, waitlist, membership, token, and other duplicate-sensitive write paths
-
-### Problem
-
-Application-level duplicate checks like `findPendingByEmailAndOrg()` are raceable. Two concurrent requests can both observe "no existing row" and then both insert.
-
-This is a correctness and security-hardening issue whenever the invariant matters for downstream auth, organization membership, or user-facing invite state.
-
-### Dangerous Pattern
-
-```typescript
-const existing = await repository.findPendingByEmailAndOrg(email, organizationId);
-if (existing) throw new DuplicateInvitationError();
-
-await repository.create({ email, organizationId, status: 'pending' });
-```
-
-### Correct Pattern
-
-Keep the preflight read if it improves UX, but enforce the real invariant in the database:
-
-1. Add a unique constraint or partial unique index for the exact invariant.
-2. Catch the exact DB uniqueness violation in the repository adapter.
-3. Translate it into the existing domain duplicate error.
-
-Example for pending invitations:
-
-```typescript
-uniqueIndex('uq_invitations_org_email_pending')
-  .on(t.organizationId, t.email)
-  .where(sql`${t.status} = 'pending'`);
-```
-
-Then map the `23505` violation for that constraint back to `DuplicateInvitationError` in the Drizzle repository.
-
-### Rule for Agents
-
-**DO NOT** rely on read-before-write duplicate checks as the only invariant for duplicate-sensitive writes.
-
-**DO** keep the DB as the source of truth with a uniqueness constraint or partial unique index, and translate the exact persistence error back into the domain-level duplicate error.
-
----
-
-## SEC-22 — Logs And Email Paths Must Not Expose Raw Email Or Token URLs
-
-**ID**: SEC-22
-**Category**: Sensitive Data / Operational Exposure
-**Classification**: Real risk -> fixed
-**Affected area**: invitation, waitlist, verification, reset, and noop email flows
-
-### Problem
-
-Raw email addresses, token-bearing URLs, and unsanitized user-controlled values often leak through:
-
-- structured logs
-- noop email transports that print to stdout
-- email subjects and headers
-- HTML email template interpolation
-
-These values do not need to appear verbatim in operational traces, and logging token URLs turns logs into credential material.
-
-### Dangerous Pattern
-
-```typescript
-logger.warn({ email, inviteUrl }, 'Invitation failed');
-console.info('[NoOpEmailService]', { to: input.to, resetUrl: input.resetUrl });
-subject: `You've been invited to join ${organizationName}`;
-html: `<p>${invitedByName}</p>`;
-```
-
-### Correct Pattern
-
-- log `emailHash` or masked recipient previews instead of raw addresses
-- never log invite, reset, or verification URLs
-- do not silently fall back to noop email providers in production
-- sanitize subject/header values, escape HTML content, and normalize URLs with `new URL()` before interpolation
-
-Example:
-
-```typescript
-logger.info({ emailHash: hashEmailForLogs(email) }, 'Invitation created');
-
-this.logger.info(
-  { recipientPreview: maskEmail(input.to) },
-  'Password reset email skipped by NoOpEmailService',
-);
-
-const safeOrganizationName = sanitizeEmailHeaderValue(input.organizationName);
-const safeInviteUrl = validateUrlForEmail(input.inviteUrl);
-const safeInvitedByName = escapeHtml(input.invitedByName ?? 'Someone');
-```
-
-### Rule for Agents
-
-**DO NOT** log raw emails when a hash or masked preview is sufficient.
-
-**DO NOT** log invite, reset, or verification URLs.
-
-**DO NOT** allow production to silently select a noop email provider.
-
-**DO** sanitize dynamic email headers, escape HTML template content, and normalize outbound URLs before rendering them into email content.

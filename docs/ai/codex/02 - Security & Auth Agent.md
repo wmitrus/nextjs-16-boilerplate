@@ -33,8 +33,6 @@ The skill reads the shared authority docs first:
 - `docs/ai/general/02 - Security & Auth Agent.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md`
 
-Security review must also enforce the repository rules that duplicate-sensitive writes need DB-backed uniqueness and that logs, noop email paths, and outbound templates must not expose raw emails or token-bearing URLs (SEC-21, SEC-22).
-
 For auth-routing review, it also reads:
 
 - `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`

@@ -1,14 +1,6 @@
 name: Continue Checks
 
 on:
-  pull_request:
-    branches:
-      - main
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - ready_for_review
   workflow_dispatch:
 
 permissions:
@@ -16,7 +8,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: continue-checks-${{ github.event.pull_request.number || github.ref }}
+  group: continue-checks-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

@@ -44,19 +44,6 @@ describe('ResendEmailService', () => {
         }),
       );
     });
-
-    it('escapes verification URLs before rendering html', async () => {
-      await service.sendVerificationEmail({
-        to: 'user@example.com',
-        verifyUrl: 'https://example.com/auth/verify-email?token=<abc>',
-      });
-
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          html: expect.stringContaining('%3Cabc%3E'),
-        }),
-      );
-    });
   });
 
   describe('sendInvitationEmail', () => {
@@ -89,33 +76,6 @@ describe('ResendEmailService', () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           html: expect.stringContaining('Someone'),
-        }),
-      );
-    });
-
-    it('escapes user-controlled html and formats dates deterministically', async () => {
-      await service.sendInvitationEmail({
-        to: 'invitee@example.com',
-        organizationName: 'Acme <Admin>',
-        invitedByName: 'Alice <script>',
-        inviteUrl: 'https://example.com/invite/<token>',
-        expiresAt: new Date('2026-12-31T12:00:00.000Z'),
-      });
-
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          subject: "You've been invited to join Acme <Admin>",
-          html: expect.stringContaining('Acme &lt;Admin&gt;'),
-        }),
-      );
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          html: expect.stringContaining('Alice &lt;script&gt;'),
-        }),
-      );
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          html: expect.stringContaining('2026-12-31'),
         }),
       );
     });

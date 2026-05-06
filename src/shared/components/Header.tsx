@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import PolymorphicElement from '@/shared/components/ui/polymorphic-element';
@@ -13,6 +14,11 @@ interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
 
 const Header = React.forwardRef<HTMLElement, HeaderProps>(
   ({ className, rightContent, ...props }, ref) => {
+    const pathname = usePathname();
+    const isHomePage = pathname === '/';
+    const getHomepageAnchorHref = (anchor: string) =>
+      isHomePage ? `#${anchor}` : `/#${anchor}`;
+
     return (
       <PolymorphicElement
         as="header"
@@ -40,19 +46,19 @@ const Header = React.forwardRef<HTMLElement, HeaderProps>(
             </Link>
             <nav className="hidden items-center gap-6 md:flex">
               <Link
-                href="#features"
+                href={getHomepageAnchorHref('features')}
                 className="text-sm font-medium text-zinc-600 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
               >
                 Features
               </Link>
               <Link
-                href="#use-cases"
+                href={getHomepageAnchorHref('use-cases')}
                 className="text-sm font-medium text-zinc-600 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
               >
                 Use Cases
               </Link>
               <Link
-                href="#pricing"
+                href={getHomepageAnchorHref('pricing')}
                 className="text-sm font-medium text-zinc-600 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
               >
                 Pricing

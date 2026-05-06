@@ -36,23 +36,10 @@ export function InviteMemberForm({ roles, onSuccess }: InviteMemberFormProps) {
       });
 
       if (!res.ok) {
-        let errorMessage = 'Failed to send invitation';
-
-        try {
-          const data = (await res.json()) as { error?: string };
-          errorMessage = data.error ?? errorMessage;
-        } catch {
-          const fallbackText = await res.text().catch(() => '');
-          errorMessage = fallbackText.trim()
-            ? fallbackText.trim()
-            : res.status || res.statusText
-              ? `Request failed: ${res.status} ${res.statusText}`.trim()
-              : errorMessage;
-        }
-
+        const data = (await res.json()) as { error?: string };
         setState({
           status: 'error',
-          errorMessage,
+          errorMessage: data.error ?? 'Failed to send invitation',
         });
         return;
       }

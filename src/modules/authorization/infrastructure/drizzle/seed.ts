@@ -74,19 +74,19 @@ const ORGS = {
 
 const ROLES = {
   acmeOwner: {
-    id: '20000000-0000-0000-0000-000000000001',
+    id: '20000000-0000-4000-8000-000000000001',
     organizationId: ORGS.acmeHq.id,
     name: 'owner',
     isSystem: true,
   },
   acmeMember: {
-    id: '20000000-0000-0000-0000-000000000002',
+    id: '20000000-0000-4000-8000-000000000002',
     organizationId: ORGS.acmeHq.id,
     name: 'member',
     isSystem: true,
   },
   globexOwner: {
-    id: '20000000-0000-0000-0000-000000000003',
+    id: '20000000-0000-4000-8000-000000000003',
     organizationId: ORGS.globexHq.id,
     name: 'owner',
     isSystem: true,
@@ -95,7 +95,7 @@ const ROLES = {
 
 const POLICIES = [
   {
-    id: '30000000-0000-0000-0000-000000000001',
+    id: '30000000-0000-4000-8000-000000000001',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
@@ -104,7 +104,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000002',
+    id: '30000000-0000-4000-8000-000000000002',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
@@ -118,7 +118,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000003',
+    id: '30000000-0000-4000-8000-000000000003',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
@@ -131,7 +131,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000004',
+    id: '30000000-0000-4000-8000-000000000004',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
@@ -140,7 +140,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000005',
+    id: '30000000-0000-4000-8000-000000000005',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeOwner.id,
     effect: 'allow' as const,
@@ -149,7 +149,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000006',
+    id: '30000000-0000-4000-8000-000000000006',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
@@ -158,7 +158,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000007',
+    id: '30000000-0000-4000-8000-000000000007',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
@@ -167,7 +167,7 @@ const POLICIES = [
     conditions: { type: 'isOwner' },
   },
   {
-    id: '30000000-0000-0000-0000-000000000008',
+    id: '30000000-0000-4000-8000-000000000008',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
@@ -176,7 +176,7 @@ const POLICIES = [
     conditions: { type: 'isOwner' },
   },
   {
-    id: '30000000-0000-0000-0000-000000000009',
+    id: '30000000-0000-4000-8000-000000000009',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
@@ -185,7 +185,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000010',
+    id: '30000000-0000-4000-8000-000000000010',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
     effect: 'allow' as const,
@@ -194,7 +194,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000011',
+    id: '30000000-0000-4000-8000-000000000011',
     organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
@@ -203,7 +203,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000012',
+    id: '30000000-0000-4000-8000-000000000012',
     organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
@@ -217,7 +217,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000013',
+    id: '30000000-0000-4000-8000-000000000013',
     organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
@@ -230,7 +230,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000014',
+    id: '30000000-0000-4000-8000-000000000014',
     organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,
@@ -239,7 +239,7 @@ const POLICIES = [
     conditions: {},
   },
   {
-    id: '30000000-0000-0000-0000-000000000015',
+    id: '30000000-0000-4000-8000-000000000015',
     organizationId: ORGS.globexHq.id,
     roleId: ROLES.globexOwner.id,
     effect: 'allow' as const,

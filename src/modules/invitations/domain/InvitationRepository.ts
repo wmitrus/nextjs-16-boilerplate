@@ -12,7 +12,7 @@ export interface InvitationRepository {
 
   listByOrganization(organizationId: string): Promise<Invitation[]>;
 
-  markAccepted(id: string, acceptedAt: Date): Promise<void>;
+  markAccepted(id: string, acceptedAt: Date): Promise<Invitation | null>;
 
   markRevoked(id: string): Promise<void>;
 

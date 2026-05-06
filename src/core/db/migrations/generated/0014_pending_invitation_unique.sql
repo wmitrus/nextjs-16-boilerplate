@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "uq_invitations_org_email_pending" ON "invitations" USING btree ("organization_id", "email") WHERE "status" = 'pending';

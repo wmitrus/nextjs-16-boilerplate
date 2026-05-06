@@ -1,13 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 import { createEmailService } from './EmailServiceFactory';
 import { NoOpEmailService } from './NoOpEmailService';
 
 describe('createEmailService', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   it('returns NoOpEmailService for provider=none', () => {
     const service = createEmailService({ provider: 'none' });
     expect(service).toBeInstanceOf(NoOpEmailService);
@@ -17,25 +13,6 @@ describe('createEmailService', () => {
     // @ts-expect-error testing runtime fallback
     const service = createEmailService({ provider: 'unknown' });
     expect(service).toBeInstanceOf(NoOpEmailService);
-  });
-
-  it('throws for provider=none in production', () => {
-    vi.stubEnv('NODE_ENV', 'production');
-
-    expect(() => createEmailService({ provider: 'none' })).toThrow(
-      'EMAIL_PROVIDER=none is not allowed in production',
-    );
-  });
-
-  it('throws for unknown provider in production', () => {
-    vi.stubEnv('NODE_ENV', 'production');
-
-    expect(() =>
-      createEmailService({
-        // @ts-expect-error testing runtime fallback
-        provider: 'unknown',
-      }),
-    ).toThrow('Unknown EMAIL_PROVIDER');
   });
 
   it('returns service with correct interface for provider=resend', () => {

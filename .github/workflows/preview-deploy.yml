@@ -54,6 +54,39 @@ jobs:
           APP_ENV: preview
           NODE_ENV: production
 
+      - name: Run DB Migrations (Preview)
+        shell: bash
+        run: |
+          set -a
+          source .vercel/.env.preview.local
+          set +a
+
+          if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
+            echo "DATABASE_URL_UNPOOLED not found in preview environment — skipping migrations (no Neon branch configured)."
+            exit 0
+          fi
+
+          pnpm db:migrate:prod
+
+      - name: Bootstrap Admin Account (idempotent)
+        shell: bash
+        run: |
+          set -a
+          source .vercel/.env.preview.local
+          set +a
+
+          if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
+            echo "DATABASE_URL_UNPOOLED not set — skipping bootstrap (no Neon branch configured for preview)."
+            exit 0
+          fi
+
+          if [ -z "${BOOTSTRAP_ADMIN_EMAIL:-}" ] || [ -z "${BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
+            echo "BOOTSTRAP_ADMIN_EMAIL or BOOTSTRAP_ADMIN_PASSWORD not set in preview env — skipping admin bootstrap."
+            exit 0
+          fi
+
+          node --import tsx scripts/bootstrap-admin.ts
+
       - name: Deploy to Vercel
         id: vercel_deploy
         run: |

@@ -139,6 +139,8 @@ function decideNewMembershipRole(
 ): 'owner' | 'member' {
   if (input.tenancyMode === 'personal') return 'owner';
 
+  if (input.tenancyMode === 'single' && tenantCreatedNow) return 'owner';
+
   if (input.tenancyMode === 'org' && input.tenantContextSource === 'provider') {
     const claimRole = mapTenantRoleClaim(input.tenantRole);
     if (tenantCreatedNow && claimRole === 'owner') return 'owner';

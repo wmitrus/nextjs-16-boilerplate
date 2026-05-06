@@ -16,11 +16,22 @@ import {
   emailVerificationTokensTable,
   userCredentialsTable,
 } from '@/modules/auth/infrastructure/drizzle/schema';
+import {
+  InvitationAlreadyUsedError,
+  InvitationExpiredError,
+  InvitationNotFoundError,
+  InvitationRevokedError,
+} from '@/modules/invitations/domain/errors';
+import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
+import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
+import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
+import { NoOpEmailService } from '@/modules/invitations/infrastructure/NoOpEmailService';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 
 const signUpSchema = z.object({
   email: z.email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  invitationToken: z.string().optional(),
 });
 
 const BCRYPT_COST = 12;
@@ -42,6 +53,14 @@ function generateVerificationToken(): { rawToken: string; tokenHash: string } {
   return { rawToken, tokenHash };
 }
 
+function resolveInvitationService(db: DrizzleDb) {
+  return new DefaultInvitationService(
+    new DrizzleInvitationRepository(db),
+    new NoOpEmailService(),
+    { appUrl: env.NEXT_PUBLIC_APP_URL ?? '' },
+  );
+}
+
 export async function POST(request: Request): Promise<Response> {
   await connection();
 
@@ -49,13 +68,6 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       { error: 'Not available for the current auth provider' },
       { status: 404 },
-    );
-  }
-
-  if (env.REGISTRATION_MODE !== 'open') {
-    return Response.json(
-      { error: 'Registration is currently closed.' },
-      { status: 403 },
     );
   }
 
@@ -83,13 +95,50 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const { email, password } = parsed.data;
+  const { email: bodyEmail, password, invitationToken } = parsed.data;
+
+  if (env.REGISTRATION_MODE !== 'open' && !invitationToken) {
+    return Response.json(
+      { error: 'Registration is currently closed.' },
+      { status: 403 },
+    );
+  }
 
   const devAutoVerify =
     env.NODE_ENV !== 'production' && env.AUTH_DEV_AUTO_VERIFY === true;
+  const emailVerifiedByInvitation = Boolean(invitationToken);
+  const emailVerified = devAutoVerify || emailVerifiedByInvitation;
 
   try {
     const db = getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+    let email = bodyEmail;
+
+    if (invitationToken) {
+      const invitationService = resolveInvitationService(db);
+      let invitation: Awaited<
+        ReturnType<typeof invitationService.validateToken>
+      >;
+      try {
+        invitation = await invitationService.validateToken(invitationToken);
+      } catch (invErr) {
+        const invError =
+          invErr instanceof Error ? invErr : new Error(String(invErr));
+        logger.warn(
+          {
+            event: 'auth:signup_invalid_invitation_token',
+            errorMessage: invError.message,
+            errorName: invError.name,
+          },
+          'Signup rejected — invitation token invalid or expired',
+        );
+        return Response.json(
+          { error: 'This invitation link is invalid or has expired.' },
+          { status: 410 },
+        );
+      }
+      email = invitation.email;
+    }
 
     const [existing] = await db
       .select({ id: usersTable.id })
@@ -126,7 +175,7 @@ export async function POST(request: Request): Promise<Response> {
         userId,
         email,
         hashedPassword,
-        emailVerified: devAutoVerify,
+        emailVerified,
       });
 
       await tx.insert(authUserIdentitiesTable).values({
@@ -135,7 +184,7 @@ export async function POST(request: Request): Promise<Response> {
         userId,
       });
 
-      if (!devAutoVerify) {
+      if (!emailVerified) {
         const { rawToken, tokenHash } = generateVerificationToken();
         rawVerificationToken = rawToken;
         const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_MS);
@@ -145,19 +194,53 @@ export async function POST(request: Request): Promise<Response> {
           tokenHash,
           expiresAt,
         });
+      } else if (invitationToken) {
+        const invitationService = resolveInvitationService(tx as DrizzleDb);
+        await invitationService.acceptInvitation({ token: invitationToken });
       }
     });
+
+    if (!emailVerified && rawVerificationToken !== null) {
+      const verifyUrl = `${env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/auth/verify-email?token=${rawVerificationToken}`;
+      const emailService = createEmailService({
+        provider: env.EMAIL_PROVIDER,
+        resendApiKey: env.RESEND_API_KEY,
+        resendFromEmail: env.RESEND_FROM_EMAIL,
+        smtpHost: env.SMTP_HOST,
+        smtpPort: env.SMTP_PORT,
+        smtpSecure: env.SMTP_SECURE,
+        smtpUser: env.SMTP_USER,
+        smtpPass: env.SMTP_PASS,
+        smtpFromEmail: env.SMTP_FROM_EMAIL,
+      });
+      try {
+        await emailService.sendVerificationEmail({ to: email, verifyUrl });
+      } catch (emailErr) {
+        const emailError =
+          emailErr instanceof Error ? emailErr : new Error(String(emailErr));
+        logger.error(
+          {
+            event: 'auth:signup_email_send_error',
+            errorMessage: emailError.message,
+            errorName: emailError.name,
+          },
+          'Failed to send verification email after signup',
+        );
+      }
+    }
 
     logger.debug(
       {
         event: 'auth:signup_success',
         provider: 'authjs',
         autoVerified: devAutoVerify,
+        viaInvitation: emailVerifiedByInvitation,
+        emailVerified,
       },
       'AuthJS credentials sign-up successful',
     );
 
-    if (devAutoVerify) {
+    if (emailVerified) {
       return Response.json(
         { success: true, message: 'Account created. You can now sign in.' },
         { status: 201 },
@@ -195,6 +278,18 @@ export async function POST(request: Request): Promise<Response> {
       { status: 201 },
     );
   } catch (err) {
+    if (
+      err instanceof InvitationNotFoundError ||
+      err instanceof InvitationExpiredError ||
+      err instanceof InvitationAlreadyUsedError ||
+      err instanceof InvitationRevokedError
+    ) {
+      return Response.json(
+        { error: 'This invitation link is invalid or has expired.' },
+        { status: 410 },
+      );
+    }
+
     if (isUniqueConstraintViolation(err)) {
       return Response.json(
         { error: 'An account with this email already exists.' },

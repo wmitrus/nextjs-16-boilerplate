@@ -514,3 +514,77 @@ describe('validateNewRelicConfigValues', () => {
     );
   });
 });
+
+describe('validateVerificationConfigValues', () => {
+  it('throws when both bypass flags are true simultaneously', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('development', 'open', true, true),
+    ).toThrow('cannot both be true');
+  });
+
+  it('throws when production has AUTH_DEV_AUTO_VERIFY=true', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('production', 'disabled', true, false),
+    ).toThrow('banned in production');
+  });
+
+  it('throws when production has AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV=true', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('production', 'disabled', false, true),
+    ).toThrow('banned in production');
+  });
+
+  it('throws when production has REGISTRATION_MODE=open', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('production', 'open', false, false),
+    ).toThrow('REGISTRATION_MODE=open is not allowed in production');
+  });
+
+  it('throws when non-production has open registration without any bypass', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('development', 'open', false, false),
+    ).toThrow('REGISTRATION_MODE=open in non-production requires');
+  });
+
+  it('passes when non-production open registration uses AUTH_DEV_AUTO_VERIFY', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('development', 'open', true, false),
+    ).not.toThrow();
+  });
+
+  it('passes when non-production open registration uses AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('development', 'open', false, true),
+    ).not.toThrow();
+  });
+
+  it('passes when production has closed registration and no bypass flags', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('production', 'disabled', false, false),
+    ).not.toThrow();
+  });
+
+  it('passes when non-production has closed registration without bypass', async () => {
+    vi.resetModules();
+    const { validateVerificationConfigValues } = await import('./env');
+    expect(() =>
+      validateVerificationConfigValues('development', 'disabled', false, false),
+    ).not.toThrow();
+  });
+});

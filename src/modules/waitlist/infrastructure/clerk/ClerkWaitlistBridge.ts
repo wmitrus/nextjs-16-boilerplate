@@ -1,6 +1,10 @@
+import { createHash } from 'node:crypto';
+
 import { resolveServerLogger } from '@/core/logger/di';
 
-import { hashEmailForLogs } from '@/shared/lib/security/email-safety';
+function hashEmail(email: string): string {
+  return createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+}
 
 const logger = resolveServerLogger().child({
   module: 'ClerkWaitlistBridge',
@@ -22,10 +26,7 @@ const logger = resolveServerLogger().child({
 export class ClerkWaitlistBridge {
   async addToWaitlist(email: string): Promise<void> {
     logger.debug(
-      {
-        emailHash: hashEmailForLogs(email),
-        event: 'waitlist:clerk:noop',
-      },
+      { emailHash: hashEmail(email) },
       '[ClerkWaitlistBridge] Clerk waitlist is managed via UI component — no server-side API call needed',
     );
   }

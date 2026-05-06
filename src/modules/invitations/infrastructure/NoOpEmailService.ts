@@ -1,6 +1,6 @@
-import { resolveServerLogger } from '@/core/logger/di';
+import { createHash } from 'node:crypto';
 
-import { maskEmail } from '@/shared/lib/security/email-safety';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import type {
   EmailService,
@@ -11,85 +11,135 @@ import type {
   SendWaitlistRejectionEmailInput,
 } from '../domain/EmailService';
 
+let hasWarnedAboutNoOp = false;
+
+function getLogger() {
+  return resolveServerLogger().child({
+    type: 'API',
+    category: 'email',
+    module: 'noop-email-service',
+  });
+}
+
+function maskEmail(email: string): string {
+  const [localPart, domain] = email.split('@');
+  if (!localPart || !domain) {
+    return '[invalid-email]';
+  }
+  return `${localPart.slice(0, 1)}***@${domain}`;
+}
+
+function summarizeLink(url: string): {
+  path: string;
+  tokenHash: string;
+  tokenLength?: number;
+} {
+  const parsed = new URL(url);
+  const token =
+    parsed.searchParams.get('token') ??
+    parsed.pathname.split('/').filter(Boolean).at(-1);
+
+  return {
+    path: parsed.pathname,
+    tokenHash: createHash('sha256').update(url).digest('hex').slice(0, 12),
+    ...(token ? { tokenLength: token.length } : {}),
+  };
+}
+
 /**
  * No-op email service for development and environments without email config.
- * Logs redacted metadata instead of sending.
+ * Logs email details to stdout instead of sending.
  *
  * Replace with ResendEmailService or NodemailerEmailService via EMAIL_PROVIDER.
  */
 export class NoOpEmailService implements EmailService {
-  private readonly logger = resolveServerLogger().child({
-    type: 'API',
-    category: 'invitations',
-    module: 'noop-email-service',
-  });
-
   constructor() {
-    if (process.env.NODE_ENV === 'production') {
-      this.logger.warn(
-        { event: 'email:noop:production' },
-        'NoOpEmailService instantiated in production — verify email provider selection',
+    const logger = getLogger();
+
+    if (!hasWarnedAboutNoOp) {
+      logger.warn(
+        {
+          event: 'email:noop_provider_active',
+          nodeEnv: process.env.NODE_ENV,
+        },
+        'NoOpEmailService is active — outbound email delivery is disabled',
       );
+      hasWarnedAboutNoOp = true;
     }
   }
 
   async sendInvitationEmail(input: SendInvitationEmailInput): Promise<void> {
-    this.logger.info(
+    const logger = getLogger();
+
+    logger.debug(
       {
-        event: 'email:noop:invitation',
-        recipientPreview: maskEmail(input.to),
-        organizationName: input.organizationName,
+        event: 'email:invitation:noop',
+        emailPreview: maskEmail(input.to),
+        organization: input.organizationName,
+        inviteLink: summarizeLink(input.inviteUrl),
         expiresAt: input.expiresAt.toISOString(),
       },
-      'Invitation email skipped by NoOpEmailService',
+      'Invitation email suppressed by NoOpEmailService',
     );
   }
 
   async sendVerificationEmail(
     input: SendVerificationEmailInput,
   ): Promise<void> {
-    this.logger.info(
+    const logger = getLogger();
+
+    logger.debug(
       {
-        event: 'email:noop:verification',
-        recipientPreview: maskEmail(input.to),
+        event: 'email:verification:noop',
+        emailPreview: maskEmail(input.to),
+        verifyLink: summarizeLink(input.verifyUrl),
       },
-      'Verification email skipped by NoOpEmailService',
+      'Verification email suppressed by NoOpEmailService',
     );
   }
 
   async sendPasswordResetEmail(
     input: SendPasswordResetEmailInput,
   ): Promise<void> {
-    this.logger.info(
+    const logger = getLogger();
+
+    logger.debug(
       {
-        event: 'email:noop:password_reset',
-        recipientPreview: maskEmail(input.to),
+        event: 'email:password_reset:noop',
+        emailPreview: maskEmail(input.to),
+        resetLink: summarizeLink(input.resetUrl),
       },
-      'Password reset email skipped by NoOpEmailService',
+      'Password reset email suppressed by NoOpEmailService',
     );
   }
 
   async sendWaitlistConfirmationEmail(
     input: SendWaitlistConfirmationEmailInput,
   ): Promise<void> {
-    this.logger.info(
+    const logger = getLogger();
+
+    logger.debug(
       {
-        event: 'email:noop:waitlist_confirmation',
-        recipientPreview: maskEmail(input.to),
+        event: 'email:waitlist_confirmation:noop',
+        emailPreview: maskEmail(input.to),
+        hasName: Boolean(input.name),
       },
-      'Waitlist confirmation email skipped by NoOpEmailService',
+      'Waitlist confirmation email suppressed by NoOpEmailService',
     );
   }
 
   async sendWaitlistRejectionEmail(
     input: SendWaitlistRejectionEmailInput,
   ): Promise<void> {
-    this.logger.info(
+    const logger = getLogger();
+
+    logger.debug(
       {
-        event: 'email:noop:waitlist_rejection',
-        recipientPreview: maskEmail(input.to),
+        event: 'email:waitlist_rejection:noop',
+        emailPreview: maskEmail(input.to),
+        hasName: Boolean(input.name),
       },
-      'Waitlist rejection email skipped by NoOpEmailService',
+      'Waitlist rejection email suppressed by NoOpEmailService',
     );
   }
 }

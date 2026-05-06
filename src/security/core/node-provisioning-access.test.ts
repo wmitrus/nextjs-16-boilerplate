@@ -27,6 +27,8 @@ function createDeps() {
         .mockResolvedValue({ id: 'u-1', onboardingComplete: true }),
       updateOnboardingStatus: vi.fn().mockResolvedValue(undefined),
       updateProfile: vi.fn().mockResolvedValue(undefined),
+      listAll: vi.fn().mockResolvedValue({ users: [], total: 0 }),
+      deactivate: vi.fn().mockResolvedValue(undefined),
     },
     tenancyMode: 'single' as const,
     tenantExistsProbe: vi.fn().mockResolvedValue(true),

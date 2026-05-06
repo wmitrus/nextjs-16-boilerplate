@@ -61,7 +61,7 @@ export function WaitlistJoinForm({ onSuccess }: WaitlistJoinFormProps) {
 
   if (state.status === 'success') {
     return (
-      <div role="status" className="text-center">
+      <div className="text-center">
         <h2 className="text-xl font-semibold text-gray-900">
           You&apos;re on the list!
         </h2>
@@ -74,7 +74,7 @@ export function WaitlistJoinForm({ onSuccess }: WaitlistJoinFormProps) {
 
   if (state.status === 'duplicate') {
     return (
-      <div role="status" className="text-center">
+      <div className="text-center">
         <h2 className="text-xl font-semibold text-gray-900">
           Already registered
         </h2>
@@ -125,9 +125,7 @@ export function WaitlistJoinForm({ onSuccess }: WaitlistJoinFormProps) {
       </div>
 
       {state.status === 'error' && (
-        <p role="alert" className="text-sm text-red-600">
-          {state.errorMessage}
-        </p>
+        <p className="text-sm text-red-600">{state.errorMessage}</p>
       )}
 
       <button

@@ -59,11 +59,10 @@ jobs:
           set +a
 
           if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
-            echo "DATABASE_URL_UNPOOLED is missing after vercel pull for production."
+            echo "DATABASE_URL_UNPOOLED is missing after vercel pull for production — cannot run DDL migrations safely."
             exit 1
           fi
 
-          export DATABASE_URL="$DATABASE_URL_UNPOOLED"
           pnpm db:migrate:prod
 
       - name: Build Project Artifacts

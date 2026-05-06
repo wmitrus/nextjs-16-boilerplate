@@ -1,14 +1,18 @@
+import { createHash } from 'node:crypto';
+
 import { clerkClient } from '@clerk/nextjs/server';
 
 import { resolveServerLogger } from '@/core/logger/di';
-
-import { hashEmailForLogs } from '@/shared/lib/security/email-safety';
 
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'invitations',
   module: 'clerk-invitation-bridge',
 });
+
+function hashEmail(email: string): string {
+  return createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+}
 
 /**
  * Bridges DB invitations with Clerk's organization invitation API.
@@ -27,11 +31,9 @@ export class ClerkInvitationBridge {
     role: 'org:admin' | 'org:member';
     redirectUrl: string;
   }): Promise<void> {
-    const emailHash = hashEmailForLogs(args.email);
+    const client = await clerkClient();
 
     try {
-      const client = await clerkClient();
-
       await client.organizations.createOrganizationInvitation({
         organizationId: args.clerkOrganizationId,
         emailAddress: args.email,
@@ -42,7 +44,7 @@ export class ClerkInvitationBridge {
       logger.debug(
         {
           event: 'invitation:clerk:sent',
-          emailHash,
+          emailHash: hashEmail(args.email),
           clerkOrganizationId: args.clerkOrganizationId,
         },
         'Clerk organization invitation sent',
@@ -51,8 +53,7 @@ export class ClerkInvitationBridge {
       logger.warn(
         {
           event: 'invitation:clerk:send_failed',
-          emailHash,
-          clerkOrganizationId: args.clerkOrganizationId,
+          emailHash: hashEmail(args.email),
           errorMessage: error instanceof Error ? error.message : String(error),
           errorName: error instanceof Error ? error.name : 'UnknownError',
         },

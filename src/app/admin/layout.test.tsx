@@ -6,10 +6,19 @@ const redirectMock = vi.hoisted(() =>
   }),
 );
 const resolveNodeProvisioningAccessMock = vi.hoisted(() => vi.fn());
+const connectionMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('next/navigation', () => ({
   redirect: redirectMock,
 }));
+
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return {
+    ...actual,
+    connection: connectionMock,
+  };
+});
 
 vi.mock('@/core/logger/di', () => ({
   resolveServerLogger: () => ({

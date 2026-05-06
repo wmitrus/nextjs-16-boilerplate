@@ -118,30 +118,32 @@ function EmptyState() {
 
 function WaitlistTable({ entries }: { entries: WaitlistEntry[] }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-      <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
-        <thead>
-          <tr className="bg-zinc-50 dark:bg-zinc-800/50">
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Applicant
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Applied
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Status
-            </th>
-            <th className="px-6 py-3 text-right text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {entries.map((entry) => (
-            <WaitlistRow key={entry.id} entry={entry} />
-          ))}
-        </tbody>
-      </table>
+    <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
+          <thead>
+            <tr className="bg-zinc-50 dark:bg-zinc-800/50">
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                Applicant
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                Applied
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                Status
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {entries.map((entry) => (
+              <WaitlistRow key={entry.id} entry={entry} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

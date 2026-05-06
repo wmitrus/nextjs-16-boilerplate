@@ -17,6 +17,11 @@ For any change touching Clerk auth, bootstrap routing, onboarding redirects, aut
 - read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
+- when real-browser validation is needed, prefer `node scripts/e2e/run-scenario.mjs ...` or a package script built on it rather than raw `playwright test`
+- treat `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`
+- for terminal-driven Playwright runs, require `--reporter=line`; HTML reporter runs are not acceptable debugging evidence
+- for focused AuthJS regressions, prefer `pnpm e2e:authjs:core`
+- do not mark an AuthJS onboarding fix complete with only completed-user browser coverage; require an incomplete-user onboarding path too
 
 Do not mark the task complete until the affected auth-flow scenarios are explicitly checked or clearly marked as deferred/blocked.
 

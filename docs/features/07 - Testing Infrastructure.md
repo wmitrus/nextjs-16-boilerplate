@@ -50,6 +50,10 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - Dev overlay is disabled for E2E runs via `NEXT_DISABLE_DEV_OVERLAY=1` to avoid click interception.
 - When `PLAYWRIGHT_SERVER_LOG_DIR` is set, the runner disables local server reuse and forces the app runtime to write server evidence into that explicit path.
 - The stable repository path for uploaded server evidence is `logs/playwright/...` rather than `test-results/...`, because `test-results` is Playwright-managed output.
+- The repository-standard E2E entrypoint is `scripts/e2e/run-scenario.mjs` or package scripts that wrap it. This runner applies the correct scenario env, DB reset/migrate/seed behavior, and runtime isolation.
+- `E2E_BACKEND_MODE=container` always means the isolated test Postgres profile `127.0.0.1:5433/app_test`.
+- Raw `playwright test` / `pnpm e2e:raw` is useful only for narrow ad hoc browser checks. It is not authoritative for auth/bootstrap/admin investigations because it bypasses scenario DB setup and can run against the current `.env.local` app runtime.
+- For agent-driven or terminal-debugging runs, use `--reporter=line` so browser output and server evidence remain visible. Avoid the HTML reporter for interactive debugging runs.
 
 #### E2E workflow split in GitHub Actions
 

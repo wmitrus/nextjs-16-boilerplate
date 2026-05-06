@@ -59,6 +59,9 @@ export function UsersClient() {
   const [page, setPage] = React.useState(0);
   const [editState, setEditState] = React.useState<ActionState>({});
   const [deactivateState, setDeactivateState] = React.useState<ActionState>({});
+  const [confirmDeactivate, setConfirmDeactivate] = React.useState<
+    Record<string, boolean>
+  >({});
   const [editValues, setEditValues] = React.useState<Map<string, string>>(
     new Map(),
   );
@@ -118,6 +121,7 @@ export function UsersClient() {
         return;
       }
       setDeactivateState((prev) => ({ ...prev, [userId]: 'done' }));
+      setConfirmDeactivate((prev) => ({ ...prev, [userId]: false }));
       const offset = page * limit;
       void fetchUsers(offset, debouncedSearch);
     } catch {
@@ -326,20 +330,61 @@ export function UsersClient() {
                             Edit
                           </button>
                         )}
-                        {!user.deactivatedAt && (
-                          <button
-                            type="button"
-                            onClick={() => void handleDeactivate(user.id)}
-                            disabled={deactivateState[user.id] === 'pending'}
-                            className="text-xs text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
-                          >
-                            {deactivateState[user.id] === 'pending'
-                              ? 'Deactivating…'
-                              : deactivateState[user.id] === 'error'
-                                ? 'Failed — retry'
-                                : 'Deactivate'}
-                          </button>
-                        )}
+                        {!user.deactivatedAt &&
+                          (confirmDeactivate[user.id] ? (
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-zinc-500 dark:text-zinc-400">
+                                Are you sure?
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void handleDeactivate(user.id)}
+                                disabled={
+                                  deactivateState[user.id] === 'pending'
+                                }
+                                className="text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                              >
+                                {deactivateState[user.id] === 'pending'
+                                  ? 'Deactivating…'
+                                  : deactivateState[user.id] === 'error'
+                                    ? 'Failed — retry'
+                                    : 'Yes'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setConfirmDeactivate((prev) => ({
+                                    ...prev,
+                                    [user.id]: false,
+                                  }))
+                                }
+                                disabled={
+                                  deactivateState[user.id] === 'pending'
+                                }
+                                className="text-zinc-400 hover:underline disabled:opacity-50"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmDeactivate((prev) => ({
+                                  ...prev,
+                                  [user.id]: true,
+                                }))
+                              }
+                              disabled={deactivateState[user.id] === 'pending'}
+                              className="text-xs text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                            >
+                              {deactivateState[user.id] === 'pending'
+                                ? 'Deactivating…'
+                                : deactivateState[user.id] === 'error'
+                                  ? 'Failed — retry'
+                                  : 'Deactivate'}
+                            </button>
+                          ))}
                       </div>
                     </td>
                   </tr>

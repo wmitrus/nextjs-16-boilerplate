@@ -27,6 +27,10 @@ For the canonical `package.json` database command map, use [../local-db.md](../l
 
 - `pnpm e2e`
   - Alias for the default single-scenario runner.
+- `pnpm e2e:raw`
+  - Direct Playwright entrypoint with `--reporter=line`.
+  - Use only for narrow ad hoc browser checks.
+  - Do not treat it as authoritative for auth/bootstrap/admin/container-backed flows because it bypasses scenario DB setup and uses the current app runtime env.
 - `pnpm e2e:auth`
   - Focused auth spec run.
 - `pnpm e2e:auth-matrix`
@@ -63,8 +67,12 @@ This split keeps auth-evidence collection separate from the wider scenario matri
 
 - Local Playwright runs start `pnpm dev`.
 - CI Playwright runs start `pnpm start`, so CI entrypoints must build first.
+- The authoritative E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or package scripts that wrap it.
+- `E2E_BACKEND_MODE=container` means the isolated test DB `127.0.0.1:5433/app_test`; the runner resets this DB before execution.
+- Raw `playwright test` does not perform scenario DB setup and can therefore hit the current runtime DB from `.env.local`.
 - Auth evidence runs can set `PLAYWRIGHT_SERVER_LOG_DIR` to capture server-side route decisions into a stable per-run artifact root.
 - The repository standard path for these server logs is `logs/playwright/...`.
+- For interactive local debugging and agent-driven runs, pass `--reporter=line`. Avoid the HTML reporter when console evidence matters.
 - CI workflows upload:
   - `logs/playwright/`
   - `playwright-report/`

@@ -51,10 +51,17 @@ async function consumeVerificationToken(token: string): Promise<VerifyResult> {
       .returning();
 
     if (consumed) {
-      await tx
+      const updatedCredentials = await tx
         .update(userCredentialsTable)
         .set({ emailVerified: true })
-        .where(eq(userCredentialsTable.userId, consumed.userId));
+        .where(eq(userCredentialsTable.userId, consumed.userId))
+        .returning({ userId: userCredentialsTable.userId });
+
+      if (updatedCredentials.length === 0) {
+        throw new Error(
+          '[authjs-verify-email] Missing credentials row for consumed verification token',
+        );
+      }
 
       resolveServerLogger()
         .child({

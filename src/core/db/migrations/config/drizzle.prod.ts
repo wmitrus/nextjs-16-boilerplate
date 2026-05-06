@@ -33,13 +33,12 @@ if (isPoolerUrl) {
 if (
   pooled &&
   (unpooled === pooled ||
-    pooled.includes('pgbouncer') ||
-    pooled.includes('-pooler.'))
+    (!pooled.includes('pgbouncer') && !pooled.includes('-pooler.')))
 ) {
   throw new Error(
     '[drizzle.prod] Invalid pooled/unpooled migration configuration.\n' +
       'DATABASE_URL must point at the pooled application URL and DATABASE_URL_UNPOOLED must point at the direct connection.\n' +
-      'The current pooled/unpooled values are identical or DATABASE_URL still points at a pooler URL.',
+      'The current pooled/unpooled values are identical or DATABASE_URL does not point at a pooler URL.',
   );
 }
 

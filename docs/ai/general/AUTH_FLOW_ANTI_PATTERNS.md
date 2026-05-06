@@ -218,6 +218,28 @@ Never call `cookies().set()` or `cookies().delete()` in `page.tsx` or `layout.ts
 
 **What happened**
 
+### Anti-Pattern 6: Consuming one-time verification tokens during initial GET render
+
+**What happened**
+
+`/auth/verify-email` consumed the verification token during the initial page render.
+
+**Why it was wrong**
+
+- a plain GET request triggered a destructive state transition
+- link previewers, prefetchers, or accidental reloads could consume the token
+- the UI had no explicit user confirmation boundary for a one-time auth action
+
+**Rule**
+
+Do not consume single-use auth tokens during initial `page.tsx` render.
+
+**Correct pattern**
+
+- GET may read `searchParams` and render a ready/error state
+- a Server Action or Route Handler POST must perform token consumption
+- successful verification may then redirect to the sign-in page
+
 There was a risk that `__onboarding_pending` could become more than a routing hint.
 
 **Why it would have been wrong**
@@ -317,6 +339,30 @@ The investigation repeatedly mixed:
 - middleware
 
 **Why it was wrong**
+
+---
+
+### Anti-Pattern 11: AuthJS E2E helpers that only provision completed users
+
+**What happened**
+
+The AuthJS E2E provisioning helper initially forced `onboardingComplete: true` for every provisioned test user.
+
+**Why it was wrong**
+
+That made the focused AuthJS browser proof blind to the exact branch that repeatedly regressed in production-style debugging: incomplete user sign-in settling on `/onboarding` before continuing to the ready route.
+
+Session-route health and completed-user dashboard entry could still pass while the incomplete-user onboarding path remained broken.
+
+**Rule**
+
+AuthJS E2E provisioning helpers must support explicit onboarding-state control whenever auth/bootstrap/onboarding regressions are in scope.
+
+**Correct pattern**
+
+- support an explicit `onboardingComplete` override in the AuthJS E2E provisioning path
+- include a focused browser scenario that proves an incomplete AuthJS user goes through `/auth/signin -> /onboarding -> ready route`
+- do not mark focused AuthJS auth-flow validation complete with only session-route or completed-user evidence
 
 Without a strict boundary-by-boundary model, many steps became expensive and inconclusive.
 

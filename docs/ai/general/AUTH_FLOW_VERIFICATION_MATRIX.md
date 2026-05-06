@@ -96,6 +96,21 @@ At minimum, after any auth/bootstrap/onboarding change, verify:
 
 If these are not checked, the auth-flow change is not considered fully verified.
 
+### Provider-Specific Focus Note — AuthJS
+
+When the affected provider is `authjs`, focused browser sign-off must also include the repository's AuthJS core proof set:
+
+- `pnpm e2e:authjs:core`
+
+This proof set must cover:
+
+- `/api/auth/session` and `/api/auth/providers` JSON health
+- unauthenticated `/dashboard` redirect to `/auth/signin`
+- completed-user AuthJS landing on `/dashboard`
+- incomplete-user AuthJS settlement through `/onboarding` and then `/dashboard`
+
+Do not treat completed-user AuthJS coverage alone as sufficient evidence for onboarding fixes.
+
 ---
 
 ## Suggested Manual Recording Template

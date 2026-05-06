@@ -18,6 +18,53 @@ interface VercelCliInvocation {
   args: string[];
 }
 
+function stripNewRelicPreload(
+  nodeOptions: string | undefined,
+): string | undefined {
+  if (!nodeOptions) {
+    return undefined;
+  }
+
+  const tokens = nodeOptions.trim().split(/\s+/);
+  const sanitized: string[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+
+    if (token === '-r' || token === '--require') {
+      const nextToken = tokens[index + 1];
+
+      if (nextToken === 'newrelic') {
+        index += 1;
+        continue;
+      }
+    }
+
+    if (token === '-rnewrelic' || token === '--requirenewrelic') {
+      continue;
+    }
+
+    sanitized.push(token);
+  }
+
+  return sanitized.length > 0 ? sanitized.join(' ') : undefined;
+}
+
+export function buildVercelChildEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const childEnv = { ...env };
+  const sanitizedNodeOptions = stripNewRelicPreload(env.NODE_OPTIONS);
+
+  if (sanitizedNodeOptions) {
+    childEnv.NODE_OPTIONS = sanitizedNodeOptions;
+  } else {
+    delete childEnv.NODE_OPTIONS;
+  }
+
+  return childEnv;
+}
+
 function printHelp(): void {
   console.log('Vercel helper');
   console.log('');
@@ -163,7 +210,7 @@ async function runExternalCommand(
   await new Promise<void>((resolve, reject) => {
     const child = spawn(invocation.command, invocation.args, {
       stdio: 'inherit',
-      env: process.env,
+      env: buildVercelChildEnv(),
     });
 
     child.on('error', reject);

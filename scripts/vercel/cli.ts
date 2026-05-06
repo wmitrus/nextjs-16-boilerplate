@@ -25,29 +25,15 @@ function stripNewRelicPreload(
     return undefined;
   }
 
-  const tokens = nodeOptions.trim().split(/\s+/);
-  const sanitized: string[] = [];
+  const sanitized = nodeOptions
+    .replace(/(^|\s)-r\s+newrelic(?=\s|$)/g, ' ')
+    .replace(/(^|\s)--require\s+newrelic(?=\s|$)/g, ' ')
+    .replace(/(^|\s)-rnewrelic(?=\s|$)/g, ' ')
+    .replace(/(^|\s)--requirenewrelic(?=\s|$)/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
 
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-
-    if (token === '-r' || token === '--require') {
-      const nextToken = tokens[index + 1];
-
-      if (nextToken === 'newrelic') {
-        index += 1;
-        continue;
-      }
-    }
-
-    if (token === '-rnewrelic' || token === '--requirenewrelic') {
-      continue;
-    }
-
-    sanitized.push(token);
-  }
-
-  return sanitized.length > 0 ? sanitized.join(' ') : undefined;
+  return sanitized.length > 0 ? sanitized : undefined;
 }
 
 export function buildVercelChildEnv(

@@ -55,7 +55,7 @@ async function consumeVerificationToken(token: string): Promise<VerifyResult> {
         .update(userCredentialsTable)
         .set({ emailVerified: true })
         .where(eq(userCredentialsTable.userId, consumed.userId))
-        .returning({ userId: userCredentialsTable.userId });
+        .returning();
 
       if (updatedCredentials.length === 0) {
         throw new Error(

@@ -101,9 +101,6 @@ You do not own:
 - In `scripts/**` and `e2e/**`, prefer shared sink-confined fs helper wrappers over repeated direct `fs.*` calls when the same file-access pattern appears in multiple files (SEC-19 in `SECURITY_CODING_PATTERNS.md`).
 - Do not rely on caller-side validation alone for helper paths that eventually reach `fs.*`; reusable helpers must perform their own confinement check at the point of file access (SEC-16 in `SECURITY_CODING_PATTERNS.md`).
 - `Math.random()` must never be used for tokens, secrets, session identifiers, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06 in `SECURITY_CODING_PATTERNS.md`).
-- For duplicate-sensitive writes, do not rely on a read-before-write existence check as the only invariant. Add a DB-level unique constraint or partial unique index and translate the exact uniqueness violation back into the domain duplicate error (SEC-21 in `SECURITY_CODING_PATTERNS.md`).
-- Do not log raw emails or token-bearing URLs in invitation, waitlist, verification, or password-reset paths. Use hashed or masked metadata in logs, and never silently select a noop email provider in production (SEC-22 in `SECURITY_CODING_PATTERNS.md`).
-- Sanitize user-controlled email subject/header values, escape dynamic HTML template content, and normalize URLs with `new URL()` before interpolating them into outbound email content (SEC-22 in `SECURITY_CODING_PATTERNS.md`).
 
 ## Script and Tooling Security Rules
 
@@ -131,6 +128,11 @@ See the canonical guard patterns in `.github/agents/security-auth.agent.md` unde
 - Prefer focused validation over running everything by default.
 - Update tests when behavior changes.
 - If a change affects runtime boundaries, validate the relevant route, action, or handler behavior.
+- For Playwright E2E validation, prefer `node scripts/e2e/run-scenario.mjs ...` or a package script built on it rather than raw `playwright test`.
+- Treat `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`.
+- For interactive terminal runs, require `--reporter=line`. Do not use the HTML reporter as debugging evidence.
+- For focused AuthJS auth-flow regressions, prefer `pnpm e2e:authjs:core` before broader browser suites.
+- Do not claim an AuthJS onboarding fix is complete with only completed-user browser coverage; validate an incomplete-user onboarding path too.
 - If full validation is not possible, say exactly what was not run and why.
 - Do not claim a fix is complete if it was not validated at a sensible level.
 - Always run `pnpm lint --fix`, never plain `pnpm lint`.
@@ -249,3 +251,15 @@ const handleError = (event: ErrorEvent) => {
 ```
 
 Same rule applies to `PromiseRejectionEvent` in `unhandledrejection` handlers.
+
+### Pattern H — AuthJS E2E Helpers Must Support Incomplete Onboarding State
+
+If AuthJS auth-flow work depends on browser proof, E2E provisioning helpers must not hard-code `onboardingComplete: true` for every created user.
+
+Required pattern:
+
+- support an explicit onboarding-state override in the provisioning helper or setup route
+- add a focused browser scenario that proves `signin -> onboarding -> ready route`
+- prefer `pnpm e2e:authjs:core` for the repository's focused AuthJS browser proof set
+
+Without this, completed-user dashboard tests can pass while the historically unstable incomplete-user path remains untested.

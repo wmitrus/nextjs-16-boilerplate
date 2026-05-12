@@ -34,8 +34,6 @@ When implementing or modifying any `scripts/` file:
 - never use dynamically constructed file paths in `fs` operations without `path.resolve()` + base-directory confinement check (CWE-22)
 - never pass env-var-sourced URLs to `fetch()` without protocol + hostname validation (CWE-918)
 - upstream CLI arg allowlist validation does not replace point-of-use guards
-- duplicate-sensitive writes also need DB-backed uniqueness, not only service-layer preflight checks (SEC-21)
-- logs and noop email transports must not expose raw emails or token-bearing URLs; production must not silently fall back to noop email delivery (SEC-22)
 - see canonical patterns in `docs/ai/general/02 - Security & Auth Agent.md` SCRIPT AND TOOLING SECURITY RULES
 
 ## Auth-Flow Note

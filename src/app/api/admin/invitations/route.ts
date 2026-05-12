@@ -36,19 +36,15 @@ async function checkAdminAccess(
 ): Promise<boolean> {
   if (isEnvBasedPlatformAdmin(email)) return true;
 
-  try {
-    const authzService = container.resolve<AuthorizationService>(
-      AUTHORIZATION.SERVICE,
-    );
-    return await authzService.can({
-      tenant: { tenantId },
-      subject: { id: userId },
-      resource: { type: RESOURCES.SECURITY, id: 'admin-panel' },
-      action: ACTIONS.SECURITY_MANAGE_POLICIES,
-    });
-  } catch {
-    return false;
-  }
+  const authzService = container.resolve<AuthorizationService>(
+    AUTHORIZATION.SERVICE,
+  );
+  return await authzService.can({
+    tenant: { tenantId },
+    subject: { id: userId },
+    resource: { type: RESOURCES.SECURITY, id: 'admin-panel' },
+    action: ACTIONS.SECURITY_MANAGE_POLICIES,
+  });
 }
 
 function createInvitationService(db: DrizzleDb): DefaultInvitationService {
@@ -86,7 +82,18 @@ export const POST = withErrorHandler(
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
-    const parseResult = bodySchema.safeParse(await request.json());
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return createServerErrorResponse(
+        'Invalid invitation payload',
+        400,
+        'VALIDATION_ERROR',
+      );
+    }
+
+    const parseResult = bodySchema.safeParse(body);
     if (!parseResult.success) {
       return createServerErrorResponse(
         'Invalid invitation payload',

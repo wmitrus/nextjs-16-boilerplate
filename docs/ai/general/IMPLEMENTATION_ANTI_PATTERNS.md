@@ -125,6 +125,70 @@ Preferred pattern:
 
 ---
 
+---
+
+## 2. Runtime And Framework Anti-Patterns (continued)
+
+### 2.4 Module-Level Framework Initialization In Shared Auth Modules
+
+Do not:
+
+- call `NextAuth(options)`, `withAuth(options)`, or any similar framework initializer at
+  module level in files that are **shared dependencies** of App Router route handlers
+- export the result of such a call (`const handler = NextAuth(options); export { handler }`)
+  from a shared module that route handlers import
+
+Why this is banned:
+
+- Next.js 16 App Router initializes route handler modules at startup, which is outside
+  a request context; framework initializers that access cookies, headers, or request-scoped
+  APIs at creation time will throw
+- Even if the initializer does NOT throw, calling it at module level in a shared file means
+  Turbopack's filesystem cache (`turbopackFileSystemCacheForDev: true`) will NOT automatically
+  recompile dependent route handlers when only that shared file changes — only the direct
+  route file being touched triggers cache invalidation for route handlers
+- The observable symptom is **CLIENT_FETCH_ERROR**: all `/api/auth/*` routes return 404 HTML,
+  the session endpoint returns `<!DOCTYPE html>` instead of JSON, and the client sees the user
+  as unauthenticated even with a valid session cookie
+
+Turbopack cache invalidation behavior (known constraint):
+
+- `turbopackFileSystemCacheForDev: true` invalidates cache entries based on direct file changes
+- When `auth.ts` is modified but `route.ts` is not touched, the compiled route handler may
+  continue to serve the stale cache version of `auth.ts` across dev server restarts
+- **Fix**: After modifying any auth-related shared module, `touch` the importing route file
+  OR run `rm -rf .next` to force a full rebuild
+
+Preferred pattern:
+
+```typescript
+// ✅ auth.ts — export only configuration, never an initialized handler
+export const authOptions: AuthOptions = { ... };
+
+// ✅ [...nextauth]/route.ts — initialize inside the handler
+import NextAuth from 'next-auth/next';
+import { authOptions } from '@/modules/auth/infrastructure/authjs/auth';
+
+async function handler(req, ctx) {
+  await connection();
+  return NextAuth(req, ctx, authOptions);
+}
+export { handler as GET, handler as POST };
+```
+
+Regression guard:
+
+- `auth.test.ts` must verify that `auth.ts` does NOT export `handler`, `GET`, or `POST`
+- `authjs-session.spec.ts` E2E test must verify `/api/auth/session` returns `application/json`
+
+Recovery procedure when CLIENT_FETCH_ERROR recurs:
+
+1. Verify `/api/auth/session` returns JSON (`curl http://localhost:3000/api/auth/session`)
+2. If it returns HTML, check for module-level framework calls in auth-related shared modules
+3. Touch the route file (`touch src/app/api/auth/[...nextauth]/route.ts`) to force recompile
+4. If touch does not fix it, run `rm -rf .next` and restart the dev server
+5. Run `pnpm lint --fix` and `pnpm typecheck` before assuming fixed
+
 ## 3. Trust And Security Anti-Patterns
 
 ### 3.1 UI-Only Authentication Or Authorization Enforcement
@@ -161,27 +225,6 @@ Do not:
 Preferred pattern:
 
 - validate at intake and again at the helper sink when the helper performs file or network access
-
-### 3.4 PII And Token Leakage In Operational Paths
-
-Do not:
-
-- log raw email addresses when a hash or masked preview is sufficient
-- emit invite, reset, or verification URLs into logs or stdout
-- silently route production email flows through noop transports
-- interpolate user-controlled strings into email subjects or HTML without sanitization
-
-Why this is banned:
-
-- it turns logs and fallback tooling into a sensitive-data sink
-- it creates repeated security-review churn across invitation, waitlist, and auth-recovery flows
-
-Preferred pattern:
-
-- use hashed or masked recipient metadata in logs
-- keep token-bearing URLs out of logs entirely
-- reject noop email-provider selection in production
-- sanitize header values, escape HTML, and normalize URLs before interpolation
 
 ---
 
@@ -263,23 +306,21 @@ Preferred pattern:
 - add `*.db.test.ts` for Drizzle adapters
 - use `Map<symbol, unknown>` for DI token resolution in tests
 
-### 4.6 Duplicate-Sensitive Writes Without DB Backstop
+### 4.6 Date-Sensitive Tests With Fixed Future Timestamps
 
-Do not:
-
-- rely on read-before-write duplicate checks as the only invariant for invitation, waitlist, token, or membership writes
-- assume a passing preflight lookup means the write path is concurrency-safe
+Do not hard-code "future" timestamps in tests for expiry-sensitive flows.
 
 Why this is banned:
 
-- concurrent requests can bypass preflight checks and create duplicate rows
-- cleanup later becomes data repair instead of code repair
+- they silently become past dates over time
+- CI begins failing without any production regression
+- the failure mode is noisy and easy to misread as business-logic breakage
 
 Preferred pattern:
 
-- keep preflight duplicate reads only as UX optimization
-- enforce the invariant in the database with a unique constraint or partial unique index
-- translate the exact DB uniqueness violation into the domain-level duplicate error
+- derive future dates relative to `new Date()` in the test
+- derive expired dates relative to `new Date()` in the past
+- keep absolute timestamps only when the exact historical instant matters to the behavior under test
 
 ---
 

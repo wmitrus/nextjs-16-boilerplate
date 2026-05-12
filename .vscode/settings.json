@@ -180,6 +180,15 @@
   "playwright.testConfigPath": "playwright.vscode.config.ts",
   "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
     {
+      "text": "Output must start with a plain-text PR title on the first line. Do not use markdown heading markers (`#`, `##`, etc.) in the title. The title must be a short sentence-case summary of the dominant branch change, under 72 characters."
+    },
+    {
+      "text": "The title must name the dominant capability, subsystem, or workflow changed in the diff. Avoid weak verbs and generic titles such as 'Enhance...', 'Update...', 'Improve...', or 'Refactor...' unless the diff is genuinely dominated by that exact kind of change."
+    },
+    {
+      "text": "After the title, insert exactly one blank line, then write the PR body. The body may use markdown headings, but it must begin with `## Summary`."
+    },
+    {
       "text": "Generate the PR description from the actual current branch diff and commit history. Do not use generic claims like 'improves maintainability', 'refactors components', or 'updates dependencies' unless you name the concrete modules, routes, configs, or workflows changed."
     },
     {
@@ -189,13 +198,25 @@
       "text": "Summary must be 2-4 sentences and identify the main architectural outcome, the primary subsystems touched, and any intentional limitations or stubs."
     },
     {
+      "text": "Do not describe the branch as a vague multi-purpose update. Name the actual dominant capabilities, routes, APIs, modules, workflows, scripts, schemas, or configuration behavior changed by the diff."
+    },
+    {
       "text": "Key Changes must be 4-8 bullets. Each bullet must mention a concrete area and the reason or impact of the change."
+    },
+    {
+      "text": "Every Key Changes bullet must name at least one concrete code surface such as a route, page, workflow, script, schema, or module. Avoid empty labels like 'Admin Functionality' or 'Testing Coverage' unless the bullet also names the actual files or APIs affected."
     },
     {
       "text": "Motivation must explain the problem or architectural gap being addressed. Never use vague goals such as 'improve code quality' or 'enhance user experience' without evidence from the diff."
     },
     {
       "text": "Testing must be split into Ran, Not Run, and Reviewer Checks. Only list commands that were actually run or are clearly expected for this branch."
+    },
+    {
+      "text": "Never invent commands in Testing. If a command was not run, put it under Not Run. Do not claim repo-wide checks, test suites, builds, or validation commands unless they were actually run for this branch."
+    },
+    {
+      "text": "Reviewer Checks must contain concrete manual checks derived from the diff, such as validating changed routes, APIs, workflows, migrations, rollout behavior, or user-visible flows. Do not write generic review advice."
     },
     {
       "text": "Additional Notes must call out new environment variables, migration or rollout considerations, intentionally incomplete areas, and operational risks. If any provider or service is stubbed, say so explicitly."
@@ -206,6 +227,40 @@
     {
       "text": "Write in a concise engineering tone. Avoid filler such as 'This pull request introduces several enhancements and fixes' and avoid marketing words such as 'robust', 'seamless', 'enhanced', or 'improved'."
     },
+    {
+      "text": "Prefer direct verbs such as 'adds', 'implements', 'removes', 'moves', 'enforces', or 'documents'. Avoid padded openings like 'This update enhances...' or 'These changes improve...'."
+    },
     { "text": "Never collapse the description into a single paragraph." }
-  ]
+  ],
+  "chat.tools.terminal.autoApprove": {
+    "/^cd /home/wojtek/projects/nextjs-16-boilerplate && pnpm exec drizzle-kit generate --name=post_reconcile_check --schema='\\./src/modules/\\*\\*/infrastructure/drizzle/schema\\.ts' --out=\\.tmp/drizzle-reconcile-check/generated --dialect=postgresql --driver=pglite$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/wojtek/projects/nextjs-16-boilerplate && pnpm exec drizzle-kit --help$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/wojtek/projects/nextjs-16-boilerplate && pnpm exec drizzle-kit introspect --help$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/wojtek/projects/nextjs-16-boilerplate && pnpm exec drizzle-kit up --help$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/wojtek/projects/nextjs-16-boilerplate && pnpm exec drizzle-kit check --help$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/wojtek/projects/nextjs-16-boilerplate && pnpm db:generate$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "pnpm": true,
+    "/^set -e\npnpm lt -- run task\\.get --input '\\{\"id\":45\\}' --format=json \\| sed -n '1,80p'\npnpm lt -- run task\\.get --input '\\{\"id\":60\\}' --format=json \\| sed -n '1,80p'\npnpm lt -- run task\\.get --input '\\{\"id\":66\\}' --format=json \\| sed -n '1,80p'$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
 }

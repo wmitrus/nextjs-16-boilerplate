@@ -15,8 +15,8 @@ Repository artifacts inside each task directory remain the source of truth. This
 
 | Status             | Count |
 | ------------------ | ----: |
-| confirmed complete |    45 |
-| partial/deferred   |     2 |
+| confirmed complete |    46 |
+| partial/deferred   |     1 |
 | active/blocked     |     4 |
 | unclear            |     1 |
 | total              |    52 |
@@ -57,6 +57,7 @@ These are the tasks that can currently be treated as 100% finished based on the 
 | [2026-04-18-db-flow-finalization](./2026-04-18-db-flow-finalization/)                                           | Final DB command surface cleanup                      | Full artifact set complete and final decision recorded                                                                                                   |
 | [2026-04-21-authjs-phase72](./2026-04-21-authjs-phase72/)                                                       | AuthJS Phase 7.2                                      | Plan status says complete                                                                                                                                |
 | [2026-04-22-email-adapters](./2026-04-22-email-adapters/)                                                       | Email adapter task                                    | Plan status says complete                                                                                                                                |
+| [2026-04-23-admin-ui](./2026-04-23-admin-ui/)                                                                   | Admin UI avatar header and admin section              | Implementation, focused unit validation, AuthJS browser proof, and focused admin browser proof are now recorded as complete                              |
 | [2026-04-23-invite-flow-fix](./2026-04-23-invite-flow-fix/)                                                     | Invite flow fixes                                     | Plan status says complete                                                                                                                                |
 | [2026-04-24-admin-direct-invitation](./2026-04-24-admin-direct-invitation/)                                     | Direct admin invitation flow                          | Plan status says complete                                                                                                                                |
 | [2026-04-24-admin-user-management](./2026-04-24-admin-user-management/)                                         | Admin user management                                 | Plan status says complete; implementation and validation recorded                                                                                        |
@@ -77,10 +78,9 @@ These are the tasks that can currently be treated as 100% finished based on the 
 
 These tasks are substantially advanced, but the artifacts still record deferred work or a remaining gap, so they are not counted as 100% finished.
 
-| Task                                                                      | Focus                                    | Why not 100% closed                                                                       |
-| ------------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [2026-04-18-eslint-security-signal](./2026-04-18-eslint-security-signal/) | Shift-left ESLint security signal        | One remaining internal API browser scenario is still noted as failing with `403`          |
-| [2026-04-23-admin-ui](./2026-04-23-admin-ui/)                             | Admin UI avatar header and admin section | Typecheck/lint passed, but manual runtime and E2E verification remain explicitly deferred |
+| Task                                                                      | Focus                             | Why not 100% closed                                                              |
+| ------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| [2026-04-18-eslint-security-signal](./2026-04-18-eslint-security-signal/) | Shift-left ESLint security signal | One remaining internal API browser scenario is still noted as failing with `403` |
 
 ## Active Or Blocked
 

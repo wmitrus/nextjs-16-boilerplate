@@ -209,13 +209,15 @@ logger.debug(
     emailPreview: 'a***@example.com',
     verifyLink: {
       path: '/auth/verify-email',
-      tokenHash: 'ab12cd34ef56',
+      tokenHashPreview: '[hash-prefix]',
       tokenLength: 43,
     },
   },
   'Verification email suppressed by NoOpEmailService',
 );
 ```
+
+Documentation note: in committed markdown, never use credential-shaped example values such as fake API keys, token hashes, license keys, passwords, or long hex/base64 placeholders. Use neutral placeholders like `[REDACTED]`, `[hash-prefix]`, or `[example-value]` instead so secret scanners do not flag the example text.
 
 ### Rule for Agents
 

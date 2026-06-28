@@ -189,6 +189,32 @@ Recovery procedure when CLIENT_FETCH_ERROR recurs:
 4. If touch does not fix it, run `rm -rf .next` and restart the dev server
 5. Run `pnpm lint --fix` and `pnpm typecheck` before assuming fixed
 
+### 2.5 Automatic Preview Admin Bootstrap In CI Or Vercel Workflow
+
+Do not:
+
+- add `bootstrap-admin.ts` as an automatic step in `.github/workflows/preview-deploy.yml`
+- keep `BOOTSTRAP_ADMIN_PASSWORD` permanently configured for shared preview environments
+- treat preview admin bootstrap as part of the default preview deployment lifecycle
+
+Why this is banned:
+
+- preview databases are branch-scoped and often short-lived; admin bootstrap is only needed for specific QA cases, not every preview deploy
+- keeping bootstrap credentials in shared preview envs turns a one-time recovery tool into standing credential exposure
+- the repository already uses a safer pattern: manual, branch-targeted bootstrap against the exact preview DB after pulling that branch's preview env
+
+Preferred pattern:
+
+- keep preview deploy focused on env validation and deployment only
+- when QA needs admin access on a preview branch, run `vercel pull --yes --environment=preview --git-branch="<branch-name>"`
+- add temporary `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` only to the local pulled env file
+- run `node --env-file=.vercel/.env.preview.local --import tsx scripts/bootstrap-admin.ts` manually
+- remove the temporary bootstrap secret after verification
+
+Reference:
+
+- `docs/features/34 - Admin Bootstrap.md` — authoritative preview and production bootstrap runbook
+
 ## 3. Trust And Security Anti-Patterns
 
 ### 3.1 UI-Only Authentication Or Authorization Enforcement

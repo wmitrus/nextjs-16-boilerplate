@@ -1,5 +1,9 @@
 # Plan
 
+## Status
+
+**COMPLETED — SPECIALIST ARTIFACT DISCIPLINE RULES AND TEMPLATES ADDED**
+
 ## Objective
 
 Strengthen the reusable workflow system so specialist agents must keep task control artifacts synchronized, maintain one persistent per-agent summary artifact under the task directory, use the `NN - Agent Name - Summary.md` naming convention, and follow professional per-agent summary templates.
@@ -61,3 +65,9 @@ Strengthen the reusable workflow system so specialist agents must keep task cont
 - [x] specialist agent docs updated
 - [x] shared artifact docs updated
 - [x] specialist summary templates updated
+
+## Closeout Outcome
+
+- The repository now carries the shared rule set for persistent per-specialist task summaries in `.github/instructions/agent-artifacts.instructions.md`.
+- The required specialist summary templates exist under `docs/ai/templates/specialist-summaries/` for the non-orchestrator specialists.
+- This task changed workflow discipline and documentation rather than product runtime behavior, so the checked plan plus repository evidence is sufficient closeout for the task objective.

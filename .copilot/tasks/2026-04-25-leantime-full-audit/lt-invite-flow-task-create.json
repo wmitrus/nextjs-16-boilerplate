@@ -1,0 +1,9 @@
+{
+  "projectId": 2,
+  "headline": "AuthJS invite flow bug fix",
+  "description": "<h2>Objective</h2><p>Fix the AuthJS invite acceptance flow regressions tracked in <code>.copilot/tasks/2026-04-23-invite-flow-fix/</code>.</p><h2>Scope</h2><ul><li>Remove the invalid request-time pattern from <code>/auth/invite/[token]</code> under Next.js 16 cacheComponents</li><li>Handle existing-session + different-email conflict explicitly</li><li>Allow fresh invited users to reach the password-set step instead of being redirected to generic login</li></ul><h2>Acceptance Criteria</h2><ul><li>The invite page no longer triggers the Blocking RouteServer failure</li><li>Cross-email invite acceptance is handled explicitly and safely</li><li>Fresh invited users can complete acceptance without being bounced to the wrong auth entry</li><li>Validation results are recorded in the repo task workspace</li></ul><h2>Task Workspace</h2><p>.copilot/tasks/2026-04-23-invite-flow-fix/</p>",
+  "tags": "authjs,invite-flow,bugfix",
+  "priority": "2",
+  "status": 4,
+  "planHours": 6
+}

@@ -1,0 +1,6 @@
+{
+  "projectId": 2,
+  "headline": "Leantime Artifact Hygiene And Full Audit",
+  "description": "<p>Audit and clean up project-management artifacts in Leantime and the repository task workspace system. Scope includes task status drift, stale milestones, placeholder boards, missing task-indexing, and follow-up todo creation for unresolved items.</p>",
+  "tags": "var(--project-orange)"
+}

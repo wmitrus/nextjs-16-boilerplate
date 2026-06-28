@@ -1,0 +1,10 @@
+{
+  "projectId": 2,
+  "milestoneId": 72,
+  "headline": "Create repository-level task index outside AI task folders",
+  "description": "<h2>Finding</h2><p>The repository has per-task workflow artifacts under <code>.copilot/tasks/</code> but no central non-AI index file summarizing active, blocked, completed, and Leantime-linked work.</p><h2>Expected Outcome</h2><p>Create and maintain one repository-level task index that points to the repo task workspace and live Leantime IDs.</p>",
+  "tags": "leantime,audit,repo,index",
+  "priority": "2",
+  "status": 3,
+  "planHours": 3
+}

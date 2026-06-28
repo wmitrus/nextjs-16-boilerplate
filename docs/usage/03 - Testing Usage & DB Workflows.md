@@ -171,7 +171,7 @@ Operational commands:
 - `pnpm db:test:migrate` → uses the test Postgres config against `127.0.0.1:5433/app_test`
 - `pnpm db:dev:studio` → opens studio for the dev Postgres config
 - `pnpm db:test:studio` → opens studio for the test Postgres config
-- `pnpm db:migrate:prod` → uses prod config (`DATABASE_URL` required)
+- `pnpm db:migrate:prod` → uses prod config (prefers `DATABASE_URL_UNPOOLED`, otherwise uses `DATABASE_URL`)
 
 ## CI Guidance
 

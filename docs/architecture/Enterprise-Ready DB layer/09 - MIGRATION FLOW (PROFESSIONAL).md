@@ -21,8 +21,10 @@ pnpm db:test:migrate
 ## PROD – Supabase
 
 ```bash
-DATABASE_URL=postgres://... pnpm db:migrate:prod
+DATABASE_URL_UNPOOLED=postgres://direct-host/... DATABASE_URL=postgres://runtime-host/... pnpm db:migrate:prod
 ```
+
+`pnpm db:migrate:prod` prefers `DATABASE_URL_UNPOOLED` when it is present and falls back to `DATABASE_URL` only when that effective migration sink is already a direct connection.
 
 > Always run migrations locally before deploying.
 

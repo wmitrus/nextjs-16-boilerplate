@@ -41,6 +41,7 @@ For any orchestrated task:
 - read the task's `plan.md` and `intake.md` first
 - use the task's requirement docs, checklists, or scenario matrix as the verification source of truth
 - if `implementation-plan.md` exists, use it to understand intended scenario coverage and sequencing
+- if the task adds or restructures E2E coverage, read `docs/usage/05 - Playwright E2E Architecture.md` before deciding where the spec belongs or which fixture model it should use
 
 ## Auth-Flow Note
 
@@ -50,6 +51,14 @@ For any auth/bootstrap/onboarding E2E verification:
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
 - use `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md` to structure the run artifact
+
+## Session-Reuse Decision Rule
+
+- Shared authenticated state is for steady-state scenarios only, where the assertion target is behavior after auth/bootstrap/onboarding has already settled.
+- Fresh interactive flow is required when the scenario validates sign-in, sign-up, bootstrap, onboarding, sign-out, session re-entry, tenant/org selection, or auth-driven redirects.
+- Public, demo, and explicitly E2E-allowed routes must stay unauthenticated unless authenticated behavior is itself the subject under test.
+- Mixed files should be split by scenario semantics before optimization rather than forcing one fixture model across the entire suite.
+- New specs should be mapped into the existing suite families from `docs/usage/05 - Playwright E2E Architecture.md` before creating a parallel test surface.
 
 ## Example prompts to try
 

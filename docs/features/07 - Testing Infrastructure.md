@@ -51,6 +51,7 @@ This project implements a robust three-tier testing strategy to ensure code qual
 - When `PLAYWRIGHT_SERVER_LOG_DIR` is set, the runner disables local server reuse and forces the app runtime to write server evidence into that explicit path.
 - The stable repository path for uploaded server evidence is `logs/playwright/...` rather than `test-results/...`, because `test-results` is Playwright-managed output.
 - The repository-standard E2E entrypoint is `scripts/e2e/run-scenario.mjs` or package scripts that wrap it. This runner applies the correct scenario env, DB reset/migrate/seed behavior, and runtime isolation.
+- The repository-standard E2E architecture, fixture taxonomy, and spec-placement rules live in `docs/usage/05 - Playwright E2E Architecture.md`.
 - `E2E_BACKEND_MODE=container` always means the isolated test Postgres profile `127.0.0.1:5433/app_test`.
 - Raw `playwright test` / `pnpm e2e:raw` is useful only for narrow ad hoc browser checks. It is not authoritative for auth/bootstrap/admin investigations because it bypasses scenario DB setup and can run against the current `.env.local` app runtime.
 - For agent-driven or terminal-debugging runs, use `--reporter=line` so browser output and server evidence remain visible. Avoid the HTML reporter for interactive debugging runs.
@@ -80,6 +81,7 @@ Use E2E tests for behaviors that require a real browser/runtime and cannot be re
 
 - Keep E2E specs in the root-level `e2e/` folder.
 - Prefer stable UI hooks that already exist in product UI, rather than adding test-only components.
+- Before creating or refactoring an E2E spec, classify the scenario using `docs/usage/05 - Playwright E2E Architecture.md` so public, interactive-auth, steady-state authenticated, and mixed matrix cases do not share the wrong fixture model.
 
 Example: the browser logger flow is validated in [e2e/users.spec.ts](e2e/users.spec.ts) by asserting the existing users page emits a browser log on load.
 

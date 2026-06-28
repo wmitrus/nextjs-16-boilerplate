@@ -6,6 +6,7 @@ This guide is the operational reference for running tests in this repository.
 It consolidates test commands, Vitest config intent, local/CI DB workflows, and migration config paths used by the modular monolith.
 
 For the canonical `package.json` database command map, use [../local-db.md](../local-db.md).
+For Playwright suite placement, fixture strategy, and E2E architecture decisions, use [05 - Playwright E2E Architecture.md](./05%20-%20Playwright%20E2E%20Architecture.md).
 
 ## Testing Matrix
 
@@ -68,6 +69,7 @@ This split keeps auth-evidence collection separate from the wider scenario matri
 - Local Playwright runs start `pnpm dev`.
 - CI Playwright runs start `pnpm start`, so CI entrypoints must build first.
 - The authoritative E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or package scripts that wrap it.
+- Suite placement and fixture-model rules live in `docs/usage/05 - Playwright E2E Architecture.md`.
 - `E2E_BACKEND_MODE=container` means the isolated test DB `127.0.0.1:5433/app_test`; the runner resets this DB before execution.
 - Raw `playwright test` does not perform scenario DB setup and can therefore hit the current runtime DB from `.env.local`.
 - Auth evidence runs can set `PLAYWRIGHT_SERVER_LOG_DIR` to capture server-side route decisions into a stable per-run artifact root.

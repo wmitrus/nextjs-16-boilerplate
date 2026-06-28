@@ -1,8 +1,8 @@
 import {
   test as base,
   expect,
+  type BrowserContext,
   type Page,
-  type StorageState,
 } from '@playwright/test';
 
 import {
@@ -11,12 +11,13 @@ import {
 } from './clerk-auth';
 
 const test = base;
+type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 const authedTest = base.extend<
   {
     authedPage: Page;
   },
   {
-    userStorageState: StorageState;
+    userStorageState: SessionStorageState;
   }
 >({
   userStorageState: [

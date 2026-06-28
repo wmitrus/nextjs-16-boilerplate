@@ -1,13 +1,62 @@
-import { test, expect } from '@playwright/test';
+import {
+  test as base,
+  expect,
+  type APIRequestContext,
+  type Page,
+  type StorageState,
+} from '@playwright/test';
 
 import {
+  captureAuthjsSessionStorageState,
   createAuthjsE2ECredentials,
   isAuthjsRuntime,
   provisionAuthjsE2EUser,
-  signInAuthjsE2E,
 } from './authjs-auth';
 
 const isAuthjs = isAuthjsRuntime();
+const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+const test = base;
+const authTest = base.extend<
+  {
+    authedPage: Page;
+  },
+  {
+    authRequest: APIRequestContext;
+    adminStorageState: StorageState;
+  }
+>({
+  authRequest: [
+    async ({ playwright }, runWithRequest) => {
+      const request = await playwright.request.newContext({ baseURL });
+      await runWithRequest(request);
+      await request.dispose();
+    },
+    { scope: 'worker' },
+  ],
+  adminStorageState: [
+    async ({ browser, authRequest }, runWithStorageState) => {
+      const authjsAdminCredentials =
+        createAuthjsE2ECredentials('admin-users-shared');
+      await provisionAuthjsE2EUser(authRequest, authjsAdminCredentials);
+      const storageState = await captureAuthjsSessionStorageState(
+        browser,
+        authjsAdminCredentials,
+      );
+      await runWithStorageState(storageState);
+    },
+    { scope: 'worker' },
+  ],
+  authedPage: async ({ browser, adminStorageState }, runWithPage) => {
+    const context = await browser.newContext({
+      storageState: adminStorageState,
+    });
+    const page = await context.newPage();
+    await runWithPage(page);
+    await context.close();
+  },
+});
+
+test.describe.configure({ mode: 'serial' });
 
 const MOCK_USERS = [
   {
@@ -36,19 +85,14 @@ test.describe('Admin User Management (/admin/users)', () => {
     await expect(page).not.toHaveURL(/\/admin\/users/);
   });
 
-  test.describe('authenticated admin (AuthJS)', () => {
-    test.skip(
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
       !isAuthjs,
       'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
     );
 
-    test.beforeEach(async ({ page, request }) => {
-      const authjsAdminUsersCredentials =
-        createAuthjsE2ECredentials('admin-users-page');
-      await provisionAuthjsE2EUser(request, authjsAdminUsersCredentials);
-      await signInAuthjsE2E(page, authjsAdminUsersCredentials);
-
-      await page.route('**/api/admin/users**', async (route) => {
+    authTest.beforeEach(async ({ authedPage }) => {
+      await authedPage.route('**/api/admin/users**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -64,40 +108,47 @@ test.describe('Admin User Management (/admin/users)', () => {
         });
       });
 
-      await page.goto('/admin/users');
+      await authedPage.goto('/admin/users');
     });
 
-    test('page loads without error boundary', async ({ page }) => {
+    authTest('page loads without error boundary', async ({ authedPage }) => {
       await expect(
-        page.getByRole('heading', { name: /user management/i }),
+        authedPage.getByRole('heading', { name: /user management/i }),
       ).toBeVisible();
-      await expect(page.getByText(/something went wrong/i)).not.toBeVisible();
+      await expect(
+        authedPage.getByText(/something went wrong/i),
+      ).not.toBeVisible();
     });
 
-    test('page has the correct title', async ({ page }) => {
-      await expect(page).toHaveTitle(/Users.*Administration/i);
+    authTest('page has the correct title', async ({ authedPage }) => {
+      await expect(authedPage).toHaveTitle(/Users.*Administration/i);
     });
 
-    test('displays search input', async ({ page }) => {
-      await expect(page.getByPlaceholder(/search/i)).toBeVisible();
+    authTest('displays search input', async ({ authedPage }) => {
+      await expect(authedPage.getByPlaceholder(/search/i)).toBeVisible();
     });
 
-    test('displays active user in table', async ({ page }) => {
-      await expect(page.getByText('alice@example.com')).toBeVisible();
-      await expect(page.getByText('Alice Admin')).toBeVisible();
+    authTest('displays active user in table', async ({ authedPage }) => {
+      await expect(authedPage.getByText('alice@example.com')).toBeVisible();
+      await expect(authedPage.getByText('Alice Admin')).toBeVisible();
     });
 
-    test('displays deactivated user in table', async ({ page }) => {
-      await expect(page.getByText('bob@example.com')).toBeVisible();
+    authTest('displays deactivated user in table', async ({ authedPage }) => {
+      await expect(authedPage.getByText('bob@example.com')).toBeVisible();
     });
 
-    test('displays the users count in the page', async ({ page }) => {
-      await expect(page.getByText('2 users')).toBeVisible();
+    authTest('displays the users count in the page', async ({ authedPage }) => {
+      await expect(authedPage.getByText('2 users')).toBeVisible();
     });
 
-    test('page has breadcrumb back to Administration hub', async ({ page }) => {
-      await expect(page.getByRole('link', { name: /home/i })).toBeVisible();
-      await expect(page.getByText('Administration')).toBeVisible();
-    });
+    authTest(
+      'page has breadcrumb back to Administration hub',
+      async ({ authedPage }) => {
+        await expect(
+          authedPage.getByRole('link', { name: /home/i }),
+        ).toBeVisible();
+        await expect(authedPage.getByText('Administration')).toBeVisible();
+      },
+    );
   });
 });

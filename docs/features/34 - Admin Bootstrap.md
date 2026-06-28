@@ -103,7 +103,7 @@ Vercel does not provide a terminal for arbitrary command execution. The professi
 
 **Recommended setup:**
 
-- Preview: add bootstrap vars only if QA needs an auto-created admin account in preview.
+- Preview: do not keep bootstrap vars permanently in Vercel and do not run bootstrap automatically from the preview workflow. When QA needs an admin account on a specific preview branch, pull that branch's preview env locally and run the bootstrap script manually against that preview database.
 - Production: do not keep bootstrap vars permanently in Vercel. Add them only for the one-time bootstrap operation, then remove them.
 - Both environments: `DEFAULT_TENANT_ID` stays in Vercel because it is real runtime config in single-tenant mode.
 
@@ -123,6 +123,31 @@ pnpm bootstrap:admin:prod:local
 # 4. Delete .env.production (contains DB credentials)
 rm .env.production
 ```
+
+### One-time preview bootstrap runbook
+
+Use this only when a specific preview branch needs an admin account for QA.
+
+```bash
+# 1. Pull preview env vars for the exact PR branch.
+vercel pull --yes --environment=preview --git-branch="<branch-name>"
+
+# 2. Add temporary bootstrap-only vars to the pulled preview env file.
+echo "BOOTSTRAP_ADMIN_EMAIL=admin@example.com" >> .vercel/.env.preview.local
+echo "BOOTSTRAP_ADMIN_PASSWORD=<strong-secret>" >> .vercel/.env.preview.local
+
+# 3. Run the bootstrap script against that preview database.
+node --env-file=.vercel/.env.preview.local --import tsx scripts/bootstrap-admin.ts
+
+# 4. Verify sign-in on the preview deployment and then remove the temporary secrets.
+rm .vercel/.env.preview.local
+```
+
+Notes:
+
+- `scripts/bootstrap-admin.ts` already prefers `DATABASE_URL_UNPOOLED` when it exists, so the script targets the direct preview DB connection automatically.
+- This must stay a manual step tied to a specific branch preview DB. Do not keep `BOOTSTRAP_ADMIN_PASSWORD` in shared preview envs and do not add preview bootstrap back into `.github/workflows/preview-deploy.yml`.
+- If the preview database already contains any user, the script exits without changing data.
 
 ### One-time production bootstrap runbook
 
@@ -149,7 +174,7 @@ rm .env.production
 
 # 7. If you added bootstrap vars to Vercel itself for a one-off run,
 # remove BOOTSTRAP_ADMIN_PASSWORD immediately and remove the other
-# bootstrap vars too unless you intentionally keep them for preview automation.
+# bootstrap vars too unless you intentionally keep them for a short-lived manual preview bootstrap window.
 ```
 
 **Why this works**: `DATABASE_URL` in Vercel production env points to Neon/Supabase/PlanetScale. The script connects to that same DB from your local machine — same as running migrations locally against the prod DB.

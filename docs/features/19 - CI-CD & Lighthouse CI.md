@@ -72,7 +72,7 @@ This repository uses two different deployment ownership models:
 1. **Preview Deployments**
    - GitHub Actions remains the orchestration entrypoint for env validation and Lighthouse CI.
    - Vercel owns the actual preview build because Neon automated preview branching injects branch-specific connection strings at deployment time.
-   - Keep the Vercel Preview Build Command set to `DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build`.
+   - Keep the Vercel Preview Build Command set to `pnpm db:migrate:prod && pnpm build`.
    - Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
 
 2. **Production Deployments**

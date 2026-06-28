@@ -8,34 +8,34 @@ It also explains which local database profile each command family targets.
 - Use `db:pglite:*` for the default local development flow.
 - Use `db:dev:*` for the opt-in local dev Postgres container used by `pnpm dev`.
 - Use `db:test:*` for the local Postgres container used by `pnpm test:db:local`.
-- Use `db:migrate:prod` in CI or deployment environments where `DATABASE_URL` is already provided.
+- Use `db:migrate:prod` in CI or deployment environments where `DATABASE_URL` is already provided and let it prefer `DATABASE_URL_UNPOOLED` automatically when that direct URL is available.
 - Use `db:migrate:prod:local` only for intentional local operator runs against `.env.production`.
 
 ## Canonical `package.json` DB script map
 
-| Script                       | Target                        | Purpose                                               |
-| ---------------------------- | ----------------------------- | ----------------------------------------------------- |
-| `pnpm db:generate`           | Dev schema config             | Generate migration files from the current schema      |
-| `pnpm db:export:sql`         | Dev schema config             | Export the current schema to `exports/sql/schema.sql` |
-| `pnpm db:pglite:migrate`     | Local PGlite                  | Apply migrations                                      |
-| `pnpm db:pglite:seed`        | Local PGlite                  | Seed canonical local data                             |
-| `pnpm db:pglite:studio`      | Local PGlite                  | Open Drizzle Studio                                   |
-| `pnpm db:pglite:reset`       | Local PGlite                  | Wipe, migrate, and seed                               |
-| `pnpm db:dev:up`             | Local dev Postgres container  | Start the dev container                               |
-| `pnpm db:dev:down`           | Local dev Postgres container  | Stop the dev container                                |
-| `pnpm db:dev:migrate`        | Local dev Postgres container  | Apply migrations                                      |
-| `pnpm db:dev:seed`           | Local dev Postgres container  | Seed canonical local data                             |
-| `pnpm db:dev:studio`         | Local dev Postgres container  | Open Drizzle Studio                                   |
-| `pnpm db:dev:reset`          | Local dev Postgres container  | Wipe, migrate, and seed                               |
-| `pnpm db:test:up`            | Local test Postgres container | Start the test container                              |
-| `pnpm db:test:down`          | Local test Postgres container | Stop the test container                               |
-| `pnpm db:test:migrate`       | Local test Postgres container | Apply migrations                                      |
-| `pnpm db:test:seed`          | Local test Postgres container | Seed canonical test data                              |
-| `pnpm db:test:studio`        | Local test Postgres container | Open Drizzle Studio                                   |
-| `pnpm db:test:reset`         | Local test Postgres container | Wipe, migrate, and seed                               |
-| `pnpm db:all:down`           | Local compose stack           | Stop all local DB containers                          |
-| `pnpm db:migrate:prod`       | Production-style Postgres     | Apply migrations using the active `DATABASE_URL`      |
-| `pnpm db:migrate:prod:local` | Production-style Postgres     | Apply prod migrations locally with `.env.production`  |
+| Script                       | Target                        | Purpose                                                                                          |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| `pnpm db:generate`           | Dev schema config             | Generate migration files from the current schema                                                 |
+| `pnpm db:export:sql`         | Dev schema config             | Export the current schema to `exports/sql/schema.sql`                                            |
+| `pnpm db:pglite:migrate`     | Local PGlite                  | Apply migrations                                                                                 |
+| `pnpm db:pglite:seed`        | Local PGlite                  | Seed canonical local data                                                                        |
+| `pnpm db:pglite:studio`      | Local PGlite                  | Open Drizzle Studio                                                                              |
+| `pnpm db:pglite:reset`       | Local PGlite                  | Wipe, migrate, and seed                                                                          |
+| `pnpm db:dev:up`             | Local dev Postgres container  | Start the dev container                                                                          |
+| `pnpm db:dev:down`           | Local dev Postgres container  | Stop the dev container                                                                           |
+| `pnpm db:dev:migrate`        | Local dev Postgres container  | Apply migrations                                                                                 |
+| `pnpm db:dev:seed`           | Local dev Postgres container  | Seed canonical local data                                                                        |
+| `pnpm db:dev:studio`         | Local dev Postgres container  | Open Drizzle Studio                                                                              |
+| `pnpm db:dev:reset`          | Local dev Postgres container  | Wipe, migrate, and seed                                                                          |
+| `pnpm db:test:up`            | Local test Postgres container | Start the test container                                                                         |
+| `pnpm db:test:down`          | Local test Postgres container | Stop the test container                                                                          |
+| `pnpm db:test:migrate`       | Local test Postgres container | Apply migrations                                                                                 |
+| `pnpm db:test:seed`          | Local test Postgres container | Seed canonical test data                                                                         |
+| `pnpm db:test:studio`        | Local test Postgres container | Open Drizzle Studio                                                                              |
+| `pnpm db:test:reset`         | Local test Postgres container | Wipe, migrate, and seed                                                                          |
+| `pnpm db:all:down`           | Local compose stack           | Stop all local DB containers                                                                     |
+| `pnpm db:migrate:prod`       | Production-style Postgres     | Apply migrations using `DATABASE_URL_UNPOOLED` when present, otherwise the active `DATABASE_URL` |
+| `pnpm db:migrate:prod:local` | Production-style Postgres     | Apply prod migrations locally with `.env.production`                                             |
 
 All removed shorthand aliases stay removed. Use the explicit target-specific families above.
 

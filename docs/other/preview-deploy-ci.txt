@@ -1,0 +1,394 @@
+2026-05-04T21:29:42.9452859Z Current runner version: '2.334.0'
+2026-05-04T21:29:42.9472645Z ##[group]Runner Image Provisioner
+2026-05-04T21:29:42.9473471Z Hosted Compute Agent
+2026-05-04T21:29:42.9473956Z Version: 20260213.493
+2026-05-04T21:29:42.9474444Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-05-04T21:29:42.9475035Z Build Date: 2026-02-13T00:28:41Z
+2026-05-04T21:29:42.9475597Z Worker ID: {44fbdf12-0621-44b0-8384-aa0a8e7bb772}
+2026-05-04T21:29:42.9476142Z Azure Region: westus
+2026-05-04T21:29:42.9476685Z ##[endgroup]
+2026-05-04T21:29:42.9477838Z ##[group]Operating System
+2026-05-04T21:29:42.9478368Z Ubuntu
+2026-05-04T21:29:42.9478801Z 24.04.4
+2026-05-04T21:29:42.9479246Z LTS
+2026-05-04T21:29:42.9479704Z ##[endgroup]
+2026-05-04T21:29:42.9480155Z ##[group]Runner Image
+2026-05-04T21:29:42.9480641Z Image: ubuntu-24.04
+2026-05-04T21:29:42.9481124Z Version: 20260413.86.1
+2026-05-04T21:29:42.9482137Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260413.86/images/ubuntu/Ubuntu2404-Readme.md
+2026-05-04T21:29:42.9483569Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260413.86
+2026-05-04T21:29:42.9484327Z ##[endgroup]
+2026-05-04T21:29:42.9485311Z ##[group]GITHUB_TOKEN Permissions
+2026-05-04T21:29:42.9486772Z Contents: read
+2026-05-04T21:29:42.9487314Z Metadata: read
+2026-05-04T21:29:42.9487733Z Packages: read
+2026-05-04T21:29:42.9488166Z ##[endgroup]
+2026-05-04T21:29:42.9489815Z Secret source: Actions
+2026-05-04T21:29:42.9490403Z Prepare workflow directory
+2026-05-04T21:29:42.9883618Z Prepare all required actions
+2026-05-04T21:29:42.9914044Z Getting action download info
+2026-05-04T21:29:43.4553114Z Download action repository 'actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd' (SHA:93cb6efe18208431cddfb8368fd83d5badbf9bfd)
+2026-05-04T21:29:43.6070884Z Download action repository 'pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320' (SHA:fc06bc1257f339d1d5d8b3a19a8cae5388b55320)
+2026-05-04T21:29:44.3356310Z Download action repository 'actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f' (SHA:53b83947a5a98c8d113130e565377fae1a50d02f)
+2026-05-04T21:29:44.5898133Z Complete job name: Vercel Preview
+2026-05-04T21:29:44.6479413Z ##[group]Run actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+2026-05-04T21:29:44.6480430Z with:
+2026-05-04T21:29:44.6481067Z   repository: wmitrus/nextjs-16-boilerplate
+2026-05-04T21:29:44.6481928Z   token: ***
+2026-05-04T21:29:44.6482693Z   ssh-strict: true
+2026-05-04T21:29:44.6483309Z   ssh-user: git
+2026-05-04T21:29:44.6483932Z   persist-credentials: true
+2026-05-04T21:29:44.6484567Z   clean: true
+2026-05-04T21:29:44.6485182Z   sparse-checkout-cone-mode: true
+2026-05-04T21:29:44.6485834Z   fetch-depth: 1
+2026-05-04T21:29:44.6486432Z   fetch-tags: false
+2026-05-04T21:29:44.6487042Z   show-progress: true
+2026-05-04T21:29:44.6487659Z   lfs: false
+2026-05-04T21:29:44.6488251Z   submodules: false
+2026-05-04T21:29:44.6488865Z   set-safe-directory: true
+2026-05-04T21:29:44.6489645Z env:
+2026-05-04T21:29:44.6490305Z   VERCEL_ORG_ID: ***
+2026-05-04T21:29:44.6491031Z   VERCEL_PROJECT_ID: ***
+2026-05-04T21:29:44.6491650Z ##[endgroup]
+2026-05-04T21:29:44.7264650Z Syncing repository: wmitrus/nextjs-16-boilerplate
+2026-05-04T21:29:44.7266981Z ##[group]Getting Git version info
+2026-05-04T21:29:44.7268187Z Working directory is '/home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate'
+2026-05-04T21:29:44.7269868Z [command]/usr/bin/git version
+2026-05-04T21:29:44.7277381Z git version 2.53.0
+2026-05-04T21:29:44.7323965Z ##[endgroup]
+2026-05-04T21:29:44.7334533Z Temporarily overriding HOME='/home/runner/work/_temp/71ccffc6-7228-4254-ac75-1ea2810b28a2' before making global git config changes
+2026-05-04T21:29:44.7338589Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T21:29:44.7339730Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate
+2026-05-04T21:29:44.7367321Z Deleting the contents of '/home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate'
+2026-05-04T21:29:44.7370588Z ##[group]Initializing the repository
+2026-05-04T21:29:44.7373726Z [command]/usr/bin/git init /home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate
+2026-05-04T21:29:44.7447741Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-05-04T21:29:44.7449354Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-05-04T21:29:44.7450605Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-05-04T21:29:44.7451448Z hint: call:
+2026-05-04T21:29:44.7452247Z hint:
+2026-05-04T21:29:44.7453318Z hint: 	git config --global init.defaultBranch <name>
+2026-05-04T21:29:44.7454298Z hint:
+2026-05-04T21:29:44.7455205Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-05-04T21:29:44.7456487Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-05-04T21:29:44.7457576Z hint:
+2026-05-04T21:29:44.7458378Z hint: 	git branch -m <name>
+2026-05-04T21:29:44.7459051Z hint:
+2026-05-04T21:29:44.7459779Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-05-04T21:29:44.7460789Z Initialized empty Git repository in /home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate/.git/
+2026-05-04T21:29:44.7463024Z [command]/usr/bin/git remote add origin https://github.com/wmitrus/nextjs-16-boilerplate
+2026-05-04T21:29:44.7483928Z ##[endgroup]
+2026-05-04T21:29:44.7486619Z ##[group]Disabling automatic garbage collection
+2026-05-04T21:29:44.7487456Z [command]/usr/bin/git config --local gc.auto 0
+2026-05-04T21:29:44.7509583Z ##[endgroup]
+2026-05-04T21:29:44.7510854Z ##[group]Setting up auth
+2026-05-04T21:29:44.7514054Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T21:29:44.7537704Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T21:29:44.7777553Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T21:29:44.7802487Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T21:29:44.7986777Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T21:29:44.8012597Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T21:29:44.8194375Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-05-04T21:29:44.8221862Z ##[endgroup]
+2026-05-04T21:29:44.8223052Z ##[group]Fetching the repository
+2026-05-04T21:29:44.8228588Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +4341c8f0203497a2c8d2462fc4cabd7b86177dbf:refs/remotes/pull/50/merge
+2026-05-04T21:29:46.0601525Z From https://github.com/wmitrus/nextjs-16-boilerplate
+2026-05-04T21:29:46.0602822Z  * [new ref]         4341c8f0203497a2c8d2462fc4cabd7b86177dbf -> pull/50/merge
+2026-05-04T21:29:46.0624017Z ##[endgroup]
+2026-05-04T21:29:46.0624560Z ##[group]Determining the checkout info
+2026-05-04T21:29:46.0626164Z ##[endgroup]
+2026-05-04T21:29:46.0630376Z [command]/usr/bin/git sparse-checkout disable
+2026-05-04T21:29:46.0662205Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-05-04T21:29:46.0683637Z ##[group]Checking out the ref
+2026-05-04T21:29:46.0686385Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/50/merge
+2026-05-04T21:29:46.1591407Z Note: switching to 'refs/remotes/pull/50/merge'.
+2026-05-04T21:29:46.1591853Z 
+2026-05-04T21:29:46.1592088Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-05-04T21:29:46.1592797Z changes and commit them, and you can discard any commits you make in this
+2026-05-04T21:29:46.1593672Z state without impacting any branches by switching back to a branch.
+2026-05-04T21:29:46.1594069Z 
+2026-05-04T21:29:46.1594423Z If you want to create a new branch to retain commits you create, you may
+2026-05-04T21:29:46.1595021Z do so (now or later) by using -c with the switch command. Example:
+2026-05-04T21:29:46.1595363Z 
+2026-05-04T21:29:46.1595537Z   git switch -c <new-branch-name>
+2026-05-04T21:29:46.1595796Z 
+2026-05-04T21:29:46.1595948Z Or undo this operation with:
+2026-05-04T21:29:46.1596174Z 
+2026-05-04T21:29:46.1596307Z   git switch -
+2026-05-04T21:29:46.1596506Z 
+2026-05-04T21:29:46.1596844Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-05-04T21:29:46.1597249Z 
+2026-05-04T21:29:46.1597697Z HEAD is now at 4341c8f Merge 5ffa344d2f3671c5ebbd966dca2dd632159b0456 into ef71933dacddb15e89ffc0107cdc836edfe188be
+2026-05-04T21:29:46.1599283Z ##[endgroup]
+2026-05-04T21:29:46.1632881Z [command]/usr/bin/git log -1 --format=%H
+2026-05-04T21:29:46.1652084Z 4341c8f0203497a2c8d2462fc4cabd7b86177dbf
+2026-05-04T21:29:46.1823310Z ##[group]Run npm install --global vercel@latest
+2026-05-04T21:29:46.1823701Z [36;1mnpm install --global vercel@latest[0m
+2026-05-04T21:29:46.1845309Z shell: /usr/bin/bash -e {0}
+2026-05-04T21:29:46.1845585Z env:
+2026-05-04T21:29:46.1846014Z   VERCEL_ORG_ID: ***
+2026-05-04T21:29:46.1846293Z   VERCEL_PROJECT_ID: ***
+2026-05-04T21:29:46.1846527Z ##[endgroup]
+2026-05-04T21:29:58.7704178Z npm warn deprecated tar@7.5.7: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-04T21:29:59.2232748Z 
+2026-05-04T21:29:59.2233394Z added 310 packages in 13s
+2026-05-04T21:29:59.2233653Z 
+2026-05-04T21:29:59.2233807Z 36 packages are looking for funding
+2026-05-04T21:29:59.2234153Z   run `npm fund` for details
+2026-05-04T21:29:59.2465391Z ##[group]Run pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+2026-05-04T21:29:59.2465686Z with:
+2026-05-04T21:29:59.2465826Z   version: 10
+2026-05-04T21:29:59.2465978Z   dest: ~/setup-pnpm
+2026-05-04T21:29:59.2466145Z   run_install: null
+2026-05-04T21:29:59.2466302Z   cache: false
+2026-05-04T21:29:59.2466475Z   cache_dependency_path: pnpm-lock.yaml
+2026-05-04T21:29:59.2466697Z   package_json_file: package.json
+2026-05-04T21:29:59.2466898Z   standalone: false
+2026-05-04T21:29:59.2467042Z env:
+2026-05-04T21:29:59.2467333Z   VERCEL_ORG_ID: ***
+2026-05-04T21:29:59.2467549Z   VERCEL_PROJECT_ID: ***
+2026-05-04T21:29:59.2467768Z ##[endgroup]
+2026-05-04T21:29:59.3610158Z ##[group]Running self-installer...
+2026-05-04T21:29:59.6527957Z (node:2114) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-05-04T21:29:59.6529330Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-04T21:29:59.7678801Z Progress: resolved 1, reused 0, downloaded 0, added 0
+2026-05-04T21:29:59.7742881Z Packages: +1
+2026-05-04T21:29:59.7743228Z +
+2026-05-04T21:30:00.0737967Z Progress: resolved 1, reused 0, downloaded 1, added 1, done
+2026-05-04T21:30:00.2359435Z 
+2026-05-04T21:30:00.2359864Z dependencies:
+2026-05-04T21:30:00.2360130Z + pnpm 10.33.2
+2026-05-04T21:30:00.2360355Z 
+2026-05-04T21:30:00.2806019Z Done in 792ms
+2026-05-04T21:30:00.2961190Z ##[endgroup]
+2026-05-04T21:30:00.2961509Z Installation Completed!
+2026-05-04T21:30:00.3103149Z ##[group]Run actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+2026-05-04T21:30:00.3103449Z with:
+2026-05-04T21:30:00.3103604Z   node-version: 24
+2026-05-04T21:30:00.3103770Z   cache: pnpm
+2026-05-04T21:30:00.3103922Z   check-latest: false
+2026-05-04T21:30:00.3104196Z   token: ***
+2026-05-04T21:30:00.3104366Z   package-manager-cache: true
+2026-05-04T21:30:00.3104554Z env:
+2026-05-04T21:30:00.3104899Z   VERCEL_ORG_ID: ***
+2026-05-04T21:30:00.3105115Z   VERCEL_PROJECT_ID: ***
+2026-05-04T21:30:00.3105352Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-05-04T21:30:00.3105595Z ##[endgroup]
+2026-05-04T21:30:00.4375543Z Found in cache @ /opt/hostedtoolcache/node/24.14.1/x64
+2026-05-04T21:30:00.4378646Z ##[group]Environment details
+2026-05-04T21:30:00.7048145Z node: v24.14.1
+2026-05-04T21:30:00.7048439Z npm: 11.11.0
+2026-05-04T21:30:00.7048648Z yarn: 1.22.22
+2026-05-04T21:30:00.7049684Z ##[endgroup]
+2026-05-04T21:30:00.7064054Z [command]/home/runner/setup-pnpm/node_modules/.bin/pnpm store path --silent
+2026-05-04T21:30:00.9873189Z /home/runner/setup-pnpm/node_modules/.bin/store/v10
+2026-05-04T21:30:01.2674040Z pnpm cache is not found
+2026-05-04T21:30:01.2774818Z ##[group]Run pnpm install --frozen-lockfile
+2026-05-04T21:30:01.2775089Z [36;1mpnpm install --frozen-lockfile[0m
+2026-05-04T21:30:01.2798911Z shell: /usr/bin/bash -e {0}
+2026-05-04T21:30:01.2799112Z env:
+2026-05-04T21:30:01.2799423Z   VERCEL_ORG_ID: ***
+2026-05-04T21:30:01.2799651Z   VERCEL_PROJECT_ID: ***
+2026-05-04T21:30:01.2799884Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-05-04T21:30:01.2800120Z ##[endgroup]
+2026-05-04T21:30:01.5921398Z Lockfile is up to date, resolution step is skipped
+2026-05-04T21:30:01.6649259Z Progress: resolved 1, reused 0, downloaded 0, added 0
+2026-05-04T21:30:01.7498572Z Packages: +1574
+2026-05-04T21:30:01.7499196Z ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-05-04T21:30:02.6656582Z Progress: resolved 1574, reused 0, downloaded 66, added 25
+2026-05-04T21:30:03.6661143Z Progress: resolved 1574, reused 0, downloaded 162, added 79
+2026-05-04T21:30:04.6664164Z Progress: resolved 1574, reused 0, downloaded 218, added 146
+2026-05-04T21:30:05.6671601Z Progress: resolved 1574, reused 0, downloaded 371, added 259
+2026-05-04T21:30:06.6675887Z Progress: resolved 1574, reused 0, downloaded 519, added 381
+2026-05-04T21:30:07.6757187Z Progress: resolved 1574, reused 0, downloaded 613, added 472
+2026-05-04T21:30:08.6763840Z Progress: resolved 1574, reused 0, downloaded 867, added 862
+2026-05-04T21:30:09.6752081Z Progress: resolved 1574, reused 0, downloaded 1015, added 1010
+2026-05-04T21:30:10.6757496Z Progress: resolved 1574, reused 0, downloaded 1118, added 1118
+2026-05-04T21:30:11.6758014Z Progress: resolved 1574, reused 0, downloaded 1370, added 1341
+2026-05-04T21:30:12.6765744Z Progress: resolved 1574, reused 0, downloaded 1509, added 1482
+2026-05-04T21:30:13.6569747Z Progress: resolved 1574, reused 0, downloaded 1569, added 1574, done
+2026-05-04T21:30:14.4307460Z .../node_modules/@clerk/shared postinstall$ node ./scripts/postinstall.mjs
+2026-05-04T21:30:14.4313107Z .../@sentry-internal/node-cpu-profiler install$ node scripts/check-build.js
+2026-05-04T21:30:14.4618535Z .../node_modules/protobufjs postinstall$ node scripts/postinstall
+2026-05-04T21:30:14.4802917Z .../sharp@0.34.5/node_modules/sharp install$ node install/check.js || npm run build
+2026-05-04T21:30:14.4821047Z .../node_modules/@clerk/shared postinstall: Done
+2026-05-04T21:30:14.6549437Z .../@sentry-internal/node-cpu-profiler install: @sentry/profiling-node: Precompiled binary found, attempting to load /home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate/node_modules/.pnpm/@sentry-internal+node-cpu-profiler@2.2.0/node_modules/@sentry-internal/node-cpu-profiler/lib/sentry_cpu_profiler-linux-x64-glibc-137.node
+2026-05-04T21:30:14.6574229Z .../@sentry-internal/node-cpu-profiler install: @sentry/profiling-node: Precompiled binary found, skipping build from source.
+2026-05-04T21:30:14.6613057Z .../@sentry-internal/node-cpu-profiler install: Done
+2026-05-04T21:30:14.6647077Z .../node_modules/protobufjs postinstall: Done
+2026-05-04T21:30:14.6805157Z .../node_modules/unrs-resolver postinstall$ napi-postinstall unrs-resolver 1.11.1 check
+2026-05-04T21:30:14.7280627Z .../node_modules/unrs-resolver postinstall: Done
+2026-05-04T21:30:14.8662246Z .../sharp@0.34.5/node_modules/sharp install: Done
+2026-05-04T21:30:15.2662836Z 
+2026-05-04T21:30:15.2663290Z dependencies:
+2026-05-04T21:30:15.2663601Z + @clerk/nextjs 6.39.3
+2026-05-04T21:30:15.2663898Z + @electric-sql/pglite 0.3.15
+2026-05-04T21:30:15.2664219Z + @growthbook/growthbook 1.6.5
+2026-05-04T21:30:15.2664516Z + @logtail/next 0.3.1
+2026-05-04T21:30:15.2664848Z + @logtail/pino 0.5.8
+2026-05-04T21:30:15.2665091Z + @sentry/nextjs 10.40.0
+2026-05-04T21:30:15.2665367Z + @t3-oss/env-nextjs 0.13.10
+2026-05-04T21:30:15.2665655Z + @tanstack/react-table 8.21.3
+2026-05-04T21:30:15.2665933Z + @types/bcryptjs 3.0.0
+2026-05-04T21:30:15.2666180Z + @upstash/ratelimit 2.0.8
+2026-05-04T21:30:15.2666436Z + @upstash/redis 1.36.3
+2026-05-04T21:30:15.2666709Z + @vercel/speed-insights 1.3.1
+2026-05-04T21:30:15.2667321Z + bcryptjs 3.0.3
+2026-05-04T21:30:15.2667537Z + clsx 2.1.1
+2026-05-04T21:30:15.2667750Z + drizzle-orm 0.45.2
+2026-05-04T21:30:15.2667994Z + newrelic 13.18.0
+2026-05-04T21:30:15.2668218Z + next 16.2.3
+2026-05-04T21:30:15.2668457Z + next-auth 4.24.14
+2026-05-04T21:30:15.2668726Z + nodemailer 8.0.5
+2026-05-04T21:30:15.2668960Z + pino 10.3.1
+2026-05-04T21:30:15.2669215Z + pino-logflare 0.5.2
+2026-05-04T21:30:15.2669468Z + postgres 3.4.8
+2026-05-04T21:30:15.2669712Z + react 19.2.4
+2026-05-04T21:30:15.2669952Z + react-dom 19.2.4
+2026-05-04T21:30:15.2670202Z + resend 6.12.2
+2026-05-04T21:30:15.2670450Z + server-only 0.0.1
+2026-05-04T21:30:15.2670716Z + tailwind-merge 3.5.0
+2026-05-04T21:30:15.2670994Z + zod 4.3.6
+2026-05-04T21:30:15.2671117Z 
+2026-05-04T21:30:15.2671223Z devDependencies:
+2026-05-04T21:30:15.2671537Z + @chromatic-com/storybook 5.0.1
+2026-05-04T21:30:15.2671874Z + @clerk/testing 1.14.3
+2026-05-04T21:30:15.2672203Z + @commitlint/cli 20.4.2
+2026-05-04T21:30:15.2672736Z + @commitlint/config-conventional 20.4.2
+2026-05-04T21:30:15.2673097Z + @continuedev/cli 1.5.45
+2026-05-04T21:30:15.2673388Z + @eslint/eslintrc 3.3.4
+2026-05-04T21:30:15.2673669Z + @playwright/test 1.58.2
+2026-05-04T21:30:15.2674017Z + @semantic-release/changelog 6.0.3
+2026-05-04T21:30:15.2674494Z + @semantic-release/commit-analyzer 13.0.1
+2026-05-04T21:30:15.2674889Z + @semantic-release/exec 7.1.0
+2026-05-04T21:30:15.2675233Z + @semantic-release/git 10.0.1
+2026-05-04T21:30:15.2675582Z + @semantic-release/github 12.0.6
+2026-05-04T21:30:15.2675940Z + @semantic-release/npm 13.1.4
+2026-05-04T21:30:15.2676357Z + @semantic-release/release-notes-generator 14.1.0
+2026-05-04T21:30:15.2676788Z + @storybook/addon-a11y 10.2.13
+2026-05-04T21:30:15.2677127Z + @storybook/addon-docs 10.2.13
+2026-05-04T21:30:15.2677500Z + @storybook/addon-onboarding 10.2.13
+2026-05-04T21:30:15.2677883Z + @storybook/addon-vitest 10.2.13
+2026-05-04T21:30:15.2678233Z + @storybook/nextjs-vite 10.2.13
+2026-05-04T21:30:15.2678543Z + @tailwindcss/postcss 4.2.1
+2026-05-04T21:30:15.2678929Z + @testcontainers/postgresql 11.12.0
+2026-05-04T21:30:15.2679294Z + @testing-library/dom 10.4.1
+2026-05-04T21:30:15.2684563Z + @testing-library/jest-dom 6.9.1
+2026-05-04T21:30:15.2685172Z + @testing-library/react 16.3.2
+2026-05-04T21:30:15.2685739Z + @testing-library/user-event 14.6.1
+2026-05-04T21:30:15.2686242Z + @types/newrelic 9.14.8
+2026-05-04T21:30:15.2686669Z + @types/node 24.11.0
+2026-05-04T21:30:15.2687095Z + @types/nodemailer 8.0.0
+2026-05-04T21:30:15.2687529Z + @types/react 19.2.14
+2026-05-04T21:30:15.2687962Z + @types/react-dom 19.2.3
+2026-05-04T21:30:15.2689345Z + @vitejs/plugin-react 5.1.4
+2026-05-04T21:30:15.2689782Z + @vitest/browser-playwright 4.0.18
+2026-05-04T21:30:15.2690151Z + @vitest/coverage-v8 4.0.18
+2026-05-04T21:30:15.2690460Z + @vitest/ui 4.0.18
+2026-05-04T21:30:15.2690790Z + babel-plugin-react-compiler 1.0.0
+2026-05-04T21:30:15.2691186Z + chromatic 15.2.0
+2026-05-04T21:30:15.2691486Z + commitizen 4.3.1
+2026-05-04T21:30:15.2691736Z + cross-env 10.1.0
+2026-05-04T21:30:15.2692060Z + cz-conventional-changelog 3.3.0
+2026-05-04T21:30:15.2692518Z + depcheck 1.4.7
+2026-05-04T21:30:15.2692786Z + drizzle-kit 0.31.9
+2026-05-04T21:30:15.2693043Z + eslint 9.39.3
+2026-05-04T21:30:15.2693321Z + eslint-config-next 16.2.1
+2026-05-04T21:30:15.2693918Z + eslint-config-prettier 10.1.8
+2026-05-04T21:30:15.2694287Z + eslint-plugin-import-x 4.16.1
+2026-05-04T21:30:15.2694629Z + eslint-plugin-jsonc 2.21.1
+2026-05-04T21:30:15.2694971Z + eslint-plugin-jsx-a11y 6.10.2
+2026-05-04T21:30:15.2695329Z + eslint-plugin-prettier 5.5.5
+2026-05-04T21:30:15.2695682Z + eslint-plugin-security 4.0.0
+2026-05-04T21:30:15.2696053Z + eslint-plugin-storybook 10.2.13
+2026-05-04T21:30:15.2696376Z + husky 9.1.7
+2026-05-04T21:30:15.2696622Z + jsdom 28.1.0
+2026-05-04T21:30:15.2696896Z + jsonc-eslint-parser 2.4.2
+2026-05-04T21:30:15.2697202Z + lint-staged 16.2.7
+2026-05-04T21:30:15.2697460Z + madge 8.0.0
+2026-05-04T21:30:15.2697686Z + msw 2.12.10
+2026-05-04T21:30:15.2697907Z + pino-pretty 13.1.3
+2026-05-04T21:30:15.2698471Z + playwright 1.58.2
+2026-05-04T21:30:15.2698836Z + prettier 3.8.1
+2026-05-04T21:30:15.2699212Z + prettier-plugin-tailwindcss 0.7.2
+2026-05-04T21:30:15.2723203Z + semantic-release 25.0.3
+2026-05-04T21:30:15.2723537Z + skott 0.35.7
+2026-05-04T21:30:15.2723817Z + storybook 10.2.13
+2026-05-04T21:30:15.2724103Z + tailwindcss 4.2.1
+2026-05-04T21:30:15.2724342Z + ts-node 10.9.2
+2026-05-04T21:30:15.2724611Z + tsc-files 1.1.4
+2026-05-04T21:30:15.2724856Z + tsx 4.21.0
+2026-05-04T21:30:15.2725121Z + typescript 5.9.3
+2026-05-04T21:30:15.2725413Z + typescript-eslint 8.56.1
+2026-05-04T21:30:15.2725703Z + undici 7.24.6
+2026-05-04T21:30:15.2725940Z + vite 7.3.2
+2026-05-04T21:30:15.2726205Z + vite-tsconfig-paths 6.1.1
+2026-05-04T21:30:15.2726501Z + vitest 4.0.18
+2026-05-04T21:30:15.2726757Z + whatwg-fetch 3.6.20
+2026-05-04T21:30:15.2726918Z 
+2026-05-04T21:30:15.3192761Z . prepare$ husky
+2026-05-04T21:30:15.3818236Z . prepare: Done
+2026-05-04T21:30:15.3845221Z ╭ Warning ─────────────────────────────────────────────────────────────────────╮
+2026-05-04T21:30:15.3845938Z │                                                                              │
+2026-05-04T21:30:15.3846660Z │   Ignored build scripts: @datadog/pprof@5.14.1,                              │
+2026-05-04T21:30:15.3847483Z │   @newrelic/fn-inspect@4.4.0, @newrelic/native-metrics@12.0.0,               │
+2026-05-04T21:30:15.3848327Z │   @parcel/watcher@2.5.4, @sentry/cli@2.58.5, cpu-features@0.0.10,            │
+2026-05-04T21:30:15.3849113Z │   esbuild@0.25.12, esbuild@0.27.2, msw@2.12.10, ssh2@1.17.0.                 │
+2026-05-04T21:30:15.3849916Z │   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+2026-05-04T21:30:15.3850686Z │   to run scripts.                                                            │
+2026-05-04T21:30:15.3851331Z │                                                                              │
+2026-05-04T21:30:15.3851981Z ╰──────────────────────────────────────────────────────────────────────────────╯
+2026-05-04T21:30:15.3953793Z Done in 14s using pnpm v10.33.2
+2026-05-04T21:30:15.4690225Z ##[group]Run vercel pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=***
+2026-05-04T21:30:15.4690899Z [36;1mvercel pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=***[0m
+2026-05-04T21:30:15.4709462Z shell: /usr/bin/bash -e {0}
+2026-05-04T21:30:15.4709660Z env:
+2026-05-04T21:30:15.4709902Z   VERCEL_ORG_ID: ***
+2026-05-04T21:30:15.4710125Z   VERCEL_PROJECT_ID: ***
+2026-05-04T21:30:15.4710352Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-05-04T21:30:15.4710599Z   PREVIEW_GIT_BRANCH: authjs/pr2
+2026-05-04T21:30:15.4710791Z ##[endgroup]
+2026-05-04T21:30:15.8914910Z > NOTE: The Vercel CLI now collects telemetry regarding usage of the CLI.
+2026-05-04T21:30:15.8915449Z > This information is used to shape the CLI roadmap and prioritize features.
+2026-05-04T21:30:15.8916087Z > You can learn more, including how to opt-out if you'd not like to participate in this program, by visiting the following URL:
+2026-05-04T21:30:15.8916684Z > https://vercel.com/docs/cli/about-telemetry
+2026-05-04T21:30:16.1796045Z Retrieving project…
+2026-05-04T21:30:16.2479605Z > Downloading `preview` Environment Variables for wojciech-mitruss-projects/nextjs-16-boilerplate and any overrides for branch authjs/pr2
+2026-05-04T21:30:16.2480488Z Downloading
+2026-05-04T21:30:16.4885118Z Created .vercel/.env.preview.local file  [241ms]
+2026-05-04T21:30:16.4885359Z 
+2026-05-04T21:30:16.4885480Z > Downloading project settings
+2026-05-04T21:30:16.4889807Z Downloaded project settings to ~/work/nextjs-16-boilerplate/nextjs-16-boilerplate/.vercel/project.json [0ms]
+2026-05-04T21:30:16.7170049Z ##[group]Run pnpm env:check
+2026-05-04T21:30:16.7170401Z [36;1mpnpm env:check[0m
+2026-05-04T21:30:16.7192244Z shell: /usr/bin/bash -e {0}
+2026-05-04T21:30:16.7192875Z env:
+2026-05-04T21:30:16.7193315Z   VERCEL_ORG_ID: ***
+2026-05-04T21:30:16.7193624Z   VERCEL_PROJECT_ID: ***
+2026-05-04T21:30:16.7193923Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-05-04T21:30:16.7194173Z   APP_ENV: preview
+2026-05-04T21:30:16.7194339Z ##[endgroup]
+2026-05-04T21:30:17.5038072Z 
+2026-05-04T21:30:17.5038938Z > temp-nextjs-scaffold@1.29.0 env:check /home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate
+2026-05-04T21:30:17.5039706Z > node scripts/check-env-consistency.mjs
+2026-05-04T21:30:17.5039947Z 
+2026-05-04T21:30:17.5318928Z ❌ Missing keys in .env.example: LEANTIME_LOCAL_APP_URL
+2026-05-04T21:30:17.5452016Z  ELIFECYCLE  Command failed with exit code 1.
+2026-05-04T21:30:17.5618388Z ##[error]Process completed with exit code 1.
+2026-05-04T21:30:17.5696672Z Post job cleanup.
+2026-05-04T21:30:17.6831712Z Pruning is unnecessary.
+2026-05-04T21:30:17.6947298Z Post job cleanup.
+2026-05-04T21:30:17.7653678Z [command]/usr/bin/git version
+2026-05-04T21:30:17.7714095Z git version 2.53.0
+2026-05-04T21:30:17.7741985Z Temporarily overriding HOME='/home/runner/work/_temp/9ebad4b1-b62b-4bd4-b8e6-68f7762d3be4' before making global git config changes
+2026-05-04T21:30:17.7743266Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T21:30:17.7746659Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nextjs-16-boilerplate/nextjs-16-boilerplate
+2026-05-04T21:30:17.8824329Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T21:30:17.8855775Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T21:30:17.9045384Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T21:30:17.9063398Z http.https://github.com/.extraheader
+2026-05-04T21:30:17.9071086Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-05-04T21:30:17.9119177Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T21:30:17.9303126Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T21:30:17.9328955Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T21:30:17.9625805Z Cleaning up orphan processes

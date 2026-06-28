@@ -100,6 +100,7 @@ Step 1. Verification Intake
 
 - Collect task context, scenario checklist, affected paths, and environment notes.
 - If an active task workspace exists, read `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present.
+- If the task adds or refactors E2E coverage, read `docs/usage/05 - Playwright E2E Architecture.md` before deciding test placement or fixture model.
 - For auth/bootstrap/onboarding work, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`, `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`, and `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`.
 - For auth/bootstrap/onboarding verification runs, use `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md` as the artifact structure.
 - Produce a verification intake summary.
@@ -107,6 +108,7 @@ Step 1. Verification Intake
 Step 2. Scenario Scope Definition
 
 - Identify the smallest Playwright scope that covers the risk.
+- Classify each scenario into the repository E2E architecture first: public route, interactive auth flow, steady-state authenticated suite, or mixed matrix coverage.
 - Explicitly list:
   - scenarios to test (with scenario ID or description)
   - scenarios to defer (with reason)

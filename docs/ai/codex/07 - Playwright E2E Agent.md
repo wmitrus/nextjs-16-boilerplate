@@ -35,6 +35,7 @@ The skill reads the shared authority docs first:
 - `docs/ai/general/ARTIFACTS_GUIDE.md`
 - `docs/ai/general/COPILOT_TASK_ARTIFACTS.md`
 - `docs/ai/general/07 - Playwright E2E Agent.md`
+- `docs/usage/05 - Playwright E2E Architecture.md` when adding or refactoring E2E coverage
 
 For auth-flow work, it also reads:
 
@@ -42,6 +43,14 @@ For auth-flow work, it also reads:
 - `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
 - `docs/ai/templates/AUTH_FLOW_VERIFICATION_RUN_TEMPLATE.md`
+
+## Session-Reuse Decision Rule
+
+- Shared authenticated state is for steady-state scenarios only, where the assertion target is behavior after auth/bootstrap/onboarding has already settled.
+- Fresh interactive flow is required when the scenario validates sign-in, sign-up, bootstrap, onboarding, sign-out, session re-entry, tenant/org selection, or auth-driven redirects.
+- Public, demo, and explicitly E2E-allowed routes must stay unauthenticated unless authenticated behavior is itself the subject under test.
+- Mixed files should be split by scenario semantics before optimization rather than forcing one fixture model across the entire suite.
+- New specs should be mapped into the existing suite families from `docs/usage/05 - Playwright E2E Architecture.md` before creating a parallel test surface.
 
 ## Output Shape
 

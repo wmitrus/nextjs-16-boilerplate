@@ -23,6 +23,7 @@ Before substantial E2E work:
 4. Read `docs/ai/general/ARTIFACTS_GUIDE.md`.
 5. Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md`.
 6. Read `docs/ai/general/07 - Playwright E2E Agent.md`.
+7. Read `docs/usage/05 - Playwright E2E Architecture.md` before adding, moving, or refactoring E2E test code.
 
 Then adopt the Playwright E2E role defined there.
 
@@ -58,12 +59,19 @@ redirects, hydration, network behavior, and runtime interaction.
 ## Working Mode
 
 - Read the relevant matrix or scenario checklist first.
+- When the task changes E2E coverage, classify the scenario into the repository's E2E architecture first: public route, interactive auth flow, steady-state authenticated suite, or mixed matrix coverage.
 - Run the smallest sensible Playwright scope that covers the affected scenarios.
 - Prefer `node scripts/e2e/run-scenario.mjs ...` or a package script built on it over raw `playwright test` whenever scenario env or DB setup matters.
 - Treat `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`.
 - For interactive terminal runs, require `--reporter=line`; do not rely on the HTML reporter for debugging evidence.
 - When the provider under test is `authjs`, do not sign off with only completed-user coverage; include an incomplete-user onboarding path.
 - If the existing AuthJS E2E provisioning helper cannot create an incomplete user, treat that as a validation gap and fix the helper or add a dedicated setup path before sign-off.
+- Before changing E2E auth setup, classify the scenario: use shared `storageState` only for steady-state assertions whose subject is behavior after auth/bootstrap/onboarding has already settled.
+- Keep fresh interactive login/bootstrap/onboarding flows for scenarios that validate sign-in, sign-up, bootstrap, onboarding, sign-out, session re-entry, tenant/org selection, or auth-driven redirects.
+- If a route is public, demo, or explicitly allowed for E2E access without auth, keep the Playwright spec unauthenticated unless authenticated behavior is itself the subject under test. Do not add auth setup by default.
+- For mixed suites, split flow-based and steady-state scenarios before optimizing. Do not impose one fixture model across a whole file when semantics differ.
+- If the correct fixture model is uncertain, inspect route policy, proxy behavior, and route/layout guards first, then prefer preserving the interactive flow over speculative session reuse.
+- Before creating a new spec, place it into the correct existing suite family when possible instead of creating parallel coverage with a different fixture model.
 - Prefer targeted specs over the entire suite unless broader coverage is justified.
 - Capture concrete evidence: final URL, key logs, trace/report references, and scenario
   mapping.

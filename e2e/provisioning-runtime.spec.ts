@@ -1,12 +1,12 @@
 import { createPageObjects } from '@clerk/testing/playwright/unstable';
 import {
   type Browser,
+  type BrowserContext,
   expect,
   test,
   type ConsoleMessage,
   type Page,
   type Response,
-  type StorageState,
 } from '@playwright/test';
 
 import {
@@ -33,6 +33,7 @@ import {
 
 const runtime = getRuntimeProfile();
 const ONBOARDING_PENDING_COOKIE = '__onboarding_pending';
+type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 
 type BrowserOrganizationMembership = {
   organization?: {
@@ -477,7 +478,7 @@ async function createCompletedSingleUserState(page: Page): Promise<void> {
 
 async function captureCompletedSingleUserStorageState(
   browser: Browser,
-): Promise<StorageState> {
+): Promise<SessionStorageState> {
   const context = await browser.newContext();
 
   try {
@@ -491,7 +492,7 @@ async function captureCompletedSingleUserStorageState(
 
 async function captureIncompleteSingleUserStorageState(
   browser: Browser,
-): Promise<StorageState> {
+): Promise<SessionStorageState> {
   const context = await browser.newContext();
 
   try {
@@ -678,12 +679,15 @@ const steadyStateSingleModeTest = test.extend<
     incompleteSingleUserPage: Page;
   },
   {
-    completedSingleUserStorageState: StorageState;
-    incompleteSingleUserStorageState: StorageState;
+    completedSingleUserStorageState: SessionStorageState;
+    incompleteSingleUserStorageState: SessionStorageState;
   }
 >({
   completedSingleUserStorageState: [
-    async ({ browser }, runWithStorageState) => {
+    async (
+      { browser }: { browser: Browser },
+      runWithStorageState: (storageState: SessionStorageState) => Promise<void>,
+    ) => {
       const storageState =
         await captureCompletedSingleUserStorageState(browser);
       await runWithStorageState(storageState);
@@ -691,7 +695,10 @@ const steadyStateSingleModeTest = test.extend<
     { scope: 'worker' },
   ],
   incompleteSingleUserStorageState: [
-    async ({ browser }, runWithStorageState) => {
+    async (
+      { browser }: { browser: Browser },
+      runWithStorageState: (storageState: SessionStorageState) => Promise<void>,
+    ) => {
       const storageState =
         await captureIncompleteSingleUserStorageState(browser);
       await runWithStorageState(storageState);

@@ -6,7 +6,7 @@
 
 ## Status
 
-**IMPLEMENTATION PHASE** — Phase 0 complete ✅. Phase 1 (DB Schema Restructure) is next.
+**IN PROGRESS** — Core implementation across Phases 0-7 is complete, including Phase 7.2 AuthJS hardening; the epic remains open for Phase 8 (Variant C sample app), Phase 9 (documentation/finalization), and the few still-undocumented / deferred checklist items retained below for traceability.
 
 ## Leantime
 
@@ -37,9 +37,9 @@ Redesign the authentication and tenancy foundation of the Next.js 16 boilerplate
 - [x] New Provider Implementation Checklist created — `docs/ai/general/new-provider-implementation-checklist.md`
 - [x] Agent 11 (Leantime Strategy Agent) spec created — `docs/ai/general/11 - Leantime Strategy Agent.md`
 - [x] Leantime project structure created — milestones, goals, blueprints, retros all populated
-- [ ] Schema design approved by user (two-level tenant/org model)
-- [ ] All specialist agents sign off on design
-- [ ] User approves complete plan before Phase 1 starts
+- [x] Schema design approved by user (two-level tenant/org model) — approved during Phase 0 on 2026-04-17
+- [ ] All specialist agents sign off on design — not fully artifacted in this master plan; retained as historical traceability
+- [x] User approves complete plan before Phase 1 starts — Step 0.6 approved on 2026-04-17
 
 ---
 
@@ -111,7 +111,7 @@ Redesign the authentication and tenancy foundation of the Next.js 16 boilerplate
 - [x] Step 5.7: Email sending abstraction (Resend/SMTP provider-agnostic)
 - [x] Step 5.8: Clerk invitation bridge (delegate to Clerk API when `AUTH_PROVIDER=clerk`)
 - [x] Step 5.9: UI: Invite member form (organization settings)
-- [ ] - [x] **Validation**: unit + integration tests for invitation flow
+- [x] **Validation**: unit + integration tests for invitation flow
 
 ### Phase 6: Registration Mode + Waitlist (Provider-Agnostic)
 
@@ -123,7 +123,7 @@ Redesign the authentication and tenancy foundation of the Next.js 16 boilerplate
 - [x] Step 6.6: Custom waitlist page (replaces Clerk Waitlist component)
 - [x] Step 6.7: Admin: approve/reject waitlist entries
 - [x] Step 6.8: Clerk waitlist bridge (mode=invite-only → Clerk waitlist)
-- [ ] **Validation**: E2E tests for registration mode gating
+- [ ] **Validation**: E2E tests for registration mode gating — deferred / not recorded as completed in this master plan
 
 ### Phase 7: AuthJS Adapter Implementation
 
@@ -165,7 +165,9 @@ Redesign the authentication and tenancy foundation of the Next.js 16 boilerplate
 
 ---
 
-## Must-Fix Before Phase 1 Ships
+## Must-Fix Before Phase 1 Shipped (Resolved)
+
+Historical gating checklist retained for traceability. These items were resolved across Phases 1-6 and are not remaining blockers for the still-open Phase 8 / Phase 9 work.
 
 These are critical structural issues that MUST be resolved before any phase ships to production:
 

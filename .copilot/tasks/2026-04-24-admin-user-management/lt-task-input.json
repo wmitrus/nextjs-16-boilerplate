@@ -1,0 +1,5 @@
+{
+  "headline": "Admin User Management — /admin/users full implementation",
+  "description": "<h2>Objective</h2><p>Implement the admin user management section at <code>/admin/users</code>. The admin panel card currently shows <code>coming-soon</code>. Deliver user listing (paginated + search), user detail view, deactivation action, and display name update — all behind admin auth gate.</p><h2>Scope</h2><ul><li>GET /api/admin/users — list with pagination/search</li><li>GET /api/admin/users/[id] — user detail</li><li>PATCH /api/admin/users/[id] — update display name</li><li>POST /api/admin/users/[id]/deactivate — soft deactivate</li><li>RSC page at /admin/users</li><li>Client component for table and actions</li><li>Extend DrizzleUserRepository with listAll and deactivate</li><li>Extend UserRepository contract</li><li>Unit tests for route handlers</li><li>Feature doc: 35 - Admin User Management.md</li></ul><h2>Acceptance Criteria</h2><ul><li>pnpm typecheck passes</li><li>pnpm lint --fix passes</li><li>Unit tests pass</li><li>Admin users list loads real data from DB</li><li>Unauthorized access returns 403</li></ul>",
+  "status": 4
+}

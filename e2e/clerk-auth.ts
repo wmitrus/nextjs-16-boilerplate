@@ -1,5 +1,5 @@
 import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright';
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 
 export type ClerkE2EIdentity =
   | 'singleNewUser'
@@ -190,10 +190,32 @@ export function hasClerkE2ECredentials(): boolean {
 }
 
 async function completeGenericOnboarding(page: Page): Promise<void> {
+  const onboardingHeading = page.getByRole('heading', {
+    name: /complete your profile/i,
+  });
+
   await page.getByLabel(/display name/i).fill('E2E User');
   await page.getByLabel(/language/i).selectOption('en-US');
   await page.getByLabel(/timezone/i).selectOption('Europe/Warsaw');
   await page.getByRole('button', { name: /get started/i }).click();
+  await onboardingHeading.waitFor({ state: 'hidden', timeout: 10_000 });
+}
+
+async function settleProvisionedUserSession(page: Page): Promise<void> {
+  await page.waitForFunction(
+    (expectedPathnames) => expectedPathnames.includes(window.location.pathname),
+    ['/onboarding', '/users'],
+  );
+
+  const onboardingHeading = page.getByRole('heading', {
+    name: /complete your profile/i,
+  });
+
+  if (await onboardingHeading.isVisible().catch(() => false)) {
+    await completeGenericOnboarding(page);
+  }
+
+  await page.waitForFunction(() => window.location.pathname === '/users');
 }
 
 async function establishProgrammaticSessionWithoutBootstrap(
@@ -270,9 +292,18 @@ export async function signInClerkIdentityE2E(
 export async function signInE2E(page: Page): Promise<void> {
   await signInClerkIdentityE2E(page, 'singleProvisionedUser');
   await page.goto('/auth/bootstrap/start?redirect_url=/users');
+  await settleProvisionedUserSession(page);
+}
 
-  if (page.url().includes('/onboarding')) {
-    await completeGenericOnboarding(page);
+export async function captureClerkSessionStorageState(browser: Browser) {
+  const context = await browser.newContext();
+
+  try {
+    const page = await context.newPage();
+    await signInE2E(page);
+    return await context.storageState();
+  } finally {
+    await context.close().catch(() => undefined);
   }
 }
 

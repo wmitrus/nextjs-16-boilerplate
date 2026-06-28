@@ -325,6 +325,7 @@ function applySharedRuntimeEnv(env, scenario, variant) {
   env.DB_PROVIDER = 'drizzle';
   env.E2E_ENABLED = 'true';
   env.NEXT_PUBLIC_E2E_ENABLED = 'true';
+  env.API_RATE_LIMIT_REQUESTS = process.env.API_RATE_LIMIT_REQUESTS ?? '1000';
   env.PLAYWRIGHT_REUSE_EXISTING_SERVER =
     env.PLAYWRIGHT_REUSE_EXISTING_SERVER ??
     (env.CI || hasExplicitServerLogDir ? 'false' : 'true');

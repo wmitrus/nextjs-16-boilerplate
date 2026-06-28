@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 
 import type {
@@ -60,7 +61,7 @@ export class NoOpEmailService implements EmailService {
       logger.warn(
         {
           event: 'email:noop_provider_active',
-          nodeEnv: process.env.NODE_ENV,
+          nodeEnv: env.NODE_ENV,
         },
         'NoOpEmailService is active — outbound email delivery is disabled',
       );

@@ -137,6 +137,22 @@ export async function POST(request: Request): Promise<Response> {
           { status: 410 },
         );
       }
+
+      if (bodyEmail !== invitation.email) {
+        logger.warn(
+          {
+            event: 'auth:signup_mismatched_invitation_email',
+            providedEmail: bodyEmail,
+            invitationEmail: invitation.email,
+          },
+          'Signup rejected — provided email does not match invitation email',
+        );
+        return Response.json(
+          { error: 'Invitation email does not match provided email.' },
+          { status: 400 },
+        );
+      }
+
       email = invitation.email;
     }
 

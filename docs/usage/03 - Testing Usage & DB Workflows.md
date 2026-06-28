@@ -6,6 +6,7 @@ This guide is the operational reference for running tests in this repository.
 It consolidates test commands, Vitest config intent, local/CI DB workflows, and migration config paths used by the modular monolith.
 
 For the canonical `package.json` database command map, use [../local-db.md](../local-db.md).
+For Playwright suite placement, fixture strategy, and E2E architecture decisions, use [05 - Playwright E2E Architecture.md](./05%20-%20Playwright%20E2E%20Architecture.md).
 
 ## Testing Matrix
 
@@ -27,6 +28,10 @@ For the canonical `package.json` database command map, use [../local-db.md](../l
 
 - `pnpm e2e`
   - Alias for the default single-scenario runner.
+- `pnpm e2e:raw`
+  - Direct Playwright entrypoint with `--reporter=line`.
+  - Use only for narrow ad hoc browser checks.
+  - Do not treat it as authoritative for auth/bootstrap/admin/container-backed flows because it bypasses scenario DB setup and uses the current app runtime env.
 - `pnpm e2e:auth`
   - Focused auth spec run.
 - `pnpm e2e:auth-matrix`
@@ -63,8 +68,13 @@ This split keeps auth-evidence collection separate from the wider scenario matri
 
 - Local Playwright runs start `pnpm dev`.
 - CI Playwright runs start `pnpm start`, so CI entrypoints must build first.
+- The authoritative E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or package scripts that wrap it.
+- Suite placement and fixture-model rules live in `docs/usage/05 - Playwright E2E Architecture.md`.
+- `E2E_BACKEND_MODE=container` means the isolated test DB `127.0.0.1:5433/app_test`; the runner resets this DB before execution.
+- Raw `playwright test` does not perform scenario DB setup and can therefore hit the current runtime DB from `.env.local`.
 - Auth evidence runs can set `PLAYWRIGHT_SERVER_LOG_DIR` to capture server-side route decisions into a stable per-run artifact root.
 - The repository standard path for these server logs is `logs/playwright/...`.
+- For interactive local debugging and agent-driven runs, pass `--reporter=line`. Avoid the HTML reporter when console evidence matters.
 - CI workflows upload:
   - `logs/playwright/`
   - `playwright-report/`
@@ -163,7 +173,7 @@ Operational commands:
 - `pnpm db:test:migrate` → uses the test Postgres config against `127.0.0.1:5433/app_test`
 - `pnpm db:dev:studio` → opens studio for the dev Postgres config
 - `pnpm db:test:studio` → opens studio for the test Postgres config
-- `pnpm db:migrate:prod` → uses prod config (`DATABASE_URL` required)
+- `pnpm db:migrate:prod` → uses prod config (prefers `DATABASE_URL_UNPOOLED`, otherwise uses `DATABASE_URL`)
 
 ## CI Guidance
 

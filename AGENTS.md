@@ -647,6 +647,7 @@ Prefer:
 
 ### Playwright E2E Execution Rules
 
+- Before adding, moving, or refactoring Playwright specs, read `docs/usage/05 - Playwright E2E Architecture.md`. It is the repository source of truth for suite placement, helper ownership, runtime-profile mapping, and fixture-model selection.
 - The authoritative local E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or a package script built on top of it (`pnpm e2e`, `pnpm e2e:auth`, `pnpm e2e:auth-matrix:*`, `pnpm e2e:scenario:*`).
 - Do not treat raw `playwright test` or `pnpm e2e:raw` as authoritative for auth, bootstrap, onboarding, AuthJS admin, or container-backed investigations. Raw Playwright bypasses scenario DB setup and will use the current app runtime env, which can point at `.env.local` / the dev database.
 - When `E2E_BACKEND_MODE=container`, the expected isolated database is always `postgres://postgres:postgres@127.0.0.1:5433/app_test`. If E2E-created users appear in the dev DB, suspect a raw Playwright run or another non-scenario entrypoint first.
@@ -654,6 +655,11 @@ Prefer:
 - For longer local container-backed AuthJS admin investigations, prefer `PLAYWRIGHT_REUSE_EXISTING_SERVER=false` together with the scenario runner.
 - For focused AuthJS auth-flow regressions, prefer `pnpm e2e:authjs:core` before broader suites.
 - Do not sign off an AuthJS onboarding fix with only completed-user browser coverage; the run must include an incomplete-user onboarding path that proves `/auth/signin -> /onboarding -> /dashboard` (or the current ready route) still settles correctly.
+- Session-reuse decision rule: shared `storageState` or captured authenticated sessions are allowed only for steady-state scenarios whose assertion target is behavior after auth/bootstrap/onboarding has already settled.
+- Fresh interactive auth flow is mandatory for scenarios that validate sign-in, sign-up, bootstrap, onboarding, sign-out, session re-entry, tenant/org selection, or auth-driven redirects as part of the behavior under test.
+- Public, demo, or E2E-only routes explicitly allowed without auth must stay unauthenticated in Playwright unless the scenario itself is about authenticated behavior. Do not add Clerk/AuthJS setup just because adjacent suites are authenticated.
+- Mixed suites must be split by scenario semantics before optimization. Do not force one fixture model across a whole file when some cases are flow-based and others are steady-state. `e2e/provisioning-runtime.spec.ts` is the canonical example.
+- When the correct fixture model is unclear, inspect route policy, proxy behavior, and route/layout guards first. If semantics are still ambiguous, preserve the interactive flow rather than introducing shared-session coupling.
 
 ---
 
@@ -786,6 +792,8 @@ If a task uses `.copilot/tasks/{task_id}/` artifacts or workflow-managed task ar
 > When quoting evidence from env files, snippets, config, or logs that contains any key, token, password, license key, API key, secret, or credential-shaped string, **always replace the value with `[REDACTED]`** before writing it into any artifact file.
 >
 > This applies to ALL agents writing `.copilot/tasks/{task_id}/*.md` files. Browser monitoring license keys (e.g., NR `licenseKey`), API keys, and connection strings are in scope — even when technically public or browser-visible. Gitleaks scans all committed text including markdown. A violation fails the `security-scan` CI workflow and requires both a file redaction and a `.gitleaksignore` fingerprint entry to unblock the branch.
+>
+> This rule also applies to **all other committed markdown and instruction files**, not only task artifacts. Do not include credential-shaped example values in docs, prompts, summaries, or code snippets even when they are fake or hashed. Use neutral placeholders like `[REDACTED]`, `[hash-prefix]`, or `[example-value]` instead of realistic-looking hex, base64, token, or key strings.
 
 Reference guides:
 

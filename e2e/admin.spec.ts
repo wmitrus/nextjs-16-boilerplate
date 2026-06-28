@@ -1,13 +1,62 @@
-import { test, expect } from '@playwright/test';
+import {
+  test as base,
+  expect,
+  type APIRequestContext,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 
 import {
+  captureAuthjsSessionStorageState,
   createAuthjsE2ECredentials,
   isAuthjsRuntime,
   provisionAuthjsE2EUser,
-  signInAuthjsE2E,
 } from './authjs-auth';
 
 const isAuthjs = isAuthjsRuntime();
+const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+const test = base;
+type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
+const authTest = base.extend<
+  {
+    authedPage: Page;
+  },
+  {
+    authRequest: APIRequestContext;
+    adminStorageState: SessionStorageState;
+  }
+>({
+  authRequest: [
+    async ({ playwright }, runWithRequest) => {
+      const request = await playwright.request.newContext({ baseURL });
+      await runWithRequest(request);
+      await request.dispose();
+    },
+    { scope: 'worker' },
+  ],
+  adminStorageState: [
+    async ({ browser, authRequest }, runWithStorageState) => {
+      const authjsAdminCredentials = createAuthjsE2ECredentials('admin-shared');
+      await provisionAuthjsE2EUser(authRequest, authjsAdminCredentials);
+      const storageState = await captureAuthjsSessionStorageState(
+        browser,
+        authjsAdminCredentials,
+      );
+      await runWithStorageState(storageState);
+    },
+    { scope: 'worker' },
+  ],
+  authedPage: async ({ browser, adminStorageState }, runWithPage) => {
+    const context = await browser.newContext({
+      storageState: adminStorageState,
+    });
+    const page = await context.newPage();
+    await runWithPage(page);
+    await context.close();
+  },
+});
+
+test.describe.configure({ mode: 'serial' });
 
 test.describe('Admin Hub (/admin)', () => {
   test('redirects unauthenticated users away from /admin', async ({ page }) => {
@@ -29,44 +78,50 @@ test.describe('Admin Hub (/admin)', () => {
     await expect(page).not.toHaveURL(/\/admin\/invitations/);
   });
 
-  test.describe('authenticated admin (AuthJS)', () => {
-    test.skip(
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
       !isAuthjs,
       'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
     );
 
-    test.beforeEach(async ({ page, request }) => {
-      const authjsAdminCredentials = createAuthjsE2ECredentials('admin-hub');
-      await provisionAuthjsE2EUser(request, authjsAdminCredentials);
-      await signInAuthjsE2E(page, authjsAdminCredentials);
+    authTest(
+      'admin hub loads without error boundary',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin');
+        await expect(
+          authedPage.getByRole('heading', { name: /administration/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByText(/something went wrong/i),
+        ).not.toBeVisible();
+      },
+    );
+
+    authTest('admin hub has correct page title', async ({ authedPage }) => {
+      await authedPage.goto('/admin');
+      await expect(authedPage).toHaveTitle(/administration/i);
     });
 
-    test('admin hub loads without error boundary', async ({ page }) => {
-      await page.goto('/admin');
+    authTest('admin hub shows active section cards', async ({ authedPage }) => {
+      await authedPage.goto('/admin');
       await expect(
-        page.getByRole('heading', { name: /administration/i }),
+        authedPage.locator('a[href="/admin/waitlist"]'),
       ).toBeVisible();
-      await expect(page.getByText(/something went wrong/i)).not.toBeVisible();
-    });
-
-    test('admin hub has correct page title', async ({ page }) => {
-      await page.goto('/admin');
-      await expect(page).toHaveTitle(/administration/i);
-    });
-
-    test('admin hub shows active section cards', async ({ page }) => {
-      await page.goto('/admin');
-      await expect(page.locator('a[href="/admin/waitlist"]')).toBeVisible();
-      await expect(page.locator('a[href="/admin/users"]')).toBeVisible();
-      await expect(page.locator('a[href="/admin/invitations"]')).toBeVisible();
-    });
-
-    test('admin hub breadcrumb shows Administration link', async ({ page }) => {
-      await page.goto('/admin');
+      await expect(authedPage.locator('a[href="/admin/users"]')).toBeVisible();
       await expect(
-        page.locator('span').filter({ hasText: /^Administration$/ }),
+        authedPage.locator('a[href="/admin/invitations"]'),
       ).toBeVisible();
     });
+
+    authTest(
+      'admin hub breadcrumb shows Administration link',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin');
+        await expect(
+          authedPage.locator('span').filter({ hasText: /^Administration$/ }),
+        ).toBeVisible();
+      },
+    );
   });
 });
 
@@ -78,88 +133,86 @@ test.describe('Admin Users (/admin/users)', () => {
     await expect(page).not.toHaveURL(/\/admin\/users/);
   });
 
-  test.describe('authenticated admin (AuthJS)', () => {
-    test.skip(
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
       !isAuthjs,
       'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
     );
 
-    test.beforeEach(async ({ page, request }) => {
-      const authjsAdminCredentials = createAuthjsE2ECredentials('admin-users');
-      await provisionAuthjsE2EUser(request, authjsAdminCredentials);
-      await signInAuthjsE2E(page, authjsAdminCredentials);
-    });
+    authTest(
+      'admin users page loads without error boundary',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/users');
+        await expect(
+          authedPage.getByText(/something went wrong/i),
+        ).not.toBeVisible();
+        await expect(authedPage).toHaveURL(/\/admin\/users/);
+      },
+    );
 
-    test('admin users page loads without error boundary', async ({ page }) => {
-      await page.goto('/admin/users');
-      await expect(page.getByText(/something went wrong/i)).not.toBeVisible();
-      await expect(page).toHaveURL(/\/admin\/users/);
-    });
-
-    test('admin users page has correct title', async ({ page }) => {
-      await page.goto('/admin/users');
-      await expect(page).toHaveTitle(/users.*administration/i);
+    authTest('admin users page has correct title', async ({ authedPage }) => {
+      await authedPage.goto('/admin/users');
+      await expect(authedPage).toHaveTitle(/users.*administration/i);
     });
   });
 });
 
 test.describe('Admin Waitlist (/admin/waitlist)', () => {
-  test.describe('authenticated admin (AuthJS)', () => {
-    test.skip(
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
       !isAuthjs,
       'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
     );
 
-    test.beforeEach(async ({ page, request }) => {
-      const authjsAdminCredentials =
-        createAuthjsE2ECredentials('admin-waitlist');
-      await provisionAuthjsE2EUser(request, authjsAdminCredentials);
-      await signInAuthjsE2E(page, authjsAdminCredentials);
-    });
+    authTest(
+      'waitlist page loads without error boundary',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/waitlist');
+        await expect(
+          authedPage.getByText(/something went wrong/i),
+        ).not.toBeVisible();
+        await expect(authedPage).toHaveURL(/\/admin\/waitlist/);
+      },
+    );
 
-    test('waitlist page loads without error boundary', async ({ page }) => {
-      await page.goto('/admin/waitlist');
-      await expect(page.getByText(/something went wrong/i)).not.toBeVisible();
-      await expect(page).toHaveURL(/\/admin\/waitlist/);
-    });
-
-    test('waitlist page has correct title', async ({ page }) => {
-      await page.goto('/admin/waitlist');
-      await expect(page).toHaveTitle(/waitlist.*administration/i);
+    authTest('waitlist page has correct title', async ({ authedPage }) => {
+      await authedPage.goto('/admin/waitlist');
+      await expect(authedPage).toHaveTitle(/waitlist.*administration/i);
     });
   });
 });
 
 test.describe('Admin Invitations (/admin/invitations)', () => {
-  test.describe('authenticated admin (AuthJS)', () => {
-    test.skip(
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
       !isAuthjs,
       'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
     );
 
-    test.beforeEach(async ({ page, request }) => {
-      const authjsAdminCredentials =
-        createAuthjsE2ECredentials('admin-invitations');
-      await provisionAuthjsE2EUser(request, authjsAdminCredentials);
-      await signInAuthjsE2E(page, authjsAdminCredentials);
+    authTest(
+      'invitations page loads without error boundary',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/invitations');
+        await expect(
+          authedPage.getByText(/something went wrong/i),
+        ).not.toBeVisible();
+        await expect(authedPage).toHaveURL(/\/admin\/invitations/);
+      },
+    );
+
+    authTest('invitations page has correct title', async ({ authedPage }) => {
+      await authedPage.goto('/admin/invitations');
+      await expect(authedPage).toHaveTitle(/invitations.*administration/i);
     });
 
-    test('invitations page loads without error boundary', async ({ page }) => {
-      await page.goto('/admin/invitations');
-      await expect(page.getByText(/something went wrong/i)).not.toBeVisible();
-      await expect(page).toHaveURL(/\/admin\/invitations/);
-    });
-
-    test('invitations page has correct title', async ({ page }) => {
-      await page.goto('/admin/invitations');
-      await expect(page).toHaveTitle(/invitations.*administration/i);
-    });
-
-    test('invitations page shows send invitation form', async ({ page }) => {
-      await page.goto('/admin/invitations');
-      await expect(
-        page.getByRole('heading', { name: 'Invitations', exact: true }),
-      ).toBeVisible();
-    });
+    authTest(
+      'invitations page shows send invitation form',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/invitations');
+        await expect(
+          authedPage.getByRole('heading', { name: 'Invitations', exact: true }),
+        ).toBeVisible();
+      },
+    );
   });
 });

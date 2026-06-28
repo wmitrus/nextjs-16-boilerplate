@@ -1,0 +1,62 @@
+[
+  {
+    "projectId": 2,
+    "milestoneId": 72,
+    "headline": "Triage legacy Leantime validation tasks and milestones",
+    "description": "<h2>Finding</h2><p>Leantime still contains older validation and governance tasks/milestones that are open, blocked, or pending without a current repository workflow owner.</p><h2>Targets</h2><ul><li>Tasks 17, 19, 20, 21, 24, 37, 38, 39, 40</li><li>Milestones 18 and 21 if they are no longer active work containers</li></ul><h2>Expected Outcome</h2><p>For each item decide: close as obsolete, keep as active roadmap work, or re-scope into a current tracked workflow.</p>",
+    "tags": "leantime,audit,cleanup,validation",
+    "priority": "2",
+    "status": 3,
+    "planHours": 4
+  },
+  {
+    "projectId": 2,
+    "milestoneId": 72,
+    "headline": "Decide retention for placeholder boards and empty canvases",
+    "description": "<h2>Finding</h2><p>Leantime contains placeholder or low-signal boards that currently add noise.</p><h2>Targets</h2><ul><li>Ideas board 3: Tablica</li><li>Retrospective board 4: Tablica</li><li>Value canvas 14: NextJS Boilerplate Value Canvas (0 items)</li></ul><h2>Expected Outcome</h2><p>For each board decide: keep as canonical workspace, rename, archive conceptually, or delete with explicit confirmation.</p>",
+    "tags": "leantime,audit,cleanup,boards",
+    "priority": "2",
+    "status": 3,
+    "planHours": 2
+  },
+  {
+    "projectId": 2,
+    "milestoneId": 72,
+    "headline": "Repair auth foundation Leantime metadata linkage",
+    "description": "<h2>Finding</h2><p>Auth foundation phase statuses were partially stale and the strategy summary claims milestone linkage that is not reflected in current task inventory. Implementation comments are also sparse in Leantime compared with repository handoff artifacts.</p><h2>Targets</h2><ul><li>Validate milestone linkage for tasks 60-69</li><li>Backfill or document where implementation notes should live</li><li>Refresh the repository-side Leantime strategy summary to match the live Leantime state</li></ul>",
+    "tags": "leantime,audit,auth-foundation,metadata",
+    "priority": "2",
+    "status": 3,
+    "planHours": 4
+  },
+  {
+    "projectId": 2,
+    "milestoneId": 72,
+    "headline": "Open or link Leantime task for invite flow fix",
+    "description": "<h2>Finding</h2><p>The repository workspace <code>.copilot/tasks/2026-04-23-invite-flow-fix/</code> is still in progress but has no obvious linked Leantime task ID in the task artifacts.</p><h2>Expected Outcome</h2><p>Create or locate the matching Leantime task, record the ID in the repo artifacts, and set the correct lifecycle status.</p>",
+    "tags": "leantime,audit,invite-flow",
+    "priority": "2",
+    "status": 3,
+    "planHours": 2
+  },
+  {
+    "projectId": 2,
+    "milestoneId": 72,
+    "headline": "Open or link Leantime task for admin direct invitation",
+    "description": "<h2>Finding</h2><p>The repository workspace <code>.copilot/tasks/2026-04-24-admin-direct-invitation/</code> is in progress but has no obvious linked Leantime task ID in the task artifacts.</p><h2>Expected Outcome</h2><p>Create or locate the matching Leantime task, record the ID in the repo artifacts, and set the correct lifecycle status.</p>",
+    "tags": "leantime,audit,admin,invitations",
+    "priority": "2",
+    "status": 3,
+    "planHours": 2
+  },
+  {
+    "projectId": 2,
+    "milestoneId": 72,
+    "headline": "Create repository-level task index outside AI task folders",
+    "description": "<h2>Finding</h2><p>The repository has per-task workflow artifacts under <code>.copilot/tasks/</code> but no central non-AI index file summarizing active, blocked, completed, and Leantime-linked work.</p><h2>Expected Outcome</h2><p>Create and maintain one repository-level task index that points to the repo task workspace and live Leantime IDs.</p>",
+    "tags": "leantime,audit,repo,index",
+    "priority": "2",
+    "status": 3,
+    "planHours": 3
+  }
+]

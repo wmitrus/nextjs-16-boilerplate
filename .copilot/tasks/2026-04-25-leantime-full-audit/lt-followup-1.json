@@ -1,0 +1,10 @@
+{
+  "projectId": 2,
+  "milestoneId": 72,
+  "headline": "Triage legacy Leantime validation tasks and milestones",
+  "description": "<h2>Finding</h2><p>Leantime still contains older validation and governance tasks/milestones that are open, blocked, or pending without a current repository workflow owner.</p><h2>Targets</h2><ul><li>Tasks 17, 19, 20, 21, 24, 37, 38, 39, 40</li><li>Milestones 18 and 21 if they are no longer active work containers</li></ul><h2>Expected Outcome</h2><p>For each item decide: close as obsolete, keep as active roadmap work, or re-scope into a current tracked workflow.</p>",
+  "tags": "leantime,audit,cleanup,validation",
+  "priority": "2",
+  "status": 3,
+  "planHours": 4
+}

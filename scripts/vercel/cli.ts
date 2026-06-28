@@ -18,6 +18,39 @@ interface VercelCliInvocation {
   args: string[];
 }
 
+function stripNewRelicPreload(
+  nodeOptions: string | undefined,
+): string | undefined {
+  if (!nodeOptions) {
+    return undefined;
+  }
+
+  const sanitized = nodeOptions
+    .replace(/(^|\s)-r\s+newrelic(?=\s|$)/g, ' ')
+    .replace(/(^|\s)--require\s+newrelic(?=\s|$)/g, ' ')
+    .replace(/(^|\s)-rnewrelic(?=\s|$)/g, ' ')
+    .replace(/(^|\s)--requirenewrelic(?=\s|$)/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
+export function buildVercelChildEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const childEnv = { ...env };
+  const sanitizedNodeOptions = stripNewRelicPreload(env.NODE_OPTIONS);
+
+  if (sanitizedNodeOptions) {
+    childEnv.NODE_OPTIONS = sanitizedNodeOptions;
+  } else {
+    delete childEnv.NODE_OPTIONS;
+  }
+
+  return childEnv;
+}
+
 function printHelp(): void {
   console.log('Vercel helper');
   console.log('');
@@ -163,7 +196,7 @@ async function runExternalCommand(
   await new Promise<void>((resolve, reject) => {
     const child = spawn(invocation.command, invocation.args, {
       stdio: 'inherit',
-      env: process.env,
+      env: buildVercelChildEnv(),
     });
 
     child.on('error', reject);

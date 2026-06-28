@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildVercelCliInvocation, parseCliArgs } from './cli';
+import {
+  buildVercelChildEnv,
+  buildVercelCliInvocation,
+  parseCliArgs,
+} from './cli';
 
 describe('parseCliArgs', () => {
   it('returns help when no command is provided', () => {
@@ -83,5 +87,30 @@ describe('buildVercelCliInvocation', () => {
       command: '/usr/local/bin/vercel',
       args: ['whoami'],
     });
+  });
+});
+
+describe('buildVercelChildEnv', () => {
+  it('removes the New Relic preload from NODE_OPTIONS', () => {
+    const childEnv = buildVercelChildEnv({
+      NODE_ENV: 'test',
+      NODE_OPTIONS: '--max-old-space-size=4096 -r newrelic --trace-warnings',
+      VERCEL_TOKEN: 'token-123',
+    });
+
+    expect(childEnv).toMatchObject({
+      NODE_ENV: 'test',
+      NODE_OPTIONS: '--max-old-space-size=4096 --trace-warnings',
+      VERCEL_TOKEN: 'token-123',
+    });
+  });
+
+  it('drops NODE_OPTIONS entirely when it only preloads New Relic', () => {
+    const childEnv = buildVercelChildEnv({
+      NODE_ENV: 'test',
+      NODE_OPTIONS: '-r newrelic',
+    });
+
+    expect(childEnv.NODE_OPTIONS).toBeUndefined();
   });
 });

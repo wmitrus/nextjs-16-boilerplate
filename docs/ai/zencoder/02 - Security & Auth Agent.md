@@ -31,9 +31,6 @@ Always flag:
 - dynamically constructed file paths in `fs` operations without `path.resolve()` + base-directory confinement check (CWE-22 — path traversal)
 - env-var-sourced or user-controlled URLs passed to `fetch()` or HTTP clients without protocol + hostname allowlist validation (CWE-918 — SSRF)
 - upstream allowlist validation of CLI args does not substitute for point-of-use guards
-- duplicate-sensitive write paths that rely only on service-layer preflight reads and do not enforce DB uniqueness (SEC-21)
-- raw email addresses or token-bearing URLs in logs, noop transports, or fallback email paths (SEC-22)
-- silent production fallback to noop email delivery or unsanitized email header / HTML interpolation (SEC-22)
 
 Canonical guard patterns live in `docs/ai/general/02 - Security & Auth Agent.md` under SCRIPT AND TOOLING SECURITY RULES.
 

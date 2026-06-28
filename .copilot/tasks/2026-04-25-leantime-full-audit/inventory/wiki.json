@@ -1,0 +1,18 @@
+[
+  {
+    "id": 5,
+    "title": "Default",
+    "author": 1,
+    "created": "2026-04-06 00:00:00",
+    "projectId": null,
+    "category": null
+  },
+  {
+    "id": 7,
+    "title": "AI Workflow Knowledge Base",
+    "author": 1,
+    "created": "2026-04-06 00:00:00",
+    "projectId": null,
+    "category": null
+  }
+]

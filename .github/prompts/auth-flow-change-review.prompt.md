@@ -16,6 +16,7 @@ Required auth-flow context:
 - read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` first
 - review `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory verification checklist for affected scenarios
+- when the active provider is `authjs`, require focused browser evidence for both completed-user dashboard entry and incomplete-user onboarding settlement before full sign-off
 
 Workflow:
 
@@ -24,6 +25,7 @@ Workflow:
 - Identify the trust-boundary, source-of-truth, redirect-flow, and runtime-sensitive risks in the affected path.
 - Explicitly map the change to the relevant matrix scenarios.
 - State which scenarios must be verified before the change can be considered complete.
+- If the active provider is `authjs`, explicitly state whether the current validation covers the repository AuthJS core proof set (`pnpm e2e:authjs:core`) or still has an incomplete-user blind spot.
 - If runtime placement or App Router behavior is central to the risk, call that out explicitly so Next.js Runtime review can follow.
 
 Required output:

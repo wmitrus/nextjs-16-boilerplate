@@ -1,0 +1,10 @@
+{
+  "projectId": 2,
+  "milestoneId": 72,
+  "headline": "Leantime full audit and artifact cleanup",
+  "description": "<h2>Objective</h2><p>Perform a full audit of Leantime and repository task artifacts, clean up stale or misleading status records, create follow-up todos for unresolved items, and establish one repository-level task index outside per-task AI folders.</p><h2>Scope</h2><ul><li>Inventory tasks, milestones, wiki, goals, ideas, blueprints, retrospectives</li><li>Compare Leantime state with .copilot/tasks artifacts</li><li>Patch clearly stale task and milestone statuses when repository evidence is sufficient</li><li>Create follow-up todos for unresolved cleanup items</li><li>Create or update a central repository task index</li><li>Document how these artifact families should be managed going forward</li></ul><h2>Acceptance Criteria</h2><ul><li>Full Leantime inventory captured</li><li>Status drift patched where evidence is sufficient</li><li>Every unresolved audit finding has a Leantime todo</li><li>Repository-level task index exists or is updated</li><li>Final guidance explains retention and usage of tasks, milestones, ideas, blueprints, retrospectives, goals, and wiki</li></ul><h2>Task Workspace</h2><p>.copilot/tasks/2026-04-25-leantime-full-audit/</p>",
+  "tags": "leantime,audit,cleanup,governance",
+  "priority": "2",
+  "status": 4,
+  "planHours": 8
+}

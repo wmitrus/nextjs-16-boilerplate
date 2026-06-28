@@ -1,0 +1,10 @@
+{
+  "projectId": 2,
+  "milestoneId": 72,
+  "headline": "Repair auth foundation Leantime metadata linkage",
+  "description": "<h2>Finding</h2><p>Auth foundation phase statuses were partially stale and the strategy summary claims milestone linkage that is not reflected in current task inventory. Implementation comments are also sparse in Leantime compared with repository handoff artifacts.</p><h2>Targets</h2><ul><li>Validate milestone linkage for tasks 60-69</li><li>Backfill or document where implementation notes should live</li><li>Refresh the repository-side Leantime strategy summary to match the live Leantime state</li></ul>",
+  "tags": "leantime,audit,auth-foundation,metadata",
+  "priority": "2",
+  "status": 3,
+  "planHours": 4
+}

@@ -58,6 +58,7 @@ Always:
 - use AUTH_FLOW_VERIFICATION_MATRIX.md as the mandatory scenario source
 - map every affected auth path to a matrix scenario ID
 - state Verified / Deferred / Blocked per scenario
+- when the provider is AuthJS, require explicit evidence for both completed-user dashboard entry and incomplete-user onboarding settlement
 - treat trust-boundary confusion as a blocker, not a warning
 - route to Next.js Runtime when routing, server/client placement, or caching is involved
 - route to Architecture Guard when module boundaries or DI/composition is affected
@@ -208,6 +209,7 @@ Triggers:
 The agent must:
 
 - run the minimum Playwright scope that covers the affected scenarios
+- prefer `pnpm e2e:authjs:core` first for focused AuthJS regressions before widening further
 - map browser evidence to specific matrix scenario IDs
 - produce a structured evidence artifact
 

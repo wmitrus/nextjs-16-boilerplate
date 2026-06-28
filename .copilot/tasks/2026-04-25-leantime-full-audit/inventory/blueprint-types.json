@@ -1,0 +1,1012 @@
+{
+  "ea": {
+    "boardType": "ea",
+    "boxes": {
+      "ea_political": {
+        "icon": "fa-landmark",
+        "title": "Polityczne"
+      },
+      "ea_economic": {
+        "icon": "fa-chart-line",
+        "title": "Ekonomiczne"
+      },
+      "ea_societal": {
+        "icon": "fa-people-arrows",
+        "title": "Społeczne"
+      },
+      "ea_technological": {
+        "icon": "fa-computer",
+        "title": "Technologiczne"
+      },
+      "ea_legal": {
+        "icon": "fa-scale-balanced",
+        "title": "Prawne"
+      },
+      "ea_ecological": {
+        "icon": "fa-cloud-sun",
+        "title": "Środowiskowe"
+      }
+    },
+    "canvasType": "eacanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Opis",
+        "field": "conclusion",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": false
+      },
+      "3": {
+        "title": "label.assumption",
+        "field": "assumptions",
+        "active": false
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-seedling",
+    "relatesLabels": {
+      "relates_none": {
+        "icon": "fa-border-none",
+        "color": "grey",
+        "title": "Brak",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_customers": {
+        "icon": "fa-users",
+        "color": "green",
+        "title": "Klienci",
+        "dropdown": "success",
+        "active": true
+      },
+      "relates_offerings": {
+        "icon": "fa-barcode",
+        "color": "red",
+        "title": "Oferty",
+        "dropdown": "danger",
+        "active": true
+      },
+      "relates_markets": {
+        "icon": "fa-shop",
+        "color": "brown",
+        "title": "Rynki",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_stakeholders": {
+        "icon": "fa-handshake",
+        "color": "orange",
+        "title": "Interesariusze",
+        "dropdown": "warning",
+        "active": true
+      }
+    },
+    "statusLabels": {
+      "status_observation": {
+        "icon": "fa-tower-observation",
+        "color": "blue",
+        "title": "Obserwacja",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_threat": {
+        "icon": "fa-cloud-bolt",
+        "color": "red",
+        "title": "Zagrożenie",
+        "dropdown": "danger",
+        "active": true
+      },
+      "status_trend": {
+        "icon": "fa-arrow-trend-up",
+        "color": "lightgreen",
+        "title": "Trend",
+        "dropdown": "success",
+        "active": true
+      }
+    },
+    "title": "Environmental Analysis"
+  },
+  "insights": {
+    "boardType": "insights",
+    "boxes": {
+      "insights_oberve": {
+        "icon": "fa-tower-observation",
+        "title": "Obserwacje etnograficzne"
+      },
+      "insights_interview": {
+        "icon": "fa-people-arrows",
+        "title": "Wywiady etnograficzne"
+      },
+      "insights_focus_groups": {
+        "icon": "fa-people-line",
+        "title": "Grupy fokusowe"
+      },
+      "insights_secondary_research": {
+        "icon": "fa-book",
+        "title": "Badania wtórne"
+      },
+      "insights_knowledge": {
+        "icon": "fa-file-signature",
+        "title": "Wypracowana wiedza",
+        "color": "#e3e3e3"
+      }
+    },
+    "canvasType": "insightscanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Opis wniosku",
+        "field": "conclusion",
+        "active": true
+      },
+      "2": {
+        "title": "Zebrane dane wspierające",
+        "field": "data",
+        "active": true
+      },
+      "3": {
+        "title": "",
+        "field": "assumptions",
+        "active": false
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-note-sticky",
+    "relatesLabels": {
+      "relates_none": {
+        "icon": "fa-border-none",
+        "color": "grey",
+        "title": "Brak",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_customers": {
+        "icon": "fa-users",
+        "color": "green",
+        "title": "Klienci",
+        "dropdown": "success",
+        "active": true
+      },
+      "relates_offerings": {
+        "icon": "fa-barcode",
+        "color": "red",
+        "title": "Oferty",
+        "dropdown": "danger",
+        "active": true
+      },
+      "relates_capabilities": {
+        "icon": "fa-pen-ruler",
+        "color": "blue",
+        "title": "Możliwości",
+        "dropdown": "info",
+        "active": true
+      },
+      "relates_financials": {
+        "icon": "fa-money-bill",
+        "color": "yellow",
+        "title": "Finanse",
+        "dropdown": "warning",
+        "active": true
+      },
+      "relates_markets": {
+        "icon": "fa-shop",
+        "color": "brown",
+        "title": "Rynki",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_environment": {
+        "icon": "fa-tree",
+        "color": "darkgreen",
+        "title": "Otoczenie",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_firm": {
+        "icon": "fa-building",
+        "color": "darkblue",
+        "title": "Firma",
+        "dropdown": "info",
+        "active": true
+      }
+    },
+    "statusLabels": {
+      "status_draft": {
+        "icon": "fa-circle-question",
+        "color": "blue",
+        "title": "Szkic",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_review": {
+        "icon": "fa-circle-exclamation",
+        "color": "orange",
+        "title": "W trakcie przeglądu",
+        "dropdown": "warning",
+        "active": true
+      },
+      "status_valid": {
+        "icon": "fa-circle-check",
+        "color": "green",
+        "title": "Zweryfikowane: poprawne",
+        "dropdown": "success",
+        "active": true
+      },
+      "status_hold": {
+        "icon": "fa-circle-h",
+        "color": "red",
+        "title": "Wstrzymane",
+        "dropdown": "danger",
+        "active": true
+      },
+      "status_invalid": {
+        "icon": "fa-circle-xmark",
+        "color": "red",
+        "title": "Zweryfikowane: błędne",
+        "dropdown": "danger",
+        "active": true
+      }
+    },
+    "title": "Observe / Learn - Insights"
+  },
+  "lean": {
+    "boardType": "lean",
+    "boxes": {
+      "problem": {
+        "icon": "fa-lock",
+        "title": "Problem"
+      },
+      "alternatives": {
+        "icon": "fa-arrow-down-up-across-line",
+        "title": "Istniejące alternatywy"
+      },
+      "solution": {
+        "icon": "fa-key",
+        "title": "Rozwiązanie"
+      },
+      "keymetrics": {
+        "icon": "fa-chart-column",
+        "title": "Kluczowe metryki"
+      },
+      "uniquevalue": {
+        "icon": "fa-gift",
+        "title": "Unikalna propozycja wartości"
+      },
+      "highlevelconcept": {
+        "icon": "fa-wand-magic-sparkles",
+        "title": "Koncepcja wysokiego poziomu"
+      },
+      "unfairadvantage": {
+        "icon": "fa-person-running",
+        "title": "Nieuczciwa przewaga"
+      },
+      "channels": {
+        "icon": "fa-truck",
+        "title": "Kanały"
+      },
+      "customersegment": {
+        "icon": "fa-user",
+        "title": "Segmenty klientów"
+      },
+      "earlyadopters": {
+        "icon": "fa-chart-pie",
+        "title": "Wcześni użytkownicy"
+      },
+      "cost": {
+        "icon": "fa-file-invoice-dollar",
+        "title": "Struktura kosztów"
+      },
+      "revenue": {
+        "icon": "fa-sack-dollar",
+        "title": "Strumienie przychodów"
+      }
+    },
+    "canvasType": "leancanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Założenia",
+        "field": "assumptions",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": true
+      },
+      "3": {
+        "title": "Wnioski",
+        "field": "conclusion",
+        "active": true
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "Lean Canvas bazuje na <a href='https://strategyzer.com/' target='_blank'>Business Model Canvas</a> i jest objęty licencją <a href='https://creativecommons.org/licenses/by-sa/3.0/'>Creative Commons Attribution-Share Alike 3.0</a>",
+    "icon": "fa-flask",
+    "relatesLabels": [],
+    "statusLabels": {
+      "status_draft": {
+        "icon": "fa-circle-question",
+        "color": "blue",
+        "title": "Szkic",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_review": {
+        "icon": "fa-circle-exclamation",
+        "color": "orange",
+        "title": "W trakcie przeglądu",
+        "dropdown": "warning",
+        "active": true
+      },
+      "status_valid": {
+        "icon": "fa-circle-check",
+        "color": "green",
+        "title": "Zweryfikowane: poprawne",
+        "dropdown": "success",
+        "active": true
+      },
+      "status_hold": {
+        "icon": "fa-circle-h",
+        "color": "red",
+        "title": "Wstrzymane",
+        "dropdown": "danger",
+        "active": true
+      },
+      "status_invalid": {
+        "icon": "fa-circle-xmark",
+        "color": "red",
+        "title": "Zweryfikowane: błędne",
+        "dropdown": "danger",
+        "active": true
+      }
+    },
+    "title": "Lean Canvas"
+  },
+  "minempathy": {
+    "boardType": "minempathy",
+    "boxes": {
+      "minempathy_who": {
+        "icon": "",
+        "title": "Komu próbujesz pomóc?"
+      },
+      "minempathy_struggles": {
+        "icon": "",
+        "title": "Z jakimi problemami się mierzą?"
+      },
+      "minempathy_where": {
+        "icon": "",
+        "title": "Gdzie szukasz zrozumienia ich problemów?"
+      },
+      "minempathy_why": {
+        "icon": "",
+        "title": "Dlaczego to jest dla nich ważne?"
+      },
+      "minempathy_how": {
+        "icon": "",
+        "title": "Jak byś się czuł na ich miejscu?"
+      }
+    },
+    "canvasType": "minempathycanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Opis",
+        "field": "conclusion",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": true
+      },
+      "3": {
+        "title": "Założenia",
+        "field": "assumptions",
+        "active": true
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-solid fa-heart-circle-check",
+    "relatesLabels": [],
+    "statusLabels": {
+      "status_draft": {
+        "icon": "fa-circle-question",
+        "color": "blue",
+        "title": "Szkic",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_review": {
+        "icon": "fa-circle-exclamation",
+        "color": "orange",
+        "title": "W trakcie przeglądu",
+        "dropdown": "warning",
+        "active": true
+      },
+      "status_valid": {
+        "icon": "fa-circle-check",
+        "color": "green",
+        "title": "Zweryfikowane: poprawne",
+        "dropdown": "success",
+        "active": true
+      },
+      "status_hold": {
+        "icon": "fa-circle-h",
+        "color": "red",
+        "title": "Wstrzymane",
+        "dropdown": "danger",
+        "active": true
+      },
+      "status_invalid": {
+        "icon": "fa-circle-xmark",
+        "color": "red",
+        "title": "Zweryfikowane: błędne",
+        "dropdown": "danger",
+        "active": true
+      }
+    },
+    "title": "Simple Empathy Map"
+  },
+  "obm": {
+    "boardType": "obm",
+    "boxes": {
+      "obm_kp": {
+        "icon": "fa-ring",
+        "title": "Kluczowi partnerzy"
+      },
+      "obm_kr": {
+        "icon": "fa-hammer",
+        "title": "Kluczowe zasoby"
+      },
+      "obm_ka": {
+        "icon": "fa-person-digging",
+        "title": "Kluczowe działania"
+      },
+      "obm_vp": {
+        "icon": "fa-gift",
+        "title": "Propozycja wartości"
+      },
+      "obm_ch": {
+        "icon": "fa-truck",
+        "title": "Kanały"
+      },
+      "obm_cr": {
+        "icon": "fa-heart",
+        "title": "Relacje z klientami"
+      },
+      "obm_cs": {
+        "icon": "fa-person",
+        "title": "Segmenty klientów"
+      },
+      "obm_fc": {
+        "icon": "fa-file-invoice-dollar",
+        "title": "Struktura kosztów"
+      },
+      "obm_fr": {
+        "icon": "fa-cash-register",
+        "title": "Strumienie przychodów"
+      }
+    },
+    "canvasType": "obmcanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Założenia",
+        "field": "assumptions",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": true
+      },
+      "3": {
+        "title": "Wnioski",
+        "field": "conclusion",
+        "active": true
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "Tablica <em>Business Model Canvas</em> pochodzi z <a href='https://www.strategyzer.com'>Strategyzer</a> i jest objęta licencją <a href='https://creativecommons.org/licenses/by-sa/3.0/'>Creative Commons Attribution-Share Alike 3.0</a>",
+    "icon": "fa-object-group",
+    "relatesLabels": [],
+    "statusLabels": {
+      "status_draft": {
+        "icon": "fa-circle-question",
+        "color": "blue",
+        "title": "Szkic",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_review": {
+        "icon": "fa-circle-exclamation",
+        "color": "orange",
+        "title": "W trakcie przeglądu",
+        "dropdown": "warning",
+        "active": true
+      },
+      "status_valid": {
+        "icon": "fa-circle-check",
+        "color": "green",
+        "title": "Zweryfikowane: poprawne",
+        "dropdown": "success",
+        "active": true
+      },
+      "status_hold": {
+        "icon": "fa-circle-h",
+        "color": "red",
+        "title": "Wstrzymane",
+        "dropdown": "danger",
+        "active": true
+      },
+      "status_invalid": {
+        "icon": "fa-circle-xmark",
+        "color": "red",
+        "title": "Zweryfikowane: błędne",
+        "dropdown": "danger",
+        "active": true
+      }
+    },
+    "title": "Business Model Board"
+  },
+  "retros": {
+    "boardType": "retros",
+    "boxes": {
+      "well": {
+        "icon": "fa-circle-check",
+        "title": "Kontynuuj – co poszło dobrze?"
+      },
+      "notwell": {
+        "icon": "fa-circle-xmark",
+        "title": "Przestań – co powinniśmy przestać robić?"
+      },
+      "startdoing": {
+        "icon": "fa-circle-plus",
+        "title": "Zacznij – co powinniśmy zacząć robić, aby się poprawić?"
+      }
+    },
+    "canvasType": "retroscanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Opis",
+        "field": "conclusion",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": false
+      },
+      "3": {
+        "title": "Założenia",
+        "field": "assumptions",
+        "active": false
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-hand-spock",
+    "relatesLabels": [],
+    "statusLabels": [],
+    "title": "Retrospectives"
+  },
+  "risks": {
+    "boardType": "risks",
+    "boxes": {
+      "risks_imp_low_pro_low": {
+        "icon": "",
+        "title": "Niski wpływ / Niskie prawdopodobieństwo"
+      },
+      "risks_imp_low_pro_high": {
+        "icon": "",
+        "title": "Niski wpływ / Wysokie prawdopodobieństwo"
+      },
+      "risks_imp_high_pro_low": {
+        "icon": "",
+        "title": "Wysoki wpływ / Niskie prawdopodobieństwo"
+      },
+      "risks_imp_high_pro_high": {
+        "icon": "",
+        "title": "Wysoki wpływ / Wysokie prawdopodobieństwo"
+      }
+    },
+    "canvasType": "riskscanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Opis ryzyka",
+        "field": "conclusion",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": true
+      },
+      "3": {
+        "title": "Planowane działania minimalizujące ryzyko",
+        "field": "assumptions",
+        "active": true
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-person-falling",
+    "relatesLabels": {
+      "relates_none": {
+        "icon": "fa-border-none",
+        "color": "grey",
+        "title": "Brak",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_customers": {
+        "icon": "fa-users",
+        "color": "green",
+        "title": "Klienci",
+        "dropdown": "success",
+        "active": true
+      },
+      "relates_offerings": {
+        "icon": "fa-barcode",
+        "color": "red",
+        "title": "Oferty",
+        "dropdown": "danger",
+        "active": true
+      },
+      "relates_capabilities": {
+        "icon": "fa-pen-ruler",
+        "color": "blue",
+        "title": "Możliwości",
+        "dropdown": "info",
+        "active": true
+      },
+      "relates_financials": {
+        "icon": "fa-money-bill",
+        "color": "yellow",
+        "title": "Finanse",
+        "dropdown": "warning",
+        "active": true
+      },
+      "relates_markets": {
+        "icon": "fa-shop",
+        "color": "brown",
+        "title": "Rynki",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_environment": {
+        "icon": "fa-tree",
+        "color": "darkgreen",
+        "title": "Otoczenie",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_firm": {
+        "icon": "fa-building",
+        "color": "darkblue",
+        "title": "Firma",
+        "dropdown": "info",
+        "active": true
+      }
+    },
+    "statusLabels": {
+      "status_draft": {
+        "icon": "fa-circle-question",
+        "color": "blue",
+        "title": "Szkic",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_review": {
+        "icon": "fa-circle-exclamation",
+        "color": "orange",
+        "title": "W trakcie przeglądu",
+        "dropdown": "warning",
+        "active": true
+      },
+      "status_valid": {
+        "icon": "fa-circle-check",
+        "color": "green",
+        "title": "Zweryfikowane: poprawne",
+        "dropdown": "success",
+        "active": true
+      },
+      "status_hold": {
+        "icon": "fa-circle-h",
+        "color": "red",
+        "title": "Wstrzymane",
+        "dropdown": "danger",
+        "active": true
+      },
+      "status_invalid": {
+        "icon": "fa-circle-xmark",
+        "color": "red",
+        "title": "Zweryfikowane: błędne",
+        "dropdown": "danger",
+        "active": true
+      }
+    },
+    "title": "Risk Analysis"
+  },
+  "sb": {
+    "boardType": "sb",
+    "boxes": {
+      "sb_industry": {
+        "icon": "fa-industry",
+        "title": "Misja"
+      },
+      "sb_description": {
+        "icon": "fa-file-lines",
+        "title": "Podsumowanie"
+      },
+      "sb_st_design": {
+        "icon": "fa-user-tie",
+        "title": "Odpowiedzialny"
+      },
+      "sb_st_decision": {
+        "icon": "fa-sitemap",
+        "title": "Decyzyjny"
+      },
+      "sb_st_experts": {
+        "icon": "fa-chalkboard-user",
+        "title": "Konsultowany"
+      },
+      "sb_st_support": {
+        "icon": "fa-person-circle-question",
+        "title": "Informowany"
+      },
+      "sb_budget": {
+        "icon": "fa-money-bills",
+        "title": "Budżet wysokiego poziomu"
+      },
+      "sb_time": {
+        "icon": "fa-business-time",
+        "title": "Harmonogram wysokiego poziomu"
+      },
+      "sb_culture": {
+        "icon": "fa-masks-theater",
+        "title": "Kultura organizacyjna"
+      },
+      "sb_change": {
+        "icon": "fa-book-skull",
+        "title": "Zdolność do zmiany"
+      },
+      "sb_principles": {
+        "icon": "fa-ruler-combined",
+        "title": "Zasady przewodnie"
+      }
+    },
+    "canvasType": "sbcanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Opis",
+        "field": "conclusion",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": false
+      },
+      "3": {
+        "title": "Założenia",
+        "field": "assumptions",
+        "active": false
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-briefcase",
+    "relatesLabels": [],
+    "statusLabels": {
+      "status_pending": {
+        "icon": "fa-person-circle-question",
+        "color": "blue",
+        "title": "Oczekujące",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_accepted": {
+        "icon": "fa-person-circle-check",
+        "color": "green",
+        "title": "Zaakceptowane",
+        "dropdown": "success",
+        "active": true
+      },
+      "status_rejected": {
+        "icon": "fa-person-circle-xmark",
+        "color": "red",
+        "title": "Odrzucone",
+        "dropdown": "danger",
+        "active": true
+      }
+    },
+    "title": "Project Brief"
+  },
+  "swot": {
+    "boardType": "swot",
+    "boxes": {
+      "swot_strengths": {
+        "icon": "fa-dumbbell",
+        "title": "Mocne strony"
+      },
+      "swot_weaknesses": {
+        "icon": "fa-fire",
+        "title": "Słabe strony"
+      },
+      "swot_opportunities": {
+        "icon": "fa-clover",
+        "title": "Szanse"
+      },
+      "swot_threats": {
+        "icon": "fa-bolt-lightning",
+        "title": "Zagrożenia"
+      }
+    },
+    "canvasType": "swotcanvas",
+    "dataLabels": {
+      "1": {
+        "title": "Opis",
+        "field": "conclusion",
+        "active": true
+      },
+      "2": {
+        "title": "Dane",
+        "field": "data",
+        "active": true
+      },
+      "3": {
+        "title": "Założenia",
+        "field": "assumptions",
+        "active": false
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-chess-board",
+    "relatesLabels": {
+      "relates_none": {
+        "icon": "fa-border-none",
+        "color": "grey",
+        "title": "Brak",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_customers": {
+        "icon": "fa-users",
+        "color": "green",
+        "title": "Klienci",
+        "dropdown": "success",
+        "active": true
+      },
+      "relates_offerings": {
+        "icon": "fa-barcode",
+        "color": "red",
+        "title": "Oferty",
+        "dropdown": "danger",
+        "active": true
+      },
+      "relates_capabilities": {
+        "icon": "fa-pen-ruler",
+        "color": "blue",
+        "title": "Możliwości",
+        "dropdown": "info",
+        "active": true
+      },
+      "relates_financials": {
+        "icon": "fa-money-bill",
+        "color": "yellow",
+        "title": "Finanse",
+        "dropdown": "warning",
+        "active": true
+      },
+      "relates_markets": {
+        "icon": "fa-shop",
+        "color": "brown",
+        "title": "Rynki",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_environment": {
+        "icon": "fa-tree",
+        "color": "darkgreen",
+        "title": "Otoczenie",
+        "dropdown": "default",
+        "active": true
+      },
+      "relates_firm": {
+        "icon": "fa-building",
+        "color": "darkblue",
+        "title": "Firma",
+        "dropdown": "info",
+        "active": true
+      }
+    },
+    "statusLabels": [],
+    "title": "SWOT Analysis"
+  },
+  "value": {
+    "boardType": "value",
+    "boxes": {
+      "customersegment": {
+        "icon": "fa-user",
+        "title": "Segmenty klientów"
+      },
+      "problem": {
+        "icon": "fa-lock",
+        "title": "Problem"
+      },
+      "solution": {
+        "icon": "fa-key",
+        "title": "Rozwiązanie"
+      },
+      "uniquevalue": {
+        "icon": "fa-gift",
+        "title": "Korzyść"
+      }
+    },
+    "canvasType": "valuecanvas",
+    "dataLabels": {
+      "1": {
+        "title": "label.valueCanvas.assumptions",
+        "field": "assumptions",
+        "active": true
+      },
+      "2": {
+        "title": "label.valueCanvas.data",
+        "field": "data",
+        "active": true
+      },
+      "3": {
+        "title": "label.valueCanvas.conclusion",
+        "field": "conclusion",
+        "active": true
+      }
+    },
+    "deleteRequiresConfirm": true,
+    "disclaimer": "",
+    "icon": "fa-ranking-star",
+    "relatesLabels": [],
+    "statusLabels": {
+      "status_draft": {
+        "icon": "fa-circle-question",
+        "color": "blue",
+        "title": "Szkic",
+        "dropdown": "info",
+        "active": true
+      },
+      "status_review": {
+        "icon": "fa-circle-exclamation",
+        "color": "orange",
+        "title": "W trakcie przeglądu",
+        "dropdown": "warning",
+        "active": true
+      },
+      "status_valid": {
+        "icon": "fa-circle-check",
+        "color": "green",
+        "title": "Zweryfikowane: poprawne",
+        "dropdown": "success",
+        "active": true
+      },
+      "status_hold": {
+        "icon": "fa-circle-h",
+        "color": "red",
+        "title": "Wstrzymane",
+        "dropdown": "danger",
+        "active": true
+      },
+      "status_invalid": {
+        "icon": "fa-circle-xmark",
+        "color": "red",
+        "title": "Zweryfikowane: błędne",
+        "dropdown": "danger",
+        "active": true
+      }
+    },
+    "title": "Project Value Canvas"
+  }
+}

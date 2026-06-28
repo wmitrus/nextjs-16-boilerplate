@@ -1,0 +1,22 @@
+[
+  {
+    "id": 21,
+    "title": "Auth Provider Feature Value Canvas",
+    "author": 1,
+    "created": "2026-04-17 18:39:01",
+    "description": "",
+    "authorFirstname": "Wojciech",
+    "authorLastname": "Mitruś",
+    "boxItems": 4
+  },
+  {
+    "id": 14,
+    "title": "NextJS Boilerplate Value Canvas",
+    "author": 1,
+    "created": "2026-04-07 21:41:22",
+    "description": "",
+    "authorFirstname": "Wojciech",
+    "authorLastname": "Mitruś",
+    "boxItems": 0
+  }
+]

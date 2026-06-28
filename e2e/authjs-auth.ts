@@ -1,4 +1,9 @@
-import type { APIRequestContext, Browser, Page } from '@playwright/test';
+import type {
+  APIRequestContext,
+  Browser,
+  BrowserContext,
+  Page,
+} from '@playwright/test';
 import { z } from 'zod';
 
 import { readEnvFileMap, resolveProjectPath } from './env-files';
@@ -26,6 +31,7 @@ const authjsProvisioningRouteReadyByRequest = new WeakMap<
 >();
 
 export type AuthjsE2ECredentials = z.infer<typeof authjsCredentialsSchema>;
+type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 
 type AuthjsE2EProvisioningOptions = {
   onboardingComplete?: boolean;
@@ -227,11 +233,7 @@ export async function signInAuthjsE2E(
 export async function captureAuthjsSessionStorageState(
   browser: Browser,
   credentials: AuthjsE2ECredentials,
-): Promise<
-  Awaited<
-    ReturnType<Awaited<ReturnType<Browser['newContext']>>['storageState']>
-  >
-> {
+): Promise<SessionStorageState> {
   const context = await browser.newContext();
 
   try {

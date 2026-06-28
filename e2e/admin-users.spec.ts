@@ -2,8 +2,8 @@ import {
   test as base,
   expect,
   type APIRequestContext,
+  type BrowserContext,
   type Page,
-  type StorageState,
 } from '@playwright/test';
 
 import {
@@ -16,13 +16,14 @@ import {
 const isAuthjs = isAuthjsRuntime();
 const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
 const test = base;
+type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 const authTest = base.extend<
   {
     authedPage: Page;
   },
   {
     authRequest: APIRequestContext;
-    adminStorageState: StorageState;
+    adminStorageState: SessionStorageState;
   }
 >({
   authRequest: [

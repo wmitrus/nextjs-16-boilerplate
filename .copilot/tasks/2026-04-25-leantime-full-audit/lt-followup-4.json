@@ -1,0 +1,10 @@
+{
+  "projectId": 2,
+  "milestoneId": 72,
+  "headline": "Open or link Leantime task for invite flow fix",
+  "description": "<h2>Finding</h2><p>The repository workspace <code>.copilot/tasks/2026-04-23-invite-flow-fix/</code> is still in progress but has no obvious linked Leantime task ID in the task artifacts.</p><h2>Expected Outcome</h2><p>Create or locate the matching Leantime task, record the ID in the repo artifacts, and set the correct lifecycle status.</p>",
+  "tags": "leantime,audit,invite-flow",
+  "priority": "2",
+  "status": 3,
+  "planHours": 2
+}

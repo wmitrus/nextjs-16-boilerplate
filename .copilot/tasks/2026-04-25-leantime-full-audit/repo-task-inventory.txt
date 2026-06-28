@@ -1,0 +1,43 @@
+2026-03-19-auth-regression-verification|plan:-|intake:-|lt:-
+2026-03-19-universal-workflow-setup|plan:-|intake:-|lt:-
+2026-03-19-workflow-orchestrator|plan:-|intake:-|lt:-
+2026-03-20-general-neutral-07-08-09|plan:-|intake:-|lt:-
+2026-03-20-specialist-artifact-discipline|plan:-|intake:-|lt:-
+2026-03-31-next-16-2-upgrade-review|plan:-|intake:-|lt:-
+2026-04-01-neon-auth-selection-review|plan:-|intake:-|lt:-
+2026-04-03-codacy-findings-review|plan:-|intake:-|lt:-
+2026-04-04-bucket1-bucket2-fixes|plan:-|intake:-|lt:-
+2026-04-04-gap-analysis-followup|plan:-|intake:-|lt:-
+2026-04-05-nr-browser-spa|plan:✅ Complete — Vercel env-size follow-up resolved with request-time Node loader path|intake:-|lt:-
+2026-04-05-per-request-caching|plan:✅ Complete — Implemented And Validated|intake:-|lt:-
+2026-04-06-codex-all-workflows|plan:Completed|intake:-|lt:-
+2026-04-06-codex-architecture-guard-skill|plan:Completed|intake:-|lt:-
+2026-04-06-codex-debug-investigation-skill|plan:Completed|intake:-|lt:-
+2026-04-06-codex-implementation-skill|plan:Completed|intake:-|lt:-
+2026-04-06-codex-nextjs-runtime-skill|plan:Completed|intake:-|lt:-
+2026-04-06-codex-orchestrator-task-brief-skills|plan:Completed|intake:-|lt:-
+2026-04-06-codex-playwright-e2e-and-workflow-roadmap|plan:Completed|intake:-|lt:-
+2026-04-06-codex-safe-refactor-workflow|plan:Completed|intake:-|lt:-
+2026-04-06-codex-security-auth-skill|plan:Completed|intake:-|lt:-
+2026-04-06-codex-validation-strategy-skill|plan:Completed|intake:-|lt:-
+2026-04-08-vercel-newrelic-incident|plan:-|intake:-|lt:-
+2026-04-12-observability-multi-provider|plan:✅ Complete|intake:-|lt:-
+2026-04-12-vercel-nr-proper-integration|plan:-|intake:-|lt:-
+2026-04-13-clerk-prod-migration|plan:-|intake:-|lt:-
+2026-04-16-prod-release-newrelic-workflow-plan|plan:-|intake:-|lt:-
+2026-04-17-auth-foundation-redesign|plan:**IN PROGRESS** — Phases 0-7 are complete, including Phase 7.2 AuthJS hardening; the epic remains open for Phase 8 (Variant C sample app) and Phase 9 (documentation/finalization).|intake:-|lt:-
+2026-04-17-authjs-adapter|plan:-|intake:-|lt:-
+2026-04-18-codacy-check-plan|plan:-|intake:-|lt:-
+2026-04-18-continue-checks-plan|plan:-|intake:-|lt:-
+2026-04-18-db-dev-up-investigation|plan:- [x] Read repository debug-investigation guidance|intake:-|lt:-
+2026-04-18-db-flow-finalization|plan:-|intake:-|lt:-
+2026-04-18-eslint-security-signal|plan:-|intake:-|lt:-
+2026-04-21-authjs-phase72|plan:✅ COMPLETE — Implementation, validation, E2E coverage, and Leantime closure delivered|intake:✅ COMPLETE|lt:-
+2026-04-22-email-adapters|plan:COMPLETE|intake:-|lt:-
+2026-04-23-admin-ui|plan:-|intake:-|lt:-
+2026-04-23-invite-flow-fix|plan:In progress|intake:-|lt:-
+2026-04-24-admin-direct-invitation|plan:-|intake:In Progress|lt:-
+2026-04-24-admin-user-management|plan:COMPLETE|intake:-|lt:70
+2026-04-25-admin-access-regression|plan:Complete|intake:-|lt:-
+2026-04-25-leantime-full-audit|plan:**IN PROGRESS** — Leantime inventory captured; cleanup and full repo audit are in progress.|intake:-|lt:-
+investigate-ci-migrations|plan:-|intake:-|lt:-

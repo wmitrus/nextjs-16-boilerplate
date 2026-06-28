@@ -1,0 +1,10 @@
+{
+  "projectId": 2,
+  "milestoneId": 72,
+  "headline": "Decide retention for placeholder boards and empty canvases",
+  "description": "<h2>Finding</h2><p>Leantime contains placeholder or low-signal boards that currently add noise.</p><h2>Targets</h2><ul><li>Ideas board 3: Tablica</li><li>Retrospective board 4: Tablica</li><li>Value canvas 14: NextJS Boilerplate Value Canvas (0 items)</li></ul><h2>Expected Outcome</h2><p>For each board decide: keep as canonical workspace, rename, archive conceptually, or delete with explicit confirmation.</p>",
+  "tags": "leantime,audit,cleanup,boards",
+  "priority": "2",
+  "status": 3,
+  "planHours": 2
+}

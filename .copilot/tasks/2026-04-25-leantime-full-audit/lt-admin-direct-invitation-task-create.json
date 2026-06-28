@@ -1,0 +1,9 @@
+{
+  "projectId": 2,
+  "headline": "Admin direct invitation feature",
+  "description": "<h2>Objective</h2><p>Implement the admin direct invitation flow tracked in <code>.copilot/tasks/2026-04-24-admin-direct-invitation/</code>.</p><h2>Scope</h2><ul><li>Activate <code>/admin/invitations</code></li><li>Allow admins to send invitations directly by email with role selection</li><li>List pending, accepted, expired, and revoked invitations</li><li>Allow revocation of pending invitations</li><li>Preserve the existing invite acceptance flow</li></ul><h2>Acceptance Criteria</h2><ul><li>Only authenticated admins can access the page and API routes</li><li>Duplicate pending invitations return a clear error</li><li>The feature works independently of REGISTRATION_MODE</li><li>Validation results are recorded in the repo task workspace</li></ul><h2>Task Workspace</h2><p>.copilot/tasks/2026-04-24-admin-direct-invitation/</p>",
+  "tags": "admin,invitations,feature,authjs",
+  "priority": "2",
+  "status": 4,
+  "planHours": 8
+}

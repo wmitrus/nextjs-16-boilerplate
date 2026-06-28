@@ -227,7 +227,11 @@ export async function signInAuthjsE2E(
 export async function captureAuthjsSessionStorageState(
   browser: Browser,
   credentials: AuthjsE2ECredentials,
-): Promise<Awaited<ReturnType<Browser['newContext']>['storageState']>> {
+): Promise<
+  Awaited<
+    ReturnType<Awaited<ReturnType<Browser['newContext']>>['storageState']>
+  >
+> {
   const context = await browser.newContext();
 
   try {

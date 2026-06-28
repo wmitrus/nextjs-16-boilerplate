@@ -22,6 +22,13 @@ For auth/bootstrap/onboarding verification, also read:
 - `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
 - `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
 
+Session-reuse decision rule:
+
+- use shared authenticated state only for steady-state scenarios whose assertion target is behavior after auth/bootstrap/onboarding has already settled
+- keep fresh interactive flows for sign-in, sign-up, bootstrap, onboarding, sign-out, session re-entry, tenant or org selection, and auth-driven redirect scenarios
+- keep public, demo, and explicitly E2E-allowed routes unauthenticated unless authenticated behavior is the actual subject under test
+- split mixed files by scenario semantics before optimizing; do not force one fixture model across a whole suite when flow-based and steady-state cases coexist
+
 Repository note:
 In Next.js 16, `src/proxy.ts` is the valid middleware-equivalent file.
 Analyze `src/proxy.ts` directly for request interception, redirect, auth pre-processing, and security header behavior.

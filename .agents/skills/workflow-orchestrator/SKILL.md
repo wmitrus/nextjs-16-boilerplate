@@ -87,6 +87,11 @@ For non-trivial tasks:
 7. Run validation at the right level
 8. Ensure final artifacts and residual risks are documented
 
+For tasks that introduce or materially change JSON API route handlers, make the
+ResponseService decision explicit in the task artifacts: either the route follows
+`src/shared/lib/api/response-service.ts` plus `with-error-handler.ts`, or the
+artifact records the protocol-specific reason for an exception.
+
 ## Specialist Selection Rules
 
 - Use `06 - Debug Investigation` first for unclear, intermittent, env-driven, or

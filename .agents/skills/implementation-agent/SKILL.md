@@ -101,6 +101,8 @@ Always preserve:
 Always follow the repository's mandatory coding patterns from
 `docs/ai/general/04 - Implementation Agents.md`, including:
 
+- shared `response-service.ts` helpers plus `with-error-handler.ts` for normal JSON App Router route handlers unless a protocol-specific exception is required
+
 - `Map<symbol, unknown>` for DI mock token resolution
 - `sanitizeRedirectUrl()` before forwarding redirect-style params
 - `Record<AllowedKeys, fn>` dispatch maps instead of `obj[dynamicKey]()`

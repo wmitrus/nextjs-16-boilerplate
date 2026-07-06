@@ -471,6 +471,18 @@ pnpm lt -- run <operation-id> --input '{"...": "..."}' --format=json
 For Retrospective boards: use `retrospectives.*` operations.
 For Blueprint/Canvas boards: use `blueprints.*` operations.
 
+### Leantime Diagnostic Rule
+
+When an agent diagnoses Leantime setup or claims that Leantime is blocked:
+
+1. verify the CLI entrypoint exists in `package.json`
+2. verify `.env.leantime` or `.env.leantime-dev` by exact path, not only by default search results
+3. verify required env values for the intended command, especially `LEANTIME_URL` and `LEANTIME_API_KEY`
+4. run the smallest falsifying command available when command execution exists
+5. if the current session cannot execute commands, record that as a session tooling limitation instead of misreporting the repository integration as broken
+
+Default workspace search may omit gitignored env files. Agents must not infer that `.env.leantime` is missing from default search results alone.
+
 ---
 
 ## Source Of Truth
@@ -703,6 +715,27 @@ Prefer:
 - actionable logs and tags
 - enough context to debug production failures
 - stable telemetry conventions across related flows
+
+## API Response Discipline
+
+For App Router route handlers and internal API surfaces in this repository:
+
+- prefer the shared response helpers in `src/shared/lib/api/response-service.ts`
+- use `createSuccessResponse()` for successful JSON payloads
+- use `createServerErrorResponse()` or `createValidationErrorResponse()` for structured error payloads
+- use `withErrorHandler()` for route-handler exception mapping unless the endpoint has a deliberate protocol-specific reason not to
+- keep response bodies aligned with the repository response envelope types under `src/shared/types/api-response`
+
+Do not:
+
+- open-code ad hoc `NextResponse.json(...)` success/error envelopes in normal application APIs when the shared ResponseService pattern already fits
+- return inconsistent `status` payload shapes across sibling admin or auth APIs without an explicit architectural reason
+- design new admin/API surfaces without stating whether they follow the shared ResponseService contract
+
+Exception rule:
+
+- raw `Response` / `NextResponse` usage is acceptable for protocol-specific cases such as redirects, streaming, non-JSON payloads, framework handshake endpoints, or other paths where the shared JSON envelope is not the right transport shape
+- when taking an exception, document the reason in the design or implementation notes instead of silently diverging
 
 ---
 

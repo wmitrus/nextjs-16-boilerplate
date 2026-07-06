@@ -107,6 +107,7 @@ Always flag these when present:
 - feature flags embedded ad hoc in UI
 - direct database access from delivery code
 - hidden service-locator patterns in request-sensitive flows
+- ad hoc API response envelopes in normal JSON route handlers when the shared `response-service` and `with-error-handler` pattern should be used
 
 ## Response Shape
 

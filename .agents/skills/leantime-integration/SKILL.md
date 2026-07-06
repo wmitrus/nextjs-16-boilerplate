@@ -20,6 +20,12 @@ Before any Leantime operation:
 1. Read `AGENTS.md`.
 2. Read `docs/ai/general/LEANTIME_AUTOMATION.md`.
 3. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
+4. Do not infer that `.env.leantime` is absent from default file search alone;
+   gitignored env files may be omitted from normal search results, so use an
+   exact-path check when diagnosing setup.
+5. If terminal execution is unavailable in the current session, treat that as a
+   tooling limitation and not as proof that the repository Leantime integration
+   is broken.
 
 ## Mission
 
@@ -55,6 +61,16 @@ pnpm lt -- run retrospectives.item.create --input '{"boardId":<id>,"box":"well",
 - Never invoke delete flows without explicit `confirm=true`.
 - Never implement hidden canvas families (`lbm`, `dbm`, `cp`, `sm`, `sq`, `em`).
 - Never put real credentials in artifacts.
+
+## Diagnostic Discipline
+
+When Leantime appears blocked:
+
+1. verify the CLI entrypoint in `package.json`
+2. verify the env file by exact path, not only by default search
+3. verify `LEANTIME_URL` and `LEANTIME_API_KEY` expectations from the env file
+4. run the smallest falsifying command available
+5. if commands cannot be run in the current session, record that limitation precisely
 
 ## Full Reference
 

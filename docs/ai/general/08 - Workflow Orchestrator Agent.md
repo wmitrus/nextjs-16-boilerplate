@@ -44,6 +44,11 @@ For non-trivial tasks:
 7. Run validation at the right level
 8. Ensure final artifacts and residual risks are documented
 
+For tasks that introduce or materially change JSON API route handlers, ensure the
+constraints or implementation plan state whether the surface follows the shared
+ResponseService pattern (`response-service.ts` + `with-error-handler.ts`) or is
+taking an explicit protocol-specific exception.
+
 At every major transition:
 
 - update `plan.md`, `intake.md`, and `implementation-plan.md` so their status stays synchronized

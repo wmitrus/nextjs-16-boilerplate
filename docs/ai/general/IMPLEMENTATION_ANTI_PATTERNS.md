@@ -256,6 +256,26 @@ Preferred pattern:
 
 ## 4. Implementation Shape Anti-Patterns
 
+### 4.0 Ad Hoc API Response Envelopes
+
+Do not:
+
+- hand-roll JSON response envelopes in App Router route handlers when the shared ResponseService already fits
+- mix raw `NextResponse.json(...)` payload shapes with `createSuccessResponse()` / `createServerErrorResponse()` siblings in the same API surface
+- skip `withErrorHandler()` on normal application APIs and then duplicate exception mapping by hand in each route
+
+Why this is banned:
+
+- it creates response-shape drift across the repository
+- client code and tests stop being able to rely on the shared `status` envelope
+- error handling becomes inconsistent and repetitive
+
+Preferred pattern:
+
+- use `src/shared/lib/api/response-service.ts` helpers for JSON API success/error responses
+- use `src/shared/lib/api/with-error-handler.ts` for normal route-handler exception mapping
+- take raw `Response` / `NextResponse` exceptions only for protocol-specific endpoints such as redirects, streaming, or non-JSON transports
+
 ### 4.1 Dynamic Bracket Dispatch
 
 Do not write:

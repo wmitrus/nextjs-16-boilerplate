@@ -68,6 +68,16 @@ A strong task brief should contain, when relevant:
 - evidence expectations
 - open questions or blockers
 
+For tasks that depend on Leantime workflow execution, the brief should also
+include a short operational smoke-test checklist under environment or
+preconditions so a new session has an explicit first-step diagnostic path
+instead of rediscovering setup expectations ad hoc.
+
+For tasks that introduce or change JSON API route handlers, the brief should say
+whether the API is expected to use the shared ResponseService pattern
+(`src/shared/lib/api/response-service.ts` and `src/shared/lib/api/with-error-handler.ts`).
+Do not leave response-shape conventions implicit.
+
 Use `docs/ai/templates/COPILOT_TASK_BRIEF_TEMPLATE.md` as the baseline format.
 
 ## Intake Normalization Rules
@@ -81,6 +91,9 @@ When turning raw requirements into a workflow-ready package:
 - preserve explicit non-goals so scope does not drift silently
 - capture what evidence will be required to call the task done
 - prefer stable scenario IDs when the task is scenario-driven
+- when Leantime is required, include the smallest operational check first:
+  exact env-file path, required vars, chosen CLI entrypoint, and one falsifying
+  command such as `pnpm lt -- list`
 
 ## Relationship To Workflow Orchestration
 

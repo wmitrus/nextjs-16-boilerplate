@@ -28,11 +28,35 @@ Verified against the on-prem instance on `2026-04-06`:
 - Use `.env.leantime` for production/on-prem Leantime automation and
   `.env.leantime-dev` for the local Podman stack; do not put optional Leantime
   integration secrets into `.env.local`.
+- When diagnosing Leantime setup, do **not** infer that `.env.leantime` or
+  `.env.leantime-dev` is missing from a normal workspace search alone.
+  These env files are commonly gitignored and may be omitted from default search
+  results. Check the exact path directly or use ignored-file search before
+  concluding that the env file does not exist.
+- Distinguish **repository/configuration problems** from **agent-session tool
+  limitations**. If an agent cannot execute terminal commands in the current
+  session, record that as a command-execution limitation; do not describe the
+  repository Leantime integration as broken unless the CLI, config, or env has
+  been verified to fail.
 - Prefer `--input-file` when descriptions, acceptance criteria, or wiki content are long
 - Prefer env defaults (`LEANTIME_DEFAULT_PROJECT_ID`, `LEANTIME_DEFAULT_AUTHOR_ID`, `LEANTIME_DEFAULT_CLIENT_ID`) so agents do not repeat IDs unnecessarily
 - For Ideas flows, deploy the `AutomationApi` plugin and use the normal
   `LEANTIME_API_KEY` JSON-RPC path. Do not use browser-session cookies for
   normal Ideas automation.
+
+## Diagnostic Rule
+
+Before stating that Leantime "is not working," validate in this order:
+
+1. Confirm the CLI entrypoint exists in `package.json` (`lt`, `lt:dev`, or `lt:rpc`).
+2. Confirm whether `.env.leantime` or `.env.leantime-dev` exists by exact-path
+   read/check, not only by default search results.
+3. Confirm required env fields are populated enough for the intended command,
+   especially `LEANTIME_URL` and `LEANTIME_API_KEY`.
+4. Run the narrowest command that can falsify the setup claim, usually
+   `pnpm lt -- list` or `pnpm lt -- run tasks.list --input '{"projectId":2}' --format=json`.
+5. If command execution tooling is unavailable in the current agent session,
+   record that limitation explicitly instead of inferring a repo defect.
 
 ## High-Value Operations
 

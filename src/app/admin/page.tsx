@@ -184,27 +184,27 @@ const adminCards: AdminCard[] = [
     icon: <UsersIcon />,
   },
   {
-    title: 'Teams',
+    title: 'Organizations',
     description:
-      'Manage organizations and teams. Create, rename, archive, or dissolve organizational units.',
-    href: '/admin/teams',
-    status: 'coming-soon',
+      'Manage organization records, workspace scope, and lifecycle status for the current tenant.',
+    href: '/admin/organizations',
+    status: 'active',
     icon: <TeamsIcon />,
   },
   {
     title: 'Roles',
     description:
-      'Define and manage named roles within your organizations. Set system roles and custom roles per tenant.',
-    href: '/admin/roles',
-    status: 'coming-soon',
+      'Define and manage organization-scoped roles. Start from Organizations to rename or safely delete custom roles in context.',
+    href: '/admin/organizations',
+    status: 'active',
     icon: <RolesIcon />,
   },
   {
     title: 'RBAC & Policies',
     description:
-      'Manage ABAC policies, permissions, and role-to-policy assignments across your tenants.',
-    href: '/admin/rbac',
-    status: 'coming-soon',
+      'Review and manage organization-scoped role policies. Start from Organizations to reach the canonical RBAC surface.',
+    href: '/admin/organizations',
+    status: 'active',
     icon: <RbacIcon />,
   },
   {
@@ -241,13 +241,14 @@ export default function AdminPage() {
           Administration
         </h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Manage users, roles, access control, and platform configuration.
+          Manage users, organizations, access control, and platform
+          configuration.
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {adminCards.map((card) => (
-          <AdminCard key={card.href} card={card} />
+          <AdminCard key={card.title} card={card} />
         ))}
       </div>
     </div>

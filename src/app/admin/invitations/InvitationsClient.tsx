@@ -25,6 +25,8 @@ export interface SafeInvitation {
 interface InvitationsClientProps {
   invitations: SafeInvitation[];
   roles: Array<{ id: string; name: string }>;
+  createEndpoint?: string;
+  revokeEndpointBase?: string;
 }
 
 type SendState =
@@ -103,6 +105,8 @@ function formatDate(d: Date | string | null): string {
 export function InvitationsClient({
   invitations,
   roles,
+  createEndpoint = '/api/admin/invitations',
+  revokeEndpointBase = '/api/admin/invitations',
 }: InvitationsClientProps) {
   const router = useRouter();
   const [email, setEmail] = React.useState('');
@@ -117,7 +121,7 @@ export function InvitationsClient({
     setSendState({ status: 'submitting' });
 
     try {
-      const res = await fetch('/api/admin/invitations', {
+      const res = await fetch(createEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, roleId }),
@@ -147,7 +151,7 @@ export function InvitationsClient({
     setRevokeState((s) => ({ ...s, [id]: 'revoking' }));
 
     try {
-      const res = await fetch(`/api/admin/invitations/${id}`, {
+      const res = await fetch(`${revokeEndpointBase}/${id}`, {
         method: 'DELETE',
       });
 

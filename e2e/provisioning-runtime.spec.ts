@@ -534,6 +534,8 @@ async function browserJsonRequest(
   page: Page,
   pathname: string,
 ): Promise<{ status: number; body: unknown }> {
+  await waitForAuthenticatedClerkSession(page);
+
   return page.evaluate(async (input) => {
     const token = await window.Clerk?.session?.getToken();
     const response = await fetch(input, {
@@ -564,6 +566,13 @@ async function waitForRouteToSettle(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
   await page.waitForFunction(() => document.readyState === 'complete');
   await page.waitForTimeout(1_500);
+}
+
+async function waitForAuthenticatedClerkSession(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => Boolean(window.Clerk?.loaded && window.Clerk?.session),
+    { timeout: 10_000 },
+  );
 }
 
 function getLocationPathname(
@@ -937,55 +946,48 @@ test.describe('Provisioning Runtime E2E', () => {
     await expectOnboardingIncomplete(page);
   });
 
-  steadyStateSingleModeTest(
-    'single mode: middleware reads onboarding cookie and redirects a general private route to /onboarding @auth-matrix-phase3',
-    async ({ incompleteSingleUserPage }) => {
-      test.skip(
-        !isSingleRuntime(runtime),
-        'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
-      );
-      test.skip(
-        !hasClerkIncompleteUserE2ECredentials(),
-        'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
-      );
+  test('single mode: middleware reads onboarding cookie and redirects a general private route to /onboarding @auth-matrix-phase3', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
 
-      await expectCookieValue(
-        incompleteSingleUserPage,
-        ONBOARDING_PENDING_COOKIE,
-        '1',
-      );
+    await createIncompleteSingleUserState(page);
+    await expectCookieValue(page, ONBOARDING_PENDING_COOKIE, '1');
 
-      await incompleteSingleUserPage.goto('/dashboard');
+    await page.goto('/dashboard');
 
-      await expectPathname(incompleteSingleUserPage, '/onboarding');
-      await expectOnboardingIncomplete(incompleteSingleUserPage);
-    },
-  );
+    await expectPathname(page, '/onboarding');
+    await expectOnboardingIncomplete(page);
+  });
 
-  steadyStateSingleModeTest(
-    'single mode: DB incomplete state still routes to onboarding when the onboarding cookie is absent @auth-matrix-phase3',
-    async ({ incompleteSingleUserPage }) => {
-      test.skip(
-        !isSingleRuntime(runtime),
-        'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
-      );
-      test.skip(
-        !hasClerkIncompleteUserE2ECredentials(),
-        'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
-      );
+  test('single mode: DB incomplete state still routes to onboarding when the onboarding cookie is absent @auth-matrix-phase3', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIncompleteUserE2ECredentials(),
+      'Set E2E_CLERK_INCOMPLETE_USER_USERNAME and E2E_CLERK_INCOMPLETE_USER_PASSWORD.',
+    );
 
-      await clearOnboardingPendingCookie(incompleteSingleUserPage);
-      await expectCookieAbsent(
-        incompleteSingleUserPage,
-        ONBOARDING_PENDING_COOKIE,
-      );
+    await createIncompleteSingleUserState(page);
+    await clearOnboardingPendingCookie(page);
+    await expectCookieAbsent(page, ONBOARDING_PENDING_COOKIE);
 
-      await incompleteSingleUserPage.goto('/users');
+    await page.goto('/users');
 
-      await expectPathname(incompleteSingleUserPage, '/onboarding');
-      await expectOnboardingIncomplete(incompleteSingleUserPage);
-    },
-  );
+    await expectPathname(page, '/onboarding');
+    await expectOnboardingIncomplete(page);
+  });
 
   test('single mode: onboarding completion clears the onboarding cookie from a legal server boundary @auth-matrix-phase3', async ({
     page,
@@ -1231,48 +1233,49 @@ test.describe('Provisioning Runtime E2E', () => {
     runtimeSignals.assertNoPhase4Failures();
   });
 
-  steadyStateSingleModeTest(
-    'single mode: hostile redirect_url is sanitized server-side to /dashboard before bootstrap completes @auth-matrix-phase6',
-    async ({ completedSingleUserPage }) => {
-      test.skip(
-        !isSingleRuntime(runtime),
-        'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
-      );
-      test.skip(
-        !hasClerkIdentityE2ECredentials('singleNewUser'),
-        'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
-      );
+  test('single mode: hostile redirect_url is sanitized server-side to /dashboard before bootstrap completes @auth-matrix-phase6', async ({
+    page,
+  }) => {
+    test.skip(
+      !isSingleRuntime(runtime),
+      'Run this scenario with AUTH_PROVIDER=clerk and TENANCY_MODE=single.',
+    );
+    test.skip(
+      !hasClerkIdentityE2ECredentials('singleNewUser'),
+      'Set E2E_CLERK_SINGLE_NEW_USER_USERNAME and E2E_CLERK_SINGLE_NEW_USER_PASSWORD.',
+    );
 
-      const bootstrapResponse = await waitForPathResponse(
-        completedSingleUserPage,
-        '/auth/bootstrap/start',
-        async () => {
-          await completedSingleUserPage.goto(
-            '/auth/bootstrap/start?redirect_url=https%3A%2F%2Fevil.example%2Fsteal',
-          );
-        },
-        (response) =>
-          response.request().method() === 'GET' &&
-          response.request().resourceType() === 'document' &&
-          response.status() >= 300 &&
-          response.status() < 400,
-      );
+    await createCompletedSingleUserState(page);
 
-      const redirectLocation =
-        (await bootstrapResponse.headerValue('location')) ??
-        bootstrapResponse.headers()['location'];
+    const bootstrapResponse = await waitForPathResponse(
+      page,
+      '/auth/bootstrap/start',
+      async () => {
+        await page.goto(
+          '/auth/bootstrap/start?redirect_url=https%3A%2F%2Fevil.example%2Fsteal',
+        );
+      },
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.request().resourceType() === 'document' &&
+        response.status() >= 300 &&
+        response.status() < 400,
+    );
 
-      expect(getLocationPathname(redirectLocation)).toBe('/dashboard');
-      expect(redirectLocation ?? '').not.toContain('evil.example');
-      await expect(completedSingleUserPage).toHaveURL(/\/dashboard$/);
-      await expect(
-        completedSingleUserPage.getByRole('heading', {
-          name: /boilerplate control center/i,
-        }),
-      ).toBeVisible();
-      await expectProvisioningReady(completedSingleUserPage, 'single');
-    },
-  );
+    const redirectLocation =
+      (await bootstrapResponse.headerValue('location')) ??
+      bootstrapResponse.headers()['location'];
+
+    expect(getLocationPathname(redirectLocation)).toBe('/dashboard');
+    expect(redirectLocation ?? '').not.toContain('evil.example');
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(
+      page.getByRole('heading', {
+        name: /boilerplate control center/i,
+      }),
+    ).toBeVisible();
+    await expectProvisioningReady(page, 'single');
+  });
 
   test('single mode: unauthenticated access to /users redirects to sign-in without entering the protected flow @auth-matrix-phase6', async ({
     page,
@@ -1375,7 +1378,7 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await completeOnboarding(page);
 
-    await expect(page).toHaveURL(/\/users$/);
+    await expect(page).toHaveURL(/\/users\?af28=1$/);
     await expect(page.getByText(/user management/i)).toBeVisible();
     await expectCookieAbsent(page, ONBOARDING_PENDING_COOKIE);
     await waitForRouteToSettle(page);
@@ -1386,7 +1389,7 @@ test.describe('Provisioning Runtime E2E', () => {
         transition.startsWith('/onboarding?redirect_url=%2Fusers%3Faf28%3D1'),
       ),
     ).toBe(true);
-    expect(runtimeSignals.transitions.at(-1)).toBe('/users');
+    expect(runtimeSignals.transitions.at(-1)).toBe('/users?af28=1');
     runtimeSignals.assertNoPhase4Failures();
     browserObservability.assertNoUnexpectedFailures();
 

@@ -73,6 +73,26 @@ function normalizePlaywrightArgs(args) {
   return args.filter((value) => value !== '--');
 }
 
+function hasPlaywrightReporterArg(args) {
+  return args.some(
+    (value, index) =>
+      value.startsWith('--reporter=') ||
+      (value === '--reporter' && typeof args[index + 1] === 'string'),
+  );
+}
+
+function shouldDefaultToLineReporter(args) {
+  return !args.includes('--ui') && !args.includes('--list');
+}
+
+function ensureReporterArg(args) {
+  if (hasPlaywrightReporterArg(args) || !shouldDefaultToLineReporter(args)) {
+    return args;
+  }
+
+  return [...args, '--reporter=line'];
+}
+
 function isPlaywrightListMode(args) {
   return args.includes('--list');
 }
@@ -384,7 +404,9 @@ async function main() {
   const { scenario, variant, withOauth, playwrightArgs } = parseArgs(
     process.argv.slice(2),
   );
-  const normalizedPlaywrightArgs = normalizePlaywrightArgs(playwrightArgs);
+  const normalizedPlaywrightArgs = ensureReporterArg(
+    normalizePlaywrightArgs(playwrightArgs),
+  );
   const listMode = isPlaywrightListMode(normalizedPlaywrightArgs);
 
   const envMap = loadScenarioEnv({

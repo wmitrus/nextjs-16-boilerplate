@@ -15,6 +15,8 @@ import {
   VARIANT_NAMES,
 } from './load-env.mjs';
 
+const E2E_DEFAULT_BASE_URL = 'http://localhost:3100';
+
 function parseArgs(argv) {
   const [scenario, ...rest] = argv;
 
@@ -248,7 +250,7 @@ async function cleanupStaleLocalNextDevState(env, listMode) {
     return;
   }
 
-  const baseUrl = env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+  const baseUrl = env.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL;
   const baseUrlReachable = await isBaseUrlReachable(baseUrl);
 
   if (baseUrlReachable) {
@@ -335,7 +337,12 @@ function applySharedRuntimeEnv(env, scenario, variant) {
   }
 
   env.PLAYWRIGHT_TEST_BASE_URL =
-    env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+    env.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL;
+
+  const e2eBaseUrl = env.PLAYWRIGHT_TEST_BASE_URL;
+  env.NEXT_PUBLIC_APP_URL = e2eBaseUrl;
+  env.AUTH_URL = e2eBaseUrl;
+  env.NEXTAUTH_URL = e2eBaseUrl;
 
   if (backendMode === 'container') {
     env.DATABASE_URL = TEST_DEFAULT_URL;

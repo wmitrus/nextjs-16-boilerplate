@@ -14,7 +14,12 @@ function parseBoolean(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
-const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+const defaultBaseURL = 'http://localhost:3100';
+const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? defaultBaseURL;
+const resolvedBaseURL = new URL(baseURL);
+const basePort =
+  resolvedBaseURL.port ||
+  (resolvedBaseURL.protocol === 'https:' ? '443' : '80');
 const captureServerLogs =
   parseBoolean(process.env.PLAYWRIGHT_CAPTURE_SERVER_LOGS) ?? true;
 const serverLogDir =
@@ -69,7 +74,7 @@ export default defineConfig({
     timeout: 120000,
     env: {
       ...process.env,
-      PORT: '3000',
+      PORT: basePort,
       E2E_ENABLED: process.env.E2E_ENABLED ?? 'true',
       INTERNAL_API_KEY: resolveInternalApiKey(process.env),
       LOG_DIR: hasExplicitServerLogDir

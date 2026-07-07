@@ -99,7 +99,7 @@ type BrowserObservabilityRecorder = {
 };
 
 function getBaseUrl(): string {
-  return process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+  return process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3100';
 }
 
 function getPathname(url: string): string {

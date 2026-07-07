@@ -14,7 +14,7 @@ import {
 } from './authjs-auth';
 
 const isAuthjs = isAuthjsRuntime();
-const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3100';
 const test = base;
 type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 const authTest = base.extend<
@@ -105,13 +105,49 @@ test.describe('Admin Hub (/admin)', () => {
     authTest('admin hub shows active section cards', async ({ authedPage }) => {
       await authedPage.goto('/admin');
       await expect(
-        authedPage.locator('a[href="/admin/waitlist"]'),
+        authedPage.getByRole('link', { name: /waitlist/i }),
       ).toBeVisible();
-      await expect(authedPage.locator('a[href="/admin/users"]')).toBeVisible();
       await expect(
-        authedPage.locator('a[href="/admin/invitations"]'),
+        authedPage.getByRole('link', {
+          name: /users browse, search, and manage/i,
+        }),
+      ).toBeVisible();
+      await expect(
+        authedPage.getByRole('link', { name: /organizations manage/i }),
+      ).toBeVisible();
+      await expect(
+        authedPage.getByRole('link', { name: /roles define and manage/i }),
+      ).toBeVisible();
+      await expect(
+        authedPage.getByRole('link', {
+          name: /rbac & policies review and manage/i,
+        }),
       ).toBeVisible();
     });
+
+    authTest(
+      'admin hub routes roles and rbac through organizations while invitations keep their own entry',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin');
+
+        await expect(
+          authedPage.getByRole('link', { name: /organizations manage/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', { name: /roles define and manage/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', {
+            name: /rbac & policies review and manage/i,
+          }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', {
+            name: /invitations send direct invitations to users/i,
+          }),
+        ).toBeVisible();
+      },
+    );
 
     authTest(
       'admin hub breadcrumb shows Administration link',
@@ -206,11 +242,16 @@ test.describe('Admin Invitations (/admin/invitations)', () => {
     });
 
     authTest(
-      'invitations page shows send invitation form',
+      'invitations page shows organization selection hub',
       async ({ authedPage }) => {
         await authedPage.goto('/admin/invitations');
         await expect(
-          authedPage.getByRole('heading', { name: 'Invitations', exact: true }),
+          authedPage.getByText(
+            /choose an organization before sending direct invitations/i,
+          ),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', { name: /open invitations/i }).first(),
         ).toBeVisible();
       },
     );

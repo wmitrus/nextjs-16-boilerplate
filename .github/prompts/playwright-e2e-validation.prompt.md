@@ -23,6 +23,7 @@ Required workflow:
 Execution expectations:
 
 - Determine the smallest Playwright scope that still verifies the affected browser scenarios.
+- Treat `scripts/e2e/run-scenario.mjs` as the authority for the browser-test origin. The default local E2E origin is `http://localhost:3100`, separate from the normal developer app on `http://localhost:3000`.
 - Classify scenarios into the repository E2E architecture before changing auth setup or creating a new spec: public route, interactive auth flow, steady-state authenticated suite, or mixed matrix coverage.
 - Classify scenarios before altering auth setup: use shared authenticated state only for steady-state checks; keep fresh interactive flows for sign-in/bootstrap/onboarding/sign-out/session-reentry semantics.
 - If the route is public, demo, or explicitly allowed for E2E access without auth, do not add Clerk/AuthJS setup unless authenticated behavior is the scenario under test.

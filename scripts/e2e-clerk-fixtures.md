@@ -203,7 +203,7 @@ E2E_BACKEND_MODE=container
 # DB_COMPOSE_ENGINE=podman
 
 # Optional Playwright base URL override
-# PLAYWRIGHT_TEST_BASE_URL=http://localhost:3000
+# PLAYWRIGHT_TEST_BASE_URL=http://localhost:3100
 
 # Scenario A: single / returning provisioned user
 E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME=

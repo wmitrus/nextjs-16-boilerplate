@@ -35,17 +35,40 @@ async function waitForBootstrapNavigation(
 
 async function completeHostedSignUpVerificationIfNeeded(
   page: Page,
-  signUp: ReturnType<typeof createPageObjects>['signUp'],
 ): Promise<void> {
+  const verificationHeading = page.getByRole('heading', {
+    name: /verify your email/i,
+  });
+
   const nextStep = await Promise.race<'bootstrap' | 'verify-email'>([
     page
       .waitForRequest(isBootstrapNavigationRequest)
       .then(() => 'bootstrap' as const),
-    signUp.waitForEmailVerificationScreen().then(() => 'verify-email' as const),
+    verificationHeading
+      .waitFor({ state: 'visible' })
+      .then(() => 'verify-email' as const),
   ]);
 
   if (nextStep === 'verify-email') {
-    await signUp.enterTestOtpCode();
+    const legacyOtpInput = page.getByRole('textbox', {
+      name: 'Enter verification code. Digit 1',
+    });
+
+    if (await legacyOtpInput.isVisible()) {
+      await legacyOtpInput.click();
+      await page.keyboard.type('424242', { delay: 100 });
+    } else {
+      await page.getByLabel(/enter verification code/i).fill('424242');
+    }
+
+    const continueButton = page.getByRole('button', {
+      name: 'Continue',
+      exact: true,
+    });
+
+    if (await continueButton.isVisible()) {
+      await continueButton.click();
+    }
   }
 }
 
@@ -105,7 +128,7 @@ test.describe('Authentication E2E', () => {
         email,
         password: SIGN_UP_PASSWORD,
       });
-      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
+      await completeHostedSignUpVerificationIfNeeded(page);
     });
   });
 
@@ -154,7 +177,7 @@ test.describe('Authentication E2E', () => {
         email,
         password: SIGN_UP_PASSWORD,
       });
-      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
+      await completeHostedSignUpVerificationIfNeeded(page);
     });
   });
 
@@ -176,7 +199,7 @@ test.describe('Authentication E2E', () => {
         email,
         password: SIGN_UP_PASSWORD,
       });
-      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
+      await completeHostedSignUpVerificationIfNeeded(page);
     });
   });
 

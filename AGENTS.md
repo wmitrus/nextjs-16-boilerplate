@@ -237,6 +237,8 @@ export { handler as GET, handler as POST };
 3. If that does not fix it: `rm -rf .next` and restart `pnpm dev`
 4. Verify no module-level `NextAuth()`, `withAuth()`, or similar initializer calls in `auth.ts`
 
+This recovery check targets the normal local dev app on `http://localhost:3000`, not the dedicated Playwright E2E origin.
+
 **Regression guards added** (do not remove):
 
 - `auth.test.ts` has a test verifying `auth.ts` does NOT export `handler`, `GET`, or `POST`
@@ -368,7 +370,7 @@ pnpm release          # Semantic release
 
 **Test co-location**: Unit tests reside next to source files (e.g., `src/core/env.ts` → `src/core/env.test.ts`).
 **Setup files**: `tests/setup.tsx`, `tests/polyfills.ts`.
-**E2E browsers**: Chromium only (Playwright); base URL `http://localhost:3000`.
+**E2E browsers**: Chromium only (Playwright); default base URL `http://localhost:3100`.
 
 ## Git Hooks & Quality Gates
 
@@ -661,6 +663,8 @@ Prefer:
 
 - Before adding, moving, or refactoring Playwright specs, read `docs/usage/05 - Playwright E2E Architecture.md`. It is the repository source of truth for suite placement, helper ownership, runtime-profile mapping, and fixture-model selection.
 - The authoritative local E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or a package script built on top of it (`pnpm e2e`, `pnpm e2e:auth`, `pnpm e2e:auth-matrix:*`, `pnpm e2e:scenario:*`).
+- The default local Playwright E2E origin is `http://localhost:3100`. It is intentionally separate from the normal developer app on `http://localhost:3000` so browser test runs do not contend with `pnpm dev`.
+- `scripts/e2e/run-scenario.mjs` is the source of truth for the E2E origin and must align `PLAYWRIGHT_TEST_BASE_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `NEXTAUTH_URL` to the same browser-test origin.
 - Do not treat raw `playwright test` or `pnpm e2e:raw` as authoritative for auth, bootstrap, onboarding, AuthJS admin, or container-backed investigations. Raw Playwright bypasses scenario DB setup and will use the current app runtime env, which can point at `.env.local` / the dev database.
 - When `E2E_BACKEND_MODE=container`, the expected isolated database is always `postgres://postgres:postgres@127.0.0.1:5433/app_test`. If E2E-created users appear in the dev DB, suspect a raw Playwright run or another non-scenario entrypoint first.
 - For interactive terminal runs, always pass `--reporter=line`. Do not use the HTML reporter for agent-driven E2E runs because it hides the console evidence needed for debugging.

@@ -183,7 +183,7 @@ Regression guard:
 
 Recovery procedure when CLIENT_FETCH_ERROR recurs:
 
-1. Verify `/api/auth/session` returns JSON (`curl http://localhost:3000/api/auth/session`)
+1. Verify `/api/auth/session` returns JSON on the local dev app (`curl http://localhost:3000/api/auth/session`)
 2. If it returns HTML, check for module-level framework calls in auth-related shared modules
 3. Touch the route file (`touch src/app/api/auth/[...nextauth]/route.ts`) to force recompile
 4. If touch does not fix it, run `rm -rf .next` and restart the dev server

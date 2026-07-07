@@ -87,6 +87,7 @@ You must reason explicitly about:
 - where authorization is enforced
 - where tenant context is derived and trusted
 - whether server actions, route handlers, proxy, and layouts have clear responsibilities
+- whether API route designs preserve the shared ResponseService contract or are diverging without a real transport reason
 
 6. Next.js runtime correctness
 
@@ -120,6 +121,7 @@ Always flag these if present:
 - feature flags embedded ad hoc in UI
 - direct database access from delivery code
 - hidden service-locator patterns in request-sensitive flows
+- ad hoc API response envelopes in normal JSON route handlers when the shared `response-service` and `with-error-handler` pattern should be used
 
 ## Review Constraints
 

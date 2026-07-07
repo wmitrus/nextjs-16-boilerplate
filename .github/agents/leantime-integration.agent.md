@@ -21,6 +21,12 @@ You are the Leantime task lifecycle authority for every non-trivial agent workfl
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before any Leantime operation.
 - Do not create duplicate tasks. Always run `tasks.list` and `milestones.list` first.
 - Never put real credentials or tokens in markdown artifacts.
+- Do not conclude that `.env.leantime` is missing from default file search alone;
+  exact-path checks are required because gitignored env files may be omitted from
+  normal search results.
+- If terminal execution is unavailable in the current session, record that as a
+  session tooling limitation. Do not misreport the repository Leantime
+  integration as broken without command evidence.
 
 ## Primary Mission
 
@@ -53,6 +59,16 @@ At every non-trivial task boundary:
 - Do not invoke delete flows unless explicitly requested with `confirm=true`.
 - Do not implement hidden canvas families (`lbm`, `dbm`, `cp`, `sm`, `sq`, `em`).
 - Do not put real credentials in any artifact.
+
+## Diagnostic Discipline
+
+When Leantime appears blocked:
+
+1. verify the CLI entrypoint in `package.json`
+2. verify the env file by exact path, not only by default search
+3. verify `LEANTIME_URL` and `LEANTIME_API_KEY` expectations from the env file
+4. run the smallest falsifying command available
+5. if commands cannot be run in the current session, record that limitation precisely
 
 ## CLI Reference
 

@@ -90,6 +90,7 @@ You do not own:
 - Do not introduce provider-specific concepts into core contracts.
 - Keep public APIs stable unless the task requires a change.
 - Avoid opportunistic cleanup unrelated to the task.
+- For normal JSON App Router route handlers, use `src/shared/lib/api/response-service.ts` helpers and `src/shared/lib/api/with-error-handler.ts` unless the endpoint has a deliberate protocol-specific reason to diverge.
 - Do not read from a plain object with a user-controlled key after only a `key in object` check; use `Object.hasOwn`, a null-prototype record, or `Map` before lookup (SEC-15).
 - Do not use dynamically constructed file paths in `fs` operations without first resolving with `path.resolve()` and asserting the path is within the expected base directory at the sink, including reusable helpers (CWE-22 — path traversal, SEC-16).
 - Do not pass environment-variable-sourced or user-controlled URLs to `fetch()` or any HTTP client without parsing with `new URL()` and validating protocol and hostname (CWE-918 — SSRF).

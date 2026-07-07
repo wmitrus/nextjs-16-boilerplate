@@ -62,6 +62,8 @@ redirects, hydration, network behavior, and runtime interaction.
 - When the task changes E2E coverage, classify the scenario into the repository's E2E architecture first: public route, interactive auth flow, steady-state authenticated suite, or mixed matrix coverage.
 - Run the smallest sensible Playwright scope that covers the affected scenarios.
 - Prefer `node scripts/e2e/run-scenario.mjs ...` or a package script built on it over raw `playwright test` whenever scenario env or DB setup matters.
+- Treat the scenario runner's E2E origin as authoritative: the default local browser-test origin is `http://localhost:3100`, intentionally separate from the normal dev app on `http://localhost:3000`.
+- If a run needs a different origin, set `PLAYWRIGHT_TEST_BASE_URL` and keep the verification evidence tied to that explicit value rather than assuming `3000`.
 - Treat `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`.
 - For interactive terminal runs, require `--reporter=line`; do not rely on the HTML reporter for debugging evidence.
 - When the provider under test is `authjs`, do not sign off with only completed-user coverage; include an incomplete-user onboarding path.

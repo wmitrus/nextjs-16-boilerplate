@@ -766,7 +766,7 @@ test.describe('Provisioning Runtime E2E', () => {
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
   });
 
-  test('single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on /users @auth-matrix-phase1', async ({
+  test('single mode: first login goes through bootstrap, reaches onboarding, completes onboarding, then lands on the requested app route @auth-matrix-phase1', async ({
     page,
   }) => {
     test.skip(
@@ -780,14 +780,14 @@ test.describe('Provisioning Runtime E2E', () => {
 
     await signInSingleNewUserE2E(page);
 
-    await page.goto('/auth/bootstrap/start?redirect_url=/app/dashboard');
-    await expect(page).toHaveURL(
-      /\/onboarding\?redirect_url=%2Fapp%2Fdashboard/,
-    );
+    await page.goto('/auth/bootstrap/start?redirect_url=/dashboard');
+    await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fdashboard/);
     await completeOnboarding(page);
-    await expect(page).toHaveURL(/\/users$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
 
-    await expect(page.getByText(/user management/i)).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /boilerplate control center/i }),
+    ).toBeVisible();
     await expectProvisioningReady(page, 'single');
   });
 

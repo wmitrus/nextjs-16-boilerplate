@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 import { AUTHORIZATION } from '@/core/contracts';
+import { parseAction, type Action } from '@/core/contracts/authorization';
 import type { AuthorizationService } from '@/core/contracts/authorization';
-import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
+import { ACTIONS } from '@/core/contracts/resources-actions';
 import type { getAppContainer } from '@/core/runtime/bootstrap';
 
 export type {
@@ -44,11 +45,12 @@ export function getFieldErrors(error: z.ZodError): Record<string, string[]> {
   return Object.fromEntries(fieldErrors);
 }
 
-export async function checkOrganizationsAdminAccess(
+export async function checkOrganizationsActionAccess(
   email: string | undefined,
   userId: string,
   tenantId: string,
   container: ReturnType<typeof getAppContainer>,
+  action: Action,
 ): Promise<boolean> {
   if (isEnvBasedPlatformAdmin(email)) {
     return true;
@@ -57,11 +59,27 @@ export async function checkOrganizationsAdminAccess(
   const authzService = container.resolve<AuthorizationService>(
     AUTHORIZATION.SERVICE,
   );
+  const { resource } = parseAction(action);
 
   return await authzService.can({
     tenant: { tenantId },
     subject: { id: userId },
-    resource: { type: RESOURCES.SECURITY, id: 'admin-panel' },
-    action: ACTIONS.SECURITY_MANAGE_POLICIES,
+    resource: { type: resource, id: 'admin-panel' },
+    action,
   });
+}
+
+export async function checkOrganizationsAdminAccess(
+  email: string | undefined,
+  userId: string,
+  tenantId: string,
+  container: ReturnType<typeof getAppContainer>,
+): Promise<boolean> {
+  return checkOrganizationsActionAccess(
+    email,
+    userId,
+    tenantId,
+    container,
+    ACTIONS.SECURITY_MANAGE_POLICIES,
+  );
 }

@@ -93,3 +93,21 @@ export class OrganizationNotFoundError extends Error {
     this.name = 'OrganizationNotFoundError';
   }
 }
+
+export class MembershipNotFoundError extends Error {
+  readonly code = 'MEMBERSHIP_NOT_FOUND';
+
+  constructor() {
+    super('Membership not found in this organization');
+    this.name = 'MembershipNotFoundError';
+  }
+}
+
+export class ProtectedMembershipMutationError extends Error {
+  readonly code = 'PROTECTED_MEMBERSHIP_MUTATION';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProtectedMembershipMutationError';
+  }
+}

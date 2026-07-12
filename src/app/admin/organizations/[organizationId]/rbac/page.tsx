@@ -18,7 +18,7 @@ import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning
 export const metadata: Metadata = {
   title: 'Organization RBAC & Policies — Administration',
   description:
-    'Review organization-scoped policies and role assignments before policy editing is introduced.',
+    'Review and manage organization-scoped policies with constrained editing in trusted organization scope.',
 };
 
 export default async function OrganizationRbacPage({
@@ -76,7 +76,7 @@ export default async function OrganizationRbacPage({
             </h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               Review current role-to-policy assignments in the trusted
-              organization scope and add constrained role policies without
+              organization scope and manage constrained role policies without
               free-form conditions.
             </p>
           </div>

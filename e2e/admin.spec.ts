@@ -339,5 +339,143 @@ test.describe('Admin Organizations (/admin/organizations)', () => {
         ).toHaveCount(0);
       },
     );
+
+    authTest(
+      'organization members page reassigns a non-owner member role and can restore it',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+
+        await authedPage.getByRole('link', { name: /manage members/i }).click();
+        await expect(authedPage).toHaveURL(/\/members$/);
+        await expect(
+          authedPage.getByRole('heading', { name: /members$/i }),
+        ).toBeVisible();
+
+        const bobRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText('bob@example.com'),
+        });
+
+        await expect(bobRow.getByText(/current role:\s*member/i)).toBeVisible();
+
+        await bobRow
+          .getByLabel(/role for bob@example.com/i)
+          .selectOption({ label: 'owner (system)' });
+        await bobRow.getByRole('button', { name: /save role/i }).click();
+
+        await expect(bobRow.getByText(/current role:\s*owner/i)).toBeVisible();
+        await expect(bobRow.getByText(/^saved$/i)).toBeVisible();
+
+        await bobRow
+          .getByLabel(/role for bob@example.com/i)
+          .selectOption({ label: 'member (system)' });
+        await bobRow.getByRole('button', { name: /save role/i }).click();
+
+        await expect(bobRow.getByText(/current role:\s*member/i)).toBeVisible();
+        await expect(bobRow.getByText(/^saved$/i)).toBeVisible();
+      },
+    );
+
+    authTest(
+      'archived organization members page disables role reassignment UI',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+        await authedPage
+          .getByRole('button', { name: /archive organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByText(/this organization is archived/i),
+        ).toBeVisible();
+
+        await authedPage.getByRole('link', { name: /manage members/i }).click();
+        await expect(authedPage).toHaveURL(/\/members$/);
+        await expect(
+          authedPage.getByText(
+            /role reassignment is disabled until the organization is restored/i,
+          ),
+        ).toBeVisible();
+
+        const bobRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText('bob@example.com'),
+        });
+
+        await expect(
+          bobRow.getByLabel(/role for bob@example.com/i),
+        ).toBeDisabled();
+        await expect(
+          bobRow.getByRole('button', { name: /save role/i }),
+        ).toBeDisabled();
+
+        await authedPage.getByRole('link', { name: /^acme hq$/i }).click();
+        await authedPage
+          .getByRole('button', { name: /restore organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toBeVisible();
+      },
+    );
+
+    authTest(
+      'organization members page blocks demoting the last owner',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+        await authedPage.getByRole('link', { name: /manage members/i }).click();
+
+        const aliceRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText('alice@example.com'),
+        });
+
+        await expect(
+          aliceRow.getByText(/current role:\s*owner/i),
+        ).toBeVisible();
+
+        await aliceRow
+          .getByLabel(/role for alice@example.com/i)
+          .selectOption({ label: 'member (system)' });
+        await aliceRow.getByRole('button', { name: /save role/i }).click();
+
+        await expect(
+          aliceRow.getByText(/last owner membership cannot be reassigned/i),
+        ).toBeVisible();
+        await expect(
+          aliceRow.getByText(/current role:\s*owner/i),
+        ).toBeVisible();
+      },
+    );
   });
 });

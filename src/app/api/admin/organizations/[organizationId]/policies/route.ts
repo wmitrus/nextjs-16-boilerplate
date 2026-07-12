@@ -126,6 +126,14 @@ export const POST = withErrorHandler(
       );
     }
 
+    if (organization.organization.status === 'archived') {
+      return createServerErrorResponse(
+        'Archived organizations cannot create policies',
+        409,
+        'ARCHIVED_ORGANIZATION',
+      );
+    }
+
     const mutationService = new DrizzleAdminPoliciesMutationService(db);
 
     try {

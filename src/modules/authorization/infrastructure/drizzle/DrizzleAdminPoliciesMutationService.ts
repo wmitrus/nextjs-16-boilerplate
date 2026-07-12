@@ -10,6 +10,7 @@ import {
   DuplicatePolicyError,
   PolicyNotFoundError,
   ProtectedPolicyDeletionError,
+  ProtectedPolicyMutationError,
   RoleNotFoundError,
 } from '../../domain/errors';
 
@@ -34,6 +35,14 @@ export interface CreatedPolicyDto {
   createdAt: string;
 }
 
+export interface UpdatePolicyInput {
+  organizationId: string;
+  policyId: string;
+  effect: 'allow' | 'deny';
+  resource: string;
+  actions: string[];
+}
+
 function rowToPolicyDto(row: PolicyRow): CreatedPolicyDto {
   return {
     id: row.id,
@@ -44,6 +53,51 @@ function rowToPolicyDto(row: PolicyRow): CreatedPolicyDto {
     actions: row.actions,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+function canonicalizePolicyActions(
+  resource: string,
+  actions: string[],
+): string[] {
+  const canonicalActions = [...new Set(actions)].sort((left, right) =>
+    left.localeCompare(right),
+  );
+
+  for (const action of canonicalActions) {
+    if (!isAction(action)) {
+      throw new Error('Policy actions must use resource:verb format');
+    }
+
+    const parsedAction = parseAction(action);
+    if (parsedAction.resource !== resource) {
+      throw new Error('Policy actions must belong to the selected resource');
+    }
+  }
+
+  return canonicalActions;
+}
+
+function isProtectedAdminBaselinePolicy(
+  role: { name: string; isSystem: boolean },
+  policy: { resource: string; actions: string[] },
+): boolean {
+  return (
+    role.isSystem &&
+    role.name.toLowerCase() === 'owner' &&
+    policy.resource === RESOURCES.SECURITY &&
+    policy.actions.includes(ACTIONS.SECURITY_MANAGE_POLICIES)
+  );
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (error instanceof Error) {
+    return (
+      error.message.includes('unique constraint') ||
+      ('code' in error && (error as { code?: unknown }).code === '23505')
+    );
+  }
+
+  return false;
 }
 
 export class DrizzleAdminPoliciesMutationService {
@@ -65,20 +119,10 @@ export class DrizzleAdminPoliciesMutationService {
       throw new RoleNotFoundError();
     }
 
-    const canonicalActions = [...new Set(input.actions)].sort((left, right) =>
-      left.localeCompare(right),
+    const canonicalActions = canonicalizePolicyActions(
+      input.resource,
+      input.actions,
     );
-
-    for (const action of canonicalActions) {
-      if (!isAction(action)) {
-        throw new Error('Policy actions must use resource:verb format');
-      }
-
-      const parsedAction = parseAction(action);
-      if (parsedAction.resource !== input.resource) {
-        throw new Error('Policy actions must belong to the selected resource');
-      }
-    }
 
     const createdRows = await this.db
       .insert(policiesTable)
@@ -100,6 +144,123 @@ export class DrizzleAdminPoliciesMutationService {
     }
 
     return rowToPolicyDto(createdPolicy);
+  }
+
+  async updateRolePolicy(input: UpdatePolicyInput): Promise<CreatedPolicyDto> {
+    const policyRows = await this.db
+      .select({
+        id: policiesTable.id,
+        roleId: policiesTable.roleId,
+        resource: policiesTable.resource,
+        actions: policiesTable.actions,
+      })
+      .from(policiesTable)
+      .where(
+        and(
+          eq(policiesTable.id, input.policyId),
+          eq(policiesTable.organizationId, input.organizationId),
+        ),
+      )
+      .limit(1);
+
+    const policy = policyRows[0];
+    if (!policy) {
+      throw new PolicyNotFoundError();
+    }
+
+    if (!policy.roleId) {
+      throw new RoleNotFoundError();
+    }
+
+    const roleRows = await this.db
+      .select({
+        id: rolesTable.id,
+        name: rolesTable.name,
+        isSystem: rolesTable.isSystem,
+      })
+      .from(rolesTable)
+      .where(
+        and(
+          eq(rolesTable.id, policy.roleId),
+          eq(rolesTable.organizationId, input.organizationId),
+        ),
+      )
+      .limit(1);
+
+    const role = roleRows[0];
+    if (!role) {
+      throw new RoleNotFoundError();
+    }
+
+    if (isProtectedAdminBaselinePolicy(role, policy)) {
+      throw new ProtectedPolicyMutationError();
+    }
+
+    const canonicalActions = canonicalizePolicyActions(
+      input.resource,
+      input.actions,
+    );
+    const canonicalActionsKey = canonicalActions.join('\u0000');
+
+    const siblingPolicies = await this.db
+      .select({
+        id: policiesTable.id,
+        effect: policiesTable.effect,
+        resource: policiesTable.resource,
+        actions: policiesTable.actions,
+      })
+      .from(policiesTable)
+      .where(
+        and(
+          eq(policiesTable.organizationId, input.organizationId),
+          eq(policiesTable.roleId, policy.roleId),
+          eq(policiesTable.conditions, {}),
+        ),
+      );
+
+    const duplicatePolicy = siblingPolicies.find(
+      (candidate) =>
+        candidate.id !== input.policyId &&
+        candidate.effect === input.effect &&
+        candidate.resource === input.resource &&
+        candidate.actions.length === canonicalActions.length &&
+        candidate.actions.join('\u0000') === canonicalActionsKey,
+    );
+
+    if (duplicatePolicy) {
+      throw new DuplicatePolicyError();
+    }
+
+    try {
+      const updatedRows = await this.db
+        .update(policiesTable)
+        .set({
+          effect: input.effect,
+          resource: input.resource,
+          actions: canonicalActions,
+          conditions: {},
+        })
+        .where(
+          and(
+            eq(policiesTable.id, input.policyId),
+            eq(policiesTable.organizationId, input.organizationId),
+          ),
+        )
+        .returning();
+
+      const updatedPolicy = updatedRows[0];
+      if (!updatedPolicy) {
+        throw new PolicyNotFoundError();
+      }
+
+      return rowToPolicyDto(updatedPolicy);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new DuplicatePolicyError();
+      }
+
+      throw error;
+    }
   }
 
   async deleteRolePolicy(input: {
@@ -148,13 +309,7 @@ export class DrizzleAdminPoliciesMutationService {
         throw new RoleNotFoundError();
       }
 
-      const protectsAdminBaseline =
-        role.isSystem &&
-        role.name.toLowerCase() === 'owner' &&
-        policy.resource === RESOURCES.SECURITY &&
-        policy.actions.includes(ACTIONS.SECURITY_MANAGE_POLICIES);
-
-      if (protectsAdminBaseline) {
+      if (isProtectedAdminBaselinePolicy(role, policy)) {
         throw new ProtectedPolicyDeletionError();
       }
     }

@@ -100,7 +100,7 @@ export function CreateRoleForm({ organizationId }: { organizationId: string }) {
           </p>
         </div>
         <span className="rounded-md border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-400 dark:border-zinc-700 dark:text-zinc-500">
-          Rename and delete come next
+          Rename and delete are available in the table below
         </span>
       </div>
 

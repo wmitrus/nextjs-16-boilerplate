@@ -91,6 +91,14 @@ export const DELETE = withErrorHandler(
       );
     }
 
+    if (organization.organization.status === 'archived') {
+      return createServerErrorResponse(
+        'Archived organizations cannot revoke invitations',
+        409,
+        'ARCHIVED_ORGANIZATION',
+      );
+    }
+
     const invitationRows = await db
       .select({ id: invitationsTable.id })
       .from(invitationsTable)

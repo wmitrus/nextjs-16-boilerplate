@@ -356,7 +356,49 @@ test.describe('Admin Organizations (/admin/organizations)', () => {
           .getByRole('link', { name: /view details/i })
           .click();
 
-        await authedPage.getByRole('link', { name: /manage members/i }).click();
+        await authedPage.getByRole('link', { name: /manage roles/i }).click();
+
+        const customRoleName = `billing_manager_${Date.now().toString()}`;
+
+        const createRoleResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'POST' &&
+              response.url().includes('/api/admin/organizations/') &&
+              response.url().includes('/roles')
+            );
+          },
+        );
+
+        await authedPage
+          .getByPlaceholder('e.g. billing_manager')
+          .fill(customRoleName);
+        await authedPage.getByRole('button', { name: /create role/i }).click();
+
+        const createRoleResponse = await createRoleResponsePromise;
+        const createRoleJson = (await createRoleResponse.json()) as {
+          data?: {
+            role?: {
+              id?: string;
+            };
+          };
+        };
+        const customRoleId = createRoleJson.data?.role?.id;
+
+        if (!customRoleId) {
+          throw new Error('Create role response did not include role.id');
+        }
+
+        expect(customRoleId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        );
+
+        await expect(
+          authedPage.getByText(`Role created: ${customRoleName}`),
+        ).toBeVisible();
+
+        await authedPage.goto(authedPage.url().replace(/\/roles$/, '/members'));
+
         await expect(authedPage).toHaveURL(/\/members$/);
         await expect(
           authedPage.getByRole('heading', { name: /members$/i }),
@@ -365,23 +407,50 @@ test.describe('Admin Organizations (/admin/organizations)', () => {
         const bobRow = authedPage.locator('tr').filter({
           has: authedPage.getByText('bob@example.com'),
         });
+        const bobRoleCell = bobRow.locator('td').nth(1);
+        const bobRoleSelect = bobRow.getByLabel(/role for bob@example.com/i);
 
-        await expect(bobRow.getByText(/current role:\s*member/i)).toBeVisible();
+        await expect(
+          bobRoleCell.getByText(/^Current role: member$/),
+        ).toBeVisible();
 
-        await bobRow
-          .getByLabel(/role for bob@example.com/i)
-          .selectOption({ label: 'owner (system)' });
+        const memberRoleId = await bobRoleSelect.inputValue();
+
+        if (!memberRoleId) {
+          throw new Error('Member role option not found for Bob');
+        }
+
+        await bobRoleSelect.selectOption(customRoleId);
+        const updateMemberResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'PATCH' &&
+              /\/api\/admin\/organizations\/[^/]+\/members\/[^/]+$/.test(
+                response.url(),
+              )
+            );
+          },
+        );
         await bobRow.getByRole('button', { name: /save role/i }).click();
+        const updateMemberResponse = await updateMemberResponsePromise;
+        const updateMemberPayload = updateMemberResponse
+          .request()
+          .postDataJSON() as { roleId?: string };
 
-        await expect(bobRow.getByText(/current role:\s*owner/i)).toBeVisible();
+        expect(updateMemberPayload.roleId).toBe(customRoleId);
+        expect(updateMemberResponse.status()).toBe(200);
+
+        await expect(
+          bobRoleCell.getByText(`Current role: ${customRoleName}`),
+        ).toBeVisible();
         await expect(bobRow.getByText(/^saved$/i)).toBeVisible();
 
-        await bobRow
-          .getByLabel(/role for bob@example.com/i)
-          .selectOption({ label: 'member (system)' });
+        await bobRoleSelect.selectOption(memberRoleId);
         await bobRow.getByRole('button', { name: /save role/i }).click();
 
-        await expect(bobRow.getByText(/current role:\s*member/i)).toBeVisible();
+        await expect(
+          bobRoleCell.getByText(/^Current role: member$/),
+        ).toBeVisible();
         await expect(bobRow.getByText(/^saved$/i)).toBeVisible();
       },
     );
@@ -428,7 +497,7 @@ test.describe('Admin Organizations (/admin/organizations)', () => {
           bobRow.getByRole('button', { name: /save role/i }),
         ).toBeDisabled();
 
-        await authedPage.getByRole('link', { name: /^acme hq$/i }).click();
+        await authedPage.getByRole('link', { name: /^acme corp hq$/i }).click();
         await authedPage
           .getByRole('button', { name: /restore organization/i })
           .click();
@@ -459,9 +528,15 @@ test.describe('Admin Organizations (/admin/organizations)', () => {
         const aliceRow = authedPage.locator('tr').filter({
           has: authedPage.getByText('alice@example.com'),
         });
+        const currentAdminRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText(/e2e\+authjs-admin-shared-/i),
+        });
 
         await expect(
           aliceRow.getByText(/current role:\s*owner/i),
+        ).toBeVisible();
+        await expect(
+          currentAdminRow.getByText(/current role:\s*owner/i),
         ).toBeVisible();
 
         await aliceRow
@@ -470,10 +545,24 @@ test.describe('Admin Organizations (/admin/organizations)', () => {
         await aliceRow.getByRole('button', { name: /save role/i }).click();
 
         await expect(
-          aliceRow.getByText(/last owner membership cannot be reassigned/i),
+          aliceRow.getByText(/current role:\s*member/i),
+        ).toBeVisible();
+        await expect(aliceRow.getByText(/^saved$/i)).toBeVisible();
+
+        await currentAdminRow
+          .getByLabel(/role for e2e\+authjs-admin-shared-.*@example.com/i)
+          .selectOption({ label: 'member (system)' });
+        await currentAdminRow
+          .getByRole('button', { name: /save role/i })
+          .click();
+
+        await expect(
+          currentAdminRow.getByText(
+            /last owner membership cannot be reassigned/i,
+          ),
         ).toBeVisible();
         await expect(
-          aliceRow.getByText(/current role:\s*owner/i),
+          currentAdminRow.getByText(/current role:\s*owner/i),
         ).toBeVisible();
       },
     );

@@ -1,7 +1,7 @@
 ---
 description: 'Use at the start and end of every non-trivial task to mirror work into the on-prem Leantime workspace: create milestones and tasks, manage status lifecycle, log time, and seed boards when required.'
 name: '10 - Leantime Integration'
-tools: [run_command, read, search]
+tools: [read, search, execute]
 user-invocable: true
 ---
 

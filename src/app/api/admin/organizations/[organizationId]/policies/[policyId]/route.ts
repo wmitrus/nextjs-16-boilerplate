@@ -141,6 +141,14 @@ export const PATCH = withErrorHandler(
       );
     }
 
+    if (organization.organization.status === 'archived') {
+      return createServerErrorResponse(
+        'Archived organizations cannot update policies',
+        409,
+        'ARCHIVED_ORGANIZATION',
+      );
+    }
+
     const mutationService = new DrizzleAdminPoliciesMutationService(db);
 
     try {
@@ -228,6 +236,14 @@ export const DELETE = withErrorHandler(
         'Organization not found',
         404,
         'NOT_FOUND',
+      );
+    }
+
+    if (organization.organization.status === 'archived') {
+      return createServerErrorResponse(
+        'Archived organizations cannot delete policies',
+        409,
+        'ARCHIVED_ORGANIZATION',
       );
     }
 

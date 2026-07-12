@@ -1,0 +1,135 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
+
+import { INFRASTRUCTURE } from '@/core/contracts';
+import type { DrizzleDb } from '@/core/db/types';
+import { getAppContainer } from '@/core/runtime/bootstrap';
+
+import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
+
+import { MembersTableClient } from './MembersTableClient';
+
+import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
+import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
+
+export const metadata: Metadata = {
+  title: 'Organization Members — Administration',
+  description:
+    'Review organization memberships and reassign member roles with organization-scoped guardrails.',
+};
+
+export default async function OrganizationMembersPage({
+  params,
+}: {
+  params: Promise<{ organizationId: string }>;
+}) {
+  await connection();
+
+  const resolvedParams = await params;
+  await getServerRequestLogContext({
+    pathname: `/admin/organizations/${resolvedParams.organizationId}/members`,
+  });
+
+  const data = await loadOrganizationMembers(resolvedParams.organizationId);
+
+  if (!data) {
+    notFound();
+  }
+
+  const isArchived = data.organization.status === 'archived';
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="mb-1 flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+          <Link
+            href="/admin"
+            className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            Administration
+          </Link>
+          <span>/</span>
+          <Link
+            href="/admin/organizations"
+            className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            Organizations
+          </Link>
+          <span>/</span>
+          <Link
+            href={`/admin/organizations/${data.organization.id}`}
+            className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            {data.organization.name}
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+            Members
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              {data.organization.name} members
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Review organization memberships and reassign roles without leaving
+              the canonical organization scope.
+            </p>
+          </div>
+          <span className="inline-flex items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            {data.members.length} members
+          </span>
+        </div>
+      </div>
+
+      {isArchived ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          This organization is archived. Membership roles remain visible, but
+          role reassignment is disabled until the organization is restored.
+        </section>
+      ) : null}
+
+      {data.members.length === 0 ? (
+        <section className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center dark:border-zinc-700 dark:bg-zinc-900">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            No members found
+          </h2>
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            This organization has no memberships in the current trusted admin
+            scope.
+          </p>
+        </section>
+      ) : (
+        <section className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+          <MembersTableClient
+            organizationId={data.organization.id}
+            isArchived={isArchived}
+            roles={data.roles}
+            initialMembers={data.members}
+          />
+        </section>
+      )}
+    </div>
+  );
+}
+
+async function loadOrganizationMembers(organizationId: string) {
+  const container = getAppContainer();
+  const access = await resolveNodeProvisioningAccess(container);
+
+  if (access.status !== 'ALLOWED') {
+    return null;
+  }
+
+  const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+  const service = new DrizzleAdminOrganizationsReadService(db);
+
+  return await service.getMembersInActiveScope({
+    activeOrganizationId: access.tenant.organizationId,
+    organizationId,
+  });
+}

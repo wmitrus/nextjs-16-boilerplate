@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 
 import { updateSecuritySettings } from '../actions/showcase-actions';
 
+import { createReplayToken } from '@/security/actions/action-replay';
+
 /**
  * Example of a Form using a Secure Server Action.
  * Demonstrates: Handling action results and validation errors.
@@ -24,6 +26,7 @@ export function SettingsFormExample() {
       theme: formData.get('theme') as 'light' | 'dark' | 'system',
       notificationsEnabled: formData.get('notifications') === 'on',
       marketingConsent: formData.get('marketing') === 'on',
+      _replayToken: createReplayToken(),
     });
 
     if (result.status === 'success') {

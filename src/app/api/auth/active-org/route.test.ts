@@ -9,13 +9,19 @@ import { POST } from './route';
 import { mockLogger, resetAllInfrastructureMocks } from '@/testing';
 import { mockEnv } from '@/testing/infrastructure/env';
 
-const { cookieSetMock, getServerSessionMock, isMemberMock } = vi.hoisted(
-  () => ({
-    cookieSetMock: vi.fn(),
-    getServerSessionMock: vi.fn(),
-    isMemberMock: vi.fn(),
-  }),
-);
+const {
+  cookieSetMock,
+  getServerSessionMock,
+  isMemberMock,
+  resolveMock,
+  dbSelectMock,
+} = vi.hoisted(() => ({
+  cookieSetMock: vi.fn(),
+  getServerSessionMock: vi.fn(),
+  isMemberMock: vi.fn(),
+  resolveMock: vi.fn(),
+  dbSelectMock: vi.fn(),
+}));
 
 vi.mock('next/server', async () => {
   const actual = await vi.importActual('next/server');
@@ -41,14 +47,13 @@ vi.mock('@/core/logger/di', () => ({
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => ({
-    resolve: () => ({
-      isMember: isMemberMock,
-    }),
+    resolve: resolveMock,
   }),
 }));
 
 vi.mock('@/core/contracts', () => ({
   AUTHORIZATION: { MEMBERSHIP_REPOSITORY: Symbol('MembershipRepository') },
+  INFRASTRUCTURE: { DB: Symbol('Db') },
 }));
 
 vi.mock('@/modules/auth/infrastructure/authjs/auth', () => ({
@@ -69,8 +74,35 @@ describe('POST /api/auth/active-org', () => {
     cookieSetMock.mockReset();
     getServerSessionMock.mockReset();
     isMemberMock.mockReset();
+    resolveMock.mockReset();
+    dbSelectMock.mockReset();
     mockEnv.AUTH_PROVIDER = 'authjs';
     mockEnv.NODE_ENV = 'test';
+
+    resolveMock.mockImplementation((token: unknown) => {
+      if (
+        typeof token === 'symbol' &&
+        token.description === 'MembershipRepository'
+      ) {
+        return { isMember: isMemberMock };
+      }
+
+      if (typeof token === 'symbol' && token.description === 'Db') {
+        return {
+          select: dbSelectMock,
+        };
+      }
+
+      throw new Error(`Unexpected token: ${String(token)}`);
+    });
+
+    dbSelectMock.mockReturnValue({
+      from: () => ({
+        where: () => ({
+          limit: () => Promise.resolve([{ status: 'active' }]),
+        }),
+      }),
+    });
   });
 
   it('returns 404 when AUTH_PROVIDER is not authjs', async () => {
@@ -105,6 +137,27 @@ describe('POST /api/auth/active-org', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(cookieSetMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when the selected organization is archived', async () => {
+    getServerSessionMock.mockResolvedValue({
+      user: { id: '11111111-1111-4111-8111-111111111112' },
+    });
+    isMemberMock.mockResolvedValue(true);
+    dbSelectMock.mockReturnValue({
+      from: () => ({
+        where: () => ({
+          limit: () => Promise.resolve([{ status: 'archived' }]),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      makeRequest({ organizationId: '11111111-1111-4111-8111-111111111111' }),
+    );
+
+    expect(response.status).toBe(409);
     expect(cookieSetMock).not.toHaveBeenCalled();
   });
 

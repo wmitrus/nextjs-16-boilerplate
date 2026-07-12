@@ -257,3 +257,87 @@ test.describe('Admin Invitations (/admin/invitations)', () => {
     );
   });
 });
+
+test.describe('Admin Organizations (/admin/organizations)', () => {
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
+      !isAuthjs,
+      'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
+    );
+
+    authTest(
+      'organization archive and restore changes detail and list state',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await expect(organizationCard).toContainText(/active|available/i);
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+
+        await expect(authedPage).toHaveURL(/\/admin\/organizations\//);
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toBeVisible();
+
+        await authedPage
+          .getByRole('button', { name: /archive organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByText(/this organization is archived/i),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('button', { name: /restore organization/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toHaveCount(0);
+
+        await authedPage.getByRole('link', { name: /organizations/i }).click();
+        await expect(authedPage).toHaveURL(/\/admin\/organizations$/);
+
+        await authedPage
+          .getByRole('button', { name: /^archived\s+\d+$/i })
+          .click();
+
+        const archivedCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await expect(archivedCard).toContainText(/archived/i);
+        await expect(
+          archivedCard.getByRole('button', {
+            name: /restore before activating/i,
+          }),
+        ).toBeDisabled();
+
+        await archivedCard.getByRole('link', { name: /view details/i }).click();
+        await expect(
+          authedPage.getByRole('button', { name: /restore organization/i }),
+        ).toBeVisible();
+
+        await authedPage
+          .getByRole('button', { name: /restore organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByText(/this organization is archived/i),
+        ).toHaveCount(0);
+      },
+    );
+  });
+});

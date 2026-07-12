@@ -255,6 +255,72 @@ test.describe('Admin Invitations (/admin/invitations)', () => {
         ).toBeVisible();
       },
     );
+
+    authTest(
+      'canonical nested invitations page sends and revokes a pending invitation',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/invitations');
+
+        await authedPage
+          .getByRole('link', { name: /open invitations/i })
+          .first()
+          .click();
+
+        await expect(authedPage).toHaveURL(
+          /\/admin\/organizations\/[^/]+\/invitations$/,
+        );
+        await expect(
+          authedPage.getByRole('heading', { name: /invitations$/i }),
+        ).toBeVisible();
+
+        const inviteEmail = `e2e+invite-${Date.now().toString()}@example.com`;
+
+        const createInvitationResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'POST' &&
+              /\/api\/admin\/organizations\/[^/]+\/invitations$/.test(
+                response.url(),
+              )
+            );
+          },
+        );
+
+        await authedPage.getByLabel('Email address').fill(inviteEmail);
+        await authedPage
+          .getByRole('button', { name: /send invitation/i })
+          .click();
+
+        const createInvitationResponse = await createInvitationResponsePromise;
+        expect(createInvitationResponse.status()).toBe(201);
+        await expect(
+          authedPage.getByText(`Invitation sent to ${inviteEmail}`),
+        ).toBeVisible();
+
+        const invitationRow = authedPage
+          .locator('div.flex.items-center.justify-between')
+          .filter({ has: authedPage.getByText(inviteEmail, { exact: true }) });
+
+        await expect(invitationRow.getByText(/pending/i)).toBeVisible();
+
+        const revokeInvitationResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'DELETE' &&
+              /\/api\/admin\/organizations\/[^/]+\/invitations\/[^/]+$/.test(
+                response.url(),
+              )
+            );
+          },
+        );
+
+        await invitationRow.getByRole('button', { name: /revoke/i }).click();
+
+        const revokeInvitationResponse = await revokeInvitationResponsePromise;
+        expect(revokeInvitationResponse.status()).toBe(200);
+        await expect(invitationRow.getByText(/revoked/i)).toBeVisible();
+      },
+    );
   });
 });
 

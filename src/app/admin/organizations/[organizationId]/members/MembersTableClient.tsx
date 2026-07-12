@@ -4,11 +4,47 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import type {
+  FormErrorsResponse,
+  ServerErrorResponse,
+} from '@/shared/types/api-response';
+
+import type {
   OrganizationMemberSummaryDto,
   OrganizationMembersPageDto,
 } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 
 type MemberRoleState = 'idle' | 'saving' | 'saved' | 'error';
+
+function getErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== 'object') {
+    return fallback;
+  }
+
+  const maybeServerError = payload as Partial<ServerErrorResponse>;
+  if (
+    maybeServerError.status === 'server_error' &&
+    typeof maybeServerError.error === 'string'
+  ) {
+    return maybeServerError.error;
+  }
+
+  const maybeFormErrors = payload as Partial<FormErrorsResponse>;
+  if (
+    maybeFormErrors.status === 'form_errors' &&
+    maybeFormErrors.errors &&
+    typeof maybeFormErrors.errors === 'object'
+  ) {
+    const firstError = Object.values(maybeFormErrors.errors)
+      .flat()
+      .find((value) => typeof value === 'string');
+
+    if (typeof firstError === 'string') {
+      return firstError;
+    }
+  }
+
+  return fallback;
+}
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en-GB', {
@@ -61,15 +97,14 @@ export function MembersTableClient({
       );
 
       if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as {
-          error?: string;
-          message?: string;
-        };
+        const body = await response.json().catch(() => null);
         setRowState((prev) => ({ ...prev, [member.userId]: 'error' }));
         setRowError((prev) => ({
           ...prev,
-          [member.userId]:
-            body.error ?? body.message ?? `HTTP ${response.status}`,
+          [member.userId]: getErrorMessage(
+            body,
+            `HTTP ${response.status.toString()}`,
+          ),
         }));
         return;
       }

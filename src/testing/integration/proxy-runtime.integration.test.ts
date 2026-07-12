@@ -8,8 +8,10 @@ import * as rateLimitHelper from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import proxy from '@/proxy';
 
+type TestAuthProvider = 'clerk' | 'authjs';
+
 const envOverrides = vi.hoisted(() => ({
-  AUTH_PROVIDER: 'clerk' as const,
+  AUTH_PROVIDER: 'clerk' as TestAuthProvider,
   NODE_ENV: 'test' as const,
   VERCEL_ENV: 'development' as const,
   INTERNAL_API_KEY: 'test-key',

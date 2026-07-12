@@ -73,3 +73,23 @@ export class ProtectedPolicyDeletionError extends Error {
     this.name = 'ProtectedPolicyDeletionError';
   }
 }
+
+export class ProtectedPolicyMutationError extends Error {
+  readonly code = 'PROTECTED_POLICY_MUTATION';
+
+  constructor() {
+    super(
+      'The baseline owner policy granting policy management cannot be edited',
+    );
+    this.name = 'ProtectedPolicyMutationError';
+  }
+}
+
+export class OrganizationNotFoundError extends Error {
+  readonly code = 'ORGANIZATION_NOT_FOUND';
+
+  constructor() {
+    super('Organization not found in this tenant');
+    this.name = 'OrganizationNotFoundError';
+  }
+}

@@ -1,8 +1,17 @@
 'use client';
 
+import {
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { SortableHeaderButton } from '@/shared/components/table/SortableHeaderButton';
 import type {
   FormErrorsResponse,
   ServerErrorResponse,
@@ -62,6 +71,9 @@ export function RolesTableClient({
   roles: RoleRow[];
 }) {
   const router = useRouter();
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'createdAt', desc: true },
+  ]);
   const [draftNames, setDraftNames] = useState<Map<string, string>>(
     () => new Map(roles.map((role) => [role.id, role.name])),
   );
@@ -168,137 +180,211 @@ export function RolesTableClient({
     }
   }
 
+  const columns: ColumnDef<RoleRow>[] = [
+    {
+      id: 'name',
+      accessorKey: 'name',
+      header: 'Role',
+      cell: ({ row }) => {
+        const role = row.original;
+        const currentRowState = rowState[role.id];
+        const draftName = draftNames.get(role.id) ?? role.name;
+
+        return (
+          <div>
+            <input
+              type="text"
+              value={draftName}
+              onChange={(event) =>
+                setDraftNames((current) =>
+                  new Map(current).set(role.id, event.target.value),
+                )
+              }
+              disabled={
+                role.isSystem || currentRowState?.status === 'submitting'
+              }
+              maxLength={50}
+              className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm shadow-sm focus:border-black focus:ring-1 focus:ring-black focus:outline-none disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {role.id}
+            </p>
+            {currentRowState?.status === 'error' ? (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                {currentRowState.message}
+              </p>
+            ) : null}
+            {currentRowState?.status === 'success' ? (
+              <p className="mt-2 text-xs text-green-600 dark:text-green-400">
+                {currentRowState.message}
+              </p>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'type',
+      accessorFn: (role) => (role.isSystem ? 'System' : 'Custom'),
+      header: 'Type',
+      cell: ({ row }) => {
+        const role = row.original;
+
+        return (
+          <span
+            className={[
+              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+              role.isSystem
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
+            ].join(' ')}
+          >
+            {role.isSystem ? 'System' : 'Custom'}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'memberCount',
+      header: 'Members',
+      cell: ({ row }) => row.original.memberCount,
+    },
+    {
+      accessorKey: 'pendingInvitationCount',
+      header: 'Pending invites',
+      cell: ({ row }) => row.original.pendingInvitationCount,
+    },
+    {
+      id: 'createdAt',
+      accessorFn: (role) => new Date(role.createdAt).getTime(),
+      header: 'Created',
+      cell: ({ row }) => formatDate(row.original.createdAt),
+    },
+    {
+      id: 'rowActions',
+      header: 'Actions',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const role = row.original;
+        const currentRowState = rowState[role.id];
+        const isProtected =
+          role.isSystem ||
+          role.memberCount > 0 ||
+          role.pendingInvitationCount > 0;
+
+        return (
+          <div className="flex flex-col items-end gap-2">
+            <span
+              className={[
+                'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+                isProtected
+                  ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+              ].join(' ')}
+            >
+              {isProtected ? 'Protected now' : 'Low-risk role'}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleRename(role.id)}
+              disabled={
+                role.isSystem || currentRowState?.status === 'submitting'
+              }
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              {currentRowState?.status === 'submitting' ? 'Saving…' : 'Rename'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(role.id)}
+              disabled={isProtected || currentRowState?.status === 'submitting'}
+              className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
+            >
+              {currentRowState?.status === 'submitting' ? 'Working…' : 'Delete'}
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  // TanStack Table exposes imperative instance helpers. This component keeps
+  // the instance local and does not pass it through memoized props or hooks.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const table = useReactTable({
+    data: roles,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getRowId: (role) => role.id,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
         <thead>
-          <tr className="bg-zinc-50 dark:bg-zinc-800/50">
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Role
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Type
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Members
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Pending invites
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Created
-            </th>
-            <th className="px-6 py-3 text-right text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
-              Actions
-            </th>
-          </tr>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="bg-zinc-50 dark:bg-zinc-800/50">
+              {headerGroup.headers.map((header) => {
+                const canSort = header.column.getCanSort();
+                const headerClassName =
+                  header.column.id === 'rowActions'
+                    ? 'px-6 py-3 text-right text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400'
+                    : 'px-6 py-3 text-left text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400';
+
+                return (
+                  <th key={header.id} className={headerClassName}>
+                    {header.isPlaceholder ? null : canSort ? (
+                      <SortableHeaderButton
+                        onClick={header.column.getToggleSortingHandler()}
+                        direction={header.column.getIsSorted()}
+                        label={`Sort by ${String(header.column.columnDef.header)}`}
+                      >
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                      </SortableHeaderButton>
+                    ) : (
+                      flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          ))}
         </thead>
         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {roles.map((role) => {
-            const isProtected =
-              role.isSystem ||
-              role.memberCount > 0 ||
-              role.pendingInvitationCount > 0;
-            const currentRowState = rowState[role.id];
-            const draftName = draftNames.get(role.id) ?? role.name;
-
+          {table.getRowModel().rows.map((row) => {
             return (
               <tr
-                key={role.id}
+                key={row.id}
                 className="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
               >
-                <td className="px-6 py-4 align-top">
-                  <div>
-                    <input
-                      type="text"
-                      value={draftName}
-                      onChange={(event) =>
-                        setDraftNames((current) =>
-                          new Map(current).set(role.id, event.target.value),
-                        )
-                      }
-                      disabled={
-                        role.isSystem ||
-                        currentRowState?.status === 'submitting'
-                      }
-                      maxLength={50}
-                      className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm shadow-sm focus:border-black focus:ring-1 focus:ring-black focus:outline-none disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                    />
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      {role.id}
-                    </p>
-                    {currentRowState?.status === 'error' ? (
-                      <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                        {currentRowState.message}
-                      </p>
-                    ) : null}
-                    {currentRowState?.status === 'success' ? (
-                      <p className="mt-2 text-xs text-green-600 dark:text-green-400">
-                        {currentRowState.message}
-                      </p>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-6 py-4 align-top">
-                  <span
-                    className={[
-                      'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                      role.isSystem
-                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                        : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
-                    ].join(' ')}
-                  >
-                    {role.isSystem ? 'System' : 'Custom'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 align-top text-sm text-zinc-500 dark:text-zinc-400">
-                  {role.memberCount}
-                </td>
-                <td className="px-6 py-4 align-top text-sm text-zinc-500 dark:text-zinc-400">
-                  {role.pendingInvitationCount}
-                </td>
-                <td className="px-6 py-4 align-top text-sm text-zinc-500 dark:text-zinc-400">
-                  {formatDate(role.createdAt)}
-                </td>
-                <td className="px-6 py-4 text-right align-top">
-                  <div className="flex flex-col items-end gap-2">
-                    <span
-                      className={[
-                        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                        isProtected
-                          ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-                      ].join(' ')}
-                    >
-                      {isProtected ? 'Protected now' : 'Low-risk role'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRename(role.id)}
-                      disabled={
-                        role.isSystem ||
-                        currentRowState?.status === 'submitting'
-                      }
-                      className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                      {currentRowState?.status === 'submitting'
-                        ? 'Saving…'
-                        : 'Rename'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(role.id)}
-                      disabled={
-                        isProtected || currentRowState?.status === 'submitting'
-                      }
-                      className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
-                    >
-                      {currentRowState?.status === 'submitting'
-                        ? 'Working…'
-                        : 'Delete'}
-                    </button>
-                  </div>
-                </td>
+                {row.getVisibleCells().map((cell) => {
+                  const className =
+                    cell.column.id === 'rowActions'
+                      ? 'px-6 py-4 text-right align-top'
+                      : cell.column.id === 'type'
+                        ? 'px-6 py-4 align-top'
+                        : cell.column.id === 'name'
+                          ? 'px-6 py-4 align-top'
+                          : 'px-6 py-4 align-top text-sm text-zinc-500 dark:text-zinc-400';
+
+                  return (
+                    <td key={cell.id} className={className}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}

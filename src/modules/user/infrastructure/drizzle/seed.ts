@@ -14,11 +14,11 @@ export interface UserSeedResult {
 
 const FIXTURES = {
   alice: {
-    id: '00000000-0000-0000-0000-000000000001',
+    id: '00000000-0000-4000-8000-000000000001',
     email: 'alice@example.com',
   },
   bob: {
-    id: '00000000-0000-0000-0000-000000000002',
+    id: '00000000-0000-4000-8000-000000000002',
     email: 'bob@example.com',
   },
 } satisfies Record<string, UserRecord>;

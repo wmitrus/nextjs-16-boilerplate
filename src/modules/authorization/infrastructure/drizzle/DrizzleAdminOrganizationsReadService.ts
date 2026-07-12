@@ -10,6 +10,8 @@ import {
   rolesTable,
 } from './schema';
 
+import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+
 export interface OrganizationSummaryDto {
   id: string;
   name: string;
@@ -82,6 +84,32 @@ export interface OrganizationPoliciesPageDto {
     isSystem: boolean;
   }>;
   policies: OrganizationPolicySummaryDto[];
+}
+
+export interface OrganizationMemberSummaryDto {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  roleId: string;
+  roleName: string;
+  roleIsSystem: boolean;
+  joinedAt: string;
+  deactivatedAt: string | null;
+}
+
+export interface OrganizationMembersPageDto {
+  organization: {
+    id: string;
+    name: string;
+    slug: string | null;
+    status: string;
+  };
+  roles: Array<{
+    id: string;
+    name: string;
+    isSystem: boolean;
+  }>;
+  members: OrganizationMemberSummaryDto[];
 }
 
 export interface ListOrganizationsInActiveScopeInput {
@@ -486,6 +514,83 @@ export class DrizzleAdminOrganizationsReadService {
           policy.conditions !== null &&
           Object.keys(policy.conditions).length > 0,
         createdAt: policy.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  async getMembersInActiveScope(input: {
+    activeOrganizationId: string;
+    organizationId: string;
+  }): Promise<OrganizationMembersPageDto | null> {
+    const tenantId = await this.resolveParentTenantId(
+      input.activeOrganizationId,
+    );
+
+    if (!tenantId) {
+      return null;
+    }
+
+    const organizationRows = await this.db
+      .select({
+        id: organizationsTable.id,
+        name: organizationsTable.name,
+        slug: organizationsTable.slug,
+        status: organizationsTable.status,
+      })
+      .from(organizationsTable)
+      .where(
+        and(
+          eq(organizationsTable.id, input.organizationId),
+          eq(organizationsTable.tenantId, tenantId),
+        ),
+      )
+      .limit(1);
+
+    const organization = organizationRows[0];
+    if (!organization) {
+      return null;
+    }
+
+    const [membershipRows, roleRows] = await Promise.all([
+      this.db
+        .select({
+          userId: membershipsTable.userId,
+          email: usersTable.email,
+          displayName: usersTable.displayName,
+          roleId: membershipsTable.roleId,
+          roleName: rolesTable.name,
+          roleIsSystem: rolesTable.isSystem,
+          joinedAt: membershipsTable.createdAt,
+          deactivatedAt: usersTable.deactivatedAt,
+        })
+        .from(membershipsTable)
+        .innerJoin(usersTable, eq(usersTable.id, membershipsTable.userId))
+        .innerJoin(rolesTable, eq(rolesTable.id, membershipsTable.roleId))
+        .where(eq(membershipsTable.organizationId, input.organizationId))
+        .orderBy(usersTable.email, membershipsTable.createdAt),
+      this.db
+        .select({
+          id: rolesTable.id,
+          name: rolesTable.name,
+          isSystem: rolesTable.isSystem,
+        })
+        .from(rolesTable)
+        .where(eq(rolesTable.organizationId, input.organizationId))
+        .orderBy(rolesTable.name),
+    ]);
+
+    return {
+      organization,
+      roles: roleRows,
+      members: membershipRows.map((membership) => ({
+        userId: membership.userId,
+        email: membership.email,
+        displayName: membership.displayName,
+        roleId: membership.roleId,
+        roleName: membership.roleName,
+        roleIsSystem: membership.roleIsSystem,
+        joinedAt: membership.joinedAt.toISOString(),
+        deactivatedAt: membership.deactivatedAt?.toISOString() ?? null,
       })),
     };
   }

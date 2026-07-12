@@ -22,7 +22,7 @@ const authjsProvisioningSchema = authjsCredentialsSchema.extend({
 
 const AUTHJS_SIGN_IN_TIMEOUT_MS = 30_000;
 const AUTHJS_PROVISIONING_ROUTE = '/api/internal/e2e/authjs-user';
-const AUTHJS_PROVISIONING_ROUTE_READY_TIMEOUT_MS = 15_000;
+const AUTHJS_PROVISIONING_ROUTE_READY_TIMEOUT_MS = 30_000;
 const AUTHJS_PROVISIONING_ROUTE_READY_POLL_MS = 250;
 
 const authjsProvisioningRouteReadyByRequest = new WeakMap<

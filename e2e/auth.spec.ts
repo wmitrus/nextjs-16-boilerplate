@@ -50,6 +50,16 @@ async function completeHostedSignUpVerificationIfNeeded(
   ]);
 
   if (nextStep === 'verify-email') {
+    const preSendWarning = page.getByText(
+      /need to send a verification code before attempting to verify/i,
+    );
+    const resendButton = page.getByRole('button', { name: /resend/i });
+
+    if (await preSendWarning.isVisible()) {
+      await expect(resendButton).toBeEnabled({ timeout: 10_000 });
+      await resendButton.click();
+    }
+
     const legacyOtpInput = page.getByRole('textbox', {
       name: 'Enter verification code. Digit 1',
     });

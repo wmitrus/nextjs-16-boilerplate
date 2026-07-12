@@ -9,6 +9,8 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
 
+import { OrganizationStatusActions } from './OrganizationStatusActions';
+
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
 
@@ -79,6 +81,13 @@ export default async function OrganizationDetailPage({
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           Organization metadata
         </h2>
+        {detail.organization.status === 'archived' ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            This organization is archived. It stays visible for review and RBAC
+            maintenance, but it should not be used as an active workspace until
+            it is restored.
+          </div>
+        ) : null}
         <dl className="mt-4 grid gap-4 sm:grid-cols-3">
           <Field label="Organization ID" value={detail.organization.id} />
           <Field
@@ -90,6 +99,10 @@ export default async function OrganizationDetailPage({
             value={formatDate(detail.organization.createdAt)}
           />
         </dl>
+        <OrganizationStatusActions
+          organizationId={detail.organization.id}
+          status={detail.organization.status as 'active' | 'archived'}
+        />
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
@@ -98,10 +111,10 @@ export default async function OrganizationDetailPage({
             Scope summary
           </h2>
           <Link
-            href={`/admin/organizations/${detail.organization.id}/roles`}
+            href={`/admin/organizations/${detail.organization.id}/members`}
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
           >
-            Open roles
+            Open members
           </Link>
         </div>
 
@@ -125,8 +138,14 @@ export default async function OrganizationDetailPage({
         </h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
-            href={`/admin/organizations/${detail.organization.id}/roles`}
+            href={`/admin/organizations/${detail.organization.id}/members`}
             className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
+          >
+            Manage members
+          </Link>
+          <Link
+            href={`/admin/organizations/${detail.organization.id}/roles`}
+            className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
           >
             Manage roles
           </Link>

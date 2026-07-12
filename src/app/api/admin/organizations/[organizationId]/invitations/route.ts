@@ -109,6 +109,14 @@ export const POST = withErrorHandler(
       );
     }
 
+    if (organization.organization.status === 'archived') {
+      return createServerErrorResponse(
+        'Archived organizations cannot create invitations',
+        409,
+        'ARCHIVED_ORGANIZATION',
+      );
+    }
+
     const roleRows = await db
       .select({ id: rolesTable.id })
       .from(rolesTable)

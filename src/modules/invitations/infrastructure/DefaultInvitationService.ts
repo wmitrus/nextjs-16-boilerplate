@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { resolveServerLogger } from '@/core/logger/di';
 
 import type { EmailService } from '../domain/EmailService';
@@ -25,6 +27,10 @@ const logger = resolveServerLogger().child({
   category: 'invitations',
   module: 'default-invitation-service',
 });
+
+function hashEmail(email: string): string {
+  return createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+}
 
 export interface DefaultInvitationServiceOptions {
   readonly appUrl: string;
@@ -77,7 +83,7 @@ export class DefaultInvitationService implements InvitationService {
         {
           event: 'invitation:email_send_failed',
           invitationId: invitation.id,
-          email: input.email,
+          emailHash: hashEmail(input.email),
           errorMessage: error instanceof Error ? error.message : String(error),
           errorName: error instanceof Error ? error.name : 'UnknownError',
         },
@@ -90,7 +96,7 @@ export class DefaultInvitationService implements InvitationService {
         event: 'invitation:created',
         invitationId: invitation.id,
         organizationId: input.organizationId,
-        email: input.email,
+        emailHash: hashEmail(input.email),
       },
       'Invitation created',
     );
@@ -140,7 +146,7 @@ export class DefaultInvitationService implements InvitationService {
         event: 'invitation:accepted',
         invitationId: acceptedInvitation.id,
         organizationId: acceptedInvitation.organizationId,
-        email: acceptedInvitation.email,
+        emailHash: hashEmail(acceptedInvitation.email),
       },
       'Invitation accepted',
     );

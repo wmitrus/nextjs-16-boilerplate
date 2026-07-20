@@ -58,7 +58,7 @@ describe('Secure Action Wrapper', () => {
       handler,
     });
 
-    const result = await action({ name: 'test' });
+    const result = await action({ name: 'test', _replayToken: 'token123' });
 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
@@ -82,7 +82,7 @@ describe('Secure Action Wrapper', () => {
     });
 
     // @ts-expect-error - testing invalid input
-    const result = await action({ name: 123 });
+    const result = await action({ name: 123, _replayToken: 'token123' });
 
     expect(result.status).toBe('validation_error');
     expect(handler).not.toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe('Secure Action Wrapper', () => {
       handler,
     });
 
-    const result = await action({ name: 'test' });
+    const result = await action({ name: 'test', _replayToken: 'token123' });
 
     expect(result.status).toBe('unauthorized');
     if (result.status === 'unauthorized') {
@@ -110,7 +110,7 @@ describe('Secure Action Wrapper', () => {
     }
   });
 
-  it('should validate replay token if provided', async () => {
+  it('should validate replay token on every action call', async () => {
     const handler = vi.fn().mockResolvedValue({});
     const action = createSecureAction({
       schema,
@@ -123,6 +123,26 @@ describe('Secure Action Wrapper', () => {
     expect(validateReplayToken).toHaveBeenCalledWith('token123', mockCtx);
   });
 
+  it('should return error when replay token is missing', async () => {
+    vi.mocked(validateReplayToken).mockRejectedValueOnce(
+      new Error('Replay protection token missing'),
+    );
+    const handler = vi.fn().mockResolvedValue({});
+    const action = createSecureAction({
+      schema,
+      dependencies: getDependencies(),
+      handler,
+    });
+
+    const result = await action({ name: 'test' });
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.error).toBe('Replay protection token missing');
+    }
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('should return error status on generic failure', async () => {
     const handler = vi.fn().mockRejectedValue(new Error('Internal Boom'));
     const action = createSecureAction({
@@ -131,7 +151,7 @@ describe('Secure Action Wrapper', () => {
       handler,
     });
 
-    const result = await action({ name: 'test' });
+    const result = await action({ name: 'test', _replayToken: 'token123' });
 
     expect(result.status).toBe('error');
     if (result.status === 'error') {
@@ -154,7 +174,7 @@ describe('Secure Action Wrapper', () => {
       handler,
     });
 
-    const result = await action({ name: 'test' });
+    const result = await action({ name: 'test', _replayToken: 'token123' });
 
     expect(result.status).toBe('error');
     if (result.status === 'error') {
@@ -202,7 +222,7 @@ describe('Secure Action Wrapper', () => {
         handler,
       });
 
-      const result = await action({ name: 'test' });
+      const result = await action({ name: 'test', _replayToken: 'token123' });
 
       expect(result.status).toBe(expectedStatus);
       expect(handler).not.toHaveBeenCalled();
@@ -227,7 +247,7 @@ describe('Secure Action Wrapper', () => {
       handler,
     });
 
-    const result = await action({ name: 'test' });
+    const result = await action({ name: 'test', _replayToken: 'token123' });
 
     expect(result.status).toBe('unauthorized');
     if (result.status === 'unauthorized') {

@@ -5,8 +5,7 @@ import { signOut } from 'next-auth/react';
 import * as React from 'react';
 
 import { Avatar } from '@/shared/components/ui/avatar';
-
-import { DEFAULT_APP_ENTRY_URL } from '@/app/auth/post-auth-redirect';
+import { DEFAULT_APP_ENTRY_URL } from '@/shared/lib/routing/default-app-entry';
 
 interface UserAvatarMenuProps {
   name?: string | null;

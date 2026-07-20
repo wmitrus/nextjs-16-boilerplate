@@ -1,4 +1,3 @@
-import { eq } from 'drizzle-orm';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -6,17 +5,12 @@ import { connection } from 'next/server';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db/types';
-import { env } from '@/core/env';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
 
 import { InvitationsClient } from '@/app/admin/invitations/InvitationsClient';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
-import { rolesTable } from '@/modules/authorization/infrastructure/drizzle/schema';
-import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
-import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
-import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
 
 export const metadata: Metadata = {
@@ -112,50 +106,8 @@ async function loadOrganizationInvitations(organizationId: string) {
 
   const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
   const readService = new DrizzleAdminOrganizationsReadService(db);
-  const organization = await readService.getDetailInActiveScope({
+  return await readService.getInvitationsInActiveScope({
     activeOrganizationId: access.tenant.organizationId,
     organizationId,
   });
-
-  if (!organization) {
-    return null;
-  }
-
-  const emailService = createEmailService({
-    provider: env.EMAIL_PROVIDER,
-    resendApiKey: env.RESEND_API_KEY,
-    resendFromEmail: env.RESEND_FROM_EMAIL,
-    smtpHost: env.SMTP_HOST,
-    smtpPort: env.SMTP_PORT,
-    smtpSecure: env.SMTP_SECURE,
-    smtpUser: env.SMTP_USER,
-    smtpPass: env.SMTP_PASS,
-    smtpFromEmail: env.SMTP_FROM_EMAIL,
-  });
-
-  const invitationService = new DefaultInvitationService(
-    new DrizzleInvitationRepository(db),
-    emailService,
-    { appUrl: env.NEXT_PUBLIC_APP_URL ?? '' },
-  );
-
-  const [rawInvitations, rawRoles] = await Promise.all([
-    invitationService.listByOrganization(organizationId),
-    db
-      .select({ id: rolesTable.id, name: rolesTable.name })
-      .from(rolesTable)
-      .where(eq(rolesTable.organizationId, organizationId))
-      .orderBy(rolesTable.name),
-  ]);
-
-  return {
-    organization: organization.organization,
-    invitations: rawInvitations.map(({ token: _token, ...rest }) => ({
-      ...rest,
-      expiresAt: rest.expiresAt.toISOString(),
-      acceptedAt: rest.acceptedAt?.toISOString() ?? null,
-      createdAt: rest.createdAt.toISOString(),
-    })),
-    roles: rawRoles,
-  };
 }

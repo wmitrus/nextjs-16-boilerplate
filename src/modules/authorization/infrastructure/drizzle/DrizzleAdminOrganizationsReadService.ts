@@ -112,6 +112,32 @@ export interface OrganizationMembersPageDto {
   members: OrganizationMemberSummaryDto[];
 }
 
+export interface OrganizationInvitationSummaryDto {
+  id: string;
+  organizationId: string;
+  invitedByUserId: string | null;
+  email: string;
+  roleId: string;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expiresAt: string;
+  acceptedAt: string | null;
+  createdAt: string;
+}
+
+export interface OrganizationInvitationsPageDto {
+  organization: {
+    id: string;
+    name: string;
+    slug: string | null;
+    status: string;
+  };
+  roles: Array<{
+    id: string;
+    name: string;
+  }>;
+  invitations: OrganizationInvitationSummaryDto[];
+}
+
 export interface ListOrganizationsInActiveScopeInput {
   activeOrganizationId: string;
   limit: number;
@@ -514,6 +540,81 @@ export class DrizzleAdminOrganizationsReadService {
           policy.conditions !== null &&
           Object.keys(policy.conditions).length > 0,
         createdAt: policy.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  async getInvitationsInActiveScope(input: {
+    activeOrganizationId: string;
+    organizationId: string;
+  }): Promise<OrganizationInvitationsPageDto | null> {
+    const tenantId = await this.resolveParentTenantId(
+      input.activeOrganizationId,
+    );
+
+    if (!tenantId) {
+      return null;
+    }
+
+    const organizationRows = await this.db
+      .select({
+        id: organizationsTable.id,
+        name: organizationsTable.name,
+        slug: organizationsTable.slug,
+        status: organizationsTable.status,
+      })
+      .from(organizationsTable)
+      .where(
+        and(
+          eq(organizationsTable.id, input.organizationId),
+          eq(organizationsTable.tenantId, tenantId),
+        ),
+      )
+      .limit(1);
+
+    const organization = organizationRows[0];
+    if (!organization) {
+      return null;
+    }
+
+    const [invitationRows, roleRows] = await Promise.all([
+      this.db
+        .select({
+          id: invitationsTable.id,
+          organizationId: invitationsTable.organizationId,
+          invitedByUserId: invitationsTable.invitedByUserId,
+          email: invitationsTable.email,
+          roleId: invitationsTable.roleId,
+          status: invitationsTable.status,
+          expiresAt: invitationsTable.expiresAt,
+          acceptedAt: invitationsTable.acceptedAt,
+          createdAt: invitationsTable.createdAt,
+        })
+        .from(invitationsTable)
+        .where(eq(invitationsTable.organizationId, input.organizationId)),
+      this.db
+        .select({
+          id: rolesTable.id,
+          name: rolesTable.name,
+        })
+        .from(rolesTable)
+        .where(eq(rolesTable.organizationId, input.organizationId))
+        .orderBy(rolesTable.name),
+    ]);
+
+    return {
+      organization,
+      roles: roleRows,
+      invitations: invitationRows.map((invitation) => ({
+        id: invitation.id,
+        organizationId: invitation.organizationId,
+        invitedByUserId: invitation.invitedByUserId ?? null,
+        email: invitation.email,
+        roleId: invitation.roleId,
+        status: invitation.status as OrganizationInvitationSummaryDto['status'],
+        expiresAt: invitation.expiresAt.toISOString(),
+        acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
+        createdAt: invitation.createdAt.toISOString(),
       })),
     };
   }

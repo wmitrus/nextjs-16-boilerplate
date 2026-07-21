@@ -141,8 +141,13 @@ const AUTO_RECONCILED_GROUPS = new Set([
   'singleNewUser',
   'incompleteUser',
   'personalNewUser',
+  'orgProviderOwner',
+  'orgProviderMember',
   'orgDbSeededMember',
 ]);
+
+const CLERK_LOOKUP_MAX_ATTEMPTS = 3;
+const CLERK_LOOKUP_RETRY_DELAY_MS = 750;
 
 function findRecordByKey(record, key) {
   for (const [entryKey, entryValue] of Object.entries(record)) {
@@ -187,6 +192,53 @@ function looksLikeEmailAddress(value) {
   return typeof value === 'string' && value.includes('@');
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function describeUnknownError(error) {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const details = [];
+  const maybeApiError = error;
+
+  if (error.name) {
+    details.push(error.name);
+  }
+
+  if (error.message) {
+    details.push(error.message);
+  }
+
+  if (typeof maybeApiError.status === 'number') {
+    details.push(`status=${maybeApiError.status}`);
+  }
+
+  if (typeof maybeApiError.statusCode === 'number') {
+    details.push(`statusCode=${maybeApiError.statusCode}`);
+  }
+
+  if (Array.isArray(maybeApiError.errors)) {
+    const clerkErrors = maybeApiError.errors
+      .map((entry) => {
+        const code = typeof entry?.code === 'string' ? entry.code : undefined;
+        const message =
+          typeof entry?.message === 'string' ? entry.message : undefined;
+
+        return [code, message].filter(Boolean).join(': ');
+      })
+      .filter(Boolean);
+
+    if (clerkErrors.length > 0) {
+      details.push(clerkErrors.join('; '));
+    }
+  }
+
+  return details.length > 0 ? details.join(' - ') : 'unknown error';
+}
+
 function createClerkFixtureLookup() {
   const secretKey = getEnvValue('CLERK_SECRET_KEY');
 
@@ -202,11 +254,24 @@ function createClerkFixtureLookup() {
   );
 
   return async (emailAddress) => {
-    const userList = await clerkClient.users.getUserList({
-      emailAddress: [emailAddress],
-    });
+    let lastError;
 
-    return Array.isArray(userList.data) && userList.data.length > 0;
+    for (let attempt = 1; attempt <= CLERK_LOOKUP_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const userList = await clerkClient.users.getUserList({
+          emailAddress: [emailAddress],
+        });
+
+        return Array.isArray(userList.data) && userList.data.length > 0;
+      } catch (error) {
+        lastError = error;
+        if (attempt < CLERK_LOOKUP_MAX_ATTEMPTS) {
+          await sleep(CLERK_LOOKUP_RETRY_DELAY_MS);
+        }
+      }
+    }
+
+    throw new Error(describeUnknownError(lastError));
   };
 }
 

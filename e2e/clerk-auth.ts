@@ -1,5 +1,18 @@
+import { createClerkClient } from '@clerk/backend';
+import type {
+  ClerkClient,
+  OrganizationMembershipRole,
+  User,
+} from '@clerk/backend';
 import { clerk, setupClerkTestingToken } from '@clerk/testing/playwright';
 import type { Browser, Page } from '@playwright/test';
+
+const GENERATED_CLERK_TEST_EMAIL_PREFIX = 'e2e+clerk_test-';
+const GENERATED_CLERK_TEST_EMAIL_DOMAIN = '@example.com';
+const CLERK_AUTO_CREATED_ORGANIZATION_NAME = 'My Organization';
+const CLERK_AUTO_CREATED_ORGANIZATION_SLUG_PREFIX = 'my-organization-';
+const CLERK_BACKEND_MAX_ATTEMPTS = 3;
+const CLERK_BACKEND_RETRY_DELAY_MS = 750;
 
 export type ClerkE2EIdentity =
   | 'singleNewUser'
@@ -88,6 +101,26 @@ const ORGANIZATION_ENV: Record<ClerkE2EOrganization, string> = {
   providerMember: 'E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG',
 };
 
+interface OrganizationMembershipFixture {
+  readonly organization: ClerkE2EOrganization;
+  readonly role: OrganizationMembershipRole;
+}
+
+const MUTABLE_IDENTITY_RECONCILIATION = new Set<ClerkE2EIdentity>([
+  'singleNewUser',
+  'singleProvisionedUser',
+  'incompleteUser',
+  'personalNewUser',
+  'orgProviderOwner',
+  'orgProviderMember',
+  'orgDbSeededMember',
+]);
+
+const mutableIdentityReconciliation = new Map<
+  ClerkE2EIdentity,
+  Promise<void>
+>();
+
 function getIdentityEnvConfig(identity: ClerkE2EIdentity): EnvAliasPair {
   switch (identity) {
     case 'singleNewUser':
@@ -128,6 +161,92 @@ function required(value: string | undefined, variableName: string): string {
   return value;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function describeUnknownError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const maybeApiError = error as Error & {
+    readonly status?: number;
+    readonly statusCode?: number;
+    readonly errors?: ReadonlyArray<{
+      readonly code?: string;
+      readonly message?: string;
+    }>;
+  };
+  const details = [];
+
+  if (error.name) {
+    details.push(error.name);
+  }
+
+  if (error.message) {
+    details.push(error.message);
+  }
+
+  if (typeof maybeApiError.status === 'number') {
+    details.push(`status=${maybeApiError.status}`);
+  }
+
+  if (typeof maybeApiError.statusCode === 'number') {
+    details.push(`statusCode=${maybeApiError.statusCode}`);
+  }
+
+  if (Array.isArray(maybeApiError.errors)) {
+    const clerkErrors = maybeApiError.errors
+      .map((entry) =>
+        [entry.code, entry.message]
+          .filter((value): value is string => typeof value === 'string')
+          .join(': '),
+      )
+      .filter((value) => value.length > 0);
+
+    if (clerkErrors.length > 0) {
+      details.push(clerkErrors.join('; '));
+    }
+  }
+
+  return details.length > 0 ? details.join(' - ') : 'unknown error';
+}
+
+async function withClerkBackendRetry<T>(
+  operationName: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= CLERK_BACKEND_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < CLERK_BACKEND_MAX_ATTEMPTS) {
+        await sleep(CLERK_BACKEND_RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  throw new Error(
+    `${operationName} failed after ${CLERK_BACKEND_MAX_ATTEMPTS} attempts: ${describeUnknownError(lastError)}`,
+  );
+}
+
+function looksLikeEmailAddress(value: string): boolean {
+  return value.includes('@');
+}
+
+function isGeneratedClerkTestEmail(value: string): boolean {
+  return (
+    value.startsWith(GENERATED_CLERK_TEST_EMAIL_PREFIX) &&
+    value.endsWith(GENERATED_CLERK_TEST_EMAIL_DOMAIN)
+  );
+}
+
 function readEnvValue(name: string): string | undefined {
   for (const [envName, envValue] of Object.entries(process.env)) {
     if (envName !== name) {
@@ -162,6 +281,392 @@ function requiredFromAliases(names: readonly string[]): string {
   }
 
   return value;
+}
+
+function createClerkBackendClient() {
+  const secretKey = required(
+    readEnvValue('CLERK_SECRET_KEY'),
+    'CLERK_SECRET_KEY',
+  );
+  const apiUrl = readEnvValue('CLERK_API_URL');
+
+  return createClerkClient(apiUrl ? { secretKey, apiUrl } : { secretKey });
+}
+
+function isClerkNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const maybeResponse = error as Error & {
+    readonly status?: number;
+    readonly statusCode?: number;
+    readonly errors?: ReadonlyArray<{ readonly code?: string }>;
+  };
+
+  return (
+    maybeResponse.status === 404 ||
+    maybeResponse.statusCode === 404 ||
+    maybeResponse.errors?.some(
+      (entry) => entry.code === 'resource_not_found',
+    ) === true
+  );
+}
+
+function getPrimaryEmailAddress(user: {
+  readonly emailAddresses?: ReadonlyArray<{
+    readonly emailAddress?: string;
+  }>;
+  readonly primaryEmailAddressId?: string | null;
+}): string | undefined {
+  const primaryEmail = user.emailAddresses?.find(
+    (email) => email.emailAddress && email.emailAddress.length > 0,
+  );
+
+  return primaryEmail?.emailAddress;
+}
+
+function getFixtureDisplayNameFromSlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter((part) => part.length > 0)
+    .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+    .join(' ');
+}
+
+function getOrganizationMembershipFixture(
+  identity: ClerkE2EIdentity,
+): OrganizationMembershipFixture | null {
+  switch (identity) {
+    case 'orgProviderOwner':
+      return {
+        organization: 'providerOwner',
+        role: 'org:admin',
+      };
+    case 'orgProviderMember':
+      return {
+        organization: 'providerMember',
+        role: 'org:member',
+      };
+    case 'singleNewUser':
+    case 'singleProvisionedUser':
+    case 'incompleteUser':
+    case 'personalNewUser':
+    case 'orgDbSeededMember':
+    case 'linkingBlockedUnverified':
+      return null;
+  }
+}
+
+function getProtectedClerkOrganizationSlugs(): Set<string> {
+  const slugs = new Set<string>();
+
+  for (const organization of Object.keys(
+    ORGANIZATION_ENV,
+  ) as ClerkE2EOrganization[]) {
+    const slug = readEnvValue(getOrganizationEnvName(organization));
+
+    if (slug) {
+      slugs.add(slug);
+    }
+  }
+
+  return slugs;
+}
+
+function isGeneratedClerkE2EOrganization(organization: {
+  readonly name?: string | null;
+  readonly slug?: string | null;
+  readonly membersCount?: number | null;
+}): boolean {
+  return (
+    organization.name === CLERK_AUTO_CREATED_ORGANIZATION_NAME &&
+    typeof organization.slug === 'string' &&
+    organization.slug.startsWith(CLERK_AUTO_CREATED_ORGANIZATION_SLUG_PREFIX) &&
+    organization.membersCount === 0
+  );
+}
+
+export async function deleteGeneratedClerkE2EUserByEmail(
+  emailAddress: string,
+): Promise<number> {
+  if (!isGeneratedClerkTestEmail(emailAddress)) {
+    throw new Error(
+      `Refusing to delete non-generated Clerk E2E email: ${emailAddress}`,
+    );
+  }
+
+  const clerkClient = createClerkBackendClient();
+  const userList = await withClerkBackendRetry(
+    'Clerk generated E2E user lookup',
+    () =>
+      clerkClient.users.getUserList({
+        emailAddress: [emailAddress],
+      }),
+  );
+  const users = Array.isArray(userList.data) ? userList.data : [];
+
+  await Promise.all(
+    users.map((user) =>
+      withClerkBackendRetry('Clerk generated E2E user deletion', () =>
+        clerkClient.users.deleteUser(user.id),
+      ),
+    ),
+  );
+
+  return users.length;
+}
+
+export async function cleanupGeneratedClerkE2EOrganizations(): Promise<number> {
+  const clerkClient = createClerkBackendClient();
+  const protectedSlugs = getProtectedClerkOrganizationSlugs();
+  let deletedCount = 0;
+
+  for (let pass = 0; pass < 5; pass += 1) {
+    const organizationList = await withClerkBackendRetry(
+      'Clerk generated E2E organization lookup',
+      () =>
+        clerkClient.organizations.getOrganizationList({
+          includeMembersCount: true,
+          limit: 100,
+          query: CLERK_AUTO_CREATED_ORGANIZATION_NAME,
+        }),
+    );
+    const organizations = (
+      Array.isArray(organizationList.data) ? organizationList.data : []
+    ).filter(
+      (organization) =>
+        isGeneratedClerkE2EOrganization(organization) &&
+        !protectedSlugs.has(organization.slug ?? ''),
+    );
+
+    if (organizations.length === 0) {
+      break;
+    }
+
+    await Promise.all(
+      organizations.map((organization) =>
+        withClerkBackendRetry('Clerk generated E2E organization deletion', () =>
+          clerkClient.organizations.deleteOrganization(organization.id),
+        ),
+      ),
+    );
+    deletedCount += organizations.length;
+
+    if (organizations.length < 100) {
+      break;
+    }
+  }
+
+  return deletedCount;
+}
+
+export async function cleanupGeneratedClerkE2EUsers(): Promise<number> {
+  const clerkClient = createClerkBackendClient();
+  let deletedCount = 0;
+
+  for (let pass = 0; pass < 5; pass += 1) {
+    const userList = await withClerkBackendRetry(
+      'Clerk generated E2E users lookup',
+      () =>
+        clerkClient.users.getUserList({
+          limit: 100,
+          query: GENERATED_CLERK_TEST_EMAIL_PREFIX,
+        }),
+    );
+    const users = (Array.isArray(userList.data) ? userList.data : []).filter(
+      (user) => {
+        const emailAddress = getPrimaryEmailAddress(user);
+
+        return emailAddress ? isGeneratedClerkTestEmail(emailAddress) : false;
+      },
+    );
+
+    if (users.length === 0) {
+      break;
+    }
+
+    await Promise.all(
+      users.map((user) =>
+        withClerkBackendRetry('Clerk generated E2E user deletion', () =>
+          clerkClient.users.deleteUser(user.id),
+        ),
+      ),
+    );
+    deletedCount += users.length;
+
+    if (users.length < 100) {
+      break;
+    }
+  }
+
+  return deletedCount;
+}
+
+export async function cleanupGeneratedClerkE2EArtifacts(): Promise<{
+  readonly organizations: number;
+  readonly users: number;
+}> {
+  const users = await cleanupGeneratedClerkE2EUsers();
+  const organizations = await cleanupGeneratedClerkE2EOrganizations();
+
+  return { organizations, users };
+}
+
+async function reconcileMutableIdentityFixture(
+  identity: ClerkE2EIdentity,
+  credentials: { username: string; password: string },
+): Promise<void> {
+  if (!MUTABLE_IDENTITY_RECONCILIATION.has(identity)) {
+    return;
+  }
+
+  if (!looksLikeEmailAddress(credentials.username)) {
+    return;
+  }
+
+  const existingTask = mutableIdentityReconciliation.get(identity);
+  if (existingTask) {
+    await existingTask;
+    return;
+  }
+
+  const reconciliationTask = (async () => {
+    const clerkClient = createClerkBackendClient();
+    const userList = await withClerkBackendRetry(
+      'Clerk mutable E2E user lookup',
+      () =>
+        clerkClient.users.getUserList({
+          emailAddress: [credentials.username],
+        }),
+    );
+    const existingUser = Array.isArray(userList.data)
+      ? userList.data[0]
+      : undefined;
+
+    if (!existingUser) {
+      const createdUser = await withClerkBackendRetry(
+        'Clerk mutable E2E user creation',
+        () =>
+          clerkClient.users.createUser({
+            emailAddress: [credentials.username],
+            password: credentials.password,
+            skipPasswordChecks: true,
+            skipLegalChecks: true,
+          }),
+      );
+      await reconcileOrganizationMembershipFixture(
+        clerkClient,
+        identity,
+        createdUser,
+      );
+      return;
+    }
+
+    const updatedUser = await withClerkBackendRetry(
+      'Clerk mutable E2E user update',
+      () =>
+        clerkClient.users.updateUser(existingUser.id, {
+          password: credentials.password,
+          skipPasswordChecks: true,
+          skipLegalChecks: true,
+        }),
+    );
+    await reconcileOrganizationMembershipFixture(
+      clerkClient,
+      identity,
+      updatedUser,
+    );
+  })();
+
+  mutableIdentityReconciliation.set(identity, reconciliationTask);
+
+  try {
+    await reconciliationTask;
+  } catch (error) {
+    mutableIdentityReconciliation.delete(identity);
+    throw error;
+  }
+}
+
+async function reconcileOrganizationMembershipFixture(
+  clerkClient: ClerkClient,
+  identity: ClerkE2EIdentity,
+  user: User,
+): Promise<void> {
+  const fixture = getOrganizationMembershipFixture(identity);
+
+  if (!fixture) {
+    return;
+  }
+
+  const organizationSlug = getClerkE2EOrganizationSlug(fixture.organization);
+  let organization:
+    | Awaited<ReturnType<typeof clerkClient.organizations.getOrganization>>
+    | undefined;
+
+  try {
+    organization = await withClerkBackendRetry(
+      'Clerk E2E organization lookup',
+      () =>
+        clerkClient.organizations.getOrganization({
+          slug: organizationSlug,
+          includeMembersCount: true,
+        }),
+    );
+  } catch (error) {
+    if (!isClerkNotFoundError(error)) {
+      throw error;
+    }
+
+    organization = await withClerkBackendRetry(
+      'Clerk E2E organization creation',
+      () =>
+        clerkClient.organizations.createOrganization({
+          name: getFixtureDisplayNameFromSlug(organizationSlug),
+          slug: organizationSlug,
+          createdBy: user.id,
+        }),
+    );
+  }
+
+  const membershipList = await withClerkBackendRetry(
+    'Clerk E2E organization membership lookup',
+    () =>
+      clerkClient.organizations.getOrganizationMembershipList({
+        organizationId: organization.id,
+        userId: [user.id],
+        limit: 1,
+      }),
+  );
+  const membership = Array.isArray(membershipList.data)
+    ? membershipList.data[0]
+    : undefined;
+
+  if (!membership) {
+    await withClerkBackendRetry(
+      'Clerk E2E organization membership creation',
+      () =>
+        clerkClient.organizations.createOrganizationMembership({
+          organizationId: organization.id,
+          userId: user.id,
+          role: fixture.role,
+        }),
+    );
+    return;
+  }
+
+  if (membership.role !== fixture.role) {
+    await withClerkBackendRetry(
+      'Clerk E2E organization membership update',
+      () =>
+        clerkClient.organizations.updateOrganizationMembership({
+          organizationId: organization.id,
+          userId: user.id,
+          role: fixture.role,
+        }),
+    );
+  }
 }
 
 export function getClerkE2ECredentials(identity: ClerkE2EIdentity): {
@@ -286,7 +791,9 @@ export async function signInClerkIdentityE2E(
   page: Page,
   identity: ClerkE2EIdentity,
 ): Promise<void> {
-  await signInWithCredentials(page, getClerkE2ECredentials(identity));
+  const credentials = getClerkE2ECredentials(identity);
+  await reconcileMutableIdentityFixture(identity, credentials);
+  await signInWithCredentials(page, credentials);
 }
 
 export async function signInE2E(page: Page): Promise<void> {

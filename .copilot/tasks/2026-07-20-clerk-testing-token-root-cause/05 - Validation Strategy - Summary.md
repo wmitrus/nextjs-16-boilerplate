@@ -35,6 +35,7 @@
 - Confirmed: the default scenario runner loads `scripts/e2e/env/base.env`, which sets `AUTH_PROVIDER=clerk` for normal E2E scenario runs.
 - Confirmed: `@clerk/testing` fetches a testing token by calling Clerk Backend `testingTokens.createTestingToken()` with `CLERK_SECRET_KEY` when `CLERK_TESTING_TOKEN` is absent.
 - Confirmed: the reported error means env presence checks already passed and the failure is now at Clerk backend token creation.
+- Confirmed: a second failure mode remained after key recovery: `scripts/check-e2e-auth-env.mjs` only verified env presence, so missing Clerk fixture accounts such as `personalNewUser` were not caught until runtime sign-in.
 - Risks: invalid, mismatched, or non-test-instance Clerk keys block the entire suite before any Playwright spec runs.
 - Drift: none recorded in code; repository docs already describe this as a Clerk fixture / instance setup problem.
 
@@ -49,6 +50,14 @@
 - minimum required validation: inspect the resolved `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` in `.env.e2e.local` / `.env.e2e` / `.env.local`, confirm they belong to the same Clerk test instance, and rerun the focused env validator plus one Clerk-backed E2E entrypoint.
 - optional additional validation: set `CLERK_TESTING_TOKEN` explicitly if available to bypass backend token minting and isolate whether the failure is key-minting-specific.
 - validation explicitly not required: AuthJS-focused commands, full matrix reruns, or DB troubleshooting before Clerk instance/key validation.
+
+## Follow-Up Fix Applied
+
+- `scripts/check-e2e-auth-env.mjs` now validates that required Clerk fixture users for the selected scenario actually exist in the configured Clerk instance by querying Clerk Backend before Playwright starts.
+- `scripts/check-e2e-auth-env.test.ts` now covers the missing-fixture case and the non-email skip path.
+- `scripts/e2e-clerk-fixtures.md` now documents that the preflight also verifies user existence, not just env presence.
+- `e2e/clerk-auth.ts` now automatically creates or repairs mutable standalone Clerk fixtures before browser sign-in for `singleNewUser`, `singleProvisionedUser`, `incompleteUser`, `personalNewUser`, and `orgDbSeededMember`.
+- `scripts/check-e2e-auth-env.mjs` now downgrades missing mutable standalone fixtures to warnings because the runtime helper reconciles them automatically.
 
 ## Validation Commands / Checks
 
@@ -80,6 +89,6 @@
 ### Update Entry
 
 - Date: 2026-07-20
-- Trigger: investigation complete
-- Summary of change: recorded the confirmed Clerk-backed control path and narrowed the root cause to Clerk testing-token minting with invalid or mismatched instance credentials/configuration
-- Sections refreshed: all
+- Trigger: runtime fixture hardening
+- Summary of change: added automatic Clerk fixture reconciliation for mutable standalone identities and aligned preflight from hard failure to warning for those identities
+- Sections refreshed: Follow-Up Fix Applied, Update Log

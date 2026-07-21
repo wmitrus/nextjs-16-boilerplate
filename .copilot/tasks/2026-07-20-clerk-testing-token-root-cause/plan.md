@@ -23,3 +23,8 @@
 # Solution
 
 After sign in into clerk it started to work.
+
+## Follow-Up Hardening
+
+- Added early Clerk fixture-account existence validation to `scripts/check-e2e-auth-env.mjs` so missing personal or scenario-specific Clerk users fail in preflight instead of later inside Playwright sign-in.
+- Replaced the remaining manual-fixture fragility for mutable standalone Clerk identities by reconciling them automatically before sign-in in `e2e/clerk-auth.ts`.

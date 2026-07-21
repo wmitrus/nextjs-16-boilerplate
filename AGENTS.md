@@ -665,6 +665,7 @@ Prefer:
 - The authoritative local E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or a package script built on top of it (`pnpm e2e`, `pnpm e2e:auth`, `pnpm e2e:auth-matrix:*`, `pnpm e2e:scenario:*`).
 - The default local Playwright E2E origin is `http://localhost:3100`. It is intentionally separate from the normal developer app on `http://localhost:3000` so browser test runs do not contend with `pnpm dev`.
 - `scripts/e2e/run-scenario.mjs` is the source of truth for the E2E origin and must align `PLAYWRIGHT_TEST_BASE_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `NEXTAUTH_URL` to the same browser-test origin.
+- Scenario runs must use a fresh Next.js server process by default because `AUTH_PROVIDER`, `TENANCY_MODE`, `TENANT_CONTEXT_SOURCE`, DB settings, and related runtime env are read at server startup. Reusing a reachable dev server across `single`, `personal`, `org-provider`, or `org-db` can execute tests against the previous scenario's runtime.
 - Do not treat raw `playwright test` or `pnpm e2e:raw` as authoritative for auth, bootstrap, onboarding, AuthJS admin, or container-backed investigations. Raw Playwright bypasses scenario DB setup and will use the current app runtime env, which can point at `.env.local` / the dev database.
 - When `E2E_BACKEND_MODE=container`, the expected isolated database is always `postgres://postgres:postgres@127.0.0.1:5433/app_test`. If E2E-created users appear in the dev DB, suspect a raw Playwright run or another non-scenario entrypoint first.
 - For interactive terminal runs, always pass `--reporter=line`. Do not use the HTML reporter for agent-driven E2E runs because it hides the console evidence needed for debugging.
@@ -676,6 +677,17 @@ Prefer:
 - Public, demo, or E2E-only routes explicitly allowed without auth must stay unauthenticated in Playwright unless the scenario itself is about authenticated behavior. Do not add Clerk/AuthJS setup just because adjacent suites are authenticated.
 - Mixed suites must be split by scenario semantics before optimization. Do not force one fixture model across a whole file when some cases are flow-based and others are steady-state. `e2e/provisioning-runtime.spec.ts` is the canonical example.
 - When the correct fixture model is unclear, inspect route policy, proxy behavior, and route/layout guards first. If semantics are still ambiguous, preserve the interactive flow rather than introducing shared-session coupling.
+
+#### Clerk E2E Fixture Contract
+
+- For Clerk auth/bootstrap/provisioning E2E work, read `scripts/e2e-clerk-fixtures.md`, `e2e/clerk-auth.ts`, and `e2e/runtime-profile.ts` before changing fixtures.
+- `@clerk/backend` is a direct dependency when repository scripts or E2E helpers import Clerk Backend API clients. Do not treat it as an optional transitive dependency of `@clerk/nextjs`.
+- Do not create per-test stable Clerk organizations or password users. Stable password fixtures are env-driven and reconciled by `e2e/clerk-auth.ts`; generated hosted sign-up users are only `e2e+clerk_test-*@example.com` and must be cleaned after use.
+- Hosted sign-up can create generated users and empty default Clerk organizations. Cleanup must stay guarded by strict generated-email/default-org predicates and must protect configured stable slugs such as `E2E_CLERK_ORG_PROVIDER_OWNER_SLUG` and `E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG`.
+- In `org-provider`, the stable Clerk organization slug is the source of truth. The helper must reconcile the owner/member users, organizations, and membership roles (`org:admin` / `org:member`) before browser sign-in.
+- In `org-db`, Clerk organization membership is not app tenant truth. Active-context cookies must use seeded application organization IDs from `SEEDED_ORGANIZATION_IDS`, not seeded tenant IDs.
+- Worker-scoped authenticated storage fixtures must guard runtime compatibility before creating browser or session state because `test.skip()` inside a test body runs too late.
+- Keep bounded retries and actionable error formatting around Clerk Backend and Clerk testing-token calls. Blank or transient Clerk API failures should be reported as fixture/provider setup failures, not confused with app regressions.
 
 ---
 

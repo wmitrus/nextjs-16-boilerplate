@@ -348,9 +348,11 @@ function applySharedRuntimeEnv(env, scenario, variant) {
   env.E2E_ENABLED = 'true';
   env.NEXT_PUBLIC_E2E_ENABLED = 'true';
   env.API_RATE_LIMIT_REQUESTS = process.env.API_RATE_LIMIT_REQUESTS ?? '1000';
+  // Scenario env is process-startup state for Next.js. Reusing an already
+  // running dev server across matrix scenarios can execute a personal/org run
+  // against the previous scenario's TENANCY_MODE or tenant-source settings.
   env.PLAYWRIGHT_REUSE_EXISTING_SERVER =
-    env.PLAYWRIGHT_REUSE_EXISTING_SERVER ??
-    (env.CI || hasExplicitServerLogDir ? 'false' : 'true');
+    env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? 'false';
 
   if (hasExplicitServerLogDir) {
     env.LOG_DIR = env.PLAYWRIGHT_SERVER_LOG_DIR;

@@ -28,7 +28,7 @@ import {
   isOrgProviderRuntime,
   isPersonalRuntime,
   isSingleRuntime,
-  SEEDED_TENANT_IDS,
+  SEEDED_ORGANIZATION_IDS,
 } from './runtime-profile';
 
 const runtime = getRuntimeProfile();
@@ -535,6 +535,7 @@ async function browserJsonRequest(
   pathname: string,
 ): Promise<{ status: number; body: unknown }> {
   await waitForAuthenticatedClerkSession(page);
+  const url = new URL(pathname, getBaseUrl()).toString();
 
   return page.evaluate(async (input) => {
     const token = await window.Clerk?.session?.getToken();
@@ -555,7 +556,7 @@ async function browserJsonRequest(
       status: response.status,
       body,
     };
-  }, pathname);
+  }, url);
 }
 
 async function assertNoVisibleRenderingHang(page: Page): Promise<void> {
@@ -682,6 +683,11 @@ async function clearActiveOrganization(page: Page) {
   });
 }
 
+const EMPTY_STORAGE_STATE = {
+  cookies: [],
+  origins: [],
+} satisfies SessionStorageState;
+
 const steadyStateSingleModeTest = test.extend<
   {
     completedSingleUserPage: Page;
@@ -697,6 +703,14 @@ const steadyStateSingleModeTest = test.extend<
       { browser }: { browser: Browser },
       runWithStorageState: (storageState: SessionStorageState) => Promise<void>,
     ) => {
+      if (
+        !isSingleRuntime(runtime) ||
+        !hasClerkIdentityE2ECredentials('singleNewUser')
+      ) {
+        await runWithStorageState(EMPTY_STORAGE_STATE);
+        return;
+      }
+
       const storageState =
         await captureCompletedSingleUserStorageState(browser);
       await runWithStorageState(storageState);
@@ -708,6 +722,14 @@ const steadyStateSingleModeTest = test.extend<
       { browser }: { browser: Browser },
       runWithStorageState: (storageState: SessionStorageState) => Promise<void>,
     ) => {
+      if (
+        !isSingleRuntime(runtime) ||
+        !hasClerkIncompleteUserE2ECredentials()
+      ) {
+        await runWithStorageState(EMPTY_STORAGE_STATE);
+        return;
+      }
+
       const storageState =
         await captureIncompleteSingleUserStorageState(browser);
       await runWithStorageState(storageState);
@@ -1610,7 +1632,7 @@ test.describe('Provisioning Runtime E2E', () => {
     );
 
     await signInClerkOrgDbSeededMemberE2E(page);
-    await setActiveTenantCookie(page, SEEDED_TENANT_IDS.acme);
+    await setActiveTenantCookie(page, SEEDED_ORGANIZATION_IDS.acmeHq);
 
     await page.goto('/auth/bootstrap/start?redirect_url=/users');
     await expect(page).toHaveURL(/\/onboarding\?redirect_url=%2Fusers/);
@@ -1632,7 +1654,7 @@ test.describe('Provisioning Runtime E2E', () => {
     );
 
     await signInClerkOrgDbSeededMemberE2E(page);
-    await setActiveTenantCookie(page, SEEDED_TENANT_IDS.globex);
+    await setActiveTenantCookie(page, SEEDED_ORGANIZATION_IDS.globexHq);
 
     const response = await browserJsonRequest(page, '/api/users');
     expect(response.status).toBe(403);

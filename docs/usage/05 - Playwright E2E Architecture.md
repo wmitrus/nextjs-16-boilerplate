@@ -56,6 +56,12 @@ Do not use raw Playwright as sign-off evidence for:
 
 Reason: raw Playwright bypasses scenario DB setup and can run against the current `.env.local` app runtime.
 
+### Server lifecycle
+
+Each scenario-runner invocation starts from scenario-specific process env. The Next.js server must not be reused across different scenario families by default because auth provider, tenancy mode, tenant-context source, DB URL/driver, and public app URL are read at server startup.
+
+`scripts/e2e/run-scenario.mjs` therefore defaults `PLAYWRIGHT_REUSE_EXISTING_SERVER=false`. Only override it for narrow local debugging when you have proved the already-running server was started with the same scenario env.
+
 ## Runtime Profiles And Scenario Model
 
 The repository does not have one generic E2E runtime. The active browser scenario is shaped by `e2e/runtime-profile.ts`.
@@ -266,6 +272,8 @@ Never downgrade a transition-sensitive test into a shared-session test just beca
 
 - identity-to-env mapping
 - supported Clerk identities
+- stable password fixture reconciliation for users, organizations, and organization membership roles
+- generated hosted sign-up artifact cleanup
 - interactive sign-in helpers
 - onboarding completion for generic provisioned users
 - captured-session helpers for safe steady-state reuse
@@ -274,6 +282,25 @@ Use Clerk helpers when:
 
 - the runtime auth provider is Clerk
 - the scenario needs provider org context, incomplete users, or seeded org DB members
+
+#### Clerk fixture lifecycle contract
+
+Before changing Clerk E2E setup, read `scripts/e2e-clerk-fixtures.md`, `e2e/clerk-auth.ts`, and `e2e/runtime-profile.ts`.
+
+Stable fixtures and generated hosted sign-up artifacts are different lifecycles:
+
+- Stable password users and org/provider organizations come from env configuration and must be reused across runs. `e2e/clerk-auth.ts` reconciles missing users, missing organizations, and membership roles before browser sign-in.
+- Generated hosted sign-up users are disposable and must use the `e2e+clerk_test-*@example.com` pattern so cleanup can delete only test-created accounts.
+- Hosted sign-up can also create empty default Clerk organizations named `My Organization` with slugs such as `my-organization-*`. Cleanup may delete only those empty default organizations and must protect configured stable slugs, including `E2E_CLERK_ORG_PROVIDER_OWNER_SLUG` and `E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG`.
+- The `org-provider` scenario treats stable Clerk org slugs as the provider source of truth. The owner user must be a member with `org:admin`; the member user must be a member with `org:member`.
+- The `org-db` scenario treats seeded application organization IDs as app context truth. Active-context cookies must use `SEEDED_ORGANIZATION_IDS`; Clerk org membership and seeded tenant IDs are not substitutes.
+
+Operational guardrails:
+
+- Do not create per-test stable Clerk users or organizations.
+- Keep bounded retries and clear error formatting around Clerk Backend API and testing-token calls.
+- Worker-scoped authenticated storage fixtures must check runtime compatibility before creating browser/session state because test-body `test.skip()` cannot prevent worker setup from running.
+- Keep `@clerk/backend` as a direct dependency whenever scripts or E2E helpers import Clerk Backend clients.
 
 ### AuthJS helpers
 

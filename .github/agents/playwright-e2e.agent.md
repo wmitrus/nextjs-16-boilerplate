@@ -23,6 +23,7 @@ You complement those agents by running browser-realistic checks and recording ev
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before E2E work.
 - Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md` before E2E work.
 - Read `docs/usage/05 - Playwright E2E Architecture.md` before adding, moving, or refactoring E2E test code.
+- For Clerk auth/bootstrap/provisioning E2E work, read `scripts/e2e-clerk-fixtures.md`, `e2e/clerk-auth.ts`, and `e2e/runtime-profile.ts` before changing fixture setup.
 - Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` before writing or modifying E2E test code — especially SEC-05 (file path construction in E2E helpers) and SEC-06 (`Math.random()` acceptable use).
 - If the task uses `.copilot/tasks/{task_id}/`, create or update `07 - Playwright E2E - Summary.md` in that task directory and keep it aligned with the run evidence before handoff, using `docs/ai/templates/specialist-summaries/07 - Playwright E2E - Summary Template.md`.
 - If the task is orchestrated, read the relevant task artifacts first, especially `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present.
@@ -67,6 +68,8 @@ Do not use this agent when:
 - For interactive terminal runs, require `--reporter=line`; do not rely on the HTML reporter for debugging evidence.
 - When the provider under test is `authjs`, do not sign off with only completed-user coverage; ensure the run includes an incomplete-user onboarding path.
 - If the existing AuthJS E2E provisioning helper cannot create an incomplete user, treat that as a validation gap and fix the helper or add a dedicated setup path before sign-off.
+- When the provider under test is Clerk, preserve the fixture lifecycle contract: stable env-driven users/orgs are reconciled and reused, generated hosted sign-up users use `e2e+clerk_test-*@example.com` and are cleaned, and empty default `My Organization` org cleanup must protect configured stable slugs.
+- For Clerk `org-provider`, reconcile owner/member organization memberships (`org:admin` / `org:member`) before sign-in. For Clerk `org-db`, active-context cookies use seeded application organization IDs from `SEEDED_ORGANIZATION_IDS`, not seeded tenant IDs.
 - Before changing E2E auth setup, classify the scenario: use shared `storageState` only for steady-state assertions whose subject is behavior after auth/bootstrap/onboarding has already settled.
 - Keep fresh interactive login/bootstrap/onboarding flows for scenarios that validate sign-in, sign-up, bootstrap, onboarding, sign-out, session re-entry, tenant/org selection, or auth-driven redirects.
 - If a route is public, demo, or explicitly allowed for E2E access without auth, keep the Playwright spec unauthenticated unless authenticated behavior is itself the subject under test. Do not add auth setup by default.

@@ -1,9 +1,11 @@
 /** @vitest-environment node */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('server-only', () => ({}));
 
 import { updateSecuritySettings } from './showcase-actions';
 
-import { createReplayToken } from '@/security/actions/action-replay';
+import { createReplayToken } from '@/security/actions/replay-token';
 
 describe('showcase-actions', () => {
   it('returns controlled auth result instead of container resolution failure', async () => {

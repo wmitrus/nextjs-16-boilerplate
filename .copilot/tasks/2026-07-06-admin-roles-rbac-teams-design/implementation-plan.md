@@ -7,6 +7,7 @@
 ## Status
 
 - Phase-based implementation complete for Organizations, Roles, RBAC & Policies, and Members slices. Teams remains intentionally deferred.
+- Replay-token boundary remediation implemented on 2026-07-21. Security & Auth re-review approved the reviewed slice for production readiness, contingent on normal release gates and production Upstash replay-store env being configured.
 
 ## Candidate Delivery Shapes
 
@@ -121,3 +122,58 @@
 - Step 2: Completed. The lint passed, so the last architecture release gate for this slice is closed in the task artifacts.
 - Step 3: If the lint reports another violation, inspect the new failing edge and fix it at the owning abstraction boundary rather than duplicating literals or pushing shared concerns upward into `src/app`.
 - Step 4: Only if follow-up lint output points to the same redirect contract area, normalize remaining direct `DEFAULT_APP_ENTRY_URL` consumers to `src/shared/lib/routing/default-app-entry.ts`; do not widen that extraction without a concrete failing edge.
+
+## Replay Token Boundary Remediation Plan
+
+### Objective
+
+- Fix the production blocker where `src/features/security-showcase/components/SettingsFormExample.tsx` imports `createReplayToken()` from `src/security/actions/action-replay.ts`.
+- Preserve the secure server-action replay contract without allowing client components to import server env, Upstash Redis, or replay-store implementation details.
+
+### Architecture Decision
+
+- Keep replay-token validation and nonce persistence in `src/security/actions/action-replay.ts`.
+- Move replay-token creation into a new client-safe security leaf module, for example `src/security/actions/replay-token.ts`.
+- The new client-safe module must not import `@/core/env`, `@upstash/redis`, `server-only`, Node-only modules, DI, repositories, or server request helpers.
+- Add `import 'server-only';` to the server replay-store module after the split so future client imports fail loudly.
+
+### Implementation Steps
+
+- Step 1: Create a client-safe token factory module under `src/security/actions/`.
+  - Export `createReplayToken()`.
+  - Use only Web Crypto-compatible APIs available in browsers and Node test environments.
+  - Keep the existing token format unless Security & Auth explicitly changes it: `${timestamp}|${nonce}`.
+- Step 2: Update client and test callers.
+  - `src/features/security-showcase/components/SettingsFormExample.tsx` imports `createReplayToken()` from the new client-safe module.
+  - `src/testing/integration/server-actions.test.ts` and `src/features/security-showcase/actions/showcase-actions.test.ts` import the token factory from the new module.
+  - `src/security/actions/action-replay.test.ts` may import token creation from the new module while keeping validation imports from `action-replay.ts`.
+- Step 3: Harden the server-only replay-store module.
+  - Add `import 'server-only';` to `src/security/actions/action-replay.ts`.
+  - Keep `validateReplayToken()`, `resetReplayProtectionStoreForTests()`, Redis setup, production fail-closed behavior, and local test/development nonce store there.
+  - Do not expose Redis or env-derived config through any client-importable barrel.
+- Step 4: Verify no client component imports server replay modules.
+  - Search for imports of `@/security/actions/action-replay` and `./action-replay`.
+  - The only remaining production import should be server-side secure-action validation; tests may import server validation with existing test `server-only` mocking where needed.
+- Step 5: Keep the log hygiene issue separate.
+  - Do not change invitation logging unless fresh code inspection finds raw email fields again.
+  - Ensure generated logs containing real emails are absent from the commit and are not used as release evidence.
+
+### Validation Commands
+
+- `pnpm exec vitest run --config vitest.unit.config.ts --coverage.enabled=false "src/security/actions/action-replay.test.ts" "src/security/actions/secure-action.test.ts" "src/features/security-showcase/actions/showcase-actions.test.ts"`
+- `pnpm exec vitest run --config vitest.integration.config.ts --coverage.enabled=false "src/testing/integration/server-actions.test.ts"`
+- `pnpm lint --fix`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm arch:lint`
+- `rg -n "from '@/security/actions/action-replay'|from './action-replay'|createReplayToken" src tests e2e -S`
+- `rg -n "wmitrus@gmail\\.com|\"email\":\"[^\"]+@[^\"]+\"" logs .copilot/tasks/2026-07-06-admin-roles-rbac-teams-design -S`
+
+### Release Criteria
+
+- [x] No client component imports `src/security/actions/action-replay.ts`.
+- [x] `src/security/actions/action-replay.ts` is explicitly server-only.
+- [x] Replay-token validation still rejects missing, expired, invalid, and reused tokens.
+- [x] The showcase server-action caller still supplies replay tokens through a client-safe import.
+- [x] No raw email, token, one-time URL, or credential-shaped value is present in generated task/log artifacts.
+- [x] Security & Auth re-review updates `02 - Security & Auth - Summary.md` back to production-ready only after the boundary fix and validation evidence are complete.

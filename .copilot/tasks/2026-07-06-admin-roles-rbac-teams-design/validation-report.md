@@ -34,6 +34,7 @@
 - Added dedicated real-DB validation for `DrizzleAdminRolesMutationService` lifecycle invariants.
 - Added focused invitation-service tests proving log payloads no longer emit raw recipient email fields.
 - Added focused replay-protection unit and integration validation for the shared secure server-action primitive, including missing-token rejection, nonce reuse rejection, and authenticated success with fresh tokens.
+- Added focused replay-token boundary validation after splitting client token creation from server replay validation/storage.
 - Re-verified the latest replay-protection slice after local edits by re-reading touched files, checking editor diagnostics, and confirming the live `createSecureAction(...)` caller set still supplies replay tokens.
 - Added focused AuthJS admin E2E proof for canonical nested invitation send/revoke.
 - Added archived-state list/detail behavior for organizations and blocked archived active-workspace switches in `/api/auth/active-org`.
@@ -82,6 +83,7 @@
 - The focused canonical nested invitation flow is now validated at route, DB-adjacent service, and browser levels for the shipped create/revoke use case.
 - The final Security & Auth implementation blockers are now remediated in code: invitation logs emit hashed recipient identifiers instead of raw emails, and archived organizations reject nested role, invitation, and policy mutations consistently.
 - The remaining shared-action security gap is now remediated too: secure server actions require replay tokens, reject reused nonces, and fail closed in production when the distributed replay store is unavailable.
+- The replay-token client/server boundary blocker is now remediated too: `createReplayToken()` lives in a client-safe security leaf, while Redis/env replay validation and nonce persistence remain in the explicitly server-only replay-store module.
 - A final Security & Auth re-verification pass found no fresh regression in the replay-protection slice; the current reachable showcase caller still supplies replay tokens and failure-path audit logging still redacts them.
 - The role lifecycle slice now has dedicated real-DB proof for duplicate-name rejection, reserved-name rejection, protected-role mutation, and deletion guards for in-use roles and pending invitations.
 - The former architecture release gate is now closed: `pnpm arch:lint` passes after extracting `DEFAULT_APP_ENTRY_URL` to `src/shared/lib/routing/default-app-entry.ts` and removing the `src/modules/auth/ui/authjs/UserAvatarMenu.tsx -> src/app/auth/post-auth-redirect.ts` reverse dependency.
@@ -115,6 +117,15 @@
 - Fresh call-site verification via workspace search found the current live `createSecureAction(...)` showcase caller supplies `_replayToken: createReplayToken()`.
 - Full architecture-gate validation passed via `pnpm arch:lint` after the boundary fix; layer dependency checks, provider isolation, skott, and madge all passed, with summary `Architecture lint passed.`
 - Release-review follow-up confirmed the nested-invitations boundary issue is fixed, and `pnpm arch:lint`, `pnpm lint --fix`, and `pnpm typecheck` all pass on the updated slice.
+- Replay-boundary release-review follow-up passed on 2026-07-21:
+  - `pnpm exec vitest run --config vitest.unit.config.ts --coverage.enabled=false "src/security/actions/action-replay.test.ts" "src/security/actions/secure-action.test.ts" "src/features/security-showcase/actions/showcase-actions.test.ts"` passed with `3` files and `21` tests.
+  - `pnpm exec vitest run --config vitest.integration.config.ts --coverage.enabled=false "src/testing/integration/server-actions.test.ts"` passed with `1` file and `11` tests.
+  - `pnpm lint --fix` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm arch:lint` passed hard layer dependency, provider isolation, runtime smell, skott, and madge checks, with the existing advisory global-container warning.
+  - import-graph scans confirmed no production client import of `src/security/actions/action-replay.ts`.
+  - sensitive-artifact scans found no raw invitation email or replay-token values in checked logs and task artifacts.
+  - operator-provided `pnpm build` evidence showed the production build completed successfully on 2026-07-21.
 
 ## Leantime Diagnostic Correction
 

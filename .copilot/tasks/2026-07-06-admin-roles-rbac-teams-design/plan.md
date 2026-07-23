@@ -76,3 +76,6 @@
 - Completed: secure server actions now enforce mandatory replay tokens with nonce reuse protection; the showcase caller and focused unit/integration tests were updated to prove the fail-closed contract.
 - Completed: the pre-existing `modules -> app` boundary violation in `src/modules/auth/ui/authjs/UserAvatarMenu.tsx` was fixed by extracting `DEFAULT_APP_ENTRY_URL` to `src/shared/lib/routing/default-app-entry.ts`.
 - Completed: `pnpm arch:lint` now passes after the boundary fix, so the remaining architecture release gate for this slice is closed.
+- Completed: replay-token creation now lives in a client-safe module, while replay validation and nonce persistence remain in the explicitly server-only replay-store module.
+- Completed: Security & Auth re-review approved the reviewed admin/RBAC/replay-boundary slice for production readiness, contingent on normal release gates and production Upstash replay-store env being configured.
+- Completed: Validation Strategy re-review approved the current validation package for release readiness; focused replay unit/integration tests, lint, typecheck, architecture lint, import-graph scans, sensitive-artifact scans, and operator-provided production build evidence are all available.

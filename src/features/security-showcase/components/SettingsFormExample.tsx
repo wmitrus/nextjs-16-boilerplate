@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 
 import { updateSecuritySettings } from '../actions/showcase-actions';
 
-import { createReplayToken } from '@/security/actions/action-replay';
+import { createReplayToken } from '@/security/actions/replay-token';
 
 /**
  * Example of a Form using a Secure Server Action.

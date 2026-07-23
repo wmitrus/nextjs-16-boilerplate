@@ -4,9 +4,9 @@
 
 - Task ID: `2026-07-06-admin-roles-rbac-teams-design`
 - Task Objective: Implement the next administration slices for AuthJS under the Organizations-first design, keeping server authority, ResponseService API boundaries, and low blast radius.
-- Current Run Scope: Organizations-first admin delivery plus final security remediation for invitation log hygiene, archived-organization write freezing, shared secure server-action replay protection, and the last nested-invitations page boundary fix for release readiness.
+- Current Run Scope: Organizations-first admin delivery plus final security remediation for invitation log hygiene, archived-organization write freezing, shared secure server-action replay protection, the nested-invitations page boundary fix, and the replay-token client/server boundary remediation for release readiness.
 - Status: COMPLETED
-- Last Updated: 2026-07-12
+- Last Updated: 2026-07-21
 - Related Control Artifacts:
   - `plan.md`
   - `intake.md`
@@ -78,6 +78,9 @@
   - hardened the shared secure server-action primitive to require replay tokens, reject reused nonces, and fail closed in production unless the distributed replay store is configured
   - updated the reachable showcase action caller to send replay tokens so the live example matches the security contract it advertises
   - moved nested invitations page loading behind `DrizzleAdminOrganizationsReadService.getInvitationsInActiveScope(...)` so the page no longer composes invitation infrastructure, raw schema, or env-driven service wiring directly
+  - split replay-token creation into `src/security/actions/replay-token.ts`, a client-safe leaf module with no server env, Upstash, DI, or server-only imports
+  - marked `src/security/actions/action-replay.ts` as explicitly server-only and kept replay validation, Redis-backed nonce persistence, test reset support, and production fail-closed behavior there
+  - updated the client showcase component and replay-related tests to import token creation from the client-safe module instead of the server replay-store module
 - tests or supporting files updated:
   - `src/app/api/admin/organizations/[organizationId]/invitations/route.test.ts`
   - `src/app/api/admin/organizations/[organizationId]/invitations/[id]/route.test.ts`
@@ -125,6 +128,7 @@
   - `src/app/api/admin/organizations/[organizationId]/policies/[policyId]/route.ts`
   - `src/modules/invitations/infrastructure/DefaultInvitationService.ts`
   - `src/security/actions/action-replay.ts`
+  - `src/security/actions/replay-token.ts`
   - `src/security/actions/secure-action.ts`
   - `src/features/security-showcase/components/SettingsFormExample.tsx`
   - `src/modules/authorization/domain/errors.ts`
@@ -187,6 +191,7 @@
   - archived organizations now reject nested invitation, role, and policy mutations consistently instead of only blocking member-role changes
   - secure server actions now enforce replay protection instead of silently accepting missing tokens, and the live showcase caller supplies tokens that satisfy the hardened contract
   - the nested invitations page now stays within modular-monolith boundaries by consuming the module-owned organizations admin read service instead of wiring invitation infrastructure in the page layer
+  - replay-token creation is now safe for client components, while replay-token validation and nonce persistence remain server-only
 - intentional non-changes:
   - no free-form policy conditions editor yet
   - no role reassignment within the policy editor yet
@@ -253,6 +258,23 @@
   - `pnpm arch:lint`
   - `pnpm lint --fix`
   - `pnpm typecheck`
+  - `pnpm exec vitest run --config vitest.unit.config.ts --coverage.enabled=false "src/security/actions/action-replay.test.ts" "src/security/actions/secure-action.test.ts" "src/features/security-showcase/actions/showcase-actions.test.ts"`
+  - `pnpm exec vitest run --config vitest.integration.config.ts --coverage.enabled=false "src/testing/integration/server-actions.test.ts"`
+  - `pnpm lint --fix`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm arch:lint`
+  - `rg -n "from '@/security/actions/action-replay'|from './action-replay'|createReplayToken" src tests e2e -S`
+  - `rg -n "wmitrus@gmail\\.com|\"email\":\"[^\"]+@[^\"]+\"" logs .copilot/tasks/2026-07-06-admin-roles-rbac-teams-design -S`
+- results from 2026-07-21 replay-boundary closure:
+  - focused replay unit tests passed: 3 files, 21 tests
+  - focused replay integration test passed: 1 file, 11 tests
+  - `pnpm lint --fix` passed
+  - `pnpm typecheck` passed
+  - `pnpm build` passed when rerun manually by the operator on 2026-07-21; output showed production compile, TypeScript, page-data collection, static generation, and page optimization all completed
+  - `pnpm arch:lint` passed with the existing global-container review warning and no hard layer/provider/runtime/circular-dependency failures
+  - import-graph scan confirmed no production client component imports `src/security/actions/action-replay.ts`; the only production server import is `secure-action.ts` validating replay tokens
+  - sensitive-log scan found no raw email matches in `logs` or the task artifact directory
 
 ## Artifact Synchronization
 
@@ -281,6 +303,7 @@
 - follow-up needed:
   - decide whether the next slice should be invitation role reassignment, broader membership lifecycle operations, RBAC conditions editing, or compatibility cleanup
   - keep `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` configured in production for any route that relies on the shared secure server-action replay store
+  - request Security & Auth re-review before changing `02 - Security & Auth - Summary.md` back to production-ready
 
 ## Leantime Synchronization
 
@@ -303,6 +326,20 @@
   - continue implementation with the next smallest RBAC mutation or compatibility cleanup slice
 
 ## Update Log
+
+### Update Entry
+
+- Date: 2026-07-21
+- Trigger: replay-token client/server trust-boundary blocker remediated
+- Summary of change: moved token creation into a client-safe replay-token module, made the replay validation/store module explicitly server-only, updated callers and tests, and recorded focused unit, integration, lint, typecheck, build, architecture lint, import-graph, and sensitive-log evidence.
+- Sections refreshed:
+  - Task Context
+  - Actions Performed
+  - Files Changed
+  - Behavior Change Summary
+  - Validation Performed
+  - Open Questions / Blockers
+  - Update Log
 
 ### Update Entry
 

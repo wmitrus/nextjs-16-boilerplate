@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('server-only', () => ({}));
 
 import {
-  createReplayToken,
   resetReplayProtectionStoreForTests,
   validateReplayToken,
 } from './action-replay';
+import { createReplayToken } from './replay-token';
 
 import { createMockSecurityContext } from '@/testing';
 

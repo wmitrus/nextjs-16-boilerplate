@@ -4,9 +4,9 @@
 
 - Task ID: `2026-07-06-admin-roles-rbac-teams-design`
 - Task Objective: Decide whether AuthJS admin GUI work for `Roles`, `RBAC & Policies`, and `Teams` should be designed together or independently.
-- Current Run Scope: Follow-up Architecture Guard review after `pnpm e2e:full` failed during E2E auth preflight with `ERR_MODULE_NOT_FOUND` for `@clerk/backend`.
+- Current Run Scope: Architecture re-review of the implemented replay-token client/server boundary remediation, modular-monolith boundary leaks, and release-readiness evidence.
 - Status: COMPLETED
-- Last Updated: 2026-07-20
+- Last Updated: 2026-07-21
 - Related Control Artifacts:
   - `plan.md`
   - `intake.md`
@@ -41,6 +41,10 @@
   - `scripts/e2e/run-scenario.mjs`
   - `scripts/check-e2e-auth-env.mjs`
   - `e2e/clerk-auth.ts`
+  - `src/features/security-showcase/components/SettingsFormExample.tsx`
+  - `src/security/actions/action-replay.ts`
+  - `src/security/actions/secure-action.ts`
+  - `src/core/env.ts`
   - `package.json`
   - `pnpm-lock.yaml`
   - `pnpm-workspace.yaml`
@@ -54,6 +58,8 @@
 - earlier task artifacts reviewed:
   - `plan.md`
   - `intake.md`
+  - `implementation-plan.md`
+  - `02 - Security & Auth - Summary.md`
 
 ## Actions Performed
 
@@ -61,6 +67,8 @@
   - checked admin navigation surface versus current schema and contracts
   - traced the remaining architecture-lint failure to a module UI import from `src/app/auth/post-auth-redirect.ts`
   - traced the E2E failure to direct `@clerk/backend` imports in E2E tooling without a matching root dependency declaration
+  - traced the replay-token blocker to a client component importing a server replay-store module that imports `@upstash/redis` and `@/core/env`
+  - re-reviewed the implemented replay-token split after remediation and verified the client now imports a dependency-clean token factory while server validation remains in the server-only replay-store module
 - boundary checks performed:
   - verified that roles, memberships, policies, and invitations are all organization-owned in live code
   - verified the only live `src/modules/** -> src/app/**` import was the AuthJS avatar menu importing `DEFAULT_APP_ENTRY_URL`
@@ -70,10 +78,15 @@
   - identified tenant-scoped wording drift in docs and admin card copy versus organization-scoped live schema
   - confirmed the post-auth landing path constant was owned too high in the app layer for its actual reuse surface
   - confirmed the admin RBAC task artifacts do not document or require the new Clerk Backend direct import; the new requirement is from the later Clerk E2E fixture hardening work
+  - confirmed the Security & Auth summary now supersedes the previous production-ready signoff because the live import graph crosses the client/server boundary
 
 ## Current-State Findings
 
 - Confirmed:
+  - the previous replay-token boundary blocker is remediated: `src/features/security-showcase/components/SettingsFormExample.tsx` imports `createReplayToken()` from `src/security/actions/replay-token.ts`, not from the server replay-store module.
+  - `src/security/actions/replay-token.ts` is a dependency-clean client-safe security leaf with no `@/core/env`, `@upstash/redis`, DI, repository, or `server-only` imports.
+  - `src/security/actions/action-replay.ts` imports `server-only` and keeps `@upstash/redis`, `@/core/env`, replay validation, Redis-backed nonce persistence, and local non-production nonce storage on the server side.
+  - production import-graph review shows `src/security/actions/action-replay.ts` is only imported by `src/security/actions/secure-action.ts`.
   - `Roles` and `RBAC & Policies` are two admin views over one authorization subsystem.
   - current authority is organization-scoped, not an independent `Teams` domain.
   - admin cards are navigation placeholders, not proof of separate bounded contexts.
@@ -81,29 +94,34 @@
   - the minimum safe fix is to move `DEFAULT_APP_ENTRY_URL` to a lower shared routing abstraction and let the app helper depend on that lower abstraction, not the reverse.
   - `scripts/check-e2e-auth-env.mjs` now imports `createClerkClient` from `@clerk/backend` to validate configured Clerk fixture accounts before Playwright starts.
   - `e2e/clerk-auth.ts` now imports `createClerkClient` from `@clerk/backend` to create or repair mutable standalone Clerk E2E fixture users before sign-in.
-  - `package.json` currently declares `@clerk/nextjs` and `@clerk/testing`, but does not declare `@clerk/backend` as a direct dependency.
-  - `pnpm-lock.yaml` contains `@clerk/backend` as an overridden/transitive package, but pnpm has not linked `node_modules/@clerk/backend` at the root importer, so Node ESM resolution fails before the preflight can run.
+  - `package.json` currently declares `@clerk/backend` as a direct dependency alongside `@clerk/nextjs` and `@clerk/testing`.
 - Risks:
+  - the original client-to-server replay import edge is no longer present in live code.
+  - moving token creation into `src/shared/*` would make a security primitive look like a generic utility and weaken ownership; the better owner remains `src/security/actions/*`.
+  - solving the issue by disabling replay validation, relaxing missing-token enforcement, or generating tokens inside the server action would undermine the security contract that Security & Auth just hardened.
   - page-by-page GUI design would force the app layer to invent missing semantics for role lifecycle, policy assignment, and organization scope.
   - a `Teams` page could hard-code the wrong structural concept before a real team model exists.
   - leaving the constant in `src/app` would keep an incentive for future module or feature code to reach upward into delivery code for routing defaults.
-  - direct provider SDK use in E2E tooling is acceptable for test harness setup, but it must be declared explicitly as a root dependency because the root package imports it directly.
-  - without that dependency declaration, every Clerk-backed scenario runner path fails before any browser or admin authorization behavior is exercised.
+  - direct provider SDK use in E2E tooling is acceptable for test harness setup when declared explicitly as a root dependency; live `package.json` now satisfies that dependency-contract requirement.
 - Drift:
+  - older update entries in this artifact described the replay-token boundary as blocked; this 2026-07-21 re-review supersedes that stale state.
   - current card wording suggests custom roles per tenant and tenant-wide policy management, which does not match live organization-scoped code.
   - before this run, the default post-auth landing path was structurally treated as app-delivery state even though it is a reusable routing constant.
-  - the validation report for this admin task records the default E2E base URL and AuthJS admin validations, but it does not mention the later Clerk fixture reconciliation dependency on `@clerk/backend`.
+  - the validation report for this admin task records the default E2E base URL and AuthJS admin validations; the later Clerk fixture dependency drift has been resolved in live `package.json`.
 
 ## Boundary And Dependency Assessment
 
 - module ownership assessment:
+  - replay protection belongs in `src/security/actions`; token validation and replay-store persistence are server-owned, while token construction can be a client-safe security leaf because it contains no authority or persistence.
   - authorization domain owns roles, policies, and policy evaluation; provisioning and invitation flows own related write-side invariants.
   - the default post-auth landing path constant belongs below `src/app`, because both delivery code and module UI can legitimately consume it without inheriting app-route helper semantics.
 - dependency direction assessment:
+  - `features -> security` is allowed, but only if the imported security module is safe for the importing runtime. A client component must not import a security module that imports server env or server-only infrastructure.
   - admin GUI should depend on existing authorization/provisioning contracts, not redefine them.
   - `src/modules/**` must not import from `src/app/**`; the avatar menu import was an explicit reverse dependency and is now removed.
-  - E2E tooling can depend on provider SDKs, but direct imports must be represented in package metadata; relying on transitive `@clerk/backend` from `@clerk/nextjs`/`@clerk/testing` is not a safe dependency contract under pnpm.
+  - E2E tooling can depend on provider SDKs, but direct imports must be represented in package metadata; live `package.json` now declares `@clerk/backend` directly.
 - DI / composition assessment:
+  - the fix must not route token generation through DI or the app container. Replay-token creation is pure client-safe construction; replay validation remains server-side and owns the Redis/local-store dependency.
   - current composition keeps authority in server-side services; that should remain intact.
 - cross-module coupling assessment:
   - roles, memberships, policies, and invitations are tightly coupled through organization ownership and should be designed together.
@@ -112,16 +130,27 @@
 ## Architectural Decisions / Constraints
 
 - approved architectural constraints:
+  - split `createReplayToken()` into a client-safe module under `src/security/actions/`.
+  - keep `validateReplayToken()` and nonce persistence in `src/security/actions/action-replay.ts`.
+  - mark the server replay-store module with `import 'server-only';` after the split.
+  - keep the existing token shape unless Security & Auth deliberately revises the replay protocol.
   - use one integrated design pass with staged implementation.
   - keep management surfaces organization-scoped.
   - treat `Teams` as unresolved terminology or future modeling work until explicitly designed.
   - keep reusable route defaults and low-level routing constants in shared lower-layer utilities when they are consumed outside the app delivery layer.
 - rejected directions:
+  - leaving `SettingsFormExample.tsx` importing `src/security/actions/action-replay.ts`.
+  - moving replay-token creation into `src/shared/*` as a generic helper.
+  - importing `@/core/env`, `@upstash/redis`, DI, repositories, or server request helpers from any client-safe token factory.
+  - weakening replay validation to avoid the client/server boundary issue.
   - three loosely coordinated page-by-page designs.
   - a standalone `Teams` implementation before its domain exists.
   - keeping `DEFAULT_APP_ENTRY_URL` in `src/app/auth/post-auth-redirect.ts` while module UI imports it from above.
   - duplicating `'/dashboard'` inside module UI just to appease the lint rule.
 - follow-up architectural guardrails:
+  - client-importable security modules must be dependency-clean and explicit about their runtime.
+  - server-owned security modules that touch env, Redis, DB, request context, or DI should use `server-only` where practical.
+  - avoid barrel exports that mix client-safe token helpers with server replay-store validation.
   - resolve terminology first.
   - keep policy logic and invariants out of delivery code.
   - do not use current admin card copy as authoritative architecture.
@@ -135,19 +164,21 @@
 - `intake.md` updates:
   - none in this run
 - `implementation-plan.md` updates:
-  - added a focused implementation-agent closeout plan for the architecture-lint gate
+  - added a focused replay-token boundary remediation plan with implementation steps, validation commands, and release criteria
 - specialist artifact updates:
-  - this summary refreshed with the boundary-fix decision and handoff notes
+  - this summary refreshed with the replay-token boundary decision and handoff notes
 
 ## Open Questions / Blockers
 
 - unresolved questions:
   - whether the product intends `Teams` to mean organizations in current UI or a future nested/team abstraction
 - blockers:
-  - no architecture blocker remains in the reviewed `modules -> app` leak itself
-  - E2E execution is currently blocked before Playwright by a package declaration/linking issue: `@clerk/backend` is imported directly but is not declared as a direct dependency.
+  - no architecture blocker remains for the reviewed replay-token boundary remediation.
+  - no architecture blocker remains in the reviewed `modules -> app` leak itself.
+  - no package-declaration architecture blocker remains for the reviewed Clerk E2E tooling dependency edge.
 - evidence still needed:
-  - after declaring/installing `@clerk/backend`, rerun the focused preflight and one Clerk-backed E2E entrypoint before retrying `pnpm e2e:full`
+  - none for the reviewed replay-token boundary remediation; focused unit/integration replay tests, typecheck, production build evidence, architecture lint, and import-graph checks are now available
+  - if full Clerk-backed E2E release evidence is required, rerun the focused preflight and one Clerk-backed E2E entrypoint before retrying `pnpm e2e:full`; this is separate from the replay-boundary validation decision
 
 ## Handoff Notes
 
@@ -159,7 +190,38 @@
   - `Teams` not being a first-class current domain model
   - `src/modules/**` must not depend on `src/app/**` for route defaults or other delivery helpers
 - recommended next specialist or step:
-  - implementation agent should add `@clerk/backend` as an explicit root dependency, refresh the lockfile/install links, and rerun the focused E2E auth preflight before broad suite execution
+  - proceed through normal release gates for the reviewed admin/RBAC/replay-boundary slice; keep the separate Clerk E2E tooling dependency issue tracked outside this replay-boundary release decision.
+
+### Update Entry
+
+- Date: 2026-07-21
+- Trigger: User requested final validation of replay-token remediation, boundary leaks, modular-monolith architecture, production readiness, and release.
+- Summary of change: Re-reviewed the implemented replay-token split and confirmed the prior architecture blocker is closed: token creation is in a client-safe security leaf, server replay validation and Redis/env dependencies remain server-only, `pnpm arch:lint` passes hard boundary checks, and import-graph scans show no production client import of `action-replay`.
+- Sections refreshed:
+  - Task Context
+  - Actions Performed
+  - Current-State Findings
+  - Boundary And Dependency Assessment
+  - Open Questions / Blockers
+  - Handoff Notes
+  - Update Log
+
+### Update Entry
+
+- Date: 2026-07-21
+- Trigger: User requested an Architecture Guard production-ready plan for the Security & Auth replay-token boundary blocker.
+- Summary of change: Planned the minimum safe boundary split: keep replay validation and Redis/local nonce persistence server-owned in `action-replay.ts`, move `createReplayToken()` to a client-safe security leaf module, mark the server module with `server-only`, and validate with focused replay tests, build/typecheck, architecture lint, and import-graph searches.
+- Sections refreshed:
+  - Task Context
+  - Inputs Reviewed
+  - Actions Performed
+  - Current-State Findings
+  - Boundary And Dependency Assessment
+  - Architectural Decisions / Constraints
+  - Artifact Synchronization
+  - Open Questions / Blockers
+  - Handoff Notes
+  - Update Log
 
 ### Update Entry
 
@@ -204,8 +266,6 @@
   - Open Questions / Blockers
   - Handoff Notes
   - Update Log
-
-## Update Log
 
 ### Update Entry
 

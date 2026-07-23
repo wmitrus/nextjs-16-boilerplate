@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { Redis } from '@upstash/redis';
 
 import { env } from '@/core/env';
@@ -60,10 +62,6 @@ async function markReplayNonce(nonce: string, now: number): Promise<void> {
   }
 
   localReplayTokens.set(nonce, expiresAt);
-}
-
-export function createReplayToken(): string {
-  return `${Date.now()}|${crypto.randomUUID()}`;
 }
 
 export function resetReplayProtectionStoreForTests(): void {

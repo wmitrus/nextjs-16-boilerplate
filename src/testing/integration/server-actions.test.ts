@@ -15,7 +15,7 @@ import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
-import { createReplayToken } from '@/security/actions/action-replay';
+import { createReplayToken } from '@/security/actions/replay-token';
 import { createSecureAction } from '@/security/actions/secure-action';
 import {
   getSecurityContext,

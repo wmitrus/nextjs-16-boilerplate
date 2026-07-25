@@ -4,6 +4,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockCookieSet = vi.hoisted(() => vi.fn());
 const resolveBootstrapOutcomeMock = vi.hoisted(() => vi.fn());
 
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return {
+    ...actual,
+    connection: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 vi.mock('next/headers', () => ({
   cookies: vi.fn().mockResolvedValue({
     set: mockCookieSet,

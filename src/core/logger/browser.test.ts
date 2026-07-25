@@ -97,6 +97,77 @@ describe('browser logger', () => {
     expect(options?.base?.env).toBe('preview');
   });
 
+  it('falls back to NODE_ENV and includes the Vercel revision', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL_GITHUB_COMMIT_SHA = 'abc123';
+
+    vi.doMock('@/core/env', () => ({
+      env: {
+        NEXT_PUBLIC_LOG_LEVEL: undefined,
+        NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
+      },
+    }));
+
+    vi.doMock('./browser-utils', () => ({
+      createLogflareBrowserTransport: vi.fn(),
+    }));
+
+    vi.doMock('pino', () => {
+      const pino = vi.fn(() => ({ info: vi.fn() }));
+      return { default: pino };
+    });
+
+    const pinoModule = await import('pino');
+    const { getBrowserLogger } = await import('./browser');
+    getBrowserLogger();
+
+    const pinoMock = vi.mocked(pinoModule.default);
+    const options = pinoMock.mock.calls[0]?.[0];
+    expect(options?.level).toBe('info');
+    expect(options?.base).toEqual({
+      env: 'production',
+      revision: 'abc123',
+    });
+  });
+
+  it('falls back to a basic logger when initialization throws', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    vi.doMock('@/core/env', () => ({
+      env: {
+        NEXT_PUBLIC_LOG_LEVEL: 'warn',
+        NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED: false,
+      },
+    }));
+
+    vi.doMock('./browser-utils', () => ({
+      createLogflareBrowserTransport: vi.fn(),
+    }));
+
+    vi.doMock('pino', async () => {
+      const stdSerializers = {};
+      const pino = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('bad browser option');
+        })
+        .mockReturnValueOnce({ info: vi.fn() });
+      return { default: pino, stdSerializers };
+    });
+
+    const pinoModule = await import('pino');
+    const { getBrowserLogger } = await import('./browser');
+
+    expect(getBrowserLogger()).toBeDefined();
+    expect(vi.mocked(pinoModule.default)).toHaveBeenCalledTimes(2);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to initialize browser logger:',
+      'bad browser option',
+    );
+
+    consoleSpy.mockRestore();
+  });
+
   it('reuses cached logger instance', async () => {
     vi.doMock('@/core/env', () => ({
       env: {

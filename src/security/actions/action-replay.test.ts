@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
@@ -15,6 +15,10 @@ describe('Action Replay Protection', () => {
 
   beforeEach(() => {
     resetReplayProtectionStoreForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('should reject when no token is provided', async () => {
@@ -65,5 +69,44 @@ describe('Action Replay Protection', () => {
     await expect(
       validateReplayToken(`${Date.now()}|`, mockCtx),
     ).rejects.toThrow('Replay token nonce missing or invalid');
+  });
+
+  it('should allow a nonce again after the local replay window expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-25T12:00:00.000Z'));
+
+    await expect(
+      validateReplayToken(`${Date.now()}|nonce-123`, mockCtx),
+    ).resolves.not.toThrow();
+
+    vi.setSystemTime(new Date('2026-07-25T12:06:00.000Z'));
+
+    await expect(
+      validateReplayToken(`${Date.now()}|nonce-123`, mockCtx),
+    ).resolves.not.toThrow();
+  });
+
+  it('should reject production validation when Redis replay storage is unavailable', async () => {
+    vi.resetModules();
+    vi.doMock('server-only', () => ({}));
+    vi.doMock('@/core/env', () => ({
+      env: {
+        NODE_ENV: 'production',
+        UPSTASH_REDIS_REST_URL: '',
+        UPSTASH_REDIS_REST_TOKEN: '',
+      },
+    }));
+
+    const { validateReplayToken: validateReplayTokenInProduction } =
+      await import('./action-replay');
+
+    await expect(
+      validateReplayTokenInProduction(`${Date.now()}|nonce-123`, mockCtx),
+    ).rejects.toThrow(
+      'Replay protection unavailable: configure Upstash Redis in production',
+    );
+
+    vi.doUnmock('@/core/env');
+    vi.resetModules();
   });
 });

@@ -227,5 +227,22 @@ describe('validate-env: runValidation', () => {
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('NEW_RELIC_LICENSE_KEY');
     });
+
+    it('accepts New Relic when NODE_OPTIONS preloads newrelic', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        true,
+        'nr_license_key',
+        '-r newrelic',
+        'production',
+      );
+
+      expect(errors).toHaveLength(0);
+    });
   });
 });

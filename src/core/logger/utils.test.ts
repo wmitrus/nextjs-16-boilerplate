@@ -8,6 +8,7 @@ import {
   ensureLogDirectory,
   createConsoleStream,
   createFileStream,
+  createBetterStackStream,
   createLogflareWriteStream,
 } from './utils';
 
@@ -242,6 +243,38 @@ describe('logger utils', () => {
         'Logflare stream error (non-fatal):',
         'test error',
       );
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('createBetterStackStream', () => {
+    it('returns null when Better Stack is disabled or missing credentials', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const originalEnabled = (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTERSTACK_ENABLED;
+      const originalToken = (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTER_STACK_SOURCE_TOKEN;
+
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTERSTACK_ENABLED = false;
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTER_STACK_SOURCE_TOKEN = undefined;
+
+      expect(createBetterStackStream()).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Better Stack stream disabled'),
+      );
+
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTERSTACK_ENABLED = originalEnabled;
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTER_STACK_SOURCE_TOKEN = originalToken;
       consoleSpy.mockRestore();
     });
   });

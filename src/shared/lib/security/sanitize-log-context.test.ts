@@ -48,6 +48,20 @@ describe('sanitizeLogContext', () => {
     ).toEqual({ nested: { safe: 'value' } });
   });
 
+  it('keeps scalar values', () => {
+    expect(
+      sanitizeLogContext({
+        count: 2,
+        enabled: true,
+        optional: null,
+      }),
+    ).toEqual({
+      count: 2,
+      enabled: true,
+      optional: null,
+    });
+  });
+
   it('truncates long strings and filters arrays to scalar values', () => {
     const long = 'a'.repeat(2050);
 

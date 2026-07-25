@@ -9,6 +9,7 @@ describe('browser logger', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     process.env = { ...originalEnv };
     vi.clearAllMocks();
   });
@@ -98,7 +99,7 @@ describe('browser logger', () => {
   });
 
   it('falls back to NODE_ENV and includes the Vercel revision', async () => {
-    process.env.NODE_ENV = 'production';
+    vi.stubEnv('NODE_ENV', 'production');
     process.env.VERCEL_GITHUB_COMMIT_SHA = 'abc123';
 
     vi.doMock('@/core/env', () => ({

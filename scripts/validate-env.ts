@@ -56,6 +56,7 @@ export function runValidation(
   return errors;
 }
 
+/* v8 ignore start -- CLI console/process wrapper; runValidation is unit-tested. */
 function main(): void {
   const source =
     loadedFiles.length > 0
@@ -102,3 +103,4 @@ function main(): void {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main();
 }
+/* v8 ignore stop */

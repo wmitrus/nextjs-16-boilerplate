@@ -1,14 +1,22 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { RouteContext } from './route-classification';
 import { withRegistrationMode } from './with-registration-mode';
 
 import { mockEnv } from '@/testing';
 
-const ctx = {
-  pathname: '/sign-up',
-  isPublic: true,
-  requiresAuth: false,
+const ctx: RouteContext = {
+  isApi: false,
+  isWebhook: false,
+  isInternalApi: false,
+  isAuthRoute: true,
+  isOnboardingRoute: false,
+  isBootstrapRoute: false,
+  isPublicRoute: true,
+  isStaticFile: false,
+  correlationId: 'correlation-1',
+  requestId: 'request-1',
 };
 
 function createRequest(path: string) {
@@ -37,7 +45,8 @@ describe('withRegistrationMode', () => {
 
     await handler(createRequest('/dashboard'), {
       ...ctx,
-      pathname: '/dashboard',
+      isAuthRoute: false,
+      isPublicRoute: false,
     });
 
     expect(next).toHaveBeenCalledTimes(1);

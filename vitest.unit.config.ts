@@ -45,6 +45,8 @@ export default defineConfig({
         'src/modules/billing/infrastructure/drizzle/schema.ts',
         'src/modules/provisioning/infrastructure/drizzle/schema.ts',
         'src/modules/auth/infrastructure/drizzle/schema.ts',
+        'src/modules/waitlist/domain/WaitlistRepository.ts',
+        'src/modules/waitlist/domain/WaitlistService.ts',
         'scripts/flags/**',
         'scripts/leantime/**',
         'scripts/new-relic/**',

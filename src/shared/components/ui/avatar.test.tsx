@@ -18,6 +18,14 @@ describe('Avatar', () => {
     expect(avatar).toHaveClass('h-11', 'w-11', 'text-base');
   });
 
+  it('uses a single-name initial', () => {
+    render(<Avatar name="Prince" size="sm" />);
+
+    const avatar = screen.getByLabelText('Prince');
+    expect(avatar).toHaveTextContent('P');
+    expect(avatar).toHaveClass('h-7', 'w-7', 'text-xs');
+  });
+
   it('renders a fallback question mark when no identity fields are available', () => {
     render(<Avatar />);
 

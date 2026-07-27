@@ -1,4 +1,9 @@
 overrides:
+  'react-docgen@*>@babel/core': 7.29.6
+  '@storybook/react-vite@*>@babel/core': 7.29.6
+  '@storybook/nextjs-vite@*>@babel/core': 7.29.6
+  '@storybook/builder-vite@*>@babel/core': 7.29.6
+  'vite-plugin-storybook-nextjs@*>@babel/core': 7.29.6
   'protobufjs@>=7.0.0 <7.6.5': 7.6.5
   'protobufjs@>=8.0.0 <8.6.6': 8.6.6
   '@protobufjs/utf8@<=1.1.0': '>=1.1.1'
@@ -42,7 +47,6 @@ overrides:
   'vite@>=7.0.0 <=7.3.4': '>=7.3.5'
   'js-yaml@<4.3.0': 4.3.0
   'js-yaml@>=5.0.0 <5.2.1': 5.2.1
-  '@babel/core@<=7.29.0': '>=7.29.6'
   'nodemailer@<=8.0.8': '>=8.0.9'
   'nodemailer@<=8.0.7': '>=8.0.8'
   '@opentelemetry/core@<2.8.0': '>=2.8.0'

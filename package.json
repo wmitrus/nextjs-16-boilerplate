@@ -55,7 +55,7 @@
     "e2e:ci": "pnpm build && pnpm e2e:matrix",
     "prepare": "husky",
     "commit": "cz",
-    "skott:check:only": "skott --cwd=src --showCircularDependencies --displayMode=file-tree",
+    "skott:check:only": "skott --cwd=src --showCircularDependencies --displayMode=raw",
     "depcheck": "depcheck",
     "madge": "madge --circular --extensions ts,tsx src",
     "generate:secret": "node scripts/generate-secret.mjs",

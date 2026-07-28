@@ -12,6 +12,7 @@ export function runValidation(
   authProvider: string | undefined,
   clerkSecretKey: string | undefined,
   clerkPublishableKey: string | undefined,
+  nextAuthSecret: string | undefined,
   tenancyMode: string | undefined,
   defaultTenantId: string | undefined,
   tenantContextSource: string | undefined,
@@ -27,6 +28,8 @@ export function runValidation(
       authProvider,
       clerkSecretKey,
       clerkPublishableKey,
+      nextAuthSecret,
+      nodeEnv,
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
@@ -73,6 +76,7 @@ function main(): void {
     authProvider,
     process.env.CLERK_SECRET_KEY,
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    process.env.NEXTAUTH_SECRET,
     tenancyMode,
     process.env.DEFAULT_TENANT_ID,
     process.env.TENANT_CONTEXT_SOURCE,

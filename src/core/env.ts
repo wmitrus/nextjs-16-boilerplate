@@ -370,7 +370,19 @@ export function validateAuthProviderConfigValues(
   authProvider: string | undefined,
   clerkSecretKey: string | undefined,
   clerkPublishableKey: string | undefined,
+  nextAuthSecret?: string | undefined,
+  nodeEnv?: string | undefined,
 ): void {
+  if (authProvider === 'authjs') {
+    const isProductionLike = nodeEnv === 'production';
+    if (isProductionLike && !nextAuthSecret?.trim()) {
+      throw new Error(
+        '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET to be set when NODE_ENV=production.',
+      );
+    }
+    return;
+  }
+
   if (authProvider !== 'clerk') {
     return;
   }
@@ -397,6 +409,8 @@ export function validateAuthProviderConfig(): void {
     env.AUTH_PROVIDER,
     env.CLERK_SECRET_KEY,
     env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    env.NEXTAUTH_SECRET,
+    env.NODE_ENV,
   );
 }
 

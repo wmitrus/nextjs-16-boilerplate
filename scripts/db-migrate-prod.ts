@@ -3,6 +3,11 @@ import './load-env';
 import { spawnSync } from 'node:child_process';
 
 import { reconcileKnownMigrationState } from './reconcile-known-migration-state';
+import {
+  assertMigrationJournalComplete,
+  formatMigrationJournalSummary,
+  validateMigrationJournal,
+} from './validate-migration-journal';
 
 const DRIZZLE_CONFIG = 'src/core/db/migrations/config/drizzle.prod.ts';
 
@@ -74,10 +79,37 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
   );
 
   if (dryRun) {
+    const journalSummary = await validateMigrationJournal({
+      connectionString,
+    });
+    console.log(
+      JSON.stringify(
+        {
+          migrationJournal: formatMigrationJournalSummary(journalSummary),
+        },
+        null,
+        2,
+      ),
+    );
+    assertMigrationJournalComplete(journalSummary);
     return;
   }
 
   runDrizzleMigrate();
+
+  const journalSummary = await validateMigrationJournal({
+    connectionString,
+  });
+  console.log(
+    JSON.stringify(
+      {
+        migrationJournal: formatMigrationJournalSummary(journalSummary),
+      },
+      null,
+      2,
+    ),
+  );
+  assertMigrationJournalComplete(journalSummary);
 }
 
 const isMain =

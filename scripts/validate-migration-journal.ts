@@ -23,6 +23,15 @@ export type MigrationJournalSummary = {
   unknownHashes: string[];
 };
 
+export type KnownMigrationDriftRepairSummary = {
+  dryRun: boolean;
+  repaired: string[];
+  skipped: Array<{
+    tag: string;
+    reason: string;
+  }>;
+};
+
 const JOURNAL_FILE = resolve(
   process.cwd(),
   'src/core/db/migrations/generated/meta/_journal.json',
@@ -137,6 +146,191 @@ export function assertMigrationJournalComplete(
     `[migration-journal] Database migration journal is missing local migration(s): ${missingTags}. ` +
       'The database schema may be behind even if drizzle-kit reported success.',
   );
+}
+
+function findExpectedMigration(
+  expected: ExpectedMigration[],
+  tag: string,
+): ExpectedMigration {
+  const migration = expected.find((entry) => entry.tag === tag);
+  if (!migration) {
+    throw new Error(
+      `[migration-journal] Missing local journal entry for ${tag}`,
+    );
+  }
+  return migration;
+}
+
+async function hasHash(sql: postgres.Sql, hash: string): Promise<boolean> {
+  const rows = await sql`
+    select 1 as present
+    from drizzle.__drizzle_migrations
+    where hash = ${hash}
+    limit 1
+  `;
+  return Boolean(rows[0]);
+}
+
+async function hasColumn(
+  sql: postgres.Sql,
+  tableName: string,
+  columnName: string,
+): Promise<boolean> {
+  const rows = await sql`
+    select 1 as present
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = ${tableName}
+      and column_name = ${columnName}
+    limit 1
+  `;
+  return Boolean(rows[0]);
+}
+
+async function hasTable(
+  sql: postgres.Sql,
+  tableName: string,
+): Promise<boolean> {
+  const rows = await sql`
+    select 1 as present
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = ${tableName}
+    limit 1
+  `;
+  return Boolean(rows[0]);
+}
+
+async function hasAuthFoundationRedesignArtifacts(
+  sql: postgres.Sql,
+): Promise<boolean> {
+  const requiredTables = [
+    'organizations',
+    'auth_organization_identities',
+    'invitations',
+    'waitlist_entries',
+  ];
+
+  for (const tableName of requiredTables) {
+    if (!(await hasTable(sql, tableName))) {
+      return false;
+    }
+  }
+
+  const requiredColumns: Array<[string, string]> = [
+    ['tenants', 'slug'],
+    ['tenants', 'status'],
+    ['memberships', 'organization_id'],
+    ['roles', 'organization_id'],
+    ['policies', 'organization_id'],
+    ['tenant_attributes', 'max_organizations'],
+  ];
+
+  for (const [tableName, columnName] of requiredColumns) {
+    if (!(await hasColumn(sql, tableName, columnName))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function insertMigrationHash(
+  sql: postgres.Sql,
+  migration: ExpectedMigration,
+): Promise<void> {
+  await sql`
+    insert into drizzle.__drizzle_migrations (hash, created_at)
+    values (${migration.hash}, ${Date.now()})
+  `;
+}
+
+export async function repairKnownMigrationJournalDrift(options: {
+  connectionString: string;
+  dryRun?: boolean;
+}): Promise<KnownMigrationDriftRepairSummary> {
+  const expected = await resolveExpectedMigrations();
+  const sql = postgres(options.connectionString, {
+    prepare: false,
+    max: 1,
+    idle_timeout: 5,
+    connect_timeout: 10,
+  });
+
+  const dryRun = options.dryRun ?? false;
+  const repaired: string[] = [];
+  const skipped: KnownMigrationDriftRepairSummary['skipped'] = [];
+
+  try {
+    const journalTable = await sql`
+      select to_regclass('drizzle.__drizzle_migrations') as name
+    `;
+
+    if (!journalTable[0]?.name) {
+      return {
+        dryRun,
+        repaired,
+        skipped: [
+          {
+            tag: '*',
+            reason: 'journal-table-missing',
+          },
+        ],
+      };
+    }
+
+    const authFoundation = findExpectedMigration(
+      expected,
+      '0008_auth_foundation_redesign',
+    );
+    if (!(await hasHash(sql, authFoundation.hash))) {
+      if (await hasAuthFoundationRedesignArtifacts(sql)) {
+        if (!dryRun) {
+          await insertMigrationHash(sql, authFoundation);
+        }
+        repaired.push(authFoundation.tag);
+      } else {
+        skipped.push({
+          tag: authFoundation.tag,
+          reason: 'schema-artifacts-missing',
+        });
+      }
+    }
+
+    const usersDeactivatedAt = findExpectedMigration(
+      expected,
+      '0012_users_deactivated_at',
+    );
+    if (!(await hasHash(sql, usersDeactivatedAt.hash))) {
+      if (!dryRun) {
+        await sql`
+          alter table public.users
+          add column if not exists deactivated_at timestamp with time zone
+        `;
+        await insertMigrationHash(sql, usersDeactivatedAt);
+      }
+      repaired.push(usersDeactivatedAt.tag);
+    }
+
+    const reconcileSnapshot = findExpectedMigration(
+      expected,
+      '0013_reconcile_snapshot',
+    );
+    if (!(await hasHash(sql, reconcileSnapshot.hash))) {
+      if (!dryRun) {
+        await insertMigrationHash(sql, reconcileSnapshot);
+      }
+      repaired.push(reconcileSnapshot.tag);
+    }
+
+    return {
+      dryRun,
+      repaired,
+      skipped,
+    };
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
 }
 
 export async function validateMigrationJournal(options: {

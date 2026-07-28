@@ -24,6 +24,7 @@ describe('validate-env: runValidation', () => {
         'clerk',
         'sk_test_secret',
         'pk_test_public',
+        undefined,
         'single',
         VALID_UUID,
         undefined,
@@ -40,6 +41,7 @@ describe('validate-env: runValidation', () => {
         'clerk',
         undefined,
         'pk_test_public',
+        undefined,
         'single',
         VALID_UUID,
         undefined,
@@ -57,6 +59,7 @@ describe('validate-env: runValidation', () => {
         'clerk',
         'sk_test_secret',
         undefined,
+        undefined,
         'single',
         VALID_UUID,
         undefined,
@@ -69,9 +72,10 @@ describe('validate-env: runValidation', () => {
       expect(errors[0]).toContain('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
     });
 
-    it('returns no auth errors when AUTH_PROVIDER is not clerk', () => {
+    it('returns no auth errors when AUTH_PROVIDER=authjs outside production without NEXTAUTH_SECRET', () => {
       const errors = runValidation(
         'authjs',
+        undefined,
         undefined,
         undefined,
         'personal',
@@ -84,12 +88,48 @@ describe('validate-env: runValidation', () => {
       );
       expect(errors).toHaveLength(0);
     });
+
+    it('returns an auth error when AUTH_PROVIDER=authjs in production without NEXTAUTH_SECRET', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        undefined,
+        'personal',
+        undefined,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NEXTAUTH_SECRET');
+    });
+
+    it('returns no auth errors when AUTH_PROVIDER=authjs in production with NEXTAUTH_SECRET', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'personal',
+        undefined,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+      );
+      expect(errors).toHaveLength(0);
+    });
   });
 
   describe('tenancy validation', () => {
     it('returns error when TENANCY_MODE=single without DEFAULT_TENANT_ID', () => {
       const errors = runValidation(
         'authjs',
+        undefined,
         undefined,
         undefined,
         'single',
@@ -109,6 +149,7 @@ describe('validate-env: runValidation', () => {
         'authjs',
         undefined,
         undefined,
+        undefined,
         'single',
         VALID_UUID,
         undefined,
@@ -123,6 +164,7 @@ describe('validate-env: runValidation', () => {
     it('returns error when TENANCY_MODE=org without TENANT_CONTEXT_SOURCE', () => {
       const errors = runValidation(
         'authjs',
+        undefined,
         undefined,
         undefined,
         'org',
@@ -142,6 +184,7 @@ describe('validate-env: runValidation', () => {
         'authjs',
         undefined,
         undefined,
+        undefined,
         'org',
         undefined,
         'provider',
@@ -158,6 +201,7 @@ describe('validate-env: runValidation', () => {
     it('accumulates multiple errors when both auth and tenancy requirements fail', () => {
       const errors = runValidation(
         'clerk',
+        undefined,
         undefined,
         undefined,
         'single',
@@ -180,6 +224,7 @@ describe('validate-env: runValidation', () => {
         'authjs',
         undefined,
         undefined,
+        'nextauth_secret',
         'personal',
         undefined,
         undefined,
@@ -198,6 +243,7 @@ describe('validate-env: runValidation', () => {
         'authjs',
         undefined,
         undefined,
+        'nextauth_secret',
         'personal',
         undefined,
         undefined,
@@ -215,6 +261,7 @@ describe('validate-env: runValidation', () => {
         'authjs',
         undefined,
         undefined,
+        'nextauth_secret',
         'personal',
         undefined,
         undefined,
@@ -233,6 +280,7 @@ describe('validate-env: runValidation', () => {
         'authjs',
         undefined,
         undefined,
+        'nextauth_secret',
         'personal',
         undefined,
         undefined,

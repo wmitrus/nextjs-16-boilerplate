@@ -6,6 +6,7 @@ import { reconcileKnownMigrationState } from './reconcile-known-migration-state'
 import {
   assertMigrationJournalComplete,
   formatMigrationJournalSummary,
+  repairKnownMigrationJournalDrift,
   validateMigrationJournal,
 } from './validate-migration-journal';
 
@@ -79,6 +80,19 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
   );
 
   if (dryRun) {
+    const repairSummary = await repairKnownMigrationJournalDrift({
+      connectionString,
+      dryRun: true,
+    });
+    console.log(
+      JSON.stringify(
+        {
+          migrationJournalRepair: repairSummary,
+        },
+        null,
+        2,
+      ),
+    );
     const journalSummary = await validateMigrationJournal({
       connectionString,
     });
@@ -96,6 +110,19 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
   }
 
   runDrizzleMigrate();
+
+  const repairSummary = await repairKnownMigrationJournalDrift({
+    connectionString,
+  });
+  console.log(
+    JSON.stringify(
+      {
+        migrationJournalRepair: repairSummary,
+      },
+      null,
+      2,
+    ),
+  );
 
   const journalSummary = await validateMigrationJournal({
     connectionString,

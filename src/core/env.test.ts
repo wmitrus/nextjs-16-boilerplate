@@ -406,12 +406,48 @@ describe('validateTenancyConfigValues', () => {
 });
 
 describe('validateAuthProviderConfigValues', () => {
-  it('passes for authjs without Clerk keys', async () => {
+  it('passes for authjs outside production without NEXTAUTH_SECRET', async () => {
     vi.resetModules();
     const { validateAuthProviderConfigValues } = await import('./env');
 
     expect(() =>
-      validateAuthProviderConfigValues('authjs', undefined, undefined),
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        undefined,
+        'development',
+      ),
+    ).not.toThrow();
+  });
+
+  it('throws for authjs in production when NEXTAUTH_SECRET is missing', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        undefined,
+        'production',
+      ),
+    ).toThrow('AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET');
+  });
+
+  it('passes for authjs in production when NEXTAUTH_SECRET is present', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'production',
+      ),
     ).not.toThrow();
   });
 

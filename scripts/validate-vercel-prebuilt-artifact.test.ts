@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   assertVercelPrebuiltArtifactHasNoEscapingTraces,
-  assertVercelPrebuiltArtifactHasNoForbiddenTraces,
   assertVercelPrebuiltArtifactValid,
   assertVercelPrebuiltUploadCoverageValid,
   validateVercelPrebuiltArtifact,
@@ -81,9 +80,6 @@ describe('validateVercelPrebuiltArtifact', () => {
     expect(() =>
       assertVercelPrebuiltArtifactHasNoEscapingTraces(summary),
     ).not.toThrow();
-    expect(() =>
-      assertVercelPrebuiltArtifactHasNoForbiddenTraces(summary),
-    ).not.toThrow();
   });
 
   it('uses filePathMap source values rather than target keys', async () => {
@@ -128,7 +124,7 @@ describe('validateVercelPrebuiltArtifact', () => {
     );
   });
 
-  it('reports forbidden traced files that should never be uploaded', async () => {
+  it('reports forbidden traced files for upload-plan enforcement', async () => {
     const root = await createTempRoot();
     const requiredPath = '.env.local';
     await writeFunctionConfig(root, {
@@ -144,9 +140,6 @@ describe('validateVercelPrebuiltArtifact', () => {
         requiredPath,
       },
     ]);
-    expect(() =>
-      assertVercelPrebuiltArtifactHasNoForbiddenTraces(summary),
-    ).toThrow('forbidden traced file');
   });
 
   it('rejects traced files that symlink outside the repository root', async () => {
@@ -206,6 +199,7 @@ describe('validateVercelPrebuiltArtifact', () => {
       ignoredPathCount: 0,
       totalUploadSizeBytes: 123,
       missingUploadFiles: [],
+      forbiddenUploadFiles: [],
     });
     expect(() =>
       assertVercelPrebuiltUploadCoverageValid(uploadSummary),
@@ -277,5 +271,84 @@ describe('validateVercelPrebuiltArtifact', () => {
     expect(() =>
       assertVercelPrebuiltUploadCoverageValid(uploadSummary),
     ).not.toThrow('likely excluded by dry-run ignored path');
+  });
+
+  it('allows forbidden trace metadata only when dry-run excludes it', async () => {
+    const root = await createTempRoot();
+    const forbiddenPath = '.env.local';
+    await writeFunctionConfig(root, {
+      [forbiddenPath]: forbiddenPath,
+    });
+    await writeRequiredFile(root, forbiddenPath);
+    const artifactSummary = await validateVercelPrebuiltArtifact(root);
+
+    const uploadSummary = validateVercelPrebuiltUploadCoverage(
+      artifactSummary,
+      JSON.stringify({
+        files: [],
+        ignored: ['.env.local'],
+        totalSize: 0,
+      }),
+    );
+
+    expect(uploadSummary.missingUploadFiles).toEqual([]);
+    expect(uploadSummary.forbiddenUploadFiles).toEqual([]);
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
+    ).not.toThrow();
+  });
+
+  it('rejects forbidden traced files present in dry-run upload', async () => {
+    const root = await createTempRoot();
+    const forbiddenPath = '.env.local';
+    await writeFunctionConfig(root, {
+      [forbiddenPath]: forbiddenPath,
+    });
+    await writeRequiredFile(root, forbiddenPath);
+    const artifactSummary = await validateVercelPrebuiltArtifact(root);
+
+    const uploadSummary = validateVercelPrebuiltUploadCoverage(
+      artifactSummary,
+      JSON.stringify({
+        files: [{ path: forbiddenPath, size: 1 }],
+        ignored: [],
+      }),
+    );
+
+    expect(uploadSummary.forbiddenUploadFiles).toHaveLength(1);
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
+    ).toThrow('forbidden traced file');
+  });
+
+  it('rejects dry-run uploads that exceed the file-count budget', () => {
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid({
+        uploadedFileCount: 5_001,
+        ignoredPathCount: 0,
+        totalUploadSizeBytes: 1,
+        missingUploadFiles: [],
+        forbiddenUploadFiles: [],
+      }),
+    ).toThrow('exceeding the 5000 file budget');
+  });
+
+  it('rejects dry-run uploads that exceed or cannot prove the size budget', () => {
+    const summary = {
+      uploadedFileCount: 1,
+      ignoredPathCount: 0,
+      missingUploadFiles: [],
+      forbiddenUploadFiles: [],
+    };
+
+    expect(() => assertVercelPrebuiltUploadCoverageValid(summary)).toThrow(
+      'upload size is unavailable',
+    );
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid({
+        ...summary,
+        totalUploadSizeBytes: 80 * 1024 * 1024 + 1,
+      }),
+    ).toThrow('exceeding the 83886080 byte budget');
   });
 });

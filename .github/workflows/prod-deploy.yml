@@ -64,7 +64,22 @@ jobs:
           pnpm db:migrate:prod
 
       - name: Build Project Artifacts
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -a
+          source .vercel/.env.production.local
+          set +a
+
+          if [ "${AUTH_PROVIDER:-}" = "authjs" ] && [ -z "${NEXTAUTH_URL:-}" ]; then
+            echo "AUTH_PROVIDER=authjs requires NEXTAUTH_URL in Vercel Production env. Do not mask a missing runtime env with a build-only fallback."
+            exit 1
+          fi
+
+          if [ -z "${VERCEL_URL:-}" ]; then
+            unset VERCEL_URL
+          fi
+
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           APP_ENV: production
           NEXT_PUBLIC_APP_ENV: production

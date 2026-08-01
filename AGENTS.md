@@ -945,6 +945,7 @@ Key rules currently in effect:
 | SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access                                |
 | SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns                                      |
 | SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas |
+| SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                      |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 
@@ -974,6 +975,15 @@ For async JSX handlers use `onClick={() => void handleX(...)}` and
 `onSubmit={(event) => void handleSubmit(event)}`. For object mocks use
 `vi.Mocked<Interface>`. For finite domain values use `z.enum(...)` or an existing typed
 schema instead of broad `z.string()`.
+
+**Deploy/runtime env rule**: A pipeline fix is incomplete if it only makes the
+current command pass while the deployed runtime receives a different or missing
+configuration contract. Before adding env fallbacks in CI/CD, identify whether the
+value is needed at build time, runtime, or both. If runtime needs it, require the
+deployment env value and fail fast when it is missing; do not synthesize a build-only
+value that masks Vercel/hosted runtime drift. This is mandatory for auth/provider
+URLs, tenant context, database URLs, redirect origins, cookies, and other
+security-sensitive env.
 
 **Also applies to unique indexes with nullable columns**: A `uniqueIndex(...).on(col1, nullableCol)` in Postgres does NOT enforce uniqueness when `nullableCol IS NULL` (BTree treats `NULL != NULL`). Use `.nullsNotDistinct()` on the unique **constraint** builder (`unique(name).on(cols).nullsNotDistinct()`) when NULLs should be treated as equal for uniqueness.
 

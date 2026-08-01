@@ -110,6 +110,7 @@ Always follow the repository's mandatory coding patterns from
 - `onClick={() => void handleX(...)}` and `onSubmit={(event) => void handleSubmit(event)}` for async React handlers
 - `vi.Mocked<Interface>` object mocks instead of repeated `vi.mocked(object.method)` unbound method references
 - `z.enum(...)` or existing typed schemas for finite domain options instead of broad `z.string()` plus downstream assumptions
+- fail fast on missing runtime-required deployment env instead of masking it with a build-only fallback in CI/CD (SEC-25)
 - `Record<AllowedKeys, fn>` dispatch maps instead of `obj[dynamicKey]()`
 - `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers instead of repeated `result[key] = ...` mutation chains in `src/**` runtime helpers
 - shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats
@@ -133,6 +134,7 @@ Do not:
 - move security-critical logic into client components without explicit approval
 - use `src/proxy.ts` as the only protection for sensitive operations
 - introduce provider-specific concepts into core contracts
+- fix only the build/deploy stage while leaving the deployed runtime env contract missing or different
 - widen scope with opportunistic cleanup unrelated to the task
 
 ## Response Shape

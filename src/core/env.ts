@@ -103,7 +103,7 @@ export const env = createEnv({
       .default('verified-only'),
     REGISTRATION_MODE: z
       .enum(['open', 'invite-only', 'disabled'])
-      .default('open'),
+      .default('invite-only'),
     AUTH_EXPOSE_RESET_TOKEN_IN_DEV: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .optional()
@@ -460,7 +460,7 @@ export function validateVerificationConfigValues(
 
   if (isProduction && isOpen) {
     throw new Error(
-      '[env] REGISTRATION_MODE=open is not allowed in production without a real email delivery adapter. Set REGISTRATION_MODE=closed.',
+      '[env] REGISTRATION_MODE=open is not allowed in production without a real email delivery adapter. Set REGISTRATION_MODE=invite-only or REGISTRATION_MODE=disabled.',
     );
   }
 

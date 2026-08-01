@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
       event: 'bootstrap_start:decision',
       pathname: '/auth/bootstrap/start',
       outcome: outcome.type,
+      outcomeError: outcome.type === 'error' ? outcome.error : undefined,
       safeTarget,
     },
     'Bootstrap start decision made',

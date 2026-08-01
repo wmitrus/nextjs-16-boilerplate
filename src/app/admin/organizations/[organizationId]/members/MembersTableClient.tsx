@@ -68,13 +68,15 @@ export function MembersTableClient({
   const router = useRouter();
   const [members, setMembers] = useState(initialMembers);
   const [selectedRoleIds, setSelectedRoleIds] = useState<
-    Record<string, string>
+    Partial<Record<string, string>>
   >(
     Object.fromEntries(
       initialMembers.map((member) => [member.userId, member.roleId]),
     ),
   );
-  const [rowState, setRowState] = useState<Record<string, MemberRoleState>>({});
+  const [rowState, setRowState] = useState<
+    Partial<Record<string, MemberRoleState>>
+  >({});
   const [rowError, setRowError] = useState<Record<string, string>>({});
 
   async function handleSave(member: OrganizationMemberSummaryDto) {

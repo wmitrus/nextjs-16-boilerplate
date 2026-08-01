@@ -198,6 +198,68 @@ describe('validate-env: runValidation', () => {
   });
 
   describe('combined validation', () => {
+    it('requires explicit provider and tenancy mode for preview deployments', () => {
+      const errors = runValidation(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        VALID_UUID,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+        'preview',
+      );
+
+      expect(errors.some((e) => e.includes('AUTH_PROVIDER'))).toBe(true);
+      expect(errors.some((e) => e.includes('TENANCY_MODE'))).toBe(true);
+    });
+
+    it('requires production-like deployment keys to come from the Vercel-pulled env file', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'single',
+        VALID_UUID,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+        'preview',
+        new Set(['AUTH_PROVIDER']),
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('TENANCY_MODE');
+      expect(errors[0]).toContain('.vercel/.env.preview.local');
+    });
+
+    it('accepts a redacted sensitive AuthJS secret when the Vercel-pulled preview env contains the key', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        '',
+        'single',
+        VALID_UUID,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+        'preview',
+        new Set(['AUTH_PROVIDER', 'TENANCY_MODE', 'NEXTAUTH_SECRET']),
+      );
+
+      expect(errors).toHaveLength(0);
+    });
+
     it('accumulates multiple errors when both auth and tenancy requirements fail', () => {
       const errors = runValidation(
         'clerk',

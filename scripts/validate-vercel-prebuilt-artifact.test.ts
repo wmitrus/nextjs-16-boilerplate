@@ -9,7 +9,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   assertVercelPrebuiltArtifactValid,
+  assertVercelPrebuiltUploadCoverageValid,
   validateVercelPrebuiltArtifact,
+  validateVercelPrebuiltUploadCoverage,
 } from './validate-vercel-prebuilt-artifact';
 
 const tempRoots: string[] = [];
@@ -62,6 +64,13 @@ describe('validateVercelPrebuiltArtifact', () => {
     expect(summary).toEqual({
       configCount: 1,
       requiredFileCount: 1,
+      requiredFiles: [
+        {
+          configPath:
+            '.vercel/output/functions/api/example.func/.vc-config.json',
+          requiredPath,
+        },
+      ],
       missingFiles: [],
     });
     expect(() => assertVercelPrebuiltArtifactValid(summary)).not.toThrow();
@@ -95,5 +104,99 @@ describe('validateVercelPrebuiltArtifact', () => {
     await expect(validateVercelPrebuiltArtifact(root)).rejects.toThrow(
       'Run `vercel build --prod` before validating prebuilt artifacts',
     );
+  });
+
+  it('passes upload coverage when dry-run files include all traced paths', async () => {
+    const root = await createTempRoot();
+    const requiredPath = 'node_modules/.pnpm/pkg/node_modules/pkg/index.js';
+    await writeFunctionConfig(root, {
+      [requiredPath]: requiredPath,
+    });
+    await writeRequiredFile(root, requiredPath);
+    const artifactSummary = await validateVercelPrebuiltArtifact(root);
+
+    const uploadSummary = validateVercelPrebuiltUploadCoverage(
+      artifactSummary,
+      [
+        'Vercel CLI 58.4.4',
+        JSON.stringify({
+          files: [{ path: requiredPath }],
+          ignored: [],
+        }),
+      ].join('\n'),
+    );
+
+    expect(uploadSummary).toEqual({
+      uploadedFileCount: 1,
+      ignoredPathCount: 0,
+      missingUploadFiles: [],
+    });
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
+    ).not.toThrow();
+  });
+
+  it('reports dry-run upload gaps with ignored parent paths', async () => {
+    const root = await createTempRoot();
+    const requiredPath =
+      'node_modules/.pnpm/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/src/api/context.js';
+    await writeFunctionConfig(root, {
+      [requiredPath]: requiredPath,
+    });
+    await writeRequiredFile(root, requiredPath);
+    const artifactSummary = await validateVercelPrebuiltArtifact(root);
+
+    const uploadSummary = validateVercelPrebuiltUploadCoverage(
+      artifactSummary,
+      JSON.stringify({
+        files: [
+          {
+            path: '.vercel/output/functions/_global-error.func/.vc-config.json',
+          },
+        ],
+        ignored: ['node_modules'],
+      }),
+    );
+
+    expect(uploadSummary.missingUploadFiles).toEqual([
+      {
+        configPath: '.vercel/output/functions/api/example.func/.vc-config.json',
+        requiredPath,
+        ignoredByDryRunPath: 'node_modules',
+      },
+    ]);
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
+    ).toThrow('likely excluded by dry-run ignored path `node_modules`');
+  });
+
+  it('does not name .vercelignore when dry-run ignored paths do not cover the missing file', async () => {
+    const root = await createTempRoot();
+    const requiredPath = 'node_modules/.pnpm/pkg/node_modules/pkg/index.js';
+    await writeFunctionConfig(root, {
+      [requiredPath]: requiredPath,
+    });
+    await writeRequiredFile(root, requiredPath);
+    const artifactSummary = await validateVercelPrebuiltArtifact(root);
+
+    const uploadSummary = validateVercelPrebuiltUploadCoverage(
+      artifactSummary,
+      JSON.stringify({
+        files: [],
+        ignored: ['docs'],
+      }),
+    );
+
+    expect(uploadSummary.missingUploadFiles[0]).toEqual({
+      configPath: '.vercel/output/functions/api/example.func/.vc-config.json',
+      requiredPath,
+      ignoredByDryRunPath: undefined,
+    });
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
+    ).toThrow('Check `.vercelignore`');
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
+    ).not.toThrow('likely excluded by dry-run ignored path');
   });
 });

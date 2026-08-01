@@ -6,6 +6,7 @@ import { signOut as signOutAuthjs } from 'next-auth/react';
 import { useSignOut } from '@/modules/auth/ui/hooks/useSignOut';
 
 type DbDriver = 'pglite' | 'postgres';
+type DeploymentEnvironment = 'production' | 'preview' | 'development';
 
 const DB_ERROR_MESSAGES: Record<DbDriver, string> = {
   pglite:
@@ -27,6 +28,9 @@ const ERROR_MESSAGES: Record<
   db_error: DB_ERROR_MESSAGES.pglite,
 };
 
+const DEPLOYED_DB_ERROR_MESSAGE =
+  'Database error during sign-in. The deployment could not complete the authentication bootstrap against its configured database. Please try again; if the problem persists, check the deployment logs for the bootstrap/provisioning error and verify the database migration and bootstrap state.';
+
 interface BootstrapErrorUIProps {
   error:
     | 'cross_provider_linking'
@@ -34,15 +38,27 @@ interface BootstrapErrorUIProps {
     | 'tenant_config'
     | 'db_error';
   dbDriver?: DbDriver;
+  deploymentEnvironment?: DeploymentEnvironment;
+  nodeEnv?: 'development' | 'test' | 'production';
   authProvider?: 'clerk' | 'authjs' | 'supabase' | 'neon';
 }
 
 function getBootstrapErrorMessage(
   error: BootstrapErrorUIProps['error'],
   dbDriver: DbDriver | undefined,
+  deploymentEnvironment: DeploymentEnvironment | undefined,
+  nodeEnv: BootstrapErrorUIProps['nodeEnv'],
 ): string {
   switch (error) {
     case 'db_error':
+      if (
+        deploymentEnvironment === 'preview' ||
+        deploymentEnvironment === 'production' ||
+        (deploymentEnvironment === 'development' && nodeEnv === 'production')
+      ) {
+        return DEPLOYED_DB_ERROR_MESSAGE;
+      }
+
       return dbDriver === 'postgres'
         ? DB_ERROR_MESSAGES.postgres
         : DB_ERROR_MESSAGES.pglite;
@@ -93,9 +109,16 @@ function FallbackSignOutButton() {
 export function BootstrapErrorUI({
   error,
   dbDriver,
+  deploymentEnvironment,
+  nodeEnv,
   authProvider,
 }: BootstrapErrorUIProps) {
-  const message = getBootstrapErrorMessage(error, dbDriver);
+  const message = getBootstrapErrorMessage(
+    error,
+    dbDriver,
+    deploymentEnvironment,
+    nodeEnv,
+  );
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">

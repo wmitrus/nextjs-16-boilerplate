@@ -9,9 +9,8 @@ import { buildProvisioningInput } from '../build-provisioning-input';
 
 import type { ProvisioningService } from '@/modules/provisioning';
 import {
-  CrossProviderLinkingNotAllowedError,
-  TenantContextRequiredError,
-  TenantUserLimitReachedError,
+  classifyProvisioningFailure,
+  type ProvisioningFailureDiagnostics,
 } from '@/modules/provisioning';
 
 const logger = resolveServerLogger().child({
@@ -19,6 +18,21 @@ const logger = resolveServerLogger().child({
   category: 'auth',
   module: 'bootstrap_outcome',
 });
+
+function logProvisioningFailure(
+  diagnostics: ProvisioningFailureDiagnostics,
+  context: Record<string, unknown>,
+): void {
+  const message =
+    'Bootstrap provisioning failed; see failureCode and operatorAction for remediation';
+
+  if (diagnostics.severity === 'warn') {
+    logger.warn(context, message);
+    return;
+  }
+
+  logger.error(context, message);
+}
 
 export type BootstrapError =
   | 'cross_provider_linking'
@@ -68,8 +82,12 @@ export async function resolveBootstrapOutcome(
     internalUserId = result.internalUserId;
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
+    const diagnostics = classifyProvisioningFailure(err);
     const logContext = {
       event: 'bootstrap_outcome:provisioning_error',
+      failureCode: diagnostics.failureCode,
+      operatorAction: diagnostics.operatorAction,
+      userFacingError: diagnostics.userFacingError,
       provider: provisioningInput.provider,
       hasExternalUserId: Boolean(provisioningInput.externalUserId),
       hasEmail: Boolean(provisioningInput.email),
@@ -77,40 +95,14 @@ export async function resolveBootstrapOutcome(
       tenancyMode: provisioningInput.tenancyMode,
       tenantContextSource: provisioningInput.tenantContextSource,
       hasActiveTenantId: Boolean(provisioningInput.activeTenantId),
+      activeTenantId: provisioningInput.activeTenantId,
       hasOrgExternalId: Boolean(provisioningInput.orgExternalId),
       errorName: error.name,
       errorMessage: error.message,
     };
 
-    if (err instanceof CrossProviderLinkingNotAllowedError) {
-      logger.warn(
-        logContext,
-        'Bootstrap provisioning failed because cross-provider email linking is not allowed',
-      );
-      return { type: 'error', error: 'cross_provider_linking' };
-    }
-
-    if (err instanceof TenantUserLimitReachedError) {
-      logger.warn(
-        logContext,
-        'Bootstrap provisioning failed because tenant user quota is exceeded',
-      );
-      return { type: 'error', error: 'quota_exceeded' };
-    }
-
-    if (err instanceof TenantContextRequiredError) {
-      logger.warn(
-        logContext,
-        'Bootstrap provisioning failed because tenant context is missing',
-      );
-      return { type: 'error', error: 'tenant_config' };
-    }
-
-    logger.error(
-      logContext,
-      'Bootstrap provisioning failed with an unexpected error',
-    );
-    return { type: 'error', error: 'db_error' };
+    logProvisioningFailure(diagnostics, logContext);
+    return { type: 'error', error: diagnostics.userFacingError };
   }
 
   const userRepository = container.resolve<UserRepository>(

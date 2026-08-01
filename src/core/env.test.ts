@@ -82,6 +82,15 @@ describe('env', () => {
     expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL).toBeUndefined();
   });
 
+  it('defaults REGISTRATION_MODE to invite-only', async () => {
+    setEnv({ REGISTRATION_MODE: undefined });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.REGISTRATION_MODE).toBe('invite-only');
+  });
+
   it('validates logger env variables', async () => {
     setEnv({
       LOG_LEVEL: 'debug',
@@ -608,7 +617,7 @@ describe('validateVerificationConfigValues', () => {
     ).not.toThrow();
   });
 
-  it('passes when production has closed registration and no bypass flags', async () => {
+  it('passes when production has disabled registration and no bypass flags', async () => {
     vi.resetModules();
     const { validateVerificationConfigValues } = await import('./env');
     expect(() =>
@@ -616,7 +625,7 @@ describe('validateVerificationConfigValues', () => {
     ).not.toThrow();
   });
 
-  it('passes when non-production has closed registration without bypass', async () => {
+  it('passes when non-production has disabled registration without bypass', async () => {
     vi.resetModules();
     const { validateVerificationConfigValues } = await import('./env');
     expect(() =>

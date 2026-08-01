@@ -73,6 +73,10 @@ export const env = createEnv({
       .default('https://in.logs.betterstack.com'),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     NEXTAUTH_SECRET: z.string().min(1).optional(),
+    NEXTAUTH_URL: z.preprocess(
+      (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.url().optional(),
+    ),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
     SECURITY_AUDIT_LOG_ENABLED: z
@@ -228,6 +232,7 @@ export const env = createEnv({
     BETTER_STACK_INGESTING_URL: process.env.BETTER_STACK_INGESTING_URL,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,

@@ -221,6 +221,21 @@ describe('DELETE /api/admin/organizations/[organizationId]/invitations/[id]', ()
     expect(response.status).toBe(404);
   });
 
+  it('returns 400 for malformed invitation ids before querying UUID columns', async () => {
+    const { DELETE } = await import('./route');
+    const response = await DELETE(
+      new NextRequest(
+        'http://localhost/api/admin/organizations/acme/invitations/not-a-uuid',
+      ),
+      makeContext(ORG_ID, 'not-a-uuid'),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
+    expect(mocks.db.select).not.toHaveBeenCalled();
+    expect(mocks.revokeInvitation).not.toHaveBeenCalled();
+  });
+
   it('revokes the invitation on the canonical nested route', async () => {
     const { DELETE } = await import('./route');
     const response = await DELETE(

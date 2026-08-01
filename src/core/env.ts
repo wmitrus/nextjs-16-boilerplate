@@ -369,7 +369,7 @@ export function validateNewRelicConfigValues(
 
   if (
     vercelEnv &&
-    /(^|\s)(?:-r|--require)\s*newrelic(?=\s|$)/.test(normalizedNodeOptions)
+    /(^|\s)(?:-r|--require=?)\s*newrelic(?=\s|$)/.test(normalizedNodeOptions)
   ) {
     throw new Error(
       '[env] NODE_OPTIONS must not preload newrelic on Vercel. Use instrumentation.ts late-load plus Vercel log drain/browser CDN monitoring instead.',

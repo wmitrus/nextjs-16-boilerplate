@@ -168,23 +168,23 @@ For admin access setup, see `docs/features/32 - AuthJS Custom Auth Provider.md` 
 
 ## Environment Variable Reference
 
-| Variable                                | Default | Description                                  |
-| --------------------------------------- | ------- | -------------------------------------------- |
-| `REGISTRATION_MODE`                     | `open`  | Set `invite-only` to enable waitlist         |
-| `EMAIL_PROVIDER`                        | `none`  | `none` / `resend` / `smtp`                   |
-| `RESEND_API_KEY`                        | —       | Required when `EMAIL_PROVIDER=resend`        |
-| `RESEND_FROM_EMAIL`                     | —       | Sender address for Resend                    |
-| `SMTP_HOST`                             | —       | SMTP server host                             |
-| `SMTP_PORT`                             | —       | SMTP port (e.g. `587`)                       |
-| `SMTP_SECURE`                           | —       | `true` for TLS, `false` for STARTTLS         |
-| `SMTP_USER`                             | —       | SMTP auth username                           |
-| `SMTP_PASS`                             | —       | SMTP auth password                           |
-| `SMTP_FROM_EMAIL`                       | —       | Sender address for SMTP                      |
-| `WAITLIST_INVITE_ORGANIZATION_ID`       | —       | Optional org UUID override for invitation    |
-| `WAITLIST_INVITE_ROLE_ID`               | —       | Optional role UUID override for invitation   |
-| `WAITLIST_SEND_REJECTION_EMAIL`         | `true`  | Set `false` to disable rejection emails      |
-| `AUTH_DEV_AUTO_VERIFY`                  | `false` | Dev only — skip email verification on signup |
-| `AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV` | `false` | Dev only — log verify URL to console         |
+| Variable                                | Default       | Description                                  |
+| --------------------------------------- | ------------- | -------------------------------------------- |
+| `REGISTRATION_MODE`                     | `invite-only` | Enables waitlist and invitation-only signup  |
+| `EMAIL_PROVIDER`                        | `none`        | `none` / `resend` / `smtp`                   |
+| `RESEND_API_KEY`                        | —             | Required when `EMAIL_PROVIDER=resend`        |
+| `RESEND_FROM_EMAIL`                     | —             | Sender address for Resend                    |
+| `SMTP_HOST`                             | —             | SMTP server host                             |
+| `SMTP_PORT`                             | —             | SMTP port (e.g. `587`)                       |
+| `SMTP_SECURE`                           | —             | `true` for TLS, `false` for STARTTLS         |
+| `SMTP_USER`                             | —             | SMTP auth username                           |
+| `SMTP_PASS`                             | —             | SMTP auth password                           |
+| `SMTP_FROM_EMAIL`                       | —             | Sender address for SMTP                      |
+| `WAITLIST_INVITE_ORGANIZATION_ID`       | —             | Optional org UUID override for invitation    |
+| `WAITLIST_INVITE_ROLE_ID`               | —             | Optional role UUID override for invitation   |
+| `WAITLIST_SEND_REJECTION_EMAIL`         | `true`        | Set `false` to disable rejection emails      |
+| `AUTH_DEV_AUTO_VERIFY`                  | `false`       | Dev only — skip email verification on signup |
+| `AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV` | `false`       | Dev only — log verify URL to console         |
 
 ---
 

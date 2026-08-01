@@ -32,7 +32,7 @@ AUTH_PROVIDER=authjs
 | Invite acceptance page      | ✅        | `/auth/invite/<token>`                         |
 | Waitlist (invite-only mode) | ✅        | `/waitlist` + email confirmation               |
 | Admin waitlist approval     | ✅        | `POST /api/admin/waitlist/[id]?action=approve` |
-| Registration mode control   | ✅        | `open`, `closed`, `invite-only`                |
+| Registration mode control   | ✅        | `open`, `invite-only`, `disabled`              |
 | Email delivery adapters     | ✅        | `none` (NoOp), `resend`, `smtp`                |
 
 ---
@@ -50,7 +50,7 @@ AUTH_PROVIDER=authjs
 | `/auth/verify-email-pending`   | Post-signup holding page                                                        |
 | `/auth/verify-email?token=X`   | Verify email address via link                                                   |
 | `/auth/invite/[token]`         | Invitation acceptance landing page                                              |
-| `/auth/registration-closed`    | Shown when `REGISTRATION_MODE=closed`                                           |
+| `/auth/registration-closed`    | Shown when `REGISTRATION_MODE=disabled`                                         |
 | `/waitlist`                    | Join the waitlist (when `REGISTRATION_MODE=invite-only`)                        |
 
 ### API Endpoints
@@ -74,11 +74,11 @@ AUTH_PROVIDER=authjs
 
 Controlled by `REGISTRATION_MODE` env var:
 
-| Mode          | Behavior                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------- |
-| `open`        | Anyone can sign up (requires email delivery or dev bypass)                                  |
-| `closed`      | No new sign-ups; `/auth/signup` redirects to `/auth/registration-closed`                    |
-| `invite-only` | Sign-up requires `?invitation_token`; `/auth/signup` without token redirects to `/waitlist` |
+| Mode          | Behavior                                                                                             |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| `invite-only` | Default. Sign-up requires `?invitation_token`; `/auth/signup` without token redirects to `/waitlist` |
+| `open`        | Anyone can sign up (requires email delivery or dev bypass)                                           |
+| `disabled`    | No new sign-ups; `/auth/signup` redirects to `/auth/registration-closed`                             |
 
 ---
 

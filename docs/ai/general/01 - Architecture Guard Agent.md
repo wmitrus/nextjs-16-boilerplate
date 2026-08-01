@@ -112,6 +112,7 @@ Always flag these if present:
 - duplicated security logic across routes
 - feature flags embedded ad hoc in UI
 - direct database access from delivery code
+- delivery-layer route handlers binding raw or insufficiently validated route params to database identifiers, especially UUID columns (SEC-23)
 - hidden service-locator patterns in request-sensitive flows
 - ad hoc API response envelopes in normal JSON route handlers when the shared `response-service` and `with-error-handler` pattern should be used
 

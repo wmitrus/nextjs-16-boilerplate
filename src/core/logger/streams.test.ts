@@ -27,6 +27,8 @@ vi.mock('./utils', () => ({
   createConsoleStream: vi.fn(() => ({ type: 'console' })),
   createFileStream: vi.fn(() => ({ type: 'file' })),
   createLogflareWriteStream: vi.fn(() => ({ type: 'logflare' })),
+  createBetterStackStream: vi.fn(() => ({ type: 'better-stack' })),
+  createStdoutStream: vi.fn(() => ({ type: 'stdout' })),
 }));
 
 interface MockStream {
@@ -37,6 +39,15 @@ describe('getLogStreams', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('window', undefined);
+    (env as unknown as Record<string, string | boolean>).NODE_ENV =
+      'development';
+    (env as unknown as Record<string, string | boolean>).LOG_TO_FILE_DEV =
+      false;
+    (env as unknown as Record<string, string | boolean>).LOG_TO_FILE_PROD =
+      false;
+    (
+      env as unknown as Record<string, string | boolean>
+    ).LOGFLARE_SERVER_ENABLED = false;
   });
 
   afterEach(() => {
@@ -80,6 +91,27 @@ describe('getLogStreams', () => {
     ).toBe(true);
   });
 
+  it('should mirror production external transport logs to stdout', () => {
+    (env as unknown as Record<string, string | boolean>).NODE_ENV =
+      'production';
+    (
+      env as unknown as Record<string, string | boolean>
+    ).LOGFLARE_SERVER_ENABLED = true;
+
+    const streams = getLogStreams();
+
+    expect(
+      streams.some(
+        (s) => (s.stream as unknown as MockStream).type === 'stdout',
+      ),
+    ).toBe(true);
+    expect(
+      streams.some(
+        (s) => (s.stream as unknown as MockStream).type === 'logflare',
+      ),
+    ).toBe(true);
+  });
+
   it('should include file stream if enabled in production', () => {
     (env as unknown as Record<string, string | boolean>).NODE_ENV =
       'production';
@@ -92,16 +124,15 @@ describe('getLogStreams', () => {
     ).toBe(true);
   });
 
-  it('should not include console stream in production', () => {
+  it('should use pino default stdout in production when no custom stream is enabled', () => {
     (env as unknown as Record<string, string | boolean>).NODE_ENV =
       'production';
+    (
+      env as unknown as Record<string, string | boolean>
+    ).LOGFLARE_SERVER_ENABLED = false;
 
     const streams = getLogStreams();
-    expect(
-      streams.some(
-        (s) => (s.stream as unknown as MockStream).type === 'console',
-      ),
-    ).toBe(false);
+    expect(streams).toHaveLength(0);
   });
 
   it('should return empty array if in browser', () => {

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { signOut as signOutAuthjs } from 'next-auth/react';
 
+import { buildBootstrapRedirectUrl } from '@/app/auth/post-auth-redirect';
 import { useSignOut } from '@/modules/auth/ui/hooks/useSignOut';
 
 type DbDriver = 'pglite' | 'postgres';
@@ -41,6 +42,7 @@ interface BootstrapErrorUIProps {
   deploymentEnvironment?: DeploymentEnvironment;
   nodeEnv?: 'development' | 'test' | 'production';
   authProvider?: 'clerk' | 'authjs' | 'supabase' | 'neon';
+  redirectUrl?: string;
 }
 
 function getBootstrapErrorMessage(
@@ -112,6 +114,7 @@ export function BootstrapErrorUI({
   deploymentEnvironment,
   nodeEnv,
   authProvider,
+  redirectUrl,
 }: BootstrapErrorUIProps) {
   const message = getBootstrapErrorMessage(
     error,
@@ -119,6 +122,7 @@ export function BootstrapErrorUI({
     deploymentEnvironment,
     nodeEnv,
   );
+  const retryHref = buildBootstrapRedirectUrl(redirectUrl);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -143,12 +147,12 @@ export function BootstrapErrorUI({
         </h1>
         <p className="mb-6 text-sm text-gray-600">{message}</p>
         <div className="flex gap-3">
-          <button
-            onClick={() => window.location.reload()}
+          <Link
+            href={retryHref}
             className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Try Again
-          </button>
+          </Link>
           {authProvider === 'clerk' ? (
             <ClerkSignOutButton />
           ) : authProvider === 'authjs' ? (

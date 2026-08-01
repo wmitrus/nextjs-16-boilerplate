@@ -1,9 +1,12 @@
+import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { env } from '@/core/env';
 
 import { BootstrapErrorUI } from './bootstrap-error';
 import { BootstrapOrgRequired } from './bootstrap-org-required';
+
+import { buildBootstrapRedirectUrl } from '@/app/auth/post-auth-redirect';
 
 const KNOWN_ERRORS = [
   'cross_provider_linking',
@@ -85,6 +88,10 @@ export async function BootstrapPageContent({
     return <BootstrapOrgRequired redirectUrl={redirect_url} />;
   }
 
+  if (!state && !error && !reason) {
+    redirect(buildBootstrapRedirectUrl(redirect_url));
+  }
+
   return (
     <BootstrapErrorUI
       error={resolveBootstrapError(error, reason)}
@@ -92,6 +99,7 @@ export async function BootstrapPageContent({
       deploymentEnvironment={env.VERCEL_ENV}
       nodeEnv={env.NODE_ENV}
       authProvider={env.AUTH_PROVIDER}
+      redirectUrl={redirect_url}
     />
   );
 }

@@ -1,9 +1,23 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('next/navigation', () => ({
+  redirect: (url: string) => {
+    throw new Error(`REDIRECT:${url}`);
+  },
+}));
+
 vi.mock('./bootstrap-error', () => ({
-  BootstrapErrorUI: ({ error }: { error: string }) => (
-    <div data-testid="bootstrap-error">{error}</div>
+  BootstrapErrorUI: ({
+    error,
+    redirectUrl,
+  }: {
+    error: string;
+    redirectUrl?: string;
+  }) => (
+    <div data-testid="bootstrap-error" data-redirect-url={redirectUrl ?? ''}>
+      {error}
+    </div>
   ),
 }));
 
@@ -87,6 +101,18 @@ describe('BootstrapPageContent', () => {
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 
+  it('passes redirect_url to BootstrapErrorUI', async () => {
+    render(
+      await BootstrapPageContent(
+        makeProps({ error: 'db_error', redirect_url: '/dashboard' }),
+      ),
+    );
+    expect(screen.getByTestId('bootstrap-error')).toHaveAttribute(
+      'data-redirect-url',
+      '/dashboard',
+    );
+  });
+
   it('defaults to db_error for an unknown error param', async () => {
     render(
       await BootstrapPageContent(makeProps({ error: 'something_unexpected' })),
@@ -111,8 +137,17 @@ describe('BootstrapPageContent', () => {
     expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
   });
 
-  it('defaults to db_error when no params are provided', async () => {
-    render(await BootstrapPageContent(makeProps()));
-    expect(screen.getByTestId('bootstrap-error')).toHaveTextContent('db_error');
+  it('redirects a bare bootstrap page request to the bootstrap start route', async () => {
+    await expect(BootstrapPageContent(makeProps())).rejects.toThrow(
+      'REDIRECT:/auth/bootstrap/start?redirect_url=%2Fdashboard',
+    );
+  });
+
+  it('preserves redirect_url when redirecting a bare bootstrap page request', async () => {
+    await expect(
+      BootstrapPageContent(makeProps({ redirect_url: '/dashboard' })),
+    ).rejects.toThrow(
+      'REDIRECT:/auth/bootstrap/start?redirect_url=%2Fdashboard',
+    );
   });
 });

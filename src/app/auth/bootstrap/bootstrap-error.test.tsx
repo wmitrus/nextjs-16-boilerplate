@@ -42,9 +42,10 @@ describe('BootstrapErrorUI', () => {
         }),
       ).toBeInTheDocument();
       expect(screen.getByText(expectedMessage)).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: 'Try Again' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
       expect(
         screen.getByRole('button', { name: 'Sign Out' }),
       ).toBeInTheDocument();
@@ -153,6 +154,47 @@ describe('BootstrapErrorUI', () => {
         callbackUrl: '/auth/signin',
       });
       expect(clerkSignOutMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Try Again link', () => {
+    it('restarts bootstrap through the start route with the default app target', () => {
+      render(<BootstrapErrorUI error="db_error" authProvider="authjs" />);
+
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
+    });
+
+    it('preserves a safe redirect_url for the retry bootstrap attempt', () => {
+      render(
+        <BootstrapErrorUI
+          error="db_error"
+          authProvider="authjs"
+          redirectUrl="/dashboard"
+        />,
+      );
+
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
+    });
+
+    it('sanitizes an unsafe redirect_url before retrying bootstrap', () => {
+      render(
+        <BootstrapErrorUI
+          error="db_error"
+          authProvider="authjs"
+          redirectUrl="https://evil.example/phish"
+        />,
+      );
+
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
     });
   });
 });

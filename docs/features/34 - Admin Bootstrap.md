@@ -35,7 +35,7 @@ A CLI script that creates the first admin account directly in the database — b
 
 | Property                        | Behaviour                                                                                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Idempotent**                  | Exits without changes if any user already exists in the DB                                                                                         |
+| **Idempotent**                  | Creates the first admin only on a fresh DB; on an existing DB it may repair only the missing AuthJS identity mapping for the exact bootstrap email |
 | **Race-safe**                   | DB unique constraints prevent duplicates even under concurrent runs                                                                                |
 | **No open registration needed** | `REGISTRATION_MODE=invite-only` is never changed                                                                                                   |
 | **No race window**              | The admin account exists before the app serves any traffic                                                                                         |
@@ -147,7 +147,7 @@ Notes:
 
 - `scripts/bootstrap-admin.ts` already prefers `DATABASE_URL_UNPOOLED` when it exists, so the script targets the direct preview DB connection automatically.
 - This must stay a manual step tied to a specific branch preview DB. Do not keep `BOOTSTRAP_ADMIN_PASSWORD` in shared preview envs and do not add preview bootstrap back into `.github/workflows/preview-deploy.yml`.
-- If the preview database already contains any user, the script exits without changing data.
+- If the preview database already contains any user, the script does not create another user. It only verifies/repairs the AuthJS identity mapping for `BOOTSTRAP_ADMIN_EMAIL` when a matching credentials row already exists.
 
 ### One-time production bootstrap runbook
 
@@ -231,7 +231,7 @@ organizationsTable        { id: <random-uuid>, tenantId: DEFAULT_TENANT_ID, name
 tenantAttributesTable     { tenantId: DEFAULT_TENANT_ID, plan: 'standard', ... }
 usersTable                { id: <random-uuid>, email: BOOTSTRAP_ADMIN_EMAIL, onboardingComplete: true }
 userCredentialsTable      { userId, email, hashedPassword, emailVerified: true }
-authUserIdentitiesTable   { provider: 'authjs', externalUserId: userId, userId }
+authUserIdentitiesTable   { provider: 'authjs', externalUserId: email, userId }
 rolesTable                { owner + member roles for the org }
 policiesTable             { ABAC policies for owner role (from ownerPolicies template) }
 membershipsTable          { userId, orgId, ownerRoleId }

@@ -145,7 +145,7 @@ describe('validate-env: runValidation', () => {
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('NEXTAUTH_URL');
-      expect(errors[0]).toContain('runtime env');
+      expect(errors[0]).toContain('production runtime');
     });
 
     it('returns no auth errors when AUTH_PROVIDER=authjs in production with NEXTAUTH_SECRET and NEXTAUTH_URL', () => {
@@ -191,7 +191,7 @@ describe('validate-env: runValidation', () => {
       expect(errors[0]).toContain('NEXTAUTH_URL');
     });
 
-    it('returns an auth error when AUTH_PROVIDER=authjs in production has an empty VERCEL_URL fallback', () => {
+    it('returns an auth error when AUTH_PROVIDER=authjs in production has only an empty runtime URL', () => {
       const errors = runValidation(
         'authjs',
         undefined,
@@ -206,10 +206,11 @@ describe('validate-env: runValidation', () => {
         'production',
         'production',
         undefined,
-        { vercelUrl: '' },
+        { nextAuthUrl: '' },
       );
       expect(errors).toHaveLength(1);
-      expect(errors[0]).toContain('build-only fallbacks');
+      expect(errors[0]).toContain('NEXTAUTH_URL');
+      expect(errors[0]).toContain('production runtime');
     });
   });
 

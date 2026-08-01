@@ -194,8 +194,23 @@ pnpm db:migrate:prod && pnpm build
 Use a normal preview deploy instead:
 
 ```bash
-vercel deploy --token="$VERCEL_TOKEN"
+vercel deploy --token="$VERCEL_TOKEN" \
+  --meta githubDeployment=1 \
+  --meta githubCommitRef="$GIT_BRANCH" \
+  --meta githubCommitSha="$GIT_SHA"
 ```
+
+The Git metadata is mandatory when the preview deployment is created through the
+Vercel CLI, including GitHub Actions. Without `githubDeployment=1` and
+`githubCommitRef`, Vercel creates a generic Preview deployment that is not linked
+to the PR branch. In that state, branch-specific environment variables and Neon
+Preview Branching do not have a branch context, so the deployment can receive
+the base Preview/Production Neon endpoint instead of a Neon preview branch
+endpoint.
+
+The repository preview workflow must verify this after deployment by inspecting
+the deployment JSON and failing if `meta.githubCommitRef` or
+`meta.githubCommitSha` is missing or different from the PR head branch/commit.
 
 3. You may still run `vercel pull --yes --environment=preview --git-branch="$GIT_BRANCH"` locally in CI when you need preview env vars for validation, but do not treat that local cache as the migration authority for Neon preview branches.
 

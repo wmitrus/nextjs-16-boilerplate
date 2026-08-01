@@ -97,6 +97,7 @@ You do not own:
 - Upstream allowlist validation of CLI args does not substitute for point-of-use guards — defense in depth requires guards at both the intake point and the point of file or network access.
 - Do not write if/else chains of `token === SYMBOL` in DI mock test containers — use `Map<symbol, unknown>` with `Map.get(token)` instead (SEC-01 in `SECURITY_CODING_PATTERNS.md`).
 - Do not forward `redirect_url` or similar query parameters to downstream routes without calling `sanitizeRedirectUrl()` at the point the param is read from the request (SEC-03 in `SECURITY_CODING_PATTERNS.md`).
+- Do not alias raw App Router `context.params` values as IDs or pass raw `params.*` values into Drizzle predicates or mutation inputs for Postgres `uuid` columns. Parse UUID path params with `z.uuid()` or an existing schema, return `createValidationErrorResponse(...)` on failure, and use only `parseResult.data.*` after validation (SEC-23).
 - Do not use `obj[dynamicKey]()` bracket dispatch on objects to call methods — use an explicit `Record<AllowedKeys, fn>` dispatch map instead (SEC-04 in `SECURITY_CODING_PATTERNS.md`).
 - In `src/**` runtime helpers, prefer `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers over repeated `result[key] = ...` mutation chains when keys are dynamic or derived (SEC-20 in `SECURITY_CODING_PATTERNS.md`).
 - In `scripts/**` and `e2e/**`, prefer shared sink-confined fs helper wrappers over repeated direct `fs.*` calls when the same file-access pattern appears in multiple files (SEC-19 in `SECURITY_CODING_PATTERNS.md`).
@@ -180,6 +181,10 @@ Read it before feature, fix, refactor, script, or tooling changes.
 ### Pattern A — Schema Type Discipline: UUID vs TEXT
 
 `uuid` Drizzle column type ONLY for DB-generated PKs (`defaultRandom()`) and FK refs to UUID PKs. Use `text` for all externally-sourced string IDs (Clerk org IDs, tenant slugs, scope keys). Misuse causes Postgres `22P02` at query bind time — silent in unit tests, crashes in production.
+
+For App Router route handlers, every UUID path segment must be parsed with `z.uuid()`
+before DB use. A presence check such as `if (!params.id)` is not validation. Add a
+malformed-ID unit test proving `400` is returned before DB or repository calls.
 
 For unique constraints on nullable columns: use `unique(name).on(cols).nullsNotDistinct()` — NOT `uniqueIndex().on(...)`. The `uniqueIndex()` builder does not expose `.nullsNotDistinct()`.
 

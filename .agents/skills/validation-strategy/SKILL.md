@@ -119,6 +119,9 @@ Always flag these when present:
 - security-sensitive behavior validated only through client or UI assertions
 - route handlers or server actions that change sensitive behavior without meaningful
   validation
+- route handlers with UUID path segments validated only by happy-path or mocked-DB
+  tests, without a malformed-ID test proving `400` before DB/repository access
+  (SEC-23)
 - cache-sensitive or env-sensitive flows with no runtime-sensitive validation
 - critical flows covered only by happy-path tests
 - CI gates that miss a high-risk repository failure mode
@@ -167,6 +170,14 @@ For artifact-backed work:
 - `docs/ai/general/05 - Validation Strategy Agent.md` remains the shared repository
   prompt source for the role
 - this skill is the Codex-native runtime surface for that role in this repository
+
+## Mandatory Route-Handler UUID Validation
+
+For App Router route handlers with UUID path segments, require a malformed-ID test
+using a value such as `not-a-uuid`. The test must prove `400` is returned before any
+DB/repository/read-service call that would bind the UUID value and before any mutation
+side effect. Do not accept happy-path and valid-UUID not-found tests as sufficient
+coverage for SEC-23.
 
 When the role changes, update:
 

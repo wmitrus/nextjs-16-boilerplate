@@ -45,7 +45,7 @@ import './load-env';
 import { randomUUID } from 'node:crypto';
 
 import { hash } from 'bcryptjs';
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 
 import { createDb } from '@/core/db/create-db';
 import type { DbDriver, DbProvider } from '@/core/db/types';
@@ -71,6 +71,55 @@ import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 
 const BCRYPT_COST = 12;
 const DEFAULT_PGLITE_URL = 'file:./data/pglite';
+
+export function buildAuthJsBootstrapIdentityValues({
+  email,
+  userId,
+}: {
+  email: string;
+  userId: string;
+}) {
+  return { provider: 'authjs' as const, externalUserId: email, userId };
+}
+
+async function ensureExistingBootstrapAuthJsIdentity(
+  db: ReturnType<typeof createDb>['db'],
+  email: string,
+): Promise<'already_present' | 'repaired' | 'not_found'> {
+  const [credential] = await db
+    .select({ userId: userCredentialsTable.userId })
+    .from(userCredentialsTable)
+    .where(eq(userCredentialsTable.email, email))
+    .limit(1);
+
+  if (!credential?.userId) {
+    return 'not_found';
+  }
+
+  const [identity] = await db
+    .select({ userId: authUserIdentitiesTable.userId })
+    .from(authUserIdentitiesTable)
+    .where(
+      and(
+        eq(authUserIdentitiesTable.provider, 'authjs'),
+        eq(authUserIdentitiesTable.externalUserId, email),
+      ),
+    )
+    .limit(1);
+
+  if (identity?.userId) {
+    return 'already_present';
+  }
+
+  await db
+    .insert(authUserIdentitiesTable)
+    .values(
+      buildAuthJsBootstrapIdentityValues({ email, userId: credential.userId }),
+    )
+    .onConflictDoNothing();
+
+  return 'repaired';
+}
 
 function resolveProvider(): DbProvider {
   const explicit = process.env.DB_PROVIDER?.trim();
@@ -162,9 +211,27 @@ export async function run(): Promise<void> {
       .from(usersTable);
 
     if (userCount > 0) {
+      const identityStatus = await ensureExistingBootstrapAuthJsIdentity(
+        dbRuntime.db,
+        email,
+      );
+
       console.log(
         `[bootstrap-admin] ⏭  Skipped — ${userCount} user(s) already exist. Bootstrap only runs on a fresh database.`,
       );
+      if (identityStatus === 'repaired') {
+        console.log(
+          '[bootstrap-admin] ✅  Repaired missing AuthJS identity mapping for the existing bootstrap credentials user.',
+        );
+      } else if (identityStatus === 'already_present') {
+        console.log(
+          '[bootstrap-admin] ✅  Existing bootstrap credentials user already has the expected AuthJS identity mapping.',
+        );
+      } else {
+        console.log(
+          '[bootstrap-admin] ℹ️   No existing credentials row matched BOOTSTRAP_ADMIN_EMAIL; no identity repair was applied.',
+        );
+      }
       return;
     }
 
@@ -212,7 +279,7 @@ export async function run(): Promise<void> {
 
       await tx
         .insert(authUserIdentitiesTable)
-        .values({ provider: 'authjs', externalUserId: userId, userId })
+        .values(buildAuthJsBootstrapIdentityValues({ email, userId }))
         .onConflictDoNothing();
 
       await tx

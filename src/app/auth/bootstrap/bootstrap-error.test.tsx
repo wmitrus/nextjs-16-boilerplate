@@ -82,6 +82,7 @@ describe('BootstrapErrorUI', () => {
         <BootstrapErrorUI
           error="db_error"
           dbDriver="postgres"
+          nodeEnv="development"
           authProvider="clerk"
         />,
       );
@@ -97,6 +98,35 @@ describe('BootstrapErrorUI', () => {
       render(<BootstrapErrorUI error="db_error" authProvider="clerk" />);
       expect(screen.getByText(/pnpm db:pglite:reset/)).toBeInTheDocument();
     });
+
+    it.each(['preview', 'production'] as const)(
+      'does not show local database instructions in Vercel %s',
+      (deploymentEnvironment) => {
+        render(
+          <BootstrapErrorUI
+            error="db_error"
+            dbDriver="postgres"
+            deploymentEnvironment={deploymentEnvironment}
+            nodeEnv="production"
+            authProvider="authjs"
+          />,
+        );
+
+        expect(
+          screen.getByText(/deployment could not complete/i),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/pnpm db:dev:up/)).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/pnpm db:dev:migrate/),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/pnpm db:dev:reset --force/),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/pnpm db:pglite:reset/),
+        ).not.toBeInTheDocument();
+      },
+    );
   });
 
   describe('Sign Out button', () => {

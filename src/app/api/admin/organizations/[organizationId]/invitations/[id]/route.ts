@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { connection } from 'next/server';
+import { z } from 'zod';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db/types';
@@ -25,6 +26,10 @@ import { DefaultInvitationService } from '@/modules/invitations/infrastructure/D
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
+
+const invitationIdSchema = z.object({
+  id: z.uuid(),
+});
 
 function createInvitationService(db: DrizzleDb): DefaultInvitationService {
   const emailService = createEmailService({
@@ -66,15 +71,19 @@ export const DELETE = withErrorHandler(
     const paramsResult = organizationIdSchema.safeParse({
       id: params.organizationId,
     });
+    const invitationResult = invitationIdSchema.safeParse({ id: params.id });
 
     if (!paramsResult.success) {
       return createValidationErrorResponse(getFieldErrors(paramsResult.error));
     }
 
-    const invitationId = params.id;
-    if (!invitationId || Array.isArray(invitationId)) {
-      return createServerErrorResponse('Invalid id', 400, 'INVALID_ID');
+    if (!invitationResult.success) {
+      return createValidationErrorResponse(
+        getFieldErrors(invitationResult.error),
+      );
     }
+
+    const invitationId = invitationResult.data.id;
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const readService = new DrizzleAdminOrganizationsReadService(db);

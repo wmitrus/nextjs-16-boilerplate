@@ -7,6 +7,7 @@ import { env } from '@/core/env';
 import {
   ensureLogDirectory,
   createConsoleStream,
+  createStdoutStream,
   createFileStream,
   createBetterStackStream,
   createLogflareWriteStream,
@@ -75,6 +76,14 @@ describe('logger utils', () => {
     it('should return a pretty stream', () => {
       const stream = createConsoleStream();
       expect(stream).toBeDefined();
+    });
+  });
+
+  describe('createStdoutStream', () => {
+    it('should return a stdout destination stream', () => {
+      const stream = createStdoutStream();
+      expect(stream).toBeDefined();
+      expect(vi.mocked(mockDestination)).toHaveBeenCalledWith(1);
     });
   });
 

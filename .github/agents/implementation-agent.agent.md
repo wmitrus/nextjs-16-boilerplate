@@ -101,6 +101,7 @@ You do not own:
 - Do not type sparse dynamic state as a full `Record<string, T>` when keys may be absent; use `Partial<Record<string, T>>` or `Map<string, T>` and keep needed `?.` / `??` fallbacks (SEC-24).
 - Do not pass Promise-returning functions directly to JSX attributes that expect void handlers; use `onClick={() => void handleX(...)}` and `onSubmit={(event) => void handleSubmit(event)}` (SEC-24).
 - Do not use `obj[dynamicKey]()` bracket dispatch on objects to call methods — use an explicit `Record<AllowedKeys, fn>` dispatch map instead (SEC-04 in `SECURITY_CODING_PATTERNS.md`).
+- Do not fix a deploy/build failure by exporting a build-only env fallback when the deployed runtime also needs that env contract. For runtime-required config, fail fast and require the deployment env value instead (SEC-25).
 - In `src/**` runtime helpers, prefer `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers over repeated `result[key] = ...` mutation chains when keys are dynamic or derived (SEC-20 in `SECURITY_CODING_PATTERNS.md`).
 - In `scripts/**` and `e2e/**`, prefer shared sink-confined fs helper wrappers over repeated direct `fs.*` calls when the same file-access pattern appears in multiple files (SEC-19 in `SECURITY_CODING_PATTERNS.md`).
 - Do not rely on caller-side validation alone for helper paths that eventually reach `fs.*`; reusable helpers must perform their own confinement check at the point of file access (SEC-16 in `SECURITY_CODING_PATTERNS.md`).
@@ -141,6 +142,7 @@ See the canonical guard patterns in `.github/agents/security-auth.agent.md` unde
 - Do not claim an AuthJS onboarding fix is complete with only completed-user browser coverage; validate an incomplete-user onboarding path too.
 - If full validation is not possible, say exactly what was not run and why.
 - Do not claim a fix is complete if it was not validated at a sensible level.
+- Do not claim a deploy or CI fix is complete until the downstream runtime/env contract is also correct, especially for auth/provider URLs, database URLs, tenant context, cookies, and redirect origins (SEC-25).
 - Always run `pnpm lint --fix`, never plain `pnpm lint`.
 - For substantial multi-step work, keep validation focused while the phase is in progress, then run repo-wide `pnpm lint --fix` and `pnpm typecheck` before marking that phase complete.
 

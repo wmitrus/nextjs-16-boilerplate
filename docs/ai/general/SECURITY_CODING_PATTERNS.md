@@ -30,6 +30,65 @@ Update it after every security review group.
 | SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges | Real risk → fixed          | Email adapters, auth bridges  |
 | SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                | Real risk → fixed          | App Router route handlers     |
 | SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                     | Not security by itself     | UI state, JSX handlers, tests |
+| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift    | Real risk → fixed          | CI/CD, Vercel, AuthJS env     |
+
+---
+
+## SEC-25 — Build-Only Env Fallbacks Must Not Mask Runtime Config Drift
+
+### Incident Pattern
+
+A production deploy failure was fixed by exporting a missing env var only for the
+`vercel build --prod` process. That made the build capable of passing while the
+deployed runtime would still lack the same env var in Vercel Production.
+
+### Why This Is Banned
+
+- It fixes the current pipeline stage while leaving the next lifecycle stage broken.
+- It creates false confidence: CI can pass even though runtime behavior remains
+  misconfigured.
+- It is especially dangerous for auth, tenant, database, redirect, cookie, and
+  provider-origin configuration where build-time and runtime both consume env.
+
+### Banned Pattern
+
+```bash
+# BANNED when NEXTAUTH_URL is also required at runtime
+export NEXTAUTH_URL="$NEXT_PUBLIC_APP_URL"
+vercel build --prod
+```
+
+### Correct Pattern
+
+- Identify whether the value is required at build time, runtime, or both.
+- If runtime needs the value, require it in the deployment environment and fail
+  before build when it is missing.
+- Do not synthesize a build-only value unless the downstream runtime receives the
+  same contract or the value is proven build-only.
+- Document provider/environment scope explicitly, for example
+  `AUTH_PROVIDER=authjs` + Vercel **Production** only.
+
+Example:
+
+```bash
+if [ "${APP_ENV:-}" = "production" ] && \
+  [ "${AUTH_PROVIDER:-}" = "authjs" ] && \
+  [ -z "${NEXTAUTH_URL:-}" ]; then
+  echo "AUTH_PROVIDER=authjs requires NEXTAUTH_URL in Vercel Production env."
+  exit 1
+fi
+```
+
+### Validation Rule
+
+Validation must cover the full lifecycle boundary affected by the fix:
+
+- CI/build stage
+- deployed runtime env contract
+- provider-specific scope
+- environment scope, such as Preview vs Production
+
+Do not sign off a deploy fix only because the failing command now passes.
 
 ---
 

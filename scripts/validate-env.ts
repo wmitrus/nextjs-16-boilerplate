@@ -17,6 +17,10 @@ const ROOT = process.cwd();
 const DEPLOYMENT_REQUIRED_ENV_KEYS = ['AUTH_PROVIDER', 'TENANCY_MODE'] as const;
 const VERCEL_SENSITIVE_PRESENT_PLACEHOLDER = '[vercel-sensitive-present]';
 
+interface AuthRuntimeUrlConfig {
+  nextAuthUrl?: string | undefined;
+}
+
 export function runValidation(
   authProvider: string | undefined,
   clerkSecretKey: string | undefined,
@@ -31,6 +35,7 @@ export function runValidation(
   nodeEnv: string | undefined,
   appEnv?: string | undefined,
   deploymentEnvKeys?: ReadonlySet<string> | undefined,
+  authRuntimeUrls: AuthRuntimeUrlConfig = {},
 ): string[] {
   const errors: string[] = [];
   const isDeploymentValidation =
@@ -66,6 +71,16 @@ export function runValidation(
           );
         }
       }
+
+      if (
+        appEnv === 'production' &&
+        authProvider === 'authjs' &&
+        !deploymentEnvKeys.has('NEXTAUTH_URL')
+      ) {
+        errors.push(
+          '[env] NEXTAUTH_URL must be present in .vercel/.env.production.local after vercel pull when AUTH_PROVIDER=authjs. Do not let local env values or build-only fallbacks mask missing Vercel Production runtime configuration.',
+        );
+      }
     }
   }
 
@@ -76,6 +91,8 @@ export function runValidation(
       clerkPublishableKey,
       nextAuthSecretForValidation,
       nodeEnv,
+      authRuntimeUrls.nextAuthUrl,
+      appEnv,
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
@@ -180,6 +197,9 @@ function main(): void {
     process.env.NODE_ENV,
     process.env.APP_ENV,
     deploymentEnvKeys,
+    {
+      nextAuthUrl: process.env.NEXTAUTH_URL,
+    },
   );
 
   if (errors.length > 0) {

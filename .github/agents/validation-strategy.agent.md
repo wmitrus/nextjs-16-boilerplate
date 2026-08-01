@@ -135,6 +135,7 @@ Always flag these if present:
 - route handlers with UUID path segments validated only by happy-path or mocked-DB tests, without a malformed-ID test proving `400` before DB/repository access (SEC-23)
 - Codacy HIGH error-prone TypeScript/JSX findings signed off without checking whether the fix preserved runtime absence handling, async handler error handling, mock behavior, and finite-domain schema narrowing (SEC-24)
 - cache-sensitive or env-sensitive flows with no runtime-sensitive validation
+- deploy/build fixes signed off without checking the downstream runtime env contract for the deployed application (SEC-25)
 - critical flows covered only by happy-path tests
 - CI gates that miss high-risk repository failure modes
 - duplicated validation that adds cost without increasing confidence

@@ -126,6 +126,7 @@ Always flag these when present:
   the fix preserved runtime absence handling, async handler error handling, mock
   behavior, and finite-domain schema narrowing (SEC-24)
 - cache-sensitive or env-sensitive flows with no runtime-sensitive validation
+- deploy/build fixes signed off without checking the downstream runtime env contract for the deployed application (SEC-25)
 - critical flows covered only by happy-path tests
 - CI gates that miss a high-risk repository failure mode
 - duplicated validation that adds cost without increasing confidence

@@ -33,7 +33,11 @@ describe('db-migrate-prod migration URL resolution', () => {
 
     expect(resolved).toBeDefined();
 
-    const target = describeMigrationTarget(resolved!);
+    if (!resolved) {
+      throw new Error('Expected migration URL to resolve');
+    }
+
+    const target = describeMigrationTarget(resolved);
 
     expect(target).toEqual({
       source: 'DATABASE_URL',

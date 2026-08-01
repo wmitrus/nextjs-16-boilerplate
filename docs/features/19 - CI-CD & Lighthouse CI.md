@@ -81,6 +81,11 @@ This repository uses two different deployment ownership models:
    - GitHub Actions remains the deployment authority.
    - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
    - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
+   - For `AUTH_PROVIDER=authjs`, the production workflow requires a
+     Production-scoped `NEXTAUTH_URL` before `vercel build --prod`. It does not
+     derive `NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`, because that would fix the
+     build while leaving runtime AuthJS misconfigured. Preview builds run
+     remotely on Vercel and Clerk deployments do not need `NEXTAUTH_URL`.
    - The downstream release workflow publishes the GitHub Release, and the final `new-relic-change-tracking.yml` workflow emits the New Relic production deployment event from that published release so New Relic shows semver while production rollout truth still comes from the deploy workflow.
 
 Why the split exists:
@@ -89,6 +94,9 @@ Why the split exists:
 - Vercel CLI deployments need explicit Git provider metadata before branch-specific environment variables and Neon preview branch injection can resolve correctly.
 - A local prebuild flow can migrate a different database than the final preview deployment uses.
 - Production does not depend on preview-branch injection, so the GitHub Actions-controlled prebuilt flow remains valid there.
+- GitHub-hosted production prebuilds do not receive a reliable Vercel system
+  `VERCEL_URL`; AuthJS production builds therefore require the same
+  `NEXTAUTH_URL` that the production runtime will receive.
 
 Add this repository variable for LHCI:
 

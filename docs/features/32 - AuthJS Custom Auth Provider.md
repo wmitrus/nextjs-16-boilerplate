@@ -170,6 +170,29 @@ EMAIL_PROVIDER=none
 
 ## Testing Flows Manually
 
+### Production URL Configuration
+
+For `AUTH_PROVIDER=authjs`, Production should have a canonical AuthJS origin:
+
+```dotenv
+NEXTAUTH_URL=https://app.example.com
+```
+
+Set this in Vercel **Production** only. It is required for AuthJS Production
+runtime, not only for the build. Do not set the production URL as an
+`All Environments` variable, because Preview deployments should keep their own
+Vercel deployment URL unless you intentionally configure a separate preview
+origin.
+
+The production GitHub Actions workflow intentionally does **not** synthesize
+`NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`. If `AUTH_PROVIDER=authjs` and the
+Production runtime env is missing `NEXTAUTH_URL`, the workflow fails before
+`vercel build --prod`. This prevents a build-only workaround from masking a
+broken runtime configuration.
+
+This requirement is AuthJS-specific. It does not apply when
+`AUTH_PROVIDER=clerk`.
+
 ### Open Registration (with NoOp email)
 
 ```dotenv
@@ -247,4 +270,5 @@ src/app/api/auth/                  # AuthJS API route handlers
 - `AUTH_PROVIDER` switching (clerk ↔ authjs) at runtime is not supported — restart required
 - Clerk and AuthJS user records are separate; no migration path between providers
 - AuthJS does not support social/OAuth providers in this boilerplate (credentials-only)
+- AuthJS Production requires a Production-scoped `NEXTAUTH_URL`; Clerk does not require `NEXTAUTH_URL`.
 - `REGISTRATION_MODE=open` in production requires a real `EMAIL_PROVIDER` (not `none`)

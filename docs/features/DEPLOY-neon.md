@@ -239,6 +239,21 @@ Add a migration step before the production build in `prod-deploy.yml`:
     pnpm db:migrate:prod
 ```
 
+AuthJS production prebuilt note:
+
+- Production uses a GitHub Actions prebuilt flow (`vercel build --prod` then
+  `vercel deploy --prebuilt --prod`), so the build does not receive a reliable
+  Vercel system `VERCEL_URL`.
+- If `AUTH_PROVIDER=authjs`, set `NEXTAUTH_URL` in Vercel **Production** to the
+  canonical production origin.
+- If `NEXTAUTH_URL` is absent, `prod-deploy.yml` fails before
+  `vercel build --prod`; it does not synthesize a build-only fallback from
+  `NEXT_PUBLIC_APP_URL`.
+- Do not set a production `NEXTAUTH_URL` as `All Environments`; Preview builds
+  are remote Vercel builds and should use their deployment URL unless a separate
+  preview canonical URL is intentionally configured.
+- This AuthJS URL handling does not apply to `AUTH_PROVIDER=clerk`.
+
 ---
 
 ## 4. Preview Branch Strategy

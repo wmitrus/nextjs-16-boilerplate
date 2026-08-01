@@ -73,6 +73,10 @@ export const env = createEnv({
       .default('https://in.logs.betterstack.com'),
     CLERK_SECRET_KEY: z.string().min(1).optional(),
     NEXTAUTH_SECRET: z.string().min(1).optional(),
+    NEXTAUTH_URL: z.preprocess(
+      (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.url().optional(),
+    ),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     INTERNAL_API_KEY: z.string().min(1).optional(),
     SECURITY_AUDIT_LOG_ENABLED: z
@@ -228,6 +232,7 @@ export const env = createEnv({
     BETTER_STACK_INGESTING_URL: process.env.BETTER_STACK_INGESTING_URL,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
@@ -365,13 +370,26 @@ export function validateNewRelicConfigValues(
  *
  * Rules:
  * - AUTH_PROVIDER=clerk requires CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ * - AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET when NODE_ENV=production
+ * - AUTH_PROVIDER=authjs requires NEXTAUTH_URL for production runtime, but not Vercel Preview
  */
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function validateAuthProviderConfigValues(
   authProvider: string | undefined,
   clerkSecretKey: string | undefined,
   clerkPublishableKey: string | undefined,
   nextAuthSecret?: string | undefined,
   nodeEnv?: string | undefined,
+  nextAuthUrl?: string | undefined,
+  vercelEnv?: string | undefined,
 ): void {
   if (authProvider === 'authjs') {
     const isProductionLike = nodeEnv === 'production';
@@ -380,6 +398,24 @@ export function validateAuthProviderConfigValues(
         '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET to be set when NODE_ENV=production.',
       );
     }
+
+    const normalizedNextAuthUrl = nextAuthUrl?.trim() ?? '';
+    if (
+      normalizedNextAuthUrl.length > 0 &&
+      !isValidHttpUrl(normalizedNextAuthUrl)
+    ) {
+      throw new Error(
+        '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_URL to be a valid absolute http(s) URL when set.',
+      );
+    }
+
+    const isProductionRuntime = isProductionLike && vercelEnv !== 'preview';
+    if (isProductionRuntime && normalizedNextAuthUrl.length === 0) {
+      throw new Error(
+        '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_URL to be set for production runtime. Vercel Preview deployments may rely on Vercel-provided request context, but Production must have an explicit runtime URL.',
+      );
+    }
+
     return;
   }
 
@@ -411,6 +447,8 @@ export function validateAuthProviderConfig(): void {
     env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     env.NEXTAUTH_SECRET,
     env.NODE_ENV,
+    env.NEXTAUTH_URL,
+    env.VERCEL_ENV,
   );
 }
 

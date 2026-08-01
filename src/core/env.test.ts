@@ -445,7 +445,7 @@ describe('validateAuthProviderConfigValues', () => {
     ).toThrow('AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET');
   });
 
-  it('passes for authjs in production when NEXTAUTH_SECRET is present', async () => {
+  it('throws for authjs production runtime when NEXTAUTH_URL is missing', async () => {
     vi.resetModules();
     const { validateAuthProviderConfigValues } = await import('./env');
 
@@ -456,6 +456,55 @@ describe('validateAuthProviderConfigValues', () => {
         undefined,
         'nextauth_secret',
         'production',
+      ),
+    ).toThrow('AUTH_PROVIDER=authjs requires NEXTAUTH_URL');
+  });
+
+  it('throws for authjs production runtime when NEXTAUTH_URL is not http(s)', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'production',
+        'ftp://example.com',
+      ),
+    ).toThrow('NEXTAUTH_URL to be a valid absolute http(s) URL');
+  });
+
+  it('passes for authjs production runtime when NEXTAUTH_SECRET and NEXTAUTH_URL are present', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'production',
+        'https://example.com',
+      ),
+    ).not.toThrow();
+  });
+
+  it('passes for authjs Vercel Preview without NEXTAUTH_URL', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'production',
+        undefined,
+        'preview',
       ),
     ).not.toThrow();
   });

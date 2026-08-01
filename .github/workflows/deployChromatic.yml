@@ -48,7 +48,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Chromatic
-        uses: chromaui/action@v18 # chromaui/action@v18
+        uses: chromaui/action@14cfaef73576e69f95f47f60058063f46ca38719 # chromaui/action@v18
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -54,6 +54,22 @@ The app fails fast at startup when these rules are violated:
 
 No Clerk keys are required when `AUTH_PROVIDER=authjs|supabase|neon`.
 
+AuthJS-specific production URL rules:
+
+- `NEXTAUTH_SECRET` is required when `AUTH_PROVIDER=authjs` and
+  `NODE_ENV=production`.
+- `NEXTAUTH_URL` is required for `AUTH_PROVIDER=authjs` in **Production** and
+  must point at the canonical production origin.
+- `NEXT_PUBLIC_APP_URL` is not a substitute for `NEXTAUTH_URL` in Production.
+  It may match the same origin, but the runtime env contract still requires the
+  explicit AuthJS variable.
+- Preview deployments do not require a static `NEXTAUTH_URL`; the preview build
+  runs remotely on Vercel and can use the deployment URL provided by Vercel.
+- Do not set a Production `NEXTAUTH_URL` as an `All Environments` variable. If
+  you set it manually, scope it to **Production** unless a specific non-production
+  canonical URL is intentionally required.
+- These AuthJS URL rules do not apply when `AUTH_PROVIDER=clerk`.
+
 Important current status:
 
 - `AuthJsRequestIdentitySource`, `SupabaseRequestIdentitySource`, and `NeonRequestIdentitySource` are placeholder adapters that fail fast before returning authenticated identity.
@@ -139,6 +155,10 @@ Security and ops vars remain optional with defaults unless your deployment polic
 1. Keep secrets only in deployment secret stores.
 2. Never commit real keys to `.env.example`.
 3. Validate env before deploy using `pnpm env:check` and CI gates.
+4. For `AUTH_PROVIDER=authjs`, set `NEXTAUTH_URL` in Vercel **Production** to
+   the canonical production URL. The production workflow fails before build if
+   this runtime env is missing, because build-only fallbacks would mask a broken
+   runtime configuration.
 
 ## 9. Canonical References
 

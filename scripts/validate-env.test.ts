@@ -72,7 +72,7 @@ describe('validate-env: runValidation', () => {
       expect(errors[0]).toContain('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
     });
 
-    it('returns no auth errors when AUTH_PROVIDER=authjs outside production without NEXTAUTH_SECRET', () => {
+    it('returns no auth errors when AUTH_PROVIDER=authjs outside production without NEXTAUTH_SECRET or NEXTAUTH_URL', () => {
       const errors = runValidation(
         'authjs',
         undefined,
@@ -102,12 +102,15 @@ describe('validate-env: runValidation', () => {
         undefined,
         undefined,
         'production',
+        undefined,
+        undefined,
+        { nextAuthUrl: 'https://example.com' },
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('NEXTAUTH_SECRET');
     });
 
-    it('returns no auth errors when AUTH_PROVIDER=authjs in production with NEXTAUTH_SECRET', () => {
+    it('returns no auth errors when AUTH_PROVIDER=authjs in preview has no static NEXTAUTH_URL', () => {
       const errors = runValidation(
         'authjs',
         undefined,
@@ -120,8 +123,94 @@ describe('validate-env: runValidation', () => {
         undefined,
         undefined,
         'production',
+        'preview',
       );
       expect(errors).toHaveLength(0);
+    });
+
+    it('returns an auth error when AUTH_PROVIDER=authjs in production prebuilt deploy has NEXTAUTH_SECRET but no runtime NEXTAUTH_URL', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'personal',
+        undefined,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+        'production',
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NEXTAUTH_URL');
+      expect(errors[0]).toContain('production runtime');
+    });
+
+    it('returns no auth errors when AUTH_PROVIDER=authjs in production with NEXTAUTH_SECRET and NEXTAUTH_URL', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'personal',
+        undefined,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+        'production',
+        undefined,
+        { nextAuthUrl: 'https://example.com' },
+      );
+      expect(errors).toHaveLength(0);
+    });
+
+    it('returns an auth error when Vercel production env lacks NEXTAUTH_URL even if a local value exists', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'personal',
+        undefined,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+        'production',
+        new Set(['AUTH_PROVIDER', 'TENANCY_MODE', 'NEXTAUTH_SECRET']),
+        { nextAuthUrl: 'https://local.example.com' },
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('.vercel/.env.production.local');
+      expect(errors[0]).toContain('NEXTAUTH_URL');
+    });
+
+    it('returns an auth error when AUTH_PROVIDER=authjs in production has only an empty runtime URL', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'personal',
+        undefined,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'production',
+        'production',
+        undefined,
+        { nextAuthUrl: '' },
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NEXTAUTH_URL');
+      expect(errors[0]).toContain('production runtime');
     });
   });
 
@@ -233,6 +322,7 @@ describe('validate-env: runValidation', () => {
         'production',
         'preview',
         new Set(['AUTH_PROVIDER']),
+        { nextAuthUrl: 'https://preview.example.com' },
       );
 
       expect(errors).toHaveLength(1);
@@ -255,6 +345,7 @@ describe('validate-env: runValidation', () => {
         'production',
         'preview',
         new Set(['AUTH_PROVIDER', 'TENANCY_MODE', 'NEXTAUTH_SECRET']),
+        { nextAuthUrl: 'https://preview.example.com' },
       );
 
       expect(errors).toHaveLength(0);
@@ -294,6 +385,9 @@ describe('validate-env: runValidation', () => {
         undefined,
         undefined,
         'production',
+        undefined,
+        undefined,
+        { nextAuthUrl: 'https://example.com' },
       );
 
       expect(errors).toHaveLength(1);
@@ -313,6 +407,9 @@ describe('validate-env: runValidation', () => {
         'nr_license_key',
         undefined,
         'production',
+        undefined,
+        undefined,
+        { nextAuthUrl: 'https://example.com' },
       );
 
       expect(errors).toHaveLength(0);
@@ -331,6 +428,9 @@ describe('validate-env: runValidation', () => {
         '   ',
         undefined,
         'production',
+        undefined,
+        undefined,
+        { nextAuthUrl: 'https://example.com' },
       );
 
       expect(errors).toHaveLength(1);
@@ -350,6 +450,9 @@ describe('validate-env: runValidation', () => {
         'nr_license_key',
         '-r newrelic',
         'production',
+        undefined,
+        undefined,
+        { nextAuthUrl: 'https://example.com' },
       );
 
       expect(errors).toHaveLength(0);

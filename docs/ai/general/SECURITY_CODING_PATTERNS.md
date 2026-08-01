@@ -71,7 +71,9 @@ vercel build --prod
 Example:
 
 ```bash
-if [ "${AUTH_PROVIDER:-}" = "authjs" ] && [ -z "${NEXTAUTH_URL:-}" ]; then
+if [ "${APP_ENV:-}" = "production" ] && \
+  [ "${AUTH_PROVIDER:-}" = "authjs" ] && \
+  [ -z "${NEXTAUTH_URL:-}" ]; then
   echo "AUTH_PROVIDER=authjs requires NEXTAUTH_URL in Vercel Production env."
   exit 1
 fi

@@ -4,6 +4,7 @@ import { connection } from 'next/server';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db/types';
+import { env } from '@/core/env';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
@@ -54,7 +55,10 @@ export default async function OrganizationsAdminPage() {
         </div>
       </div>
 
-      <OrganizationsClient organizations={organizations} />
+      <OrganizationsClient
+        authProvider={env.AUTH_PROVIDER}
+        organizations={organizations}
+      />
     </div>
   );
 }

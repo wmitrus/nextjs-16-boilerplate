@@ -105,7 +105,9 @@ export function CreateRoleForm({ organizationId }: { organizationId: string }) {
       </div>
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
         className="mt-4 flex flex-col gap-3 sm:flex-row"
       >
         <input

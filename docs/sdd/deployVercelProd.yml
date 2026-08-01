@@ -13,9 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
@@ -29,7 +26,7 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm exec vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Verify environment (production)
         run: node scripts/verify-vercel-env.mjs
@@ -44,7 +41,7 @@ jobs:
           NEXT_PUBLIC_APP_ENV: production
 
       - name: Build Project Artifact
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm exec vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           # Environment configuration
           APP_ENV: production
@@ -88,8 +85,16 @@ jobs:
           SENTRY_ENVIRONMENT: production
           SENTRY_RELEASE: ${{ github.sha }}
 
+      - name: Validate Prebuilt Artifact Contract
+        run: pnpm vercel:prebuilt:validate
+
+      - name: Validate Prebuilt Upload Coverage
+        run: |
+          pnpm exec vercel deploy --prebuilt --prod --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-prebuilt-dry-run.json
+          pnpm vercel:prebuilt:validate -- --dry-run-json /tmp/vercel-prebuilt-dry-run.json
+
       - name: Deploy Project Artifacts to Vercel
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm exec vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           # Environment configuration
           APP_ENV: production

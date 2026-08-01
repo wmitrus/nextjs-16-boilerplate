@@ -30,6 +30,7 @@ import {
   memberPolicies,
   ownerPolicies,
 } from '../../policy/templates';
+import { classifyProvisioningFailure } from '../provisioning-failure-diagnostics';
 
 import {
   authOrganizationIdentitiesTable,
@@ -60,6 +61,18 @@ function previewEmail(email: string | undefined): string | undefined {
   }
 
   return `${localPart.slice(0, 1)}***@${domain}`;
+}
+
+function hashLogIdentifier(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+
+  return createHash('sha256').update(value).digest('hex').slice(0, 12);
+}
+
+function previewExternalUserId(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.includes('@')) return previewEmail(value);
+  return `[id:${hashLogIdentifier(value)}]`;
 }
 
 function isRetryableProvisioningError(err: unknown): boolean {
@@ -242,14 +255,15 @@ export class DrizzleProvisioningService implements ProvisioningService {
       pathname: requestContext.pathname,
       runId,
       provider,
-      externalUserId,
+      externalUserIdPreview: previewExternalUserId(externalUserId),
+      externalUserIdHash: hashLogIdentifier(externalUserId),
       externalOrgId: input.orgExternalId,
       tenancyMode: input.tenancyMode,
       tenantContextSource: input.tenantContextSource,
       activeTenantId: input.activeTenantId,
       emailPreview: previewEmail(email),
       emailVerified,
-      subjectKey,
+      subjectKeyHash: hashLogIdentifier(subjectKey),
     };
 
     logger.info(
@@ -612,9 +626,13 @@ export class DrizzleProvisioningService implements ProvisioningService {
 
         return result;
       } catch (err) {
+        const failureDiagnostics = classifyProvisioningFailure(err);
         logger.error(
           {
             event: 'provisioning:ensure:failure',
+            failureCode: failureDiagnostics.failureCode,
+            operatorAction: failureDiagnostics.operatorAction,
+            userFacingError: failureDiagnostics.userFacingError,
             ...baseLogFields,
             internalUserId: internalSubjectKey,
             stage: currentStage,

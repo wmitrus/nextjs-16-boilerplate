@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type Mocked, vi } from 'vitest';
 
 vi.mock('@/core/logger/di', async () => {
   const testing = await import('@/testing');
@@ -42,7 +42,7 @@ function buildInvitation(overrides: Partial<Invitation> = {}): Invitation {
 }
 
 describe('DefaultInvitationService', () => {
-  const repository: vi.Mocked<InvitationRepository> = {
+  const repository: Mocked<InvitationRepository> = {
     create: vi.fn(),
     findByToken: vi.fn(),
     findPendingByEmailAndOrg: vi.fn(),
@@ -52,7 +52,7 @@ describe('DefaultInvitationService', () => {
     markExpired: vi.fn(),
   };
 
-  const emailService: vi.Mocked<EmailService> = {
+  const emailService: Mocked<EmailService> = {
     sendInvitationEmail: vi.fn(),
     sendVerificationEmail: vi.fn(),
     sendWaitlistConfirmationEmail: vi.fn(),

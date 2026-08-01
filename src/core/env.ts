@@ -370,13 +370,26 @@ export function validateNewRelicConfigValues(
  *
  * Rules:
  * - AUTH_PROVIDER=clerk requires CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ * - AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET when NODE_ENV=production
+ * - AUTH_PROVIDER=authjs requires NEXTAUTH_URL for production runtime, but not Vercel Preview
  */
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function validateAuthProviderConfigValues(
   authProvider: string | undefined,
   clerkSecretKey: string | undefined,
   clerkPublishableKey: string | undefined,
   nextAuthSecret?: string | undefined,
   nodeEnv?: string | undefined,
+  nextAuthUrl?: string | undefined,
+  vercelEnv?: string | undefined,
 ): void {
   if (authProvider === 'authjs') {
     const isProductionLike = nodeEnv === 'production';
@@ -385,6 +398,24 @@ export function validateAuthProviderConfigValues(
         '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET to be set when NODE_ENV=production.',
       );
     }
+
+    const normalizedNextAuthUrl = nextAuthUrl?.trim() ?? '';
+    if (
+      normalizedNextAuthUrl.length > 0 &&
+      !isValidHttpUrl(normalizedNextAuthUrl)
+    ) {
+      throw new Error(
+        '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_URL to be a valid absolute http(s) URL when set.',
+      );
+    }
+
+    const isProductionRuntime = isProductionLike && vercelEnv !== 'preview';
+    if (isProductionRuntime && normalizedNextAuthUrl.length === 0) {
+      throw new Error(
+        '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_URL to be set for production runtime. Vercel Preview deployments may rely on Vercel-provided request context, but Production must have an explicit runtime URL.',
+      );
+    }
+
     return;
   }
 
@@ -416,6 +447,8 @@ export function validateAuthProviderConfig(): void {
     env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     env.NEXTAUTH_SECRET,
     env.NODE_ENV,
+    env.NEXTAUTH_URL,
+    env.VERCEL_ENV,
   );
 }
 

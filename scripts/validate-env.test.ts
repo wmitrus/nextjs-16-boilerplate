@@ -437,7 +437,7 @@ describe('validate-env: runValidation', () => {
       expect(errors[0]).toContain('NEW_RELIC_LICENSE_KEY');
     });
 
-    it('accepts New Relic when NODE_OPTIONS preloads newrelic', () => {
+    it('rejects New Relic preload when validating a Vercel deployment', () => {
       const errors = runValidation(
         'authjs',
         undefined,
@@ -450,12 +450,14 @@ describe('validate-env: runValidation', () => {
         'nr_license_key',
         '-r newrelic',
         'production',
-        undefined,
+        'production',
         undefined,
         { nextAuthUrl: 'https://example.com' },
       );
 
-      expect(errors).toHaveLength(0);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NODE_OPTIONS');
+      expect(errors[0]).toContain('newrelic');
     });
   });
 });

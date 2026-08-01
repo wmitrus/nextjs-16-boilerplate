@@ -102,7 +102,9 @@ export function PoliciesTableClient({
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ]);
-  const [rowState, setRowState] = useState<Record<string, RowState>>({});
+  const [rowState, setRowState] = useState<Partial<Record<string, RowState>>>(
+    {},
+  );
   const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
 
@@ -346,7 +348,7 @@ export function PoliciesTableClient({
             </button>
             <button
               type="button"
-              onClick={() => handleDelete(policy.id)}
+              onClick={() => void handleDelete(policy.id)}
               disabled={isProtected || currentRowState?.status === 'submitting'}
               className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
             >

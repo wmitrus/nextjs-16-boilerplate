@@ -17,6 +17,11 @@ const ROOT = process.cwd();
 const DEPLOYMENT_REQUIRED_ENV_KEYS = ['AUTH_PROVIDER', 'TENANCY_MODE'] as const;
 const VERCEL_SENSITIVE_PRESENT_PLACEHOLDER = '[vercel-sensitive-present]';
 
+interface AuthRuntimeUrlConfig {
+  nextAuthUrl?: string | undefined;
+  vercelUrl?: string | undefined;
+}
+
 export function runValidation(
   authProvider: string | undefined,
   clerkSecretKey: string | undefined,
@@ -31,6 +36,7 @@ export function runValidation(
   nodeEnv: string | undefined,
   appEnv?: string | undefined,
   deploymentEnvKeys?: ReadonlySet<string> | undefined,
+  authRuntimeUrls: AuthRuntimeUrlConfig = {},
 ): string[] {
   const errors: string[] = [];
   const isDeploymentValidation =
@@ -66,6 +72,16 @@ export function runValidation(
           );
         }
       }
+
+      if (
+        appEnv === 'production' &&
+        authProvider === 'authjs' &&
+        !deploymentEnvKeys.has('NEXTAUTH_URL')
+      ) {
+        errors.push(
+          '[env] NEXTAUTH_URL must be present in .vercel/.env.production.local after vercel pull when AUTH_PROVIDER=authjs. Do not let local env values or build-only fallbacks mask missing Vercel Production runtime configuration.',
+        );
+      }
     }
   }
 
@@ -79,6 +95,16 @@ export function runValidation(
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
+  }
+
+  const authJsBuildUrlError = validateAuthJsBuildUrlConfig(
+    authProvider,
+    nodeEnv,
+    appEnv,
+    authRuntimeUrls,
+  );
+  if (authJsBuildUrlError) {
+    errors.push(authJsBuildUrlError);
   }
 
   try {
@@ -103,6 +129,45 @@ export function runValidation(
   }
 
   return errors;
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function validateAuthJsBuildUrlConfig(
+  authProvider: string | undefined,
+  nodeEnv: string | undefined,
+  appEnv: string | undefined,
+  urls: AuthRuntimeUrlConfig,
+): string | undefined {
+  if (
+    authProvider !== 'authjs' ||
+    nodeEnv !== 'production' ||
+    appEnv !== 'production'
+  ) {
+    return undefined;
+  }
+
+  const nextAuthUrl = urls.nextAuthUrl?.trim();
+  const vercelUrl = urls.vercelUrl?.trim();
+
+  if (nextAuthUrl) {
+    return isValidHttpUrl(nextAuthUrl)
+      ? undefined
+      : '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_URL to be a valid absolute http(s) URL when NODE_ENV=production.';
+  }
+
+  if (!vercelUrl) {
+    return '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_URL to be set in Vercel Production env. GitHub-hosted vercel build does not provide a usable VERCEL_URL fallback, and build-only fallbacks would mask a missing runtime env.';
+  }
+
+  return undefined;
 }
 
 function readVercelPulledEnvKeys(
@@ -180,6 +245,10 @@ function main(): void {
     process.env.NODE_ENV,
     process.env.APP_ENV,
     deploymentEnvKeys,
+    {
+      nextAuthUrl: process.env.NEXTAUTH_URL,
+      vercelUrl: process.env.VERCEL_URL,
+    },
   );
 
   if (errors.length > 0) {

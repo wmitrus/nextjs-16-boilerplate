@@ -51,6 +51,13 @@ export function ensureLogDirectory(logDir: string): boolean {
 }
 
 /**
+ * Creates a raw stdout stream for production platforms such as Vercel.
+ */
+export function createStdoutStream(): DestinationStream {
+  return destination(1);
+}
+
+/**
  * Creates a console stream with pretty printing for development.
  */
 export function createConsoleStream(): PrettyStream {

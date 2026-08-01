@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -11,16 +13,30 @@ interface VercelFunctionConfig {
   filePathMap?: Record<string, string>;
 }
 
-export interface MissingVercelTraceFile {
+export interface VercelTraceFileReference {
   configPath: string;
   requiredPath: string;
+}
+
+export interface MissingVercelTraceFile extends VercelTraceFileReference {
   resolvedPath: string;
 }
 
 export interface VercelPrebuiltArtifactSummary {
   configCount: number;
   requiredFileCount: number;
+  requiredFiles: VercelTraceFileReference[];
   missingFiles: MissingVercelTraceFile[];
+}
+
+export interface MissingVercelUploadFile extends VercelTraceFileReference {
+  ignoredByDryRunPath?: string;
+}
+
+export interface VercelPrebuiltUploadCoverageSummary {
+  uploadedFileCount: number;
+  ignoredPathCount: number;
+  missingUploadFiles: MissingVercelUploadFile[];
 }
 
 const DEFAULT_FUNCTIONS_DIR = '.vercel/output/functions';
@@ -43,7 +59,7 @@ async function findVercelFunctionConfigPaths(
   const configPaths: string[] = [];
 
   for (const dirent of dirents) {
-    const childPath = `${safeDir}/${dirent.name}`;
+    const childPath = path.join(safeDir, dirent.name);
 
     if (dirent.isDirectory()) {
       configPaths.push(
@@ -89,7 +105,7 @@ export async function validateVercelPrebuiltArtifact(
 ): Promise<VercelPrebuiltArtifactSummary> {
   const safeRoot = assertPathWithinBase(rootDir, rootDir, 'repository root');
   const safeFunctionsDir = assertPathWithinBase(
-    `${safeRoot}/${functionsDir}`,
+    path.join(safeRoot, functionsDir),
     safeRoot,
     'Vercel functions directory',
   );
@@ -105,6 +121,7 @@ export async function validateVercelPrebuiltArtifact(
     safeRoot,
   );
   let requiredFileCount = 0;
+  const requiredFiles: VercelTraceFileReference[] = [];
   const missingFiles: MissingVercelTraceFile[] = [];
 
   for (const configPath of configPaths) {
@@ -113,15 +130,20 @@ export async function validateVercelPrebuiltArtifact(
     requiredFileCount += requiredPaths.length;
 
     for (const requiredPath of requiredPaths) {
+      const configRelativePath = toRepoRelativePath(configPath, safeRoot);
       const resolvedPath = assertPathWithinBase(
-        `${safeRoot}/${requiredPath}`,
+        path.join(safeRoot, requiredPath),
         safeRoot,
         'Vercel traced file',
       );
+      requiredFiles.push({
+        configPath: configRelativePath,
+        requiredPath,
+      });
 
       if (!pathExistsWithinBase(resolvedPath, safeRoot, 'Vercel traced file')) {
         missingFiles.push({
-          configPath: toRepoRelativePath(configPath, safeRoot),
+          configPath: configRelativePath,
           requiredPath,
           resolvedPath,
         });
@@ -132,6 +154,7 @@ export async function validateVercelPrebuiltArtifact(
   return {
     configCount: configPaths.length,
     requiredFileCount,
+    requiredFiles,
     missingFiles,
   };
 }
@@ -158,10 +181,200 @@ export function assertVercelPrebuiltArtifactValid(
   );
 }
 
+function normalizeVercelRelativePath(filePath: string): string {
+  return filePath.replaceAll('\\', '/').replace(/^\.\/+/, '');
+}
+
+function extractJsonObject(rawOutput: string): unknown {
+  const start = rawOutput.indexOf('{');
+  const end = rawOutput.lastIndexOf('}');
+
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error(
+      '[vercel-prebuilt] Dry-run output does not contain a JSON object.',
+    );
+  }
+
+  return JSON.parse(rawOutput.slice(start, end + 1));
+}
+
+function collectPathSet(value: unknown, propertyName: string): Set<string> {
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `[vercel-prebuilt] Dry-run JSON is missing an array at \`${propertyName}\`.`,
+    );
+  }
+
+  const paths = new Set<string>();
+
+  for (const entry of value) {
+    if (typeof entry === 'string') {
+      paths.add(normalizeVercelRelativePath(entry));
+      continue;
+    }
+
+    const record = entry as { path?: unknown };
+
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      Object.hasOwn(entry, 'path') &&
+      typeof record.path === 'string'
+    ) {
+      paths.add(normalizeVercelRelativePath(record.path));
+    }
+  }
+
+  return paths;
+}
+
+export function parseVercelDeployDryRunOutput(rawOutput: string): {
+  uploadedPaths: Set<string>;
+  ignoredPaths: Set<string>;
+} {
+  const parsed = extractJsonObject(rawOutput);
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('[vercel-prebuilt] Dry-run JSON must be an object.');
+  }
+
+  const dryRun = parsed as { files?: unknown; ignored?: unknown };
+
+  return {
+    uploadedPaths: collectPathSet(dryRun.files, 'files'),
+    ignoredPaths: collectPathSet(dryRun.ignored, 'ignored'),
+  };
+}
+
+function findIgnoredParentPath(
+  requiredPath: string,
+  ignoredPaths: Set<string>,
+): string | undefined {
+  for (const ignoredPath of ignoredPaths) {
+    if (
+      requiredPath === ignoredPath ||
+      requiredPath.startsWith(`${ignoredPath}/`)
+    ) {
+      return ignoredPath;
+    }
+  }
+
+  return undefined;
+}
+
+export function validateVercelPrebuiltUploadCoverage(
+  artifactSummary: VercelPrebuiltArtifactSummary,
+  dryRunOutput: string,
+): VercelPrebuiltUploadCoverageSummary {
+  const { uploadedPaths, ignoredPaths } =
+    parseVercelDeployDryRunOutput(dryRunOutput);
+  const missingUploadFiles = artifactSummary.requiredFiles
+    .filter(({ requiredPath }) => !uploadedPaths.has(requiredPath))
+    .map(({ configPath, requiredPath }) => ({
+      configPath,
+      requiredPath,
+      ignoredByDryRunPath: findIgnoredParentPath(requiredPath, ignoredPaths),
+    }));
+
+  return {
+    uploadedFileCount: uploadedPaths.size,
+    ignoredPathCount: ignoredPaths.size,
+    missingUploadFiles,
+  };
+}
+
+export function assertVercelPrebuiltUploadCoverageValid(
+  summary: VercelPrebuiltUploadCoverageSummary,
+): void {
+  if (summary.missingUploadFiles.length === 0) {
+    return;
+  }
+
+  const examples = summary.missingUploadFiles
+    .slice(0, 10)
+    .map((missing) => {
+      const ignoredSuffix = missing.ignoredByDryRunPath
+        ? `; likely excluded by dry-run ignored path \`${missing.ignoredByDryRunPath}\``
+        : '';
+
+      return `  - ${missing.requiredPath} (referenced by ${missing.configPath}${ignoredSuffix})`;
+    })
+    .join('\n');
+
+  throw new Error(
+    `[vercel-prebuilt] Dry-run upload is missing ${summary.missingUploadFiles.length} traced file(s) required by .vc-config.json.\n` +
+      `${examples}\n` +
+      'Check `.vercelignore` and the prebuilt upload file list before running the real deploy.',
+  );
+}
+
+function getDryRunJsonPath(args: string[]): string | undefined {
+  const equalsArg = args.find((arg) => arg.startsWith('--dry-run-json='));
+
+  if (equalsArg) {
+    return equalsArg.slice('--dry-run-json='.length);
+  }
+
+  const flagIndex = args.indexOf('--dry-run-json');
+  if (flagIndex === -1) {
+    return undefined;
+  }
+
+  if (!args[flagIndex + 1] || args[flagIndex + 1].startsWith('--')) {
+    throw new Error('[vercel-prebuilt] --dry-run-json requires a file path.');
+  }
+
+  return args[flagIndex + 1];
+}
+
+function readDryRunJsonFile(filePath: string): string {
+  const allowedBaseDirs = [process.cwd(), tmpdir()];
+  const safePath = allowedBaseDirs
+    .map((baseDir) => {
+      try {
+        return assertPathWithinBase(
+          filePath,
+          baseDir,
+          'Vercel deploy dry-run JSON',
+        );
+      } catch {
+        return undefined;
+      }
+    })
+    .find((resolvedPath): resolvedPath is string => Boolean(resolvedPath));
+
+  if (!safePath) {
+    throw new Error(
+      '[vercel-prebuilt] Dry-run JSON path must be inside the repository or the system temp directory.',
+    );
+  }
+
+  return readTextFileWithinBase(
+    safePath,
+    path.dirname(safePath),
+    'Vercel deploy dry-run JSON',
+  );
+}
+
 /* v8 ignore start -- CLI console/process wrapper; exported functions are unit-tested. */
 async function main(): Promise<void> {
   const summary = await validateVercelPrebuiltArtifact();
   assertVercelPrebuiltArtifactValid(summary);
+  const dryRunJsonPath = getDryRunJsonPath(process.argv.slice(2));
+
+  if (dryRunJsonPath) {
+    const dryRunOutput = readDryRunJsonFile(dryRunJsonPath);
+    const uploadSummary = validateVercelPrebuiltUploadCoverage(
+      summary,
+      dryRunOutput,
+    );
+    assertVercelPrebuiltUploadCoverageValid(uploadSummary);
+
+    console.log(
+      `[vercel-prebuilt] Upload coverage valid: ${summary.requiredFileCount} traced file reference(s), ${uploadSummary.uploadedFileCount} dry-run upload file(s), 0 missing.`,
+    );
+    return;
+  }
 
   console.log(
     `[vercel-prebuilt] Artifact contract valid: ${summary.configCount} function config(s), ${summary.requiredFileCount} traced file reference(s), 0 missing.`,

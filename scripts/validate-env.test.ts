@@ -110,7 +110,7 @@ describe('validate-env: runValidation', () => {
       expect(errors[0]).toContain('NEXTAUTH_SECRET');
     });
 
-    it('returns no auth errors when AUTH_PROVIDER=authjs in preview can rely on the Vercel build host URL', () => {
+    it('returns no auth errors when AUTH_PROVIDER=authjs in preview has no static NEXTAUTH_URL', () => {
       const errors = runValidation(
         'authjs',
         undefined,

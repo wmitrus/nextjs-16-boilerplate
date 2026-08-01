@@ -30,7 +30,7 @@ const ERROR_MESSAGES: Record<
 };
 
 const DEPLOYED_DB_ERROR_MESSAGE =
-  'Database error during sign-in. The deployment could not complete the authentication bootstrap against its configured database. Please try again; if the problem persists, check the deployment logs for the bootstrap/provisioning error and verify the database migration and bootstrap state.';
+  'Sign-in could not be completed because of a server-side configuration problem. Please try again later or contact support if the problem persists.';
 
 interface BootstrapErrorUIProps {
   error:

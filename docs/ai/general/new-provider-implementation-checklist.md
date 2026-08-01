@@ -160,7 +160,7 @@ File: `src/app/auth/signin/page.tsx` (or provider-specific route)
 - [ ] `REGISTRATION_MODE` env var read from T3-Env (`src/core/env.ts`)
 - [ ] Edge guard in `src/proxy.ts`:
   - `invite-only`: redirect new users to `/auth/invite-required` or `/waitlist`
-  - `disabled`: redirect to `/auth/registration-disabled`
+  - `disabled`: redirect to `/auth/registration-closed`
 - [ ] Route handler guard in `/api/auth/*`:
   - Validates invitation token before allowing account creation (invite-only)
   - Rejects all sign-ups (disabled)

@@ -19,6 +19,14 @@ const E2E_RATE_LIMIT_BYPASS_API_PREFIXES = [
   '/api/me/provisioning-status',
 ] as const;
 
+const AUTHJS_PROTOCOL_RATE_LIMIT_BYPASS_PATHS = new Set([
+  '/api/auth/callback/credentials',
+  '/api/auth/csrf',
+  '/api/auth/providers',
+  '/api/auth/session',
+  '/api/auth/signout',
+]);
+
 function getLogger() {
   if (_logger) return _logger;
   _logger = resolveEdgeLogger().child({
@@ -35,6 +43,12 @@ function isE2eRateLimitBypassRoute(pathname: string): boolean {
   );
 }
 
+function isAuthJsProtocolRateLimitBypassRoute(pathname: string): boolean {
+  return env.AUTH_PROVIDER === 'authjs'
+    ? AUTHJS_PROTOCOL_RATE_LIMIT_BYPASS_PATHS.has(pathname)
+    : false;
+}
+
 /**
  * Enforces rate limiting on API routes.
  */
@@ -45,8 +59,15 @@ export function withRateLimit(
     const pathname = req.nextUrl.pathname;
     const isE2eBypassRoute =
       env.E2E_ENABLED && isE2eRateLimitBypassRoute(pathname);
+    const isAuthJsProtocolBypassRoute =
+      isAuthJsProtocolRateLimitBypassRoute(pathname);
 
-    if (!ctx.isApi || ctx.isWebhook || isE2eBypassRoute) {
+    if (
+      !ctx.isApi ||
+      ctx.isWebhook ||
+      isE2eBypassRoute ||
+      isAuthJsProtocolBypassRoute
+    ) {
       return handler(req, ctx);
     }
 

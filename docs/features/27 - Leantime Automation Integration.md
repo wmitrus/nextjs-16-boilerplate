@@ -52,6 +52,19 @@ Optional flags:
 - `LEANTIME_DEFAULT_AUTHOR_ID`
 - `LEANTIME_DEFAULT_CLIENT_ID`
 
+## Diagnostic Notes
+
+- Do not assume `.env.leantime` or `.env.leantime-dev` is missing just because a
+  default workspace search does not show it. These files are commonly gitignored
+  and may be omitted from normal search results.
+- When diagnosing setup, check the exact path directly and then verify the
+  required values for the intended command, especially `LEANTIME_URL` and
+  `LEANTIME_API_KEY`.
+- Distinguish repository problems from session-tooling limitations. If a chat or
+  agent session cannot execute terminal commands, that is not proof that the
+  Leantime integration is broken.
+- Preferred first falsifying command: `pnpm lt -- list`.
+
 ## Verified On-Prem Baseline
 
 Verified against the on-prem instance on `2026-04-06`:

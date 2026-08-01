@@ -1,7 +1,7 @@
 ---
 description: 'Use when reviewing architecture, modular-monolith boundaries, dependency direction, DI/composition discipline, auth routing shape, Clerk/bootstrap/onboarding design, security boundary placement, or docs-vs-code drift. Pick this agent over the default agent for architecture review, governance, and repository reality-checking rather than implementation.'
 name: '01 - Architecture Guard'
-tools: [read, search, web, edit]
+tools: [read, search, web, edit, execute]
 user-invocable: true
 agents: []
 ---
@@ -87,6 +87,7 @@ You must reason explicitly about:
 - where authorization is enforced
 - where tenant context is derived and trusted
 - whether server actions, route handlers, proxy, and layouts have clear responsibilities
+- whether API route designs preserve the shared ResponseService contract or are diverging without a real transport reason
 
 6. Next.js runtime correctness
 
@@ -119,7 +120,10 @@ Always flag these if present:
 - duplicated security logic across routes
 - feature flags embedded ad hoc in UI
 - direct database access from delivery code
+- delivery-layer route handlers binding raw or insufficiently validated route params to database identifiers, especially UUID columns (SEC-23)
+- state or schema designs that lie about runtime absence or finite domains, such as sparse UI state typed as full `Record<string, T>` or finite request options parsed as broad `z.string()` (SEC-24)
 - hidden service-locator patterns in request-sensitive flows
+- ad hoc API response envelopes in normal JSON route handlers when the shared `response-service` and `with-error-handler` pattern should be used
 
 ## Review Constraints
 

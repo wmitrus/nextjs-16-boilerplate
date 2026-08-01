@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import { connection, NextResponse } from 'next/server';
 
 import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
@@ -19,6 +19,8 @@ const logger = resolveServerLogger().child({
 });
 
 export async function GET(request: NextRequest) {
+  await connection();
+
   const rawRedirectUrl = request.nextUrl.searchParams.get('redirect_url') ?? '';
   const safeTarget = sanitizeRedirectUrl(rawRedirectUrl, DEFAULT_APP_ENTRY_URL);
 
@@ -56,6 +58,7 @@ export async function GET(request: NextRequest) {
       event: 'bootstrap_start:decision',
       pathname: '/auth/bootstrap/start',
       outcome: outcome.type,
+      outcomeError: outcome.type === 'error' ? outcome.error : undefined,
       safeTarget,
     },
     'Bootstrap start decision made',

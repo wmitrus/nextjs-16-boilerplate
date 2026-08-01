@@ -25,6 +25,7 @@ Real agent file: [`.github/agents/architecture-guard.agent.md`](../../../.github
 - When dependency direction or DI/composition discipline may drift
 - When auth-routing shape needs architectural review before implementation
 - When you want a repository-reality check instead of design-by-document
+- When a new API design should be checked for conformance to the repository's shared ResponseService contract instead of drifting into ad hoc route envelopes
 
 ## Auth-Flow Note
 

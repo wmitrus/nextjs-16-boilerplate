@@ -133,6 +133,8 @@ Produce three explicit lists:
 - specific test commands to run
 - specific scenarios to verify
 - typecheck and lint if applicable
+- for App Router route handlers with UUID path segments, a malformed-ID `400` test proving DB/repository/mutation calls are not reached
+- for SEC-24 Codacy HIGH error-prone fixes, evidence matched to the shape: lint for async JSX handlers, typecheck for sparse state / finite schemas, owning tests for UI handlers and typed mocks, route tests for request schema narrowing
 
 **Optional additional validation** — recommended but not blocking:
 

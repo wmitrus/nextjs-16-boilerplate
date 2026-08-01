@@ -37,8 +37,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
@@ -50,7 +48,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Chromatic
-        uses: chromaui/action@eea1606238fd97a70b5af723d103953d1f40967b # chromaui/action@v15
+        uses: chromaui/action@v18 # chromaui/action@v18
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -8,7 +8,7 @@
   updates, map propagation, shared template-path correction
 - Mode: CHANGE VALIDATION
 - Status: COMPLETED
-- Last Updated: 2026-04-06
+- Last Updated: 2026-07-21
 - Related Control Artifacts: `plan.md`, `intake.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -123,10 +123,20 @@
   runtime wrapper around the shared `05` prompt, not a separate authority source
 - what should not be re-decided without new evidence: the specialist-summary contract
   for `05` and the shared-authority ordering
-- recommended next specialist or step: continue filling the Codex specialist table in
-  numeric order
+- recommended next specialist or step: task is finished; no further Validation Strategy
+  artifacts are required for this task unless new scope is introduced
 
 ## Update Log
+
+### Update Entry
+
+- Date: 2026-07-21
+- Trigger: user requested a current Validation Strategy completion statement for this
+  task
+- Summary of change: confirmed the task remains completed, all required task artifacts
+  are present in `.copilot/tasks/2026-04-06-codex-validation-strategy-skill/`, and no
+  additional Validation Strategy artifact is required
+- Sections refreshed: task context, handoff notes, update log
 
 ### Update Entry
 

@@ -36,6 +36,7 @@ The skill reads the shared authority docs first:
 - `docs/ai/general/COPILOT_TASK_ARTIFACTS.md`
 - `docs/ai/general/07 - Playwright E2E Agent.md`
 - `docs/usage/05 - Playwright E2E Architecture.md` when adding or refactoring E2E coverage
+- `scripts/e2e-clerk-fixtures.md`, `e2e/clerk-auth.ts`, and `e2e/runtime-profile.ts` before changing Clerk auth/bootstrap/provisioning fixture setup
 
 For auth-flow work, it also reads:
 
@@ -51,6 +52,7 @@ For auth-flow work, it also reads:
 - Public, demo, and explicitly E2E-allowed routes must stay unauthenticated unless authenticated behavior is itself the subject under test.
 - Mixed files should be split by scenario semantics before optimization rather than forcing one fixture model across the entire suite.
 - New specs should be mapped into the existing suite families from `docs/usage/05 - Playwright E2E Architecture.md` before creating a parallel test surface.
+- Clerk fixtures keep a stable/generated split: env-driven users and org/provider organizations are reconciled and reused, while generated hosted sign-up users and empty default orgs are cleaned with strict predicates.
 
 ## Output Shape
 

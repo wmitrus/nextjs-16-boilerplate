@@ -10,14 +10,14 @@ import {
  * process.env before T3-Env initializes. Import this BEFORE importing @/core/env
  * in scripts that run outside the Next.js dev/build context.
  *
- * Load order (last-write wins for duplicates is irrelevant — existing keys are NOT
- * overwritten, so earlier files take precedence):
+ * Load order:
  *   1. .env                          — base defaults
  *   2. .env.local                    — local developer overrides
  *   3. .vercel/.env.{APP_ENV}.local  — downloaded by `vercel pull` in CI
  *
  * Rules:
  * - Existing process.env values are NOT overwritten (CI/Vercel-injected values take precedence).
+ * - Vercel-pulled env may override values loaded from earlier env files.
  * - Quotes are stripped from values.
  * - Comment lines (#) and blank lines are ignored.
  */
@@ -25,8 +25,12 @@ import {
 const ROOT = process.cwd();
 
 export const loadedFiles: string[] = [];
+const loadedEnvFileKeys = new Set<string>();
 
-function applyEnvFile(filePath: string): void {
+function applyEnvFile(
+  filePath: string,
+  options: { overrideEarlierEnvFiles?: boolean } = {},
+): void {
   const resolvedFilePath = resolve(filePath);
   if (!pathExistsWithinBase(resolvedFilePath, ROOT, 'environment file')) return;
 
@@ -48,12 +52,18 @@ function applyEnvFile(filePath: string): void {
     const rawVal = line.slice(eqIdx + 1);
     const val = rawVal.trim().replace(/^(['"])([\s\S]*)\1$/, '$2');
 
-    if (key && !(key in process.env)) {
+    const mayOverrideEarlierFile =
+      options.overrideEarlierEnvFiles === true && loadedEnvFileKeys.has(key);
+
+    if (key && (!(key in process.env) || mayOverrideEarlierFile)) {
       pendingEntries.push([key, val]);
     }
   }
 
   Object.assign(process.env, Object.fromEntries(pendingEntries));
+  for (const [key] of pendingEntries) {
+    loadedEnvFileKeys.add(key);
+  }
 
   loadedFiles.push(filePath.replace(ROOT, '.'));
 }
@@ -69,5 +79,7 @@ applyEnvFile(resolve(ROOT, '.env.local'));
 //    VERCEL_ENV is set by the Vercel runtime itself during builds.
 const vercelEnv = process.env.APP_ENV ?? process.env.VERCEL_ENV;
 if (vercelEnv === 'preview' || vercelEnv === 'production') {
-  applyEnvFile(resolve(ROOT, `.vercel/.env.${vercelEnv}.local`));
+  applyEnvFile(resolve(ROOT, `.vercel/.env.${vercelEnv}.local`), {
+    overrideEarlierEnvFiles: true,
+  });
 }

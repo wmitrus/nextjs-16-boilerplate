@@ -26,8 +26,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
@@ -58,13 +56,125 @@ jobs:
         id: vercel_deploy
         run: |
           set +e
-          DEPLOY_URL=$(vercel deploy --logs --token=${{ secrets.VERCEL_TOKEN }})
+          DEPLOY_URL=$(vercel deploy --logs --token=${{ secrets.VERCEL_TOKEN }} \
+            --meta githubDeployment=1 \
+            --meta githubCommitOrg="$GITHUB_REPOSITORY_OWNER" \
+            --meta githubOrg="$GITHUB_REPOSITORY_OWNER" \
+            --meta githubCommitRepo="$GITHUB_REPOSITORY_NAME" \
+            --meta githubRepo="$GITHUB_REPOSITORY_NAME" \
+            --meta githubCommitRef="$PREVIEW_GIT_BRANCH" \
+            --meta githubCommitSha="$PREVIEW_GIT_SHA" \
+            --meta githubCommitAuthorLogin="$PREVIEW_GIT_AUTHOR_LOGIN" \
+            --meta githubCommitMessage="$PREVIEW_GIT_MESSAGE")
           DEPLOY_EXIT=$?
           set -e
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
           if [ $DEPLOY_EXIT -ne 0 ]; then
             exit $DEPLOY_EXIT
           fi
+        env:
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          PREVIEW_GIT_AUTHOR_LOGIN: ${{ github.event.pull_request.head.user.login }}
+          PREVIEW_GIT_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PREVIEW_GIT_MESSAGE: ${{ github.event.pull_request.title }}
+          PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify Vercel Git Metadata
+        run: |
+          vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+
+          const inspected = JSON.parse(
+            fs.readFileSync('/tmp/vercel-preview-inspect.json', 'utf8'),
+          );
+          const deploymentId = inspected.id;
+          if (typeof deploymentId !== 'string' || deploymentId.length === 0) {
+            console.error(
+              JSON.stringify(
+                {
+                  message:
+                    'Vercel inspect did not return a deployment id; cannot verify deployment metadata.',
+                  inspectKeys: Object.keys(inspected).sort(),
+                },
+                null,
+                2,
+              ),
+            );
+            process.exit(1);
+          }
+
+          const teamId = process.env.VERCEL_ORG_ID;
+          const query = teamId
+            ? `?teamId=${encodeURIComponent(teamId)}`
+            : '';
+          const apiUrl = `https://api.vercel.com/v13/deployments/${encodeURIComponent(
+            deploymentId,
+          )}${query}`;
+          const apiResponse = execFileSync(
+            'curl',
+            [
+              '-fsS',
+              '-H',
+              `Authorization: Bearer ${process.env.VERCEL_TOKEN}`,
+              apiUrl,
+            ],
+            { encoding: 'utf8' },
+          );
+          const deployment = JSON.parse(apiResponse);
+          const meta = deployment.meta ?? {};
+          const expectedRef = process.env.PREVIEW_GIT_BRANCH;
+          const expectedSha = process.env.PREVIEW_GIT_SHA;
+
+          const actualRef = meta.githubCommitRef;
+          const actualSha = meta.githubCommitSha;
+          const githubDeployment = meta.githubDeployment;
+
+          if (
+            githubDeployment !== '1' ||
+            actualRef !== expectedRef ||
+            actualSha !== expectedSha
+          ) {
+            console.error(
+              JSON.stringify(
+                {
+                  message:
+                    'Vercel preview deployment is not linked to the PR git branch. Neon Preview Branching will not receive branch-specific deployment context.',
+                  expected: {
+                    githubDeployment: '1',
+                    githubCommitRef: expectedRef,
+                    githubCommitSha: expectedSha,
+                  },
+                  actual: {
+                    githubDeployment,
+                    githubCommitRef: actualRef,
+                    githubCommitSha: actualSha,
+                  },
+                },
+                null,
+                2,
+              ),
+            );
+            process.exit(1);
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                message: 'Vercel preview deployment is linked to the PR git branch.',
+                githubCommitRef: actualRef,
+                githubCommitSha: actualSha,
+              },
+              null,
+              2,
+            ),
+          );
+          NODE
+        env:
+          PREVIEW_GIT_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Print Vercel Build Logs On Failure
         if: failure() && steps.vercel_deploy.outputs.preview_url != ''

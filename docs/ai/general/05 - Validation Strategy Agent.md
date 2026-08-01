@@ -124,6 +124,8 @@ Always flag these if present:
 - unit tests used as the only evidence for cross-layer behavior
 - security-sensitive behavior validated only through client or UI assertions
 - no meaningful validation for route handlers or server actions that change sensitive behavior
+- route handlers with UUID path segments validated only by happy-path or mocked-DB tests, without a malformed-ID test proving `400` before DB/repository access (SEC-23)
+- Codacy HIGH error-prone TypeScript/JSX findings signed off without checking whether the fix preserved runtime absence handling, async handler error handling, mock behavior, and finite-domain schema narrowing (SEC-24)
 - cache-sensitive or env-sensitive flows with no runtime-sensitive validation
 - critical flows covered only by happy-path tests
 - CI gates that miss high-risk repository failure modes
@@ -212,6 +214,42 @@ A unit test with a mocked DB is NOT sufficient alone. The `*.db.test.ts` test mu
 - **Schema type validation**: use non-UUID string tenant IDs (e.g., `'demo'`, `'acme'`) to verify the column accepts them
 
 If a Drizzle adapter lacks a `*.db.test.ts`, treat this as a validation gap and require it.
+
+### Pattern G — Malformed UUID Path Param Tests for Route Handlers
+
+Any App Router route handler that accepts a path segment later used as a Postgres
+`uuid` identifier must have a negative route-handler test with a malformed value such
+as `not-a-uuid`.
+
+The test must assert:
+
+- response status is `400`
+- DB/repository/read-service calls that would bind the malformed UUID are not called
+- mutation side effects are not called
+
+Happy-path tests, not-found tests with valid UUIDs, and mocked DB query chains are not
+enough. Mocked DB tests do not reproduce Postgres `22P02` bind-time failures, so this
+case must be asserted before the DB boundary.
+
+### Pattern H — Validation For Codacy HIGH Error-Prone TS/JSX Findings
+
+When a change addresses SEC-24 patterns, validation must prove the relevant behavior
+did not regress:
+
+- sparse dynamic state fixes: typecheck must show `?.` / `??` fallbacks are genuinely
+  needed, and component tests should cover absent-row-state behavior when the component
+  already has a test surface
+- Promise-returning JSX handlers: local ESLint must pass with
+  `@typescript-eslint/no-misused-promises`; affected UI tests should still cover success
+  and error states when the handler controls user-visible state
+- typed test mocks: the owning unit test file must still pass after replacing
+  `vi.mocked(object.method)` with `vi.Mocked<Interface>`
+- finite-domain schemas: route-handler tests must cover invalid option rejection and a
+  valid option path when the schema change affects request parsing
+
+Do not approve a scanner quick fix that removes optional chaining/nullish fallback from
+sparse dynamic state unless code inspection proves the key is always populated before
+read.
 
 ### Pattern C — MSW Handlers for External HTTP Adapters
 

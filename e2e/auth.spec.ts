@@ -2,6 +2,8 @@ import { createPageObjects } from '@clerk/testing/playwright/unstable';
 import { test, expect, type Page, type Request } from '@playwright/test';
 
 import {
+  cleanupGeneratedClerkE2EArtifacts,
+  deleteGeneratedClerkE2EUserByEmail,
   getClerkE2ECredentials,
   hasClerkSingleProvisionedUserE2ECredentials,
 } from './clerk-auth';
@@ -16,7 +18,7 @@ function createUniqueClerkTestEmail(prefix: string): string {
 }
 
 function getBaseUrl(): string {
-  return process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+  return process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3100';
 }
 
 function isBootstrapNavigationRequest(request: Request): boolean {
@@ -35,22 +37,64 @@ async function waitForBootstrapNavigation(
 
 async function completeHostedSignUpVerificationIfNeeded(
   page: Page,
-  signUp: ReturnType<typeof createPageObjects>['signUp'],
 ): Promise<void> {
+  const verificationHeading = page.getByRole('heading', {
+    name: /verify your email/i,
+  });
+
   const nextStep = await Promise.race<'bootstrap' | 'verify-email'>([
     page
       .waitForRequest(isBootstrapNavigationRequest)
       .then(() => 'bootstrap' as const),
-    signUp.waitForEmailVerificationScreen().then(() => 'verify-email' as const),
+    verificationHeading
+      .waitFor({ state: 'visible' })
+      .then(() => 'verify-email' as const),
   ]);
 
   if (nextStep === 'verify-email') {
-    await signUp.enterTestOtpCode();
+    const preSendWarning = page.getByText(
+      /need to send a verification code before attempting to verify/i,
+    );
+    const resendButton = page.getByRole('button', { name: /resend/i });
+    const needsVerificationCodeSend = await preSendWarning
+      .waitFor({ state: 'visible', timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (needsVerificationCodeSend) {
+      await expect(resendButton).toBeEnabled({ timeout: 20_000 });
+      await resendButton.click();
+      await expect(preSendWarning).toBeHidden({ timeout: 10_000 });
+    }
+
+    const legacyOtpInput = page.getByRole('textbox', {
+      name: 'Enter verification code. Digit 1',
+    });
+
+    if (await legacyOtpInput.isVisible()) {
+      await legacyOtpInput.click();
+      await page.keyboard.type('424242', { delay: 100 });
+    } else {
+      await page.getByLabel(/enter verification code/i).fill('424242');
+    }
+
+    const continueButton = page.getByRole('button', {
+      name: 'Continue',
+      exact: true,
+    });
+
+    if (await continueButton.isVisible()) {
+      await continueButton.click();
+    }
   }
 }
 
 test.describe('Authentication E2E', () => {
   test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async () => {
+    await cleanupGeneratedClerkE2EArtifacts();
+  });
 
   test('shows signed-out auth entry buttons on the home page', async ({
     page,
@@ -99,14 +143,19 @@ test.describe('Authentication E2E', () => {
     });
     const email = createUniqueClerkTestEmail('page-sign-up');
 
-    await clerkUi.signUp.goTo();
-    await waitForBootstrapNavigation(page, async () => {
-      await clerkUi.signUp.signUpWithEmailAndPassword({
-        email,
-        password: SIGN_UP_PASSWORD,
+    try {
+      await clerkUi.signUp.goTo();
+      await waitForBootstrapNavigation(page, async () => {
+        await clerkUi.signUp.signUpWithEmailAndPassword({
+          email,
+          password: SIGN_UP_PASSWORD,
+        });
+        await completeHostedSignUpVerificationIfNeeded(page);
       });
-      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
-    });
+    } finally {
+      await deleteGeneratedClerkE2EUserByEmail(email);
+      await cleanupGeneratedClerkE2EArtifacts();
+    }
   });
 
   test('sign-in via header modal force redirects through /auth/bootstrap/start', async ({
@@ -145,17 +194,22 @@ test.describe('Authentication E2E', () => {
     });
     const email = createUniqueClerkTestEmail('modal-sign-up');
 
-    await clerkUi.page.goToAppHome();
-    await page.getByRole('button', { name: /^sign up$/i }).click();
-    await clerkUi.signUp.waitForModal('open');
+    try {
+      await clerkUi.page.goToAppHome();
+      await page.getByRole('button', { name: /^sign up$/i }).click();
+      await clerkUi.signUp.waitForModal('open');
 
-    await waitForBootstrapNavigation(page, async () => {
-      await clerkUi.signUp.signUpWithEmailAndPassword({
-        email,
-        password: SIGN_UP_PASSWORD,
+      await waitForBootstrapNavigation(page, async () => {
+        await clerkUi.signUp.signUpWithEmailAndPassword({
+          email,
+          password: SIGN_UP_PASSWORD,
+        });
+        await completeHostedSignUpVerificationIfNeeded(page);
       });
-      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
-    });
+    } finally {
+      await deleteGeneratedClerkE2EUserByEmail(email);
+      await cleanupGeneratedClerkE2EArtifacts();
+    }
   });
 
   test('switching sign-in -> sign-up inside Clerk page UI still ends at /auth/bootstrap/start', async ({
@@ -171,13 +225,18 @@ test.describe('Authentication E2E', () => {
     await clerkUi.signIn.getGoToSignUp().click();
     await clerkUi.signUp.waitForMounted();
 
-    await waitForBootstrapNavigation(page, async () => {
-      await clerkUi.signUp.signUpWithEmailAndPassword({
-        email,
-        password: SIGN_UP_PASSWORD,
+    try {
+      await waitForBootstrapNavigation(page, async () => {
+        await clerkUi.signUp.signUpWithEmailAndPassword({
+          email,
+          password: SIGN_UP_PASSWORD,
+        });
+        await completeHostedSignUpVerificationIfNeeded(page);
       });
-      await completeHostedSignUpVerificationIfNeeded(page, clerkUi.signUp);
-    });
+    } finally {
+      await deleteGeneratedClerkE2EUserByEmail(email);
+      await cleanupGeneratedClerkE2EArtifacts();
+    }
   });
 
   test('switching sign-up -> sign-in inside Clerk modal UI still ends at /auth/bootstrap/start', async ({

@@ -109,7 +109,7 @@ export function AuthJsWorkspaceSwitcher({
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => handleSelect(org.id)}
+                onClick={() => void handleSelect(org.id)}
                 className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 {org.name}

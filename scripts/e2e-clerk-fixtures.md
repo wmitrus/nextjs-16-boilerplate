@@ -152,6 +152,13 @@ For each identity above:
    - `alice@example.com` for `clerk_link_blocked_unverified`
 5. Store the email/username and password in `.env.e2e.local` or `.env.e2e`.
 
+Mutable fixture note:
+
+- `clerk_single_provisioned_user`, `clerk_single_new_user`, `clerk_incomplete_user`, `clerk_personal_new_user`, `clerk_org_provider_owner`, `clerk_org_provider_member`, and `clerk_org_db_seeded_member` are now reconciled automatically by the E2E harness.
+- If the Clerk account is missing but the env vars are present, the harness will create or repair the account before sign-in.
+- For `org/provider`, the harness uses the stable slugs from `E2E_CLERK_ORG_PROVIDER_OWNER_SLUG` and `E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG`; it creates the stable organization if missing and reconciles the expected membership role before sign-in.
+- The `link_blocked_unverified` fixture still requires deliberate dashboard setup because unverified-state semantics are part of the scenario contract.
+
 ### 4.2a Hosted verification test-emails
 
 Use this only for interactive hosted sign-up / verification coverage such as
@@ -169,6 +176,22 @@ Rules:
    of the first-factor email-code step, do not classify that as app-routing
    failure. It is a Clerk-instance policy issue for this harness.
 
+Lifecycle contract:
+
+- Hosted sign-up tests may create throwaway Clerk users because the behavior
+  under test is the real Clerk sign-up surface.
+- The E2E harness deletes generated users whose email matches
+  `e2e+clerk_test-*@example.com`.
+- Clerk can also create a default personal organization named
+  `My Organization` with a `my-organization-*` slug during hosted sign-up.
+  The E2E harness deletes only matching zero-member organizations and protects
+  the stable slugs configured by `E2E_CLERK_ORG_PROVIDER_OWNER_SLUG` and
+  `E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG`.
+- A full Clerk test instance with 50 default `My Organization` records means
+  previous hosted sign-up runs leaked provider artifacts. The symptom is a
+  Clerk `organization_quota_exceeded` response before the app can reach
+  `/auth/bootstrap/start`.
+
 ### 4.3 Assign organization memberships
 
 Assign memberships like this:
@@ -177,6 +200,10 @@ Assign memberships like this:
 | --------------------------- | ---------------- | ---------------------------------- |
 | `clerk_org_provider_owner`  | `e2e-org-owner`  | role containing `admin` or `owner` |
 | `clerk_org_provider_member` | `e2e-org-member` | non-owner role                     |
+
+The harness reconciles these memberships automatically when the env vars are
+present. Manual dashboard setup is still acceptable, but the suite should not
+depend on ad hoc, stale membership state.
 
 Do not use Clerk organization membership as tenant truth in `org/db`. That mode
 is DB-managed and depends on seeded app-side membership only.
@@ -203,7 +230,7 @@ E2E_BACKEND_MODE=container
 # DB_COMPOSE_ENGINE=podman
 
 # Optional Playwright base URL override
-# PLAYWRIGHT_TEST_BASE_URL=http://localhost:3000
+# PLAYWRIGHT_TEST_BASE_URL=http://localhost:3100
 
 # Scenario A: single / returning provisioned user
 E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME=
@@ -367,7 +394,7 @@ node scripts/check-e2e-auth-env.mjs --scenario single
 
 Expected:
 
-- success when the required identities and org slugs are configured
+- success when the required identities and org slugs are configured; mutable standalone fixtures may emit warnings and be auto-created by the harness before sign-in
 - warning only if legacy alias vars are used instead of canonical names
 
 ## 10. Troubleshooting

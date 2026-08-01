@@ -44,6 +44,18 @@ For non-trivial tasks:
 7. Run validation at the right level
 8. Ensure final artifacts and residual risks are documented
 
+For tasks that introduce or materially change JSON API route handlers, ensure the
+constraints or implementation plan state whether the surface follows the shared
+ResponseService pattern (`response-service.ts` + `with-error-handler.ts`) or is
+taking an explicit protocol-specific exception.
+
+For tasks that introduce or materially change App Router route handlers with UUID path
+segments, ensure the handoff explicitly covers SEC-23:
+
+- Security & Auth verifies every UUID path param is parsed before DB/repository use
+- Implementation uses only parsed `z.uuid()` or existing schema data in UUID predicates and mutation inputs
+- Validation requires a malformed-ID `400` test proving DB/repository/mutation calls are not reached
+
 At every major transition:
 
 - update `plan.md`, `intake.md`, and `implementation-plan.md` so their status stays synchronized

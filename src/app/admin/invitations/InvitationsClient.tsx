@@ -25,6 +25,8 @@ export interface SafeInvitation {
 interface InvitationsClientProps {
   invitations: SafeInvitation[];
   roles: Array<{ id: string; name: string }>;
+  createEndpoint?: string;
+  revokeEndpointBase?: string;
 }
 
 type SendState =
@@ -103,6 +105,8 @@ function formatDate(d: Date | string | null): string {
 export function InvitationsClient({
   invitations,
   roles,
+  createEndpoint = '/api/admin/invitations',
+  revokeEndpointBase = '/api/admin/invitations',
 }: InvitationsClientProps) {
   const router = useRouter();
   const [email, setEmail] = React.useState('');
@@ -117,7 +121,7 @@ export function InvitationsClient({
     setSendState({ status: 'submitting' });
 
     try {
-      const res = await fetch('/api/admin/invitations', {
+      const res = await fetch(createEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, roleId }),
@@ -147,7 +151,7 @@ export function InvitationsClient({
     setRevokeState((s) => ({ ...s, [id]: 'revoking' }));
 
     try {
-      const res = await fetch(`/api/admin/invitations/${id}`, {
+      const res = await fetch(`${revokeEndpointBase}/${id}`, {
         method: 'DELETE',
       });
 
@@ -169,7 +173,12 @@ export function InvitationsClient({
         <h2 className="mb-4 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           Send Direct Invitation
         </h2>
-        <form onSubmit={handleSend} className="space-y-4">
+        <form
+          onSubmit={(event) => {
+            void handleSend(event);
+          }}
+          className="space-y-4"
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label
@@ -270,7 +279,7 @@ export function InvitationsClient({
                   {statusBadge(inv.status)}
                   {inv.status === 'pending' && (
                     <button
-                      onClick={() => handleRevoke(inv.id)}
+                      onClick={() => void handleRevoke(inv.id)}
                       disabled={revokeState[inv.id] === 'revoking'}
                       className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
                     >

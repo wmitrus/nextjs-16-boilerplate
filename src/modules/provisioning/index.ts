@@ -10,3 +10,8 @@ export {
   CrossProviderLinkingNotAllowedError,
 } from './domain/errors';
 export { DrizzleProvisioningService } from './infrastructure/drizzle/DrizzleProvisioningService';
+export {
+  classifyProvisioningFailure,
+  type ProvisioningFailureDiagnostics,
+  type ProvisioningFailureCode,
+} from './infrastructure/provisioning-failure-diagnostics';

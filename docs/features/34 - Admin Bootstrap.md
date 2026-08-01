@@ -35,7 +35,7 @@ A CLI script that creates the first admin account directly in the database — b
 
 | Property                        | Behaviour                                                                                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Idempotent**                  | Exits without changes if any user already exists in the DB                                                                                         |
+| **Idempotent**                  | Creates the first admin only on a fresh DB; on an existing DB it may repair only the missing AuthJS identity mapping for the exact bootstrap email |
 | **Race-safe**                   | DB unique constraints prevent duplicates even under concurrent runs                                                                                |
 | **No open registration needed** | `REGISTRATION_MODE=invite-only` is never changed                                                                                                   |
 | **No race window**              | The admin account exists before the app serves any traffic                                                                                         |
@@ -103,7 +103,7 @@ Vercel does not provide a terminal for arbitrary command execution. The professi
 
 **Recommended setup:**
 
-- Preview: do not keep bootstrap vars permanently in Vercel and do not run bootstrap automatically from the preview workflow. When QA needs an admin account on a specific preview branch, pull that branch's preview env locally and run the bootstrap script manually against that preview database.
+- Preview: do not keep bootstrap vars permanently in Vercel and do not run bootstrap automatically from the preview workflow. Neon preview branches copy existing production data; if an AuthJS credentials admin already exists, migration `0014_authjs_credentials_identity_backfill` repairs the required AuthJS identity mapping automatically during `pnpm db:migrate:prod`.
 - Production: do not keep bootstrap vars permanently in Vercel. Add them only for the one-time bootstrap operation, then remove them.
 - Both environments: `DEFAULT_TENANT_ID` stays in Vercel because it is real runtime config in single-tenant mode.
 
@@ -126,7 +126,7 @@ rm .env.production
 
 ### One-time preview bootstrap runbook
 
-Use this only when a specific preview branch needs an admin account for QA.
+Use this only when a specific preview branch has no admin account at all and QA explicitly needs one.
 
 ```bash
 # 1. Pull preview env vars for the exact PR branch.
@@ -147,7 +147,8 @@ Notes:
 
 - `scripts/bootstrap-admin.ts` already prefers `DATABASE_URL_UNPOOLED` when it exists, so the script targets the direct preview DB connection automatically.
 - This must stay a manual step tied to a specific branch preview DB. Do not keep `BOOTSTRAP_ADMIN_PASSWORD` in shared preview envs and do not add preview bootstrap back into `.github/workflows/preview-deploy.yml`.
-- If the preview database already contains any user, the script exits without changing data.
+- If the preview database already contains any user, the script does not create another user. It only verifies/repairs the AuthJS identity mapping for `BOOTSTRAP_ADMIN_EMAIL` when a matching credentials row already exists.
+- Do not use this runbook just to fix a legacy AuthJS credentials identity mapping. Existing credentials mappings are handled by migration `0014_authjs_credentials_identity_backfill` and should be applied by the normal deployment migration step.
 
 ### One-time production bootstrap runbook
 
@@ -231,7 +232,7 @@ organizationsTable        { id: <random-uuid>, tenantId: DEFAULT_TENANT_ID, name
 tenantAttributesTable     { tenantId: DEFAULT_TENANT_ID, plan: 'standard', ... }
 usersTable                { id: <random-uuid>, email: BOOTSTRAP_ADMIN_EMAIL, onboardingComplete: true }
 userCredentialsTable      { userId, email, hashedPassword, emailVerified: true }
-authUserIdentitiesTable   { provider: 'authjs', externalUserId: userId, userId }
+authUserIdentitiesTable   { provider: 'authjs', externalUserId: email, userId }
 rolesTable                { owner + member roles for the org }
 policiesTable             { ABAC policies for owner role (from ownerPolicies template) }
 membershipsTable          { userId, orgId, ownerRoleId }

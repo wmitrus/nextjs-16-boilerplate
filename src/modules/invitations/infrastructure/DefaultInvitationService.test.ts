@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type Mocked, vi } from 'vitest';
 
 vi.mock('@/core/logger/di', async () => {
   const testing = await import('@/testing');
@@ -17,7 +17,7 @@ import type { Invitation } from '../domain/types';
 import { DefaultInvitationService } from './DefaultInvitationService';
 
 import type { EmailService } from '@/modules/invitations/domain/EmailService';
-import { resetAllInfrastructureMocks } from '@/testing';
+import { mockChildLogger, resetAllInfrastructureMocks } from '@/testing';
 
 function daysFromNow(days: number): Date {
   const date = new Date();
@@ -42,7 +42,7 @@ function buildInvitation(overrides: Partial<Invitation> = {}): Invitation {
 }
 
 describe('DefaultInvitationService', () => {
-  const repository: InvitationRepository = {
+  const repository: Mocked<InvitationRepository> = {
     create: vi.fn(),
     findByToken: vi.fn(),
     findPendingByEmailAndOrg: vi.fn(),
@@ -52,7 +52,7 @@ describe('DefaultInvitationService', () => {
     markExpired: vi.fn(),
   };
 
-  const emailService: EmailService = {
+  const emailService: Mocked<EmailService> = {
     sendInvitationEmail: vi.fn(),
     sendVerificationEmail: vi.fn(),
     sendWaitlistConfirmationEmail: vi.fn(),
@@ -72,8 +72,8 @@ describe('DefaultInvitationService', () => {
       status: 'accepted',
       acceptedAt,
     });
-    vi.mocked(repository.findByToken).mockResolvedValue(pendingInvitation);
-    vi.mocked(repository.markAccepted).mockResolvedValue(acceptedInvitation);
+    repository.findByToken.mockResolvedValue(pendingInvitation);
+    repository.markAccepted.mockResolvedValue(acceptedInvitation);
 
     const service = new DefaultInvitationService(repository, emailService, {
       appUrl: 'http://localhost:3000',
@@ -90,8 +90,8 @@ describe('DefaultInvitationService', () => {
 
   it('throws InvitationAlreadyUsedError when the conditional accept update loses the race', async () => {
     const pendingInvitation = buildInvitation();
-    vi.mocked(repository.findByToken).mockResolvedValue(pendingInvitation);
-    vi.mocked(repository.markAccepted).mockResolvedValue(null);
+    repository.findByToken.mockResolvedValue(pendingInvitation);
+    repository.markAccepted.mockResolvedValue(null);
 
     const service = new DefaultInvitationService(repository, emailService, {
       appUrl: 'http://localhost:3000',
@@ -106,7 +106,7 @@ describe('DefaultInvitationService', () => {
     const expiredInvitation = buildInvitation({
       expiresAt: daysFromNow(-30),
     });
-    vi.mocked(repository.findByToken).mockResolvedValue(expiredInvitation);
+    repository.findByToken.mockResolvedValue(expiredInvitation);
 
     const service = new DefaultInvitationService(repository, emailService, {
       appUrl: 'http://localhost:3000',
@@ -116,5 +116,62 @@ describe('DefaultInvitationService', () => {
       service.validateToken(expiredInvitation.token),
     ).rejects.toBeInstanceOf(InvitationExpiredError);
     expect(repository.markExpired).toHaveBeenCalledWith(expiredInvitation.id);
+  });
+
+  it('logs invitation lifecycle events without raw email addresses', async () => {
+    const createdInvitation = buildInvitation();
+    repository.findPendingByEmailAndOrg.mockResolvedValue(null);
+    repository.create.mockResolvedValue(createdInvitation);
+    emailService.sendInvitationEmail.mockResolvedValue(undefined);
+    repository.findByToken.mockResolvedValue(createdInvitation);
+    repository.markAccepted.mockResolvedValue(
+      buildInvitation({ status: 'accepted', acceptedAt: new Date() }),
+    );
+
+    const service = new DefaultInvitationService(repository, emailService, {
+      appUrl: 'http://localhost:3000',
+    });
+
+    await service.createInvitation({
+      organizationId: createdInvitation.organizationId,
+      invitedByUserId: createdInvitation.invitedByUserId ?? 'user-1',
+      email: createdInvitation.email,
+      roleId: createdInvitation.roleId,
+      expiresInHours: 72,
+    });
+    await service.acceptInvitation({ token: createdInvitation.token });
+
+    const createdLog = vi.mocked(mockChildLogger.info).mock.calls[0]?.[0];
+    const acceptedLog = vi.mocked(mockChildLogger.info).mock.calls[1]?.[0];
+
+    expect(createdLog).toHaveProperty('emailHash');
+    expect(createdLog).not.toHaveProperty('email');
+    expect(acceptedLog).toHaveProperty('emailHash');
+    expect(acceptedLog).not.toHaveProperty('email');
+  });
+
+  it('logs email send failures without raw recipient addresses', async () => {
+    const createdInvitation = buildInvitation();
+    repository.findPendingByEmailAndOrg.mockResolvedValue(null);
+    repository.create.mockResolvedValue(createdInvitation);
+    emailService.sendInvitationEmail.mockRejectedValue(
+      new Error('smtp unavailable'),
+    );
+
+    const service = new DefaultInvitationService(repository, emailService, {
+      appUrl: 'http://localhost:3000',
+    });
+
+    await service.createInvitation({
+      organizationId: createdInvitation.organizationId,
+      invitedByUserId: createdInvitation.invitedByUserId ?? 'user-1',
+      email: createdInvitation.email,
+      roleId: createdInvitation.roleId,
+      expiresInHours: 72,
+    });
+
+    const warnPayload = vi.mocked(mockChildLogger.warn).mock.calls[0]?.[0];
+    expect(warnPayload).toHaveProperty('emailHash');
+    expect(warnPayload).not.toHaveProperty('email');
   });
 });

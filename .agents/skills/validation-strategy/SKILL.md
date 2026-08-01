@@ -119,6 +119,12 @@ Always flag these when present:
 - security-sensitive behavior validated only through client or UI assertions
 - route handlers or server actions that change sensitive behavior without meaningful
   validation
+- route handlers with UUID path segments validated only by happy-path or mocked-DB
+  tests, without a malformed-ID test proving `400` before DB/repository access
+  (SEC-23)
+- Codacy HIGH error-prone TypeScript/JSX findings signed off without checking whether
+  the fix preserved runtime absence handling, async handler error handling, mock
+  behavior, and finite-domain schema narrowing (SEC-24)
 - cache-sensitive or env-sensitive flows with no runtime-sensitive validation
 - critical flows covered only by happy-path tests
 - CI gates that miss a high-risk repository failure mode
@@ -167,6 +173,23 @@ For artifact-backed work:
 - `docs/ai/general/05 - Validation Strategy Agent.md` remains the shared repository
   prompt source for the role
 - this skill is the Codex-native runtime surface for that role in this repository
+
+## Mandatory Route-Handler UUID Validation
+
+For App Router route handlers with UUID path segments, require a malformed-ID test
+using a value such as `not-a-uuid`. The test must prove `400` is returned before any
+DB/repository/read-service call that would bind the UUID value and before any mutation
+side effect. Do not accept happy-path and valid-UUID not-found tests as sufficient
+coverage for SEC-23.
+
+## Mandatory Codacy Error-Prone Validation
+
+For SEC-24 findings, require evidence matched to the code shape: `pnpm lint --fix` for
+Promise-returning JSX handlers, typecheck for sparse dynamic state and finite schemas,
+the owning unit/component test for changed mocks or UI handlers, and route-handler tests
+for schema narrowing that changes request parsing. Do not approve scanner quick fixes
+that remove `?.` / `??` from sparse state unless the key is proven always present before
+read.
 
 When the role changes, update:
 

@@ -88,7 +88,12 @@ export function SignUpClient({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      className="space-y-4"
+    >
       {error && (
         <div className="rounded-md bg-red-50 p-3 dark:bg-red-950">
           <p className="text-sm text-red-700 dark:text-red-300">{error}</p>

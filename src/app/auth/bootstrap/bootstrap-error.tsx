@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { signOut as signOutAuthjs } from 'next-auth/react';
 
+import { buildBootstrapRedirectUrl } from '@/app/auth/post-auth-redirect';
 import { useSignOut } from '@/modules/auth/ui/hooks/useSignOut';
 
 type DbDriver = 'pglite' | 'postgres';
+type DeploymentEnvironment = 'production' | 'preview' | 'development';
 
 const DB_ERROR_MESSAGES: Record<DbDriver, string> = {
   pglite:
@@ -27,6 +29,9 @@ const ERROR_MESSAGES: Record<
   db_error: DB_ERROR_MESSAGES.pglite,
 };
 
+const DEPLOYED_DB_ERROR_MESSAGE =
+  'Sign-in could not be completed because of a server-side configuration problem. Please try again later or contact support if the problem persists.';
+
 interface BootstrapErrorUIProps {
   error:
     | 'cross_provider_linking'
@@ -34,15 +39,28 @@ interface BootstrapErrorUIProps {
     | 'tenant_config'
     | 'db_error';
   dbDriver?: DbDriver;
+  deploymentEnvironment?: DeploymentEnvironment;
+  nodeEnv?: 'development' | 'test' | 'production';
   authProvider?: 'clerk' | 'authjs' | 'supabase' | 'neon';
+  redirectUrl?: string;
 }
 
 function getBootstrapErrorMessage(
   error: BootstrapErrorUIProps['error'],
   dbDriver: DbDriver | undefined,
+  deploymentEnvironment: DeploymentEnvironment | undefined,
+  nodeEnv: BootstrapErrorUIProps['nodeEnv'],
 ): string {
   switch (error) {
     case 'db_error':
+      if (
+        deploymentEnvironment === 'preview' ||
+        deploymentEnvironment === 'production' ||
+        (deploymentEnvironment === 'development' && nodeEnv === 'production')
+      ) {
+        return DEPLOYED_DB_ERROR_MESSAGE;
+      }
+
       return dbDriver === 'postgres'
         ? DB_ERROR_MESSAGES.postgres
         : DB_ERROR_MESSAGES.pglite;
@@ -93,9 +111,18 @@ function FallbackSignOutButton() {
 export function BootstrapErrorUI({
   error,
   dbDriver,
+  deploymentEnvironment,
+  nodeEnv,
   authProvider,
+  redirectUrl,
 }: BootstrapErrorUIProps) {
-  const message = getBootstrapErrorMessage(error, dbDriver);
+  const message = getBootstrapErrorMessage(
+    error,
+    dbDriver,
+    deploymentEnvironment,
+    nodeEnv,
+  );
+  const retryHref = buildBootstrapRedirectUrl(redirectUrl);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -120,12 +147,12 @@ export function BootstrapErrorUI({
         </h1>
         <p className="mb-6 text-sm text-gray-600">{message}</p>
         <div className="flex gap-3">
-          <button
-            onClick={() => window.location.reload()}
+          <Link
+            href={retryHref}
             className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Try Again
-          </button>
+          </Link>
           {authProvider === 'clerk' ? (
             <ClerkSignOutButton />
           ) : authProvider === 'authjs' ? (

@@ -7,7 +7,11 @@ vi.mock('@/core/logger/di', async () => {
   };
 });
 
-import { DuplicateWaitlistEntryError } from '../domain/errors';
+import {
+  DuplicateWaitlistEntryError,
+  WaitlistEntryAlreadyProcessedError,
+  WaitlistEntryNotFoundError,
+} from '../domain/errors';
 import type { WaitlistRepository } from '../domain/WaitlistRepository';
 
 import { DefaultWaitlistService } from './DefaultWaitlistService';
@@ -101,5 +105,96 @@ describe('DefaultWaitlistService', () => {
       }),
       'Failed to send waitlist confirmation email',
     );
+  });
+
+  it('approves a pending entry', async () => {
+    const approvedEntry = {
+      ...waitlistEntry,
+      status: 'approved' as const,
+      approvedAt: new Date('2026-04-26T11:00:00.000Z'),
+    };
+    vi.mocked(repository.findById).mockResolvedValue(waitlistEntry);
+    vi.mocked(repository.approve).mockResolvedValue(approvedEntry);
+
+    const service = new DefaultWaitlistService(repository, emailService);
+    const result = await service.approveEntry(waitlistEntry.id);
+
+    expect(repository.findById).toHaveBeenCalledWith(waitlistEntry.id);
+    expect(repository.approve).toHaveBeenCalledWith(waitlistEntry.id);
+    expect(result).toEqual(approvedEntry);
+  });
+
+  it('rejects a pending entry', async () => {
+    const rejectedEntry = {
+      ...waitlistEntry,
+      status: 'rejected' as const,
+    };
+    vi.mocked(repository.findById).mockResolvedValue(waitlistEntry);
+    vi.mocked(repository.reject).mockResolvedValue(rejectedEntry);
+
+    const service = new DefaultWaitlistService(repository, emailService);
+    const result = await service.rejectEntry(waitlistEntry.id);
+
+    expect(repository.findById).toHaveBeenCalledWith(waitlistEntry.id);
+    expect(repository.reject).toHaveBeenCalledWith(waitlistEntry.id);
+    expect(result).toEqual(rejectedEntry);
+  });
+
+  it('throws when approving a missing entry', async () => {
+    vi.mocked(repository.findById).mockResolvedValue(null);
+
+    const service = new DefaultWaitlistService(repository, emailService);
+
+    await expect(service.approveEntry('missing')).rejects.toBeInstanceOf(
+      WaitlistEntryNotFoundError,
+    );
+    expect(repository.approve).not.toHaveBeenCalled();
+  });
+
+  it('throws when approving an already processed entry', async () => {
+    vi.mocked(repository.findById).mockResolvedValue({
+      ...waitlistEntry,
+      status: 'rejected',
+    });
+
+    const service = new DefaultWaitlistService(repository, emailService);
+
+    await expect(service.approveEntry(waitlistEntry.id)).rejects.toBeInstanceOf(
+      WaitlistEntryAlreadyProcessedError,
+    );
+    expect(repository.approve).not.toHaveBeenCalled();
+  });
+
+  it('throws when rejecting a missing entry', async () => {
+    vi.mocked(repository.findById).mockResolvedValue(null);
+
+    const service = new DefaultWaitlistService(repository, emailService);
+
+    await expect(service.rejectEntry('missing')).rejects.toBeInstanceOf(
+      WaitlistEntryNotFoundError,
+    );
+    expect(repository.reject).not.toHaveBeenCalled();
+  });
+
+  it('throws when rejecting an already processed entry', async () => {
+    vi.mocked(repository.findById).mockResolvedValue({
+      ...waitlistEntry,
+      status: 'approved',
+    });
+
+    const service = new DefaultWaitlistService(repository, emailService);
+
+    await expect(service.rejectEntry(waitlistEntry.id)).rejects.toBeInstanceOf(
+      WaitlistEntryAlreadyProcessedError,
+    );
+    expect(repository.reject).not.toHaveBeenCalled();
+  });
+
+  it('lists pending entries from the repository', async () => {
+    vi.mocked(repository.listPending).mockResolvedValue([waitlistEntry]);
+
+    const service = new DefaultWaitlistService(repository, emailService);
+
+    await expect(service.listPending()).resolves.toEqual([waitlistEntry]);
   });
 });

@@ -14,7 +14,7 @@ import {
 } from './authjs-auth';
 
 const isAuthjs = isAuthjsRuntime();
-const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3100';
 const test = base;
 type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 const authTest = base.extend<

@@ -68,6 +68,8 @@ export function createRequestContainer(config: AppConfig): Container {
     config.auth.authProvider,
     env.CLERK_SECRET_KEY,
     env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    env.NEXTAUTH_SECRET,
+    env.NODE_ENV,
   );
   validateTenancyConfigValues(
     config.auth.tenancyMode,

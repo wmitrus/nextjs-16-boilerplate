@@ -40,6 +40,15 @@ Determine, execute, and report the minimum safe validation scope for a specific 
 4. Validation execution
 5. Result report
 
+For App Router route handlers with UUID path segments, the minimum required validation
+must include a malformed-ID `400` test proving DB/repository/mutation calls are not
+reached before the change can be marked safe (SEC-23).
+
+For SEC-24 Codacy HIGH error-prone fixes, the minimum required validation must match
+the shape: lint for async JSX handlers, typecheck for sparse state and finite schemas,
+owning tests for UI handlers and typed mocks, and route tests for request schema
+narrowing.
+
 ## Compatibility Notes
 
 - `docs/ai/general/Workflow 07 - Change Validation Workflow.md` remains the shared,

@@ -1,5 +1,7 @@
 import { fileURLToPath } from 'node:url';
 
+import { createClerkClient } from '@clerk/backend';
+
 import { checkClerkRedirectUrls } from './check-env-consistency.mjs';
 import {
   applyEnv,
@@ -134,6 +136,19 @@ const REQUIRED_ORGS = {
   },
 };
 
+const AUTO_RECONCILED_GROUPS = new Set([
+  'singleProvisionedUser',
+  'singleNewUser',
+  'incompleteUser',
+  'personalNewUser',
+  'orgProviderOwner',
+  'orgProviderMember',
+  'orgDbSeededMember',
+]);
+
+const CLERK_LOOKUP_MAX_ATTEMPTS = 3;
+const CLERK_LOOKUP_RETRY_DELAY_MS = 750;
+
 function findRecordByKey(record, key) {
   for (const [entryKey, entryValue] of Object.entries(record)) {
     if (entryKey === key) {
@@ -171,6 +186,122 @@ function resolveAlias(keys) {
   }
 
   return null;
+}
+
+function looksLikeEmailAddress(value) {
+  return typeof value === 'string' && value.includes('@');
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function describeUnknownError(error) {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const details = [];
+  const maybeApiError = error;
+
+  if (error.name) {
+    details.push(error.name);
+  }
+
+  if (error.message) {
+    details.push(error.message);
+  }
+
+  if (typeof maybeApiError.status === 'number') {
+    details.push(`status=${maybeApiError.status}`);
+  }
+
+  if (typeof maybeApiError.statusCode === 'number') {
+    details.push(`statusCode=${maybeApiError.statusCode}`);
+  }
+
+  if (Array.isArray(maybeApiError.errors)) {
+    const clerkErrors = maybeApiError.errors
+      .map((entry) => {
+        const code = typeof entry?.code === 'string' ? entry.code : undefined;
+        const message =
+          typeof entry?.message === 'string' ? entry.message : undefined;
+
+        return [code, message].filter(Boolean).join(': ');
+      })
+      .filter(Boolean);
+
+    if (clerkErrors.length > 0) {
+      details.push(clerkErrors.join('; '));
+    }
+  }
+
+  return details.length > 0 ? details.join(' - ') : 'unknown error';
+}
+
+function createClerkFixtureLookup() {
+  const secretKey = getEnvValue('CLERK_SECRET_KEY');
+
+  if (!secretKey) {
+    throw new Error(
+      'CLERK_SECRET_KEY is required to validate Clerk fixture accounts.',
+    );
+  }
+
+  const apiUrl = getEnvValue('CLERK_API_URL');
+  const clerkClient = createClerkClient(
+    apiUrl ? { secretKey, apiUrl } : { secretKey },
+  );
+
+  return async (emailAddress) => {
+    let lastError;
+
+    for (let attempt = 1; attempt <= CLERK_LOOKUP_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const userList = await clerkClient.users.getUserList({
+          emailAddress: [emailAddress],
+        });
+
+        return Array.isArray(userList.data) && userList.data.length > 0;
+      } catch (error) {
+        lastError = error;
+        if (attempt < CLERK_LOOKUP_MAX_ATTEMPTS) {
+          await sleep(CLERK_LOOKUP_RETRY_DELAY_MS);
+        }
+      }
+    }
+
+    throw new Error(describeUnknownError(lastError));
+  };
+}
+
+export async function findMissingClerkFixtureAccounts(fixtures, fixtureExists) {
+  const missing = [];
+  const warnings = [];
+
+  for (const fixture of fixtures) {
+    if (!looksLikeEmailAddress(fixture.identifierValue)) {
+      continue;
+    }
+
+    const exists = await fixtureExists(fixture.identifierValue);
+    if (exists) {
+      continue;
+    }
+
+    const message = `${fixture.label}: ${fixture.identifierKey}=${fixture.identifierValue} is set locally but no Clerk user with that email exists in the current Clerk instance`;
+
+    if (fixture.autoReconciled === true) {
+      warnings.push(
+        `${message}. The E2E Clerk helper will create or repair this mutable fixture automatically before sign-in.`,
+      );
+      continue;
+    }
+
+    missing.push(message);
+  }
+
+  return { missing, warnings };
 }
 
 function collectRequirements({ scenario, variant, withOauth }) {
@@ -263,7 +394,7 @@ export function validateClerkRedirectEnv(
   );
 }
 
-export function main() {
+export async function main() {
   const { scenario, variant, withOauth } = parseArgs(process.argv.slice(2));
 
   const loadedEnv = loadScenarioEnv({
@@ -279,6 +410,7 @@ export function main() {
   const missing = [];
   const aliasWarnings = [];
   const optionalWarnings = collectOptionalWarnings();
+  const requiredFixtures = [];
   const redirectEnvErrors = validateClerkRedirectEnv(
     process.env,
     process.env.NODE_ENV,
@@ -319,6 +451,13 @@ export function main() {
         `${group.label} password uses legacy alias ${password.key}; migrate to ${group.password[0]}`,
       );
     }
+
+    requiredFixtures.push({
+      label: group.label,
+      identifierKey: username.key,
+      identifierValue: username.value,
+      autoReconciled: AUTO_RECONCILED_GROUPS.has(groupName),
+    });
   }
 
   for (const orgName of orgs) {
@@ -339,6 +478,30 @@ export function main() {
 
   if (redirectEnvErrors.length > 0) {
     missing.push(...redirectEnvErrors);
+  }
+
+  if (missing.length === 0) {
+    try {
+      const fixtureExists = createClerkFixtureLookup();
+      const fixtureAccountStatus = await findMissingClerkFixtureAccounts(
+        requiredFixtures,
+        fixtureExists,
+      );
+
+      if (fixtureAccountStatus.missing.length > 0) {
+        missing.push(...fixtureAccountStatus.missing);
+      }
+
+      if (fixtureAccountStatus.warnings.length > 0) {
+        optionalWarnings.push(...fixtureAccountStatus.warnings);
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'unknown Clerk lookup failure';
+      missing.push(
+        `Unable to verify Clerk fixture accounts against the current Clerk instance: ${errorMessage}`,
+      );
+    }
   }
 
   if (missing.length > 0) {
@@ -368,5 +531,10 @@ export function main() {
 // Only run main() if this file is executed directly via `node`, not when imported
 const isDirectlyExecuted = process.argv[1] === fileURLToPath(import.meta.url);
 if (isDirectlyExecuted && typeof process.env.VITEST === 'undefined') {
-  main();
+  main().catch((error) => {
+    const errorMessage =
+      error instanceof Error ? error.message : 'unknown E2E auth env failure';
+    console.error(`❌ Failed to validate Clerk E2E env: ${errorMessage}`);
+    process.exit(1);
+  });
 }

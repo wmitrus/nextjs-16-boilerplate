@@ -183,7 +183,7 @@ Regression guard:
 
 Recovery procedure when CLIENT_FETCH_ERROR recurs:
 
-1. Verify `/api/auth/session` returns JSON (`curl http://localhost:3000/api/auth/session`)
+1. Verify `/api/auth/session` returns JSON on the local dev app (`curl http://localhost:3000/api/auth/session`)
 2. If it returns HTML, check for module-level framework calls in auth-related shared modules
 3. Touch the route file (`touch src/app/api/auth/[...nextauth]/route.ts`) to force recompile
 4. If touch does not fix it, run `rm -rf .next` and restart the dev server
@@ -256,6 +256,26 @@ Preferred pattern:
 
 ## 4. Implementation Shape Anti-Patterns
 
+### 4.0 Ad Hoc API Response Envelopes
+
+Do not:
+
+- hand-roll JSON response envelopes in App Router route handlers when the shared ResponseService already fits
+- mix raw `NextResponse.json(...)` payload shapes with `createSuccessResponse()` / `createServerErrorResponse()` siblings in the same API surface
+- skip `withErrorHandler()` on normal application APIs and then duplicate exception mapping by hand in each route
+
+Why this is banned:
+
+- it creates response-shape drift across the repository
+- client code and tests stop being able to rely on the shared `status` envelope
+- error handling becomes inconsistent and repetitive
+
+Preferred pattern:
+
+- use `src/shared/lib/api/response-service.ts` helpers for JSON API success/error responses
+- use `src/shared/lib/api/with-error-handler.ts` for normal route-handler exception mapping
+- take raw `Response` / `NextResponse` exceptions only for protocol-specific endpoints such as redirects, streaming, or non-JSON transports
+
 ### 4.1 Dynamic Bracket Dispatch
 
 Do not write:
@@ -326,13 +346,92 @@ Do not:
 
 - over-mock DB-backed adapters when the failure mode is schema or integration sensitive
 - write DI mocks as `if (token === SYMBOL)` chains
+- reference interface mock methods through `vi.mocked(object.method)` when the object
+  can be typed as `vi.Mocked<Interface>` instead
 
 Preferred pattern:
 
 - add `*.db.test.ts` for Drizzle adapters
 - use `Map<symbol, unknown>` for DI token resolution in tests
+- type object mocks as `vi.Mocked<Interface>` and call `mockObject.method.mockResolvedValue(...)`
+  directly
 
-### 4.6 Date-Sensitive Tests With Fixed Future Timestamps
+### 4.6 Sparse Dynamic State Typed As Full Records
+
+Do not model per-row, per-user, per-organization, or request-keyed sparse state as:
+
+```typescript
+const [rowState, setRowState] = useState<Record<string, RowState>>({});
+```
+
+when the code later reads arbitrary runtime keys:
+
+```typescript
+const state = rowState[row.id] ?? 'idle';
+```
+
+Why this is banned:
+
+- `Record<string, T>` tells TypeScript every string key exists, which is false for sparse UI state
+- Codacy and type-aware linters then report `?.` / `??` as unnecessary
+- accepting the quick fix removes real runtime protection and can crash UI when a row has no state entry
+
+Preferred pattern:
+
+- use `Partial<Record<string, T>>` for object-backed sparse state
+- use `Map<string, T>` when mutation ergonomics or key provenance matter
+- keep `?.` and `??` fallback logic when absent keys are valid runtime states
+
+### 4.7 Promise-Returning React Event Handlers
+
+Do not pass an async function directly to JSX attributes that expect a void-returning
+handler:
+
+```tsx
+<button onClick={() => handleDelete(id)} />
+<form onSubmit={handleSubmit} />
+```
+
+Why this is banned:
+
+- React does not await event handler promises
+- thrown or newly introduced errors can become unhandled rejections
+- Codacy flags this repeatedly as HIGH error-prone
+
+Preferred pattern:
+
+```tsx
+<button onClick={() => void handleDelete(id)} />
+<form onSubmit={(event) => void handleSubmit(event)} />
+```
+
+Async handlers must still contain their own user-facing error handling. The `void`
+wrapper is the JSX boundary marker, not a substitute for `try/catch`.
+
+### 4.8 Loose String Schemas For Finite Domain Options
+
+Do not parse finite domain options with `z.string()` when downstream logic assumes a
+closed set:
+
+```typescript
+const bodySchema = z.object({
+  resource: z.string(),
+});
+```
+
+Why this is banned:
+
+- downstream template literals and maps see `unknown` or broad `string` values
+- scanners report avoidable error-prone findings
+- future code can accidentally treat unchecked strings as domain values
+
+Preferred pattern:
+
+- use `z.enum(...)` or an existing typed schema for finite options
+- use the parsed enum value in downstream predicates, maps, and mutation inputs
+- keep separate cross-field validation for relationships such as resource/action compatibility
+
+### 4.9 Date-Sensitive Tests With Fixed Future Timestamps
 
 Do not hard-code "future" timestamps in tests for expiry-sensitive flows.
 

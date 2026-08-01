@@ -170,9 +170,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       );
 
       // 2. Replay Protection
-      if (input._replayToken) {
-        await validateReplayToken(input._replayToken, context);
-      }
+      await validateReplayToken(input._replayToken, context);
 
       // 3. Validate Input
       const { _replayToken, ...pureInput } = input;

@@ -33,7 +33,7 @@ The CI/CD setup is implemented with GitHub Actions. It covers:
 ## Key Pipeline Behaviors
 
 - **PR Validation** runs on pull requests to `main` and blocks PRs originating from `main`.
-- **Preview Deploy** validates preview env in GitHub Actions, then triggers a normal `vercel deploy` so Vercel builds remotely and runs preview DB migrations against Neon deployment-scoped branch variables before LHCI audits the resulting preview URL.
+- **Preview Deploy** validates preview env in GitHub Actions, then triggers a normal `vercel deploy` with GitHub metadata (`githubDeployment=1`, PR head ref, PR head SHA) so Vercel builds remotely and Neon can resolve deployment-scoped preview branch variables before LHCI audits the resulting preview URL.
 - **Production Deploy** runs on pushes to `main`, skips docs-only changes, and owns the real Vercel production rollout.
 - **Release** runs semantic-release in a separate workflow file only after the `Production Deployment` workflow completes successfully on `main`.
 - **New Relic Change Tracking** runs as the final workflow on published releases, resolves the released semantic version and tagged commit, and emits the production deployment event independently of the release workflow rerun path.
@@ -74,6 +74,8 @@ This repository uses two different deployment ownership models:
    - Vercel owns the actual preview build because Neon automated preview branching injects branch-specific connection strings at deployment time.
    - Keep the Vercel Preview Build Command set to `pnpm db:migrate:prod && pnpm build`.
    - Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
+   - If preview deployments are created with the Vercel CLI, pass GitHub metadata via `--meta`. Without `githubDeployment=1` and `githubCommitRef`, Vercel does not link the deployment to the PR branch, and Neon Preview Branching cannot inject branch-specific database variables.
+   - The preview workflow must verify the created deployment through Vercel's deployment API and fail if the expected PR branch/SHA metadata is missing.
 
 2. **Production Deployments**
    - GitHub Actions remains the deployment authority.
@@ -84,6 +86,7 @@ This repository uses two different deployment ownership models:
 Why the split exists:
 
 - Neon preview branches inject deployment-scoped database variables for the specific preview deployment.
+- Vercel CLI deployments need explicit Git provider metadata before branch-specific environment variables and Neon preview branch injection can resolve correctly.
 - A local prebuild flow can migrate a different database than the final preview deployment uses.
 - Production does not depend on preview-branch injection, so the GitHub Actions-controlled prebuilt flow remains valid there.
 

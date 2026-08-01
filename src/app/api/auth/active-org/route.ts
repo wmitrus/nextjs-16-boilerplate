@@ -1,15 +1,18 @@
+import { eq } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { connection } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { z } from 'zod';
 
-import { AUTHORIZATION } from '@/core/contracts';
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import type { MembershipRepository } from '@/core/contracts/repositories';
+import type { DrizzleDb } from '@/core/db/types';
 import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { authOptions } from '@/modules/auth/infrastructure/authjs/auth';
+import { organizationsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
 
 const bodySchema = z.object({
   organizationId: z.uuid(),
@@ -49,10 +52,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const membershipRepository =
-      getAppContainer().resolve<MembershipRepository>(
-        AUTHORIZATION.MEMBERSHIP_REPOSITORY,
-      );
+    const container = getAppContainer();
+    const membershipRepository = container.resolve<MembershipRepository>(
+      AUTHORIZATION.MEMBERSHIP_REPOSITORY,
+    );
     const isMember = await membershipRepository.isMember(
       userId,
       parsed.data.organizationId,
@@ -62,6 +65,20 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json(
         { error: 'Organization membership required' },
         { status: 403 },
+      );
+    }
+
+    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+    const organizationRows = await db
+      .select({ status: organizationsTable.status })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, parsed.data.organizationId))
+      .limit(1);
+
+    if (organizationRows[0]?.status === 'archived') {
+      return Response.json(
+        { error: 'Archived organizations cannot be set as active' },
+        { status: 409 },
       );
     }
   } catch (err) {

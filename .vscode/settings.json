@@ -232,6 +232,15 @@
     },
     { "text": "Never collapse the description into a single paragraph." }
   ],
+  // "generate-local-commit.promptTemplate": "Generate exactly one Git commit message from the unified Git diff below.\n\nDo not reproduce, quote, translate, restructure, or output the diff as JSON. Do not explain your reasoning. Output only the content between [COMMIT] tags.\n\nUse Conventional Commits:\n<type>[optional scope]: <imperative description under 72 characters>\n\nTypes:\n- feat: new production functionality\n- fix: corrected broken production behavior\n- refactor: production restructuring without behavior changes\n- test: test-only changes\n- docs: documentation-only changes\n- style: formatting-only changes\n- build: dependencies, package manager, compiler, bundler, or build configuration\n- ci: CI/CD configuration\n- perf: measurable performance improvement\n- chore: maintenance not covered by another type\n- revert: reverted commit\n\nChoose the primary intent from the actual diff. Never use feat for test-only changes. Never use chore when build, ci, test, docs, style, perf, refactor, fix, or feat fits. When production code and tests change together, classify by the production change. Add a lowercase scope only when one area clearly dominates.\n\nFor more than one meaningful change, include 2 to 5 bullets with exactly one blank line after the subject. For a trivial single change, output only the subject.\n\nRequired format:\n[COMMIT]\n<type>[optional scope]: <description>\n\n- concrete change\n- concrete change\n[/COMMIT]\n\nDIFF START\n${diff}\nDIFF END",
+  "generate-local-commit.endpoint": "http://localhost:11434",
+  "generate-local-commit.model": "qwen2.5-coder:7b",
+  "generate-local-commit.maxTokens": 220,
+  "generate-local-commit.temperature": 0,
+  "generate-local-commit.contextRange": 0,
+  "generate-local-commit.useConventionalCommits": true,
+  "generate-local-commit.enableMessageCleanup": true,
+  "generate-local-commit.enableDebugMode": false,
   "chat.tools.terminal.autoApprove": {
     "/^cd /home/wojtek/projects/nextjs-16-boilerplate && pnpm exec drizzle-kit generate --name=post_reconcile_check --schema='\\./src/modules/\\*\\*/infrastructure/drizzle/schema\\.ts' --out=\\.tmp/drizzle-reconcile-check/generated --dialect=postgresql --driver=pglite$/": {
       "approve": true,

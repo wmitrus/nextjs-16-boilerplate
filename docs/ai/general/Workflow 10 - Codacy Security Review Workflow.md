@@ -167,6 +167,9 @@ Triage (Security & Auth Agent):
 1. Read the affected file in full.
 2. Identify the exact runtime context — what the code does, what inputs reach that line.
 3. Classify: Real Risk / Latent Risk / False Positive.
+   For Codacy HIGH `Error prone` TypeScript/JSX findings, explicitly separate
+   "security exploit path" from "reliability/type-safety cleanup" and apply SEC-24
+   unless the live code shows a concrete trust-boundary failure.
 4. Apply Key Decision Rules 1–3 to determine the resolution.
 5. If the finding matches a known SEC-XX entry, apply the documented correct pattern immediately.
 6. If the finding is new, define the correct pattern before implementation begins.

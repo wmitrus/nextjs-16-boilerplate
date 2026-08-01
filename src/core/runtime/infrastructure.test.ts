@@ -80,6 +80,31 @@ describe('runtime infrastructure process scope', () => {
     expect(createDbMock).toHaveBeenCalledTimes(2);
   });
 
+  it('does nothing when closing without active infrastructure', async () => {
+    const { closeInfrastructure } = await import('./infrastructure');
+
+    await expect(closeInfrastructure()).resolves.toBeUndefined();
+  });
+
+  it('rethrows database creation failures', async () => {
+    const failure = new Error('database unavailable');
+    createDbMock.mockImplementation(() => {
+      throw failure;
+    });
+
+    const { getInfrastructure } = await import('./infrastructure');
+
+    expect(() =>
+      getInfrastructure({
+        db: {
+          provider: 'drizzle',
+          driver: 'postgres',
+          url: 'postgres://localhost:5432/app',
+        },
+      }),
+    ).toThrow(failure);
+  });
+
   it('reuses cached infrastructure across module reloads', async () => {
     const close = vi.fn().mockResolvedValue(undefined);
     const runtime: DbRuntime = {

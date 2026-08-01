@@ -14,7 +14,7 @@ import {
 } from './authjs-auth';
 
 const isAuthjs = isAuthjsRuntime();
-const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+const baseURL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3100';
 const test = base;
 type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 const authTest = base.extend<
@@ -105,13 +105,49 @@ test.describe('Admin Hub (/admin)', () => {
     authTest('admin hub shows active section cards', async ({ authedPage }) => {
       await authedPage.goto('/admin');
       await expect(
-        authedPage.locator('a[href="/admin/waitlist"]'),
+        authedPage.getByRole('link', { name: /waitlist/i }),
       ).toBeVisible();
-      await expect(authedPage.locator('a[href="/admin/users"]')).toBeVisible();
       await expect(
-        authedPage.locator('a[href="/admin/invitations"]'),
+        authedPage.getByRole('link', {
+          name: /users browse, search, and manage/i,
+        }),
+      ).toBeVisible();
+      await expect(
+        authedPage.getByRole('link', { name: /organizations manage/i }),
+      ).toBeVisible();
+      await expect(
+        authedPage.getByRole('link', { name: /roles define and manage/i }),
+      ).toBeVisible();
+      await expect(
+        authedPage.getByRole('link', {
+          name: /rbac & policies review and manage/i,
+        }),
       ).toBeVisible();
     });
+
+    authTest(
+      'admin hub routes roles and rbac through organizations while invitations keep their own entry',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin');
+
+        await expect(
+          authedPage.getByRole('link', { name: /organizations manage/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', { name: /roles define and manage/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', {
+            name: /rbac & policies review and manage/i,
+          }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', {
+            name: /invitations send direct invitations to users/i,
+          }),
+        ).toBeVisible();
+      },
+    );
 
     authTest(
       'admin hub breadcrumb shows Administration link',
@@ -206,11 +242,393 @@ test.describe('Admin Invitations (/admin/invitations)', () => {
     });
 
     authTest(
-      'invitations page shows send invitation form',
+      'invitations page shows organization selection hub',
       async ({ authedPage }) => {
         await authedPage.goto('/admin/invitations');
         await expect(
-          authedPage.getByRole('heading', { name: 'Invitations', exact: true }),
+          authedPage.getByText(
+            /choose an organization before sending direct invitations/i,
+          ),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('link', { name: /open invitations/i }).first(),
+        ).toBeVisible();
+      },
+    );
+
+    authTest(
+      'canonical nested invitations page sends and revokes a pending invitation',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/invitations');
+
+        await authedPage
+          .getByRole('link', { name: /open invitations/i })
+          .first()
+          .click();
+
+        await expect(authedPage).toHaveURL(
+          /\/admin\/organizations\/[^/]+\/invitations$/,
+        );
+        await expect(
+          authedPage.getByRole('heading', { name: /invitations$/i }),
+        ).toBeVisible();
+
+        const inviteEmail = `e2e+invite-${Date.now().toString()}@example.com`;
+
+        const createInvitationResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'POST' &&
+              /\/api\/admin\/organizations\/[^/]+\/invitations$/.test(
+                response.url(),
+              )
+            );
+          },
+        );
+
+        await authedPage.getByLabel('Email address').fill(inviteEmail);
+        await authedPage
+          .getByRole('button', { name: /send invitation/i })
+          .click();
+
+        const createInvitationResponse = await createInvitationResponsePromise;
+        expect(createInvitationResponse.status()).toBe(201);
+        await expect(
+          authedPage.getByText(`Invitation sent to ${inviteEmail}`),
+        ).toBeVisible();
+
+        const invitationRow = authedPage
+          .locator('div.flex.items-center.justify-between')
+          .filter({ has: authedPage.getByText(inviteEmail, { exact: true }) });
+
+        await expect(invitationRow.getByText(/pending/i)).toBeVisible();
+
+        const revokeInvitationResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'DELETE' &&
+              /\/api\/admin\/organizations\/[^/]+\/invitations\/[^/]+$/.test(
+                response.url(),
+              )
+            );
+          },
+        );
+
+        await invitationRow.getByRole('button', { name: /revoke/i }).click();
+
+        const revokeInvitationResponse = await revokeInvitationResponsePromise;
+        expect(revokeInvitationResponse.status()).toBe(200);
+        await expect(invitationRow.getByText(/revoked/i)).toBeVisible();
+      },
+    );
+  });
+});
+
+test.describe('Admin Organizations (/admin/organizations)', () => {
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
+      !isAuthjs,
+      'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
+    );
+
+    authTest(
+      'organization archive and restore changes detail and list state',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await expect(organizationCard).toContainText(/active|available/i);
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+
+        await expect(authedPage).toHaveURL(/\/admin\/organizations\//);
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toBeVisible();
+
+        await authedPage
+          .getByRole('button', { name: /archive organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByText(/this organization is archived/i),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('button', { name: /restore organization/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toHaveCount(0);
+
+        await authedPage.getByRole('link', { name: /organizations/i }).click();
+        await expect(authedPage).toHaveURL(/\/admin\/organizations$/);
+
+        await authedPage
+          .getByRole('button', { name: /^archived\s+\d+$/i })
+          .click();
+
+        const archivedCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await expect(archivedCard).toContainText(/archived/i);
+        await expect(
+          archivedCard.getByRole('button', {
+            name: /restore before activating/i,
+          }),
+        ).toBeDisabled();
+
+        await archivedCard.getByRole('link', { name: /view details/i }).click();
+        await expect(
+          authedPage.getByRole('button', { name: /restore organization/i }),
+        ).toBeVisible();
+
+        await authedPage
+          .getByRole('button', { name: /restore organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toBeVisible();
+        await expect(
+          authedPage.getByText(/this organization is archived/i),
+        ).toHaveCount(0);
+      },
+    );
+
+    authTest(
+      'organization members page reassigns a non-owner member role and can restore it',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+
+        await authedPage.getByRole('link', { name: /manage roles/i }).click();
+
+        const customRoleName = `billing_manager_${Date.now().toString()}`;
+
+        const createRoleResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'POST' &&
+              response.url().includes('/api/admin/organizations/') &&
+              response.url().includes('/roles')
+            );
+          },
+        );
+
+        await authedPage
+          .getByPlaceholder('e.g. billing_manager')
+          .fill(customRoleName);
+        await authedPage.getByRole('button', { name: /create role/i }).click();
+
+        const createRoleResponse = await createRoleResponsePromise;
+        const createRoleJson = (await createRoleResponse.json()) as {
+          data?: {
+            role?: {
+              id?: string;
+            };
+          };
+        };
+        const customRoleId = createRoleJson.data?.role?.id;
+
+        if (!customRoleId) {
+          throw new Error('Create role response did not include role.id');
+        }
+
+        expect(customRoleId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        );
+
+        await expect(
+          authedPage.getByText(`Role created: ${customRoleName}`),
+        ).toBeVisible();
+
+        await authedPage.goto(authedPage.url().replace(/\/roles$/, '/members'));
+
+        await expect(authedPage).toHaveURL(/\/members$/);
+        await expect(
+          authedPage.getByRole('heading', { name: /members$/i }),
+        ).toBeVisible();
+
+        const bobRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText('bob@example.com'),
+        });
+        const bobRoleCell = bobRow.locator('td').nth(1);
+        const bobRoleSelect = bobRow.getByLabel(/role for bob@example.com/i);
+
+        await expect(
+          bobRoleCell.getByText(/^Current role: member$/),
+        ).toBeVisible();
+
+        const memberRoleId = await bobRoleSelect.inputValue();
+
+        if (!memberRoleId) {
+          throw new Error('Member role option not found for Bob');
+        }
+
+        await bobRoleSelect.selectOption(customRoleId);
+        const updateMemberResponsePromise = authedPage.waitForResponse(
+          (response) => {
+            return (
+              response.request().method() === 'PATCH' &&
+              /\/api\/admin\/organizations\/[^/]+\/members\/[^/]+$/.test(
+                response.url(),
+              )
+            );
+          },
+        );
+        await bobRow.getByRole('button', { name: /save role/i }).click();
+        const updateMemberResponse = await updateMemberResponsePromise;
+        const updateMemberPayload = updateMemberResponse
+          .request()
+          .postDataJSON() as { roleId?: string };
+
+        expect(updateMemberPayload.roleId).toBe(customRoleId);
+        expect(updateMemberResponse.status()).toBe(200);
+
+        await expect(
+          bobRoleCell.getByText(`Current role: ${customRoleName}`),
+        ).toBeVisible();
+        await expect(bobRow.getByText(/^saved$/i)).toBeVisible();
+
+        await bobRoleSelect.selectOption(memberRoleId);
+        await bobRow.getByRole('button', { name: /save role/i }).click();
+
+        await expect(
+          bobRoleCell.getByText(/^Current role: member$/),
+        ).toBeVisible();
+        await expect(bobRow.getByText(/^saved$/i)).toBeVisible();
+      },
+    );
+
+    authTest(
+      'archived organization members page disables role reassignment UI',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+        await authedPage
+          .getByRole('button', { name: /archive organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByText(/this organization is archived/i),
+        ).toBeVisible();
+
+        await authedPage.getByRole('link', { name: /manage members/i }).click();
+        await expect(authedPage).toHaveURL(/\/members$/);
+        await expect(
+          authedPage.getByText(
+            /role reassignment is disabled until the organization is restored/i,
+          ),
+        ).toBeVisible();
+
+        const bobRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText('bob@example.com'),
+        });
+
+        await expect(
+          bobRow.getByLabel(/role for bob@example.com/i),
+        ).toBeDisabled();
+        await expect(
+          bobRow.getByRole('button', { name: /save role/i }),
+        ).toBeDisabled();
+
+        await authedPage.getByRole('link', { name: /^acme corp hq$/i }).click();
+        await authedPage
+          .getByRole('button', { name: /restore organization/i })
+          .click();
+
+        await expect(
+          authedPage.getByRole('button', { name: /archive organization/i }),
+        ).toBeVisible();
+      },
+    );
+
+    authTest(
+      'organization members page blocks demoting the last owner',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/organizations');
+
+        const organizationCard = authedPage
+          .locator('section')
+          .filter({
+            has: authedPage.getByRole('link', { name: /view details/i }),
+          })
+          .first();
+
+        await organizationCard
+          .getByRole('link', { name: /view details/i })
+          .click();
+        await authedPage.getByRole('link', { name: /manage members/i }).click();
+
+        const aliceRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText('alice@example.com'),
+        });
+        const currentAdminRow = authedPage.locator('tr').filter({
+          has: authedPage.getByText(/e2e\+authjs-admin-shared-/i),
+        });
+
+        await expect(
+          aliceRow.getByText(/current role:\s*owner/i),
+        ).toBeVisible();
+        await expect(
+          currentAdminRow.getByText(/current role:\s*owner/i),
+        ).toBeVisible();
+
+        await aliceRow
+          .getByLabel(/role for alice@example.com/i)
+          .selectOption({ label: 'member (system)' });
+        await aliceRow.getByRole('button', { name: /save role/i }).click();
+
+        await expect(
+          aliceRow.getByText(/current role:\s*member/i),
+        ).toBeVisible();
+        await expect(aliceRow.getByText(/^saved$/i)).toBeVisible();
+
+        await currentAdminRow
+          .getByLabel(/role for e2e\+authjs-admin-shared-.*@example.com/i)
+          .selectOption({ label: 'member (system)' });
+        await currentAdminRow
+          .getByRole('button', { name: /save role/i })
+          .click();
+
+        await expect(
+          currentAdminRow.getByText(
+            /last owner membership cannot be reassigned/i,
+          ),
+        ).toBeVisible();
+        await expect(
+          currentAdminRow.getByText(/current role:\s*owner/i),
         ).toBeVisible();
       },
     );

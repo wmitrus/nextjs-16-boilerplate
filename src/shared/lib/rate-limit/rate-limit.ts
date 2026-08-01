@@ -7,13 +7,16 @@ import { env } from '@/core/env';
 /**
  * Initialize Upstash Redis client if credentials are provided.
  */
-const redis =
-  env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: env.UPSTASH_REDIS_REST_URL,
-        token: env.UPSTASH_REDIS_REST_TOKEN,
-      })
-    : undefined;
+const shouldUseUpstashRateLimit =
+  env.NODE_ENV === 'production' &&
+  Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
+
+const redis = shouldUseUpstashRateLimit
+  ? new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  : undefined;
 
 /**
  * Production rate limiter using Upstash Redis.

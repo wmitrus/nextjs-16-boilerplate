@@ -82,6 +82,14 @@ A strong task brief should contain, when relevant:
 - evidence expectations
 - open questions or blockers
 
+For tasks that depend on Leantime workflow execution, include a short
+operational smoke-test checklist under environment or preconditions so a fresh
+session has an explicit first-step diagnostic path.
+
+For tasks that introduce or change JSON API route handlers, make the response
+contract explicit in the brief and reference the shared ResponseService pattern
+when it is expected.
+
 ## Working Mode
 
 - keep reusable workflow docs generic
@@ -91,6 +99,9 @@ A strong task brief should contain, when relevant:
 - preserve explicit non-goals so scope does not drift silently
 - capture what evidence will be required to call the task done
 - prefer stable scenario IDs when the task is scenario-driven
+- when Leantime is required, include the smallest operational check first:
+  exact env-file path, required vars, chosen CLI entrypoint, and one falsifying
+  command such as `pnpm lt -- list`
 
 ## Output Shape
 

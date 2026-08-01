@@ -101,8 +101,15 @@ Always preserve:
 Always follow the repository's mandatory coding patterns from
 `docs/ai/general/04 - Implementation Agents.md`, including:
 
+- shared `response-service.ts` helpers plus `with-error-handler.ts` for normal JSON App Router route handlers unless a protocol-specific exception is required
+
 - `Map<symbol, unknown>` for DI mock token resolution
 - `sanitizeRedirectUrl()` before forwarding redirect-style params
+- `z.uuid()` or an existing UUID schema for App Router path params before they are used in Drizzle predicates or mutation inputs for Postgres `uuid` columns; use only `parseResult.data.*` after validation and add a malformed-ID `400` regression test
+- `Partial<Record<string, T>>` or `Map<string, T>` for sparse dynamic UI state; do not model absent runtime keys as full `Record<string, T>`
+- `onClick={() => void handleX(...)}` and `onSubmit={(event) => void handleSubmit(event)}` for async React handlers
+- `vi.Mocked<Interface>` object mocks instead of repeated `vi.mocked(object.method)` unbound method references
+- `z.enum(...)` or existing typed schemas for finite domain options instead of broad `z.string()` plus downstream assumptions
 - `Record<AllowedKeys, fn>` dispatch maps instead of `obj[dynamicKey]()`
 - `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers instead of repeated `result[key] = ...` mutation chains in `src/**` runtime helpers
 - shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats

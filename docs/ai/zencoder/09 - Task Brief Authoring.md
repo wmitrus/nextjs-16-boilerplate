@@ -54,6 +54,11 @@ Use [COPILOT_TASK_BRIEF_TEMPLATE.md](../templates/COPILOT_TASK_BRIEF_TEMPLATE.md
 
 The filename is Copilot-branded, but the template content is reusable for Zencoder as well.
 
+For tasks that depend on Leantime workflow execution, include a short
+operational smoke-test checklist under environment or preconditions so a fresh
+session has an explicit first-step diagnostic path instead of rediscovering the
+setup ad hoc.
+
 ## How To Start The Task
 
 Recommended flow:

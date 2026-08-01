@@ -1,6 +1,7 @@
+import { DEFAULT_APP_ENTRY_URL } from '@/shared/lib/routing/default-app-entry';
 import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
-export const DEFAULT_APP_ENTRY_URL = '/dashboard';
+export { DEFAULT_APP_ENTRY_URL };
 const BOOTSTRAP_START_PATH = '/auth/bootstrap/start';
 
 export function buildBootstrapRedirectUrl(

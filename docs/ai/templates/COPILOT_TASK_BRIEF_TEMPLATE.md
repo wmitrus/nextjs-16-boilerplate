@@ -64,6 +64,16 @@ If omitted, the workflow may use straight-through execution.
 
 List accounts, feature flags, local services, env vars, seeded data, or branch context required.
 
+For tasks that require Leantime workflow execution, include a short operational
+smoke-test checklist here before the main implementation steps. Prefer a flat
+checklist such as:
+
+- [ ] Confirm the intended env file path (`.env.leantime` or `.env.leantime-dev`)
+- [ ] Confirm required Leantime vars are present for the target command (`LEANTIME_URL`, `LEANTIME_API_KEY`)
+- [ ] Confirm the CLI entrypoint to use (`pnpm lt` for on-prem, `pnpm lt:dev` for local Podman)
+- [ ] Run the smallest falsifying command first (`pnpm lt -- list` or equivalent)
+- [ ] If command execution is unavailable in the current session, record that as a session-tooling limitation rather than a repository defect
+
 ## Evidence Expectations
 
 State what artifacts, logs, screenshots, traces, test results, or reports should be produced.

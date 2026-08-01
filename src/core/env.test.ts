@@ -82,6 +82,15 @@ describe('env', () => {
     expect(env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL).toBeUndefined();
   });
 
+  it('defaults REGISTRATION_MODE to invite-only', async () => {
+    setEnv({ REGISTRATION_MODE: undefined });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.REGISTRATION_MODE).toBe('invite-only');
+  });
+
   it('validates logger env variables', async () => {
     setEnv({
       LOG_LEVEL: 'debug',
@@ -406,12 +415,48 @@ describe('validateTenancyConfigValues', () => {
 });
 
 describe('validateAuthProviderConfigValues', () => {
-  it('passes for authjs without Clerk keys', async () => {
+  it('passes for authjs outside production without NEXTAUTH_SECRET', async () => {
     vi.resetModules();
     const { validateAuthProviderConfigValues } = await import('./env');
 
     expect(() =>
-      validateAuthProviderConfigValues('authjs', undefined, undefined),
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        undefined,
+        'development',
+      ),
+    ).not.toThrow();
+  });
+
+  it('throws for authjs in production when NEXTAUTH_SECRET is missing', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        undefined,
+        'production',
+      ),
+    ).toThrow('AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET');
+  });
+
+  it('passes for authjs in production when NEXTAUTH_SECRET is present', async () => {
+    vi.resetModules();
+    const { validateAuthProviderConfigValues } = await import('./env');
+
+    expect(() =>
+      validateAuthProviderConfigValues(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'production',
+      ),
     ).not.toThrow();
   });
 
@@ -572,7 +617,7 @@ describe('validateVerificationConfigValues', () => {
     ).not.toThrow();
   });
 
-  it('passes when production has closed registration and no bypass flags', async () => {
+  it('passes when production has disabled registration and no bypass flags', async () => {
     vi.resetModules();
     const { validateVerificationConfigValues } = await import('./env');
     expect(() =>
@@ -580,7 +625,7 @@ describe('validateVerificationConfigValues', () => {
     ).not.toThrow();
   });
 
-  it('passes when non-production has closed registration without bypass', async () => {
+  it('passes when non-production has disabled registration without bypass', async () => {
     vi.resetModules();
     const { validateVerificationConfigValues } = await import('./env');
     expect(() =>

@@ -42,9 +42,10 @@ describe('BootstrapErrorUI', () => {
         }),
       ).toBeInTheDocument();
       expect(screen.getByText(expectedMessage)).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: 'Try Again' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
       expect(
         screen.getByRole('button', { name: 'Sign Out' }),
       ).toBeInTheDocument();
@@ -82,6 +83,7 @@ describe('BootstrapErrorUI', () => {
         <BootstrapErrorUI
           error="db_error"
           dbDriver="postgres"
+          nodeEnv="development"
           authProvider="clerk"
         />,
       );
@@ -97,6 +99,35 @@ describe('BootstrapErrorUI', () => {
       render(<BootstrapErrorUI error="db_error" authProvider="clerk" />);
       expect(screen.getByText(/pnpm db:pglite:reset/)).toBeInTheDocument();
     });
+
+    it.each(['preview', 'production'] as const)(
+      'does not show local database instructions in Vercel %s',
+      (deploymentEnvironment) => {
+        render(
+          <BootstrapErrorUI
+            error="db_error"
+            dbDriver="postgres"
+            deploymentEnvironment={deploymentEnvironment}
+            nodeEnv="production"
+            authProvider="authjs"
+          />,
+        );
+
+        expect(
+          screen.getByText(/server-side configuration problem/i),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/pnpm db:dev:up/)).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/pnpm db:dev:migrate/),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/pnpm db:dev:reset --force/),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/pnpm db:pglite:reset/),
+        ).not.toBeInTheDocument();
+      },
+    );
   });
 
   describe('Sign Out button', () => {
@@ -123,6 +154,47 @@ describe('BootstrapErrorUI', () => {
         callbackUrl: '/auth/signin',
       });
       expect(clerkSignOutMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Try Again link', () => {
+    it('restarts bootstrap through the start route with the default app target', () => {
+      render(<BootstrapErrorUI error="db_error" authProvider="authjs" />);
+
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
+    });
+
+    it('preserves a safe redirect_url for the retry bootstrap attempt', () => {
+      render(
+        <BootstrapErrorUI
+          error="db_error"
+          authProvider="authjs"
+          redirectUrl="/dashboard"
+        />,
+      );
+
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
+    });
+
+    it('sanitizes an unsafe redirect_url before retrying bootstrap', () => {
+      render(
+        <BootstrapErrorUI
+          error="db_error"
+          authProvider="authjs"
+          redirectUrl="https://evil.example/phish"
+        />,
+      );
+
+      expect(screen.getByRole('link', { name: 'Try Again' })).toHaveAttribute(
+        'href',
+        '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      );
     });
   });
 });

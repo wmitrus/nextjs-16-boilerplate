@@ -42,6 +42,7 @@ For any orchestrated task:
 - use the task's requirement docs, checklists, or scenario matrix as the verification source of truth
 - if `implementation-plan.md` exists, use it to understand intended scenario coverage and sequencing
 - if the task adds or restructures E2E coverage, read `docs/usage/05 - Playwright E2E Architecture.md` before deciding where the spec belongs or which fixture model it should use
+- before changing Clerk auth/bootstrap/provisioning fixture setup, read `scripts/e2e-clerk-fixtures.md`, `e2e/clerk-auth.ts`, and `e2e/runtime-profile.ts`
 
 ## Auth-Flow Note
 
@@ -59,6 +60,7 @@ For any auth/bootstrap/onboarding E2E verification:
 - Public, demo, and explicitly E2E-allowed routes must stay unauthenticated unless authenticated behavior is itself the subject under test.
 - Mixed files should be split by scenario semantics before optimization rather than forcing one fixture model across the entire suite.
 - New specs should be mapped into the existing suite families from `docs/usage/05 - Playwright E2E Architecture.md` before creating a parallel test surface.
+- Clerk fixtures keep a stable/generated split: env-driven users and org/provider organizations are reconciled and reused, while generated hosted sign-up users and empty default orgs are cleaned with strict predicates.
 
 ## Example prompts to try
 

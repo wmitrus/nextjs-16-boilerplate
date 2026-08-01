@@ -75,7 +75,7 @@ export function ExternalFetchExample() {
         />
         <button
           type="button"
-          onClick={() => handleFetch()}
+          onClick={() => void handleFetch()}
           disabled={loading}
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
@@ -86,21 +86,21 @@ export function ExternalFetchExample() {
       <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
         <button
           type="button"
-          onClick={() => handleFetch('https://api.github.com/zen')}
+          onClick={() => void handleFetch('https://api.github.com/zen')}
           className="p-1 text-left text-blue-600 hover:underline"
         >
           • Allowed: api.github.com
         </button>
         <button
           type="button"
-          onClick={() => handleFetch('https://api.clerk.com/v1/health')}
+          onClick={() => void handleFetch('https://api.clerk.com/v1/health')}
           className="p-1 text-left text-blue-600 hover:underline"
         >
           • Allowed: api.clerk.com
         </button>
         <button
           type="button"
-          onClick={() => handleFetch('https://google.com')}
+          onClick={() => void handleFetch('https://google.com')}
           className="p-1 text-left text-red-600 hover:underline"
         >
           • Blocked: google.com
@@ -108,7 +108,7 @@ export function ExternalFetchExample() {
         <button
           type="button"
           onClick={() =>
-            handleFetch('http://169.254.169.254/latest/meta-data/')
+            void handleFetch('http://169.254.169.254/latest/meta-data/')
           }
           className="p-1 text-left text-red-600 hover:underline"
         >

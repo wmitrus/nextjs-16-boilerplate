@@ -88,6 +88,30 @@ warn_client_server_smells() {
   fi
 }
 
+fail_unvalidated_route_param_uuid_sinks() {
+  local matches=""
+
+  # App Router params are untrusted strings. A raw params.* value must never be
+  # aliased as an id or passed directly into a Drizzle eq(...) predicate, because
+  # UUID columns fail at Postgres bind time with 22P02 before application-level
+  # not-found handling can run. Route handlers must parse through z.uuid() or an
+  # equivalent schema and use result.data.* in DB queries.
+  matches="$(
+    {
+      rg -n "const\s+[A-Za-z0-9_]*Id\s*=\s*params\.[A-Za-z0-9_]+" src/app/api --glob 'route.ts' || true
+      rg -n "eq\([^,\n]+,\s*params\.[A-Za-z0-9_]+" src/app/api --glob 'route.ts' || true
+    } | sort -u
+  )"
+
+  if [[ -n "$matches" ]]; then
+    echo "FAIL: route params must be schema-validated before UUID DB predicates"
+    echo "$matches"
+    EXIT_CODE=1
+  else
+    echo "PASS: route params must be schema-validated before UUID DB predicates"
+  fi
+}
+
 print_section "Architecture lint"
 
 print_section "Layer dependency checks"
@@ -169,6 +193,9 @@ warn_matches \
   --glob '!**/*.test.*' \
   --glob '!**/*.mock.*' \
   --glob '!src/modules/auth/index.ts'
+
+print_section "Route handler safety checks"
+fail_unvalidated_route_param_uuid_sinks
 
 print_section "Dependency graph checks"
 run_optional_pnpm_check "skott dependency graph check" pnpm skott:check:only

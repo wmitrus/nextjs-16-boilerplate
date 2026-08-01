@@ -87,6 +87,17 @@ For non-trivial tasks:
 7. Run validation at the right level
 8. Ensure final artifacts and residual risks are documented
 
+For tasks that introduce or materially change JSON API route handlers, make the
+ResponseService decision explicit in the task artifacts: either the route follows
+`src/shared/lib/api/response-service.ts` plus `with-error-handler.ts`, or the
+artifact records the protocol-specific reason for an exception.
+
+For tasks that introduce or materially change App Router route handlers with UUID path
+segments, make the SEC-23 handoff explicit: Security & Auth verifies UUID params are
+parsed before DB/repository use, Implementation uses only parsed schema data in UUID
+predicates or mutation inputs, and Validation requires a malformed-ID `400` test
+proving DB/repository/mutation calls are not reached.
+
 ## Specialist Selection Rules
 
 - Use `06 - Debug Investigation` first for unclear, intermittent, env-driven, or

@@ -15,6 +15,7 @@ import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import { createReplayToken } from '@/security/actions/replay-token';
 import { createSecureAction } from '@/security/actions/secure-action';
 import {
   getSecurityContext,
@@ -52,6 +53,10 @@ describe('Server Actions Integration', () => {
   }) => {
     return { greeting: `Hello ${input.name}`, userId: context.user?.id };
   };
+
+  function makeSecureInput(name: string) {
+    return { name, _replayToken: createReplayToken() };
+  }
 
   beforeEach(() => {
     container = getAppContainer();
@@ -110,7 +115,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Zencoder' });
+    const result = await action(makeSecureInput('Zencoder'));
 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
@@ -142,7 +147,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Zencoder' });
+    const result = await action(makeSecureInput('Zencoder'));
 
     expect(result.status).toBe('unauthorized');
   });
@@ -156,7 +161,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Zencoder' });
+    const result = await action(makeSecureInput('Zencoder'));
 
     expect(result.status).toBe('unauthorized');
   });
@@ -174,7 +179,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Z' }); // Too short
+    const result = await action(makeSecureInput('Z')); // Too short
 
     expect(result.status).toBe('validation_error');
     if (result.status === 'validation_error') {
@@ -199,7 +204,7 @@ describe('Server Actions Integration', () => {
     const oldTimestamp = Date.now() - 10 * 60 * 1000; // 10 mins ago
     const result = await action({
       name: 'Zencoder',
-      _replayToken: `${oldTimestamp}|nonce`,
+      _replayToken: `${oldTimestamp}|nonce-123`,
     });
 
     expect(result.status).toBe('error');
@@ -225,10 +230,31 @@ describe('Server Actions Integration', () => {
     const now = Date.now();
     const result = await action({
       name: 'Zencoder',
-      _replayToken: `${now}|nonce`,
+      _replayToken: `${now}|nonce-123`,
     });
 
     expect(result.status).toBe('success');
+  });
+
+  it('should fail when replay token is missing', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_123',
+      email: 'test@example.com',
+    });
+    vi.mocked(authorizationService.can).mockResolvedValue(true);
+
+    const action = createSecureAction({
+      schema,
+      dependencies: getSecureActionDependencies(),
+      handler: testHandler,
+    });
+
+    const result = await action({ name: 'Zencoder' });
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.error).toBe('Replay protection token missing');
+    }
   });
 
   it('should return unauthorized when authorization policy denies access (policy-level denial)', async () => {
@@ -244,7 +270,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Zencoder' });
+    const result = await action(makeSecureInput('Zencoder'));
 
     expect(result.status).toBe('unauthorized');
   });
@@ -264,7 +290,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Zencoder' });
+    const result = await action(makeSecureInput('Zencoder'));
 
     expect(result.status).toBe('tenant_context_required');
   });
@@ -284,7 +310,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Zencoder' });
+    const result = await action(makeSecureInput('Zencoder'));
 
     expect(result.status).toBe('tenant_context_required');
   });
@@ -304,7 +330,7 @@ describe('Server Actions Integration', () => {
       handler: testHandler,
     });
 
-    const result = await action({ name: 'Zencoder' });
+    const result = await action(makeSecureInput('Zencoder'));
 
     expect(result.status).toBe('tenant_membership_required');
   });

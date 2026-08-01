@@ -29,6 +29,7 @@ Real agent file: [`.github/agents/workflow-orchestrator.agent.md`](../../../.git
 - When you want all task artifacts under one `.copilot/tasks/{task_id}/` folder
 - When work must be designed, implemented, validated, and documented as one controlled flow
 - When you want to start from requirements, description, and referenced files instead of manually stitching the workflow together
+- When an API task needs the response-contract rule captured in `constraints.md` or `implementation-plan.md` before implementation starts
 
 ## Auth-Flow Note
 

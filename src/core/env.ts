@@ -103,7 +103,7 @@ export const env = createEnv({
       .default('verified-only'),
     REGISTRATION_MODE: z
       .enum(['open', 'invite-only', 'disabled'])
-      .default('open'),
+      .default('invite-only'),
     AUTH_EXPOSE_RESET_TOKEN_IN_DEV: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .optional()
@@ -370,7 +370,19 @@ export function validateAuthProviderConfigValues(
   authProvider: string | undefined,
   clerkSecretKey: string | undefined,
   clerkPublishableKey: string | undefined,
+  nextAuthSecret?: string | undefined,
+  nodeEnv?: string | undefined,
 ): void {
+  if (authProvider === 'authjs') {
+    const isProductionLike = nodeEnv === 'production';
+    if (isProductionLike && !nextAuthSecret?.trim()) {
+      throw new Error(
+        '[env] AUTH_PROVIDER=authjs requires NEXTAUTH_SECRET to be set when NODE_ENV=production.',
+      );
+    }
+    return;
+  }
+
   if (authProvider !== 'clerk') {
     return;
   }
@@ -397,6 +409,8 @@ export function validateAuthProviderConfig(): void {
     env.AUTH_PROVIDER,
     env.CLERK_SECRET_KEY,
     env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    env.NEXTAUTH_SECRET,
+    env.NODE_ENV,
   );
 }
 
@@ -446,7 +460,7 @@ export function validateVerificationConfigValues(
 
   if (isProduction && isOpen) {
     throw new Error(
-      '[env] REGISTRATION_MODE=open is not allowed in production without a real email delivery adapter. Set REGISTRATION_MODE=closed.',
+      '[env] REGISTRATION_MODE=open is not allowed in production without a real email delivery adapter. Set REGISTRATION_MODE=invite-only or REGISTRATION_MODE=disabled.',
     );
   }
 

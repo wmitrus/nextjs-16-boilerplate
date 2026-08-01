@@ -5,6 +5,11 @@ export const SEEDED_TENANT_IDS = {
   globex: '10000000-0000-4000-8000-000000000002',
 } as const;
 
+export const SEEDED_ORGANIZATION_IDS = {
+  acmeHq: '15000000-0000-4000-8000-000000000001',
+  globexHq: '15000000-0000-4000-8000-000000000002',
+} as const;
+
 type RuntimeTenancyMode = 'single' | 'personal' | 'org';
 type RuntimeTenantContextSource = 'provider' | 'db';
 type CrossProviderEmailLinking = 'disabled' | 'verified-only';

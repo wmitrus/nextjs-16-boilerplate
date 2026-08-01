@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateClerkRedirectEnv } from './check-e2e-auth-env.mjs';
+import {
+  findMissingClerkFixtureAccounts,
+  validateClerkRedirectEnv,
+} from './check-e2e-auth-env.mjs';
 
 describe('validateClerkRedirectEnv', () => {
   const CORRECT_ENV = {
@@ -43,5 +46,83 @@ describe('validateClerkRedirectEnv', () => {
     );
 
     expect(errors).toEqual([]);
+  });
+});
+
+describe('findMissingClerkFixtureAccounts', () => {
+  it('returns no errors when all required fixture accounts exist', async () => {
+    const result = await findMissingClerkFixtureAccounts(
+      [
+        {
+          label: 'personal new user',
+          identifierKey: 'E2E_CLERK_PERSONAL_NEW_USER_USERNAME',
+          identifierValue: 'personal@example.com',
+        },
+      ],
+      async () => true,
+    );
+
+    expect(result).toEqual({ missing: [], warnings: [] });
+  });
+
+  it('returns an explicit error when a configured fixture account is missing in Clerk', async () => {
+    const result = await findMissingClerkFixtureAccounts(
+      [
+        {
+          label: 'personal new user',
+          identifierKey: 'E2E_CLERK_PERSONAL_NEW_USER_USERNAME',
+          identifierValue: 'personal@example.com',
+        },
+      ],
+      async () => false,
+    );
+
+    expect(result.missing).toHaveLength(1);
+    expect(result.warnings).toEqual([]);
+    expect(result.missing[0]).toContain('personal new user');
+    expect(result.missing[0]).toContain('E2E_CLERK_PERSONAL_NEW_USER_USERNAME');
+    expect(result.missing[0]).toContain('personal@example.com');
+    expect(result.missing[0]).toContain('no Clerk user with that email exists');
+  });
+
+  it('downgrades missing mutable fixtures to warnings', async () => {
+    const result = await findMissingClerkFixtureAccounts(
+      [
+        {
+          label: 'personal new user',
+          identifierKey: 'E2E_CLERK_PERSONAL_NEW_USER_USERNAME',
+          identifierValue: 'personal@example.com',
+          autoReconciled: true,
+        },
+      ],
+      async () => false,
+    );
+
+    expect(result.missing).toEqual([]);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain(
+      'create or repair this mutable fixture automatically',
+    );
+  });
+
+  it('skips lookup for non-email identifiers', async () => {
+    let lookupCount = 0;
+
+    const result = await findMissingClerkFixtureAccounts(
+      [
+        {
+          label: 'provider owner user',
+          identifierKey: 'E2E_CLERK_ORG_PROVIDER_OWNER_USERNAME',
+          identifierValue: 'non-email-identifier',
+        },
+      ],
+      async () => {
+        lookupCount += 1;
+        return false;
+      },
+    );
+
+    expect(result).toEqual({ missing: [], warnings: [] });
+    expect(lookupCount).toBe(0);
   });
 });

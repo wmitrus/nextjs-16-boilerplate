@@ -58,6 +58,19 @@ const eslintConfig = defineConfig([
         },
       ],
       '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        {
+          checksVoidReturn: {
+            arguments: false,
+            attributes: true,
+            inheritedMethods: false,
+            properties: false,
+            returns: false,
+            variables: false,
+          },
+        },
+      ],
       '@typescript-eslint/no-unused-vars': [
         'error',
         {

@@ -15,6 +15,8 @@ import {
   VARIANT_NAMES,
 } from './load-env.mjs';
 
+const E2E_DEFAULT_BASE_URL = 'http://localhost:3100';
+
 function parseArgs(argv) {
   const [scenario, ...rest] = argv;
 
@@ -69,6 +71,26 @@ function parseArgs(argv) {
 
 function normalizePlaywrightArgs(args) {
   return args.filter((value) => value !== '--');
+}
+
+function hasPlaywrightReporterArg(args) {
+  return args.some(
+    (value, index) =>
+      value.startsWith('--reporter=') ||
+      (value === '--reporter' && typeof args[index + 1] === 'string'),
+  );
+}
+
+function shouldDefaultToLineReporter(args) {
+  return !args.includes('--ui') && !args.includes('--list');
+}
+
+function ensureReporterArg(args) {
+  if (hasPlaywrightReporterArg(args) || !shouldDefaultToLineReporter(args)) {
+    return args;
+  }
+
+  return [...args, '--reporter=line'];
 }
 
 function isPlaywrightListMode(args) {
@@ -248,7 +270,7 @@ async function cleanupStaleLocalNextDevState(env, listMode) {
     return;
   }
 
-  const baseUrl = env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+  const baseUrl = env.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL;
   const baseUrlReachable = await isBaseUrlReachable(baseUrl);
 
   if (baseUrlReachable) {
@@ -326,16 +348,23 @@ function applySharedRuntimeEnv(env, scenario, variant) {
   env.E2E_ENABLED = 'true';
   env.NEXT_PUBLIC_E2E_ENABLED = 'true';
   env.API_RATE_LIMIT_REQUESTS = process.env.API_RATE_LIMIT_REQUESTS ?? '1000';
+  // Scenario env is process-startup state for Next.js. Reusing an already
+  // running dev server across matrix scenarios can execute a personal/org run
+  // against the previous scenario's TENANCY_MODE or tenant-source settings.
   env.PLAYWRIGHT_REUSE_EXISTING_SERVER =
-    env.PLAYWRIGHT_REUSE_EXISTING_SERVER ??
-    (env.CI || hasExplicitServerLogDir ? 'false' : 'true');
+    env.PLAYWRIGHT_REUSE_EXISTING_SERVER ?? 'false';
 
   if (hasExplicitServerLogDir) {
     env.LOG_DIR = env.PLAYWRIGHT_SERVER_LOG_DIR;
   }
 
   env.PLAYWRIGHT_TEST_BASE_URL =
-    env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:3000';
+    env.PLAYWRIGHT_TEST_BASE_URL ?? E2E_DEFAULT_BASE_URL;
+
+  const e2eBaseUrl = env.PLAYWRIGHT_TEST_BASE_URL;
+  env.NEXT_PUBLIC_APP_URL = e2eBaseUrl;
+  env.AUTH_URL = e2eBaseUrl;
+  env.NEXTAUTH_URL = e2eBaseUrl;
 
   if (backendMode === 'container') {
     env.DATABASE_URL = TEST_DEFAULT_URL;
@@ -377,7 +406,9 @@ async function main() {
   const { scenario, variant, withOauth, playwrightArgs } = parseArgs(
     process.argv.slice(2),
   );
-  const normalizedPlaywrightArgs = normalizePlaywrightArgs(playwrightArgs);
+  const normalizedPlaywrightArgs = ensureReporterArg(
+    normalizePlaywrightArgs(playwrightArgs),
+  );
   const listMode = isPlaywrightListMode(normalizedPlaywrightArgs);
 
   const envMap = loadScenarioEnv({

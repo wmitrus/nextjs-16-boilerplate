@@ -7,7 +7,9 @@ import { env } from '@/core/env';
 import {
   ensureLogDirectory,
   createConsoleStream,
+  createStdoutStream,
   createFileStream,
+  createBetterStackStream,
   createLogflareWriteStream,
 } from './utils';
 
@@ -74,6 +76,14 @@ describe('logger utils', () => {
     it('should return a pretty stream', () => {
       const stream = createConsoleStream();
       expect(stream).toBeDefined();
+    });
+  });
+
+  describe('createStdoutStream', () => {
+    it('should return a stdout destination stream', () => {
+      const stream = createStdoutStream();
+      expect(stream).toBeDefined();
+      expect(vi.mocked(mockDestination)).toHaveBeenCalledWith(1);
     });
   });
 
@@ -242,6 +252,38 @@ describe('logger utils', () => {
         'Logflare stream error (non-fatal):',
         'test error',
       );
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('createBetterStackStream', () => {
+    it('returns null when Better Stack is disabled or missing credentials', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const originalEnabled = (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTERSTACK_ENABLED;
+      const originalToken = (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTER_STACK_SOURCE_TOKEN;
+
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTERSTACK_ENABLED = false;
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTER_STACK_SOURCE_TOKEN = undefined;
+
+      expect(createBetterStackStream()).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Better Stack stream disabled'),
+      );
+
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTERSTACK_ENABLED = originalEnabled;
+      (
+        env as unknown as Record<string, string | boolean | undefined>
+      ).BETTER_STACK_SOURCE_TOKEN = originalToken;
       consoleSpy.mockRestore();
     });
   });

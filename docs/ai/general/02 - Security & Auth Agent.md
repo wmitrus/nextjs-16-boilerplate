@@ -114,6 +114,8 @@ Always flag these if present:
 - dynamically constructed file paths used in `fs` operations without `path.resolve()` and base-directory confinement check at the sink, including reusable helpers (CWE-22 — path traversal, SEC-16)
 - environment-variable-sourced or user-controlled URLs passed directly to `fetch()` or any HTTP client without protocol and hostname allowlist validation (CWE-918 — SSRF)
 - forwarding `redirect_url` or similar query parameters to any redirect destination without calling `sanitizeRedirectUrl()` first — unvalidated params propagate open redirect risk downstream even when the immediate redirect target is a safe literal (SEC-03)
+- using unvalidated App Router `context.params` values, or aliases derived from them, in Drizzle predicates or mutation inputs that bind Postgres `uuid` columns; parse with `z.uuid()` first and use only `parseResult.data.*` (SEC-23)
+- treating Codacy HIGH error-prone TypeScript/JSX findings as security vulnerabilities without a live-code exploit path; classify sparse-state typing, Promise-returning JSX handlers, unbound test mocks, and finite-option schema drift under SEC-24 unless they connect to an actual trust-boundary failure
 - using `obj[dynamicKey]()` bracket dispatch on objects to call methods — use explicit `Record<AllowedKeys, fn>` dispatch maps; the Zod guard upstream is invisible to static analysis (SEC-04)
 - `Math.random()` for tokens, secrets, session identifiers, API keys, nonces, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06)
 - real credential-shaped values (API keys, tokens, license keys, passwords, secrets) or realistic-looking credential examples written into committed markdown files — always replace with `[REDACTED]`, `[hash-prefix]`, or another neutral placeholder; gitleaks scans committed markdown and will fail the `security-scan` CI workflow
@@ -134,6 +136,7 @@ Never approve a design that relies on:
 - logs or telemetry that expose secrets, tokens, or unnecessary private data
 - upstream allowlist validation of CLI args or config values as a substitute for point-of-use guards in file path construction or HTTP calls
 - inherited-key checks on plain objects as a substitute for own-key validation on untrusted input
+- raw route params bound to UUID columns; malformed IDs must return `400` before DB/repository access, not surface as Postgres `22P02` server errors
 
 ## Script and Tooling Security Rules
 

@@ -127,6 +127,54 @@ describe('Rate Limit Middleware', () => {
     expect(mockHandler).toHaveBeenCalled();
   });
 
+  it.each([
+    '/api/auth/callback/credentials',
+    '/api/auth/csrf',
+    '/api/auth/providers',
+    '/api/auth/session',
+    '/api/auth/signout',
+  ])(
+    'should bypass the global API rate limit for AuthJS protocol route %s',
+    async (path) => {
+      mockEnv.AUTH_PROVIDER = 'authjs';
+
+      const req = createMockRequest({ path });
+      const ctx = createMockRouteContext({ isApi: true });
+
+      const middleware = withRateLimit(mockHandler);
+      const res = await middleware(req, ctx);
+
+      expect(res.status).toBe(200);
+      expect(mockGetIP).not.toHaveBeenCalled();
+      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+      expect(mockHandler).toHaveBeenCalled();
+    },
+  );
+
+  it('should still rate limit custom AuthJS auth API routes', async () => {
+    mockEnv.AUTH_PROVIDER = 'authjs';
+    mockGetIP.mockResolvedValue('127.0.0.1');
+    mockCheckRateLimit.mockResolvedValue({
+      success: true,
+      limit: 100,
+      remaining: 99,
+      reset: new Date(),
+    });
+
+    const req = createMockRequest({ path: '/api/auth/signup' });
+    const ctx = createMockRouteContext({ isApi: true });
+
+    const middleware = withRateLimit(mockHandler);
+    const res = await middleware(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(mockGetIP).toHaveBeenCalled();
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('127.0.0.1', {
+      path: '/api/auth/signup',
+    });
+    expect(mockHandler).toHaveBeenCalled();
+  });
+
   it('should still rate limit unrelated API routes in E2E mode', async () => {
     mockEnv.E2E_ENABLED = true;
     mockGetIP.mockResolvedValue('127.0.0.1');

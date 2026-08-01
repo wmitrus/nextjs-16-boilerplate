@@ -237,6 +237,8 @@ export { handler as GET, handler as POST };
 3. If that does not fix it: `rm -rf .next` and restart `pnpm dev`
 4. Verify no module-level `NextAuth()`, `withAuth()`, or similar initializer calls in `auth.ts`
 
+This recovery check targets the normal local dev app on `http://localhost:3000`, not the dedicated Playwright E2E origin.
+
 **Regression guards added** (do not remove):
 
 - `auth.test.ts` has a test verifying `auth.ts` does NOT export `handler`, `GET`, or `POST`
@@ -368,7 +370,7 @@ pnpm release          # Semantic release
 
 **Test co-location**: Unit tests reside next to source files (e.g., `src/core/env.ts` → `src/core/env.test.ts`).
 **Setup files**: `tests/setup.tsx`, `tests/polyfills.ts`.
-**E2E browsers**: Chromium only (Playwright); base URL `http://localhost:3000`.
+**E2E browsers**: Chromium only (Playwright); default base URL `http://localhost:3100`.
 
 ## Git Hooks & Quality Gates
 
@@ -470,6 +472,18 @@ pnpm lt -- run <operation-id> --input '{"...": "..."}' --format=json
 
 For Retrospective boards: use `retrospectives.*` operations.
 For Blueprint/Canvas boards: use `blueprints.*` operations.
+
+### Leantime Diagnostic Rule
+
+When an agent diagnoses Leantime setup or claims that Leantime is blocked:
+
+1. verify the CLI entrypoint exists in `package.json`
+2. verify `.env.leantime` or `.env.leantime-dev` by exact path, not only by default search results
+3. verify required env values for the intended command, especially `LEANTIME_URL` and `LEANTIME_API_KEY`
+4. run the smallest falsifying command available when command execution exists
+5. if the current session cannot execute commands, record that as a session tooling limitation instead of misreporting the repository integration as broken
+
+Default workspace search may omit gitignored env files. Agents must not infer that `.env.leantime` is missing from default search results alone.
 
 ---
 
@@ -649,6 +663,9 @@ Prefer:
 
 - Before adding, moving, or refactoring Playwright specs, read `docs/usage/05 - Playwright E2E Architecture.md`. It is the repository source of truth for suite placement, helper ownership, runtime-profile mapping, and fixture-model selection.
 - The authoritative local E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or a package script built on top of it (`pnpm e2e`, `pnpm e2e:auth`, `pnpm e2e:auth-matrix:*`, `pnpm e2e:scenario:*`).
+- The default local Playwright E2E origin is `http://localhost:3100`. It is intentionally separate from the normal developer app on `http://localhost:3000` so browser test runs do not contend with `pnpm dev`.
+- `scripts/e2e/run-scenario.mjs` is the source of truth for the E2E origin and must align `PLAYWRIGHT_TEST_BASE_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `NEXTAUTH_URL` to the same browser-test origin.
+- Scenario runs must use a fresh Next.js server process by default because `AUTH_PROVIDER`, `TENANCY_MODE`, `TENANT_CONTEXT_SOURCE`, DB settings, and related runtime env are read at server startup. Reusing a reachable dev server across `single`, `personal`, `org-provider`, or `org-db` can execute tests against the previous scenario's runtime.
 - Do not treat raw `playwright test` or `pnpm e2e:raw` as authoritative for auth, bootstrap, onboarding, AuthJS admin, or container-backed investigations. Raw Playwright bypasses scenario DB setup and will use the current app runtime env, which can point at `.env.local` / the dev database.
 - When `E2E_BACKEND_MODE=container`, the expected isolated database is always `postgres://postgres:postgres@127.0.0.1:5433/app_test`. If E2E-created users appear in the dev DB, suspect a raw Playwright run or another non-scenario entrypoint first.
 - For interactive terminal runs, always pass `--reporter=line`. Do not use the HTML reporter for agent-driven E2E runs because it hides the console evidence needed for debugging.
@@ -660,6 +677,17 @@ Prefer:
 - Public, demo, or E2E-only routes explicitly allowed without auth must stay unauthenticated in Playwright unless the scenario itself is about authenticated behavior. Do not add Clerk/AuthJS setup just because adjacent suites are authenticated.
 - Mixed suites must be split by scenario semantics before optimization. Do not force one fixture model across a whole file when some cases are flow-based and others are steady-state. `e2e/provisioning-runtime.spec.ts` is the canonical example.
 - When the correct fixture model is unclear, inspect route policy, proxy behavior, and route/layout guards first. If semantics are still ambiguous, preserve the interactive flow rather than introducing shared-session coupling.
+
+#### Clerk E2E Fixture Contract
+
+- For Clerk auth/bootstrap/provisioning E2E work, read `scripts/e2e-clerk-fixtures.md`, `e2e/clerk-auth.ts`, and `e2e/runtime-profile.ts` before changing fixtures.
+- `@clerk/backend` is a direct dependency when repository scripts or E2E helpers import Clerk Backend API clients. Do not treat it as an optional transitive dependency of `@clerk/nextjs`.
+- Do not create per-test stable Clerk organizations or password users. Stable password fixtures are env-driven and reconciled by `e2e/clerk-auth.ts`; generated hosted sign-up users are only `e2e+clerk_test-*@example.com` and must be cleaned after use.
+- Hosted sign-up can create generated users and empty default Clerk organizations. Cleanup must stay guarded by strict generated-email/default-org predicates and must protect configured stable slugs such as `E2E_CLERK_ORG_PROVIDER_OWNER_SLUG` and `E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG`.
+- In `org-provider`, the stable Clerk organization slug is the source of truth. The helper must reconcile the owner/member users, organizations, and membership roles (`org:admin` / `org:member`) before browser sign-in.
+- In `org-db`, Clerk organization membership is not app tenant truth. Active-context cookies must use seeded application organization IDs from `SEEDED_ORGANIZATION_IDS`, not seeded tenant IDs.
+- Worker-scoped authenticated storage fixtures must guard runtime compatibility before creating browser or session state because `test.skip()` inside a test body runs too late.
+- Keep bounded retries and actionable error formatting around Clerk Backend and Clerk testing-token calls. Blank or transient Clerk API failures should be reported as fixture/provider setup failures, not confused with app regressions.
 
 ---
 
@@ -703,6 +731,27 @@ Prefer:
 - actionable logs and tags
 - enough context to debug production failures
 - stable telemetry conventions across related flows
+
+## API Response Discipline
+
+For App Router route handlers and internal API surfaces in this repository:
+
+- prefer the shared response helpers in `src/shared/lib/api/response-service.ts`
+- use `createSuccessResponse()` for successful JSON payloads
+- use `createServerErrorResponse()` or `createValidationErrorResponse()` for structured error payloads
+- use `withErrorHandler()` for route-handler exception mapping unless the endpoint has a deliberate protocol-specific reason not to
+- keep response bodies aligned with the repository response envelope types under `src/shared/types/api-response`
+
+Do not:
+
+- open-code ad hoc `NextResponse.json(...)` success/error envelopes in normal application APIs when the shared ResponseService pattern already fits
+- return inconsistent `status` payload shapes across sibling admin or auth APIs without an explicit architectural reason
+- design new admin/API surfaces without stating whether they follow the shared ResponseService contract
+
+Exception rule:
+
+- raw `Response` / `NextResponse` usage is acceptable for protocol-specific cases such as redirects, streaming, non-JSON payloads, framework handshake endpoints, or other paths where the shared JSON envelope is not the right transport shape
+- when taking an exception, document the reason in the design or implementation notes instead of silently diverging
 
 ---
 
@@ -873,27 +922,29 @@ This document is the living, authoritative catalogue of:
 
 Key rules currently in effect:
 
-| ID     | Rule                                                                                                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`                                                |
-| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                                                                   |
-| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                                                               |
-| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                                                                   |
-| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                                                                  |
-| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                                                                     |
-| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                                                            |
-| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                                                                   |
-| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context                                              |
-| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields                                                         |
-| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset                                            |
-| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)                                                       |
-| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`                                              |
-| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                                                |
-| SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map`                  |
-| SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                                            |
-| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                   |
-| SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs       |
-| SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access |
+| ID     | Rule                                                                                                                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`                                                                               |
+| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                                                                                                  |
+| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                                                                                              |
+| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                                                                                                  |
+| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                                                                                                 |
+| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                                                                                                    |
+| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                                                                                           |
+| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                                                                                                  |
+| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context                                                                             |
+| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields                                                                                        |
+| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset                                                                           |
+| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)                                                                                      |
+| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`                                                                             |
+| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                                                                               |
+| SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map`                                                 |
+| SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                                                                           |
+| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                                                  |
+| SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs                                      |
+| SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access                                |
+| SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns                                      |
+| SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 
@@ -909,6 +960,20 @@ Key rules currently in effect:
 | `text`      | Externally-sourced string identifiers: Clerk org IDs (`org_xxx`), tenant slugs, string scope keys, feature flag tenant scope keys |
 
 **Rule**: Misuse of UUID for external/application-level string IDs causes Postgres error `22P02: invalid input syntax for type uuid` at query parameter binding time — silent in unit tests with mocked DB, crash in production.
+
+**Route param rule**: App Router `context.params` values are untrusted strings. Before any `params.*` value is used in a Drizzle predicate against a `uuid` column, parse it with `z.uuid()` or an existing schema such as `organizationIdSchema`, branch on parse failure with `createValidationErrorResponse(...)`, and use only `parseResult.data.*` in DB queries and mutations. Do not alias raw route params as `const invitationId = params.id` or pass `params.id` directly into `eq(table.id, ...)`.
+
+Every route handler with a UUID path segment must have a negative test for a malformed ID (for example `not-a-uuid`) proving the endpoint returns `400` before any DB read/write/repository call that would bind the UUID value.
+
+**Codacy HIGH error-prone rule**: Treat unnecessary optional chaining / nullish
+coalescing, Promise-returning JSX handlers, unbound mock methods, and invalid template
+literal types as reliability/type-safety findings unless live-code triage identifies a
+concrete security path. Do not accept quick fixes blindly. For sparse dynamic state use
+`Partial<Record<string, T>>` or `Map<string, T>` and keep required `?.` / `??` fallbacks.
+For async JSX handlers use `onClick={() => void handleX(...)}` and
+`onSubmit={(event) => void handleSubmit(event)}`. For object mocks use
+`vi.Mocked<Interface>`. For finite domain values use `z.enum(...)` or an existing typed
+schema instead of broad `z.string()`.
 
 **Also applies to unique indexes with nullable columns**: A `uniqueIndex(...).on(col1, nullableCol)` in Postgres does NOT enforce uniqueness when `nullableCol IS NULL` (BTree treats `NULL != NULL`). Use `.nullsNotDistinct()` on the unique **constraint** builder (`unique(name).on(cols).nullsNotDistinct()`) when NULLs should be treated as equal for uniqueness.
 

@@ -31,10 +31,23 @@ describe('rate-limit', () => {
     vi.resetModules();
     vi.clearAllMocks();
     resetEnvMocks();
+    mockEnv.NODE_ENV = 'production';
     mockEnv.UPSTASH_REDIS_REST_URL = 'https://test.upstash.io';
     mockEnv.UPSTASH_REDIS_REST_TOKEN = 'test-token';
     mockEnv.API_RATE_LIMIT_REQUESTS = 10;
     mockEnv.API_RATE_LIMIT_WINDOW = '60 s';
+  });
+
+  it('should not configure Upstash outside production even when credentials exist', async () => {
+    mockEnv.NODE_ENV = 'development';
+
+    const { apiRateLimit, checkUpstashRateLimit } =
+      await import('./rate-limit');
+
+    expect(apiRateLimit).toBeUndefined();
+    await expect(checkUpstashRateLimit('test')).rejects.toThrow(
+      'Upstash Rate Limiter is not configured',
+    );
   });
 
   it('should throw if apiRateLimit is undefined', async () => {

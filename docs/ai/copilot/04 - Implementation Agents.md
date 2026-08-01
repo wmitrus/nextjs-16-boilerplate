@@ -26,6 +26,7 @@ Real agent file: [`.github/agents/implementation-agent.agent.md`](../../../.gith
 - When the architecture, security, runtime, and validation constraints are already clear
 - When the task is to make the smallest safe patch rather than re-decide the design
 - When code and tests need to be updated under already-approved guardrails
+- When App Router route handlers must be implemented using the repository's shared ResponseService helpers instead of hand-rolled JSON envelopes
 
 ## Script and Tooling Security
 

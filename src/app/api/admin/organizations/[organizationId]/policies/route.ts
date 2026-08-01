@@ -3,7 +3,11 @@ import { z } from 'zod';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 import { isAction } from '@/core/contracts/authorization';
-import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
+import {
+  ACTIONS,
+  RESOURCES,
+  type Resource,
+} from '@/core/contracts/resources-actions';
 import type { DrizzleDb } from '@/core/db/types';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -30,11 +34,12 @@ import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const allowedResources = new Set<string>(Object.values(RESOURCES));
 const allowedActions = new Set<string>(Object.values(ACTIONS));
+const resourceOptions = Object.values(RESOURCES) as [Resource, ...Resource[]];
 
 const bodySchema = z.object({
   roleId: z.uuid(),
   effect: z.enum(['allow', 'deny']),
-  resource: z.string(),
+  resource: z.enum(resourceOptions),
   actions: z.array(z.string()).min(1).max(20),
 });
 

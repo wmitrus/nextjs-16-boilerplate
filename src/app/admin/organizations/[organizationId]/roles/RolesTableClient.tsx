@@ -77,7 +77,9 @@ export function RolesTableClient({
   const [draftNames, setDraftNames] = useState<Map<string, string>>(
     () => new Map(roles.map((role) => [role.id, role.name])),
   );
-  const [rowState, setRowState] = useState<Record<string, RowState>>({});
+  const [rowState, setRowState] = useState<Partial<Record<string, RowState>>>(
+    {},
+  );
 
   async function handleRename(roleId: string) {
     const nextName = draftNames.get(roleId)?.trim() ?? '';
@@ -286,7 +288,7 @@ export function RolesTableClient({
             </span>
             <button
               type="button"
-              onClick={() => handleRename(role.id)}
+              onClick={() => void handleRename(role.id)}
               disabled={
                 role.isSystem || currentRowState?.status === 'submitting'
               }
@@ -296,7 +298,7 @@ export function RolesTableClient({
             </button>
             <button
               type="button"
-              onClick={() => handleDelete(role.id)}
+              onClick={() => void handleDelete(role.id)}
               disabled={isProtected || currentRowState?.status === 'submitting'}
               className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
             >

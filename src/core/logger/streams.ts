@@ -9,6 +9,7 @@ import {
   createConsoleStream,
   createFileStream,
   createLogflareWriteStream,
+  createStdoutStream,
 } from './utils';
 
 /**
@@ -30,18 +31,26 @@ export function getLogStreams(): StreamEntry[] {
     (isDev && env.LOG_TO_FILE_DEV) ||
     (!isDev && !isTest && env.LOG_TO_FILE_PROD);
 
+  const externalStreams: (DestinationStream | null | undefined)[] = [
+    env.LOGFLARE_SERVER_ENABLED ? createLogflareWriteStream() : undefined,
+    env.BETTERSTACK_ENABLED ? createBetterStackStream() : undefined,
+  ];
+
+  const shouldMirrorToStdout =
+    !isDev && !isTest && externalStreams.some(Boolean);
+
   const streams: (DestinationStream | null | undefined)[] = [
     // 1. Console stream (Pretty in dev/test, default JSON in prod if no other streams)
     isDev || isTest ? createConsoleStream() : undefined,
 
-    // 2. File stream (if enabled)
+    // 2. Keep platform logs visible even when an external transport is enabled.
+    shouldMirrorToStdout ? createStdoutStream() : undefined,
+
+    // 3. File stream (if enabled)
     shouldLogToFile ? createFileStream(logFile, logDir) : undefined,
 
-    // 3. Logflare stream (if enabled)
-    env.LOGFLARE_SERVER_ENABLED ? createLogflareWriteStream() : undefined,
-
-    // 4. Better Stack stream (if enabled)
-    env.BETTERSTACK_ENABLED ? createBetterStackStream() : undefined,
+    // 4. External streams (if enabled)
+    ...externalStreams,
   ];
 
   // Filter out any null or undefined streams

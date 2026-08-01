@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -6,7 +7,15 @@ import {
   validateTenancyConfigValues,
 } from '@/core/env';
 
+import {
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+} from './lib/fs-guards-shared';
 import { loadedFiles } from './load-env-files';
+
+const ROOT = process.cwd();
+const DEPLOYMENT_REQUIRED_ENV_KEYS = ['AUTH_PROVIDER', 'TENANCY_MODE'] as const;
+const VERCEL_SENSITIVE_PRESENT_PLACEHOLDER = '[vercel-sensitive-present]';
 
 export function runValidation(
   authProvider: string | undefined,
@@ -20,15 +29,52 @@ export function runValidation(
   newRelicLicenseKey: string | undefined,
   nodeOptions: string | undefined,
   nodeEnv: string | undefined,
+  appEnv?: string | undefined,
+  deploymentEnvKeys?: ReadonlySet<string> | undefined,
 ): string[] {
   const errors: string[] = [];
+  const isDeploymentValidation =
+    nodeEnv === 'production' || appEnv === 'preview' || appEnv === 'production';
+  const nextAuthSecretForValidation = resolvePulledSensitiveValueForValidation(
+    'NEXTAUTH_SECRET',
+    nextAuthSecret,
+    appEnv,
+    deploymentEnvKeys,
+  );
+
+  if (isDeploymentValidation) {
+    if (!authProvider?.trim()) {
+      errors.push(
+        '[env] AUTH_PROVIDER must be explicitly set for production-like deployments. Do not rely on the local default.',
+      );
+    }
+
+    if (!tenancyMode?.trim()) {
+      errors.push(
+        '[env] TENANCY_MODE must be explicitly set for production-like deployments. Do not rely on the local default.',
+      );
+    }
+
+    if (
+      (appEnv === 'preview' || appEnv === 'production') &&
+      deploymentEnvKeys !== undefined
+    ) {
+      for (const key of DEPLOYMENT_REQUIRED_ENV_KEYS) {
+        if (!deploymentEnvKeys.has(key)) {
+          errors.push(
+            `[env] ${key} must be present in .vercel/.env.${appEnv}.local after vercel pull. Do not let local defaults mask missing Vercel configuration.`,
+          );
+        }
+      }
+    }
+  }
 
   try {
     validateAuthProviderConfigValues(
       authProvider,
       clerkSecretKey,
       clerkPublishableKey,
-      nextAuthSecret,
+      nextAuthSecretForValidation,
       nodeEnv,
     );
   } catch (error) {
@@ -59,6 +105,53 @@ export function runValidation(
   return errors;
 }
 
+function readVercelPulledEnvKeys(
+  appEnv: string | undefined,
+): ReadonlySet<string> | undefined {
+  if (appEnv !== 'preview' && appEnv !== 'production') return undefined;
+
+  const envFile = resolve(ROOT, `.vercel/.env.${appEnv}.local`);
+  if (!pathExistsWithinBase(envFile, ROOT, 'Vercel environment file')) {
+    return new Set();
+  }
+
+  const keys = new Set<string>();
+  const content = readTextFileWithinBase(
+    envFile,
+    ROOT,
+    'Vercel environment file',
+  );
+
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const eqIdx = line.indexOf('=');
+    if (eqIdx === -1) continue;
+
+    const key = line.slice(0, eqIdx).trim();
+    if (key) keys.add(key);
+  }
+
+  return keys;
+}
+
+function resolvePulledSensitiveValueForValidation(
+  key: string,
+  value: string | undefined,
+  appEnv: string | undefined,
+  deploymentEnvKeys: ReadonlySet<string> | undefined,
+): string | undefined {
+  if (value?.trim()) return value;
+
+  const isVercelDeploymentEnv = appEnv === 'preview' || appEnv === 'production';
+  if (isVercelDeploymentEnv && deploymentEnvKeys?.has(key)) {
+    return VERCEL_SENSITIVE_PRESENT_PLACEHOLDER;
+  }
+
+  return value;
+}
+
 /* v8 ignore start -- CLI console/process wrapper; runValidation is unit-tested. */
 function main(): void {
   const source =
@@ -69,8 +162,9 @@ function main(): void {
   // Read from process.env directly — T3-Env proxy caches values at module init time
   // and may have stale undefined for optional fields when .env.local is loaded after.
   // By the time main() runs, load-env-files has already populated process.env.
-  const authProvider = process.env.AUTH_PROVIDER ?? 'clerk';
-  const tenancyMode = process.env.TENANCY_MODE ?? 'single';
+  const authProvider = process.env.AUTH_PROVIDER;
+  const tenancyMode = process.env.TENANCY_MODE;
+  const deploymentEnvKeys = readVercelPulledEnvKeys(process.env.APP_ENV);
 
   const errors = runValidation(
     authProvider,
@@ -84,6 +178,8 @@ function main(): void {
     process.env.NEW_RELIC_LICENSE_KEY,
     process.env.NODE_OPTIONS,
     process.env.NODE_ENV,
+    process.env.APP_ENV,
+    deploymentEnvKeys,
   );
 
   if (errors.length > 0) {
@@ -100,7 +196,7 @@ function main(): void {
   }
 
   console.log(
-    `✅ Environment cross-field validation passed (${source})\n   NODE_ENV=${process.env.NODE_ENV ?? 'development'}, AUTH_PROVIDER=${authProvider}, TENANCY_MODE=${tenancyMode}`,
+    `✅ Environment cross-field validation passed (${source})\n   NODE_ENV=${process.env.NODE_ENV ?? 'development'}, AUTH_PROVIDER=${authProvider ?? '[unset]'}, TENANCY_MODE=${tenancyMode ?? '[unset]'}`,
   );
 }
 

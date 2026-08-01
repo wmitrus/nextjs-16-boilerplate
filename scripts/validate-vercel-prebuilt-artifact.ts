@@ -45,9 +45,12 @@ export interface VercelPrebuiltUploadCoverageSummary {
   ignoredPathCount: number;
   totalUploadSizeBytes?: number;
   missingUploadFiles: MissingVercelUploadFile[];
+  forbiddenUploadFiles: VercelTraceFileReference[];
 }
 
 const DEFAULT_FUNCTIONS_DIR = '.vercel/output/functions';
+export const MAX_PREBUILT_UPLOAD_FILE_COUNT = 5_000;
+export const MAX_PREBUILT_UPLOAD_SIZE_BYTES = 80 * 1024 * 1024;
 const FORBIDDEN_TRACE_PATH_PREFIXES = [
   '.env',
   'logs/',
@@ -284,28 +287,6 @@ export function assertVercelPrebuiltArtifactHasNoEscapingTraces(
   );
 }
 
-export function assertVercelPrebuiltArtifactHasNoForbiddenTraces(
-  summary: VercelPrebuiltArtifactSummary,
-): void {
-  if (summary.forbiddenFiles.length === 0) {
-    return;
-  }
-
-  const examples = summary.forbiddenFiles
-    .slice(0, 10)
-    .map(
-      (forbidden) =>
-        `  - ${forbidden.requiredPath} (referenced by ${forbidden.configPath})`,
-    )
-    .join('\n');
-
-  throw new Error(
-    `[vercel-prebuilt] Found ${summary.forbiddenFiles.length} forbidden traced file(s) in .vc-config.json.\n` +
-      `${examples}\n` +
-      'Do not deploy this prebuilt artifact. Fix the build/runtime trace source instead of modifying generated .vc-config.json.',
-  );
-}
-
 function normalizeVercelRelativePath(filePath: string): string {
   return filePath.replaceAll('\\', '/').replace(/^\.\/+/, '');
 }
@@ -427,45 +408,84 @@ export function validateVercelPrebuiltUploadCoverage(
 ): VercelPrebuiltUploadCoverageSummary {
   const { uploadedPaths, ignoredPaths, totalUploadSizeBytes } =
     parseVercelDeployDryRunOutput(dryRunOutput);
-  const missingUploadFiles = artifactSummary.requiredFiles
+  const allowedRequiredFiles = artifactSummary.requiredFiles.filter(
+    ({ requiredPath }) => !isForbiddenTracePath(requiredPath),
+  );
+  const missingUploadFiles = allowedRequiredFiles
     .filter(({ requiredPath }) => !uploadedPaths.has(requiredPath))
     .map(({ configPath, requiredPath }) => ({
       configPath,
       requiredPath,
       ignoredByDryRunPath: findIgnoredParentPath(requiredPath, ignoredPaths),
     }));
+  const forbiddenUploadFiles = artifactSummary.forbiddenFiles.filter(
+    ({ requiredPath }) => uploadedPaths.has(requiredPath),
+  );
 
   return {
     uploadedFileCount: uploadedPaths.size,
     ignoredPathCount: ignoredPaths.size,
     totalUploadSizeBytes,
     missingUploadFiles,
+    forbiddenUploadFiles,
   };
 }
 
 export function assertVercelPrebuiltUploadCoverageValid(
   summary: VercelPrebuiltUploadCoverageSummary,
 ): void {
-  if (summary.missingUploadFiles.length === 0) {
-    return;
+  if (summary.missingUploadFiles.length > 0) {
+    const examples = summary.missingUploadFiles
+      .slice(0, 10)
+      .map((missing) => {
+        const ignoredSuffix = missing.ignoredByDryRunPath
+          ? `; likely excluded by dry-run ignored path \`${missing.ignoredByDryRunPath}\``
+          : '';
+
+        return `  - ${missing.requiredPath} (referenced by ${missing.configPath}${ignoredSuffix})`;
+      })
+      .join('\n');
+
+    throw new Error(
+      `[vercel-prebuilt] Dry-run upload is missing ${summary.missingUploadFiles.length} allowed traced file(s) required by .vc-config.json.\n` +
+        `${examples}\n` +
+        'Check `.vercelignore` and the prebuilt upload file list before running the real deploy.',
+    );
   }
 
-  const examples = summary.missingUploadFiles
-    .slice(0, 10)
-    .map((missing) => {
-      const ignoredSuffix = missing.ignoredByDryRunPath
-        ? `; likely excluded by dry-run ignored path \`${missing.ignoredByDryRunPath}\``
-        : '';
+  if (summary.forbiddenUploadFiles.length > 0) {
+    const examples = summary.forbiddenUploadFiles
+      .slice(0, 10)
+      .map(
+        (forbidden) =>
+          `  - ${forbidden.requiredPath} (referenced by ${forbidden.configPath})`,
+      )
+      .join('\n');
 
-      return `  - ${missing.requiredPath} (referenced by ${missing.configPath}${ignoredSuffix})`;
-    })
-    .join('\n');
+    throw new Error(
+      `[vercel-prebuilt] Dry-run upload contains ${summary.forbiddenUploadFiles.length} forbidden traced file(s).\n` +
+        `${examples}\n` +
+        'Do not deploy until the forbidden source paths are excluded from the upload plan.',
+    );
+  }
 
-  throw new Error(
-    `[vercel-prebuilt] Dry-run upload is missing ${summary.missingUploadFiles.length} traced file(s) required by .vc-config.json.\n` +
-      `${examples}\n` +
-      'Check `.vercelignore` and the prebuilt upload file list before running the real deploy.',
-  );
+  if (summary.uploadedFileCount > MAX_PREBUILT_UPLOAD_FILE_COUNT) {
+    throw new Error(
+      `[vercel-prebuilt] Dry-run upload contains ${summary.uploadedFileCount} files, exceeding the ${MAX_PREBUILT_UPLOAD_FILE_COUNT} file budget.`,
+    );
+  }
+
+  if (summary.totalUploadSizeBytes === undefined) {
+    throw new Error(
+      '[vercel-prebuilt] Dry-run upload size is unavailable; cannot enforce the upload budget.',
+    );
+  }
+
+  if (summary.totalUploadSizeBytes > MAX_PREBUILT_UPLOAD_SIZE_BYTES) {
+    throw new Error(
+      `[vercel-prebuilt] Dry-run upload is ${summary.totalUploadSizeBytes} bytes, exceeding the ${MAX_PREBUILT_UPLOAD_SIZE_BYTES} byte budget.`,
+    );
+  }
 }
 
 function getDryRunJsonPath(args: string[]): string | undefined {
@@ -522,7 +542,6 @@ async function main(): Promise<void> {
   const summary = await validateVercelPrebuiltArtifact();
   assertVercelPrebuiltArtifactValid(summary);
   assertVercelPrebuiltArtifactHasNoEscapingTraces(summary);
-  assertVercelPrebuiltArtifactHasNoForbiddenTraces(summary);
   const dryRunJsonPath = getDryRunJsonPath(args);
 
   if (dryRunJsonPath) {
@@ -534,13 +553,13 @@ async function main(): Promise<void> {
     assertVercelPrebuiltUploadCoverageValid(uploadSummary);
 
     console.log(
-      `[vercel-prebuilt] Upload coverage valid: ${summary.requiredFileCount} traced file reference(s), ${uploadSummary.uploadedFileCount} dry-run upload file(s), ${uploadSummary.totalUploadSizeBytes ?? 'unknown'} byte(s), 0 missing.`,
+      `[vercel-prebuilt] Upload coverage valid: ${summary.requiredFileCount} traced file reference(s), ${uploadSummary.uploadedFileCount}/${MAX_PREBUILT_UPLOAD_FILE_COUNT} dry-run upload file(s), ${uploadSummary.totalUploadSizeBytes}/${MAX_PREBUILT_UPLOAD_SIZE_BYTES} byte(s), 0 missing allowed reference(s), 0 forbidden upload(s).`,
     );
     return;
   }
 
   console.log(
-    `[vercel-prebuilt] Artifact contract valid: ${summary.configCount} function config(s), ${summary.requiredFileCount} traced file reference(s), 0 missing.`,
+    `[vercel-prebuilt] Artifact contract valid: ${summary.configCount} function config(s), ${summary.requiredFileCount} traced file reference(s), ${summary.forbiddenFiles.length} forbidden reference(s) pending upload-plan enforcement, 0 missing.`,
   );
 }
 

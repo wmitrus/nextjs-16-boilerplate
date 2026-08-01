@@ -36,14 +36,18 @@ export function runValidation(
   appEnv?: string | undefined,
   deploymentEnvKeys?: ReadonlySet<string> | undefined,
   authRuntimeUrls: AuthRuntimeUrlConfig = {},
+  vercelEnv?: string | undefined,
 ): string[] {
   const errors: string[] = [];
+  const effectiveVercelEnv = appEnv ?? vercelEnv;
   const isDeploymentValidation =
-    nodeEnv === 'production' || appEnv === 'preview' || appEnv === 'production';
+    nodeEnv === 'production' ||
+    effectiveVercelEnv === 'preview' ||
+    effectiveVercelEnv === 'production';
   const nextAuthSecretForValidation = resolvePulledSensitiveValueForValidation(
     'NEXTAUTH_SECRET',
     nextAuthSecret,
-    appEnv,
+    effectiveVercelEnv,
     deploymentEnvKeys,
   );
 
@@ -61,19 +65,20 @@ export function runValidation(
     }
 
     if (
-      (appEnv === 'preview' || appEnv === 'production') &&
+      (effectiveVercelEnv === 'preview' ||
+        effectiveVercelEnv === 'production') &&
       deploymentEnvKeys !== undefined
     ) {
       for (const key of DEPLOYMENT_REQUIRED_ENV_KEYS) {
         if (!deploymentEnvKeys.has(key)) {
           errors.push(
-            `[env] ${key} must be present in .vercel/.env.${appEnv}.local after vercel pull. Do not let local defaults mask missing Vercel configuration.`,
+            `[env] ${key} must be present in .vercel/.env.${effectiveVercelEnv}.local after vercel pull. Do not let local defaults mask missing Vercel configuration.`,
           );
         }
       }
 
       if (
-        appEnv === 'production' &&
+        effectiveVercelEnv === 'production' &&
         authProvider === 'authjs' &&
         !deploymentEnvKeys.has('NEXTAUTH_URL')
       ) {
@@ -92,7 +97,7 @@ export function runValidation(
       nextAuthSecretForValidation,
       nodeEnv,
       authRuntimeUrls.nextAuthUrl,
-      appEnv,
+      effectiveVercelEnv,
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
@@ -114,6 +119,7 @@ export function runValidation(
       newRelicLicenseKey,
       nodeOptions,
       nodeEnv,
+      effectiveVercelEnv,
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
@@ -181,7 +187,8 @@ function main(): void {
   // By the time main() runs, load-env-files has already populated process.env.
   const authProvider = process.env.AUTH_PROVIDER;
   const tenancyMode = process.env.TENANCY_MODE;
-  const deploymentEnvKeys = readVercelPulledEnvKeys(process.env.APP_ENV);
+  const effectiveVercelEnv = process.env.APP_ENV ?? process.env.VERCEL_ENV;
+  const deploymentEnvKeys = readVercelPulledEnvKeys(effectiveVercelEnv);
 
   const errors = runValidation(
     authProvider,
@@ -200,6 +207,7 @@ function main(): void {
     {
       nextAuthUrl: process.env.NEXTAUTH_URL,
     },
+    process.env.VERCEL_ENV,
   );
 
   if (errors.length > 0) {

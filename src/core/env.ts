@@ -349,19 +349,31 @@ export function validateTenancyConfigValues(
  *
  * Rules:
  * - NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY
+ * - Vercel runtimes must not preload New Relic through NODE_OPTIONS
  */
 export function validateNewRelicConfigValues(
   newRelicEnabled: boolean | string | undefined,
   newRelicLicenseKey: string | undefined,
-  _nodeOptions?: string | undefined,
+  nodeOptions?: string | undefined,
   _nodeEnv?: string | undefined,
+  vercelEnv?: string | undefined,
 ): void {
   const isNewRelicEnabled =
     newRelicEnabled === true || newRelicEnabled === 'true';
   const normalizedLicenseKey = newRelicLicenseKey?.trim() ?? '';
+  const normalizedNodeOptions = nodeOptions?.trim() ?? '';
 
   if (isNewRelicEnabled && normalizedLicenseKey.length === 0) {
     throw new Error('NEW_RELIC_ENABLED=true requires NEW_RELIC_LICENSE_KEY.');
+  }
+
+  if (
+    vercelEnv &&
+    /(^|\s)(?:-r|--require=?)\s*newrelic(?=\s|$)/.test(normalizedNodeOptions)
+  ) {
+    throw new Error(
+      '[env] NODE_OPTIONS must not preload newrelic on Vercel. Use instrumentation.ts late-load plus Vercel log drain/browser CDN monitoring instead.',
+    );
   }
 }
 

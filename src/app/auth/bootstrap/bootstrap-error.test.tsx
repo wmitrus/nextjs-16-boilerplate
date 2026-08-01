@@ -114,7 +114,7 @@ describe('BootstrapErrorUI', () => {
         );
 
         expect(
-          screen.getByText(/deployment could not complete/i),
+          screen.getByText(/server-side configuration problem/i),
         ).toBeInTheDocument();
         expect(screen.queryByText(/pnpm db:dev:up/)).not.toBeInTheDocument();
         expect(

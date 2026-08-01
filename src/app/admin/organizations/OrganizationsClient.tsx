@@ -18,6 +18,7 @@ export interface OrganizationSummary {
 
 interface OrganizationsClientProps {
   organizations: OrganizationSummary[];
+  authProvider: 'clerk' | 'authjs' | 'supabase' | 'neon';
 }
 
 type OrganizationFilter = 'active' | 'archived' | 'all';
@@ -31,9 +32,11 @@ function formatDate(value: string): string {
 }
 
 export function OrganizationsClient({
+  authProvider,
   organizations,
 }: OrganizationsClientProps) {
   const router = useRouter();
+  const canSwitchActiveOrganization = authProvider === 'authjs';
   const [filter, setFilter] = useState<OrganizationFilter>('active');
   const [pendingOrganizationId, setPendingOrganizationId] = useState<
     string | null
@@ -41,6 +44,10 @@ export function OrganizationsClient({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSetActive(organizationId: string) {
+    if (!canSwitchActiveOrganization) {
+      return;
+    }
+
     setErrorMessage(null);
     setPendingOrganizationId(organizationId);
 
@@ -244,16 +251,18 @@ export function OrganizationsClient({
                     View details
                   </Link>
 
-                  <button
-                    type="button"
-                    disabled={
-                      organization.isActive || isSubmitting || isArchived
-                    }
-                    onClick={() => handleSetActive(organization.id)}
-                    className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
-                  >
-                    {activationLabel}
-                  </button>
+                  {canSwitchActiveOrganization ? (
+                    <button
+                      type="button"
+                      disabled={
+                        organization.isActive || isSubmitting || isArchived
+                      }
+                      onClick={() => handleSetActive(organization.id)}
+                      className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
+                    >
+                      {activationLabel}
+                    </button>
+                  ) : null}
 
                   <Link
                     href={`/admin/organizations/${organization.id}/invitations`}

@@ -63,7 +63,13 @@ GitHub provides `GITHUB_TOKEN` automatically.
 To ensure smooth builds on Vercel with pnpm 10, the project includes:
 
 - **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
-- **.vercelignore**: Optimized to exclude `node_modules`, `coverage`, `docs`, and `tests` from the upload payload to prevent transient API errors.
+- **Pinned Vercel CLI**: GitHub Actions and local helper scripts use the
+  repository-pinned Vercel CLI through `pnpm exec vercel`. Do not use a global
+  `vercel@latest` in deploy workflows.
+- **.vercelignore**: Uses root-only excludes for env files, logs, source,
+  tests, docs, coverage, and reports. Do not ignore `.next` or `node_modules`
+  in this file for prebuilt deployments; Vercel's generated `filePathMap` may
+  legally reference traced source files from those directories.
 
 ## Vercel Deployment Strategy
 
@@ -81,6 +87,11 @@ This repository uses two different deployment ownership models:
    - GitHub Actions remains the deployment authority.
    - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
    - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
+   - Production runs prebuilt artifact guards after build and before deploy.
+     These guards validate `Object.values(filePathMap)` as source paths, require
+     every allowed runtime source in the dry-run upload, reject every forbidden
+     source present in that upload, reject missing or symlink-escaping sources,
+     and enforce budgets of 5,000 files and 80 MiB.
    - For `AUTH_PROVIDER=authjs`, the production workflow requires a
      Production-scoped `NEXTAUTH_URL` before `vercel build --prod`. It does not
      derive `NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`, because that would fix the
@@ -97,6 +108,12 @@ Why the split exists:
 - GitHub-hosted production prebuilds do not receive a reliable Vercel system
   `VERCEL_URL`; AuthJS production builds therefore require the same
   `NEXTAUTH_URL` that the production runtime will receive.
+- The prebuilt production deploy must preserve Vercel's Build Output contract:
+  every allowed runtime source value in function `filePathMap` must be uploaded,
+  while root env, log, source, test, docs, and report paths must remain excluded
+  from the upload plan. Next.js and the Vercel adapter can retain such paths in
+  generated metadata, including Node proxy traces and production env files.
+  Never repair this by deleting entries from generated `.vc-config.json`.
 
 Add this repository variable for LHCI:
 

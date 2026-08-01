@@ -99,6 +99,13 @@ async function readMigrationSql(tag: string): Promise<Buffer> {
       return readFile(resolve(MIGRATIONS_DIR, '0012_users_deactivated_at.sql'));
     case '0013_reconcile_snapshot':
       return readFile(resolve(MIGRATIONS_DIR, '0013_reconcile_snapshot.sql'));
+    case '0014_authjs_credentials_identity_backfill':
+      return readFile(
+        resolve(
+          MIGRATIONS_DIR,
+          '0014_authjs_credentials_identity_backfill.sql',
+        ),
+      );
     default:
       throw new Error(
         `[migration-journal] Unsupported journal entry ${tag}. Add it to readMigrationSql().`,

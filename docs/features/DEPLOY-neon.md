@@ -66,10 +66,10 @@ Enabling Neon Auth here would introduce a **second auth authority** that the app
 ### Step 2 — Connect to Your Vercel Project
 
 1. In Vercel: **Storage → your database → Connect Project**.
-2. Select your project and enable all three environments: **Production**, **Preview**, **Development**.
-3. Under **Advanced Options → Deployments Configuration**, enable **Preview** branching.
+2. Select your project.
+3. Configure the resource environments and deployment integration as described below.
 4. Enable **Resource must be active before deployment**.
-5. Click **Connect**.
+5. Click **Connect** or **Update Connection**.
 
 Vercel now auto-injects these env vars per environment:
 
@@ -78,6 +78,56 @@ Vercel now auto-injects these env vars per environment:
 | `DATABASE_URL`                                 | Pooled connection (PgBouncer) | Runtime app |
 | `DATABASE_URL_UNPOOLED`                        | Direct connection             | Migrations  |
 | `PGHOST`, `PGUSER`, `PGDATABASE`, `PGPASSWORD` | Raw connection parts          | Optional    |
+
+### Required Preview Branching Checkbox Matrix
+
+The Neon/Vercel connection form has two separate environment controls. Selecting
+**Production** and **Preview** in the upper **Environments** field only creates
+the base resource environment variables in those Vercel environments. It does
+not, by itself, enable Neon Preview Branching. If the lower **Preview** checkbox
+is left off, Vercel Preview deployments can receive the same `DATABASE_URL` as
+Production.
+
+Use this configuration:
+
+| Form element                                    | Setting                                                                 |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Upper **Environments** multiselect              | Select **Production** and **Preview**                                   |
+| Upper **Environments** multiselect: Development | Select only if local `vercel env pull` / `vercel dev` should use Neon   |
+| Lower **Preview** checkbox                      | Select                                                                  |
+| Lower **Production** checkbox                   | Do not select                                                           |
+| Prefix                                          | Leave default unless the app has been changed to use prefixed variables |
+| Sensitive                                       | Keep enabled                                                            |
+
+Visual target:
+
+```text
+Environments
+[x] Production
+[x] Preview
+[-] Development, optional
+
+Preview Branching / deployment integration
+[x] Preview
+[ ] Production
+```
+
+Meaning:
+
+- The upper **Environments** field controls where Vercel creates the base
+  resource variables, such as `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
+- The lower **Preview** checkbox opts the resource into the Preview Deployment
+  integration. This is the setting that makes Neon create an isolated database
+  branch for a specific Vercel Preview Deployment and inject branch-specific
+  connection variables into that deployment.
+- The lower **Production** checkbox does not select the production database.
+  Production should keep using the main Neon branch directly through the base
+  Production variables, so leave this deployment-integration checkbox off unless
+  Neon/Vercel explicitly changes the integration semantics.
+
+After changing this setting, create a new Preview Deployment. Existing Vercel
+deployments keep the environment snapshot prepared when they were created; a
+configuration change does not retroactively replace their database variables.
 
 ### Step 3 — Configure Boilerplate Env Vars
 
@@ -184,6 +234,74 @@ Each preview branch is a **copy-on-write snapshot** of the production branch —
 
 This means each PR gets an isolated database that mirrors production schema, which aligns with the boilerplate's self-bootstrapping provisioning model: the first sign-in on any preview deployment will provision its own tenant, roles, and policies automatically.
 
+### Do Not Trust The Project Env Vars List Alone
+
+In Vercel **Settings → Environment Variables**, integration-managed variables may
+still appear as shared resource variables, for example:
+
+```text
+DATABASE_URL             All Environments
+DATABASE_URL_UNPOOLED    All Environments
+```
+
+That view is not the final database target for each deployment. It shows the
+base variables created by the integration. With Preview Branching enabled, a new
+Preview Deployment receives deployment-scoped values for the Neon branch created
+for that deployment:
+
+| Deployment           | Effective `DATABASE_URL` target              |
+| -------------------- | -------------------------------------------- |
+| Production           | Main Neon branch                             |
+| Preview: `feature-a` | Neon preview branch for `feature-a`          |
+| Preview: `feature-b` | Separate Neon preview branch for `feature-b` |
+
+Do not manually delete integration-managed `DATABASE_URL` or
+`DATABASE_URL_UNPOOLED` rows from the Vercel Environment Variables screen just
+because they show a broad environment scope. Deleting them can break the native
+integration wiring.
+
+### How To Verify Preview Branching
+
+Verify a newly created Preview Deployment, not an older deployment:
+
+1. Confirm a matching preview branch was created in the Neon project.
+2. Compare the hostname from the Preview deployment's masked `DATABASE_URL`
+   against the Neon endpoint for that preview branch.
+3. Confirm the Preview hostname differs from the Production Neon endpoint.
+4. Run a harmless read-only identity query if direct database access is needed:
+
+   ```sql
+   SELECT
+     current_database(),
+     current_user;
+   ```
+
+5. Perform a non-destructive write test only in an intentionally disposable
+   preview branch, then confirm it does not appear in Production.
+
+The strongest signal is the hostname/endpoint comparison between the new Neon
+preview branch and the effective deployment variable. Do not paste full
+connection strings into logs, tickets, docs, or chat.
+
+### Troubleshooting: Preview Uses Production Database
+
+If Preview writes are visible in Production, check the Neon connection settings
+first:
+
+1. Go to **Vercel → Storage → Neon → Projects**.
+2. Select the project and choose **Update Connection**.
+3. In the upper **Environments** multiselect, select **Production** and
+   **Preview**.
+4. Under the deployment integration / Preview Branching checkboxes, select
+   **Preview** and leave **Production** unselected.
+5. Save the connection.
+6. Trigger a new Preview Deployment, preferably with a new commit. If redeploying,
+   avoid reusing stale build cache for this validation.
+
+Root cause to look for: the lower **Preview** checkbox was not selected. In that
+state, Vercel Preview has access to the base Preview resource variable, which may
+point at the same main Neon branch as Production.
+
 ---
 
 ## 5. Env Var Summary Per Environment
@@ -199,7 +317,11 @@ This means each PR gets an isolated database that mirrors production schema, whi
 
 ### Preview
 
-Same as production. Connection strings point to the PR-specific branch, injected at deployment time and not visible in Vercel's env var settings (by design — branch-scoped injection only).
+Same variable names as Production. For new Preview Deployments with Neon Preview
+Branching enabled, the effective connection strings point to the deployment's
+Neon preview branch. The branch-specific final values may not be visible in the
+main Vercel Environment Variables list; verify by checking the Neon branch and
+masked deployment host.
 
 ### `.env.production` (local — for running migrations manually)
 
@@ -238,6 +360,12 @@ All RBAC data (tenants, roles, policies, tenant attributes) is provisioned autom
 | Provisioning (RBAC bootstrap) | `src/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService.ts` |
 | Env requirements              | `docs/features/ENV-requirements.md`                                             |
 | Manual Vercel deploy guide    | `docs/features/DEPLOY-manual.md`                                                |
+
+External references:
+
+- [Vercel Marketplace — Neon](https://vercel.com/marketplace/neon)
+- [Vercel Environment Variables](https://vercel.com/docs/environment-variables)
+- [Neon Vercel Native Integration preview branching announcement](https://neon.com/blog/neon-vercel-native-integration)
 
 ---
 

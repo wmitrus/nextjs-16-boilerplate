@@ -459,5 +459,29 @@ describe('validate-env: runValidation', () => {
       expect(errors[0]).toContain('NODE_OPTIONS');
       expect(errors[0]).toContain('newrelic');
     });
+
+    it('rejects New Relic preload with native VERCEL_ENV when APP_ENV is unset', () => {
+      const errors = runValidation(
+        'authjs',
+        undefined,
+        undefined,
+        'nextauth_secret',
+        'personal',
+        undefined,
+        undefined,
+        true,
+        'nr_license_key',
+        '--require=newrelic',
+        'production',
+        undefined,
+        undefined,
+        { nextAuthUrl: 'https://example.com' },
+        'production',
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('NODE_OPTIONS');
+      expect(errors[0]).toContain('newrelic');
+    });
   });
 });

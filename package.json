@@ -232,6 +232,7 @@
     "typescript": "^5",
     "typescript-eslint": "^8.56.1",
     "undici": "^7.28.0",
+    "vercel": "58.4.4",
     "vite": "^7.3.2",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.10",

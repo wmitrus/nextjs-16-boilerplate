@@ -123,13 +123,42 @@ Preferred pattern:
 
 - reason explicitly about cache and revalidation whenever data scope is user, org, tenant, or permission dependent
 
+### 2.4 Build-Only Fixes That Mask Runtime Configuration Drift
+
+Do not:
+
+- export an env var only for `vercel build`, `next build`, or CI to make a deploy
+  command pass when the deployed runtime also needs that value
+- treat `NEXT_PUBLIC_*` or another adjacent env var as a runtime substitute for a
+  provider-specific env contract unless the runtime actually receives the same
+  variable
+- sign off a deploy fix without checking the next lifecycle stage: build artifact,
+  deployment runtime, provider callbacks/cookies, and environment scope
+
+Why this is banned:
+
+- it makes CI green while production remains misconfigured
+- it hides the true operational action from the owner of Vercel/env settings
+- it is high risk for auth, tenant, database, redirect, cookie, and provider-origin
+  settings
+
+Preferred pattern:
+
+- decide whether the value is build-only, runtime-only, or both
+- if runtime needs it, require it in the deployment environment and fail before build
+  when missing
+- document provider and environment scope explicitly, such as
+  `AUTH_PROVIDER=authjs` + Vercel Production only
+- add validation that proves the guard does not affect unrelated providers or
+  environments
+
 ---
 
 ---
 
 ## 2. Runtime And Framework Anti-Patterns (continued)
 
-### 2.4 Module-Level Framework Initialization In Shared Auth Modules
+### 2.5 Module-Level Framework Initialization In Shared Auth Modules
 
 Do not:
 
@@ -189,7 +218,7 @@ Recovery procedure when CLIENT_FETCH_ERROR recurs:
 4. If touch does not fix it, run `rm -rf .next` and restart the dev server
 5. Run `pnpm lint --fix` and `pnpm typecheck` before assuming fixed
 
-### 2.5 Automatic Preview Admin Bootstrap In CI Or Vercel Workflow
+### 2.6 Automatic Preview Admin Bootstrap In CI Or Vercel Workflow
 
 Do not:
 

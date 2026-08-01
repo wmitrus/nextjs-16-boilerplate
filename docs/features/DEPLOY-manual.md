@@ -68,6 +68,18 @@ Before starting, ensure you have accounts and projects ready on:
    - **Preview Build Command**: `pnpm db:migrate:prod && pnpm build`
    - **Production Build Command**: leave the default `pnpm build`; production deployments are built in GitHub Actions via `vercel build --prod` and deployed with `vercel deploy --prebuilt --prod`
 
+AuthJS production URL note:
+
+- If `AUTH_PROVIDER=authjs`, set `NEXTAUTH_URL` in Vercel **Production** to the
+  canonical production origin.
+- Do not set the production `NEXTAUTH_URL` as `All Environments`; Preview builds
+  run remotely on Vercel and can use their deployment URL.
+- The production workflow fails before `vercel build --prod` when
+  `AUTH_PROVIDER=authjs` and Production `NEXTAUTH_URL` is missing. It does not
+  synthesize `NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`, because that would mask a
+  missing runtime env. `NEXTAUTH_URL` is not required for Clerk and does not
+  block Preview deployments.
+
 For the exact Neon/Vercel checkbox matrix, including the separate lower
 **Preview** deployment-integration checkbox required for branch-specific preview
 database URLs, follow [DEPLOY-neon.md](./DEPLOY-neon.md).
@@ -98,6 +110,12 @@ Run the following locally to create and link the project:
 Opening or updating a PR to `main` triggers a **Preview Deployment** (see `preview-deploy.yml`). Preview validation runs in GitHub Actions, but the actual preview build happens remotely on Vercel so Neon preview-branch migrations run against deployment-scoped branch variables.
 
 Merging into `main` triggers a **Production Deployment** (see `prod-deploy.yml`). Production remains GitHub Actions controlled and uses an explicit migration step before the prebuilt deployment.
+
+For `AUTH_PROVIDER=authjs`, this split also affects AuthJS URL handling:
+Preview builds can use the Vercel-provided deployment URL, while Production
+prebuilt builds must have a build-safe URL available in GitHub Actions. The
+workflow requires the same `NEXTAUTH_URL` that the Production runtime will
+receive from Vercel.
 
 After successful production deployment, the separate release workflow runs. If semantic-release publishes a new version, the final `new-relic-change-tracking.yml` workflow runs from that published release and emits the New Relic production deployment event using the semantic version as the visible release identifier and the tagged Git commit as commit metadata.
 

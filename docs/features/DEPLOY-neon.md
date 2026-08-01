@@ -44,7 +44,8 @@ This boilerplate currently uses **Clerk** as the implemented auth provider and r
 
 Code-backed reasons:
 
-- `AUTH_PROVIDER` defaults to `clerk` and the checked-in env surface is Clerk-first.
+- the checked-in local env surface is Clerk-first, while production-like
+  deployments must set `AUTH_PROVIDER` explicitly in Vercel env.
 - request identity is established through Clerk in `src/proxy.ts`
 - post-auth routing goes through `/auth/bootstrap/start`
 - provisioning and onboarding truth are stored in the app database, not in provider-synced auth tables
@@ -208,9 +209,12 @@ Preview Branching do not have a branch context, so the deployment can receive
 the base Preview/Production Neon endpoint instead of a Neon preview branch
 endpoint.
 
-The repository preview workflow must verify this after deployment by inspecting
-the deployment JSON and failing if `meta.githubCommitRef` or
-`meta.githubCommitSha` is missing or different from the PR head branch/commit.
+The repository preview workflow must verify this after deployment by resolving
+the deployment id with `vercel inspect`, reading metadata from Vercel's
+deployment API, and failing if `meta.githubCommitRef` or `meta.githubCommitSha`
+is missing or different from the PR head branch/commit. Do not use the root
+`vercel inspect --json` object alone for this guard; it does not reliably expose
+deployment `meta`.
 
 3. You may still run `vercel pull --yes --environment=preview --git-branch="$GIT_BRANCH"` locally in CI when you need preview env vars for validation, but do not treat that local cache as the migration authority for Neon preview branches.
 

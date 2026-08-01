@@ -68,6 +68,10 @@ Before starting, ensure you have accounts and projects ready on:
    - **Preview Build Command**: `pnpm db:migrate:prod && pnpm build`
    - **Production Build Command**: leave the default `pnpm build`; production deployments are built in GitHub Actions via `vercel build --prod` and deployed with `vercel deploy --prebuilt --prod`
 
+For the exact Neon/Vercel checkbox matrix, including the separate lower
+**Preview** deployment-integration checkbox required for branch-specific preview
+database URLs, follow [DEPLOY-neon.md](./DEPLOY-neon.md).
+
 ### Option B: Create via Vercel CLI
 
 Run the following locally to create and link the project:

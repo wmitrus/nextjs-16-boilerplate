@@ -28,6 +28,7 @@ Update it after every security review group.
 | SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers     |
 | SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting    | Real risk → fixed          | Public auth route handlers   |
 | SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges | Real risk → fixed          | Email adapters, auth bridges |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                | Real risk → fixed          | App Router route handlers    |
 
 ---
 
@@ -505,6 +506,75 @@ session identifiers, nonces, or any value an adversary must not be able to predi
 **Why**: Postgres validates UUID format at query parameter binding time. A non-UUID string passed to a `uuid`-typed column raises `22P02: invalid input syntax for type uuid` before any rows are evaluated — even if the query uses `OR col IS NULL`. Unit tests with mocked DBs cannot catch this; only `*.db.test.ts` integration tests will surface it.
 
 **Correct alternative**: Use `text` column type for externally-sourced identifiers. Document the expected value format (e.g., "will always be a UUID-shaped string from `tenants.id` in production") in a code comment.
+
+---
+
+## SEC-23 — Validate Route Params Before Binding UUID Columns
+
+**ID**: SEC-23
+**Category**: Routes / DB input validation
+**Classification**: Real risk
+**Affected contexts**: App Router route handlers, server actions, Drizzle predicates, repository calls that bind UUID columns
+
+### Risk
+
+App Router `context.params` values are untrusted strings. Passing a malformed path
+segment such as `not-a-uuid` into a Drizzle predicate for a Postgres `uuid` column
+raises `22P02: invalid input syntax for type uuid` at query parameter binding time.
+That bypasses intended application-level `400` or `404` handling and returns a server
+error for caller-controlled input.
+
+### Dangerous Pattern
+
+```typescript
+const params = await context.params;
+const invitationId = params.id;
+
+await db
+  .select()
+  .from(invitationsTable)
+  .where(eq(invitationsTable.id, invitationId));
+```
+
+Presence checks such as `if (!params.id)` are not enough. They prove only that a
+string exists, not that it is valid for a UUID-typed DB column.
+
+### Correct Pattern
+
+```typescript
+const idResult = z.object({ id: z.uuid() }).safeParse({ id: params.id });
+
+if (!idResult.success) {
+  return createValidationErrorResponse(getFieldErrors(idResult.error));
+}
+
+await db
+  .select()
+  .from(invitationsTable)
+  .where(eq(invitationsTable.id, idResult.data.id));
+```
+
+Use existing route-level schemas such as `organizationIdSchema` where available. After
+validation, use only `parseResult.data.*` values in DB predicates and mutation inputs.
+
+### Required Validation
+
+Every route handler with a UUID path segment must include a negative route-handler test
+using a malformed value such as `not-a-uuid`. The test must prove:
+
+- response status is `400`
+- repository/read-service/DB query mocks are not called for that malformed ID
+- mutation side effects are not called
+
+This check is required even when happy-path and not-found tests already exist, because
+mocked DB tests do not surface Postgres UUID bind errors.
+
+### Rule for Agents
+
+**DO** parse every UUID path param with `z.uuid()` or an equivalent schema before DB use.
+**DO** add malformed-ID tests for UUID path segments.
+**DO NOT** alias raw `params.*` values as IDs or pass raw route params directly to
+Drizzle `eq(...)` predicates for UUID columns.
 
 **ID**: SEC-08
 

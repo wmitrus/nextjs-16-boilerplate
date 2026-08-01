@@ -86,7 +86,12 @@ export function WaitlistJoinForm({ onSuccess }: WaitlistJoinFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
+    <form
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      className="w-full max-w-sm space-y-4"
+    >
       <div>
         <label
           htmlFor="waitlist-name"

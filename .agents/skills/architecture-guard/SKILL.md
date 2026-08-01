@@ -107,6 +107,7 @@ Always flag these when present:
 - feature flags embedded ad hoc in UI
 - direct database access from delivery code
 - delivery-layer route handlers binding raw or insufficiently validated route params to database identifiers, especially UUID columns (SEC-23)
+- state or schema designs that lie about runtime absence or finite domains, such as sparse UI state typed as full `Record<string, T>` or finite request options parsed as broad `z.string()` (SEC-24)
 - hidden service-locator patterns in request-sensitive flows
 - ad hoc API response envelopes in normal JSON route handlers when the shared `response-service` and `with-error-handler` pattern should be used
 

@@ -35,6 +35,10 @@ keeping blast radius low and updating durable security pattern guidance.
 4. Scanner ignore report
 5. Patterns propagation
 
+For Codacy HIGH `Error prone` TypeScript/JSX findings, explicitly separate security
+exploitability from reliability/type-safety cleanup and apply SEC-24 unless live code
+shows a concrete trust-boundary failure.
+
 ## Compatibility Notes
 
 - `docs/ai/general/Workflow 10 - Codacy Security Review Workflow.md` remains the

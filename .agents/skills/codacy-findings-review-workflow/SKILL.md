@@ -43,6 +43,10 @@ risk, add or update a local guardrail such as `scripts/architecture-lint.sh`, ES
 a focused validation script. Do not leave automatable production-risk checks as
 agent-memory-only guidance.
 
+For Codacy HIGH `Error prone` TypeScript/JSX findings, explicitly separate security
+exploitability from reliability/type-safety cleanup and apply SEC-24 unless live code
+shows a concrete trust-boundary failure.
+
 ## Compatibility Notes
 
 - `docs/ai/general/Workflow 11 - Codacy Findings Review Workflow.md` remains the

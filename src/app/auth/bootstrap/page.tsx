@@ -89,6 +89,8 @@ export async function BootstrapPageContent({
     <BootstrapErrorUI
       error={resolveBootstrapError(error, reason)}
       dbDriver={env.DB_DRIVER}
+      deploymentEnvironment={env.VERCEL_ENV}
+      nodeEnv={env.NODE_ENV}
       authProvider={env.AUTH_PROVIDER}
     />
   );

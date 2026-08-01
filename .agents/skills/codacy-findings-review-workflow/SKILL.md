@@ -38,6 +38,11 @@ confirmed patterns into repository AI instructions.
 5. Remediation plan
 6. Patterns propagation and validation
 
+When a confirmed real-risk finding is mechanically detectable with low false-positive
+risk, add or update a local guardrail such as `scripts/architecture-lint.sh`, ESLint, or
+a focused validation script. Do not leave automatable production-risk checks as
+agent-memory-only guidance.
+
 ## Compatibility Notes
 
 - `docs/ai/general/Workflow 11 - Codacy Findings Review Workflow.md` remains the

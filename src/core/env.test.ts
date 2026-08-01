@@ -623,6 +623,21 @@ describe('validateNewRelicConfigValues', () => {
     ).toThrow('NODE_OPTIONS must not preload newrelic on Vercel');
   });
 
+  it('throws when Vercel runtime preloads New Relic through NODE_OPTIONS equals require syntax', async () => {
+    vi.resetModules();
+    const { validateNewRelicConfigValues } = await import('./env');
+
+    expect(() =>
+      validateNewRelicConfigValues(
+        true,
+        'nr_license_key',
+        '--require=newrelic',
+        'production',
+        'production',
+      ),
+    ).toThrow('NODE_OPTIONS must not preload newrelic on Vercel');
+  });
+
   it('allows New Relic preload outside Vercel', async () => {
     vi.resetModules();
     const { validateNewRelicConfigValues } = await import('./env');

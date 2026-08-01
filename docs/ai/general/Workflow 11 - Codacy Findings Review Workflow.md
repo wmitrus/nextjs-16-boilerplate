@@ -228,6 +228,9 @@ For each finding:
    - Latent Risk
    - False Positive
    - Tooling Noise / Out-of-Scope
+     For Codacy HIGH `Error prone` TypeScript/JSX findings, explicitly separate
+     security exploitability from reliability/type-safety cleanup and apply SEC-24
+     unless live code shows a concrete trust-boundary failure.
 4. If it matches an existing SEC-XX entry, apply that pattern and say whether the current finding confirms or extends it.
 5. Decide the action:
    - code fix

@@ -11,24 +11,25 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                   | Classification             | Affected Contexts            |
-| ------ | ------------------ | ----------------------------------------------------- | -------------------------- | ---------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks              | False positive             | Unit test files              |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin   | False positive             | Middleware                   |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param  | Latent risk → fixed        | Middleware                   |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`             | False positive → hardened  | API route                    |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths              | False positive             | E2E helpers                  |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness             | False positive             | E2E specs                    |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config   | Real risk → fixed          | Module-level SDK adapters    |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`        | Latent risk                | Auth/bootstrap UI mapping    |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement        | Latent risk                | Runtime logger helpers       |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop   | Real risk → fixed          | Rate-limit middleware        |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers         | Local lint-backed workflow | Scripts, E2E helpers         |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling   | Local lint-backed workflow | Scripts, E2E helpers         |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers     |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting    | Real risk → fixed          | Public auth route handlers   |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges | Real risk → fixed          | Email adapters, auth bridges |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                | Real risk → fixed          | App Router route handlers    |
+| #      | Category           | Vulnerability Class                                   | Classification             | Affected Contexts             |
+| ------ | ------------------ | ----------------------------------------------------- | -------------------------- | ----------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks              | False positive             | Unit test files               |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin   | False positive             | Middleware                    |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param  | Latent risk → fixed        | Middleware                    |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`             | False positive → hardened  | API route                     |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths              | False positive             | E2E helpers                   |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness             | False positive             | E2E specs                     |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config   | Real risk → fixed          | Module-level SDK adapters     |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`        | Latent risk                | Auth/bootstrap UI mapping     |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement        | Latent risk                | Runtime logger helpers        |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop   | Real risk → fixed          | Rate-limit middleware         |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers         | Local lint-backed workflow | Scripts, E2E helpers          |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling   | Local lint-backed workflow | Scripts, E2E helpers          |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers      |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting    | Real risk → fixed          | Public auth route handlers    |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges | Real risk → fixed          | Email adapters, auth bridges  |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                | Real risk → fixed          | App Router route handlers     |
+| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                     | Not security by itself     | UI state, JSX handlers, tests |
 
 ---
 
@@ -575,6 +576,88 @@ mocked DB tests do not surface Postgres UUID bind errors.
 **DO** add malformed-ID tests for UUID path segments.
 **DO NOT** alias raw `params.*` values as IDs or pass raw route params directly to
 Drizzle `eq(...)` predicates for UUID columns.
+
+---
+
+## SEC-24 — Codacy HIGH Error-Prone Patterns Are Reliability Findings, Not Automatic Security Findings
+
+**ID**: SEC-24
+**Category**: TypeScript / React reliability
+**Classification**: Not security by itself; fix when low-blast-radius because repeated
+scanner churn hides real findings
+**Affected contexts**: Client components, sparse UI state, JSX event handlers, unit-test
+mocks, finite-option route schemas
+
+### Risk Classification
+
+Codacy `HIGH Error prone` findings such as unnecessary optional chaining, unnecessary
+`??`, Promise-returning JSX handlers, unbound mock methods, and invalid template literal
+types are not automatically security vulnerabilities. They usually do not create a data
+leak, authorization bypass, or tenant exposure on their own.
+
+They still deserve professional handling because:
+
+- type declarations may be lying about runtime absence
+- React does not await event handler promises
+- broad strings can drift into domain-sensitive logic
+- repeated scanner noise can hide security-significant findings
+
+### Correct Patterns
+
+For sparse maps keyed by dynamic IDs, do not use full `Record<string, T>`:
+
+```typescript
+const [rowState, setRowState] = useState<Partial<Record<string, RowState>>>({});
+const state = rowState[row.id] ?? { status: 'idle' };
+```
+
+Use `Partial<Record<string, T>>` or `Map<string, T>` whenever a key may be absent. Do
+not accept scanner quick fixes that remove `?.` or `??` from sparse dynamic state.
+
+For async React handlers, mark the JSX boundary explicitly:
+
+```tsx
+<button onClick={() => void handleDelete(id)} />
+<form onSubmit={(event) => void handleSubmit(event)} />
+```
+
+The async handler itself must still handle expected failures with `try/catch` and
+user-facing error state. The `void` wrapper only prevents returning a Promise to a
+void-returning JSX attribute.
+
+For test object mocks, prefer typed mocks:
+
+```typescript
+const repository: vi.Mocked<InvitationRepository> = {
+  findByToken: vi.fn(),
+  // ...
+};
+
+repository.findByToken.mockResolvedValue(invitation);
+```
+
+For finite route/domain options, use schemas that narrow the type:
+
+```typescript
+const resourceOptions = Object.values(RESOURCES) as [Resource, ...Resource[]];
+const bodySchema = z.object({
+  resource: z.enum(resourceOptions),
+});
+```
+
+Keep separate validation for cross-field relationships such as action values belonging
+to the selected resource.
+
+### Rule for Agents
+
+**DO** classify these findings as reliability/type-safety unless a concrete security
+path is found in the live code.
+**DO** prefer low-blast-radius code fixes over suppressions.
+**DO** update validation so the affected component, route, or test still proves the
+behavior.
+**DO NOT** remove optional chaining or nullish fallbacks from dynamic sparse state just
+because a scanner says the type is non-nullish.
+**DO NOT** leave Promise-returning JSX handlers unwrapped.
 
 **ID**: SEC-08
 

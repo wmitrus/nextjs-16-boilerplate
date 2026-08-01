@@ -90,11 +90,15 @@ You do not own:
 - Do not write if/else chains of `token === SYMBOL` in DI mock test containers — use `Map<symbol, unknown>` with `Map.get(token)` instead (SEC-01 in `SECURITY_CODING_PATTERNS.md`).
 - Do not forward `redirect_url` or similar query parameters to downstream routes without calling `sanitizeRedirectUrl()` at the point the param is read from the request (SEC-03 in `SECURITY_CODING_PATTERNS.md`).
 - Do not alias raw App Router `context.params` values as IDs or pass raw `params.*` values into Drizzle predicates or mutation inputs for Postgres `uuid` columns. Parse UUID path params with `z.uuid()` or an existing schema, return `createValidationErrorResponse(...)` on failure, and use only `parseResult.data.*` after validation (SEC-23).
+- Do not type sparse dynamic state as a full `Record<string, T>` when keys may be absent; use `Partial<Record<string, T>>` or `Map<string, T>` and keep needed `?.` / `??` fallbacks (SEC-24).
+- Do not pass Promise-returning functions directly to JSX attributes that expect void handlers; use `onClick={() => void handleX(...)}` and `onSubmit={(event) => void handleSubmit(event)}` (SEC-24).
 - Do not use `obj[dynamicKey]()` bracket dispatch on objects to call methods — use an explicit `Record<AllowedKeys, fn>` dispatch map instead (SEC-04 in `SECURITY_CODING_PATTERNS.md`).
 - In `src/**` runtime helpers, prefer `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers over repeated `result[key] = ...` mutation chains when keys are dynamic or derived (SEC-20 in `SECURITY_CODING_PATTERNS.md`).
 - In `scripts/**` and `e2e/**`, prefer shared sink-confined fs helper wrappers over repeated direct `fs.*` calls when the same file-access pattern appears in multiple files (SEC-19 in `SECURITY_CODING_PATTERNS.md`).
 - Do not rely on caller-side validation alone for helper paths that eventually reach `fs.*`; reusable helpers must perform their own confinement check at the point of file access (SEC-16 in `SECURITY_CODING_PATTERNS.md`).
 - `Math.random()` must never be used for tokens, secrets, session identifiers, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06 in `SECURITY_CODING_PATTERNS.md`).
+- In unit tests, prefer `vi.Mocked<Interface>` object mocks over repeated `vi.mocked(object.method)` unbound method references (SEC-24).
+- For finite domain options in request bodies or form state, use `z.enum(...)` or an existing typed schema instead of broad `z.string()` followed by downstream assumptions (SEC-24).
 
 ## Script and Tooling Security Rules
 

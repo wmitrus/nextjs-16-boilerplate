@@ -24,6 +24,7 @@ Workflow:
 - Inspect the affected tests, configs, workflows, and validation tooling that matter for this change.
 - Recommend the minimum sensible validation scope for this change.
 - For App Router route handlers with UUID path segments, require a malformed-ID `400` test proving DB/repository/mutation calls are not reached before treating validation as sufficient.
+- For SEC-24 Codacy HIGH error-prone fixes, require shape-matched evidence: lint for async JSX handlers, typecheck for sparse state and finite schemas, owning tests for UI handlers and typed mocks, and route tests for request schema narrowing.
 
 Required output:
 

@@ -36,6 +36,7 @@ Required workflow:
 Codacy review discipline:
 
 - real code fix always beats inline suppress — eliminate the pattern from code before adding a comment
+- for Codacy HIGH `Error prone` TypeScript/JSX findings, explicitly separate security exploitability from reliability/type-safety cleanup and apply SEC-24 unless live code shows a concrete trust-boundary failure
 - inline `eslint-disable-next-line` is last resort; it must include a rationale comment on the preceding line
 - when hardening is possible (e.g. confinement check, typed dispatch map, Map instead of Record), apply it before suppressing
 - do NOT add findings to the scanner ignore table if they were resolved by a real code fix — those go in a "Resolved" section

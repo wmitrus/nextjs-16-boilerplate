@@ -22,6 +22,7 @@ Task input package:
 - treat live repository code as the source of truth for classification
 - do not assume Codacy is correct without reading the actual code
 - cross-reference every finding against `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+- for Codacy HIGH `Error prone` TypeScript/JSX findings, explicitly separate security exploitability from reliability/type-safety cleanup and apply SEC-24 unless live code shows a concrete trust-boundary failure
 
 Required workflow:
 

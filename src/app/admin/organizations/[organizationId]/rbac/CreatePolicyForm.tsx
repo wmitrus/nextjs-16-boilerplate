@@ -156,7 +156,12 @@ export function CreatePolicyForm({
         </span>
       </div>
 
-      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+      <form
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+        className="mt-4 space-y-4"
+      >
         <div className="grid gap-4 md:grid-cols-3">
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-zinc-900 dark:text-zinc-100">

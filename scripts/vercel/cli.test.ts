@@ -75,7 +75,7 @@ describe('parseCliArgs', () => {
 });
 
 describe('buildVercelCliInvocation', () => {
-  it('uses npx vercel by default and forwards the token from env', () => {
+  it('uses the pinned repo Vercel CLI by default and forwards the token from env', () => {
     const invocation = buildVercelCliInvocation(
       {
         command: 'inspect-logs',
@@ -90,10 +90,10 @@ describe('buildVercelCliInvocation', () => {
     );
 
     expect(invocation).toEqual({
-      command: 'npx',
+      command: 'pnpm',
       args: [
-        '-y',
-        'vercel@latest',
+        'exec',
+        'vercel',
         'inspect',
         'preview.example.vercel.app',
         '--logs',
@@ -136,8 +136,8 @@ describe('buildVercelCliInvocation', () => {
     );
 
     expect(invocation.args).toEqual([
-      '-y',
-      'vercel@latest',
+      'exec',
+      'vercel',
       'whoami',
       '--token=manual-token',
     ]);

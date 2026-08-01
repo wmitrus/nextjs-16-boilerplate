@@ -3,10 +3,6 @@ const REPLAY_TOKEN_SEPARATOR = '|';
 function createReplayNonce(): string {
   const cryptoApi = globalThis.crypto;
 
-  if (!cryptoApi) {
-    throw new Error('Replay token generation requires Web Crypto');
-  }
-
   if (typeof cryptoApi.randomUUID === 'function') {
     return cryptoApi.randomUUID();
   }

@@ -42,7 +42,7 @@ function buildInvitation(overrides: Partial<Invitation> = {}): Invitation {
 }
 
 describe('DefaultInvitationService', () => {
-  const repository: InvitationRepository = {
+  const repository: vi.Mocked<InvitationRepository> = {
     create: vi.fn(),
     findByToken: vi.fn(),
     findPendingByEmailAndOrg: vi.fn(),
@@ -52,7 +52,7 @@ describe('DefaultInvitationService', () => {
     markExpired: vi.fn(),
   };
 
-  const emailService: EmailService = {
+  const emailService: vi.Mocked<EmailService> = {
     sendInvitationEmail: vi.fn(),
     sendVerificationEmail: vi.fn(),
     sendWaitlistConfirmationEmail: vi.fn(),
@@ -72,8 +72,8 @@ describe('DefaultInvitationService', () => {
       status: 'accepted',
       acceptedAt,
     });
-    vi.mocked(repository.findByToken).mockResolvedValue(pendingInvitation);
-    vi.mocked(repository.markAccepted).mockResolvedValue(acceptedInvitation);
+    repository.findByToken.mockResolvedValue(pendingInvitation);
+    repository.markAccepted.mockResolvedValue(acceptedInvitation);
 
     const service = new DefaultInvitationService(repository, emailService, {
       appUrl: 'http://localhost:3000',
@@ -90,8 +90,8 @@ describe('DefaultInvitationService', () => {
 
   it('throws InvitationAlreadyUsedError when the conditional accept update loses the race', async () => {
     const pendingInvitation = buildInvitation();
-    vi.mocked(repository.findByToken).mockResolvedValue(pendingInvitation);
-    vi.mocked(repository.markAccepted).mockResolvedValue(null);
+    repository.findByToken.mockResolvedValue(pendingInvitation);
+    repository.markAccepted.mockResolvedValue(null);
 
     const service = new DefaultInvitationService(repository, emailService, {
       appUrl: 'http://localhost:3000',
@@ -106,7 +106,7 @@ describe('DefaultInvitationService', () => {
     const expiredInvitation = buildInvitation({
       expiresAt: daysFromNow(-30),
     });
-    vi.mocked(repository.findByToken).mockResolvedValue(expiredInvitation);
+    repository.findByToken.mockResolvedValue(expiredInvitation);
 
     const service = new DefaultInvitationService(repository, emailService, {
       appUrl: 'http://localhost:3000',
@@ -120,11 +120,11 @@ describe('DefaultInvitationService', () => {
 
   it('logs invitation lifecycle events without raw email addresses', async () => {
     const createdInvitation = buildInvitation();
-    vi.mocked(repository.findPendingByEmailAndOrg).mockResolvedValue(null);
-    vi.mocked(repository.create).mockResolvedValue(createdInvitation);
-    vi.mocked(emailService.sendInvitationEmail).mockResolvedValue(undefined);
-    vi.mocked(repository.findByToken).mockResolvedValue(createdInvitation);
-    vi.mocked(repository.markAccepted).mockResolvedValue(
+    repository.findPendingByEmailAndOrg.mockResolvedValue(null);
+    repository.create.mockResolvedValue(createdInvitation);
+    emailService.sendInvitationEmail.mockResolvedValue(undefined);
+    repository.findByToken.mockResolvedValue(createdInvitation);
+    repository.markAccepted.mockResolvedValue(
       buildInvitation({ status: 'accepted', acceptedAt: new Date() }),
     );
 
@@ -152,9 +152,9 @@ describe('DefaultInvitationService', () => {
 
   it('logs email send failures without raw recipient addresses', async () => {
     const createdInvitation = buildInvitation();
-    vi.mocked(repository.findPendingByEmailAndOrg).mockResolvedValue(null);
-    vi.mocked(repository.create).mockResolvedValue(createdInvitation);
-    vi.mocked(emailService.sendInvitationEmail).mockRejectedValue(
+    repository.findPendingByEmailAndOrg.mockResolvedValue(null);
+    repository.create.mockResolvedValue(createdInvitation);
+    emailService.sendInvitationEmail.mockRejectedValue(
       new Error('smtp unavailable'),
     );
 

@@ -65,6 +65,7 @@
     "nr": "tsx scripts/new-relic/cli.ts",
     "nr:query": "tsx scripts/new-relic/query.ts",
     "vercel": "node --import tsx scripts/vercel/cli.ts",
+    "vercel:prebuilt:validate": "tsx scripts/validate-vercel-prebuilt-artifact.ts",
     "vercel:whoami": "node --import tsx scripts/vercel/cli.ts whoami",
     "vercel:inspect:logs": "node --import tsx scripts/vercel/cli.ts inspect-logs",
     "vercel:inspect:logs:wait": "node --import tsx scripts/vercel/cli.ts inspect-logs --wait",

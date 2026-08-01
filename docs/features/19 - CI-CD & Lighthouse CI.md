@@ -75,7 +75,7 @@ This repository uses two different deployment ownership models:
    - Keep the Vercel Preview Build Command set to `pnpm db:migrate:prod && pnpm build`.
    - Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
    - If preview deployments are created with the Vercel CLI, pass GitHub metadata via `--meta`. Without `githubDeployment=1` and `githubCommitRef`, Vercel does not link the deployment to the PR branch, and Neon Preview Branching cannot inject branch-specific database variables.
-   - The preview workflow must inspect the created deployment and fail if the expected PR branch/SHA metadata is missing.
+   - The preview workflow must verify the created deployment through Vercel's deployment API and fail if the expected PR branch/SHA metadata is missing.
 
 2. **Production Deployments**
    - GitHub Actions remains the deployment authority.

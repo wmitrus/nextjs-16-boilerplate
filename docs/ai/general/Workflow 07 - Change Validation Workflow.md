@@ -133,6 +133,7 @@ Produce three explicit lists:
 - specific test commands to run
 - specific scenarios to verify
 - typecheck and lint if applicable
+- for App Router route handlers with UUID path segments, a malformed-ID `400` test proving DB/repository/mutation calls are not reached
 
 **Optional additional validation** — recommended but not blocking:
 

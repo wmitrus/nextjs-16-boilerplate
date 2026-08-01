@@ -308,6 +308,7 @@ Severity:
 - security direct coupling violations
 - provider leakage outside approved boundaries
 - suspicious global container usage in request-sensitive flows
+- raw App Router params reaching UUID DB predicates without schema validation
 - obvious client/server and edge/node architecture smells
 - existing graph/cycle checks through repository commands where practical
 

@@ -314,6 +314,11 @@ For every durable false-positive pattern or remediation pattern confirmed during
    - relevant `.github/agents/*.agent.md`
    - relevant workflow or prompt docs
 
+If the confirmed real-risk pattern is mechanically detectable with low false-positive
+risk, add or update a local guardrail such as `scripts/architecture-lint.sh`, ESLint, or
+a focused validation script. Do not leave automatable production-risk checks as
+agent-memory-only guidance.
+
 Do not leave confirmed patterns only in chat or in a one-off findings report.
 
 Output required from this step:

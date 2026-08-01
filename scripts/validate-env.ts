@@ -114,6 +114,7 @@ export function runValidation(
       newRelicLicenseKey,
       nodeOptions,
       nodeEnv,
+      appEnv,
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));

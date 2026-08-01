@@ -12,11 +12,59 @@ import {
 
 const DRIZZLE_CONFIG = 'src/core/db/migrations/config/drizzle.prod.ts';
 
+type MigrationUrlSource = 'DATABASE_URL' | 'DATABASE_URL_UNPOOLED';
+
+interface ResolvedMigrationUrl {
+  source: MigrationUrlSource;
+  url: string;
+}
+
 export function resolveMigrationUrl(
   rawUrl: string | undefined,
   unpooledUrl: string | undefined,
 ): string | undefined {
-  return unpooledUrl?.trim() || rawUrl?.trim() || undefined;
+  return resolveMigrationUrlWithSource(rawUrl, unpooledUrl)?.url;
+}
+
+export function resolveMigrationUrlWithSource(
+  rawUrl: string | undefined,
+  unpooledUrl: string | undefined,
+): ResolvedMigrationUrl | undefined {
+  const directUrl = unpooledUrl?.trim();
+  if (directUrl) {
+    return {
+      source: 'DATABASE_URL_UNPOOLED',
+      url: directUrl,
+    };
+  }
+
+  const pooledUrl = rawUrl?.trim();
+  if (pooledUrl) {
+    return {
+      source: 'DATABASE_URL',
+      url: pooledUrl,
+    };
+  }
+
+  return undefined;
+}
+
+export function describeMigrationTarget(resolved: ResolvedMigrationUrl): {
+  database: string;
+  hostname: string;
+  pooled: boolean;
+  protocol: string;
+  source: MigrationUrlSource;
+} {
+  const parsed = new URL(resolved.url);
+
+  return {
+    source: resolved.source,
+    protocol: parsed.protocol,
+    hostname: parsed.hostname,
+    database: parsed.pathname.replace(/^\//, ''),
+    pooled: /pooler/i.test(parsed.hostname),
+  };
 }
 
 function runDrizzleMigrate(): void {
@@ -40,16 +88,27 @@ function runDrizzleMigrate(): void {
 
 export async function run(argv = process.argv.slice(2)): Promise<void> {
   const dryRun = argv.includes('--check');
-  const connectionString = resolveMigrationUrl(
+  const migrationUrl = resolveMigrationUrlWithSource(
     process.env.DATABASE_URL,
     process.env.DATABASE_URL_UNPOOLED,
   );
+  const connectionString = migrationUrl?.url;
 
   if (!connectionString) {
     throw new Error(
       '[db-migrate-prod] DATABASE_URL_UNPOOLED or DATABASE_URL is required before running prod migrations.',
     );
   }
+
+  console.log(
+    JSON.stringify(
+      {
+        migrationTarget: describeMigrationTarget(migrationUrl),
+      },
+      null,
+      2,
+    ),
+  );
 
   const summary = await reconcileKnownMigrationState({
     connectionString,

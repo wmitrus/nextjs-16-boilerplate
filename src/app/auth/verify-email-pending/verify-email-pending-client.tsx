@@ -38,7 +38,12 @@ export function ResendVerificationForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      className="space-y-4"
+    >
       {message && (
         <div className="rounded-md bg-green-50 p-3 dark:bg-green-950">
           <p className="text-sm text-green-700 dark:text-green-300">

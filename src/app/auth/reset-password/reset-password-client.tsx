@@ -70,7 +70,12 @@ export function ResetPasswordClient({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      className="space-y-4"
+    >
       <p className="text-center text-sm text-gray-600 dark:text-gray-400">
         Resetting password for{' '}
         <span className="font-medium text-gray-900 dark:text-gray-100">

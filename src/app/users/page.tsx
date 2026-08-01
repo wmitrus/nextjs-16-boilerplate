@@ -57,7 +57,7 @@ export default function UsersPage() {
     <ClientErrorBoundary>
       <div className="container mx-auto p-8">
         <h1 className="mb-6 text-3xl font-bold">User Management</h1>
-        <ErrorAlert error={error} onRetry={fetchUsers} />
+        <ErrorAlert error={error} onRetry={() => void fetchUsers()} />
         <UserList
           users={users}
           loading={loading}

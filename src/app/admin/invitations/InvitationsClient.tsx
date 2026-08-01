@@ -173,7 +173,12 @@ export function InvitationsClient({
         <h2 className="mb-4 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           Send Direct Invitation
         </h2>
-        <form onSubmit={handleSend} className="space-y-4">
+        <form
+          onSubmit={(event) => {
+            void handleSend(event);
+          }}
+          className="space-y-4"
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label
@@ -274,7 +279,7 @@ export function InvitationsClient({
                   {statusBadge(inv.status)}
                   {inv.status === 'pending' && (
                     <button
-                      onClick={() => handleRevoke(inv.id)}
+                      onClick={() => void handleRevoke(inv.id)}
                       disabled={revokeState[inv.id] === 'revoking'}
                       className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
                     >

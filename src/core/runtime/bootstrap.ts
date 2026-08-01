@@ -70,6 +70,8 @@ export function createRequestContainer(config: AppConfig): Container {
     env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     env.NEXTAUTH_SECRET,
     env.NODE_ENV,
+    env.NEXTAUTH_URL,
+    env.VERCEL_ENV,
   );
   validateTenancyConfigValues(
     config.auth.tenancyMode,

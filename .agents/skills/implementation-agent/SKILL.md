@@ -105,6 +105,7 @@ Always follow the repository's mandatory coding patterns from
 
 - `Map<symbol, unknown>` for DI mock token resolution
 - `sanitizeRedirectUrl()` before forwarding redirect-style params
+- `z.uuid()` or an existing UUID schema for App Router path params before they are used in Drizzle predicates or mutation inputs for Postgres `uuid` columns; use only `parseResult.data.*` after validation and add a malformed-ID `400` regression test
 - `Record<AllowedKeys, fn>` dispatch maps instead of `obj[dynamicKey]()`
 - `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers instead of repeated `result[key] = ...` mutation chains in `src/**` runtime helpers
 - shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats

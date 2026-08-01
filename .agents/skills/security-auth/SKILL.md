@@ -107,6 +107,7 @@ Always flag these when present:
 - env-var-sourced or user-controlled URLs passed directly to HTTP clients without
   protocol and hostname validation
 - forwarding `redirect_url` without `sanitizeRedirectUrl()` (SEC-03)
+- unvalidated App Router `context.params` values, or aliases derived from them, used in Drizzle predicates or mutation inputs that bind Postgres `uuid` columns; parse with `z.uuid()` first and use only `parseResult.data.*` (SEC-23)
 - `obj[dynamicKey]()` dispatch instead of explicit `Record<AllowedKeys, fn>` maps
   (SEC-04)
 - `Math.random()` for security-sensitive values (SEC-06)

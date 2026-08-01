@@ -943,6 +943,7 @@ Key rules currently in effect:
 | SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                   |
 | SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs       |
 | SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access |
+| SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns       |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 
@@ -958,6 +959,10 @@ Key rules currently in effect:
 | `text`      | Externally-sourced string identifiers: Clerk org IDs (`org_xxx`), tenant slugs, string scope keys, feature flag tenant scope keys |
 
 **Rule**: Misuse of UUID for external/application-level string IDs causes Postgres error `22P02: invalid input syntax for type uuid` at query parameter binding time — silent in unit tests with mocked DB, crash in production.
+
+**Route param rule**: App Router `context.params` values are untrusted strings. Before any `params.*` value is used in a Drizzle predicate against a `uuid` column, parse it with `z.uuid()` or an existing schema such as `organizationIdSchema`, branch on parse failure with `createValidationErrorResponse(...)`, and use only `parseResult.data.*` in DB queries and mutations. Do not alias raw route params as `const invitationId = params.id` or pass `params.id` directly into `eq(table.id, ...)`.
+
+Every route handler with a UUID path segment must have a negative test for a malformed ID (for example `not-a-uuid`) proving the endpoint returns `400` before any DB read/write/repository call that would bind the UUID value.
 
 **Also applies to unique indexes with nullable columns**: A `uniqueIndex(...).on(col1, nullableCol)` in Postgres does NOT enforce uniqueness when `nullableCol IS NULL` (BTree treats `NULL != NULL`). Use `.nullsNotDistinct()` on the unique **constraint** builder (`unique(name).on(cols).nullsNotDistinct()`) when NULLs should be treated as equal for uniqueness.
 

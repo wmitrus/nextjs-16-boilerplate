@@ -81,13 +81,48 @@ jobs:
 
       - name: Verify Vercel Git Metadata
         run: |
-          vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-deployment.json
+          vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
           node - <<'NODE'
           const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
 
-          const deployment = JSON.parse(
-            fs.readFileSync('/tmp/vercel-preview-deployment.json', 'utf8'),
+          const inspected = JSON.parse(
+            fs.readFileSync('/tmp/vercel-preview-inspect.json', 'utf8'),
           );
+          const deploymentId = inspected.id;
+          if (typeof deploymentId !== 'string' || deploymentId.length === 0) {
+            console.error(
+              JSON.stringify(
+                {
+                  message:
+                    'Vercel inspect did not return a deployment id; cannot verify deployment metadata.',
+                  inspectKeys: Object.keys(inspected).sort(),
+                },
+                null,
+                2,
+              ),
+            );
+            process.exit(1);
+          }
+
+          const teamId = process.env.VERCEL_ORG_ID;
+          const query = teamId
+            ? `?teamId=${encodeURIComponent(teamId)}`
+            : '';
+          const apiUrl = `https://api.vercel.com/v13/deployments/${encodeURIComponent(
+            deploymentId,
+          )}${query}`;
+          const apiResponse = execFileSync(
+            'curl',
+            [
+              '-fsS',
+              '-H',
+              `Authorization: Bearer ${process.env.VERCEL_TOKEN}`,
+              apiUrl,
+            ],
+            { encoding: 'utf8' },
+          );
+          const deployment = JSON.parse(apiResponse);
           const meta = deployment.meta ?? {};
           const expectedRef = process.env.PREVIEW_GIT_BRANCH;
           const expectedSha = process.env.PREVIEW_GIT_SHA;
@@ -139,6 +174,7 @@ jobs:
         env:
           PREVIEW_GIT_BRANCH: ${{ github.event.pull_request.head.ref }}
           PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Print Vercel Build Logs On Failure
         if: failure() && steps.vercel_deploy.outputs.preview_url != ''

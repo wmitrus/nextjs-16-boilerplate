@@ -1,17 +1,17 @@
 // @vitest-environment node
 /* eslint-disable security/detect-non-literal-fs-filename -- tests create isolated temporary fixture trees. */
 
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  assertVercelPrebuiltArtifactHasNoEscapingTraces,
   assertVercelPrebuiltArtifactHasNoForbiddenTraces,
   assertVercelPrebuiltArtifactValid,
   assertVercelPrebuiltUploadCoverageValid,
-  sanitizeVercelPrebuiltArtifact,
   validateVercelPrebuiltArtifact,
   validateVercelPrebuiltUploadCoverage,
 } from './validate-vercel-prebuilt-artifact';
@@ -75,11 +75,35 @@ describe('validateVercelPrebuiltArtifact', () => {
       ],
       missingFiles: [],
       forbiddenFiles: [],
+      escapingFiles: [],
     });
     expect(() => assertVercelPrebuiltArtifactValid(summary)).not.toThrow();
     expect(() =>
+      assertVercelPrebuiltArtifactHasNoEscapingTraces(summary),
+    ).not.toThrow();
+    expect(() =>
       assertVercelPrebuiltArtifactHasNoForbiddenTraces(summary),
     ).not.toThrow();
+  });
+
+  it('uses filePathMap source values rather than target keys', async () => {
+    const root = await createTempRoot();
+    const targetPath = 'server/chunks/vendor.js';
+    const sourcePath = 'node_modules/.pnpm/pkg/node_modules/pkg/index.js';
+    await writeFunctionConfig(root, {
+      [targetPath]: sourcePath,
+    });
+    await writeRequiredFile(root, sourcePath);
+
+    const summary = await validateVercelPrebuiltArtifact(root);
+
+    expect(summary.requiredFiles).toEqual([
+      {
+        configPath: '.vercel/output/functions/api/example.func/.vc-config.json',
+        requiredPath: sourcePath,
+      },
+    ]);
+    expect(summary.missingFiles).toEqual([]);
   });
 
   it('reports missing traced files with the config that references them', async () => {
@@ -125,35 +149,28 @@ describe('validateVercelPrebuiltArtifact', () => {
     ).toThrow('forbidden traced file');
   });
 
-  it('sanitizes forbidden traced files from function configs', async () => {
+  it('rejects traced files that symlink outside the repository root', async () => {
     const root = await createTempRoot();
-    const forbiddenPath = 'logs/server.log';
-    const allowedPath = 'node_modules/.pnpm/pkg/node_modules/pkg/index.js';
+    const outsideRoot = await createTempRoot();
+    const requiredPath = 'node_modules/.pnpm/pkg/node_modules/pkg/index.js';
+    const outsideFile = join(outsideRoot, 'outside.js');
     await writeFunctionConfig(root, {
-      [forbiddenPath]: forbiddenPath,
-      [allowedPath]: allowedPath,
+      [requiredPath]: requiredPath,
     });
-    await writeRequiredFile(root, forbiddenPath);
-    await writeRequiredFile(root, allowedPath);
+    await mkdir(dirname(join(root, requiredPath)), { recursive: true });
+    await writeFile(outsideFile, 'module.exports = {};\n', 'utf8');
+    await symlink(outsideFile, join(root, requiredPath));
 
-    const sanitizeSummary = await sanitizeVercelPrebuiltArtifact(root);
-    const configRaw = await readFile(
-      join(root, '.vercel/output/functions/api/example.func/.vc-config.json'),
-      'utf8',
-    );
-    const config = JSON.parse(configRaw) as {
-      filePathMap: Record<string, string>;
-    };
     const summary = await validateVercelPrebuiltArtifact(root);
 
-    expect(sanitizeSummary).toEqual({
-      configCount: 1,
-      removedFileCount: 1,
+    expect(summary.escapingFiles).toHaveLength(1);
+    expect(summary.escapingFiles[0]).toMatchObject({
+      configPath: '.vercel/output/functions/api/example.func/.vc-config.json',
+      requiredPath,
     });
-    expect(config.filePathMap).toEqual({
-      [allowedPath]: allowedPath,
-    });
-    expect(summary.forbiddenFiles).toEqual([]);
+    expect(() =>
+      assertVercelPrebuiltArtifactHasNoEscapingTraces(summary),
+    ).toThrow('escaping the repository root');
   });
 
   it('throws when the prebuilt functions output does not exist', async () => {
@@ -178,7 +195,7 @@ describe('validateVercelPrebuiltArtifact', () => {
       [
         'Vercel CLI 58.4.4',
         JSON.stringify({
-          files: [{ path: requiredPath }],
+          files: [{ path: requiredPath, size: 123 }],
           ignored: [],
         }),
       ].join('\n'),
@@ -187,6 +204,7 @@ describe('validateVercelPrebuiltArtifact', () => {
     expect(uploadSummary).toEqual({
       uploadedFileCount: 1,
       ignoredPathCount: 0,
+      totalUploadSizeBytes: 123,
       missingUploadFiles: [],
     });
     expect(() =>
@@ -210,9 +228,11 @@ describe('validateVercelPrebuiltArtifact', () => {
         files: [
           {
             path: '.vercel/output/functions/_global-error.func/.vc-config.json',
+            size: 456,
           },
         ],
         ignored: ['node_modules'],
+        totalSize: 789,
       }),
     );
 
@@ -223,6 +243,7 @@ describe('validateVercelPrebuiltArtifact', () => {
         ignoredByDryRunPath: 'node_modules',
       },
     ]);
+    expect(uploadSummary.totalUploadSizeBytes).toBe(789);
     expect(() =>
       assertVercelPrebuiltUploadCoverageValid(uploadSummary),
     ).toThrow('likely excluded by dry-run ignored path `node_modules`');

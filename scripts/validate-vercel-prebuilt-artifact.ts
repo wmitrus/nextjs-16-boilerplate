@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +8,6 @@ import {
   pathExistsWithinBase,
   readDirentsWithinBase,
   readTextFileWithinBase,
-  writeTextFileWithinBase,
 } from './lib/fs-guards-shared';
 
 interface VercelFunctionConfig extends Record<string, unknown> {
@@ -23,12 +23,17 @@ export interface MissingVercelTraceFile extends VercelTraceFileReference {
   resolvedPath: string;
 }
 
+export interface EscapingVercelTraceFile extends VercelTraceFileReference {
+  resolvedPath: string;
+}
+
 export interface VercelPrebuiltArtifactSummary {
   configCount: number;
   requiredFileCount: number;
   requiredFiles: VercelTraceFileReference[];
   missingFiles: MissingVercelTraceFile[];
   forbiddenFiles: VercelTraceFileReference[];
+  escapingFiles: EscapingVercelTraceFile[];
 }
 
 export interface MissingVercelUploadFile extends VercelTraceFileReference {
@@ -38,6 +43,7 @@ export interface MissingVercelUploadFile extends VercelTraceFileReference {
 export interface VercelPrebuiltUploadCoverageSummary {
   uploadedFileCount: number;
   ignoredPathCount: number;
+  totalUploadSizeBytes?: number;
   missingUploadFiles: MissingVercelUploadFile[];
 }
 
@@ -107,7 +113,9 @@ function readVercelFunctionConfig(
 
   if (
     parsed.filePathMap !== undefined &&
-    (typeof parsed.filePathMap !== 'object' || parsed.filePathMap === null)
+    (typeof parsed.filePathMap !== 'object' ||
+      parsed.filePathMap === null ||
+      Array.isArray(parsed.filePathMap))
   ) {
     throw new Error(
       `[vercel-prebuilt] Invalid filePathMap in ${toRepoRelativePath(configPath, rootDir)}.`,
@@ -115,6 +123,37 @@ function readVercelFunctionConfig(
   }
 
   return parsed;
+}
+
+function assertVercelFilePathMap(
+  filePathMap: Record<string, string>,
+  configPath: string,
+  rootDir: string,
+): void {
+  for (const [targetPath, sourcePath] of Object.entries(filePathMap)) {
+    if (typeof sourcePath !== 'string') {
+      throw new Error(
+        `[vercel-prebuilt] Invalid source path in ${toRepoRelativePath(configPath, rootDir)} for target ${targetPath}.`,
+      );
+    }
+  }
+}
+
+function assertTraceSourceRealPathWithinRoot(
+  requiredPath: string,
+  rootDir: string,
+): void {
+  const resolvedPath = path.join(rootDir, requiredPath);
+
+  if (!pathExistsWithinBase(resolvedPath, rootDir, 'Vercel traced file')) {
+    return;
+  }
+
+  assertPathWithinBase(
+    realpathSync.native(resolvedPath),
+    rootDir,
+    'Vercel traced file real path',
+  );
 }
 
 export async function validateVercelPrebuiltArtifact(
@@ -142,14 +181,17 @@ export async function validateVercelPrebuiltArtifact(
   const requiredFiles: VercelTraceFileReference[] = [];
   const missingFiles: MissingVercelTraceFile[] = [];
   const forbiddenFiles: VercelTraceFileReference[] = [];
+  const escapingFiles: EscapingVercelTraceFile[] = [];
 
   for (const configPath of configPaths) {
     const config = readVercelFunctionConfig(configPath, safeRoot);
-    const requiredPaths = Object.keys(config.filePathMap ?? {});
+    const configRelativePath = toRepoRelativePath(configPath, safeRoot);
+    const filePathMap = config.filePathMap ?? {};
+    assertVercelFilePathMap(filePathMap, configPath, safeRoot);
+    const requiredPaths = Object.values(filePathMap);
     requiredFileCount += requiredPaths.length;
 
     for (const requiredPath of requiredPaths) {
-      const configRelativePath = toRepoRelativePath(configPath, safeRoot);
       const resolvedPath = assertPathWithinBase(
         path.join(safeRoot, requiredPath),
         safeRoot,
@@ -173,6 +215,17 @@ export async function validateVercelPrebuiltArtifact(
           requiredPath,
           resolvedPath,
         });
+        continue;
+      }
+
+      try {
+        assertTraceSourceRealPathWithinRoot(requiredPath, safeRoot);
+      } catch {
+        escapingFiles.push({
+          configPath: configRelativePath,
+          requiredPath,
+          resolvedPath,
+        });
       }
     }
   }
@@ -183,6 +236,7 @@ export async function validateVercelPrebuiltArtifact(
     requiredFiles,
     missingFiles,
     forbiddenFiles,
+    escapingFiles,
   };
 }
 
@@ -208,6 +262,28 @@ export function assertVercelPrebuiltArtifactValid(
   );
 }
 
+export function assertVercelPrebuiltArtifactHasNoEscapingTraces(
+  summary: VercelPrebuiltArtifactSummary,
+): void {
+  if (summary.escapingFiles.length === 0) {
+    return;
+  }
+
+  const examples = summary.escapingFiles
+    .slice(0, 10)
+    .map(
+      (escaping) =>
+        `  - ${escaping.requiredPath} (referenced by ${escaping.configPath})`,
+    )
+    .join('\n');
+
+  throw new Error(
+    `[vercel-prebuilt] Found ${summary.escapingFiles.length} traced file(s) escaping the repository root.\n` +
+      `${examples}\n` +
+      'Do not deploy a prebuilt artifact whose traced source paths resolve outside the repository.',
+  );
+}
+
 export function assertVercelPrebuiltArtifactHasNoForbiddenTraces(
   summary: VercelPrebuiltArtifactSummary,
 ): void {
@@ -226,52 +302,8 @@ export function assertVercelPrebuiltArtifactHasNoForbiddenTraces(
   throw new Error(
     `[vercel-prebuilt] Found ${summary.forbiddenFiles.length} forbidden traced file(s) in .vc-config.json.\n` +
       `${examples}\n` +
-      'Run `pnpm vercel:prebuilt:sanitize` after `vercel build --prod` before validating or deploying the prebuilt artifact.',
+      'Do not deploy this prebuilt artifact. Fix the build/runtime trace source instead of modifying generated .vc-config.json.',
   );
-}
-
-export async function sanitizeVercelPrebuiltArtifact(
-  rootDir = process.cwd(),
-  functionsDir = DEFAULT_FUNCTIONS_DIR,
-): Promise<{ configCount: number; removedFileCount: number }> {
-  const safeRoot = assertPathWithinBase(rootDir, rootDir, 'repository root');
-  const safeFunctionsDir = assertPathWithinBase(
-    path.join(safeRoot, functionsDir),
-    safeRoot,
-    'Vercel functions directory',
-  );
-  const configPaths = await findVercelFunctionConfigPaths(
-    safeFunctionsDir,
-    safeRoot,
-  );
-  let removedFileCount = 0;
-
-  for (const configPath of configPaths) {
-    const config = readVercelFunctionConfig(configPath, safeRoot);
-    const filePathMap = config.filePathMap;
-
-    if (!filePathMap) {
-      continue;
-    }
-
-    const allowedEntries = Object.entries(filePathMap).filter(
-      ([requiredPath]) => !isForbiddenTracePath(requiredPath),
-    );
-    removedFileCount += Object.keys(filePathMap).length - allowedEntries.length;
-    config.filePathMap = Object.fromEntries(allowedEntries);
-
-    await writeTextFileWithinBase(
-      configPath,
-      safeRoot,
-      JSON.stringify(config),
-      'Vercel function config',
-    );
-  }
-
-  return {
-    configCount: configPaths.length,
-    removedFileCount,
-  };
 }
 
 function normalizeVercelRelativePath(filePath: string): string {
@@ -321,9 +353,42 @@ function collectPathSet(value: unknown, propertyName: string): Set<string> {
   return paths;
 }
 
+function collectTotalSizeBytes(parsed: {
+  files?: unknown;
+  totalSize?: unknown;
+}): number | undefined {
+  if (typeof parsed.totalSize === 'number') {
+    return parsed.totalSize;
+  }
+
+  if (!Array.isArray(parsed.files)) {
+    return undefined;
+  }
+
+  let totalSizeBytes = 0;
+  let hasSizeData = false;
+
+  for (const entry of parsed.files) {
+    const record = entry as { size?: unknown };
+
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      Object.hasOwn(entry, 'size') &&
+      typeof record.size === 'number'
+    ) {
+      totalSizeBytes += record.size;
+      hasSizeData = true;
+    }
+  }
+
+  return hasSizeData ? totalSizeBytes : undefined;
+}
+
 export function parseVercelDeployDryRunOutput(rawOutput: string): {
   uploadedPaths: Set<string>;
   ignoredPaths: Set<string>;
+  totalUploadSizeBytes?: number;
 } {
   const parsed = extractJsonObject(rawOutput);
 
@@ -336,6 +401,7 @@ export function parseVercelDeployDryRunOutput(rawOutput: string): {
   return {
     uploadedPaths: collectPathSet(dryRun.files, 'files'),
     ignoredPaths: collectPathSet(dryRun.ignored, 'ignored'),
+    totalUploadSizeBytes: collectTotalSizeBytes(dryRun),
   };
 }
 
@@ -359,7 +425,7 @@ export function validateVercelPrebuiltUploadCoverage(
   artifactSummary: VercelPrebuiltArtifactSummary,
   dryRunOutput: string,
 ): VercelPrebuiltUploadCoverageSummary {
-  const { uploadedPaths, ignoredPaths } =
+  const { uploadedPaths, ignoredPaths, totalUploadSizeBytes } =
     parseVercelDeployDryRunOutput(dryRunOutput);
   const missingUploadFiles = artifactSummary.requiredFiles
     .filter(({ requiredPath }) => !uploadedPaths.has(requiredPath))
@@ -372,6 +438,7 @@ export function validateVercelPrebuiltUploadCoverage(
   return {
     uploadedFileCount: uploadedPaths.size,
     ignoredPathCount: ignoredPaths.size,
+    totalUploadSizeBytes,
     missingUploadFiles,
   };
 }
@@ -420,10 +487,6 @@ function getDryRunJsonPath(args: string[]): string | undefined {
   return args[flagIndex + 1];
 }
 
-function shouldSanitizeForbiddenTraces(args: string[]): boolean {
-  return args.includes('--sanitize-forbidden-traces');
-}
-
 function readDryRunJsonFile(filePath: string): string {
   const allowedBaseDirs = [process.cwd(), tmpdir()];
   const safePath = allowedBaseDirs
@@ -456,16 +519,9 @@ function readDryRunJsonFile(filePath: string): string {
 /* v8 ignore start -- CLI console/process wrapper; exported functions are unit-tested. */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (shouldSanitizeForbiddenTraces(args)) {
-    const sanitizeSummary = await sanitizeVercelPrebuiltArtifact();
-
-    console.log(
-      `[vercel-prebuilt] Sanitized forbidden traces: ${sanitizeSummary.removedFileCount} removed across ${sanitizeSummary.configCount} function config(s).`,
-    );
-  }
-
   const summary = await validateVercelPrebuiltArtifact();
   assertVercelPrebuiltArtifactValid(summary);
+  assertVercelPrebuiltArtifactHasNoEscapingTraces(summary);
   assertVercelPrebuiltArtifactHasNoForbiddenTraces(summary);
   const dryRunJsonPath = getDryRunJsonPath(args);
 
@@ -478,7 +534,7 @@ async function main(): Promise<void> {
     assertVercelPrebuiltUploadCoverageValid(uploadSummary);
 
     console.log(
-      `[vercel-prebuilt] Upload coverage valid: ${summary.requiredFileCount} traced file reference(s), ${uploadSummary.uploadedFileCount} dry-run upload file(s), 0 missing.`,
+      `[vercel-prebuilt] Upload coverage valid: ${summary.requiredFileCount} traced file reference(s), ${uploadSummary.uploadedFileCount} dry-run upload file(s), ${uploadSummary.totalUploadSizeBytes ?? 'unknown'} byte(s), 0 missing.`,
     );
     return;
   }

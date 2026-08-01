@@ -35,6 +35,7 @@ Required workflow:
 - for every finding, classify as real risk, latent risk, false positive, or tooling noise
 - do not propose suppressions or fixes until the real code at that location has been read
 - if durable patterns are confirmed, update `docs/ai/general/SECURITY_CODING_PATTERNS.md` and propagate to AI instructions
+- if a confirmed real-risk pattern is mechanically detectable with low false-positive risk, add or update a local guardrail such as `scripts/architecture-lint.sh`, ESLint, or a focused validation script instead of leaving it as agent-memory-only guidance
 
 Required task artifacts (in `.copilot/tasks/{task_id}/`):
 

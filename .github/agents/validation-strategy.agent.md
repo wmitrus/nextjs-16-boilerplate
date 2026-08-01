@@ -132,6 +132,7 @@ Always flag these if present:
 - unit tests used as the only evidence for cross-layer behavior
 - security-sensitive behavior validated only through client or UI assertions
 - no meaningful validation for route handlers or server actions that change sensitive behavior
+- route handlers with UUID path segments validated only by happy-path or mocked-DB tests, without a malformed-ID test proving `400` before DB/repository access (SEC-23)
 - cache-sensitive or env-sensitive flows with no runtime-sensitive validation
 - critical flows covered only by happy-path tests
 - CI gates that miss high-risk repository failure modes
@@ -210,6 +211,16 @@ Your job is to protect validation quality, calibration, and cost-effectiveness s
 ### Pattern B — `*.db.test.ts` Required for All Drizzle Adapters
 
 Every `Drizzle*Service`/`Drizzle*Repository` MUST have a `*.db.test.ts` using `resolveTestDb()`. Treat absence as a validation gap. Tests must use non-UUID string tenant IDs to verify text column acceptance.
+
+### Pattern G — Malformed UUID Path Param Tests for Route Handlers
+
+Any App Router route handler that accepts a path segment later used as a Postgres
+`uuid` identifier must have a negative route-handler test with a malformed value such
+as `not-a-uuid`. The test must assert `400` and must prove DB/repository/read-service
+calls and mutation side effects are not reached for that malformed ID.
+
+Happy-path tests, valid-UUID not-found tests, and mocked DB query chains are not enough,
+because mocked DB tests do not reproduce Postgres `22P02` bind-time failures.
 
 ### Pattern C — MSW Handlers for External HTTP Adapters
 

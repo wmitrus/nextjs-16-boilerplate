@@ -23,6 +23,7 @@ Workflow:
 - If I provided specific files, modules, or risk notes, treat them as priority context but still verify the actual changed files in the repository.
 - Inspect the affected tests, configs, workflows, and validation tooling that matter for this change.
 - Recommend the minimum sensible validation scope for this change.
+- For App Router route handlers with UUID path segments, require a malformed-ID `400` test proving DB/repository/mutation calls are not reached before treating validation as sufficient.
 
 Required output:
 

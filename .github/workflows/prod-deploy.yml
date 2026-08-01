@@ -20,9 +20,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
 
@@ -36,7 +33,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm exec vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Verify Environment
         run: pnpm env:check
@@ -79,11 +76,20 @@ jobs:
             unset VERCEL_URL
           fi
 
-          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          pnpm exec vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           APP_ENV: production
           NEXT_PUBLIC_APP_ENV: production
           SKIP_ENV_VALIDATION: false
 
+      - name: Validate Prebuilt Artifact Contract
+        run: pnpm vercel:prebuilt:validate
+
+      - name: Validate Prebuilt Upload Coverage
+        shell: bash
+        run: |
+          pnpm exec vercel deploy --prebuilt --prod --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-prebuilt-dry-run.json
+          pnpm vercel:prebuilt:validate -- --dry-run-json /tmp/vercel-prebuilt-dry-run.json
+
       - name: Deploy to Vercel
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm exec vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

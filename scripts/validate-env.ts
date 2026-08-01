@@ -36,10 +36,14 @@ export function runValidation(
   appEnv?: string | undefined,
   deploymentEnvKeys?: ReadonlySet<string> | undefined,
   authRuntimeUrls: AuthRuntimeUrlConfig = {},
+  vercelEnv?: string | undefined,
 ): string[] {
   const errors: string[] = [];
+  const effectiveVercelEnv = appEnv ?? vercelEnv;
   const isDeploymentValidation =
-    nodeEnv === 'production' || appEnv === 'preview' || appEnv === 'production';
+    nodeEnv === 'production' ||
+    effectiveVercelEnv === 'preview' ||
+    effectiveVercelEnv === 'production';
   const nextAuthSecretForValidation = resolvePulledSensitiveValueForValidation(
     'NEXTAUTH_SECRET',
     nextAuthSecret,
@@ -114,7 +118,7 @@ export function runValidation(
       newRelicLicenseKey,
       nodeOptions,
       nodeEnv,
-      appEnv,
+      effectiveVercelEnv,
     );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
@@ -201,6 +205,7 @@ function main(): void {
     {
       nextAuthUrl: process.env.NEXTAUTH_URL,
     },
+    process.env.VERCEL_ENV,
   );
 
   if (errors.length > 0) {

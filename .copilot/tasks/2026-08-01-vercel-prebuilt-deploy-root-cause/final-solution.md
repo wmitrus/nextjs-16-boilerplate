@@ -3,8 +3,8 @@
 ## Status
 
 Local implementation is complete. The `.copilot` task is closed locally.
-Leantime task `98` remains open in `Do oceny` until post-merge production deploy
-verification is complete.
+Leantime task `98` remains open in `Do oceny` until hosted preview and post-merge
+production deploy verification are complete.
 
 ## Root Cause
 
@@ -35,15 +35,18 @@ The remediation adds contract guards and removes the user ignore conflict.
 
 ## Implemented Changes
 
-- Removed user `.vercelignore` rules for `.next` and `node_modules`.
-- Kept root-only excludes for env files, logs, source, tests, docs, coverage,
-  and reports.
+- Kept the default `.vercelignore` source-safe for remote preview builds.
+- Added `.vercelignore.prebuilt`, which excludes root source and non-runtime
+  artifacts without excluding `.next` or `node_modules`, and activate it only
+  after the local production build.
+- Added a preview source dry-run guard requiring the Next.js config, package
+  manifest, and generated migration journal before real deployment.
 - Removed prototype sanitizer behavior that edited generated `.vc-config.json`.
 - Added supported route-level Next.js output tracing excludes for non-runtime
   repository paths. Next 16.2.11 Turbopack does not apply these exclusions to
   its Node proxy trace; the upload guard therefore remains authoritative.
-- Ensured workflows and helper commands use repository-pinned Vercel CLI through
-  `pnpm exec vercel`.
+- Ensured workflows and helper commands resolve `vercel@latest` through
+  `pnpm dlx`, with artifact and upload-plan guards enforcing compatibility.
 - Updated the validator to use `Object.values(filePathMap)` as source paths.
 - Added fail-closed checks for:
   - missing traced source files;
@@ -55,12 +58,13 @@ The remediation adds contract guards and removes the user ignore conflict.
 
 ## Validation Evidence
 
-- Focused unit tests passed: `23` tests in `2` files.
+- Focused unit tests passed: `35` tests in `3` files.
 - Focused ESLint passed on changed TypeScript files.
 - TypeScript passed with `pnpm exec tsc --noEmit --pretty false`.
 - Prettier checks passed for changed formatted files.
 - `git diff --check` passed.
-- Pinned CLI check returned `58.4.4`.
+- The original validation observed `58.4.4`; current deployments resolve the
+  latest CLI dynamically.
 - A fresh clean Vercel build without production migrations passed.
 - Dry-run upload coverage passed:
   - `11292` traced source references;
@@ -69,6 +73,8 @@ The remediation adds contract guards and removes the user ignore conflict.
   - `73499700` bytes;
   - `0` missing allowed references;
   - `0` forbidden uploads.
+- Preview source dry-run passed with `626` `src/**` files and the generated
+  migration journal present.
 
 ## Deferred Proof
 
@@ -79,8 +85,9 @@ migrations and deployment authority belong to the protected workflow:
 DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build
 ```
 
-Final acceptance requires merging the PR and verifying that the updated
-production workflow passes:
+Final acceptance requires verifying that the updated hosted workflows pass:
+
+- PR preview source-upload guard, remote migration/build, and ready status;
 
 - fresh Vercel production build;
 - artifact contract guard;

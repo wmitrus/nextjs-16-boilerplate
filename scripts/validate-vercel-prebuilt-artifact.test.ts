@@ -152,6 +152,19 @@ describe('validateVercelPrebuiltArtifact', () => {
     ]);
   });
 
+  it('allows the tracked public env template required by the Vercel builder', async () => {
+    const root = await createTempRoot();
+    const requiredPath = '.env.example';
+    await writeFunctionConfig(root, {
+      [requiredPath]: requiredPath,
+    });
+    await writeRequiredFile(root, requiredPath);
+
+    const summary = await validateVercelPrebuiltArtifact(root);
+
+    expect(summary.forbiddenFiles).toEqual([]);
+  });
+
   it('rejects traced files that symlink outside the repository root', async () => {
     const root = await createTempRoot();
     const outsideRoot = await createTempRoot();

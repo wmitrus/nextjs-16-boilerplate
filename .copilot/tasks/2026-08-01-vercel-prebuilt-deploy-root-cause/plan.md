@@ -7,7 +7,7 @@
 - Active specialist: `06 - Debug Investigation`
 - Leantime milestone: `97` (`Vercel prebuilt deployment incident`).
 - Leantime task: `98` (`Determine Vercel prebuilt deploy root cause`), status `Do oceny` (`2`).
-- Status: Implementation and local validation complete; awaiting post-merge production deploy verification in Leantime.
+- Status: Implementation and local validation complete, including split preview/prebuilt upload profiles; awaiting workflow preview and post-merge production deploy verification in Leantime.
 
 ## Investigation Plan
 
@@ -25,6 +25,17 @@
 - [done] Synchronize task artifacts and close the investigation lifecycle.
 - [done] Close local `.copilot` implementation artifacts with production verification pending.
 - [done] Reopen Leantime task `98` to `Do oceny` until post-merge production deploy proof is collected.
+- [done] Confirm the preview source-deploy regression caused by sharing the
+  production `/src` exclusion with preview.
+- [done] Restore a preview-safe default `.vercelignore` and add a dedicated
+  `.vercelignore.prebuilt` profile activated only by the production workflow.
+- [done] Add preview source dry-run validation for required build and migration
+  inputs before the real deployment.
+- [done] Revalidate both real CLI plans: preview required sources present;
+  production `0` missing allowed refs and `0` forbidden uploads.
+- [done] Confirm release metadata and scope: `vercel@58.4.4` release notes only
+  record a republish, while direct package/history evidence remains the root-cause
+  proof; no preview prebuilt workaround is required.
 
 ## Confirmed Causal Chain
 
@@ -47,10 +58,11 @@ production plan.
   repository paths; verify separately that Next 16.2.11 Turbopack does not apply
   them to the Node proxy trace.
 - [done] Remove the sanitizer path that mutates generated `.vc-config.json`.
-- [done] Pin Vercel CLI as an exact tool dependency and run deploy commands through
-  the repository-pinned CLI.
-- [done] Simplify `.vercelignore` so it does not user-ignore `.next` or
-  `node_modules`, while still blocking root env/log/test/report artifacts.
+- [done] Resolve `vercel@latest` through `pnpm dlx` for each deploy command and
+  rely on artifact/upload-plan guards as the CLI compatibility boundary.
+- [done] Split upload profiles: keep default `.vercelignore` source-safe for
+  preview, and keep `.vercelignore.prebuilt` free of `.next`/`node_modules`
+  exclusions while blocking root env/log/source/test/report artifacts.
 - [done] Rewrite the validator to operate on `Object.values(filePathMap)`, because
   those values are the source paths Vercel uploads.
 - [done] Add containment and symlink-escape checks for each required source path.
@@ -76,6 +88,26 @@ migrations and deploy authority belong to the protected workflow.
 The local task is closed as implementation-complete. Leantime remains open in
 `Do oceny` until the merged production workflow proves the fresh build and real
 deploy path.
+
+## 2026-08-13 Scope Clarification
+
+- The incident remains isolated to production `vercel deploy --prebuilt --prod`.
+  Preview uploads source for a remote build and was never affected by the
+  `filePathMap`/`node_modules` omission.
+- The temporary preview URL-output parsing change proposed after a CodeRabbit
+  comment was removed from both the live workflow and the historical preview
+  SDD. It is unrelated to the proven prebuilt incident.
+- Retained preview validation is not a CLI workaround: it prevents recurrence of
+  the separate, observed `/src` upload regression introduced when production and
+  preview briefly shared a production-only ignore profile.
+- Deploy commands resolve `vercel@latest` through `pnpm dlx`; production guards
+  remain mandatory regardless of the CLI version that CI resolves.
+- npm dist-tag `latest` was `58.11.0` on 2026-08-13. The local `pnpm dlx` cache
+  ran `58.9.5`; the fresh GitHub Actions runner is the authoritative resolution
+  environment for the next deploy.
+- The old local `.vercel/output` is invalid after removing the prior CLI package
+  because it references stale `ms@2.1.1` files. Fresh production artifact proof
+  remains a protected-workflow responsibility due to production migrations.
 
 ## Archived Prototype Decision
 

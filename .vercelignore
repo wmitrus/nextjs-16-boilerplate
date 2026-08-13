@@ -5,6 +5,8 @@
 /.storybook
 /docs
 /tests
-/e2e
+/e2e/*
+!/e2e/env-files.ts
+!/e2e/internal-api-key.ts
 /playwright-report
 /test-results

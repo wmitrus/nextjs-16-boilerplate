@@ -132,3 +132,16 @@ guard, dry-run coverage, and real deploy success.
 - Added focused regression tests. `pnpm exec vitest run --config
 vitest.unit.config.ts scripts/validate-vercel-prebuilt-artifact.test.ts
 --coverage.enabled=false` passed with `16` tests.
+
+## 2026-08-13 Preview Build Follow-up
+
+- Hosted preview build failed while type-checking `playwright.config.ts`: the
+  preview upload profile excluded the imported `e2e/internal-api-key.ts` and
+  its `e2e/env-files.ts` dependency.
+- Kept the E2E suite excluded from preview uploads, but allowlisted exactly
+  those two source files through `.vercelignore` negation rules.
+- Extended the preview dry-run guard and regression tests to require both
+  configuration imports. The focused profile suite passed with `9` tests;
+  `pnpm vercel:deploy:validate` and `pnpm typecheck` also passed locally.
+- The next hosted preview deployment remains the required proof that Vercel
+  applies the allowlist rules as expected.

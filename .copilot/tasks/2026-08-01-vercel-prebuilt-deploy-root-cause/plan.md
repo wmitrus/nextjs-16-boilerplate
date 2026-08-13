@@ -38,6 +38,9 @@
   proof; no preview prebuilt workaround is required.
 - [done] Address verified PR review findings: keep production env validation
   enabled and fail closed for malformed Vercel dry-run output.
+- [done] Restore the two E2E helper files required by `playwright.config.ts` in
+  preview source uploads and enforce their presence in the preview dry-run
+  guard.
 
 ## Confirmed Causal Chain
 

@@ -112,20 +112,28 @@ function readVercelFunctionConfig(
     rootDir,
     'Vercel function config',
   );
-  const parsed = JSON.parse(rawConfig) as VercelFunctionConfig;
+  const parsed = JSON.parse(rawConfig) as unknown;
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      `[vercel-prebuilt] Invalid function config in ${toRepoRelativePath(configPath, rootDir)}.`,
+    );
+  }
+
+  const filePathMap = (parsed as Record<string, unknown>).filePathMap;
 
   if (
-    parsed.filePathMap !== undefined &&
-    (typeof parsed.filePathMap !== 'object' ||
-      parsed.filePathMap === null ||
-      Array.isArray(parsed.filePathMap))
+    filePathMap !== undefined &&
+    (typeof filePathMap !== 'object' ||
+      filePathMap === null ||
+      Array.isArray(filePathMap))
   ) {
     throw new Error(
       `[vercel-prebuilt] Invalid filePathMap in ${toRepoRelativePath(configPath, rootDir)}.`,
     );
   }
 
-  return parsed;
+  return parsed as VercelFunctionConfig;
 }
 
 function assertVercelFilePathMap(

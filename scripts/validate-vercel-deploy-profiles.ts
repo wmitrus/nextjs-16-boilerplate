@@ -11,6 +11,8 @@ import { parseVercelDeployDryRunOutput } from './validate-vercel-prebuilt-artifa
 const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'next.config.ts',
   'package.json',
+  'e2e/env-files.ts',
+  'e2e/internal-api-key.ts',
   'src/core/db/migrations/generated/meta/_journal.json',
 ];
 const PREBUILT_REQUIRED_EXCLUSIONS = ['/src'];

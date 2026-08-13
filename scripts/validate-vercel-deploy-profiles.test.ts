@@ -10,8 +10,26 @@ import {
 describe('assertVercelDeployProfilesValid', () => {
   it('accepts separate preview source and production prebuilt profiles', () => {
     expect(() =>
-      assertVercelDeployProfilesValid('/docs\n/tests\n', '/src\n/docs\n'),
+      assertVercelDeployProfilesValid(
+        '/docs\n/tests\n',
+        [
+          '/src',
+          '/docs',
+          '!/.env.example',
+          '!/.env.leantime.example',
+          '!/.env.leantime-dev.example',
+        ].join('\n'),
+      ),
     ).not.toThrow();
+  });
+
+  it('rejects a prebuilt profile missing a tracked public env template', () => {
+    expect(() =>
+      assertVercelDeployProfilesValid(
+        '/docs\n',
+        ['/src', '!/.env.example', '!/.env.leantime.example'].join('\n'),
+      ),
+    ).toThrow('.env.leantime-dev.example');
   });
 
   it('rejects a default profile that excludes preview source files', () => {
@@ -24,7 +42,16 @@ describe('assertVercelDeployProfilesValid', () => {
     'rejects a prebuilt profile that excludes traced runtime path %s',
     (runtimePath) => {
       expect(() =>
-        assertVercelDeployProfilesValid('/docs\n', `/src\n${runtimePath}\n`),
+        assertVercelDeployProfilesValid(
+          '/docs\n',
+          [
+            '/src',
+            runtimePath,
+            '!/.env.example',
+            '!/.env.leantime.example',
+            '!/.env.leantime-dev.example',
+          ].join('\n'),
+        ),
       ).toThrow('must not exclude');
     },
   );

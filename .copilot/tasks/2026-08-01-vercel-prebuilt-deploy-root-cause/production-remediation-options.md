@@ -48,10 +48,10 @@ Każdy zaakceptowany wariant musi zapewniać:
 
 Niezależnie od wybranego modelu należy:
 
-- dodać Vercel CLI jako dokładnie przypiętą zależność narzędziową i uruchamiać
-  ją przez `pnpm exec vercel` albo równoważny skrypt repozytorium;
-- aktualizować CLI wyłącznie przez kontrolowany PR z buildem, sprawdzeniem
-  upload manifestu i deploymentem testowym;
+- uruchamiać `vercel@latest` przez `pnpm dlx` albo równoważny skrypt
+  repozytorium dla każdego polecenia deploy;
+- traktować artifact guard, sprawdzenie upload manifestu i deploymentowy dry-run
+  jako obowiązkowy test kompatybilności aktualnie rozwiązanego CLI;
 - walidować źródłowe wartości `filePathMap`, ich istnienie, pozostawanie
   wewnątrz repozytorium oraz brak ucieczki przez symlink;
 - blokować artifact referencjonujący `/.env*`, logi lub inne sklasyfikowane

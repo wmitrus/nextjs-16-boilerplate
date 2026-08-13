@@ -7,6 +7,7 @@ import {
   readTextFileWithinBase,
 } from './lib/fs-guards-shared';
 import { parseVercelDeployDryRunOutput } from './validate-vercel-prebuilt-artifact';
+import { PUBLIC_PREBUILT_ENV_TEMPLATE_IGNORE_RULES } from './vercel/prebuilt-env-template-policy';
 
 const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'next.config.ts',
@@ -44,6 +45,14 @@ export function assertVercelDeployProfilesValid(
     if (!prebuiltRules.has(requiredExclusion)) {
       throw new Error(
         `[vercel-deploy] Production prebuilt profile must exclude ${requiredExclusion}.`,
+      );
+    }
+  }
+
+  for (const requiredTemplate of PUBLIC_PREBUILT_ENV_TEMPLATE_IGNORE_RULES) {
+    if (!prebuiltRules.has(requiredTemplate)) {
+      throw new Error(
+        `[vercel-deploy] Production prebuilt profile must include tracked public template ${requiredTemplate.slice(1)} because Vercel filePathMap may require it.`,
       );
     }
   }

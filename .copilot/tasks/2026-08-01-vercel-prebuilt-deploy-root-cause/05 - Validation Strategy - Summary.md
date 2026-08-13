@@ -18,7 +18,8 @@
   the upload plan.
 - The production workflow validates the local artifact and dry-run upload
   coverage before real `vercel deploy --prebuilt --prod`.
-- Vercel CLI is pinned through `package.json` and lockfile.
+- Deploy commands resolve `vercel@latest` through `pnpm dlx`; the artifact and
+  upload-plan guards remain the compatibility check for every resolved release.
 - A fresh clean artifact passes dry-run upload coverage and both enforced budgets.
 
 ## Validation Performed
@@ -28,7 +29,8 @@
 - Focused ESLint passed on changed TypeScript files.
 - TypeScript passed with `pnpm exec tsc --noEmit --pretty false`.
 - Prettier check passed on changed formatted files.
-- Pinned CLI check returned `58.4.4`.
+- The original incident validation used `58.4.4`; current commands resolve the
+  latest CLI dynamically and require the same dry-run guards to pass.
 - Fresh dry-run upload coverage passed: `11292` traced source references, `4365`
   upload files, `73499700` bytes, `0` missing allowed references, and `0`
   forbidden uploads. Budgets: `5000` files and `83886080` bytes.

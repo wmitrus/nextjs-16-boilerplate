@@ -87,6 +87,36 @@
 - final decision artifact: Variant A is selected; prototype sanitizer/manual
   allowlist/Next tracing-exclude work is archived as non-production.
 
+## Preview Deployment Regression
+
+- confirmed symptom: pull request preview deployment uploaded the repository for
+  a remote Vercel build, then failed before `next build` because
+  `src/core/db/migrations/generated/meta/_journal.json` was absent
+- confirmed trigger: Variant A added the root-level `/src` rule to the shared
+  `.vercelignore`; the preview workflow uses `vercel deploy` without
+  `--prebuilt`, so it requires application and migration source files in the
+  source upload
+- confirmed non-cause: changing preview from a global Vercel CLI to the pinned
+  repository CLI did not remove the file; the remote log shows source upload
+  completed and the missing path is directly covered by `/src`
+- execution boundary: production deploy uploads an already-built Build Output
+  artifact, while preview uploads source for a remote build; one shared ignore
+  profile cannot exclude `/src` for production and simultaneously provide it to
+  preview
+- minimum safe handoff: preserve the existing preview source-deploy workflow,
+  restore a preview-safe default `.vercelignore`, and activate a separate
+  production-prebuilt ignore profile only inside the production workflow before
+  dry-run and real prebuilt deployment
+- required regression check: preview dry-run/source upload must include
+  `src/core/db/migrations/generated/meta/_journal.json`; production prebuilt
+  dry-run must retain `0` missing allowed references and `0` forbidden uploads
+- confirmed remediation: the default `.vercelignore` is preview-safe, the
+  production workflow activates `.vercelignore.prebuilt` only after its local
+  build, and preview validates a real source dry-run before deployment
+- validation evidence: preview dry-run uploaded `626` `src/**` files and the
+  migration journal; production dry-run retained `4365` files, `73499700`
+  bytes, `0` missing allowed references, and `0` forbidden uploads
+
 ## Handoff Notes
 
 - what the next agent should rely on: the exact upstream Vercel commit, immutable package comparison, historical workflow boundary, and deployment-file evidence establish the root cause without relying on correlation alone
@@ -152,3 +182,39 @@
 MiB` budgets. Fresh dry-run evidence: `11292` trace refs, `266` forbidden
   metadata refs excluded from upload, `4365` uploaded files, `73499700` bytes,
   `0` missing allowed refs, and `0` forbidden uploads.
+
+### 2026-08-01 - Preview Source Upload Regression Confirmed
+
+- Trigger: PR preview deployment failed while opening the migration journal.
+- Summary of change: Confirmed that the shared `/src` `.vercelignore` rule,
+  introduced for production prebuilt upload policy, removed source required by
+  the unchanged remote preview build. The pinned CLI change is not the direct
+  cause.
+- Required handoff: split preview source-upload and production prebuilt ignore
+  profiles without converting or otherwise redesigning preview deployment.
+
+### 2026-08-01 - Preview And Prebuilt Profiles Split
+
+- Trigger: User requested restoring normal preview deployment while preserving
+  the production prebuilt guard.
+- Summary of change: Restored a source-safe default `.vercelignore`, added a
+  production-only `.vercelignore.prebuilt`, activated it after production
+  build, and added preview source dry-run validation before the real deploy.
+- Evidence: Real preview and production CLI dry-runs passed their respective
+  lifecycle contracts; hosted preview and real production deploys remain the
+  final external workflow proofs.
+
+### 2026-08-13 - Release Review And Preview Scope Confirmed
+
+- Trigger: User requested verification that a newer Vercel CLI release resolves
+  the incident and removal of any preview-only prebuilt workaround.
+- Release evidence: `vercel@58.4.4` release metadata records only a republish.
+  npm reports `58.11.0`, but GitHub exposes no matching release entry; neither
+  source establishes an upstream fix for the observed prebuilt upload behavior.
+- Superseded decision: at user direction, remove the fixed CLI dependency and
+  resolve `vercel@latest` through `pnpm dlx` for every deploy command. Remove
+  the unrelated preview URL-output parsing change from the live workflow and
+  historical SDD.
+- Boundary retained: preview remains a source upload with its source-completeness
+  regression guard; production alone activates the prebuilt ignore profile and
+  prebuilt artifact/upload guards.

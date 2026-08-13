@@ -51,6 +51,7 @@ export interface VercelPrebuiltUploadCoverageSummary {
 const DEFAULT_FUNCTIONS_DIR = '.vercel/output/functions';
 export const MAX_PREBUILT_UPLOAD_FILE_COUNT = 5_000;
 export const MAX_PREBUILT_UPLOAD_SIZE_BYTES = 80 * 1024 * 1024;
+const PUBLIC_ENV_TEMPLATE_PATH = '.env.example';
 const FORBIDDEN_TRACE_PATH_PREFIXES = [
   '.env',
   'logs/',
@@ -63,6 +64,10 @@ const FORBIDDEN_TRACE_PATH_PREFIXES = [
 ];
 
 function isForbiddenTracePath(requiredPath: string): boolean {
+  if (requiredPath === PUBLIC_ENV_TEMPLATE_PATH) {
+    return false;
+  }
+
   return FORBIDDEN_TRACE_PATH_PREFIXES.some((prefix) =>
     requiredPath.startsWith(prefix),
   );

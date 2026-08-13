@@ -70,6 +70,10 @@ prototype work.
 - [done] Root-cause confidence and residual uncertainty documented.
 - [done] Production remediation decision captured: Variant A, contract-aligned prebuilt deploy.
 - [done] Prototype remediation separated from the final production plan.
+- [done] Preview source-upload regression reproduced and attributed to the
+  shared production `/src` exclusion.
+- [done] Preview-safe and production-prebuilt upload profiles separated and
+  validated against real Vercel CLI dry-run plans.
 
 ## Final Decision
 
@@ -77,7 +81,8 @@ Variant A is the accepted remediation direction for this task:
 
 - keep Vercel prebuilt deployment;
 - keep New Relic;
-- pin the Vercel CLI instead of using `vercel@latest`;
+- resolve `vercel@latest` dynamically through `pnpm dlx` and retain artifact
+  and upload-plan guards as the per-release compatibility check;
 - remove user `.vercelignore` rules for directories legally referenced by
   generated `filePathMap`, especially `.next` and `node_modules`;
 - keep only truly sensitive or unnecessary root-path ignores;
@@ -86,6 +91,10 @@ Variant A is the accepted remediation direction for this task:
 - require every allowed runtime source in the dry-run upload and reject every
   forbidden source present in that upload;
 - enforce upload file-count and byte-size budgets against a fresh baseline.
+- keep preview as a Vercel-owned remote source build with a preview-safe default
+  `.vercelignore` and a required-source dry-run guard;
+- activate the stricter `.vercelignore.prebuilt` only after the local production
+  build and before prebuilt dry-run/deploy.
 
 The prior phase-based implementation under
 `.copilot/tasks/2026-08-01-vercel-prebuilt-node-modules-deploy/` is retained

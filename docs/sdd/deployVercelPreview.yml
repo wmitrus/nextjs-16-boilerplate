@@ -36,9 +36,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,7 +49,7 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm dlx vercel@latest pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Verify environment (preview)
         run: node scripts/verify-vercel-env.mjs
@@ -67,7 +64,7 @@ jobs:
           NEXT_PUBLIC_APP_ENV: preview
 
       - name: Build Project Artifacts
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm dlx vercel@latest build --token=${{ secrets.VERCEL_TOKEN }}
         env:
           # Environment configuration
           APP_ENV: preview
@@ -114,7 +111,7 @@ jobs:
       - name: Deploy Project Artifacts to Vercel
         id: vercel_deploy
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --no-clipboard)
+          DEPLOY_URL=$(pnpm dlx vercel@latest deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --no-clipboard)
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
         env:
           # Environment configuration

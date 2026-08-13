@@ -63,7 +63,16 @@ GitHub provides `GITHUB_TOKEN` automatically.
 To ensure smooth builds on Vercel with pnpm 10, the project includes:
 
 - **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
-- **.vercelignore**: Optimized to exclude `node_modules`, `coverage`, `docs`, and `tests` from the upload payload to prevent transient API errors.
+- **Current Vercel CLI**: GitHub Actions and local helper scripts resolve
+  `vercel@latest` through `pnpm dlx` for every deployment command. Deployment
+  guards must remain compatible with the current CLI release.
+- **Vercel upload profiles**: The default `.vercelignore` is preview-safe and
+  must not exclude `src`, because preview deployments upload source for a
+  remote build. Production activates `.vercelignore.prebuilt` after the local
+  build and before prebuilt dry-run/deploy; that profile excludes root source,
+  tests, docs, coverage, and reports. The prebuilt profile must not ignore
+  `.next` or `node_modules`, because Vercel's generated `filePathMap` may
+  legally reference traced files from those directories.
 
 ## Vercel Deployment Strategy
 
@@ -74,6 +83,9 @@ This repository uses two different deployment ownership models:
    - Vercel owns the actual preview build because Neon automated preview branching injects branch-specific connection strings at deployment time.
    - Keep the Vercel Preview Build Command set to `pnpm db:migrate:prod && pnpm build`.
    - Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
+   - Validate the default upload profile and a real `vercel deploy --dry --json`
+     source plan before creating the deployment. The plan must include the
+     Next.js config, package manifest, and generated migration journal.
    - If preview deployments are created with the Vercel CLI, pass GitHub metadata via `--meta`. Without `githubDeployment=1` and `githubCommitRef`, Vercel does not link the deployment to the PR branch, and Neon Preview Branching cannot inject branch-specific database variables.
    - The preview workflow must verify the created deployment through Vercel's deployment API and fail if the expected PR branch/SHA metadata is missing.
 
@@ -81,6 +93,13 @@ This repository uses two different deployment ownership models:
    - GitHub Actions remains the deployment authority.
    - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
    - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
+   - After the local build, production copies `.vercelignore.prebuilt` to
+     `.vercelignore` before both the prebuilt dry-run and real deployment.
+   - Production runs prebuilt artifact guards after build and before deploy.
+     These guards validate `Object.values(filePathMap)` as source paths, require
+     every allowed runtime source in the dry-run upload, reject every forbidden
+     source present in that upload, reject missing or symlink-escaping sources,
+     and enforce budgets of 5,000 files and 80 MiB.
    - For `AUTH_PROVIDER=authjs`, the production workflow requires a
      Production-scoped `NEXTAUTH_URL` before `vercel build --prod`. It does not
      derive `NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`, because that would fix the
@@ -97,6 +116,12 @@ Why the split exists:
 - GitHub-hosted production prebuilds do not receive a reliable Vercel system
   `VERCEL_URL`; AuthJS production builds therefore require the same
   `NEXTAUTH_URL` that the production runtime will receive.
+- The prebuilt production deploy must preserve Vercel's Build Output contract:
+  every allowed runtime source value in function `filePathMap` must be uploaded,
+  while root env, log, source, test, docs, and report paths must remain excluded
+  from the upload plan. Next.js and the Vercel adapter can retain such paths in
+  generated metadata, including Node proxy traces and production env files.
+  Never repair this by deleting entries from generated `.vc-config.json`.
 
 Add this repository variable for LHCI:
 

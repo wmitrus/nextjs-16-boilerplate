@@ -2,9 +2,23 @@ import { withBetterStackNextConfig } from '@logtail/next';
 import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from 'next';
 
+const outputFileTracingExcludes = [
+  '.env*',
+  'logs/**/*',
+  'src/**/*',
+  'tests/**/*',
+  'docs/**/*',
+  'e2e/**/*',
+  'playwright-report/**/*',
+  'test-results/**/*',
+];
+
 const nextConfig: NextConfig = {
   cacheComponents: true,
   reactCompiler: true,
+  outputFileTracingExcludes: {
+    '/*': outputFileTracingExcludes,
+  },
   serverExternalPackages: [
     '@electric-sql/pglite',
     '@logtail/pino',

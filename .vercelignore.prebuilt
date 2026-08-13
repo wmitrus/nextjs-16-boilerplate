@@ -3,10 +3,9 @@
 /coverage
 /public/img
 /.storybook
+/src
 /docs
 /tests
-/e2e/*
-!/e2e/env-files.ts
-!/e2e/internal-api-key.ts
+/e2e
 /playwright-report
 /test-results

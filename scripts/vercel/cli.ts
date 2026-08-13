@@ -64,7 +64,7 @@ function printHelp(): void {
     '  VERCEL_TOKEN        Optional. Passed through as --token=... when set.',
   );
   console.log(
-    '  VERCEL_CLI_BIN      Optional. Overrides the executable used instead of npx.',
+    '  VERCEL_CLI_BIN      Optional. Overrides the executable used instead of pnpm dlx vercel@latest.',
   );
   console.log('');
   console.log('Examples:');
@@ -147,8 +147,8 @@ function resolveVercelCommand(env: NodeJS.ProcessEnv): VercelCliInvocation {
   }
 
   return {
-    command: 'npx',
-    args: ['-y', 'vercel@latest'],
+    command: 'pnpm',
+    args: ['dlx', 'vercel@latest'],
   };
 }
 

@@ -80,7 +80,6 @@ jobs:
         env:
           APP_ENV: production
           NEXT_PUBLIC_APP_ENV: production
-          SKIP_ENV_VALIDATION: false
 
       - name: Validate Prebuilt Artifact Contract
         run: pnpm vercel:prebuilt:validate

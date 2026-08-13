@@ -81,6 +81,14 @@
 - The exact production prebuilt dry-run and validator completed with `0 missing allowed reference(s)` and `0 forbidden upload(s)`.
 - The active preview profile was restored with its E2E helper allowlist; the public template upload exception remains scoped to `.vercelignore.prebuilt`.
 
+## Preview And Production Profile Audit
+
+- Confirmed: `e2e/env-files.ts` and `e2e/internal-api-key.ts` remain required preview upload inputs. Both `playwright.config.ts` and `playwright.vscode.config.ts` import `e2e/internal-api-key.ts`, which imports `e2e/env-files.ts`.
+- Confirmed: Commit `6c1d8f84` introduced the two negated preview rules after a source-upload regression. The current preview dry-run contains both files, and the existing profile guard checks them as required build inputs.
+- Confirmed: Production uses a distinct prebuilt profile after `vercel build --prod`; it excludes `e2e/` because the serverless prebuilt output does not require Playwright configuration or E2E helper sources. The real production dry-run contains no `e2e/` files.
+- Confirmed: Production trace guards continue to cover historical failure classes: missing sources, malformed function metadata, source-value versus target-key handling, paths escaping the repository, malformed dry-run output, forbidden source upload, missing allowed source upload, and file-count and byte budgets.
+- Validation evidence: preview source dry-run passed with both E2E helpers present; production prebuilt dry-run passed with `0 missing allowed reference(s)`, `0 forbidden upload(s)`, no E2E sources, and only the three tracked public env templates.
+
 ## Update Log
 
 ### Update Entry

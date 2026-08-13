@@ -17,12 +17,15 @@ materialization to fail with `ENOENT`.
 
 ## Changes
 
-- Use the repository-pinned Vercel CLI via `pnpm exec vercel` instead of global
-  `vercel@latest`.
+- Resolve `vercel@latest` through `pnpm dlx` for every deploy command; the
+  artifact and upload-plan guards remain mandatory for each release.
 - Remove `.vercelignore` rules for `.next` and `node_modules`, which Vercel may
   legally reference from generated prebuilt metadata.
-- Keep root-only ignores for env files, logs, source, tests, docs, coverage, and
-  reports.
+- Keep the default `.vercelignore` source-safe for remote preview builds and
+  activate a separate `.vercelignore.prebuilt` only after the local production
+  build.
+- Validate a real preview source dry-run before deployment and require the
+  Next.js config, package manifest, and generated migration journal.
 - Remove the prototype sanitizer path; generated `.vc-config.json` is no longer
   modified after build.
 - Validate `Object.values(filePathMap)` as Vercel source paths.
@@ -38,9 +41,13 @@ materialization to fail with `ENOENT`.
 - `pnpm exec eslint --fix scripts/validate-vercel-prebuilt-artifact.ts scripts/validate-vercel-prebuilt-artifact.test.ts scripts/vercel/cli.ts scripts/vercel/cli.test.ts next.config.ts`
 - `pnpm exec tsc --noEmit --pretty false`
 - `pnpm exec prettier --check .github/workflows/prod-deploy.yml .github/workflows/preview-deploy.yml package.json scripts/validate-vercel-prebuilt-artifact.ts scripts/validate-vercel-prebuilt-artifact.test.ts scripts/vercel/cli.ts scripts/vercel/cli.test.ts next.config.ts .copilot/tasks/2026-08-01-vercel-prebuilt-deploy-root-cause/plan.md`
-- `pnpm exec vercel --version` -> `58.4.4`
+- Original incident validation: `pnpm exec vercel --version` -> `58.4.4`
+- Current dynamic resolution: `pnpm dlx vercel@latest --version` -> `58.9.5`
 - `pnpm vercel:prebuilt:validate`
-- `pnpm exec vercel deploy --prebuilt --prod --dry --json` +
+- `pnpm vercel:deploy:validate`
+- `pnpm dlx vercel@latest deploy --dry --json` +
+  `pnpm vercel:deploy:validate -- --preview-dry-run-json ...`
+- `pnpm dlx vercel@latest deploy --prebuilt --prod --dry --json` +
   `pnpm vercel:prebuilt:validate -- --dry-run-json ...`
 - `git diff --check`
 
@@ -53,9 +60,15 @@ Fresh clean dry-run upload baseline:
 - `0` missing allowed references
 - `0` forbidden uploads
 
+Preview source dry-run evidence:
+
+- `626` uploaded `src/**` files
+- generated migration journal present
+
 ## Not Run
 
 - Real `vercel deploy --prebuilt --prod`
+- Hosted PR preview deployment after this correction
 - Full repository `pnpm lint --fix`
 
 The fresh local build used a temporary Vercel config that skipped production
@@ -71,6 +84,8 @@ typecheck, Prettier, dry-run upload validation, and `git diff --check` passed.
 
 ## Post-Merge Verification
 
+- Confirm the PR preview passes source-upload validation and reaches ready
+  status after remote migrations/build.
 - Confirm the production workflow reaches `Validate Prebuilt Artifact Contract`.
 - Confirm `Validate Prebuilt Upload Coverage` reports `0` missing allowed
   references and `0` forbidden uploads.

@@ -36,6 +36,8 @@ describe('assertVercelPreviewSourceUploadValid', () => {
       files: [
         'next.config.ts',
         'package.json',
+        'e2e/env-files.ts',
+        'e2e/internal-api-key.ts',
         'src/core/db/migrations/generated/meta/_journal.json',
       ],
       ignored: [],
@@ -54,6 +56,22 @@ describe('assertVercelPreviewSourceUploadValid', () => {
 
     expect(() => assertVercelPreviewSourceUploadValid(dryRunOutput)).toThrow(
       'src/core/db/migrations/generated/meta/_journal.json',
+    );
+  });
+
+  it('rejects a source upload missing Playwright configuration imports', () => {
+    const dryRunOutput = JSON.stringify({
+      files: [
+        'next.config.ts',
+        'package.json',
+        'e2e/env-files.ts',
+        'src/core/db/migrations/generated/meta/_journal.json',
+      ],
+      ignored: ['e2e/internal-api-key.ts'],
+    });
+
+    expect(() => assertVercelPreviewSourceUploadValid(dryRunOutput)).toThrow(
+      'e2e/internal-api-key.ts',
     );
   });
 });

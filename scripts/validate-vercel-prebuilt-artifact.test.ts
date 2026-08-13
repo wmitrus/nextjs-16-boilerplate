@@ -25,7 +25,7 @@ async function createTempRoot(): Promise<string> {
 
 async function writeFunctionConfig(
   root: string,
-  filePathMap: Record<string, string>,
+  filePathMap: unknown,
 ): Promise<void> {
   const functionDir = join(root, '.vercel/output/functions/api/example.func');
   await mkdir(functionDir, { recursive: true });
@@ -52,6 +52,15 @@ afterEach(async () => {
 });
 
 describe('validateVercelPrebuiltArtifact', () => {
+  it('rejects a non-object filePathMap from generated config JSON', async () => {
+    const root = await createTempRoot();
+    await writeFunctionConfig(root, 42);
+
+    await expect(validateVercelPrebuiltArtifact(root)).rejects.toThrow(
+      'Invalid filePathMap',
+    );
+  });
+
   it('passes when all function filePathMap entries exist locally', async () => {
     const root = await createTempRoot();
     const requiredPath = 'node_modules/.pnpm/pkg/node_modules/pkg/index.js';

@@ -11,6 +11,7 @@ import {
   assertVercelPrebuiltArtifactHasNoEscapingTraces,
   assertVercelPrebuiltArtifactValid,
   assertVercelPrebuiltUploadCoverageValid,
+  parseVercelDeployDryRunOutput,
   validateVercelPrebuiltArtifact,
   validateVercelPrebuiltUploadCoverage,
 } from './validate-vercel-prebuilt-artifact';
@@ -213,6 +214,22 @@ describe('validateVercelPrebuiltArtifact', () => {
     expect(() =>
       assertVercelPrebuiltUploadCoverageValid(uploadSummary),
     ).not.toThrow();
+  });
+
+  it('rejects dry-run entries that do not contain a supported path shape', () => {
+    expect(() =>
+      parseVercelDeployDryRunOutput(
+        JSON.stringify({ files: [{ unexpected: 'entry' }], ignored: [] }),
+      ),
+    ).toThrow('contains an invalid entry in `files`');
+  });
+
+  it('rejects trailing non-JSON content after the dry-run payload', () => {
+    expect(() =>
+      parseVercelDeployDryRunOutput(
+        `${JSON.stringify({ files: [], ignored: [] })}\nunexpected output`,
+      ),
+    ).toThrow(SyntaxError);
   });
 
   it('reports dry-run upload gaps with ignored parent paths', async () => {

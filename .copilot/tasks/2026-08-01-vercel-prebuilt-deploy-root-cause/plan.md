@@ -36,6 +36,8 @@
 - [done] Confirm release metadata and scope: `vercel@58.4.4` release notes only
   record a republish, while direct package/history evidence remains the root-cause
   proof; no preview prebuilt workaround is required.
+- [done] Address verified PR review findings: keep production env validation
+  enabled and fail closed for malformed Vercel dry-run output.
 
 ## Confirmed Causal Chain
 

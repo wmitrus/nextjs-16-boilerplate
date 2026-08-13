@@ -121,3 +121,14 @@ guard, dry-run coverage, and real deploy success.
   `ms@2.1.3`. Local prebuilt validation therefore requires a fresh production
   build, which is deferred to the protected workflow because it includes
   production migrations.
+
+## 2026-08-13 Review Follow-up
+
+- Verified and fixed the production workflow's `SKIP_ENV_VALIDATION: false`.
+  GitHub Actions exposes it as the truthy string `"false"`, which would have
+  disabled T3-Env validation through the existing boolean coercion.
+- Hardened the dry-run parser to reject unsupported entries and non-JSON output
+  following its payload rather than silently under-counting upload paths.
+- Added focused regression tests. `pnpm exec vitest run --config
+vitest.unit.config.ts scripts/validate-vercel-prebuilt-artifact.test.ts
+--coverage.enabled=false` passed with `16` tests.

@@ -301,15 +301,14 @@ function normalizeVercelRelativePath(filePath: string): string {
 
 function extractJsonObject(rawOutput: string): unknown {
   const start = rawOutput.indexOf('{');
-  const end = rawOutput.lastIndexOf('}');
 
-  if (start === -1 || end === -1 || end < start) {
+  if (start === -1) {
     throw new Error(
       '[vercel-prebuilt] Dry-run output does not contain a JSON object.',
     );
   }
 
-  return JSON.parse(rawOutput.slice(start, end + 1));
+  return JSON.parse(rawOutput.slice(start));
 }
 
 function collectPathSet(value: unknown, propertyName: string): Set<string> {
@@ -336,7 +335,12 @@ function collectPathSet(value: unknown, propertyName: string): Set<string> {
       typeof record.path === 'string'
     ) {
       paths.add(normalizeVercelRelativePath(record.path));
+      continue;
     }
+
+    throw new Error(
+      `[vercel-prebuilt] Dry-run JSON contains an invalid entry in \`${propertyName}\`.`,
+    );
   }
 
   return paths;

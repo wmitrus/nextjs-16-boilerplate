@@ -63,13 +63,16 @@ GitHub provides `GITHUB_TOKEN` automatically.
 To ensure smooth builds on Vercel with pnpm 10, the project includes:
 
 - **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
-- **Pinned Vercel CLI**: GitHub Actions and local helper scripts use the
-  repository-pinned Vercel CLI through `pnpm exec vercel`. Do not use a global
-  `vercel@latest` in deploy workflows.
-- **.vercelignore**: Uses root-only excludes for env files, logs, source,
-  tests, docs, coverage, and reports. Do not ignore `.next` or `node_modules`
-  in this file for prebuilt deployments; Vercel's generated `filePathMap` may
-  legally reference traced source files from those directories.
+- **Current Vercel CLI**: GitHub Actions and local helper scripts resolve
+  `vercel@latest` through `pnpm dlx` for every deployment command. Deployment
+  guards must remain compatible with the current CLI release.
+- **Vercel upload profiles**: The default `.vercelignore` is preview-safe and
+  must not exclude `src`, because preview deployments upload source for a
+  remote build. Production activates `.vercelignore.prebuilt` after the local
+  build and before prebuilt dry-run/deploy; that profile excludes root source,
+  tests, docs, coverage, and reports. The prebuilt profile must not ignore
+  `.next` or `node_modules`, because Vercel's generated `filePathMap` may
+  legally reference traced files from those directories.
 
 ## Vercel Deployment Strategy
 
@@ -80,6 +83,9 @@ This repository uses two different deployment ownership models:
    - Vercel owns the actual preview build because Neon automated preview branching injects branch-specific connection strings at deployment time.
    - Keep the Vercel Preview Build Command set to `pnpm db:migrate:prod && pnpm build`.
    - Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
+   - Validate the default upload profile and a real `vercel deploy --dry --json`
+     source plan before creating the deployment. The plan must include the
+     Next.js config, package manifest, and generated migration journal.
    - If preview deployments are created with the Vercel CLI, pass GitHub metadata via `--meta`. Without `githubDeployment=1` and `githubCommitRef`, Vercel does not link the deployment to the PR branch, and Neon Preview Branching cannot inject branch-specific database variables.
    - The preview workflow must verify the created deployment through Vercel's deployment API and fail if the expected PR branch/SHA metadata is missing.
 
@@ -87,6 +93,8 @@ This repository uses two different deployment ownership models:
    - GitHub Actions remains the deployment authority.
    - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
    - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
+   - After the local build, production copies `.vercelignore.prebuilt` to
+     `.vercelignore` before both the prebuilt dry-run and real deployment.
    - Production runs prebuilt artifact guards after build and before deploy.
      These guards validate `Object.values(filePathMap)` as source paths, require
      every allowed runtime source in the dry-run upload, reject every forbidden

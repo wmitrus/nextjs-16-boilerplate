@@ -1,5 +1,7 @@
 /.env*
 !/.env.example
+!/.env.leantime.example
+!/.env.leantime-dev.example
 /logs
 /coverage
 /public/img

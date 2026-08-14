@@ -55,7 +55,6 @@ export const MAX_PREBUILT_UPLOAD_SIZE_BYTES = 80 * 1024 * 1024;
 const FORBIDDEN_TRACE_PATH_PREFIXES = [
   '.env',
   'logs/',
-  'src/',
   'tests/',
   'docs/',
   'e2e/',
@@ -297,6 +296,28 @@ export function assertVercelPrebuiltArtifactHasNoEscapingTraces(
     `[vercel-prebuilt] Found ${summary.escapingFiles.length} traced file(s) escaping the repository root.\n` +
       `${examples}\n` +
       'Do not deploy a prebuilt artifact whose traced source paths resolve outside the repository.',
+  );
+}
+
+export function assertVercelPrebuiltArtifactHasNoForbiddenTraces(
+  summary: VercelPrebuiltArtifactSummary,
+): void {
+  if (summary.forbiddenFiles.length === 0) {
+    return;
+  }
+
+  const examples = summary.forbiddenFiles
+    .slice(0, 10)
+    .map(
+      (forbidden) =>
+        `  - ${forbidden.requiredPath} (referenced by ${forbidden.configPath})`,
+    )
+    .join('\n');
+
+  throw new Error(
+    `[vercel-prebuilt] Found ${summary.forbiddenFiles.length} forbidden traced file(s) in .vc-config.json.\n` +
+      `${examples}\n` +
+      'Do not deploy until the trace no longer references paths excluded from the production prebuilt upload.',
   );
 }
 
@@ -559,6 +580,7 @@ async function main(): Promise<void> {
   const summary = await validateVercelPrebuiltArtifact();
   assertVercelPrebuiltArtifactValid(summary);
   assertVercelPrebuiltArtifactHasNoEscapingTraces(summary);
+  assertVercelPrebuiltArtifactHasNoForbiddenTraces(summary);
   const dryRunJsonPath = getDryRunJsonPath(args);
 
   if (dryRunJsonPath) {

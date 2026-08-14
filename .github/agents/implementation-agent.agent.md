@@ -143,6 +143,7 @@ See the canonical guard patterns in `.github/agents/security-auth.agent.md` unde
 - If full validation is not possible, say exactly what was not run and why.
 - Do not claim a fix is complete if it was not validated at a sensible level.
 - Do not claim a deploy or CI fix is complete until the downstream runtime/env contract is also correct, especially for auth/provider URLs, database URLs, tenant context, cookies, and redirect origins (SEC-25).
+- **Temporary ESLint execution blocker (effective 2026-08-14):** `pnpm lint --fix` repeatedly hangs in the agent shell. Until this block is explicitly removed after a verified fix, do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. Run other relevant checks and report lint as skipped because of this blocker.
 - Always run `pnpm lint --fix`, never plain `pnpm lint`.
 - For substantial multi-step work, keep validation focused while the phase is in progress, then run repo-wide `pnpm lint --fix` and `pnpm typecheck` before marking that phase complete.
 

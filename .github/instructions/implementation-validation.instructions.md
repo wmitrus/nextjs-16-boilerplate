@@ -5,10 +5,12 @@ description: 'Use during implementation work to keep validation focused and requ
 
 During implementation work, prefer focused validation over broad test expansion.
 
+**Temporary ESLint execution blocker (effective 2026-08-14):** `pnpm lint --fix` repeatedly hangs in the agent shell. Until this block is explicitly removed after a verified fix, do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. Run other relevant checks and record lint as skipped because of this blocker.
+
 For substantial multi-step or phase-based implementation work:
 
 - use focused validation while the phase is in progress
-- before marking a major phase complete, run `pnpm lint --fix` and `pnpm typecheck`
+- before marking a major phase complete, run `pnpm typecheck`; lint remains skipped while the temporary ESLint execution blocker is active
 - do not pay the full repo-wide lint/typecheck cost after every tiny interim edit unless the task explicitly requires it
 - if repo-wide lint/typecheck is blocked by unrelated pre-existing issues, record that explicitly in the task artifacts before closing the phase
 

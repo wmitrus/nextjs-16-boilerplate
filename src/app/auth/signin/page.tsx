@@ -78,6 +78,16 @@ async function SignInPageContent({
   );
 }
 
+function SignInPageFallback() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
+      <p role="status" className="text-sm text-gray-600 dark:text-gray-400">
+        Loading sign in...
+      </p>
+    </main>
+  );
+}
+
 export default function SignInPage({
   searchParams,
 }: {
@@ -89,7 +99,7 @@ export default function SignInPage({
   }>;
 }) {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<SignInPageFallback />}>
       <SignInPageContent searchParams={searchParams} />
     </Suspense>
   );

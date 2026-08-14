@@ -15,8 +15,10 @@ concurrency:
 
 jobs:
   deploy-preview:
-    name: Vercel Preview
+    name: Deploy Preview
     runs-on: ubuntu-latest
+    outputs:
+      preview_url: ${{ steps.vercel_deploy.outputs.preview_url }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
@@ -39,9 +41,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
 
       - name: Pull Vercel Environment Information
         run: ./node_modules/.bin/vercel pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=${{ secrets.VERCEL_TOKEN }}
@@ -192,21 +191,71 @@ jobs:
           PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
-      - name: Verify hosted runtime
-        run: pnpm vercel:runtime:smoke
-        env:
-          PLAYWRIGHT_TEST_BASE_URL: ${{ steps.vercel_deploy.outputs.preview_url }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-
       - name: Print Vercel Build Logs On Failure
         if: failure() && steps.vercel_deploy.outputs.preview_url != ''
         run: ./node_modules/.bin/vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
 
+  verify-preview-runtime:
+    name: Verify Preview Runtime
+    needs: deploy-preview
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployed revision
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run hosted runtime smoke
+        run: pnpm vercel:runtime:smoke
+        env:
+          PLAYWRIGHT_TEST_BASE_URL: ${{ needs.deploy-preview.outputs.preview_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+      - name: Upload runtime smoke traces
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # actions/upload-artifact@v7
+        with:
+          name: preview-runtime-smoke-traces
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  lighthouse:
+    name: Preview Lighthouse
+    needs:
+      - deploy-preview
+      - verify-preview-runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployed revision
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
+        with:
+          node-version: 24
+
       - name: Run Lighthouse Audit
-        if: success()
         run: |
-          echo "Running Lighthouse audit on URL: ${{ steps.vercel_deploy.outputs.preview_url }}"
-          npx @lhci/cli autorun --collect.url=${{ steps.vercel_deploy.outputs.preview_url }} --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'", "x-vercel-set-bypass-cookie": "samesitenone"}'
+          echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
+          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'", "x-vercel-set-bypass-cookie": "samesitenone"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

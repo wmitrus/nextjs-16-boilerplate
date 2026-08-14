@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 
@@ -35,6 +36,7 @@ export function SignInClient({
   error,
   verified,
 }: SignInClientProps) {
+  const router = useRouter();
   const postAuthRedirectUrl = buildBootstrapRedirectUrl(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(
@@ -50,24 +52,33 @@ export function SignInClient({
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
-    const result = await signIn('credentials', {
-      email,
-      password,
-      callbackUrl: postAuthRedirectUrl,
-      redirect: false,
-    });
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        callbackUrl: postAuthRedirectUrl,
+        redirect: false,
+      });
 
-    if (result?.error) {
-      const errorMsg = resolveErrorMessage(result.error);
-      if (result.error === 'EmailNotVerified') {
-        window.location.href = '/auth/verify-email-pending';
-        return;
+      if (result?.error) {
+        const errorMsg = resolveErrorMessage(result.error);
+        if (result.error === 'EmailNotVerified') {
+          router.replace('/auth/verify-email-pending');
+          return;
+        }
+        setFormError(errorMsg);
+        setIsLoading(false);
+      } else if (result?.url) {
+        const url = new URL(result.url, window.location.origin);
+        if (url.origin !== window.location.origin) {
+          throw new Error('AuthJS returned a cross-origin callback URL.');
+        }
+        router.replace(`${url.pathname}${url.search}${url.hash}`);
+      } else {
+        setFormError(ERROR_MESSAGES.Default);
+        setIsLoading(false);
       }
-      setFormError(errorMsg);
-      setIsLoading(false);
-    } else if (result?.url) {
-      window.location.href = result.url;
-    } else {
+    } catch {
       setFormError(ERROR_MESSAGES.Default);
       setIsLoading(false);
     }

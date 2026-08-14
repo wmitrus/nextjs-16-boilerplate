@@ -18,12 +18,20 @@
   directly for machine-readable commands.
 - Deploy steps now preserve failure status, parse successful `--json` output,
   validate HTTPS, and only then write one URL to `$GITHUB_OUTPUT`.
+- Restricted the hosted Playwright configuration to
+  `vercel-runtime-smoke.spec.ts`, preventing accidental execution of all 109
+  scenario-managed E2E tests.
+- Split Preview deployment, hosted runtime smoke, and Lighthouse into separate
+  jobs. Runtime smoke consumes the immutable deployment URL and uploads traces
+  on failure.
+- Added a deployment-profile guard for the focused smoke `testMatch` and the
+  separate runtime verification job.
 - Updated both the audit artifacts and the original Copilot task with the
   superseding solution.
 
 ## Validation
 
-- 59 focused unit tests passed.
+- Focused unit tests and the exact two-test Playwright discovery check passed.
 - `pnpm typecheck` passed.
 - `pnpm vercel:deploy:validate` passed.
 - Prettier and `git diff --check` passed.

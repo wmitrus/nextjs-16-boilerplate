@@ -48,6 +48,11 @@
 
 ## Remaining Hosted Proof
 
-A fresh Preview and staged Production deployment are still required to prove
-generated Vercel `filePathMap`, dry-run upload closure, hosted browser behavior,
-and clean runtime logs for the patched revision.
+- The corrected Preview build and deployment completed, and the deployed page
+  plus sign-in were manually confirmed working.
+- The first automated hosted smoke attempt was invalid because its Playwright
+  config selected all 109 E2E tests; failures requiring Clerk/scenario fixtures
+  did not indicate a deployment failure.
+- Automated sign-off still requires rerunning the corrected two-test hosted
+  smoke. Staged Production `filePathMap`, dry-run closure, runtime smoke, and
+  clean runtime logs also remain pending.

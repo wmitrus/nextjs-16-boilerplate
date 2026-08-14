@@ -77,7 +77,8 @@ No auth or deployment fix is accepted until these gates are satisfied:
       cap itself as an auth fix.
 - [ ] Validate the fresh CI prebuilt artifact and dry-run upload plan.
 - [x] Ran focused validators, typecheck, and the production build.
-- [ ] Run hosted browser proof against the exact newly deployed artifact.
+- [ ] Rerun the corrected two-test hosted browser smoke against the exact newly
+      deployed artifact; the deployment itself and manual sign-in are confirmed.
 - [x] Recorded lint as skipped while the repository's temporary ESLint blocker is
       active.
 

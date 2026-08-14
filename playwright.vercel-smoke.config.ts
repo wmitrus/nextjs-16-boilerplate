@@ -9,6 +9,7 @@ if (!baseURL) {
 
 export default defineConfig({
   testDir: './e2e',
+  testMatch: 'vercel-runtime-smoke.spec.ts',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,

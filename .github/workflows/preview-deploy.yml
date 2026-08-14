@@ -20,6 +20,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify checked out revision
+        run: test "$(git rev-parse HEAD)" = "$PREVIEW_GIT_SHA"
+        env:
+          PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
@@ -33,8 +40,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Pull Vercel Environment Information
-        run: npm exec --yes vercel@latest -- pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm exec vercel pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=${{ secrets.VERCEL_TOKEN }}
         env:
           PREVIEW_GIT_BRANCH: ${{ github.head_ref }}
 
@@ -52,14 +62,14 @@ jobs:
       - name: Validate Preview Source Upload
         run: |
           pnpm vercel:deploy:validate
-          npm exec --yes vercel@latest -- deploy --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-dry-run.json
+          pnpm exec vercel deploy --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-dry-run.json
           pnpm vercel:deploy:validate -- --preview-dry-run-json /tmp/vercel-preview-dry-run.json
 
       - name: Deploy to Vercel
         id: vercel_deploy
         run: |
           set +e
-          DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --logs --token=${{ secrets.VERCEL_TOKEN }} \
+          DEPLOY_URL=$(pnpm exec vercel deploy --logs --token=${{ secrets.VERCEL_TOKEN }} \
             --meta githubDeployment=1 \
             --meta githubCommitOrg="$GITHUB_REPOSITORY_OWNER" \
             --meta githubOrg="$GITHUB_REPOSITORY_OWNER" \
@@ -84,7 +94,7 @@ jobs:
 
       - name: Verify Vercel Git Metadata
         run: |
-          npm exec --yes vercel@latest -- inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
+          pnpm exec vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
           node - <<'NODE'
           const fs = require('node:fs');
           const { execFileSync } = require('node:child_process');
@@ -179,9 +189,15 @@ jobs:
           PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
+      - name: Verify hosted runtime
+        run: pnpm vercel:runtime:smoke
+        env:
+          PLAYWRIGHT_TEST_BASE_URL: ${{ steps.vercel_deploy.outputs.preview_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
       - name: Print Vercel Build Logs On Failure
         if: failure() && steps.vercel_deploy.outputs.preview_url != ''
-        run: npm exec --yes vercel@latest -- inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
+        run: pnpm exec vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
 
       - name: Run Lighthouse Audit
         if: success()

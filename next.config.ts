@@ -1,6 +1,15 @@
+import os from 'node:os';
+
 import { withBetterStackNextConfig } from '@logtail/next';
 import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from 'next';
+
+const buildWorkerCpuLimit = Math.min(
+  16,
+  Math.max(1, (os.availableParallelism?.() ?? os.cpus().length) - 1),
+);
+
+const deploymentId = process.env.NEXT_DEPLOYMENT_ID?.slice(0, 32);
 
 const outputFileTracingExcludes = [
   '.env*',
@@ -15,9 +24,15 @@ const outputFileTracingExcludes = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  deploymentId,
   reactCompiler: true,
   outputFileTracingExcludes: {
     '/*': outputFileTracingExcludes,
+  },
+  outputFileTracingIncludes: {
+    // Next 16.2.x requires this module at runtime, but Vercel's minimal
+    // function trace can omit it and terminate resumed PPR responses.
+    '/*': ['node_modules/next/dist/server/dev/browser-logs/file-logger.js'],
   },
   serverExternalPackages: [
     '@electric-sql/pglite',
@@ -28,6 +43,7 @@ const nextConfig: NextConfig = {
     'pino-pretty',
   ],
   experimental: {
+    cpus: buildWorkerCpuLimit,
     turbopackFileSystemCacheForDev: true,
   },
   logging: {

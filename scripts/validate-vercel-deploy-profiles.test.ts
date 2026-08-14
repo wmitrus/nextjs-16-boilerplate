@@ -153,17 +153,17 @@ describe('assertVercelProductionReadinessVerificationValid', () => {
   it('rejects a workflow whose inspected production deployment is not prebuilt', () => {
     expect(() =>
       assertVercelProductionReadinessVerificationValid(
-        'pnpm exec vercel deploy --prebuilt --prod --dry --json\nDEPLOY_URL=$(pnpm exec vercel deploy --prod --skip-domain)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\npnpm exec vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
+        './node_modules/.bin/vercel deploy --prebuilt --prod --dry --json\n./node_modules/.bin/vercel deploy --prod --skip-domain --yes --json\nDEPLOY_URL=$(node -e)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\n./node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
       ),
     ).toThrow(
-      'DEPLOY_URL=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain',
+      './node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json',
     );
   });
 
   it('rejects a workflow that assumes inspect returns prebuilt metadata', () => {
     expect(() =>
       assertVercelProductionReadinessVerificationValid(
-        'DEPLOY_URL=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\npnpm exec vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"\ndeployment.prebuilt',
+        './node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json\nDEPLOY_URL=$(node -e)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\n./node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"\ndeployment.prebuilt',
       ),
     ).toThrow('must not require deployment.prebuilt');
   });
@@ -173,13 +173,14 @@ describe('assertVercelToolingAndProvenanceValid', () => {
   const preview = [
     'ref: ${{ github.event.pull_request.head.sha }}',
     'test "$(git rev-parse HEAD)" = "$PREVIEW_GIT_SHA"',
-    'pnpm exec vercel deploy',
+    './node_modules/.bin/vercel deploy --yes --json',
+    'if [ $DEPLOY_EXIT -ne 0 ]; then',
     'pnpm exec playwright install --with-deps chromium',
     'pnpm vercel:runtime:smoke',
   ].join('\n');
   const production = [
     'NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"',
-    'pnpm exec vercel build --prod',
+    './node_modules/.bin/vercel build --prod',
     '--meta githubCommitSha="$GITHUB_SHA"',
     'pnpm exec playwright install --with-deps chromium',
     'pnpm vercel:runtime:smoke',
@@ -207,17 +208,16 @@ describe('assertVercelToolingAndProvenanceValid', () => {
 });
 
 describe('assertNextRuntimeTraceGuardValid', () => {
-  it('requires the Next.js file logger runtime dependency', () => {
-    expect(() =>
-      assertNextRuntimeTraceGuardValid(
-        "outputFileTracingIncludes: { '/*': ['node_modules/next/dist/server/dev/browser-logs/file-logger.js'] }",
-      ),
-    ).not.toThrow();
+  it('accepts framework-owned output file tracing', () => {
+    expect(() => assertNextRuntimeTraceGuardValid('{}')).not.toThrow();
   });
 
-  it('rejects a config that can recreate the hosted PPR crash', () => {
-    expect(() => assertNextRuntimeTraceGuardValid('{}')).toThrow(
-      'file-logger.js',
-    );
-  });
+  it.each(['outputFileTracingIncludes', 'outputFileTracingExcludes'])(
+    'rejects a repository-wide %s override',
+    (option) => {
+      expect(() =>
+        assertNextRuntimeTraceGuardValid(`${option}: { '/*': ['logs/**/*'] }`),
+      ).toThrow('must remain automatic');
+    },
+  );
 });

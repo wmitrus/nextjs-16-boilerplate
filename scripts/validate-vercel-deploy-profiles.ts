@@ -17,8 +17,6 @@ const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'src/core/db/migrations/generated/meta/_journal.json',
 ];
 const PREBUILT_RUNTIME_PATHS = ['/.next', '/node_modules', '/src'];
-const NEXT_FILE_LOGGER_TRACE =
-  'node_modules/next/dist/server/dev/browser-logs/file-logger.js';
 
 function parseIgnoreRules(content: string): Set<string> {
   return new Set(
@@ -98,12 +96,13 @@ export function assertVercelProductionReadinessVerificationValid(
   workflowContent: string,
 ): void {
   const requiredFragments = [
-    'DEPLOY_URL=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain',
+    './node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json',
+    'DEPLOY_URL=$(node -e',
     'inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json',
     "readyState: 'READY'",
     "target: 'production'",
     'pnpm vercel:runtime:smoke',
-    'pnpm exec vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
+    './node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
   ];
   const missingFragments = requiredFragments.filter(
     (fragment) => !workflowContent.includes(fragment),
@@ -124,7 +123,7 @@ export function assertVercelProductionReadinessVerificationValid(
 
   const smokeIndex = workflowContent.indexOf('pnpm vercel:runtime:smoke');
   const promoteIndex = workflowContent.indexOf(
-    'pnpm exec vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
+    './node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
   );
   if (smokeIndex === -1 || promoteIndex <= smokeIndex) {
     throw new Error(
@@ -152,8 +151,8 @@ export function assertVercelToolingAndProvenanceValid(
   const combinedWorkflows = `${previewWorkflowContent}\n${productionWorkflowContent}`;
   if (
     combinedWorkflows.includes('vercel@latest') ||
-    !previewWorkflowContent.includes('pnpm exec vercel') ||
-    !productionWorkflowContent.includes('pnpm exec vercel')
+    !previewWorkflowContent.includes('./node_modules/.bin/vercel') ||
+    !productionWorkflowContent.includes('./node_modules/.bin/vercel')
   ) {
     throw new Error(
       '[vercel-deploy] Preview and production must use the lockfile-pinned Vercel CLI.',
@@ -165,6 +164,8 @@ export function assertVercelToolingAndProvenanceValid(
     'test "$(git rev-parse HEAD)" = "$PREVIEW_GIT_SHA"',
     'pnpm exec playwright install --with-deps chromium',
     'pnpm vercel:runtime:smoke',
+    './node_modules/.bin/vercel deploy --yes --json',
+    'if [ $DEPLOY_EXIT -ne 0 ]; then',
   ];
   const requiredProductionFragments = [
     'NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"',
@@ -193,11 +194,11 @@ export function assertNextRuntimeTraceGuardValid(
   nextConfigContent: string,
 ): void {
   if (
-    !nextConfigContent.includes('outputFileTracingIncludes') ||
-    !nextConfigContent.includes(NEXT_FILE_LOGGER_TRACE)
+    nextConfigContent.includes('outputFileTracingIncludes') ||
+    nextConfigContent.includes('outputFileTracingExcludes')
   ) {
     throw new Error(
-      `[vercel-deploy] Next.js runtime trace must include ${NEXT_FILE_LOGGER_TRACE}.`,
+      '[vercel-deploy] Next.js output file tracing must remain automatic; repository-wide include/exclude overrides can break pnpm-backed Vercel function packaging.',
     );
   }
 }

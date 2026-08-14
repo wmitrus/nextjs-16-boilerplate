@@ -13,7 +13,15 @@
 
 ## Pending Validation
 
-- Run a protected Production workflow from the target SHA and retain its build, dry-run, and inspected deployment evidence.
+- Run a protected Production workflow from the target SHA after the inspect-field correction and retain its build, dry-run, and inspected deployment evidence.
+
+## Hosted Incident Evidence
+
+- GitHub Actions run `31806827731` reached a real Vercel prebuilt deployment after a successful build, artifact validation, and dry-run closure.
+- Vercel reported the deployment `READY` with target `production`.
+- The GitHub Actions job then failed because `vercel inspect --json` omitted `prebuilt`; the workflow compared `undefined` to `true` and produced a false negative.
+- The final correction treats `deploy --prebuilt --prod` and the preceding prebuilt dry-run as provenance evidence. The inspect gate now verifies only the observed `READY` and `production` fields.
+- Contract tests reject both a real deploy missing `--prebuilt` and any reintroduction of `deployment.prebuilt` into the inspect assertion.
 
 ## Explicitly Skipped
 
@@ -22,4 +30,4 @@
 
 ## Verdict
 
-The implementation is a conditional GO for merge: it now fails closed on the known recurrence path and has a durable hosted-readiness gate. It is not an unconditional Production-readiness certificate until the current immutable SHA completes the protected workflow and Vercel inspection reports a ready Production prebuilt deployment.
+The implementation is a conditional GO for merge: the previous Vercel deployment itself was ready, and the false-negative job condition is now corrected with regression coverage. It becomes an unconditional Production-readiness certificate when the target SHA completes the protected workflow with the corrected inspect gate.

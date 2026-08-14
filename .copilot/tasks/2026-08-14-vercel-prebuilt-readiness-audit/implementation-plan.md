@@ -11,6 +11,6 @@
 
 ## Pending Operational Proof
 
-- [ ] Run the protected Production workflow from the target immutable SHA.
+- [ ] Run the protected Production workflow from the target immutable SHA after the inspect-field correction.
 - [ ] Preserve the fresh artifact-validator and dry-run-closure summaries from that run.
 - [ ] Preserve the final inspected deployment summary showing `READY`, `production`, and `prebuilt: true`.

@@ -113,6 +113,14 @@
 
 ## Update Log
 
+### 2026-08-14 - Hosted Production False Negative
+
+- Trigger: Production workflow run `31806827731` failed after Vercel reported the real prebuilt deployment ready.
+- Evidence: build succeeded; artifact validator reported 11,054 trace references with no missing sources; dry-run closure passed with 4,390 files and 73,495,645 bytes; Vercel deployment completed as `READY`/`production`.
+- Root cause: `vercel inspect --wait --json` omitted `prebuilt`, while the GitHub Actions inline assertion required `deployment.prebuilt === true`.
+- Resolution: removed the unsupported inspect field assertion; retained prebuilt proof on the real deploy command plus dry-run gate; added contract tests that distinguish the real deploy from a dry-run and forbid reintroducing `deployment.prebuilt`.
+- Residual condition: run the corrected workflow once from the target SHA before closing the Production readiness task.
+
 ### Update Entry
 
 - Date: 2026-08-14

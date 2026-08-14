@@ -34,6 +34,12 @@
 - validation not run: hosted Production workflow.
 - residual risk from validation gaps: current-SHA hosted materialization remains unproven until the protected workflow completes and records its inspected READY result.
 
+## Production Incident Follow-Up
+
+- confirmed root cause: Vercel completed the real prebuilt deployment and `inspect --json` reported `READY`/`production`, but did not include `prebuilt`. The workflow's own `undefined !== true` comparison failed the job.
+- final correction: prebuilt provenance remains enforced by the real `deploy --prebuilt --prod` command and the pre-deploy dry-run closure; the hosted inspect assertion now checks only returned fields.
+- regression coverage: the workflow contract requires the real `DEPLOY_URL` command to include `--prebuilt`, rejects a dry-run-only match, and rejects any future `deployment.prebuilt` inspect assertion.
+
 ## Artifact Synchronization
 
 - `plan.md` updates: remediation and external-proof statuses synchronized.

@@ -95,6 +95,25 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - brace-expansion@1.1.17 || 2.1.3
+  - '@vercel/backends@0.8.37'
+  - '@vercel/build-utils@14.1.0'
+  - '@vercel/cervel@0.1.45'
+  - '@vercel/elysia@0.1.114'
+  - '@vercel/express@0.1.128'
+  - '@vercel/fastify@0.1.117'
+  - '@vercel/gatsby-plugin-vercel-builder@2.2.40'
+  - '@vercel/h3@0.1.123'
+  - '@vercel/hono@0.2.117'
+  - '@vercel/koa@0.1.97'
+  - '@vercel/nestjs@0.2.118'
+  - '@vercel/next@4.21.4'
+  - '@vercel/node@5.10.0'
+  - '@vercel/static-build@2.12.6'
+  - '@vercel/vc-native-darwin-arm64@59.0.0'
+  - '@vercel/vc-native-darwin-x64@59.0.0'
+  - '@vercel/vc-native-linux-arm64@59.0.0'
+  - '@vercel/vc-native-linux-x64@59.0.0'
+  - vercel@59.0.0
 
 auditConfig:
   ignoreGhsas:

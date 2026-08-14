@@ -6,7 +6,6 @@
 /coverage
 /public/img
 /.storybook
-/src
 /docs
 /tests
 /e2e

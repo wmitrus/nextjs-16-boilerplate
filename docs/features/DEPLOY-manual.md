@@ -64,9 +64,10 @@ Before starting, ensure you have accounts and projects ready on:
 4. **Environment Variables**: Expand this section and add the required keys from [ENV-requirements.md](./ENV-requirements.md).
 5. Click **Deploy**.
 6. Once created, go to **Settings > General** and copy the **Project ID** and **Organization ID** for your GitHub Secrets.
-7. If you enable Neon automated preview branching, update Vercel Build Settings:
-   - **Preview Build Command**: `pnpm db:migrate:prod && pnpm build`
-   - **Production Build Command**: leave the default `pnpm build`; production deployments are built in GitHub Actions via `vercel build --prod` and deployed with `vercel deploy --prebuilt --prod`
+7. If you enable Neon automated preview branching, set the shared **Project Build Command** to `pnpm db:migrate:prod && pnpm build`.
+   - Preview deployments run that command remotely against the deployment-scoped Neon branch.
+   - Production deployments run that same command once through GitHub Actions `vercel build --prod`, after pulling the Production environment, then deploy with `vercel deploy --prebuilt --prod`.
+   - Do not add a second production migration step to the workflow.
 
 AuthJS production URL note:
 
@@ -88,15 +89,14 @@ database URLs, follow [DEPLOY-neon.md](./DEPLOY-neon.md).
 
 Run the following locally to create and link the project:
 
-1. Install CLI: `pnpm install -g vercel`
-2. Log in: `vercel login`
-3. Initialize: `vercel link`
+1. Log in: `npm exec --yes vercel@latest -- login`
+2. Initialize: `npm exec --yes vercel@latest -- link`
    - Set up "your-project"? **Yes**
    - Which scope? **[Your Team/User]**
    - Link to existing project? **No**
    - What's your project's name? **your-project**
    - In which directory is your code located? `./`
-4. This creates `.vercel/project.json`. Open it to find your `orgId` and `projectId`.
+3. This creates `.vercel/project.json`. Open it to find your `orgId` and `projectId`.
 
 ### Finalizing CI/CD Connection
 
@@ -109,7 +109,7 @@ Run the following locally to create and link the project:
 
 Opening or updating a PR to `main` triggers a **Preview Deployment** (see `preview-deploy.yml`). Preview validation runs in GitHub Actions, but the actual preview build happens remotely on Vercel so Neon preview-branch migrations run against deployment-scoped branch variables.
 
-Merging into `main` triggers a **Production Deployment** (see `prod-deploy.yml`). Production remains GitHub Actions controlled and uses an explicit migration step before the prebuilt deployment.
+Merging into `main` triggers a **Production Deployment** (see `prod-deploy.yml`). GitHub Actions orchestrates the prebuilt deployment, while the shared Vercel Project Build Command runs the production migration exactly once during `vercel build --prod`.
 
 For `AUTH_PROVIDER=authjs`, this split also affects AuthJS URL handling:
 Preview builds can use the Vercel-provided deployment URL, while Production

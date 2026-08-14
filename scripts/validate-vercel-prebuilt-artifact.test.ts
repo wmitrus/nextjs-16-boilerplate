@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  assertVercelPrebuiltArtifactHasNoForbiddenTraces,
   assertVercelPrebuiltArtifactHasNoEscapingTraces,
   assertVercelPrebuiltArtifactValid,
   assertVercelPrebuiltUploadCoverageValid,
@@ -235,6 +236,38 @@ describe('validateVercelPrebuiltArtifact', () => {
     ).not.toThrow();
   });
 
+  it('requires dry-run upload of a traced source file', async () => {
+    const root = await createTempRoot();
+    const requiredPath = 'src/core/logger/edge.ts';
+    await writeFunctionConfig(root, {
+      [requiredPath]: requiredPath,
+    });
+    await writeRequiredFile(root, requiredPath);
+    const artifactSummary = await validateVercelPrebuiltArtifact(root);
+
+    expect(artifactSummary.forbiddenFiles).toEqual([]);
+
+    const uploadSummary = validateVercelPrebuiltUploadCoverage(
+      artifactSummary,
+      JSON.stringify({
+        files: [],
+        ignored: ['src'],
+        totalSize: 0,
+      }),
+    );
+
+    expect(uploadSummary.missingUploadFiles).toEqual([
+      {
+        configPath: '.vercel/output/functions/api/example.func/.vc-config.json',
+        requiredPath,
+        ignoredByDryRunPath: 'src',
+      },
+    ]);
+    expect(() =>
+      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
+    ).toThrow('likely excluded by dry-run ignored path `src`');
+  });
+
   it('rejects dry-run entries that do not contain a supported path shape', () => {
     expect(() =>
       parseVercelDeployDryRunOutput(
@@ -318,7 +351,7 @@ describe('validateVercelPrebuiltArtifact', () => {
     ).not.toThrow('likely excluded by dry-run ignored path');
   });
 
-  it('allows forbidden trace metadata only when dry-run excludes it', async () => {
+  it('rejects forbidden trace metadata before the dry-run can exclude it', async () => {
     const root = await createTempRoot();
     const forbiddenPath = '.env.local';
     await writeFunctionConfig(root, {
@@ -327,20 +360,9 @@ describe('validateVercelPrebuiltArtifact', () => {
     await writeRequiredFile(root, forbiddenPath);
     const artifactSummary = await validateVercelPrebuiltArtifact(root);
 
-    const uploadSummary = validateVercelPrebuiltUploadCoverage(
-      artifactSummary,
-      JSON.stringify({
-        files: [],
-        ignored: ['.env.local'],
-        totalSize: 0,
-      }),
-    );
-
-    expect(uploadSummary.missingUploadFiles).toEqual([]);
-    expect(uploadSummary.forbiddenUploadFiles).toEqual([]);
     expect(() =>
-      assertVercelPrebuiltUploadCoverageValid(uploadSummary),
-    ).not.toThrow();
+      assertVercelPrebuiltArtifactHasNoForbiddenTraces(artifactSummary),
+    ).toThrow('.env.local');
   });
 
   it('rejects forbidden traced files present in dry-run upload', async () => {

@@ -90,10 +90,12 @@ describe('buildVercelCliInvocation', () => {
     );
 
     expect(invocation).toEqual({
-      command: 'pnpm',
+      command: 'npm',
       args: [
-        'dlx',
+        'exec',
+        '--yes',
         'vercel@latest',
+        '--',
         'inspect',
         'preview.example.vercel.app',
         '--logs',
@@ -136,8 +138,10 @@ describe('buildVercelCliInvocation', () => {
     );
 
     expect(invocation.args).toEqual([
-      'dlx',
+      'exec',
+      '--yes',
       'vercel@latest',
+      '--',
       'whoami',
       '--token=manual-token',
     ]);

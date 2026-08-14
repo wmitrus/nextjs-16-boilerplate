@@ -16,7 +16,6 @@ const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'e2e/internal-api-key.ts',
   'src/core/db/migrations/generated/meta/_journal.json',
 ];
-const PREBUILT_REQUIRED_EXCLUSIONS = ['/src'];
 const PREBUILT_RUNTIME_PATHS = ['/.next', '/node_modules'];
 
 function parseIgnoreRules(content: string): Set<string> {
@@ -39,14 +38,6 @@ export function assertVercelDeployProfilesValid(
     throw new Error(
       '[vercel-deploy] Default .vercelignore must include src for preview source builds.',
     );
-  }
-
-  for (const requiredExclusion of PREBUILT_REQUIRED_EXCLUSIONS) {
-    if (!prebuiltRules.has(requiredExclusion)) {
-      throw new Error(
-        `[vercel-deploy] Production prebuilt profile must exclude ${requiredExclusion}.`,
-      );
-    }
   }
 
   for (const requiredTemplate of PUBLIC_PREBUILT_ENV_TEMPLATE_IGNORE_RULES) {
@@ -81,6 +72,43 @@ export function assertVercelPreviewSourceUploadValid(
     throw new Error(
       '[vercel-deploy] Preview source upload is missing required build input(s):\n' +
         missingPaths.map((missingPath) => `  - ${missingPath}`).join('\n'),
+    );
+  }
+}
+
+export function assertVercelProductionMigrationOwnershipValid(
+  workflowContent: string,
+): void {
+  if (!/\bvercel(?:@[\w.-]+)?\s+--\s+build\s+--prod\b/.test(workflowContent)) {
+    throw new Error(
+      '[vercel-deploy] Production workflow must build through vercel build --prod.',
+    );
+  }
+
+  if (workflowContent.includes('pnpm db:migrate:prod')) {
+    throw new Error(
+      '[vercel-deploy] Production workflow must not run pnpm db:migrate:prod separately; the Vercel Project Build Command owns the migration.',
+    );
+  }
+}
+
+export function assertVercelProductionReadinessVerificationValid(
+  workflowContent: string,
+): void {
+  const requiredFragments = [
+    'inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json',
+    "readyState: 'READY'",
+    "target: 'production'",
+    'prebuilt: true',
+  ];
+  const missingFragments = requiredFragments.filter(
+    (fragment) => !workflowContent.includes(fragment),
+  );
+
+  if (missingFragments.length > 0) {
+    throw new Error(
+      '[vercel-deploy] Production workflow must inspect the deployed prebuilt artifact and require READY production state. Missing:\n' +
+        missingFragments.map((fragment) => `  - ${fragment}`).join('\n'),
     );
   }
 }
@@ -140,6 +168,18 @@ function main(): void {
     readAllowedFile(
       path.resolve(repositoryRoot, '.vercelignore.prebuilt'),
       'production prebuilt upload profile',
+    ),
+  );
+  assertVercelProductionMigrationOwnershipValid(
+    readAllowedFile(
+      path.resolve(repositoryRoot, '.github/workflows/prod-deploy.yml'),
+      'production deployment workflow',
+    ),
+  );
+  assertVercelProductionReadinessVerificationValid(
+    readAllowedFile(
+      path.resolve(repositoryRoot, '.github/workflows/prod-deploy.yml'),
+      'production deployment workflow',
     ),
   );
   console.log('[vercel-deploy] Preview and production upload profiles valid.');

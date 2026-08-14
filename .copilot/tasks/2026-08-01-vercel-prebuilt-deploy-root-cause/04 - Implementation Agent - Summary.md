@@ -145,3 +145,12 @@ vitest.unit.config.ts scripts/validate-vercel-prebuilt-artifact.test.ts
   `pnpm vercel:deploy:validate` and `pnpm typecheck` also passed locally.
 - The next hosted preview deployment remains the required proof that Vercel
   applies the allowlist rules as expected.
+
+## 2026-08-14 Migration Ownership Follow-up
+
+- Replaced the duplicate production workflow migration with the existing single
+  project Build Command owner: `vercel build --prod` executes
+  `pnpm db:migrate:prod && pnpm build` once using the pulled Production env.
+- Added a focused regression assertion against local workflow migration steps.
+- Updated the deployment runbooks to remove the obsolete per-environment Build
+  Command claim and reflect the required `filePathMap` source closure.

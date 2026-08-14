@@ -227,17 +227,10 @@ Why this matters:
 
 ### Automated Migrations on Production
 
-Add a migration step before the production build in `prod-deploy.yml`:
-
-```yaml
-- name: Run DB Migrations (Production)
-  shell: bash
-  run: |
-    set -a
-    source .vercel/.env.production.local
-    set +a
-    pnpm db:migrate:prod
-```
+The shared Vercel Project Build Command, `pnpm db:migrate:prod && pnpm build`,
+owns production migrations. GitHub Actions runs it once through `vercel build
+--prod` after pulling the Production environment; do not add a separate
+`pnpm db:migrate:prod` workflow step.
 
 AuthJS production prebuilt note:
 

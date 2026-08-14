@@ -1,10 +1,15 @@
 // @vitest-environment node
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   assertVercelDeployProfilesValid,
   assertVercelPreviewSourceUploadValid,
+  assertVercelProductionMigrationOwnershipValid,
+  assertVercelProductionReadinessVerificationValid,
 } from './validate-vercel-deploy-profiles';
 
 describe('assertVercelDeployProfilesValid', () => {
@@ -13,7 +18,6 @@ describe('assertVercelDeployProfilesValid', () => {
       assertVercelDeployProfilesValid(
         '/docs\n/tests\n',
         [
-          '/src',
           '/docs',
           '!/.env.example',
           '!/.env.leantime.example',
@@ -27,7 +31,7 @@ describe('assertVercelDeployProfilesValid', () => {
     expect(() =>
       assertVercelDeployProfilesValid(
         '/docs\n',
-        ['/src', '!/.env.example', '!/.env.leantime.example'].join('\n'),
+        ['!/.env.example', '!/.env.leantime.example'].join('\n'),
       ),
     ).toThrow('.env.leantime-dev.example');
   });
@@ -45,7 +49,6 @@ describe('assertVercelDeployProfilesValid', () => {
         assertVercelDeployProfilesValid(
           '/docs\n',
           [
-            '/src',
             runtimePath,
             '!/.env.example',
             '!/.env.leantime.example',
@@ -100,5 +103,48 @@ describe('assertVercelPreviewSourceUploadValid', () => {
     expect(() => assertVercelPreviewSourceUploadValid(dryRunOutput)).toThrow(
       'e2e/internal-api-key.ts',
     );
+  });
+});
+
+describe('assertVercelProductionMigrationOwnershipValid', () => {
+  it('accepts the production workflow with Vercel as the only migration owner', () => {
+    const workflowContent = readFileSync(
+      path.resolve(process.cwd(), '.github/workflows/prod-deploy.yml'),
+      'utf8',
+    );
+
+    expect(() =>
+      assertVercelProductionMigrationOwnershipValid(workflowContent),
+    ).not.toThrow();
+    expect(workflowContent).toContain('pnpm vercel:deploy:validate');
+  });
+
+  it('rejects a workflow that runs migrations separately from the project build command', () => {
+    expect(() =>
+      assertVercelProductionMigrationOwnershipValid(
+        'pnpm db:migrate:prod\nnpm exec --yes vercel@latest -- build --prod',
+      ),
+    ).toThrow('must not run pnpm db:migrate:prod separately');
+  });
+});
+
+describe('assertVercelProductionReadinessVerificationValid', () => {
+  it('accepts the production workflow hosted deployment readiness gate', () => {
+    const workflowContent = readFileSync(
+      path.resolve(process.cwd(), '.github/workflows/prod-deploy.yml'),
+      'utf8',
+    );
+
+    expect(() =>
+      assertVercelProductionReadinessVerificationValid(workflowContent),
+    ).not.toThrow();
+  });
+
+  it('rejects a workflow that does not inspect the deployed prebuilt artifact', () => {
+    expect(() =>
+      assertVercelProductionReadinessVerificationValid(
+        "npm exec --yes vercel@latest -- deploy --prebuilt --prod\nreadyState: 'READY'\ntarget: 'production'\nprebuilt: true",
+      ),
+    ).toThrow('must inspect the deployed prebuilt artifact');
   });
 });

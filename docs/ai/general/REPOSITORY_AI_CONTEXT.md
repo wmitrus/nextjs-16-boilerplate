@@ -313,6 +313,8 @@ Unit tests are co-located with source files.
 
 **Lint rule**: Always run `pnpm lint --fix`, never plain `pnpm lint`. The linter auto-fixes import ordering and formatting issues on save; running without `--fix` only reports fixable errors and wastes tokens. If unfixable errors remain after `--fix`, report them.
 
+**Temporary ESLint execution blocker (effective 2026-08-14):** `pnpm lint --fix` repeatedly hangs in the agent shell. Until this block is explicitly removed after a verified fix, do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. Run other relevant checks and report lint as skipped because of this blocker.
+
 **Phase-close rule**: For substantial phase-based implementation work, use narrower validation during the phase and run repo-wide `pnpm lint --fix` plus `pnpm typecheck` before declaring the phase complete. Do not run both after every tiny code edit unless the task specifically requires it.
 
 Pre-push hook runs: typecheck -> skott -> depcheck -> madge.

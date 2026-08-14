@@ -64,15 +64,17 @@ To ensure smooth builds on Vercel with pnpm 10, the project includes:
 
 - **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
 - **Current Vercel CLI**: GitHub Actions and local helper scripts resolve
-  `vercel@latest` through `pnpm dlx` for every deployment command. Deployment
-  guards must remain compatible with the current CLI release.
+  `vercel@latest` through `npm exec --yes` for every deployment command. This
+  resolves the current registry tag rather than reusing pnpm's `dlx` cache.
+  Deployment guards must remain compatible with the current CLI release.
 - **Vercel upload profiles**: The default `.vercelignore` is preview-safe and
   must not exclude `src`, because preview deployments upload source for a
   remote build. Production activates `.vercelignore.prebuilt` after the local
-  build and before prebuilt dry-run/deploy; that profile excludes root source,
-  tests, docs, coverage, and reports. The prebuilt profile must not ignore
-  `.next` or `node_modules`, because Vercel's generated `filePathMap` may
-  legally reference traced files from those directories.
+  build and before prebuilt dry-run/deploy; that profile excludes logs, tests,
+  docs, coverage, and reports. It must retain every source required by
+  Vercel's generated `filePathMap`, including traced `src/**` files. The
+  prebuilt profile must not ignore `.next` or `node_modules`, because generated
+  metadata may legally reference traced files from those directories.
 
 ## Vercel Deployment Strategy
 
@@ -81,31 +83,33 @@ This repository uses two different deployment ownership models:
 1. **Preview Deployments**
    - GitHub Actions remains the orchestration entrypoint for env validation and Lighthouse CI.
    - Vercel owns the actual preview build because Neon automated preview branching injects branch-specific connection strings at deployment time.
-   - Keep the Vercel Preview Build Command set to `pnpm db:migrate:prod && pnpm build`.
-   - Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
-   - Validate the default upload profile and a real `vercel deploy --dry --json`
-     source plan before creating the deployment. The plan must include the
-     Next.js config, package manifest, and generated migration journal.
-   - If preview deployments are created with the Vercel CLI, pass GitHub metadata via `--meta`. Without `githubDeployment=1` and `githubCommitRef`, Vercel does not link the deployment to the PR branch, and Neon Preview Branching cannot inject branch-specific database variables.
-   - The preview workflow must verify the created deployment through Vercel's deployment API and fail if the expected PR branch/SHA metadata is missing.
+
+- Keep the shared Vercel Project Build Command set to `pnpm db:migrate:prod && pnpm build`; it owns migrations once per Vercel build.
+- Do not use `vercel build` / `vercel deploy --prebuilt` for preview deployments when Neon automated preview branches are enabled.
+- Validate the default upload profile and a real `vercel deploy --dry --json`
+  source plan before creating the deployment. The plan must include the
+  Next.js config, package manifest, and generated migration journal.
+- If preview deployments are created with the Vercel CLI, pass GitHub metadata via `--meta`. Without `githubDeployment=1` and `githubCommitRef`, Vercel does not link the deployment to the PR branch, and Neon Preview Branching cannot inject branch-specific database variables.
+- The preview workflow must verify the created deployment through Vercel's deployment API and fail if the expected PR branch/SHA metadata is missing.
 
 2. **Production Deployments**
    - GitHub Actions remains the deployment authority.
-   - Production migrations run explicitly in [prod-deploy.yml](../../.github/workflows/prod-deploy.yml) using `DATABASE_URL_UNPOOLED`.
-   - Production still uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`.
-   - After the local build, production copies `.vercelignore.prebuilt` to
-     `.vercelignore` before both the prebuilt dry-run and real deployment.
-   - Production runs prebuilt artifact guards after build and before deploy.
-     These guards validate `Object.values(filePathMap)` as source paths, require
-     every allowed runtime source in the dry-run upload, reject every forbidden
-     source present in that upload, reject missing or symlink-escaping sources,
-     and enforce budgets of 5,000 files and 80 MiB.
-   - For `AUTH_PROVIDER=authjs`, the production workflow requires a
-     Production-scoped `NEXTAUTH_URL` before `vercel build --prod`. It does not
-     derive `NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`, because that would fix the
-     build while leaving runtime AuthJS misconfigured. Preview builds run
-     remotely on Vercel and Clerk deployments do not need `NEXTAUTH_URL`.
-   - The downstream release workflow publishes the GitHub Release, and the final `new-relic-change-tracking.yml` workflow emits the New Relic production deployment event from that published release so New Relic shows semver while production rollout truth still comes from the deploy workflow.
+
+- Production uses `vercel build --prod` followed by `vercel deploy --prebuilt --prod`; the shared Vercel Project Build Command runs the migration once during that build with the pulled Production environment.
+- Do not add a separate `pnpm db:migrate:prod` workflow step, which would execute the same DDL twice.
+- After the local build, production copies `.vercelignore.prebuilt` to
+  `.vercelignore` before both the prebuilt dry-run and real deployment.
+- Production runs prebuilt artifact guards after build and before deploy.
+  These guards validate `Object.values(filePathMap)` as source paths, require
+  every allowed runtime source in the dry-run upload, reject every forbidden
+  source present in that upload, reject missing or symlink-escaping sources,
+  and enforce budgets of 5,000 files and 80 MiB.
+- For `AUTH_PROVIDER=authjs`, the production workflow requires a
+  Production-scoped `NEXTAUTH_URL` before `vercel build --prod`. It does not
+  derive `NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`, because that would fix the
+  build while leaving runtime AuthJS misconfigured. Preview builds run
+  remotely on Vercel and Clerk deployments do not need `NEXTAUTH_URL`.
+- The downstream release workflow publishes the GitHub Release, and the final `new-relic-change-tracking.yml` workflow emits the New Relic production deployment event from that published release so New Relic shows semver while production rollout truth still comes from the deploy workflow.
 
 Why the split exists:
 
@@ -117,9 +121,10 @@ Why the split exists:
   `VERCEL_URL`; AuthJS production builds therefore require the same
   `NEXTAUTH_URL` that the production runtime will receive.
 - The prebuilt production deploy must preserve Vercel's Build Output contract:
-  every allowed runtime source value in function `filePathMap` must be uploaded,
-  while root env, log, source, test, docs, and report paths must remain excluded
-  from the upload plan. Next.js and the Vercel adapter can retain such paths in
+  every non-forbidden source value in function `filePathMap` must be uploaded,
+  while private env, log, test, docs, and report paths must remain excluded from
+  the upload plan. Traced `src/**` files must remain uploadable when required by
+  `filePathMap`. Next.js and the Vercel adapter can retain such paths in
   generated metadata, including Node proxy traces and production env files.
   Never repair this by deleting entries from generated `.vc-config.json`.
 

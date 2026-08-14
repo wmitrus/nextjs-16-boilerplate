@@ -34,7 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
-        run: pnpm dlx vercel@latest pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=${{ secrets.VERCEL_TOKEN }}
+        run: npm exec --yes vercel@latest -- pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=${{ secrets.VERCEL_TOKEN }}
         env:
           PREVIEW_GIT_BRANCH: ${{ github.head_ref }}
 
@@ -52,14 +52,14 @@ jobs:
       - name: Validate Preview Source Upload
         run: |
           pnpm vercel:deploy:validate
-          pnpm dlx vercel@latest deploy --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-dry-run.json
+          npm exec --yes vercel@latest -- deploy --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-dry-run.json
           pnpm vercel:deploy:validate -- --preview-dry-run-json /tmp/vercel-preview-dry-run.json
 
       - name: Deploy to Vercel
         id: vercel_deploy
         run: |
           set +e
-          DEPLOY_URL=$(pnpm dlx vercel@latest deploy --logs --token=${{ secrets.VERCEL_TOKEN }} \
+          DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --logs --token=${{ secrets.VERCEL_TOKEN }} \
             --meta githubDeployment=1 \
             --meta githubCommitOrg="$GITHUB_REPOSITORY_OWNER" \
             --meta githubOrg="$GITHUB_REPOSITORY_OWNER" \
@@ -84,7 +84,7 @@ jobs:
 
       - name: Verify Vercel Git Metadata
         run: |
-          pnpm dlx vercel@latest inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
+          npm exec --yes vercel@latest -- inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
           node - <<'NODE'
           const fs = require('node:fs');
           const { execFileSync } = require('node:child_process');
@@ -181,7 +181,7 @@ jobs:
 
       - name: Print Vercel Build Logs On Failure
         if: failure() && steps.vercel_deploy.outputs.preview_url != ''
-        run: pnpm dlx vercel@latest inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
+        run: npm exec --yes vercel@latest -- inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
 
       - name: Run Lighthouse Audit
         if: success()

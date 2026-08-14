@@ -33,7 +33,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
-        run: pnpm dlx vercel@latest pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: npm exec --yes vercel@latest -- pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Verify Environment
         run: pnpm env:check
@@ -46,19 +46,8 @@ jobs:
           APP_ENV: production
           NODE_ENV: production
 
-      - name: Run DB Migrations (Production)
-        shell: bash
-        run: |
-          set -a
-          source .vercel/.env.production.local
-          set +a
-
-          if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
-            echo "DATABASE_URL_UNPOOLED is missing after vercel pull for production — cannot run DDL migrations safely."
-            exit 1
-          fi
-
-          pnpm db:migrate:prod
+      - name: Validate Deployment Profiles
+        run: pnpm vercel:deploy:validate
 
       - name: Build Project Artifacts
         shell: bash
@@ -76,7 +65,7 @@ jobs:
             unset VERCEL_URL
           fi
 
-          pnpm dlx vercel@latest build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          npm exec --yes vercel@latest -- build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           APP_ENV: production
           NEXT_PUBLIC_APP_ENV: production
@@ -90,8 +79,73 @@ jobs:
       - name: Validate Prebuilt Upload Coverage
         shell: bash
         run: |
-          pnpm dlx vercel@latest deploy --prebuilt --prod --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-prebuilt-dry-run.json
+          npm exec --yes vercel@latest -- deploy --prebuilt --prod --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-prebuilt-dry-run.json
           pnpm vercel:prebuilt:validate -- --dry-run-json /tmp/vercel-prebuilt-dry-run.json
 
       - name: Deploy to Vercel
-        run: pnpm dlx vercel@latest deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        id: vercel_deploy
+        shell: bash
+        run: |
+          DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "Vercel deploy did not return a deployment URL."
+            exit 1
+          fi
+          echo "production_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Production Deployment Readiness
+        shell: bash
+        run: |
+          npm exec --yes vercel@latest -- inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-production-inspect.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+
+          const deployment = JSON.parse(
+            fs.readFileSync('/tmp/vercel-production-inspect.json', 'utf8'),
+          );
+          const expected = {
+            readyState: 'READY',
+            target: 'production',
+            prebuilt: true,
+          };
+          const actual = {
+            readyState: deployment.readyState,
+            target: deployment.target,
+            prebuilt: deployment.prebuilt,
+          };
+
+          if (
+            actual.readyState !== expected.readyState ||
+            actual.target !== expected.target ||
+            actual.prebuilt !== expected.prebuilt
+          ) {
+            console.error(
+              JSON.stringify(
+                {
+                  message:
+                    'Vercel deployment did not reach the expected ready production prebuilt state.',
+                  expected,
+                  actual,
+                  deploymentId: deployment.id,
+                  deploymentUrl: deployment.url,
+                },
+                null,
+                2,
+              ),
+            );
+            process.exit(1);
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                message: 'Vercel production prebuilt deployment is ready.',
+                deploymentId: deployment.id,
+                deploymentUrl: deployment.url,
+                ...actual,
+              },
+              null,
+              2,
+            ),
+          );
+          NODE

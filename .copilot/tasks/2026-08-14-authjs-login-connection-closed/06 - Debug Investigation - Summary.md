@@ -1,5 +1,9 @@
 # 06 - Debug Investigation - Summary
 
+> **Final debug disposition:** Vercel logs proved the Flight stream closed
+> because the function could not load Next.js `file-logger.js`. See
+> `final-root-cause-and-deployment-standard.md`.
+
 ## Task Context
 
 - Task ID: `2026-08-14-authjs-login-connection-closed`
@@ -111,3 +115,21 @@
 - Trigger: Evidence-first investigation requested for the hosted AuthJS `Connection closed` rejection.
 - Summary of change: Confirmed the installed Next.js production RSC client as the literal source; traced the AuthJS credentials/session/bootstrap sequence; bounded the unresolved cause to a Flight response close; documented the fastest falsifying browser check.
 - Sections refreshed: All initial sections.
+
+### Update Entry
+
+- Date: 2026-08-14
+- Trigger: New production screenshot shows `Loading sign in...` plus Next client `Unhandled Promise Rejection: Connection closed.` after a fallback deployment.
+- Scope handled: Current source, `connection()`, RSC `getServerSession(authOptions)`, AuthJS config/provider imports, active Vercel deployment/build data, and accessible Vercel request logs. No application code was edited.
+- Confirmed evidence:
+  - `Loading sign in...` is unique to `src/app/auth/signin/page.tsx` and can render only while `SignInPageContent` is suspended. The active order is `await connection()`, AuthJS provider gate, `await getServerSession(authOptions)`, then `await searchParams` before the form is emitted.
+  - `connection()` is correctly the first request-time operation. It is required under `cacheComponents: true` and is not a database/socket connection.
+  - Installed `next-auth@4.24.15` implements RSC `getServerSession(authOptions)` by reading `headers()` and `cookies()`, then calling local `AuthHandler` with `action: 'session'` and `providers: []`. It does not fetch `/api/auth/session`, execute the credentials provider's `authorize`, query the database, bcrypt-compare a password, or invoke bootstrap.
+  - `authOptions` uses JWT sessions. Importing `auth.ts` builds the Credentials provider definition, but database and bcrypt work occurs only in `authorize` during `POST /api/auth/callback/credentials`, which cannot run before the form exists.
+  - The current production alias is deployment `dpl_A5RByEAXNL2Tiwknir7xxe88HTSf`, produced by GitHub Actions run `31808466275` from `1f42eb87`. Vercel reports a successful prebuilt `.vercel/output` deployment. Its anonymous `/auth/signin` response is a cache-hit PPR shell (`x-nextjs-prerender: 1`) with unresolved `B:0` Suspense content and no form.
+  - Production `1f42eb87` predates the visible-fallback commit `3921f831`; it cannot be the source of the screenshot text. The accessible PR Preview is deployment-protected, so it cannot be anonymously correlated either.
+  - Vercel returned no log entry for the captured production request ID and no recent production `5xx`. This does not prove a stream cannot close, but it provides no evidence for an exception in `connection()`, `getServerSession()`, auth config evaluation, or credentials authorization.
+- Superseded prior hypothesis: The current source uses `router.replace()` rather than `window.location.href`; the prior post-submit hard-navigation explanation does not explain the reported pre-form loading screen.
+- Falsifiable root-cause hypothesis: The loading screen and `Connection closed.` rejection are effects of one initial PPR failure. Vercel/Next delivers the cached sign-in shell, but the browser's dynamic Flight continuation closes before `SignInPageContent` completes. `GlobalErrorHandlers` observes the resulting framework rejection; it does not create it. The evidence does not support AuthJS provider/database work as the cause of this pre-form occurrence.
+- Cheapest discriminating check: Against the exact deployment that renders `Loading sign in...`, capture one anonymous browser navigation with CDP network events and console `unhandledrejection`. The hypothesis is supported only when the document shell is `200` and its associated Flight continuation is canceled, reset, or truncated without a preceding function `5xx`. It is falsified by a continuation response or function log naming `connection()`, `getServerSession()`, auth config import/evaluation, or session-cookie parsing. Query Vercel with the captured request ID immediately after the trace; redact cookies and credentials.
+- Handoff: Route a clean continuation closure to Next.js Runtime for PPR/transport analysis. Route a named server error back to Debug Investigation, then to Runtime or Security & Auth based on the failing boundary.

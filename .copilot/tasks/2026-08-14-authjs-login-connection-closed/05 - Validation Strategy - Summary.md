@@ -1,10 +1,14 @@
 # 05 - Validation Strategy - Summary
 
+> **Superseded validation conclusion:** Auth-only tests cannot prove this
+> packaging failure. Use the artifact and hosted-runtime gates in
+> `final-root-cause-and-deployment-standard.md`.
+
 ## Task Context
 
 - Task ID: `2026-08-14-authjs-login-connection-closed`
-- Task Objective: Validate the proposed client-side AuthJS credentials sign-in correction: catch rejected `signIn()` calls locally and replace successful `window.location.href` navigation with App Router navigation.
-- Current Run Scope: Change-validation review only; no production or test code changed in this run.
+- Task Objective: Validate the AuthJS credentials sign-in correction: catch rejected `signIn()` calls locally, replace successful hard navigation with App Router navigation, keep the sign-in RSC render path lightweight, and confirm the build worker cap.
+- Current Run Scope: Change-validation review plus synchronization against the current implementation and local validation evidence.
 - Mode: CHANGE VALIDATION
 - Status: COMPLETED
 - Last Updated: 2026-08-14
@@ -12,8 +16,8 @@
 
 ## Scope Handled
 
-- change surfaces assessed: `src/app/auth/signin/sign-in-client.tsx`, its colocated unit test, AuthJS E2E helper/specs, scenario runner, and auth-flow verification matrix.
-- validation questions in scope: local rejection handling, successful App Router navigation, normal AuthJS result errors, credentials-session health, completed and incomplete post-sign-in settlement, and hosted Preview/Production evidence.
+- change surfaces assessed: `src/app/auth/signin/sign-in-client.tsx`, `src/app/auth/signin/page.tsx`, colocated unit/page tests, AuthJS E2E helper/specs, scenario runner, `next.config.ts`, and auth-flow verification matrix.
+- validation questions in scope: local rejection handling, successful App Router navigation, normal AuthJS result errors, lightweight JWT-backed existing-session redirect, credentials-session health, completed and incomplete post-sign-in settlement, build worker cap application, and hosted Preview/Production evidence.
 - excluded validation areas: AuthJS route-handler authorization, proxy policy, credentials persistence, cookie configuration, tenancy, and New Relic configuration. These are unchanged and were reviewed by the Security & Auth and Next.js Runtime specialists.
 
 ## Inputs Reviewed
@@ -31,10 +35,13 @@
 
 ## Current-State Findings
 
-- Confirmed: `SignInClient` currently awaits `signIn()` without a local rejection boundary and performs a full-document `window.location.href` assignment after a successful result.
-- Confirmed: The proposed change stays in the initiating client boundary. It does not alter route-handler, proxy, authorization, tenant, cookie, or database behavior.
+- Confirmed: Current `SignInClient` catches rejected `signIn()` promises, rejects cross-origin result URLs, and uses `router.replace()` for same-origin results.
+- Confirmed: Current `SignInPageContent` no longer imports `authOptions` or calls `getServerSession(authOptions)`; it reads the signed AuthJS JWT through `getToken()` with App Router cookie/header stores after `await connection()`.
+- Confirmed: `next.config.ts` now caps Next.js build workers with `experimental.cpus`; `pnpm build` printed `cpus: 16`, proving the cap was loaded by Next.
+- Confirmed: The implemented change stays within the sign-in page/client and build config. It does not alter route-handler, proxy, authorization, tenant, cookie, or database behavior.
 - Confirmed: `pnpm e2e:authjs:core` is the supported scenario-runner entrypoint and covers AuthJS JSON endpoint health plus fresh completed- and incomplete-user sign-in paths.
 - Risks: Neither current unit tests nor current AuthJS E2E explicitly fail on a browser `unhandledrejection`/`pageerror` during credentials sign-in. A hosted runtime check must add that observation for this incident.
+- Risk: The local `pnpm build` run did not finish after accepting `cpus: 16`, so build completion is still unproven in this agent shell.
 - Drift: The mandatory auth-flow matrix is primarily phrased in historical Clerk `/users` terminology. Its routing/redirect invariants apply, but AuthJS evidence must use the current `/dashboard` and `/onboarding` equivalents rather than claiming Clerk-path coverage.
 
 ## Validation-Risk Assessment
@@ -65,8 +72,10 @@
 
 - commands to run:
   - `pnpm vitest run --config vitest.unit.config.ts src/app/auth/signin/sign-in-client.test.tsx`
+  - `pnpm exec vitest run --config vitest.unit.config.ts src/app/auth/signin/page.test.tsx src/app/auth/signin/sign-in-client.test.tsx --coverage.enabled=false`
   - `pnpm typecheck`
   - `pnpm e2e:authjs:core`
+  - `pnpm build` after the worker cap, with the remaining hang tracked separately if it reproduces
 - environment prerequisites: Node 24 and pnpm; the AuthJS core run requires the scenario runner's supported container profile, `E2E_BACKEND_MODE=container`, and its isolated `127.0.0.1:5433/app_test` database. Hosted checks require authorized Preview/Production test identities and a browser capture mechanism; do not use raw Playwright as the authoritative local AuthJS sign-off.
 - expected evidence: unit assertions for rejected/success/normal-result-error paths; a passing typecheck; line-reporter scenario output for the AuthJS core suite; and separate Preview and Production matrix records showing clean console/rejection behavior and healthy AuthJS callback/session/navigation outcomes.
 
@@ -97,3 +106,10 @@
 - Trigger: Requested minimum safe validation review for the proposed AuthJS client sign-in fix.
 - Summary of change: Defined focused unit, scenario-runner E2E, and Preview/Production interactive matrix evidence; excluded unrelated validation surfaces.
 - Sections refreshed: All sections created from the Validation Strategy summary template.
+
+### Update Entry
+
+- Date: 2026-08-14
+- Trigger: Continued validation sync after the sign-in RSC `getToken()` patch and requested `pnpm build` worker cap.
+- Summary of change: Updated the validation surface to include the page-level JWT redirect predicate, `next.config.ts` worker cap, combined focused test command, and the observed local build hang after Next accepted `cpus: 16`.
+- Sections refreshed: Task Context, Scope Handled, Current-State Findings, Validation Commands / Checks, Update Log.

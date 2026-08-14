@@ -1,23 +1,23 @@
-# Implementation Plan
+# Final Implementation Plan
 
-## Status
+- [done] Reconstruct the working/failing deployment boundary.
+- [done] Capture anonymous browser failure on Preview and Production.
+- [done] Correlate it with Vercel runtime `MODULE_NOT_FOUND` logs.
+- [done] Revert the unproven `getToken()` sign-in-page change.
+- [done] Add the exact Next.js `file-logger.js` trace include.
+- [done] Cap Next.js build workers at 16.
+- [done] Pin Vercel CLI 59.0.0 and remove `vercel@latest` execution.
+- [done] Require exact Preview PR-head checkout and provenance.
+- [done] Add a unique custom deployment ID to external Production builds.
+- [done] Add generated Node-function trace validation.
+- [done] Add anonymous hosted AuthJS runtime smoke.
+- [done] Stage Production before smoke and promote only after success.
+- [done] Complete local unit, type, profile, and production-build validation.
+- [pending] Deploy fresh Preview and pass hosted smoke/log verification.
+- [pending] Build fresh prebuilt Production artifact and pass `filePathMap` plus
+  dry-run validation.
+- [pending] Pass staged Production smoke, promote, and pass canonical-domain
+  smoke.
 
-- [done] Catch rejected AuthJS `signIn()` promises and restore the submit state.
-- [done] Replace hard document navigation with same-origin `router.replace()`.
-- [done] Reject cross-origin AuthJS result URLs.
-- [done] Replace the sign-in page's null Suspense fallback with generic visible loading UI.
-- [done] Add focused client regression coverage.
-- [done] Run focused local validation.
-- [blocked] Deploy and verify Preview and Production with real hosted sign-in evidence.
-
-## Implementation Notes
-
-The page keeps `connection()`, provider gating, session lookup, redirect sanitization, and authenticated-user redirect in `SignInPageContent`. The static fallback contains only a generic loading status, so it cannot disclose state or initiate authentication before those server checks resolve.
-
-## Hosted Verification Plan
-
-1. Deploy the current change through the normal Preview and Production release path.
-2. Confirm a public `GET /auth/signin` renders a visible fallback or form rather than a blank shell.
-3. With approved non-privileged test identities, verify completed-user and incomplete-user login flows.
-4. Capture redacted console and network evidence for AuthJS callback, session, bootstrap, and Flight/document requests.
-5. Confirm no unhandled `Connection closed.` rejection occurs; if it does, correlate the failed request with Vercel logs before expanding scope.
+Existing client rejection handling and visible Suspense fallback may remain as
+defense in depth, but they are not incident remediation.

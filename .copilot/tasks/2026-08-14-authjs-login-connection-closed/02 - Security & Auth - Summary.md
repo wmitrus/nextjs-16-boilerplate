@@ -1,5 +1,9 @@
 # 02 - Security & Auth - Summary
 
+> **Superseded root-cause analysis:** Hosted logs proved a missing Next.js
+> runtime module, not an AuthJS session-read defect. `getToken()` was reverted.
+> Use `final-root-cause-and-deployment-standard.md` as authoritative.
+
 ## Task Context
 
 - Task ID: `2026-08-14-authjs-login-connection-closed`
@@ -38,6 +42,12 @@
 - Confirmed: `auth.config.ts` has no custom `cookies`, `redirect`, or callback URL override. AuthJS uses its default same-origin session cookie behavior. The SessionProvider uses relative AuthJS endpoints; it does not introduce a cross-origin session fetch.
 - Confirmed: Production AuthJS requires a non-empty secret and explicit absolute `NEXTAUTH_URL`; Preview intentionally relies on Vercel request context. Forcing a production URL into Preview would risk cross-environment origin/cookie behavior and is not a safe correction.
 - Confirmed: The HAR contains successful New Relic telemetry but no `/api/auth/*` callback/session response or rejected-promise payload. It cannot prove a server AuthJS callback failure or an origin/cookie mismatch.
+- Confirmed: The root-cause patch replaces `getServerSession(authOptions)` only for the signed-in redirect predicate. `getToken()` decrypts and verifies the same AuthJS JWT with the same explicit secret expression as `authOptions` and `AuthJsEdgeIdentitySource`; expired, malformed, or wrongly encrypted tokens resolve to `null` rather than redirecting.
+- Confirmed: Cookie handling is preserved for the configured AuthJS defaults. `auth.config.ts` has no cookie override, and NextAuth's `SessionStore` consumes the App Router `cookies()` store through `getAll()` and deterministically reassembles default session-cookie chunks (`next-auth.session-token` or `__Secure-next-auth.session-token`, including `.<n>` chunks). Passing the `cookies()` and `headers()` values through the request-shaped object is sufficient for this API.
+- Confirmed: Hosted secure-cookie selection is aligned with the existing edge identity source. Both calls rely on NextAuth's `NEXTAUTH_URL`/`VERCEL` heuristic, while the route handler uses the actual HTTPS request URL. On normal Vercel Preview and Production deployments this selects the `__Secure-` default session cookie consistently across proxy and page.
+- Confirmed: Authenticated redirect security semantics are equivalent for the current callbacks. The previous session callback only maps signed token fields into the response and cannot reject a valid JWT. The new path retains server-side provider gating, internal-path sanitization, and the downstream bootstrap route revalidates authentication before any ready-route redirect.
+- Finding (minor, non-blocking): `getToken()` also accepts a valid `Authorization: Bearer` JWT and does not invoke the session callback or refresh session-cookie expiry. Top-level browser navigation does not normally supply this header; the redirect exposes no sensitive data and remains internal, while the next bootstrap request independently authenticates from its cookie. This can at most cause a benign re-entry to sign-in when no session cookie exists; it does not grant access or bypass authorization.
+- Finding (minor, configuration-dependent): If a Vercel deployment were incorrectly configured with an `http://` `NEXTAUTH_URL`, `getToken()` would choose the non-secure cookie name even though the AuthJS route handler derives secure cookies from its HTTPS request URL. This is already the same behavior in `AuthJsEdgeIdentitySource`, so the page patch does not create the inconsistency; the failure mode is fail-closed (missed redirect/auth recognition), not a cross-user or authorization bypass. Production configuration should continue to use the canonical HTTPS URL.
 - Risks: The originating Flight-stream closure is still unclassified. The client catch/router correction can prevent a post-submit rejection from escaping, but it is insufficient for the newly evidenced pre-form PPR failure. A visible fallback prevents a blank page but cannot make an unresolved dynamic template resolve; retain error reporting and investigate the server/Flight closure separately.
 - Drift: The auth-flow anti-pattern and matrix describe historical Clerk bootstrap behavior. Their redirect/cookie invariants remain applicable, but they do not establish a root cause for this AuthJS-specific RSC transport failure.
 
@@ -59,7 +69,9 @@
 ## Security Decisions / Constraints
 
 - approved controls or constraints: Preserve `redirect: false` with server-side internal redirect sanitization; preserve full-page navigation only after a successful AuthJS result; preserve the request-time `NextAuth(req, ctx, authOptions)` invocation; preserve public `/api/auth` protocol routing and private-route server enforcement.
+- root-cause patch disposition: APPROVED. Removing the Node-only `auth.ts` import and `getServerSession(authOptions)` from the App Router sign-in page eliminates that render-path dependency without weakening the authenticated redirect predicate, cookie integrity, secret selection, or downstream authorization enforcement under the current AuthJS configuration.
 - minimal safe recommendation: Replace only this page's `fallback={null}` with a visible, static, non-sensitive loading shell, or equivalently scope the Suspense boundary around a dynamic content region while retaining that same static loading shell. Keep `connection()`, provider gating, `getServerSession(authOptions)`, redirect sanitization, and the signed-in redirect inside the dynamic server component; do not move them into the fallback or client code.
+- validation note: The focused page test proves the anonymous and authenticated branches with mocked `getToken`, but does not exercise a real encrypted multi-chunk cookie. NextAuth's installed `SessionStore` source confirms that behavior. A future narrow regression test may use real NextAuth JWT encoding and split default cookie chunks if this implementation surface changes; no broad test addition is required for the current patch.
 - disposition: The client router/catch correction alone is insufficient. It cannot provide a form, retry path, or bounded user feedback when the initial PPR dynamic segment remains unresolved. Treat visible fallback UI as immediate user-safe containment, not root-cause remediation; Runtime/Debug must continue tracing why the hosted Flight response closes before dynamic content resolves.
 - rejected directions: Do not suppress `Connection closed.` in `GlobalErrorHandlers`; do not mark it as an ignored pattern; do not relax proxy checks; do not add a Preview-wide static `NEXTAUTH_URL`; do not add permissive cookie domains, `SameSite=None`, `trustHost`, or external callback allowlists without new evidence.
 - required enforcement points: The correction belongs at the initiating client promise boundary. It must distinguish rejected transport from AuthJS's normal `result.error`, clear loading state, present the existing non-enumerating retry message, and report the sanitized error with `auth:credentials_sign_in` context rather than letting it escape unhandled.
@@ -98,3 +110,10 @@
 - Trigger: New hosted evidence of a cached `/auth/signin` PPR shell with an unresolved Suspense template and no form.
 - Summary of change: Established that the initial failure occurs before `SignInClient` can run, so the existing client router/catch correction is insufficient by itself. Approved only a static, non-sensitive visible Suspense fallback as user-facing containment while preserving all server-side auth, session, and redirect decisions in the dynamic component.
 - Sections refreshed: Current-State Findings, Sensitive Data And Exposure Notes, Security Decisions / Constraints, Open Questions / Blockers, Handoff Notes, Update Log.
+
+### Update Entry
+
+- Date: 2026-08-14
+- Trigger: Requested review of the root-cause patch replacing `getServerSession(authOptions)` with App Router cookie/header-backed `getToken()` on the AuthJS sign-in page.
+- Summary of change: Approved the authenticated redirect predicate as equivalent for the current JWT session configuration. Verified default secure-cookie selection and chunk reassembly, identical secret fallback to the edge identity adapter, and preserved internal redirect/bootstrap enforcement. Recorded the fail-closed malformed `NEXTAUTH_URL` caveat and the non-escalating Bearer-token/session-refresh differences.
+- Sections refreshed: Current-State Findings, Security Decisions / Constraints, Update Log.

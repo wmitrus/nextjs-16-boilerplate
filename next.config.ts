@@ -11,29 +11,10 @@ const buildWorkerCpuLimit = Math.min(
 
 const deploymentId = process.env.NEXT_DEPLOYMENT_ID?.slice(0, 32);
 
-const outputFileTracingExcludes = [
-  '.env*',
-  'logs/**/*',
-  'src/**/*',
-  'tests/**/*',
-  'docs/**/*',
-  'e2e/**/*',
-  'playwright-report/**/*',
-  'test-results/**/*',
-];
-
 const nextConfig: NextConfig = {
   cacheComponents: true,
   deploymentId,
   reactCompiler: true,
-  outputFileTracingExcludes: {
-    '/*': outputFileTracingExcludes,
-  },
-  outputFileTracingIncludes: {
-    // Next 16.2.x requires this module at runtime, but Vercel's minimal
-    // function trace can omit it and terminate resumed PPR responses.
-    '/*': ['node_modules/next/dist/server/dev/browser-logs/file-logger.js'],
-  },
   serverExternalPackages: [
     '@electric-sql/pglite',
     '@logtail/pino',

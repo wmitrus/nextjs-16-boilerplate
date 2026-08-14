@@ -2,12 +2,19 @@
 
 ## Passed Locally
 
-- 58 focused validator/helper tests.
+- 59 focused validator/helper tests.
 - Typecheck.
 - Vercel deployment-profile validation.
 - Production Next.js build with 16 workers and 55/55 generated pages.
-- 70 fresh Next NFT traces reference `file-logger.js`, including AuthJS page and
-  route traces.
+- Controlled A/B build: automatic tracing included `file-logger.js` in 69/70
+  traces; the old excludes left `console-file.js` in 69 traces but retained
+  `file-logger.js` in only one.
+- Final automatic trace includes `file-logger.js` for both the AuthJS page and
+  route without a manual include.
+- Trace consistency check: 69 traces contain `console-file.js`, the same 69
+  contain `file-logger.js`, and zero importer traces are broken.
+- Deployment output parser accepts the pinned CLI's wrapped JSON shape and
+  emits one normalized HTTPS URL.
 
 ## Skipped
 
@@ -17,7 +24,8 @@
 
 ## Required Hosted Sign-Off
 
-- every generated Node function `filePathMap` contains `file-logger.js`;
+- every generated function containing `console-file.js` also contains
+  `file-logger.js`;
 - prebuilt dry-run uploads every allowed traced source;
 - Preview and staged Production `/auth/signin` render the form without a failed
   RSC request or `Connection closed` error;

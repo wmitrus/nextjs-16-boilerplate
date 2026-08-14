@@ -2,10 +2,13 @@
 
 ## Root Cause
 
-Vercel functions omitted Next.js
+The global Next.js trace exclusion added after the last good Preview treated
+`logs/**/*` as a shared `next-server` ignore and removed
 `dist/server/dev/browser-logs/file-logger.js`. Loading the shared server runtime
-failed, the cached PPR shell remained unresolved, and the browser surfaced
-`Connection closed.`. AuthJS and Neon were not the failing boundary.
+then failed, the cached PPR shell remained unresolved, and the browser surfaced
+`Connection closed.`. AuthJS and Neon were not the failing boundary. The later
+manual include was also invalid because it produced a symlinked Vercel function
+package.
 
 ## Resolution
 

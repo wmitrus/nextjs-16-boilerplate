@@ -25,10 +25,12 @@ reported the downstream symptom `Unhandled Promise Rejection: Connection
 closed.`. The form never rendered, so AuthJS credential and database code had
 not run.
 
-The last known good Preview was commit `6f2a1f09` (2026-08-01). The failing
-deployments used the same Next.js release line but a different packaging/build
-period. This localizes the regression to function tracing/packaging rather than
-an auth-source change.
+The last known good Preview was commit `6f2a1f09` (2026-08-01). Later commit
+`ba5ba1cc` added repository-wide `outputFileTracingExcludes`. Next.js applies a
+global `/*` exclude set to its shared `next-server` trace with substring-style
+glob matching. Consequently `logs/**/*` matched the `browser-logs` directory
+inside Next.js and removed `file-logger.js`, while leaving its importer
+`console-file.js` in the functions. This was the source-to-artifact regression.
 
 ## Correct Runtime Fix
 
@@ -43,18 +45,17 @@ Do not replace it with `getToken()` as a fix for this incident. That changes the
 session-read semantics but cannot restore a module missing from the deployed
 function.
 
-Use Next.js's supported trace-completion mechanism, scoped to the exact missing
-runtime dependency:
+Remove both repository-wide `outputFileTracingExcludes` and
+`outputFileTracingIncludes`. Let Next.js and Vercel own automatic output file
+tracing. A controlled build without either override traced `file-logger.js`
+through its real pnpm store path in every relevant Node route, including
+`/auth/signin` and `/api/auth/[...nextauth]`.
 
-```typescript
-outputFileTracingIncludes: {
-  '/*': ['node_modules/next/dist/server/dev/browser-logs/file-logger.js'],
-}
-```
-
-The `/*` route key is intentional because `console-file.js` belongs to the
-shared Next.js Node runtime, not only the sign-in route. Do not widen this to the
-whole Next package or manually copy files into generated Vercel output.
+The attempted manual include is explicitly rejected. Its glob resolves through
+the `node_modules/next` pnpm symlink; the remote builder then produced an invalid
+Serverless Function package and Vercel rejected it during output deployment.
+Do not patch Next.js, switch pnpm linker mode, or manually copy files into
+generated Vercel output for this incident.
 
 ## Preview And Production Standard
 
@@ -78,11 +79,11 @@ Production-only controls are `.vercelignore.prebuilt`, prebuilt artifact and
 dry-run closure validation, custom prebuilt `deploymentId`, and staged promotion.
 They do not belong in ordinary Preview.
 
-Shared controls are the exact runtime trace include, pinned CLI, source
-provenance, and hosted anonymous smoke for `/auth/signin` plus JSON verification
-of `/api/auth/session`. Preview should keep this smoke because it catches the
-same remote function-startup/tracing class before Production, although it cannot
-certify the separate prebuilt artifact path.
+Shared controls are automatic framework tracing, pinned CLI, source provenance,
+machine-readable deploy output, and hosted anonymous smoke for `/auth/signin`
+plus JSON verification of `/api/auth/session`. Preview should keep this smoke
+because it catches the same remote function-startup class before Production,
+although it cannot certify the separate prebuilt artifact path.
 
 ## Resource Limit
 
@@ -94,8 +95,8 @@ generated all 55 pages, and completed successfully.
 
 Before closing the hosted incident, a fresh deployment must prove:
 
-1. every generated Node function `.vc-config.json` includes `file-logger.js` in
-   `filePathMap`;
+1. every generated function that includes Next.js `console-file.js` also
+   includes `file-logger.js` through a non-manual framework trace;
 2. the dry-run upload includes every allowed traced source;
 3. anonymous `/auth/signin` renders the Sign In form with no `Connection closed`
    page error or failed RSC request;
@@ -104,3 +105,11 @@ Before closing the hosted incident, a fresh deployment must prove:
 
 Existing client rejection handling and visible Suspense fallback may remain as
 defense-in-depth UX. They are not the root-cause fix.
+
+## CI Output Correction
+
+Do not capture human-readable `vercel deploy --logs` output as a deployment URL.
+Run the pinned local CLI directly with `--json`, preserve its exit status, parse
+the URL only after success, and only then write one validated HTTPS value to
+`$GITHUB_OUTPUT`. This prevents pnpm warnings and build logs from corrupting
+GitHub Actions outputs.

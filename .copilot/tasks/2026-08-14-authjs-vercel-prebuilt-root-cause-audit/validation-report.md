@@ -2,11 +2,15 @@
 
 ## Passed
 
-- `pnpm exec vitest run --config vitest.unit.config.ts scripts/validate-vercel-deploy-profiles.test.ts scripts/validate-vercel-prebuilt-artifact.test.ts scripts/vercel/cli.test.ts --coverage.enabled=false`: 58 tests.
+- `pnpm exec vitest run --config vitest.unit.config.ts scripts/validate-vercel-deploy-profiles.test.ts scripts/validate-vercel-prebuilt-artifact.test.ts scripts/vercel/cli.test.ts --coverage.enabled=false`: 59 tests.
 - `pnpm typecheck`.
 - `pnpm vercel:deploy:validate`.
 - `NEXT_TELEMETRY_DISABLED=1 pnpm build`: successful, 16 workers, 55/55 pages.
-- Next NFT inspection: 70 traces include the required `file-logger.js`.
+- Controlled Next NFT inspection: automatic tracing includes `file-logger.js`
+  in 69/70 traces; old global excludes reduce that to 1/70 while retaining its
+  importer in 69 traces.
+- Final trace relation: 69 importers, 69 dependencies, zero broken traces.
+- Pinned Vercel CLI wrapped-JSON URL parsing: passed.
 - `git diff --check` during implementation.
 
 ## Intentionally Skipped
@@ -23,5 +27,6 @@
 - staged Production smoke before promotion;
 - promoted Production smoke and clean Vercel runtime logs.
 
-The implementation is locally validated, but the hosted incident must not be
-called fully resolved until the immutable deployed artifacts pass those gates.
+The corrected implementation is locally validated. The previous manual include
+failed hosted packaging and is superseded; the incident remains open until the
+new immutable Preview and Production artifacts pass the hosted gates.

@@ -12,8 +12,10 @@ Vercel packaging change. Neither environment alone certifies the other path.
 
 ## Shared Controls
 
-- exact `file-logger.js` trace include for every Next.js server route;
+- automatic Next.js output file tracing with no repository-wide include or
+  exclude overrides;
 - Vercel CLI pinned to one lockfile version;
+- successful machine-readable deploy output parsed before GitHub outputs;
 - immutable git SHA provenance;
 - anonymous hosted AuthJS runtime smoke;
 - build worker cap of 16.
@@ -29,6 +31,9 @@ Vercel packaging change. Neither environment alone certifies the other path.
 ## Rejected Directions
 
 - `getToken()` as an AuthJS root-cause fix;
+- global `outputFileTracingExcludes` used for deployment size optimization;
+- a manual `outputFileTracingIncludes` entry for pnpm-linked Next.js files;
+- changing pnpm linker mode or patching Next.js for this incident;
 - hand-editing or copying files into `.vercel/output`;
 - returning to `vercel@latest`;
 - converting every Preview to prebuilt;

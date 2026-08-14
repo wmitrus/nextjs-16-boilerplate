@@ -2,7 +2,8 @@
 
 ## Status
 
-`IMPLEMENTED LOCALLY` - hosted deployment proof remains pending.
+`CORRECTED AND VALIDATED LOCALLY` - the rejected manual trace include is
+superseded; hosted deployment proof remains pending.
 
 ## Decision Gates
 
@@ -30,7 +31,9 @@ No auth or deployment fix is accepted until these gates are satisfied:
 - [x] Architecture Guard: approved the minimum provider-aligned design.
 - [x] Validation Strategy: defined proof that distinguishes source,
       artifact, deploy, and runtime behavior.
-- [x] Implementation Agent: applied the trace and deployment-pipeline guards.
+- [x] Implementation Agent: removed both trace overrides, made artifact
+      validation relational, and corrected machine-readable deploy output
+      handling.
 - [x] Playwright E2E: captured the failing hosted request chain and added final
       browser behavior against the identified deployment.
 - [ ] Workflow Orchestrator: synchronize this workspace and the previous Copilot

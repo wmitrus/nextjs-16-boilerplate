@@ -18,8 +18,10 @@
 - Installed Next.js 16.2.11 and checked 16.2.9/16.2.12 packages contain both the
   static require and the required file. A stable patch upgrade alone does not
   remove the packaging gap.
-- Next.js documents `outputFileTracingIncludes` as the supported correction when
-  tracing misses a runtime dependency.
+- Next.js documents includes/excludes as manual corrections, but its implementation
+  applies global excludes to the shared `next-server` trace. Controlled builds
+  proved `logs/**/*` removes the dependency because it matches Next.js
+  `browser-logs` under substring-style matching.
 - Vercel's upstream ignore change intentionally re-applies `.vercelignore` to
   generated `filePathMap` sources. Restoring ignored source paths by hand would
   violate the provider's security behavior.
@@ -34,8 +36,13 @@
 - `pnpm vercel:deploy:validate`: passed.
 - Fresh `pnpm build`: passed; Next reported and used 16 workers, compiled the
   application, and generated 55/55 pages.
-- Fresh Next NFT output references `file-logger.js` in 70 trace files, including
-  `/auth/signin` and `/api/auth/[...nextauth]`.
+- Without custom trace overrides, fresh Next NFT output references
+  `file-logger.js` in 69/70 trace files, including `/auth/signin` and
+  `/api/auth/[...nextauth]`, using the real `.pnpm` store path.
+- With only the old global excludes, 69 traces retained `console-file.js` but
+  only one retained `file-logger.js`.
+- With the later manual include, hosted Preview built successfully but Vercel
+  rejected the generated Serverless Function package as symlinked.
 - Existing `.vercel/output` is stale relative to the fresh `.next` and is
   correctly rejected. It is not accepted as proof of the new artifact.
 

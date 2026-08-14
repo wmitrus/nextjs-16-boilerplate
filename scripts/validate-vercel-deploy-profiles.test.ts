@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertVercelDeployProfilesValid,
   assertNextRuntimeTraceGuardValid,
+  assertVercelRuntimeSmokeConfigValid,
   assertVercelPreviewSourceUploadValid,
   assertVercelProductionMigrationOwnershipValid,
   assertVercelProductionReadinessVerificationValid,
@@ -177,6 +178,9 @@ describe('assertVercelToolingAndProvenanceValid', () => {
     'if [ $DEPLOY_EXIT -ne 0 ]; then',
     'pnpm exec playwright install --with-deps chromium',
     'pnpm vercel:runtime:smoke',
+    'name: Verify Preview Runtime',
+    'needs: deploy-preview',
+    'PLAYWRIGHT_TEST_BASE_URL: ${{ needs.deploy-preview.outputs.preview_url }}',
   ].join('\n');
   const production = [
     'NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"',
@@ -204,6 +208,22 @@ describe('assertVercelToolingAndProvenanceValid', () => {
         production,
       ),
     ).toThrow('pinned');
+  });
+});
+
+describe('assertVercelRuntimeSmokeConfigValid', () => {
+  it('accepts a smoke config restricted to the hosted runtime spec', () => {
+    expect(() =>
+      assertVercelRuntimeSmokeConfigValid(
+        "testDir: './e2e', testMatch: 'vercel-runtime-smoke.spec.ts'",
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a config that would run the full E2E directory', () => {
+    expect(() =>
+      assertVercelRuntimeSmokeConfigValid("testDir: './e2e'"),
+    ).toThrow('full E2E suite');
   });
 });
 

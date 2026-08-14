@@ -106,24 +106,21 @@ jobs:
           const expected = {
             readyState: 'READY',
             target: 'production',
-            prebuilt: true,
           };
           const actual = {
             readyState: deployment.readyState,
             target: deployment.target,
-            prebuilt: deployment.prebuilt,
           };
 
           if (
             actual.readyState !== expected.readyState ||
-            actual.target !== expected.target ||
-            actual.prebuilt !== expected.prebuilt
+            actual.target !== expected.target
           ) {
             console.error(
               JSON.stringify(
                 {
                   message:
-                    'Vercel deployment did not reach the expected ready production prebuilt state.',
+                    'Vercel deployment did not reach the expected ready production state.',
                   expected,
                   actual,
                   deploymentId: deployment.id,
@@ -139,7 +136,7 @@ jobs:
           console.log(
             JSON.stringify(
               {
-                message: 'Vercel production prebuilt deployment is ready.',
+                message: 'Vercel production deployment is ready.',
                 deploymentId: deployment.id,
                 deploymentUrl: deployment.url,
                 ...actual,

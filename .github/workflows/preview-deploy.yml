@@ -44,7 +44,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Pull Vercel Environment Information
-        run: pnpm exec vercel pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=${{ secrets.VERCEL_TOKEN }}
+        run: ./node_modules/.bin/vercel pull --yes --environment=preview --git-branch="$PREVIEW_GIT_BRANCH" --token=${{ secrets.VERCEL_TOKEN }}
         env:
           PREVIEW_GIT_BRANCH: ${{ github.head_ref }}
 
@@ -62,14 +62,14 @@ jobs:
       - name: Validate Preview Source Upload
         run: |
           pnpm vercel:deploy:validate
-          pnpm exec vercel deploy --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-dry-run.json
+          ./node_modules/.bin/vercel deploy --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-dry-run.json
           pnpm vercel:deploy:validate -- --preview-dry-run-json /tmp/vercel-preview-dry-run.json
 
       - name: Deploy to Vercel
         id: vercel_deploy
         run: |
           set +e
-          DEPLOY_URL=$(pnpm exec vercel deploy --logs --token=${{ secrets.VERCEL_TOKEN }} \
+          ./node_modules/.bin/vercel deploy --yes --json --token=${{ secrets.VERCEL_TOKEN }} \
             --meta githubDeployment=1 \
             --meta githubCommitOrg="$GITHUB_REPOSITORY_OWNER" \
             --meta githubOrg="$GITHUB_REPOSITORY_OWNER" \
@@ -78,13 +78,16 @@ jobs:
             --meta githubCommitRef="$PREVIEW_GIT_BRANCH" \
             --meta githubCommitSha="$PREVIEW_GIT_SHA" \
             --meta githubCommitAuthorLogin="$PREVIEW_GIT_AUTHOR_LOGIN" \
-            --meta githubCommitMessage="$PREVIEW_GIT_MESSAGE")
+            --meta githubCommitMessage="$PREVIEW_GIT_MESSAGE" \
+            > /tmp/vercel-preview-deploy.json
           DEPLOY_EXIT=$?
           set -e
-          echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          cat /tmp/vercel-preview-deploy.json
           if [ $DEPLOY_EXIT -ne 0 ]; then
             exit $DEPLOY_EXIT
           fi
+          DEPLOY_URL=$(node -e 'const fs=require("node:fs"); const result=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); const raw=result.deployment?.url ?? result.url; if (typeof raw !== "string" || raw.length === 0) throw new Error("Vercel deploy JSON does not contain a URL."); const url=new URL(raw.startsWith("http") ? raw : `https://${raw}`); if (url.protocol !== "https:") throw new Error("Vercel deploy URL must use HTTPS."); process.stdout.write(url.href.replace(/\/$/, ""));' /tmp/vercel-preview-deploy.json)
+          echo "preview_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
         env:
           GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
           PREVIEW_GIT_AUTHOR_LOGIN: ${{ github.event.pull_request.head.user.login }}
@@ -94,7 +97,7 @@ jobs:
 
       - name: Verify Vercel Git Metadata
         run: |
-          pnpm exec vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
+          ./node_modules/.bin/vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-preview-inspect.json
           node - <<'NODE'
           const fs = require('node:fs');
           const { execFileSync } = require('node:child_process');
@@ -197,7 +200,7 @@ jobs:
 
       - name: Print Vercel Build Logs On Failure
         if: failure() && steps.vercel_deploy.outputs.preview_url != ''
-        run: pnpm exec vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
+        run: ./node_modules/.bin/vercel inspect "${{ steps.vercel_deploy.outputs.preview_url }}" --logs --wait --token=${{ secrets.VERCEL_TOKEN }} || true
 
       - name: Run Lighthouse Audit
         if: success()

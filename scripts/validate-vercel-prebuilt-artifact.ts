@@ -52,6 +52,8 @@ export interface VercelPrebuiltUploadCoverageSummary {
 }
 
 const DEFAULT_FUNCTIONS_DIR = '.vercel/output/functions';
+const NEXT_CONSOLE_FILE_SUFFIX =
+  '/next/dist/server/node-environment-extensions/console-file.js';
 const NEXT_FILE_LOGGER_SUFFIX =
   '/next/dist/server/dev/browser-logs/file-logger.js';
 export const MAX_PREBUILT_UPLOAD_FILE_COUNT = 5_000;
@@ -211,11 +213,17 @@ export async function validateVercelPrebuiltArtifact(
     const requiredPaths = Object.values(filePathMap);
     requiredFileCount += requiredPaths.length;
 
+    const requiresNextConsoleFile = requiredPaths.some((requiredPath) =>
+      requiredPath.endsWith(NEXT_CONSOLE_FILE_SUFFIX),
+    );
+    const includesNextFileLogger = requiredPaths.some((requiredPath) =>
+      requiredPath.endsWith(NEXT_FILE_LOGGER_SUFFIX),
+    );
+
     if (
       config.runtime?.startsWith('nodejs') &&
-      !requiredPaths.some((requiredPath) =>
-        requiredPath.endsWith(NEXT_FILE_LOGGER_SUFFIX),
-      )
+      requiresNextConsoleFile &&
+      !includesNextFileLogger
     ) {
       missingNextRuntimeTraceConfigs.push(configRelativePath);
     }

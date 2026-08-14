@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   assertVercelPrebuiltArtifactHasNoForbiddenTraces,
   assertVercelPrebuiltArtifactHasNoEscapingTraces,
+  assertVercelPrebuiltArtifactHasNextRuntimeTrace,
   assertVercelPrebuiltArtifactValid,
   assertVercelPrebuiltUploadCoverageValid,
   parseVercelDeployDryRunOutput,
@@ -28,12 +29,13 @@ async function createTempRoot(): Promise<string> {
 async function writeFunctionConfig(
   root: string,
   filePathMap: unknown,
+  runtime?: string,
 ): Promise<void> {
   const functionDir = join(root, '.vercel/output/functions/api/example.func');
   await mkdir(functionDir, { recursive: true });
   await writeFile(
     join(functionDir, '.vc-config.json'),
-    JSON.stringify({ filePathMap }),
+    JSON.stringify({ filePathMap, runtime }),
     'utf8',
   );
 }
@@ -86,10 +88,56 @@ describe('validateVercelPrebuiltArtifact', () => {
       missingFiles: [],
       forbiddenFiles: [],
       escapingFiles: [],
+      missingNextRuntimeTraceConfigs: [],
     });
     expect(() => assertVercelPrebuiltArtifactValid(summary)).not.toThrow();
     expect(() =>
       assertVercelPrebuiltArtifactHasNoEscapingTraces(summary),
+    ).not.toThrow();
+  });
+
+  it('rejects a Node function that omits the required Next.js file logger', async () => {
+    const root = await createTempRoot();
+    const requiredPath =
+      'node_modules/.pnpm/next@16.2.11/node_modules/next/dist/server/node-environment-extensions/console-file.js';
+    await writeFunctionConfig(
+      root,
+      { [requiredPath]: requiredPath },
+      'nodejs24.x',
+    );
+    await writeRequiredFile(root, requiredPath);
+
+    const summary = await validateVercelPrebuiltArtifact(root);
+
+    expect(summary.missingNextRuntimeTraceConfigs).toEqual([
+      '.vercel/output/functions/api/example.func/.vc-config.json',
+    ]);
+    expect(() =>
+      assertVercelPrebuiltArtifactHasNextRuntimeTrace(summary),
+    ).toThrow('omit Next.js file-logger.js');
+  });
+
+  it('accepts a Node function whose trace includes the Next.js file logger', async () => {
+    const root = await createTempRoot();
+    const consoleFilePath =
+      'node_modules/.pnpm/next@16.2.11/node_modules/next/dist/server/node-environment-extensions/console-file.js';
+    const fileLoggerPath =
+      'node_modules/.pnpm/next@16.2.11/node_modules/next/dist/server/dev/browser-logs/file-logger.js';
+    await writeFunctionConfig(
+      root,
+      {
+        [consoleFilePath]: consoleFilePath,
+        [fileLoggerPath]: fileLoggerPath,
+      },
+      'nodejs24.x',
+    );
+    await writeRequiredFile(root, consoleFilePath);
+    await writeRequiredFile(root, fileLoggerPath);
+
+    const summary = await validateVercelPrebuiltArtifact(root);
+
+    expect(() =>
+      assertVercelPrebuiltArtifactHasNextRuntimeTrace(summary),
     ).not.toThrow();
   });
 

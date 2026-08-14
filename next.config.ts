@@ -1,24 +1,20 @@
+import os from 'node:os';
+
 import { withBetterStackNextConfig } from '@logtail/next';
 import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from 'next';
 
-const outputFileTracingExcludes = [
-  '.env*',
-  'logs/**/*',
-  'src/**/*',
-  'tests/**/*',
-  'docs/**/*',
-  'e2e/**/*',
-  'playwright-report/**/*',
-  'test-results/**/*',
-];
+const buildWorkerCpuLimit = Math.min(
+  16,
+  Math.max(1, (os.availableParallelism?.() ?? os.cpus().length) - 1),
+);
+
+const deploymentId = process.env.NEXT_DEPLOYMENT_ID?.slice(0, 32);
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  deploymentId,
   reactCompiler: true,
-  outputFileTracingExcludes: {
-    '/*': outputFileTracingExcludes,
-  },
   serverExternalPackages: [
     '@electric-sql/pglite',
     '@logtail/pino',
@@ -28,6 +24,7 @@ const nextConfig: NextConfig = {
     'pino-pretty',
   ],
   experimental: {
+    cpus: buildWorkerCpuLimit,
     turbopackFileSystemCacheForDev: true,
   },
   logging: {

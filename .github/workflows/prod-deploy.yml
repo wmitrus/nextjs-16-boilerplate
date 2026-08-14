@@ -32,8 +32,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Pull Vercel Environment Information
-        run: npm exec --yes vercel@latest -- pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: ./node_modules/.bin/vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Verify Environment
         run: pnpm env:check
@@ -50,6 +53,7 @@ jobs:
         run: pnpm vercel:deploy:validate
 
       - name: Build Project Artifacts
+        id: build_context
         shell: bash
         run: |
           set -a
@@ -65,7 +69,9 @@ jobs:
             unset VERCEL_URL
           fi
 
-          npm exec --yes vercel@latest -- build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          export NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"
+          echo "production_url=$NEXT_PUBLIC_APP_URL" >> "$GITHUB_OUTPUT"
+          ./node_modules/.bin/vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           APP_ENV: production
           NEXT_PUBLIC_APP_ENV: production
@@ -79,24 +85,38 @@ jobs:
       - name: Validate Prebuilt Upload Coverage
         shell: bash
         run: |
-          npm exec --yes vercel@latest -- deploy --prebuilt --prod --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-prebuilt-dry-run.json
+          ./node_modules/.bin/vercel deploy --prebuilt --prod --dry --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-prebuilt-dry-run.json
           pnpm vercel:prebuilt:validate -- --dry-run-json /tmp/vercel-prebuilt-dry-run.json
 
       - name: Deploy to Vercel
         id: vercel_deploy
         shell: bash
         run: |
-          DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
-          if [ -z "$DEPLOY_URL" ]; then
-            echo "Vercel deploy did not return a deployment URL."
-            exit 1
+          set +e
+          ./node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json --token=${{ secrets.VERCEL_TOKEN }} \
+            --meta githubDeployment=1 \
+            --meta githubCommitOrg="$GITHUB_REPOSITORY_OWNER" \
+            --meta githubOrg="$GITHUB_REPOSITORY_OWNER" \
+            --meta githubCommitRepo="$GITHUB_REPOSITORY_NAME" \
+            --meta githubRepo="$GITHUB_REPOSITORY_NAME" \
+            --meta githubCommitRef="$GITHUB_REF_NAME" \
+            --meta githubCommitSha="$GITHUB_SHA" \
+            > /tmp/vercel-production-deploy.json
+          DEPLOY_EXIT=$?
+          set -e
+          cat /tmp/vercel-production-deploy.json
+          if [ $DEPLOY_EXIT -ne 0 ]; then
+            exit $DEPLOY_EXIT
           fi
+          DEPLOY_URL=$(node -e 'const fs=require("node:fs"); const result=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); const raw=result.deployment?.url ?? result.url; if (typeof raw !== "string" || raw.length === 0) throw new Error("Vercel deploy JSON does not contain a URL."); const url=new URL(raw.startsWith("http") ? raw : `https://${raw}`); if (url.protocol !== "https:") throw new Error("Vercel deploy URL must use HTTPS."); process.stdout.write(url.href.replace(/\/$/, ""));' /tmp/vercel-production-deploy.json)
           echo "production_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
 
       - name: Verify Production Deployment Readiness
         shell: bash
         run: |
-          npm exec --yes vercel@latest -- inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-production-inspect.json
+          ./node_modules/.bin/vercel inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json --token=${{ secrets.VERCEL_TOKEN }} > /tmp/vercel-production-inspect.json
           node - <<'NODE'
           const fs = require('node:fs');
 
@@ -146,3 +166,18 @@ jobs:
             ),
           );
           NODE
+
+      - name: Verify hosted runtime
+        run: pnpm vercel:runtime:smoke
+        env:
+          PLAYWRIGHT_TEST_BASE_URL: ${{ steps.vercel_deploy.outputs.production_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+      - name: Promote verified deployment to Production
+        run: ./node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}" --yes --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Verify promoted Production runtime
+        run: pnpm vercel:runtime:smoke
+        env:
+          PLAYWRIGHT_TEST_BASE_URL: ${{ steps.build_context.outputs.production_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}

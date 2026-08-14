@@ -16,7 +16,8 @@ const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'e2e/internal-api-key.ts',
   'src/core/db/migrations/generated/meta/_journal.json',
 ];
-const PREBUILT_RUNTIME_PATHS = ['/.next', '/node_modules'];
+const PREBUILT_RUNTIME_PATHS = ['/.next', '/node_modules', '/src'];
+const VERCEL_RUNTIME_SMOKE_SPEC = 'vercel-runtime-smoke.spec.ts';
 
 function parseIgnoreRules(content: string): Set<string> {
   return new Set(
@@ -79,7 +80,7 @@ export function assertVercelPreviewSourceUploadValid(
 export function assertVercelProductionMigrationOwnershipValid(
   workflowContent: string,
 ): void {
-  if (!/\bvercel(?:@[\w.-]+)?\s+--\s+build\s+--prod\b/.test(workflowContent)) {
+  if (!/\bvercel\s+build\s+--prod\b/.test(workflowContent)) {
     throw new Error(
       '[vercel-deploy] Production workflow must build through vercel build --prod.',
     );
@@ -96,10 +97,13 @@ export function assertVercelProductionReadinessVerificationValid(
   workflowContent: string,
 ): void {
   const requiredFragments = [
-    'DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --prebuilt --prod',
+    './node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json',
+    'DEPLOY_URL=$(node -e',
     'inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json',
     "readyState: 'READY'",
     "target: 'production'",
+    'pnpm vercel:runtime:smoke',
+    './node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
   ];
   const missingFragments = requiredFragments.filter(
     (fragment) => !workflowContent.includes(fragment),
@@ -115,6 +119,103 @@ export function assertVercelProductionReadinessVerificationValid(
   if (workflowContent.includes('deployment.prebuilt')) {
     throw new Error(
       '[vercel-deploy] Production workflow must not require deployment.prebuilt from vercel inspect JSON; the field is absent from observed CLI output.',
+    );
+  }
+
+  const smokeIndex = workflowContent.indexOf('pnpm vercel:runtime:smoke');
+  const promoteIndex = workflowContent.indexOf(
+    './node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
+  );
+  if (smokeIndex === -1 || promoteIndex <= smokeIndex) {
+    throw new Error(
+      '[vercel-deploy] Production must smoke-test the staged deployment before promotion.',
+    );
+  }
+}
+
+export function assertVercelToolingAndProvenanceValid(
+  packageContent: string,
+  previewWorkflowContent: string,
+  productionWorkflowContent: string,
+): void {
+  const packageJson = JSON.parse(packageContent) as {
+    devDependencies?: Record<string, string>;
+  };
+  const vercelVersion = packageJson.devDependencies?.vercel;
+
+  if (!vercelVersion || !/^\d+\.\d+\.\d+$/.test(vercelVersion)) {
+    throw new Error(
+      '[vercel-deploy] Vercel CLI must be pinned to one exact devDependency version.',
+    );
+  }
+
+  const combinedWorkflows = `${previewWorkflowContent}\n${productionWorkflowContent}`;
+  if (
+    combinedWorkflows.includes('vercel@latest') ||
+    !previewWorkflowContent.includes('./node_modules/.bin/vercel') ||
+    !productionWorkflowContent.includes('./node_modules/.bin/vercel')
+  ) {
+    throw new Error(
+      '[vercel-deploy] Preview and production must use the lockfile-pinned Vercel CLI.',
+    );
+  }
+
+  const requiredPreviewFragments = [
+    'ref: ${{ github.event.pull_request.head.sha }}',
+    'test "$(git rev-parse HEAD)" = "$PREVIEW_GIT_SHA"',
+    'pnpm exec playwright install --with-deps chromium',
+    'pnpm vercel:runtime:smoke',
+    'name: Verify Preview Runtime',
+    'needs: deploy-preview',
+    'PLAYWRIGHT_TEST_BASE_URL: ${{ needs.deploy-preview.outputs.preview_url }}',
+    './node_modules/.bin/vercel deploy --yes --json',
+    'if [ $DEPLOY_EXIT -ne 0 ]; then',
+  ];
+  const requiredProductionFragments = [
+    'NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"',
+    '--meta githubCommitSha="$GITHUB_SHA"',
+    'pnpm exec playwright install --with-deps chromium',
+    'pnpm vercel:runtime:smoke',
+  ];
+  const missing = [
+    ...requiredPreviewFragments.filter(
+      (fragment) => !previewWorkflowContent.includes(fragment),
+    ),
+    ...requiredProductionFragments.filter(
+      (fragment) => !productionWorkflowContent.includes(fragment),
+    ),
+  ];
+
+  if (missing.length > 0) {
+    throw new Error(
+      '[vercel-deploy] Deployment provenance/runtime guards are incomplete. Missing:\n' +
+        missing.map((fragment) => `  - ${fragment}`).join('\n'),
+    );
+  }
+}
+
+export function assertVercelRuntimeSmokeConfigValid(
+  smokeConfigContent: string,
+): void {
+  if (
+    !smokeConfigContent.includes('testMatch') ||
+    !smokeConfigContent.includes(VERCEL_RUNTIME_SMOKE_SPEC)
+  ) {
+    throw new Error(
+      `[vercel-deploy] Hosted runtime smoke must be restricted to ${VERCEL_RUNTIME_SMOKE_SPEC}; otherwise Playwright runs the full E2E suite against Preview.`,
+    );
+  }
+}
+
+export function assertNextRuntimeTraceGuardValid(
+  nextConfigContent: string,
+): void {
+  if (
+    nextConfigContent.includes('outputFileTracingIncludes') ||
+    nextConfigContent.includes('outputFileTracingExcludes')
+  ) {
+    throw new Error(
+      '[vercel-deploy] Next.js output file tracing must remain automatic; repository-wide include/exclude overrides can break pnpm-backed Vercel function packaging.',
     );
   }
 }
@@ -186,6 +287,31 @@ function main(): void {
     readAllowedFile(
       path.resolve(repositoryRoot, '.github/workflows/prod-deploy.yml'),
       'production deployment workflow',
+    ),
+  );
+  const previewWorkflowContent = readAllowedFile(
+    path.resolve(repositoryRoot, '.github/workflows/preview-deploy.yml'),
+    'preview deployment workflow',
+  );
+  const productionWorkflowContent = readAllowedFile(
+    path.resolve(repositoryRoot, '.github/workflows/prod-deploy.yml'),
+    'production deployment workflow',
+  );
+  assertVercelToolingAndProvenanceValid(
+    readAllowedFile(path.resolve(repositoryRoot, 'package.json'), 'package'),
+    previewWorkflowContent,
+    productionWorkflowContent,
+  );
+  assertNextRuntimeTraceGuardValid(
+    readAllowedFile(
+      path.resolve(repositoryRoot, 'next.config.ts'),
+      'Next.js configuration',
+    ),
+  );
+  assertVercelRuntimeSmokeConfigValid(
+    readAllowedFile(
+      path.resolve(repositoryRoot, 'playwright.vercel-smoke.config.ts'),
+      'Vercel runtime smoke configuration',
     ),
   );
   console.log('[vercel-deploy] Preview and production upload profiles valid.');

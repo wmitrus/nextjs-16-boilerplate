@@ -63,10 +63,10 @@ GitHub provides `GITHUB_TOKEN` automatically.
 To ensure smooth builds on Vercel with pnpm 10, the project includes:
 
 - **onlyBuiltDependencies**: Explicitly allows build scripts for `@parcel/watcher`, `esbuild`, and `msw` in `package.json`.
-- **Current Vercel CLI**: GitHub Actions and local helper scripts resolve
-  `vercel@latest` through `npm exec --yes` for every deployment command. This
-  resolves the current registry tag rather than reusing pnpm's `dlx` cache.
-  Deployment guards must remain compatible with the current CLI release.
+- **Pinned Vercel CLI**: GitHub Actions invokes the exact lockfile-installed
+  `./node_modules/.bin/vercel` binary. Machine-readable commands must not run
+  through a package-manager wrapper because wrapper warnings can corrupt JSON
+  or deployment URL output.
 - **Vercel upload profiles**: The default `.vercelignore` is preview-safe and
   must not exclude `src`, because preview deployments upload source for a
   remote build. Production activates `.vercelignore.prebuilt` after the local
@@ -91,6 +91,12 @@ This repository uses two different deployment ownership models:
   Next.js config, package manifest, and generated migration journal.
 - If preview deployments are created with the Vercel CLI, pass GitHub metadata via `--meta`. Without `githubDeployment=1` and `githubCommitRef`, Vercel does not link the deployment to the PR branch, and Neon Preview Branching cannot inject branch-specific database variables.
 - The preview workflow must verify the created deployment through Vercel's deployment API and fail if the expected PR branch/SHA metadata is missing.
+- Preview deployment, hosted runtime smoke, and Lighthouse are separate GitHub
+  jobs. `Deploy Preview` owns only deployment and provenance. `Verify Preview
+Runtime` consumes its immutable URL and runs only
+  `e2e/vercel-runtime-smoke.spec.ts`; the broader E2E suite remains in its
+  scenario-managed workflows. Lighthouse runs only after the focused runtime
+  smoke passes.
 
 2. **Production Deployments**
    - GitHub Actions remains the deployment authority.

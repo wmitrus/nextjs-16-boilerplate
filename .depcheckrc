@@ -39,6 +39,7 @@
     "undici",
     "drizzle-kit",
     "newrelic",
-    "postgres"
+    "postgres",
+    "vercel"
   ]
 }

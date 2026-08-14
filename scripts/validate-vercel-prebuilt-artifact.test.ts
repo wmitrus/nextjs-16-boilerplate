@@ -98,7 +98,8 @@ describe('validateVercelPrebuiltArtifact', () => {
 
   it('rejects a Node function that omits the required Next.js file logger', async () => {
     const root = await createTempRoot();
-    const requiredPath = 'node_modules/.pnpm/pkg/node_modules/pkg/index.js';
+    const requiredPath =
+      'node_modules/.pnpm/next@16.2.11/node_modules/next/dist/server/node-environment-extensions/console-file.js';
     await writeFunctionConfig(
       root,
       { [requiredPath]: requiredPath },
@@ -118,14 +119,20 @@ describe('validateVercelPrebuiltArtifact', () => {
 
   it('accepts a Node function whose trace includes the Next.js file logger', async () => {
     const root = await createTempRoot();
-    const requiredPath =
+    const consoleFilePath =
+      'node_modules/.pnpm/next@16.2.11/node_modules/next/dist/server/node-environment-extensions/console-file.js';
+    const fileLoggerPath =
       'node_modules/.pnpm/next@16.2.11/node_modules/next/dist/server/dev/browser-logs/file-logger.js';
     await writeFunctionConfig(
       root,
-      { [requiredPath]: requiredPath },
+      {
+        [consoleFilePath]: consoleFilePath,
+        [fileLoggerPath]: fileLoggerPath,
+      },
       'nodejs24.x',
     );
-    await writeRequiredFile(root, requiredPath);
+    await writeRequiredFile(root, consoleFilePath);
+    await writeRequiredFile(root, fileLoggerPath);
 
     const summary = await validateVercelPrebuiltArtifact(root);
 

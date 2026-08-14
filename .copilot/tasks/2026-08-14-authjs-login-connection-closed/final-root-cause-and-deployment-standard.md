@@ -85,6 +85,12 @@ plus JSON verification of `/api/auth/session`. Preview should keep this smoke
 because it catches the same remote function-startup class before Production,
 although it cannot certify the separate prebuilt artifact path.
 
+The Preview smoke is exactly two tests from
+`e2e/vercel-runtime-smoke.spec.ts`. Its Playwright config must set `testMatch` so
+the full scenario-managed E2E directory is never executed against the hosted
+Preview. Deployment, runtime smoke, and Lighthouse use separate GitHub jobs so
+their statuses identify the failing boundary correctly.
+
 ## Resource Limit
 
 Next.js build workers are capped at 16 through `experimental.cpus`. A fresh

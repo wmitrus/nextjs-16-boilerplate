@@ -45,4 +45,5 @@ A missing production workflow/deployment proof is a separate residual risk; it c
 - [done] Enforce Vercel Project Build Command as the single migration owner in the production validation gate.
 - [done] Capture the production prebuilt deployment URL and require Vercel inspection to report `READY`, `production`, and `prebuilt: true`.
 - [done] Retire the executable-looking Preview prebuilt SDD sample as valid YAML metadata that points to the live remote-build workflow.
-- [pending] Obtain current-SHA workflow evidence: fresh Production build, dry-run closure, real deploy, and inspected READY state.
+- [done] A hosted Production run proved generated-artifact closure and Vercel READY/production state; its job failed only on an unsupported inspect-field assertion.
+- [pending] Obtain one post-fix Production workflow run from the target SHA, preserving its fresh build, dry-run closure, real deploy, and inspected READY/production state.

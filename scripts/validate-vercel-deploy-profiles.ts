@@ -96,10 +96,10 @@ export function assertVercelProductionReadinessVerificationValid(
   workflowContent: string,
 ): void {
   const requiredFragments = [
+    'DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --prebuilt --prod',
     'inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json',
     "readyState: 'READY'",
     "target: 'production'",
-    'prebuilt: true',
   ];
   const missingFragments = requiredFragments.filter(
     (fragment) => !workflowContent.includes(fragment),
@@ -109,6 +109,12 @@ export function assertVercelProductionReadinessVerificationValid(
     throw new Error(
       '[vercel-deploy] Production workflow must inspect the deployed prebuilt artifact and require READY production state. Missing:\n' +
         missingFragments.map((fragment) => `  - ${fragment}`).join('\n'),
+    );
+  }
+
+  if (workflowContent.includes('deployment.prebuilt')) {
+    throw new Error(
+      '[vercel-deploy] Production workflow must not require deployment.prebuilt from vercel inspect JSON; the field is absent from observed CLI output.',
     );
   }
 }

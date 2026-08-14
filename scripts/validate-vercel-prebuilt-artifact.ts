@@ -13,6 +13,7 @@ import { isPublicPrebuiltEnvTemplatePath } from './vercel/prebuilt-env-template-
 
 interface VercelFunctionConfig extends Record<string, unknown> {
   filePathMap?: Record<string, string>;
+  runtime?: string;
 }
 
 export interface VercelTraceFileReference {
@@ -35,6 +36,7 @@ export interface VercelPrebuiltArtifactSummary {
   missingFiles: MissingVercelTraceFile[];
   forbiddenFiles: VercelTraceFileReference[];
   escapingFiles: EscapingVercelTraceFile[];
+  missingNextRuntimeTraceConfigs: string[];
 }
 
 export interface MissingVercelUploadFile extends VercelTraceFileReference {
@@ -50,6 +52,8 @@ export interface VercelPrebuiltUploadCoverageSummary {
 }
 
 const DEFAULT_FUNCTIONS_DIR = '.vercel/output/functions';
+const NEXT_FILE_LOGGER_SUFFIX =
+  '/next/dist/server/dev/browser-logs/file-logger.js';
 export const MAX_PREBUILT_UPLOAD_FILE_COUNT = 5_000;
 export const MAX_PREBUILT_UPLOAD_SIZE_BYTES = 80 * 1024 * 1024;
 const FORBIDDEN_TRACE_PATH_PREFIXES = [
@@ -197,6 +201,7 @@ export async function validateVercelPrebuiltArtifact(
   const missingFiles: MissingVercelTraceFile[] = [];
   const forbiddenFiles: VercelTraceFileReference[] = [];
   const escapingFiles: EscapingVercelTraceFile[] = [];
+  const missingNextRuntimeTraceConfigs: string[] = [];
 
   for (const configPath of configPaths) {
     const config = readVercelFunctionConfig(configPath, safeRoot);
@@ -205,6 +210,15 @@ export async function validateVercelPrebuiltArtifact(
     assertVercelFilePathMap(filePathMap, configPath, safeRoot);
     const requiredPaths = Object.values(filePathMap);
     requiredFileCount += requiredPaths.length;
+
+    if (
+      config.runtime?.startsWith('nodejs') &&
+      !requiredPaths.some((requiredPath) =>
+        requiredPath.endsWith(NEXT_FILE_LOGGER_SUFFIX),
+      )
+    ) {
+      missingNextRuntimeTraceConfigs.push(configRelativePath);
+    }
 
     for (const requiredPath of requiredPaths) {
       const resolvedPath = assertPathWithinBase(
@@ -252,7 +266,24 @@ export async function validateVercelPrebuiltArtifact(
     missingFiles,
     forbiddenFiles,
     escapingFiles,
+    missingNextRuntimeTraceConfigs,
   };
+}
+
+export function assertVercelPrebuiltArtifactHasNextRuntimeTrace(
+  summary: VercelPrebuiltArtifactSummary,
+): void {
+  if (summary.missingNextRuntimeTraceConfigs.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    `[vercel-prebuilt] ${summary.missingNextRuntimeTraceConfigs.length} Node function(s) omit Next.js file-logger.js from filePathMap.\n` +
+      summary.missingNextRuntimeTraceConfigs
+        .slice(0, 10)
+        .map((configPath) => `  - ${configPath}`)
+        .join('\n'),
+  );
 }
 
 export function assertVercelPrebuiltArtifactValid(
@@ -579,6 +610,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const summary = await validateVercelPrebuiltArtifact();
   assertVercelPrebuiltArtifactValid(summary);
+  assertVercelPrebuiltArtifactHasNextRuntimeTrace(summary);
   assertVercelPrebuiltArtifactHasNoEscapingTraces(summary);
   assertVercelPrebuiltArtifactHasNoForbiddenTraces(summary);
   const dryRunJsonPath = getDryRunJsonPath(args);

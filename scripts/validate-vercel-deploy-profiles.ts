@@ -17,6 +17,7 @@ const PREVIEW_REQUIRED_SOURCE_PATHS = [
   'src/core/db/migrations/generated/meta/_journal.json',
 ];
 const PREBUILT_RUNTIME_PATHS = ['/.next', '/node_modules', '/src'];
+const VERCEL_RUNTIME_SMOKE_SPEC = 'vercel-runtime-smoke.spec.ts';
 
 function parseIgnoreRules(content: string): Set<string> {
   return new Set(
@@ -164,6 +165,9 @@ export function assertVercelToolingAndProvenanceValid(
     'test "$(git rev-parse HEAD)" = "$PREVIEW_GIT_SHA"',
     'pnpm exec playwright install --with-deps chromium',
     'pnpm vercel:runtime:smoke',
+    'name: Verify Preview Runtime',
+    'needs: deploy-preview',
+    'PLAYWRIGHT_TEST_BASE_URL: ${{ needs.deploy-preview.outputs.preview_url }}',
     './node_modules/.bin/vercel deploy --yes --json',
     'if [ $DEPLOY_EXIT -ne 0 ]; then',
   ];
@@ -186,6 +190,19 @@ export function assertVercelToolingAndProvenanceValid(
     throw new Error(
       '[vercel-deploy] Deployment provenance/runtime guards are incomplete. Missing:\n' +
         missing.map((fragment) => `  - ${fragment}`).join('\n'),
+    );
+  }
+}
+
+export function assertVercelRuntimeSmokeConfigValid(
+  smokeConfigContent: string,
+): void {
+  if (
+    !smokeConfigContent.includes('testMatch') ||
+    !smokeConfigContent.includes(VERCEL_RUNTIME_SMOKE_SPEC)
+  ) {
+    throw new Error(
+      `[vercel-deploy] Hosted runtime smoke must be restricted to ${VERCEL_RUNTIME_SMOKE_SPEC}; otherwise Playwright runs the full E2E suite against Preview.`,
     );
   }
 }
@@ -289,6 +306,12 @@ function main(): void {
     readAllowedFile(
       path.resolve(repositoryRoot, 'next.config.ts'),
       'Next.js configuration',
+    ),
+  );
+  assertVercelRuntimeSmokeConfigValid(
+    readAllowedFile(
+      path.resolve(repositoryRoot, 'playwright.vercel-smoke.config.ts'),
+      'Vercel runtime smoke configuration',
     ),
   );
   console.log('[vercel-deploy] Preview and production upload profiles valid.');

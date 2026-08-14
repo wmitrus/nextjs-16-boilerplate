@@ -143,8 +143,26 @@ describe('assertVercelProductionReadinessVerificationValid', () => {
   it('rejects a workflow that does not inspect the deployed prebuilt artifact', () => {
     expect(() =>
       assertVercelProductionReadinessVerificationValid(
-        "npm exec --yes vercel@latest -- deploy --prebuilt --prod\nreadyState: 'READY'\ntarget: 'production'\nprebuilt: true",
+        "npm exec --yes vercel@latest -- deploy --prebuilt --prod\nreadyState: 'READY'\ntarget: 'production'",
       ),
     ).toThrow('must inspect the deployed prebuilt artifact');
+  });
+
+  it('rejects a workflow whose inspected production deployment is not prebuilt', () => {
+    expect(() =>
+      assertVercelProductionReadinessVerificationValid(
+        "npm exec --yes vercel@latest -- deploy --prebuilt --prod --dry --json\nDEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --prod)\ninspect \"${{ steps.vercel_deploy.outputs.production_url }}\" --wait --json\nreadyState: 'READY'\ntarget: 'production'",
+      ),
+    ).toThrow(
+      'DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --prebuilt --prod',
+    );
+  });
+
+  it('rejects a workflow that assumes inspect returns prebuilt metadata', () => {
+    expect(() =>
+      assertVercelProductionReadinessVerificationValid(
+        "DEPLOY_URL=$(npm exec --yes vercel@latest -- deploy --prebuilt --prod)\ninspect \"${{ steps.vercel_deploy.outputs.production_url }}\" --wait --json\nreadyState: 'READY'\ntarget: 'production'\ndeployment.prebuilt",
+      ),
+    ).toThrow('must not require deployment.prebuilt');
   });
 });

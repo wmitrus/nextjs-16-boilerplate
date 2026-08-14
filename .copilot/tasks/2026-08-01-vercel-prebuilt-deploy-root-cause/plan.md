@@ -136,6 +136,21 @@ forensics but not the production plan.
   contexts.
 - [done] Removing New Relic is explicitly not part of Variant A.
 
+## 2026-08-14 Migration Ownership Follow-up
+
+- [done] Confirmed the live pulled Vercel Project Build Command is
+  `DATABASE_URL="$DATABASE_URL_UNPOOLED" pnpm db:migrate:prod && pnpm build`.
+- [done] Removed the duplicate local `pnpm db:migrate:prod` step from the
+  production workflow; `vercel build --prod` now invokes the project command
+  once with the pulled Production environment.
+- [done] Added a regression guard that rejects future production workflows with
+  both `vercel build --prod` and a separate migration invocation.
+- [done] Synced the deployment documentation to the single-owner migration
+  contract and the `filePathMap` source-upload contract.
+- [done] Validated focused deployment guards (`46` tests), TypeScript, YAML
+  diagnostics, formatting, and whitespace. ESLint remains explicitly skipped
+  because the repository's current agent-shell blocker is active.
+
 ## Initial Hypotheses
 
 These are unproven until a controlled check or historical comparison supports them:

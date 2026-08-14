@@ -61,3 +61,13 @@ Those proof steps should run only in a controlled deployment session.
 
 Local validation is complete for this PR. Leantime remains open in `Do oceny`
 because the final acceptance signal is the post-merge production workflow run.
+
+## 2026-08-14 Migration Ownership Follow-up
+
+- The focused deployment profile suite now includes an invariant that the
+  production workflow has `vercel build --prod` without a separate
+  `pnpm db:migrate:prod` step.
+- Focused Vercel contract tests passed (`46` tests), as did `pnpm typecheck`.
+- Prettier passed for the edited workflow and deployment docs; workflow editor
+  diagnostics reported no errors. `actionlint` is not installed.
+- ESLint was not run under the documented agent-shell execution blocker.

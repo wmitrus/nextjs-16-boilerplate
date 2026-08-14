@@ -187,7 +187,7 @@ Run focused validation with strong signal for the actual risk surface.
 
 Prefer:
 
-- `pnpm lint --fix` on the touched scope
+- **Temporary ESLint execution blocker (effective 2026-08-14):** do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. The command repeatedly hangs in the agent shell; run other relevant checks and report lint as skipped until this block is explicitly removed after a verified fix.
 - targeted tests for the touched behavior
 - explicit documentation of residual risk when validation is intentionally limited
 

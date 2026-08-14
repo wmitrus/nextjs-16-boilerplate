@@ -612,6 +612,7 @@ Always:
 - distinguish must-fix risks from follow-up debt
 - keep risky behavioral changes separate from unrelated cleanup when possible
 - document residual risk if a task is only partially complete or intentionally deferred
+- **Temporary ESLint execution blocker (effective 2026-08-14):** `pnpm lint --fix` repeatedly hangs in the agent shell. Until this block is explicitly removed after a verified fix, do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. Run other relevant checks and report lint as skipped because of this blocker.
 - **run `pnpm lint --fix`, never plain `pnpm lint`** — the linter auto-fixes import order and formatting; running without `--fix` only reports fixable errors and wastes tokens
 - for substantial phase-based implementation work, use focused validation during the phase and run repo-wide `pnpm lint --fix` plus `pnpm typecheck` before marking the phase complete
 - when shifting recurring scanner findings into local lint, record a baseline in task artifacts and compare local ESLint coverage versus Codacy findings on later PRs

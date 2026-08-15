@@ -1,3 +1,16 @@
+# [1.34.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.33.0...v1.34.0) (2026-08-15)
+
+
+### Bug Fixes
+
+* **ci:** gate Production upload on tenant readiness ([9e06354](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9e06354bb74e6e6099f0445ec06c36688b5b2d9c))
+* **vercel:** enforce Production tenant readiness ordering ([9814084](https://github.com/wmitrus/nextjs-16-boilerplate/commit/98140846a22ab9e881c5978b25b55779f29416b0))
+
+
+### Features
+
+* **tenant:** add read-only Production readiness validator ([a8f5201](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a8f5201c5cbc18f2b03e99ca1b1b319485fd7929))
+
 # [1.33.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.32.0...v1.33.0) (2026-08-15)
 
 

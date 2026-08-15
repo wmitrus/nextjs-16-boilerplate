@@ -292,7 +292,7 @@ See also: SEC-17 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
 **Main Dependencies**:
 
-- **next**: `16.2.1`
+- **next**: `16.2.11`
 - **react** / **react-dom**: `19.2.4`
 - **@clerk/nextjs**: `^6.39.0` — Authentication
 - **@sentry/nextjs**: `^10.40.0` — Error tracking & observability

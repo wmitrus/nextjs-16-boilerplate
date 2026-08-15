@@ -110,6 +110,14 @@ Runtime` consumes its immutable URL and runs only
   every allowed runtime source in the dry-run upload, reject every forbidden
   source present in that upload, reject missing or symlink-escaping sources,
   and enforce budgets of 5,000 files and 80 MiB.
+- Production sets the custom Next.js `deploymentId` through
+  `VERCEL_PREBUILT_DEPLOYMENT_ID`, using the GitHub run ID and run attempt as a
+  unique value. Never export or configure `NEXT_DEPLOYMENT_ID` for this
+  prebuilt build. That name is reserved for Vercel-managed build/runtime
+  identity; setting it only during `vercel build` makes Next.js enable
+  `runtimeServerDeploymentId`, and every deployed Node function then exits when
+  the variable is absent at runtime. The artifact validator requires the custom
+  ID to be embedded and rejects runtime deployment-ID resolution.
 - For `AUTH_PROVIDER=authjs`, the production workflow requires a
   Production-scoped `NEXTAUTH_URL` before `vercel build --prod`. It does not
   derive `NEXTAUTH_URL` from `NEXT_PUBLIC_APP_URL`, because that would fix the
@@ -123,6 +131,10 @@ Why the split exists:
 - Vercel CLI deployments need explicit Git provider metadata before branch-specific environment variables and Neon preview branch injection can resolve correctly.
 - A local prebuild flow can migrate a different database than the final preview deployment uses.
 - Production does not depend on preview-branch injection, so the GitHub Actions-controlled prebuilt flow remains valid there.
+- Source-built Preview does not use `VERCEL_PREBUILT_DEPLOYMENT_ID`. Vercel owns
+  both its build and runtime identity and supplies the matching framework
+  deployment ID itself. The custom variable is a Production prebuilt control,
+  not a Preview compatibility workaround.
 - GitHub-hosted production prebuilds do not receive a reliable Vercel system
   `VERCEL_URL`; AuthJS production builds therefore require the same
   `NEXTAUTH_URL` that the production runtime will receive.

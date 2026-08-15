@@ -1,3 +1,35 @@
+# [1.33.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.32.0...v1.33.0) (2026-08-15)
+
+
+### Bug Fixes
+
+* **auth:** harden credentials sign-in navigation ([66cbf86](https://github.com/wmitrus/nextjs-16-boilerplate/commit/66cbf864cdcf514c615e3874a8c992cedbe952e8))
+* **auth:** show loading fallback for sign-in page ([3921f83](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3921f8312d99cce7e37455057feff70753c4dc6a))
+* **ci:** harden Vercel preview provenance and runtime smoke ([85e9c97](https://github.com/wmitrus/nextjs-16-boilerplate/commit/85e9c97e9ae73e2dae799aabd5cc071f6c0c833e))
+* **ci:** parse Vercel Preview deploy output safely ([4cf1068](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4cf106810b251b093bb47778fcc3d47eec35df3b))
+* **ci:** parse Vercel Production deploy output safely ([fca10d9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/fca10d9ac78ed2518c091f3fb9fda8781e2dfe5f))
+* **ci:** split Preview deployment and runtime verification ([cb0701a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cb0701a70baa85c045cd3ef95146e3e24dca0385))
+* **ci:** stage and verify Vercel production deployment ([1b050ae](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1b050aed040824bb85286cbe9004e923d8063a8c))
+* **ci:** use custom deployment ID for prebuilt Production ([3e940d2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3e940d2075a77abf5a0c2bd5e4a392896a5ddd21))
+* **neon:** harden provider API URL validation ([2304cb8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2304cb8c58418c3b29fae0f9de931beb41cfc4c4))
+* **next:** harden Vercel runtime tracing and build workers ([974d5d5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/974d5d5eee22f187da1883afe3962dd16b19ca76))
+* **next:** separate prebuilt deployment ID from reserved runtime env ([28a9ded](https://github.com/wmitrus/nextjs-16-boilerplate/commit/28a9ded2cc1d56740d35caa21a0f63ae5e412207))
+* **tests:** update Vercel deployment readiness tests ([356f93f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/356f93fa9dc2dbfa2c268350ff0dbb10c923e030))
+* **vercel:** enforce automatic tracing and JSON deploy output ([29d2c8c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/29d2c8cf90899fea58e022b200a582e8b38cf94c))
+* **vercel:** enforce Neon Preview capacity and failure diagnostics ([d2ddc84](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d2ddc847d035b3d8c6bbbab4a51757405b67efe0))
+* **vercel:** enforce prebuilt deployment ID contract ([ac3a40d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ac3a40dc7f3b0c1c8864e23ac9815b7fddc90c22))
+* **vercel:** enforce runtime trace and deployment provenance guards ([5e7baee](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5e7baee25451efe7d5b30f8370bf65fe9db3e898))
+* **vercel:** make Next runtime trace validation relational ([cd333d3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cd333d3e9186cf27aba8e4a56aa5c360021ad94e))
+* **vercel:** require Next.js runtime trace in prebuilt artifacts ([4efd782](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4efd78251d2af336f12dd33397926d754a0aca3c))
+* **vercel:** validate embedded prebuilt deployment ID ([ae91194](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ae911945a9f8b86f7ad2bb17d0a62540e75df2da))
+* **vercel:** validate scoped hosted runtime smoke config ([83ba922](https://github.com/wmitrus/nextjs-16-boilerplate/commit/83ba922a3f08bf9c088bd36b0e74972af1d5d3be))
+
+
+### Features
+
+* **neon:** add safe Preview branch capacity management ([d12bd0f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d12bd0f9025b5b092278fdf272d6354b817c54e1))
+* **vercel:** add Preview deployment failure diagnostics ([0be0d48](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0be0d486578ff3f9356b8f80edd249f8f38c5c8d))
+
 # [1.32.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.31.0...v1.32.0) (2026-08-14)
 
 

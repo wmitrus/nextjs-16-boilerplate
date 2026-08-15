@@ -36,3 +36,13 @@
 
 Local validation supports the implementation. Hosted resolution remains pending
 until these deployment gates run on the new revision.
+
+## Deployment-ID Follow-Up
+
+- The first corrected Production smoke was valuable and failed for a real
+  launcher error, not a test harness problem.
+- `74` focused deployment validator tests now pass with regression coverage for
+  the reserved variable and generated runtime flag.
+- Typecheck and deployment-profile validation pass.
+- A fresh staged and promoted Production run remains required; the incident is
+  not closed from local evidence alone.

@@ -65,3 +65,8 @@
   absent; otherwise it blocks without deleting anything.
 - Added deployment-profile guards and focused unit coverage for safe cleanup
   candidate selection.
+- Hardened both provider HTTP sinks with a closed provider allowlist: HTTPS,
+  exact origin, exact endpoint family, exact Neon project/GitHub repository
+  scope, and rejection of credentials, query, and fragment components.
+- A cloud-synchronized Codacy Opengrep rerun reported zero HTTP/SSRF findings;
+  its two remaining findings are unrelated pre-existing workflow warnings.

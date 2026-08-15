@@ -31,6 +31,10 @@
   and selects only the oldest verified-obsolete `preview/*` branch.
 - `36` focused tests passed across the Neon CLI, deployment diagnostic, and
   deployment-profile validator; TypeScript and profile validation passed.
+- After provider URL hardening, `42` focused tests and TypeScript passed.
+- Cloud-synchronized Codacy Opengrep completed with two unrelated workflow
+  warnings and no finding in `scripts/neon/cli.ts`; both reported HTTP findings
+  are cleared without scanner suppression.
 
 ## 2026-08-14 Deployment-ID Runtime Correction
 

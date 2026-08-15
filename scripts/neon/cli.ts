@@ -1,7 +1,24 @@
-const NEON_API_BASE_URL = 'https://console.neon.tech/api/v2/';
-const GITHUB_API_BASE_URL = 'https://api.github.com/';
+const NEON_API_ORIGIN = 'https://console.neon.tech';
+const GITHUB_API_ORIGIN = 'https://api.github.com';
 const RESOURCE_ID_PATTERN = /^[a-z0-9-]{1,60}$/;
+const GITHUB_REPOSITORY_PART_PATTERN = /^[a-zA-Z0-9_.-]+$/;
 const DEFAULT_BRANCH_LIMIT = 10;
+const TRUSTED_PROVIDER_ENDPOINTS = {
+  github: {
+    origin: GITHUB_API_ORIGIN,
+    pathname:
+      /^\/repos\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/branches\/[a-zA-Z0-9_.%~-]+$/,
+  },
+  neon: {
+    origin: NEON_API_ORIGIN,
+    pathname:
+      /^\/api\/v2\/projects\/[a-z0-9-]{1,60}\/branches(?:\/[a-z0-9-]{1,60})?$/,
+  },
+} as const;
+
+type TrustedProviderScope =
+  | { projectId: string; provider: 'neon' }
+  | { owner: string; provider: 'github'; repository: string };
 
 interface NeonBranch {
   created_at: string;
@@ -51,12 +68,44 @@ export function readNeonConfig(): NeonConfig {
   };
 }
 
+export function assertTrustedProviderUrl(
+  url: URL,
+  scope: TrustedProviderScope,
+): void {
+  const endpoint = TRUSTED_PROVIDER_ENDPOINTS[scope.provider];
+  const expectedPrefix =
+    scope.provider === 'neon'
+      ? `/api/v2/projects/${scope.projectId}/branches`
+      : `/repos/${scope.owner}/${scope.repository}/branches/`;
+  const isWithinScope =
+    url.pathname === expectedPrefix ||
+    url.pathname.startsWith(
+      `${expectedPrefix}${expectedPrefix.endsWith('/') ? '' : '/'}`,
+    );
+  if (
+    url.protocol !== 'https:' ||
+    url.origin !== endpoint.origin ||
+    !endpoint.pathname.test(url.pathname) ||
+    !isWithinScope ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    throw new Error('Refusing an unexpected provider API URL.');
+  }
+}
+
 async function neonRequest<T>(
   config: NeonConfig,
-  pathName: string,
+  url: URL,
   init: RequestInit = {},
 ): Promise<T | undefined> {
-  const response = await fetch(new URL(pathName, NEON_API_BASE_URL), {
+  assertTrustedProviderUrl(url, {
+    projectId: config.projectId,
+    provider: 'neon',
+  });
+  const response = await fetch(url, {
     ...init,
     headers: {
       accept: 'application/json',
@@ -81,9 +130,10 @@ async function neonRequest<T>(
 }
 
 async function listBranches(config: NeonConfig): Promise<NeonBranch[]> {
+  const pathname = `/api/v2/projects/${config.projectId}/branches`;
   const result = await neonRequest<NeonBranchesResponse>(
     config,
-    `projects/${config.projectId}/branches`,
+    new URL(pathname, NEON_API_ORIGIN),
   );
   return result?.branches ?? [];
 }
@@ -103,17 +153,22 @@ async function deleteBranch(
     throw new Error(`Refusing to automatically delete branch ${branch.name}.`);
   }
 
-  await neonRequest(
-    config,
-    `projects/${config.projectId}/branches/${branch.id}`,
-    { method: 'DELETE' },
-  );
+  const pathname = `/api/v2/projects/${config.projectId}/branches/${branch.id}`;
+  await neonRequest(config, new URL(pathname, NEON_API_ORIGIN), {
+    method: 'DELETE',
+  });
 }
 
 function parseRepository(value: string): { owner: string; repository: string } {
   const [owner, repository, ...rest] = value.split('/');
   if (!owner || !repository || rest.length > 0) {
     throw new Error('GITHUB_REPOSITORY must use the owner/repository format.');
+  }
+  if (
+    !GITHUB_REPOSITORY_PART_PATTERN.test(owner) ||
+    !GITHUB_REPOSITORY_PART_PATTERN.test(repository)
+  ) {
+    throw new Error('GITHUB_REPOSITORY contains unsupported characters.');
   }
   return { owner, repository };
 }
@@ -123,10 +178,9 @@ async function githubBranchExists(
   branchName: string,
 ): Promise<boolean> {
   const { owner, repository } = parseRepository(repositorySlug);
-  const url = new URL(
-    `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/branches/${encodeURIComponent(branchName)}`,
-    GITHUB_API_BASE_URL,
-  );
+  const pathname = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/branches/${encodeURIComponent(branchName)}`;
+  const url = new URL(pathname, GITHUB_API_ORIGIN);
+  assertTrustedProviderUrl(url, { owner, provider: 'github', repository });
   const token = process.env.GITHUB_TOKEN?.trim();
   const response = await fetch(url, {
     headers: {

@@ -82,6 +82,9 @@ jobs:
           APP_ENV: production
           NEXT_PUBLIC_APP_ENV: production
 
+      - name: Validate Production Tenant Readiness
+        run: pnpm tenant:readiness:vercel:prod
+
       - name: Validate Prebuilt Artifact Contract
         run: pnpm vercel:prebuilt:validate
 

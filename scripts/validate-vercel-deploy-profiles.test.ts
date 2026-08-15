@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertVercelDeployProfilesValid,
+  assertVercelDeploymentIdContractValid,
   assertNextRuntimeTraceGuardValid,
   assertVercelRuntimeSmokeConfigValid,
   assertVercelPreviewSourceUploadValid,
@@ -183,7 +184,9 @@ describe('assertVercelToolingAndProvenanceValid', () => {
     'PLAYWRIGHT_TEST_BASE_URL: ${{ needs.deploy-preview.outputs.preview_url }}',
   ].join('\n');
   const production = [
-    'NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"',
+    'VERCEL_PREBUILT_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}',
+    'if [ -n "${NEXT_DEPLOYMENT_ID:-}" ]; then exit 1; fi',
+    'VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
     './node_modules/.bin/vercel build --prod',
     '--meta githubCommitSha="$GITHUB_SHA"',
     'pnpm exec playwright install --with-deps chromium',
@@ -208,6 +211,57 @@ describe('assertVercelToolingAndProvenanceValid', () => {
         production,
       ),
     ).toThrow('pinned');
+  });
+});
+
+describe('assertVercelDeploymentIdContractValid', () => {
+  const nextConfig = 'deploymentId: process.env.VERCEL_PREBUILT_DEPLOYMENT_ID';
+  const workflow = [
+    'VERCEL_PREBUILT_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}',
+    'if [ -n "${NEXT_DEPLOYMENT_ID:-}" ]; then exit 1; fi',
+    'export VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+  ].join('\n');
+
+  it('accepts an embedded custom prebuilt deployment ID', () => {
+    expect(() =>
+      assertVercelDeploymentIdContractValid(nextConfig, workflow),
+    ).not.toThrow();
+  });
+
+  it('rejects using the reserved runtime deployment ID as build input', () => {
+    expect(() =>
+      assertVercelDeploymentIdContractValid(
+        'deploymentId: process.env.NEXT_DEPLOYMENT_ID',
+        'export NEXT_DEPLOYMENT_ID="build-id"',
+      ),
+    ).toThrow('reserved');
+  });
+
+  it('rejects enabling runtime deployment ID resolution explicitly', () => {
+    expect(() =>
+      assertVercelDeploymentIdContractValid(
+        `${nextConfig}\nexperimental: { runtimeServerDeploymentId: true }`,
+        workflow,
+      ),
+    ).toThrow('reserved');
+  });
+
+  it('rejects assigning the reserved runtime ID through workflow YAML', () => {
+    expect(() =>
+      assertVercelDeploymentIdContractValid(
+        nextConfig,
+        `${workflow}\nenv:\n  NEXT_DEPLOYMENT_ID: forced`,
+      ),
+    ).toThrow('reserved');
+  });
+
+  it('requires a guard against a dashboard-defined reserved variable', () => {
+    expect(() =>
+      assertVercelDeploymentIdContractValid(
+        nextConfig,
+        'VERCEL_PREBUILT_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}\nexport VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+      ),
+    ).toThrow('fail before building');
   });
 });
 

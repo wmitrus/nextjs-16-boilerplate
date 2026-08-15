@@ -58,8 +58,9 @@
 
 - Added a dedicated Neon management CLI with list, preview capacity check, and
   confirmed preview-branch deletion commands.
-- Added `.env.neon.example`; local credentials remain isolated from Next.js
-  application and build environments.
+- Added `scripts/neon/neon.env.example`; local credentials remain isolated from
+  Next.js application and build environments without creating a root `.env.*`
+  file that Next can trace into server functions.
 - Preview CI now checks the Neon API before source upload. At capacity it may
   delete only the oldest `preview/*` branch whose GitHub branch is confirmed
   absent; otherwise it blocks without deleting anything.

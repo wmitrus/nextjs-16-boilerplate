@@ -31,3 +31,16 @@
 - Keep request-time `NextAuth(req, ctx, authOptions)` and the existing AuthJS
   session predicate unchanged.
 - Require hosted Preview and staged Production smoke before incident closure.
+
+## 2026-08-14 Deployment-ID Runtime Update
+
+- Confirmed failure boundary: the Vercel Node launcher exits before route or
+  AuthJS code because `runtimeServerDeploymentId` is enabled while runtime
+  `NEXT_DEPLOYMENT_ID` is absent.
+- Next.js 16.2.11 enables this runtime mode automatically when its reserved
+  variable is present during a Vercel-supported production build.
+- Runtime decision: retain top-level custom `deploymentId` for prebuilt Skew
+  Protection, but source it from `VERCEL_PREBUILT_DEPLOYMENT_ID`. Do not set the
+  reserved runtime variable and do not enable runtime resolution explicitly.
+- Preview requires no matching change because Vercel owns its source build and
+  runtime identity together.

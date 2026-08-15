@@ -1,5 +1,59 @@
 # Validation Report
 
+## 2026-08-15 Preview Provisioning Failure
+
+- GitHub Actions run `31883863182`, deployment
+  `dpl_7Xt1jTxQE6MdzDALCTdvsp5rnsWM`, failed in about four seconds with
+  `Resource provisioning failed`.
+- Vercel's deployment API reported `integrations.status: error`, `builds: []`,
+  and an empty builder output. Neither the configured database migration nor
+  `pnpm build` started.
+- A controlled rerun of the same SHA created deployment
+  `dpl_9iZBvT7HhSNeFtGSbDADpigFyVGP` and reproduced the same pre-build failure.
+- `vercel integration resource inspect neon-db-boilerplate --format=json`
+  confirmed that the Neon Free resource is connected to Production, Preview,
+  and Development and has the general status `available`. This does not prove
+  that its per-deployment branch action can allocate another Preview branch.
+- Vercel and Neon public status pages were operational during the retry. The
+  remaining gate is the project-specific Neon deployment action, with branch
+  capacity or connection state as the leading provider-side causes.
+- No repository code or workflow change is justified by this evidence. Preview
+  must remain a source deployment so Neon can inject branch-scoped connection
+  details before the remote build.
+- Follow-up observability improvement: Preview now runs
+  `pnpm vercel:deploy:diagnose` when `vercel deploy` fails. A replay against
+  `dpl_9iZBvT7HhSNeFtGSbDADpigFyVGP` correctly reported that integration
+  provisioning failed before migrations/build, identified Neon, and printed the
+  resource and deployment dashboard links.
+- Follow-up prevention improvement: Preview now runs a direct Neon branch
+  capacity check before source upload. Focused unit coverage proves automatic
+  cleanup excludes the current, default, protected, and GitHub-active branches
+  and selects only the oldest verified-obsolete `preview/*` branch.
+- `36` focused tests passed across the Neon CLI, deployment diagnostic, and
+  deployment-profile validator; TypeScript and profile validation passed.
+- After provider URL hardening, `42` focused tests and TypeScript passed.
+- Cloud-synchronized Codacy Opengrep completed with two unrelated workflow
+  warnings and no finding in `scripts/neon/cli.ts`; both reported HTTP findings
+  are cleared without scanner suppression.
+
+## 2026-08-14 Deployment-ID Runtime Correction
+
+- `74` focused validator/helper tests passed.
+- `pnpm typecheck` passed.
+- `pnpm vercel:deploy:validate` passed outside the restricted IPC sandbox.
+- Controlled Next.js config load proved the corrected custom ID is embedded,
+  `runtimeServerDeploymentId` is not enabled, and no runtime
+  `NEXT_DEPLOYMENT_ID` is required.
+- The generated-artifact validator now rejects either a missing/invalid custom
+  ID, an ID that differs from the current GitHub run, or
+  `runtimeServerDeploymentId: true`.
+- A local `pnpm build` reported `cpus: 16` but made no progress for six minutes
+  after entering Turbopack compilation and was interrupted to protect WSL. It
+  is not recorded as a pass. The authoritative full prebuilt build remains the
+  fresh CI `vercel build --prod` gate.
+- ESLint remains skipped under the repository's active blocker.
+- Hosted staged and promoted Production smoke are still required before closure.
+
 ## Passed
 
 - `pnpm exec vitest run --config vitest.unit.config.ts scripts/validate-vercel-deploy-profiles.test.ts scripts/validate-vercel-prebuilt-artifact.test.ts scripts/vercel/cli.test.ts --coverage.enabled=false`: 61 tests.

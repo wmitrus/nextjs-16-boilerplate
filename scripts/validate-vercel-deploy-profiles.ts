@@ -170,9 +170,14 @@ export function assertVercelToolingAndProvenanceValid(
     'PLAYWRIGHT_TEST_BASE_URL: ${{ needs.deploy-preview.outputs.preview_url }}',
     './node_modules/.bin/vercel deploy --yes --json',
     'if [ $DEPLOY_EXIT -ne 0 ]; then',
+    'pnpm vercel:deploy:diagnose -- /tmp/vercel-preview-deploy.json',
+    'pnpm neon:preview:check -- --git-branch="$PREVIEW_GIT_BRANCH" --cleanup-obsolete',
+    'NEON_API_KEY: ${{ secrets.NEON_API_KEY }}',
+    'NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}',
   ];
   const requiredProductionFragments = [
-    'NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"',
+    'VERCEL_PREBUILT_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}',
+    'VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
     '--meta githubCommitSha="$GITHUB_SHA"',
     'pnpm exec playwright install --with-deps chromium',
     'pnpm vercel:runtime:smoke',
@@ -190,6 +195,42 @@ export function assertVercelToolingAndProvenanceValid(
     throw new Error(
       '[vercel-deploy] Deployment provenance/runtime guards are incomplete. Missing:\n' +
         missing.map((fragment) => `  - ${fragment}`).join('\n'),
+    );
+  }
+}
+
+export function assertVercelDeploymentIdContractValid(
+  nextConfigContent: string,
+  productionWorkflowContent: string,
+): void {
+  if (
+    nextConfigContent.includes('process.env.NEXT_DEPLOYMENT_ID') ||
+    /\b(?:export\s+)?NEXT_DEPLOYMENT_ID\s*=/.test(productionWorkflowContent) ||
+    /(?:^|\n)\s*NEXT_DEPLOYMENT_ID\s*:/.test(productionWorkflowContent) ||
+    nextConfigContent.includes('runtimeServerDeploymentId')
+  ) {
+    throw new Error(
+      '[vercel-deploy] NEXT_DEPLOYMENT_ID and runtimeServerDeploymentId are reserved for Vercel-managed build/runtime identity; a prebuilt build must use the custom deploymentId value embedded at build time.',
+    );
+  }
+
+  if (
+    !nextConfigContent.includes('process.env.VERCEL_PREBUILT_DEPLOYMENT_ID') ||
+    !productionWorkflowContent.includes(
+      'VERCEL_PREBUILT_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}',
+    ) ||
+    !productionWorkflowContent.includes(
+      'VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    )
+  ) {
+    throw new Error(
+      '[vercel-deploy] Production prebuilt builds must provide a unique custom deploymentId through VERCEL_PREBUILT_DEPLOYMENT_ID.',
+    );
+  }
+
+  if (!productionWorkflowContent.includes('${NEXT_DEPLOYMENT_ID:-}')) {
+    throw new Error(
+      '[vercel-deploy] Production must fail before building when NEXT_DEPLOYMENT_ID is supplied by project configuration.',
     );
   }
 }
@@ -300,6 +341,13 @@ function main(): void {
   assertVercelToolingAndProvenanceValid(
     readAllowedFile(path.resolve(repositoryRoot, 'package.json'), 'package'),
     previewWorkflowContent,
+    productionWorkflowContent,
+  );
+  assertVercelDeploymentIdContractValid(
+    readAllowedFile(
+      path.resolve(repositoryRoot, 'next.config.ts'),
+      'Next.js configuration',
+    ),
     productionWorkflowContent,
   );
   assertNextRuntimeTraceGuardValid(

@@ -79,6 +79,15 @@ Production-only controls are `.vercelignore.prebuilt`, prebuilt artifact and
 dry-run closure validation, custom prebuilt `deploymentId`, and staged promotion.
 They do not belong in ordinary Preview.
 
+The custom Production ID must be read from
+`VERCEL_PREBUILT_DEPLOYMENT_ID` in `next.config.ts` and embedded at build time.
+Never export `NEXT_DEPLOYMENT_ID` in the prebuilt workflow and never enable
+`runtimeServerDeploymentId` manually. `NEXT_DEPLOYMENT_ID` is the
+Vercel-managed runtime contract used when Vercel owns both sides of the build;
+setting it only in CI build scope makes the uploaded functions require a value
+that is absent at runtime. Source-built Preview remains provider-managed and
+does not need the Production custom-ID variable.
+
 Shared controls are automatic framework tracing, pinned CLI, source provenance,
 machine-readable deploy output, and hosted anonymous smoke for `/auth/signin`
 plus JSON verification of `/api/auth/session`. Preview should keep this smoke
@@ -108,6 +117,9 @@ Before closing the hosted incident, a fresh deployment must prove:
    page error or failed RSC request;
 4. `/api/auth/session` returns HTTP 200 JSON;
 5. Vercel runtime logs contain no matching `MODULE_NOT_FOUND`.
+6. generated Next.js config contains the custom `deploymentId` and does not set
+   `runtimeServerDeploymentId: true`;
+7. runtime logs contain no `NEXT_DEPLOYMENT_ID is missing` launcher failure.
 
 Existing client rejection handling and visible Suspense fallback may remain as
 defense-in-depth UX. They are not the root-cause fix.
@@ -119,3 +131,20 @@ Run the pinned local CLI directly with `--json`, preserve its exit status, parse
 the URL only after success, and only then write one validated HTTPS value to
 `$GITHUB_OUTPUT`. This prevents pnpm warnings and build logs from corrupting
 GitHub Actions outputs.
+
+## Subsequent Production Runtime Incident
+
+After the tracing fix, Production deployment
+`dpl_A62Nfc7pBYjGhWchmfeZMjDqpwW4` exposed a second, independent startup
+failure. The deploy reached `READY`, but the two hosted tests failed and Vercel
+logs reported:
+
+```text
+process.env.NEXT_DEPLOYMENT_ID is missing but runtimeServerDeploymentId is enabled
+```
+
+This failure again occurred before AuthJS. Its root cause was the prebuilt
+workflow exporting the reserved `NEXT_DEPLOYMENT_ID` only during build. The
+correct fix is the custom build-only variable and embedded top-level
+`deploymentId` described above, not an auth change and not removal of Skew
+Protection.

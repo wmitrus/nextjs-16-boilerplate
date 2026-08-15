@@ -38,3 +38,35 @@
 - Final `pnpm build` passed with 16 workers and 55/55 pages.
 - Final trace relation: 69 importers, 69 dependencies, zero broken traces.
 - ESLint was skipped under the active repository blocker.
+
+## 2026-08-14 Deployment-ID Runtime Update
+
+- Replaced `process.env.NEXT_DEPLOYMENT_ID` in `next.config.ts` with
+  `process.env.VERCEL_PREBUILT_DEPLOYMENT_ID`.
+- Production now generates the custom ID from GitHub run ID plus run attempt and
+  fails before build if project configuration supplies reserved
+  `NEXT_DEPLOYMENT_ID`.
+- Deployment-profile validation rejects reserved build assignment or explicit
+  runtime resolution.
+- Prebuilt artifact validation requires a valid embedded custom ID and rejects
+  `runtimeServerDeploymentId: true`.
+- The expected custom ID is job-scoped and the artifact must match it exactly;
+  stale or constant IDs and YAML-level assignments of the reserved variable are
+  covered by regression tests.
+
+## 2026-08-15 Neon Preview Capacity Guard
+
+- Added a dedicated Neon management CLI with list, preview capacity check, and
+  confirmed preview-branch deletion commands.
+- Added `.env.neon.example`; local credentials remain isolated from Next.js
+  application and build environments.
+- Preview CI now checks the Neon API before source upload. At capacity it may
+  delete only the oldest `preview/*` branch whose GitHub branch is confirmed
+  absent; otherwise it blocks without deleting anything.
+- Added deployment-profile guards and focused unit coverage for safe cleanup
+  candidate selection.
+- Hardened both provider HTTP sinks with a closed provider allowlist: HTTPS,
+  exact origin, exact endpoint family, exact Neon project/GitHub repository
+  scope, and rejection of credentials, query, and fragment components.
+- A cloud-synchronized Codacy Opengrep rerun reported zero HTTP/SSRF findings;
+  its two remaining findings are unrelated pre-existing workflow warnings.

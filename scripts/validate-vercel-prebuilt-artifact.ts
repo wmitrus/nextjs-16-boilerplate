@@ -51,6 +51,15 @@ export interface VercelPrebuiltUploadCoverageSummary {
   forbiddenUploadFiles: VercelTraceFileReference[];
 }
 
+interface NextRequiredServerFiles {
+  config?: {
+    deploymentId?: unknown;
+    experimental?: {
+      runtimeServerDeploymentId?: unknown;
+    };
+  };
+}
+
 const DEFAULT_FUNCTIONS_DIR = '.vercel/output/functions';
 const NEXT_CONSOLE_FILE_SUFFIX =
   '/next/dist/server/node-environment-extensions/console-file.js';
@@ -292,6 +301,42 @@ export function assertVercelPrebuiltArtifactHasNextRuntimeTrace(
         .map((configPath) => `  - ${configPath}`)
         .join('\n'),
   );
+}
+
+export function assertNextPrebuiltDeploymentIdArtifactValid(
+  requiredServerFilesContent: string,
+  expectedDeploymentId: string | undefined,
+): void {
+  const parsed = JSON.parse(
+    requiredServerFilesContent,
+  ) as NextRequiredServerFiles;
+  const deploymentId = parsed.config?.deploymentId;
+  const runtimeServerDeploymentId =
+    parsed.config?.experimental?.runtimeServerDeploymentId;
+
+  if (runtimeServerDeploymentId === true) {
+    throw new Error(
+      '[vercel-prebuilt] Generated Next.js config enables runtimeServerDeploymentId. Prebuilt functions would require a runtime NEXT_DEPLOYMENT_ID and fail during startup.',
+    );
+  }
+
+  if (
+    typeof deploymentId !== 'string' ||
+    deploymentId.length === 0 ||
+    deploymentId.length > 32 ||
+    deploymentId.startsWith('dpl_') ||
+    !/^[a-zA-Z0-9_-]+$/.test(deploymentId)
+  ) {
+    throw new Error(
+      '[vercel-prebuilt] Generated Next.js config must contain a valid custom deploymentId of at most 32 URL-safe characters.',
+    );
+  }
+
+  if (deploymentId !== expectedDeploymentId) {
+    throw new Error(
+      `[vercel-prebuilt] Generated Next.js deploymentId does not match the current CI run. Expected ${expectedDeploymentId ?? '<missing>'}, received ${deploymentId}.`,
+    );
+  }
 }
 
 export function assertVercelPrebuiltArtifactValid(
@@ -616,6 +661,15 @@ function readDryRunJsonFile(filePath: string): string {
 /* v8 ignore start -- CLI console/process wrapper; exported functions are unit-tested. */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  const repositoryRoot = process.cwd();
+  assertNextPrebuiltDeploymentIdArtifactValid(
+    readTextFileWithinBase(
+      path.join(repositoryRoot, '.next/required-server-files.json'),
+      repositoryRoot,
+      'Next.js required server files manifest',
+    ),
+    process.env.VERCEL_PREBUILT_DEPLOYMENT_ID,
+  );
   const summary = await validateVercelPrebuiltArtifact();
   assertVercelPrebuiltArtifactValid(summary);
   assertVercelPrebuiltArtifactHasNextRuntimeTrace(summary);

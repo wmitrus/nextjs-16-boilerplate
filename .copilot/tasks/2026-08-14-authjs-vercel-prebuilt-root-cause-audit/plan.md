@@ -2,8 +2,11 @@
 
 ## Status
 
-`CORRECTED AND VALIDATED LOCALLY` - the rejected manual trace include is
-superseded; hosted deployment proof remains pending.
+`SECOND PRODUCTION RUNTIME CORRECTION VALIDATED LOCALLY` - hosted smoke exposed
+an invalid reserved deployment-ID contract after the trace fix. Source and
+artifact guards are corrected; a fresh staged Production run remains pending.
+The current Preview gate is independently blocked before the application build
+by the Neon deployment integration action (`Resource provisioning failed`).
 
 ## Decision Gates
 
@@ -38,6 +41,38 @@ No auth or deployment fix is accepted until these gates are satisfied:
       browser behavior against the identified deployment.
 - [ ] Workflow Orchestrator: synchronize this workspace and the previous Copilot
       task artifacts, then close Leantime with time logging.
+
+### D. Production Runtime Deployment ID
+
+- [x] Correlated the two hosted smoke failures with the exact Vercel function
+      launcher error.
+- [x] Reproduced Next.js enabling `runtimeServerDeploymentId` when
+      `NEXT_DEPLOYMENT_ID` is present in Vercel builder context.
+- [x] Replaced the reserved variable with
+      `VERCEL_PREBUILT_DEPLOYMENT_ID` and retained custom prebuilt Skew
+      Protection.
+- [x] Added source/workflow guards and generated-artifact validation.
+- [ ] Run a fresh staged Production deployment, pass both immutable smoke tests,
+      promote, and pass both canonical URL smoke tests.
+
+### E. Preview Neon Provisioning Gate
+
+- [x] Proved the failed Preview deployment did not enter the Next.js build:
+      Vercel reported `integrations.status: error`, `builds: []`, and an empty
+      builder output.
+- [x] Repeated the same SHA in a controlled GitHub Actions retry and reproduced
+      the integration failure on a second deployment ID.
+- [x] Verified the connected Vercel Marketplace resource is Neon, is connected
+      to Preview, and currently reports the general resource status `available`.
+- [x] Added a deployment-failure diagnostic CLI that classifies this state,
+      names connected Marketplace resources, links their dashboards, emits a
+      GitHub error annotation, and preserves the failed Preview gate.
+- [x] Added a direct Neon API capacity gate plus conservative cleanup of the
+      oldest preview branch whose corresponding GitHub branch no longer exists.
+- [ ] Inspect the Neon resource's deployment-action error/branch capacity in the
+      provider dashboard, repair the resource state, and rerun the unchanged
+      Preview deployment.
+- [ ] Pass Preview hosted runtime smoke after provisioning and remote build.
 
 ## Workstreams
 
@@ -100,3 +135,7 @@ No auth or deployment fix is accepted until these gates are satisfied:
   place during investigation, but its configuration is subject to review.
 - Do not call the incident resolved until fresh hosted artifact and browser gates
   pass.
+- Do not change Preview to a prebuilt deployment or bypass the required Neon
+  action to conceal a provider provisioning failure.
+- Do not claim a branch-capacity preflight unless Neon exposes authenticated
+  branch state to CI; classify Vercel's authoritative deployment action result.

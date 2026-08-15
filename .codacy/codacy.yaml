@@ -2,3 +2,4 @@ runtimes:
   - node@24.14.0
 tools:
   - eslint@9.39.3
+  - opengrep@1.16.4

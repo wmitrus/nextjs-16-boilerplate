@@ -261,6 +261,36 @@ Each preview branch is a **copy-on-write snapshot** of the production branch —
 
 This means each PR gets an isolated database that mirrors production schema, which aligns with the boilerplate's self-bootstrapping provisioning model: the first sign-in on any preview deployment will provision its own tenant, roles, and policies automatically.
 
+### Branch Capacity Gate And Safe Cleanup
+
+The Preview workflow runs `pnpm neon:preview:check` before uploading source to
+Vercel. It reads branch state directly from the Neon API and:
+
+1. passes when capacity exists or `preview/<git-branch>` already exists;
+2. at the configured limit, considers only non-protected `preview/*` branches;
+3. verifies through the GitHub API that the corresponding Git branch no longer
+   exists;
+4. deletes only the oldest verified-obsolete candidate;
+5. blocks deployment if no branch can be removed safely.
+
+Blind deletion of the oldest Neon branch is forbidden. The root/default branch,
+protected branches, active Git branches, and the current Preview branch are not
+automatic cleanup candidates.
+
+Required GitHub Actions secrets:
+
+- `NEON_API_KEY` - preferably a project-scoped organization API key;
+- `NEON_PROJECT_ID` - the Neon project ID.
+
+For local checks, create `.env.neon` from `.env.neon.example`. This dedicated
+file keeps the management API key outside `.env.local` and the Next.js runtime:
+
+```shell
+pnpm neon:branches:list
+pnpm neon:preview:check -- --git-branch="$(git branch --show-current)" --cleanup-obsolete
+pnpm neon:branch:delete -- <branch-id> --confirm
+```
+
 ### Do Not Trust The Project Env Vars List Alone
 
 In Vercel **Settings → Environment Variables**, integration-managed variables may

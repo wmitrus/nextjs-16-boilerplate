@@ -11,6 +11,7 @@ on:
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_PREBUILT_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   deploy-production:
@@ -69,7 +70,12 @@ jobs:
             unset VERCEL_URL
           fi
 
-          export NEXT_DEPLOYMENT_ID="${GITHUB_SHA:0:16}-${GITHUB_RUN_ID}"
+          if [ -n "${NEXT_DEPLOYMENT_ID:-}" ]; then
+            echo "NEXT_DEPLOYMENT_ID is reserved for Vercel-managed Next.js runtime identity and must not be set for a prebuilt build."
+            exit 1
+          fi
+
+          export VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           echo "production_url=$NEXT_PUBLIC_APP_URL" >> "$GITHUB_OUTPUT"
           ./node_modules/.bin/vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:

@@ -35,6 +35,10 @@
 - Cloud-synchronized Codacy Opengrep completed with two unrelated workflow
   warnings and no finding in `scripts/neon/cli.ts`; both reported HTTP findings
   are cleared without scanner suppression.
+- Production prebuilt validation correctly rejected the root
+  `.env.neon.example` template after Next traced it into three functions. The
+  template moved to `scripts/neon/neon.env.example`; no tracing override or
+  forbidden upload exception was added.
 
 ## 2026-08-14 Deployment-ID Runtime Correction
 

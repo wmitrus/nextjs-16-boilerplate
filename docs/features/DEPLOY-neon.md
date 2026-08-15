@@ -282,8 +282,9 @@ Required GitHub Actions secrets:
 - `NEON_API_KEY` - preferably a project-scoped organization API key;
 - `NEON_PROJECT_ID` - the Neon project ID.
 
-For local checks, create `.env.neon` from `.env.neon.example`. This dedicated
-file keeps the management API key outside `.env.local` and the Next.js runtime:
+For local checks, create `.env.neon` from
+`scripts/neon/neon.env.example`. This dedicated file keeps the management API
+key outside `.env.local` and the Next.js runtime:
 
 ```shell
 pnpm neon:branches:list

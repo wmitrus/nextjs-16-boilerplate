@@ -148,3 +148,26 @@ workflow exporting the reserved `NEXT_DEPLOYMENT_ID` only during build. The
 correct fix is the custom build-only variable and embedded top-level
 `deploymentId` described above, not an auth change and not removal of Skew
 Protection.
+
+## Subsequent Production Tenant Configuration Incident
+
+Once function startup and AuthJS sign-in were repaired, authenticated bootstrap
+returned `?error=tenant_config`. The browser's nearby
+`/auth/bootstrap/start?_rsc=...` `404`s were speculative RSC prefetch responses,
+not the failing navigation. The actual route executed and returned `307`.
+
+Vercel runtime logs reported `TENANT_NOT_PROVISIONED`. A read-only production DB
+check proved that one complete tenant, organization, membership, roles, and
+policies already existed, while Production `DEFAULT_TENANT_ID` pointed at a
+different UUID. Migrations had completed and were not causal.
+
+The only correct repair is to align Production-only `DEFAULT_TENANT_ID` with the
+existing bootstrapped tenant and create a fresh deployment. Do not create a
+second tenant, modify AuthJS/bootstrap routes, or make single-tenant provisioning
+silently create root tenant data.
+
+Production now runs `pnpm tenant:readiness:vercel:prod` after
+`vercel build --prod` migrations and before prebuilt upload. The check is not
+copied into GitHub's Preview pre-deploy phase because Neon binds the branch DB
+during the hosted source build; a pre-upload GitHub query could validate the
+wrong database.

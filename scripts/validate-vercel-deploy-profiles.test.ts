@@ -155,7 +155,7 @@ describe('assertVercelProductionReadinessVerificationValid', () => {
   it('rejects a workflow whose inspected production deployment is not prebuilt', () => {
     expect(() =>
       assertVercelProductionReadinessVerificationValid(
-        './node_modules/.bin/vercel deploy --prebuilt --prod --dry --json\n./node_modules/.bin/vercel deploy --prod --skip-domain --yes --json\nDEPLOY_URL=$(node -e)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\n./node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
+        './node_modules/.bin/vercel build --prod\npnpm tenant:readiness:vercel:prod\n./node_modules/.bin/vercel deploy --prebuilt --prod --dry --json\n./node_modules/.bin/vercel deploy --prod --skip-domain --yes --json\nDEPLOY_URL=$(node -e)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\n./node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
       ),
     ).toThrow(
       './node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json',
@@ -165,7 +165,7 @@ describe('assertVercelProductionReadinessVerificationValid', () => {
   it('rejects a workflow that assumes inspect returns prebuilt metadata', () => {
     expect(() =>
       assertVercelProductionReadinessVerificationValid(
-        './node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json\nDEPLOY_URL=$(node -e)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\n./node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"\ndeployment.prebuilt',
+        './node_modules/.bin/vercel build --prod\npnpm tenant:readiness:vercel:prod\n./node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json\nDEPLOY_URL=$(node -e)\ninspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json\nreadyState: \'READY\'\ntarget: \'production\'\npnpm vercel:runtime:smoke\n./node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"\ndeployment.prebuilt',
       ),
     ).toThrow('must not require deployment.prebuilt');
   });
@@ -192,6 +192,7 @@ describe('assertVercelToolingAndProvenanceValid', () => {
     'if [ -n "${NEXT_DEPLOYMENT_ID:-}" ]; then exit 1; fi',
     'VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
     './node_modules/.bin/vercel build --prod',
+    'pnpm tenant:readiness:vercel:prod',
     '--meta githubCommitSha="$GITHUB_SHA"',
     'pnpm exec playwright install --with-deps chromium',
     'pnpm vercel:runtime:smoke',

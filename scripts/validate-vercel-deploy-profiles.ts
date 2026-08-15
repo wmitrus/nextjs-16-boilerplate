@@ -102,6 +102,7 @@ export function assertVercelProductionReadinessVerificationValid(
     'inspect "${{ steps.vercel_deploy.outputs.production_url }}" --wait --json',
     "readyState: 'READY'",
     "target: 'production'",
+    'pnpm tenant:readiness:vercel:prod',
     'pnpm vercel:runtime:smoke',
     './node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
   ];
@@ -123,9 +124,28 @@ export function assertVercelProductionReadinessVerificationValid(
   }
 
   const smokeIndex = workflowContent.indexOf('pnpm vercel:runtime:smoke');
+  const buildIndex = workflowContent.indexOf(
+    './node_modules/.bin/vercel build --prod',
+  );
+  const tenantReadinessIndex = workflowContent.indexOf(
+    'pnpm tenant:readiness:vercel:prod',
+  );
+  const deployIndex = workflowContent.indexOf(
+    './node_modules/.bin/vercel deploy --prebuilt --prod --skip-domain --yes --json',
+  );
   const promoteIndex = workflowContent.indexOf(
     './node_modules/.bin/vercel promote "${{ steps.vercel_deploy.outputs.production_url }}"',
   );
+  if (
+    buildIndex === -1 ||
+    tenantReadinessIndex <= buildIndex ||
+    deployIndex <= tenantReadinessIndex
+  ) {
+    throw new Error(
+      '[vercel-deploy] Production tenant readiness must run after migrations in vercel build and before the prebuilt deployment upload.',
+    );
+  }
+
   if (smokeIndex === -1 || promoteIndex <= smokeIndex) {
     throw new Error(
       '[vercel-deploy] Production must smoke-test the staged deployment before promotion.',
@@ -180,6 +200,7 @@ export function assertVercelToolingAndProvenanceValid(
     'VERCEL_PREBUILT_DEPLOYMENT_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
     '--meta githubCommitSha="$GITHUB_SHA"',
     'pnpm exec playwright install --with-deps chromium',
+    'pnpm tenant:readiness:vercel:prod',
     'pnpm vercel:runtime:smoke',
   ];
   const missing = [

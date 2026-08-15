@@ -79,3 +79,16 @@
 - Automated sign-off still requires rerunning the corrected two-test hosted
   smoke. Staged Production `filePathMap`, dry-run closure, runtime smoke, and
   clean runtime logs also remain pending.
+
+## Production Bootstrap Evidence (2026-08-15)
+
+- HAR for the active Production deployment shows the real bootstrap route
+  returning `307` to `?error=tenant_config`; the visible `404`s are prefetches.
+- Vercel logs classify the failure as `TENANT_NOT_PROVISIONED`, not a generic DB
+  error, and show the AuthJS callback/session succeeding.
+- Read-only DB counts are `users=1`, `tenants=1`, `organizations=1`,
+  `memberships=1`, `roles=2`, and `policies=10`.
+- The configured tenant hash differed from the sole database tenant hash, and no
+  organization matched the configured ID.
+- After aligning Production-only `DEFAULT_TENANT_ID` and re-pulling Vercel env,
+  the read-only readiness checker passed.

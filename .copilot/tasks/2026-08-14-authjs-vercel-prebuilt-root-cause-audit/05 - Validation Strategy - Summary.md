@@ -45,3 +45,19 @@
   pass before promotion, followed by canonical Production smoke. Runtime logs
   must contain neither the earlier missing-module error nor the new missing
   deployment-ID launcher error.
+
+## 2026-08-15 Tenant Readiness Validation
+
+- HAR evidence distinguishes speculative prefetch `404` from the real `307`
+  bootstrap decision.
+- Runtime logs prove `TENANT_NOT_PROVISIONED` and successful AuthJS callback/session
+  behavior.
+- A read-only DB snapshot proves one complete existing tenant boundary and a
+  mismatched configured tenant ID.
+- Unit acceptance: 35 focused checker/workflow tests pass with coverage disabled
+  for the focused run.
+- Static acceptance: typecheck and `pnpm vercel:deploy:validate` pass.
+- Operational acceptance: old Production env fails the new checker; corrected
+  re-pulled Production env passes.
+- Final hosted acceptance still requires a new deployment and authenticated
+  bootstrap settlement; an env update alone cannot alter the active deployment.

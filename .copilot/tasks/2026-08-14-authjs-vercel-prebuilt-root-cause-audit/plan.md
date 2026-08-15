@@ -2,11 +2,11 @@
 
 ## Status
 
-`SECOND PRODUCTION RUNTIME CORRECTION VALIDATED LOCALLY` - hosted smoke exposed
-an invalid reserved deployment-ID contract after the trace fix. Source and
-artifact guards are corrected; a fresh staged Production run remains pending.
-The current Preview gate is independently blocked before the application build
-by the Neon deployment integration action (`Resource provisioning failed`).
+`PRODUCTION TENANT DRIFT CORRECTED; FRESH DEPLOYMENT PENDING` - sign-in now
+reaches bootstrap, where a production-only `DEFAULT_TENANT_ID` mismatch was
+proved and corrected. A read-only readiness gate now blocks the same drift after
+migrations and before prebuilt upload. A fresh staged Production run remains
+pending.
 
 ## Decision Gates
 
@@ -73,6 +73,18 @@ No auth or deployment fix is accepted until these gates are satisfied:
       provider dashboard, repair the resource state, and rerun the unchanged
       Preview deployment.
 - [ ] Pass Preview hosted runtime smoke after provisioning and remote build.
+
+### F. Production Single-Tenant Readiness
+
+- [x] Correlated HAR prefetch `404` responses with the successful real route
+      execution and `tenant_config` redirect.
+- [x] Confirmed `TENANT_NOT_PROVISIONED` in Vercel runtime logs.
+- [x] Proved the production DB has one complete tenant boundary while Vercel
+      `DEFAULT_TENANT_ID` pointed at another UUID.
+- [x] Aligned Production-only `DEFAULT_TENANT_ID` to the existing tenant.
+- [x] Added a post-migration, pre-upload read-only readiness gate and tests.
+- [ ] Run a fresh staged Production deployment and verify signed-in bootstrap
+      reaches the expected onboarding/dashboard destination.
 
 ## Workstreams
 

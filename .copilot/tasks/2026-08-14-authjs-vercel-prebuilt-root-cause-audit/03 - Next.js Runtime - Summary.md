@@ -44,3 +44,15 @@
   reserved runtime variable and do not enable runtime resolution explicitly.
 - Preview requires no matching change because Vercel owns its source build and
   runtime identity together.
+
+## 2026-08-15 Bootstrap Runtime Update
+
+- The HAR's `404` responses were RSC prefetch requests matched to `/404`; they
+  were not the failing navigation.
+- The actual `/auth/bootstrap/start` RSC request matched the route, executed the
+  Node function, and returned `307` to `?error=tenant_config`.
+- Runtime logs then identified `TENANT_NOT_PROVISIONED`; therefore no App Router,
+  PPR, route packaging, or migration change is justified.
+- Production readiness runs after `vercel build --prod` completes migrations and
+  before prebuilt upload. Preview does not use the same GitHub-side check because
+  its branch DB is selected during the hosted source build.

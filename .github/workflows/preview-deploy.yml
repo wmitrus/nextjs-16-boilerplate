@@ -58,6 +58,15 @@ jobs:
           APP_ENV: preview
           NODE_ENV: production
 
+      - name: Check Neon Preview Capacity
+        run: pnpm neon:preview:check -- --git-branch="$PREVIEW_GIT_BRANCH" --cleanup-obsolete
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_BRANCH_LIMIT: '10'
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+          PREVIEW_GIT_BRANCH: ${{ github.head_ref }}
+
       - name: Validate Preview Source Upload
         run: |
           pnpm vercel:deploy:validate
@@ -83,6 +92,7 @@ jobs:
           set -e
           cat /tmp/vercel-preview-deploy.json
           if [ $DEPLOY_EXIT -ne 0 ]; then
+            pnpm vercel:deploy:diagnose -- /tmp/vercel-preview-deploy.json
             exit $DEPLOY_EXIT
           fi
           DEPLOY_URL=$(node -e 'const fs=require("node:fs"); const result=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); const raw=result.deployment?.url ?? result.url; if (typeof raw !== "string" || raw.length === 0) throw new Error("Vercel deploy JSON does not contain a URL."); const url=new URL(raw.startsWith("http") ? raw : `https://${raw}`); if (url.protocol !== "https:") throw new Error("Vercel deploy URL must use HTTPS."); process.stdout.write(url.href.replace(/\/$/, ""));' /tmp/vercel-preview-deploy.json)
@@ -93,6 +103,7 @@ jobs:
           PREVIEW_GIT_BRANCH: ${{ github.event.pull_request.head.ref }}
           PREVIEW_GIT_MESSAGE: ${{ github.event.pull_request.title }}
           PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Verify Vercel Git Metadata
         run: |

@@ -53,3 +53,15 @@
 - The expected custom ID is job-scoped and the artifact must match it exactly;
   stale or constant IDs and YAML-level assignments of the reserved variable are
   covered by regression tests.
+
+## 2026-08-15 Neon Preview Capacity Guard
+
+- Added a dedicated Neon management CLI with list, preview capacity check, and
+  confirmed preview-branch deletion commands.
+- Added `.env.neon.example`; local credentials remain isolated from Next.js
+  application and build environments.
+- Preview CI now checks the Neon API before source upload. At capacity it may
+  delete only the oldest `preview/*` branch whose GitHub branch is confirmed
+  absent; otherwise it blocks without deleting anything.
+- Added deployment-profile guards and focused unit coverage for safe cleanup
+  candidate selection.

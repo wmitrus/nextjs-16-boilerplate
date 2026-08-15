@@ -69,6 +69,15 @@ behavior, and the files actually deployed.
 - Focused build/artifact, type, unit, and browser validation is defined before
   implementation.
 
+## 2026-08-15 Production Bootstrap Follow-Up
+
+After the prebuilt runtime corrections, Production sign-in succeeded but the
+post-login bootstrap redirected to `?error=tenant_config`. The follow-up scope
+is to distinguish route packaging, migrations, incomplete bootstrap data, and
+Vercel tenant-env drift using HAR, runtime logs, and read-only production DB
+evidence. No auth or tenant mutation is permitted before that evidence identifies
+one safe correction.
+
 ## Leantime
 
 - Auth incident milestone/task: `99` / `100` (`W toku`).

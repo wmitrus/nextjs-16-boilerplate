@@ -47,3 +47,19 @@
   Neon, PPR, fonts, static preloads, or the two-test smoke harness.
 - Corrective direction: embed a custom top-level ID from a non-reserved build
   variable and reject the runtime flag in generated artifacts.
+
+## 2026-08-15 Production Bootstrap Root Cause
+
+- HAR: two `/auth/bootstrap/start` `404` responses were speculative RSC
+  prefetches matched to `/404`; the real navigation matched
+  `/auth/bootstrap/start.rsc` and returned `307` to `?error=tenant_config`.
+- Vercel runtime log: provisioning failed at `tenant_upsert` with
+  `TENANT_NOT_PROVISIONED` in `TENANCY_MODE=single`.
+- Read-only Production DB check: one user, tenant, organization, membership, two
+  roles, and ten policies exist, but the configured tenant ID matched neither
+  the tenant nor organization.
+- Root cause: Production Vercel `DEFAULT_TENANT_ID` drifted from the existing
+  bootstrapped tenant. Migrations succeeded and were not causal.
+- Correct repair: align Production env to the existing tenant and redeploy. Do
+  not create a second tenant, rerun bootstrap against a non-empty DB, or alter
+  auth/bootstrap routing.

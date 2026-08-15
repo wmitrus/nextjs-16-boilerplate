@@ -71,3 +71,16 @@
   scope, and rejection of credentials, query, and fragment components.
 - A cloud-synchronized Codacy Opengrep rerun reported zero HTTP/SSRF findings;
   its two remaining findings are unrelated pre-existing workflow warnings.
+
+## 2026-08-15 Production Tenant Readiness Gate
+
+- Added `scripts/validate-tenant-readiness.ts`, a read-only Drizzle check for the
+  single-tenant runtime/data contract.
+- Added local and Vercel Production package commands.
+- Production runs the gate after `vercel build --prod` migrations and before
+  artifact validation/upload.
+- Deployment-profile validation locks in both presence and ordering of the gate.
+- Updated the admin bootstrap runbook to distinguish empty DB bootstrap from an
+  existing DB with a mismatched `DEFAULT_TENANT_ID`.
+- Production Vercel config was aligned to the one existing provisioned tenant;
+  no database rows or auth flow code were changed.

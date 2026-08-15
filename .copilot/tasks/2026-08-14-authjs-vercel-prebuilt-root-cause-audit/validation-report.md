@@ -90,3 +90,25 @@
 The corrected implementation is locally validated. The previous manual include
 failed hosted packaging and is superseded; the incident remains open until the
 new immutable Preview and Production artifacts pass the hosted gates.
+
+## 2026-08-15 Production Tenant Readiness
+
+- HAR inspection proved the visible bootstrap `404`s were speculative RSC
+  prefetches; the real route executed and returned the controlled
+  `tenant_config` redirect.
+- Vercel runtime logs proved `TENANT_NOT_PROVISIONED` after successful AuthJS
+  sign-in/session handling.
+- A read-only Production DB query proved one complete tenant boundary exists and
+  the old Vercel tenant ID did not match it.
+- The old pulled Production env failed the new checker with the intended
+  duplicate-tenant warning.
+- Production-only `DEFAULT_TENANT_ID` was aligned to the existing tenant. A fresh
+  env pull passed the checker.
+- `36` focused tenant-readiness and deployment-profile tests passed with four
+  workers and focused-run coverage disabled.
+- `pnpm typecheck`, `pnpm vercel:deploy:validate`, formatting, and
+  `git diff --check` passed.
+- No local production build was added for this scripts/workflow-only change; the
+  existing 16-worker cap and CI prebuilt build remain authoritative.
+- Pending: push the change, complete a fresh staged Production deployment, and
+  verify authenticated bootstrap settlement on the new deployment.

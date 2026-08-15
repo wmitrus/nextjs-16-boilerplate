@@ -60,3 +60,22 @@ The supported prebuilt model remains accepted. The incorrect implementation of
 its custom deployment ID is replaced by a provider-documented top-level
 `deploymentId` sourced from a non-reserved build variable. Preview remains
 source-built and requires no equivalent workaround.
+
+## 2026-08-15 Production Tenant Decision
+
+The post-login failure is not another prebuilt or AuthJS workaround case.
+Production runtime configuration pointed at a different tenant UUID than the
+single complete tenant already stored in the production DB.
+
+Accepted correction:
+
+- align Production-only `DEFAULT_TENANT_ID` to the existing tenant;
+- retain fail-closed provisioning behavior;
+- run read-only tenant readiness after Production migrations and before prebuilt
+  upload;
+- keep Preview branch DB validation deployment-scoped rather than copying this
+  Production-only GitHub preflight.
+
+Rejected corrections are creating a duplicate tenant, changing auth routes,
+making provisioning silently create single-tenant roots, or treating successful
+schema migrations as proof of operational tenant data.

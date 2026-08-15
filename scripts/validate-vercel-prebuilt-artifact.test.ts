@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  assertNextPrebuiltDeploymentIdArtifactValid,
   assertVercelPrebuiltArtifactHasNoForbiddenTraces,
   assertVercelPrebuiltArtifactHasNoEscapingTraces,
   assertVercelPrebuiltArtifactHasNextRuntimeTrace,
@@ -53,6 +54,57 @@ afterEach(async () => {
   await Promise.all(
     tempRoots.splice(0).map((root) => rm(root, { recursive: true })),
   );
+});
+
+describe('assertNextPrebuiltDeploymentIdArtifactValid', () => {
+  it('accepts an embedded custom deployment ID', () => {
+    expect(() =>
+      assertNextPrebuiltDeploymentIdArtifactValid(
+        JSON.stringify({
+          config: {
+            deploymentId: '31838476407-1',
+            experimental: { runtimeServerDeploymentId: false },
+          },
+        }),
+        '31838476407-1',
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects runtime deployment ID resolution in a prebuilt artifact', () => {
+    expect(() =>
+      assertNextPrebuiltDeploymentIdArtifactValid(
+        JSON.stringify({
+          config: {
+            deploymentId: '31838476407-1',
+            experimental: { runtimeServerDeploymentId: true },
+          },
+        }),
+        '31838476407-1',
+      ),
+    ).toThrow('would require a runtime NEXT_DEPLOYMENT_ID');
+  });
+
+  it.each([undefined, '', 'dpl_invalid', 'contains.dots', 'x'.repeat(33)])(
+    'rejects invalid custom deployment ID %s',
+    (deploymentId) => {
+      expect(() =>
+        assertNextPrebuiltDeploymentIdArtifactValid(
+          JSON.stringify({ config: { deploymentId } }),
+          typeof deploymentId === 'string' ? deploymentId : undefined,
+        ),
+      ).toThrow('valid custom deploymentId');
+    },
+  );
+
+  it('rejects a valid but stale deployment ID', () => {
+    expect(() =>
+      assertNextPrebuiltDeploymentIdArtifactValid(
+        JSON.stringify({ config: { deploymentId: 'previous-run-1' } }),
+        'current-run-1',
+      ),
+    ).toThrow('does not match the current CI run');
+  });
 });
 
 describe('validateVercelPrebuiltArtifact', () => {

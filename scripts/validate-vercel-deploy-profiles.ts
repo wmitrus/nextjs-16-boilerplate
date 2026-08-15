@@ -170,6 +170,10 @@ export function assertVercelToolingAndProvenanceValid(
     'PLAYWRIGHT_TEST_BASE_URL: ${{ needs.deploy-preview.outputs.preview_url }}',
     './node_modules/.bin/vercel deploy --yes --json',
     'if [ $DEPLOY_EXIT -ne 0 ]; then',
+    'pnpm vercel:deploy:diagnose -- /tmp/vercel-preview-deploy.json',
+    'pnpm neon:preview:check -- --git-branch="$PREVIEW_GIT_BRANCH" --cleanup-obsolete',
+    'NEON_API_KEY: ${{ secrets.NEON_API_KEY }}',
+    'NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}',
   ];
   const requiredProductionFragments = [
     'VERCEL_PREBUILT_DEPLOYMENT_ID: ${{ github.run_id }}-${{ github.run_attempt }}',

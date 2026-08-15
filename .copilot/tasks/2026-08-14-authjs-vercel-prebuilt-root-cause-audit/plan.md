@@ -2,8 +2,9 @@
 
 ## Status
 
-`CORRECTED AND VALIDATED LOCALLY` - the rejected manual trace include is
-superseded; hosted deployment proof remains pending.
+`SECOND PRODUCTION RUNTIME CORRECTION VALIDATED LOCALLY` - hosted smoke exposed
+an invalid reserved deployment-ID contract after the trace fix. Source and
+artifact guards are corrected; a fresh staged Production run remains pending.
 
 ## Decision Gates
 
@@ -38,6 +39,19 @@ No auth or deployment fix is accepted until these gates are satisfied:
       browser behavior against the identified deployment.
 - [ ] Workflow Orchestrator: synchronize this workspace and the previous Copilot
       task artifacts, then close Leantime with time logging.
+
+### D. Production Runtime Deployment ID
+
+- [x] Correlated the two hosted smoke failures with the exact Vercel function
+      launcher error.
+- [x] Reproduced Next.js enabling `runtimeServerDeploymentId` when
+      `NEXT_DEPLOYMENT_ID` is present in Vercel builder context.
+- [x] Replaced the reserved variable with
+      `VERCEL_PREBUILT_DEPLOYMENT_ID` and retained custom prebuilt Skew
+      Protection.
+- [x] Added source/workflow guards and generated-artifact validation.
+- [ ] Run a fresh staged Production deployment, pass both immutable smoke tests,
+      promote, and pass both canonical URL smoke tests.
 
 ## Workstreams
 

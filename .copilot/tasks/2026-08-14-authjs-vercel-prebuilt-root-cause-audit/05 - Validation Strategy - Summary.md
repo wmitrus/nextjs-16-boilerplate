@@ -32,3 +32,16 @@
   scenario-owned credentials, fixtures, and mutable test state.
 - The incident remains open until both deployment paths pass on a fresh
   immutable revision.
+
+## 2026-08-14 Deployment-ID Runtime Update
+
+- Added source-contract tests for custom ID wiring, reserved variable rejection,
+  explicit runtime-mode rejection, and the dashboard-env guard.
+- Added generated-artifact tests for an embedded valid custom ID, invalid IDs,
+  and `runtimeServerDeploymentId: true`.
+- Local acceptance: 74 focused tests, typecheck, profile validation, and a
+  controlled Next.js config load pass.
+- Hosted acceptance remains unchanged in principle: staged immutable smoke must
+  pass before promotion, followed by canonical Production smoke. Runtime logs
+  must contain neither the earlier missing-module error nor the new missing
+  deployment-ID launcher error.

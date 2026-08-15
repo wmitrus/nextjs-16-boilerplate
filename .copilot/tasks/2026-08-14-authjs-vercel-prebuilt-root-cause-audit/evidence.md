@@ -27,6 +27,29 @@
   violate the provider's security behavior.
 - Vercel documents custom `deploymentId` for externally built prebuilt Next.js
   deployments and staged Production through `--skip-domain` plus `promote`.
+- Vercel documents that prebuilt Skew Protection uses a custom top-level
+  `deploymentId`; it does not require a runtime `NEXT_DEPLOYMENT_ID` when the ID
+  is embedded into the build.
+
+## Production Deployment-ID Incident
+
+- GitHub Actions run `31838476407`, commit `92f76466`, produced staged
+  Production deployment `dpl_A62Nfc7pBYjGhWchmfeZMjDqpwW4`.
+- Deployment readiness was `READY` and `target=production`, but the immutable
+  hosted smoke correctly failed: `/auth/signin` never rendered the form and
+  `/api/auth/session` returned `500`.
+- Vercel runtime logs for both requests contain the same launcher failure:
+  `process.env.NEXT_DEPLOYMENT_ID is missing but runtimeServerDeploymentId is enabled`.
+- The workflow exported `NEXT_DEPLOYMENT_ID` only around `vercel build --prod`.
+  Installed Next.js 16.2.11 source shows that under Vercel builder context this
+  automatically sets `experimental.runtimeServerDeploymentId = true`; the
+  prebuilt runtime did not receive the manually created build value.
+- A controlled Next.js config load with
+  `VERCEL_PREBUILT_DEPLOYMENT_ID=local-31838476407-1` resolved
+  `deploymentId=local-31838476407-1`, left `runtimeServerDeploymentId`
+  unset, and observed no runtime `NEXT_DEPLOYMENT_ID`.
+- The font and `next.svg` preload warnings are downstream effects of the
+  incomplete page response, not the failure source.
 
 ## Local Proof
 

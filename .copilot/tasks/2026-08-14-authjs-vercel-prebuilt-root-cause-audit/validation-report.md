@@ -1,5 +1,23 @@
 # Validation Report
 
+## 2026-08-14 Deployment-ID Runtime Correction
+
+- `74` focused validator/helper tests passed.
+- `pnpm typecheck` passed.
+- `pnpm vercel:deploy:validate` passed outside the restricted IPC sandbox.
+- Controlled Next.js config load proved the corrected custom ID is embedded,
+  `runtimeServerDeploymentId` is not enabled, and no runtime
+  `NEXT_DEPLOYMENT_ID` is required.
+- The generated-artifact validator now rejects either a missing/invalid custom
+  ID, an ID that differs from the current GitHub run, or
+  `runtimeServerDeploymentId: true`.
+- A local `pnpm build` reported `cpus: 16` but made no progress for six minutes
+  after entering Turbopack compilation and was interrupted to protect WSL. It
+  is not recorded as a pass. The authoritative full prebuilt build remains the
+  fresh CI `vercel build --prod` gate.
+- ESLint remains skipped under the repository's active blocker.
+- Hosted staged and promoted Production smoke are still required before closure.
+
 ## Passed
 
 - `pnpm exec vitest run --config vitest.unit.config.ts scripts/validate-vercel-deploy-profiles.test.ts scripts/validate-vercel-prebuilt-artifact.test.ts scripts/vercel/cli.test.ts --coverage.enabled=false`: 61 tests.

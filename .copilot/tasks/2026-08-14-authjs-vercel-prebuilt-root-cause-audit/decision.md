@@ -25,7 +25,11 @@ Vercel packaging change. Neither environment alone certifies the other path.
 - `.vercelignore.prebuilt`;
 - `.vercel/output` and `filePathMap` validation;
 - dry-run upload closure and budgets;
-- unique custom `deploymentId` for skew protection;
+- unique custom `deploymentId` for skew protection, sourced only from
+  `VERCEL_PREBUILT_DEPLOYMENT_ID` and embedded during the build;
+- a hard ban on manually assigning the reserved `NEXT_DEPLOYMENT_ID` in the
+  prebuilt workflow and an artifact guard rejecting
+  `runtimeServerDeploymentId: true`;
 - staged deployment and promotion.
 
 ## Rejected Directions
@@ -39,3 +43,20 @@ Vercel packaging change. Neither environment alone certifies the other path.
 - converting every Preview to prebuilt;
 - treating a successful build/deploy status as runtime proof;
 - testing Production only after its domains have already moved.
+- exporting `NEXT_DEPLOYMENT_ID` only for `vercel build`; this activates
+  runtime resolution without providing the required runtime variable.
+
+## 2026-08-14 Production Runtime Correction
+
+Production deployment `dpl_A62Nfc7pBYjGhWchmfeZMjDqpwW4` built and deployed,
+but both hosted smoke tests failed. Vercel function logs proved that every Node
+function exited before AuthJS execution:
+
+```text
+process.env.NEXT_DEPLOYMENT_ID is missing but runtimeServerDeploymentId is enabled
+```
+
+The supported prebuilt model remains accepted. The incorrect implementation of
+its custom deployment ID is replaced by a provider-documented top-level
+`deploymentId` sourced from a non-reserved build variable. Preview remains
+source-built and requires no equivalent workaround.

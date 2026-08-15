@@ -32,3 +32,18 @@
 - Parse the pinned Vercel CLI's successful JSON before publishing a deployment
   URL.
 - Hosted Preview and staged Production evidence remain required before closure.
+
+## 2026-08-14 Production Runtime Update
+
+- Symptom: staged Production reached `READY`, `/auth/signin` retained its loading
+  shell, and `/api/auth/session` returned `500`.
+- Exact runtime evidence: Vercel logs for deployment
+  `dpl_A62Nfc7pBYjGhWchmfeZMjDqpwW4` show the launcher exiting with
+  `process.env.NEXT_DEPLOYMENT_ID is missing but runtimeServerDeploymentId is enabled`.
+- Trigger: the workflow exported `NEXT_DEPLOYMENT_ID` only during
+  `vercel build --prod`; Next.js treated it as provider-managed runtime identity
+  and generated functions requiring the same variable at startup.
+- Root cause location: Production prebuilt deployment-ID wiring, not AuthJS,
+  Neon, PPR, fonts, static preloads, or the two-test smoke harness.
+- Corrective direction: embed a custom top-level ID from a non-reserved build
+  variable and reject the runtime flag in generated artifacts.

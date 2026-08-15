@@ -1,6 +1,36 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { findOldestObsoletePreviewBranch, readNeonConfig } from './cli';
+import {
+  assertTrustedProviderUrl,
+  findOldestObsoletePreviewBranch,
+  readNeonConfig,
+} from './cli';
+
+describe('assertTrustedProviderUrl', () => {
+  it('accepts only the exact HTTPS provider endpoint', () => {
+    expect(() =>
+      assertTrustedProviderUrl(
+        new URL('https://console.neon.tech/api/v2/projects/project-1/branches'),
+        { projectId: 'project-1', provider: 'neon' },
+      ),
+    ).not.toThrow();
+  });
+
+  it.each([
+    'http://console.neon.tech/api/v2/projects/project-1/branches',
+    'https://internal.example/api/v2/projects/project-1/branches',
+    'https://console.neon.tech/api/v2/projects/project-2/branches',
+    'https://user:password@console.neon.tech/api/v2/projects/project-1/branches',
+    'https://console.neon.tech/api/v2/projects/project-1/branches?redirect=internal',
+  ])('rejects an untrusted provider URL: %s', (value) => {
+    expect(() =>
+      assertTrustedProviderUrl(new URL(value), {
+        projectId: 'project-1',
+        provider: 'neon',
+      }),
+    ).toThrow('unexpected provider API URL');
+  });
+});
 
 describe('readNeonConfig', () => {
   it('validates the dedicated Neon management environment', () => {

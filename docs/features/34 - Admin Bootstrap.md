@@ -43,6 +43,11 @@ A CLI script that creates the first admin account directly in the database — b
 | **Email pre-verified**          | No email verification step required for the bootstrap admin                                                                                        |
 | **Not in Next.js runtime**      | `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` are read only by the script — they are not in `src/core/env.ts` and not loaded into the app |
 
+The bootstrap script is intentionally conservative. When users already exist,
+it does not create another tenant or rewrite tenant ownership. Use
+`pnpm tenant:readiness:prod:local` to distinguish an empty database that needs
+bootstrap from an existing database whose `DEFAULT_TENANT_ID` is misconfigured.
+
 ---
 
 ## Required Environment Variables (Script Only)
@@ -90,6 +95,17 @@ REGISTRATION_MODE=invite-only \
 ### Vercel deployment
 
 Vercel does not provide a terminal for arbitrary command execution. The professional pattern (same as `pnpm db:migrate:prod:local`) is to run against the production database **from your local machine** with the production env vars pulled via Vercel CLI.
+
+The Production workflow runs `pnpm tenant:readiness:vercel:prod` after
+`vercel build --prod` completes its migrations and before the prebuilt artifact
+is uploaded. For `TENANCY_MODE=single`, deployment is blocked when:
+
+- `DEFAULT_TENANT_ID` does not identify a row in `tenants`
+- the identified tenant has no row in `organizations`
+
+This is a data/configuration contract, not a schema migration. A successful
+migration cannot prove that Vercel runtime configuration points at the tenant
+already bootstrapped in the target database.
 
 ### Vercel env matrix
 
@@ -159,26 +175,47 @@ Notes:
 # 2. Pull the production env locally.
 vercel env pull .env.production
 
-# 3. Add temporary bootstrap-only vars locally.
+# 3. Check whether runtime tenant config matches the target database.
+pnpm tenant:readiness:prod:local
+
+# If the check reports that tenant data already exists, inspect the single
+# production tenant in the Neon console and update Production-only
+# DEFAULT_TENANT_ID in Vercel to that existing UUID. Re-pull the env and rerun
+# the check. Do not create a second tenant to match a mistaken env value.
+
+# 4. Only for an empty database, add temporary bootstrap-only vars locally.
 echo "BOOTSTRAP_ADMIN_EMAIL=admin@company.com" >> .env.production
 echo "BOOTSTRAP_ADMIN_PASSWORD=<strong-secret>" >> .env.production
 # Optional override:
 # echo "BOOTSTRAP_ORG_NAME=Main Organization" >> .env.production
 
-# 4. Run the bootstrap script against production.
+# 5. Run the bootstrap script against production.
 pnpm bootstrap:admin:prod:local
 
-# 5. Sign in and verify /admin access.
+# 6. Confirm readiness, then sign in and verify /admin access.
+pnpm tenant:readiness:prod:local
 
-# 6. Remove the temporary local env file.
+# 7. Remove the temporary local env file.
 rm .env.production
 
-# 7. If you added bootstrap vars to Vercel itself for a one-off run,
+# 8. If you added bootstrap vars to Vercel itself for a one-off run,
 # remove BOOTSTRAP_ADMIN_PASSWORD immediately and remove the other
 # bootstrap vars too unless you intentionally keep them for a short-lived manual preview bootstrap window.
 ```
 
 **Why this works**: `DATABASE_URL` in Vercel production env points to Neon/Supabase/PlanetScale. The script connects to that same DB from your local machine — same as running migrations locally against the prod DB.
+
+### Why Preview does not run the Production preflight
+
+Preview remains a Vercel source build. The Neon integration selects or creates
+the branch-scoped database during that hosted deployment, so a GitHub-side DB
+check before source upload can observe the wrong database. Production uses a
+locally built prebuilt artifact with Production env already pulled, which gives
+the readiness check an authoritative target before upload and promotion.
+
+Do not add the Production preflight blindly to Preview CI. Validate Preview via
+its deployment-scoped migrations and hosted runtime tests. If a specific Preview
+needs an admin, use the branch-targeted manual bootstrap runbook above.
 
 **Alternative**: Set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` in Vercel → Settings → Environment Variables → **Production only**, optionally set `BOOTSTRAP_ORG_NAME`, then use a one-off Vercel CLI invocation or a deploy hook that runs once. Remove `BOOTSTRAP_ADMIN_PASSWORD` immediately after bootstrap is confirmed. Remove the remaining bootstrap vars too unless you intentionally keep them for preview-only automation.
 

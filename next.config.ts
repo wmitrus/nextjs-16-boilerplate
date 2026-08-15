@@ -9,7 +9,9 @@ const buildWorkerCpuLimit = Math.min(
   Math.max(1, (os.availableParallelism?.() ?? os.cpus().length) - 1),
 );
 
-const deploymentId = process.env.NEXT_DEPLOYMENT_ID?.slice(0, 32);
+// Prebuilt Vercel deployments need a build-stable custom ID. Keep it separate
+// from Next.js' reserved runtime NEXT_DEPLOYMENT_ID contract.
+const deploymentId = process.env.VERCEL_PREBUILT_DEPLOYMENT_ID;
 
 const nextConfig: NextConfig = {
   cacheComponents: true,

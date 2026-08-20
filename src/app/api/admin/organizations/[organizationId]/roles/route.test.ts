@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
+  recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -62,6 +63,10 @@ vi.mock(
   }),
 );
 
+vi.mock('@/security/actions/record-admin-audit-event', () => ({
+  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+}));
+
 function makeRequest(body?: unknown) {
   return new NextRequest(
     `http://localhost/api/admin/organizations/${ORG_ID}/roles`,
@@ -76,6 +81,22 @@ function makeRequest(body?: unknown) {
 function makeContext(organizationId: string = ORG_ID) {
   return { params: Promise.resolve({ organizationId }) };
 }
+
+const ACTIVE_ORG = {
+  organization: {
+    id: ORG_ID,
+    name: 'Acme HQ',
+    slug: 'acme-hq',
+    status: 'active',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  stats: {
+    memberCount: 2,
+    roleCount: 2,
+    pendingInvitationCount: 0,
+    policyCount: 4,
+  },
+};
 
 describe('POST /api/admin/organizations/[organizationId]/roles', () => {
   beforeEach(() => {
@@ -127,5 +148,72 @@ describe('POST /api/admin/organizations/[organizationId]/roles', () => {
 
     expect(response.status).toBe(409);
     expect(mocks.createCustomRole).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when the caller is not an organizations admin', async () => {
+    mocks.authzService.can.mockResolvedValue(false);
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      makeRequest({ name: 'auditor' }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.createCustomRole).not.toHaveBeenCalled();
+  });
+
+  it('creates a role for an active organization and records the audit event', async () => {
+    mocks.readService.getDetailInActiveScope.mockResolvedValue(ACTIVE_ORG);
+    const createdRole = {
+      id: '25000000-0000-4000-8000-000000000001',
+      organizationId: ORG_ID,
+      name: 'auditor',
+      isSystem: false,
+    };
+    mocks.createCustomRole.mockResolvedValue(createdRole);
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      makeRequest({ name: 'auditor' }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { data: { role: unknown } };
+    expect(body.data.role).toEqual(createdRole);
+    expect(mocks.createCustomRole).toHaveBeenCalledWith({
+      organizationId: ORG_ID,
+      name: 'auditor',
+    });
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'rbac_policy',
+        action: 'role.create',
+        outcome: 'success',
+        tenantId: 'tenant-acme',
+        actorUserId: 'admin-1',
+        targetType: 'role',
+        targetId: createdRole.id,
+      }),
+    );
+  });
+
+  it('returns 409 when the mutation service reports a duplicate role name', async () => {
+    mocks.readService.getDetailInActiveScope.mockResolvedValue(ACTIVE_ORG);
+    const { DuplicateRoleNameError } =
+      await import('@/modules/authorization/domain/errors');
+    mocks.createCustomRole.mockRejectedValue(
+      new DuplicateRoleNameError('auditor'),
+    );
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      makeRequest({ name: 'auditor' }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(409);
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
   });
 });

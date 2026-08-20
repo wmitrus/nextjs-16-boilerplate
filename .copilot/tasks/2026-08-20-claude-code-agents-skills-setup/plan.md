@@ -13,9 +13,11 @@ Codex's shape).
 below): `.agents/skills/` actually contains 20 directories, not 19.** The
 20th is `leantime-integration`, which `.agents/README.md`'s own skill
 inventory omits, and which `intake.md`'s Out Of Scope section incorrectly
-assumed didn't exist for Codex either. Not yet acted on — flagged for a
-scope decision before proceeding further, per `AGENTS.md`'s "trust the
-code, report the drift explicitly, do not silently reconcile" rule.
+assumed didn't exist for Codex either. **Resolved**: ported
+`.claude/skills/leantime-integration/SKILL.md` (diff-clean, same rule set —
+rules 2 and 4 correctly no-op since this file has no "Compatibility Notes"
+section to begin with). `intake.md` updated to record the correction rather
+than pretend it was always in scope. 20 of 20 skills now ported.
 
 ## Docs vs Code Drift Found (Not Yet Acted On)
 
@@ -90,6 +92,9 @@ content drift, diff-verified against source for all 9):
 - [x] `.claude/skills/playwright-e2e/SKILL.md`
 - [x] `.claude/skills/workflow-orchestrator/SKILL.md`
 - [x] `.claude/skills/task-brief-authoring/SKILL.md`
+- [x] `.claude/skills/leantime-integration/SKILL.md` (drift correction —
+      added after Phase 3's inventory check found it missing from
+      `.agents/README.md`'s own inventory; see "Docs vs Code Drift Found")
 
 Workflow skills (Phase 3) — **DONE**, all 10 ported and diff-verified clean
 against Codex source (same rule set as Phase 2; only

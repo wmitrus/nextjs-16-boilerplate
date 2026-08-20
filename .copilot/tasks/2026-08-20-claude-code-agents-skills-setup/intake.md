@@ -59,10 +59,15 @@ not real parity:
   context, closer to how Codex actually operates) is the direct analog to
   what already exists; whether isolated-context subagents add value on top
   is a follow-up decision, not part of this task (see Open Questions).
-- Adding Leantime Integration (10) or Leantime Strategy (11) as a Claude
-  skill. Neither has a Codex skill counterpart today either — that's an
-  existing gap in the Codex layer, not something to invent net-new for
-  Claude ahead of the other tools.
+- ~~Adding Leantime Integration (10) or Leantime Strategy (11) as a Claude
+  skill. Neither has a Codex skill counterpart today either~~ — **corrected
+  during Phase 3**: `.agents/skills/leantime-integration/SKILL.md` does
+  exist (it's simply missing from `.agents/README.md`'s own inventory,
+  which is docs-vs-code drift in that file, not this task's doing). Leantime
+  Integration (10) was therefore ported in-scope after all, consistent with
+  this task's own inclusion rule ("port what already exists for Codex"). See
+  `plan.md`'s "Docs vs Code Drift Found" section. Leantime Strategy (11)
+  genuinely has no Codex skill and remains out of scope.
 - Adding a Claude entry point for Workflow 09 (Architecture Lint). It has no
   Codex skill and no Copilot prompt today; carrying that same gap forward is
   consistent with "port what exists," not "fix pre-existing gaps in other
@@ -73,7 +78,8 @@ not real parity:
 ## Requirements
 
 1. One `.claude/skills/<name>/SKILL.md` per existing `.agents/skills/<name>/SKILL.md`
-   (19 total), each declaring `name` + `description` frontmatter so Claude's
+   (20 total — see the Phase 3 drift correction above), each declaring
+   `name` + `description` frontmatter so Claude's
    `Skill` tool can select it, and each pointing back at the shared
    `docs/ai/general/` source as the authoritative content.
 2. Each ported skill's "Compatibility Notes" section lists all locations to
@@ -107,7 +113,7 @@ not real parity:
 
 ## Acceptance Criteria
 
-- [ ] 19 `.claude/skills/*/SKILL.md` files exist, one per existing Codex
+- [ ] 20 `.claude/skills/*/SKILL.md` files exist, one per existing Codex
       skill, each valid per Claude Code's `SKILL.md` frontmatter contract.
 - [ ] `docs/ai/claude/README.md` exists and lists every ported skill with a
       one-line "use when" description and a link to its shared source.

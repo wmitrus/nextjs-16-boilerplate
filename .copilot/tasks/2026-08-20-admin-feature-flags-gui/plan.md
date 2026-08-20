@@ -2,48 +2,43 @@
 
 ## Status
 
-**SPECIALIST SEQUENCE COMPLETE — all 3 GO.** Architecture Guard, Security/Auth,
-Next.js Runtime all reviewed. Consolidated constraint summary below.
-Awaiting user go-ahead on implementation plus the one escalated question
-(audit depth) before proceeding to Step 6.
+**COMPLETE.** All 3 specialist reviews GO, implementation done, all
+non-lint quality gates green (typecheck, unit tests, DB integration tests,
+skott, depcheck, env:check). `pnpm lint --fix` skipped per the documented
+2026-08-14 blocker — run it once before merge if the blocker has lifted.
+Full detail in `04 - Implementation Agent - Summary.md`.
 
 ## Consolidated Constraint Summary (Step 5)
 
 **Architecture:**
+
 1. New `DrizzleFeatureFlagAdminService` — separate class, no
    `core/contracts` interface, no DI token, directly instantiated in route
    handlers. `FeatureFlagService` and its 3 adapters stay untouched.
 2. New `RESOURCES.FEATURE_FLAG` + `ACTIONS.FEATURE_FLAG_READ`/`_MANAGE` in
    `resources-actions.ts`.
 
-**Security/Auth:**
-3. `seed.ts`: add both new actions to the `acmeOwner`/`globexOwner` policy
-   entries only (alongside their existing `SECURITY_*` grant) — not to
-   `member`.
-4. Gating per-operation: `FEATURE_FLAG_READ` for GET, `FEATURE_FLAG_MANAGE`
-   for POST/PATCH/DELETE — mirrors `users/[id]/route.ts`, not one blanket
-   check per route file.
-5. Mutations logged via `logger.info({event: 'admin:feature_flag_*', ...})`
-   — not `logActionAudit()`.
-6. `[id]`-param routes must `z.uuid()`-parse before use in a Drizzle
-   predicate (SEC-23).
-7. Cross-tenant visibility in the list view is correct as designed — do
-   not scope to the admin's own tenant.
-8. **OPEN, escalated to user**: audit depth for flag mutations. Default
-   recommendation is log-only (matches existing precedent for all admin
-   mutations in this repo) — will proceed with that default unless told
-   otherwise.
+**Security/Auth:** 3. `seed.ts`: add both new actions to the `acmeOwner`/`globexOwner` policy
+entries only (alongside their existing `SECURITY_*` grant) — not to
+`member`. 4. Gating per-operation: `FEATURE_FLAG_READ` for GET, `FEATURE_FLAG_MANAGE`
+for POST/PATCH/DELETE — mirrors `users/[id]/route.ts`, not one blanket
+check per route file. 5. Mutations logged via `logger.info({event: 'admin:feature_flag_*', ...})`
+— not `logActionAudit()`. 6. `[id]`-param routes must `z.uuid()`-parse before use in a Drizzle
+predicate (SEC-23). 7. Cross-tenant visibility in the list view is correct as designed — do
+not scope to the admin's own tenant. 8. **RESOLVED by user**: audit depth for flag mutations stays log-only
+(`logger.info`), matching existing precedent. User explicitly deferred
+building a real persisted/queryable audit trail — that requires its own
+planning pass (tooling review vs. keeping logs in a DB, cost analysis)
+and is out of scope for this task and for the near-term "Security"
+admin card both.
 
-**Next.js Runtime:**
-9. `feature-flags/page.tsx` — thin RSC shell (metadata + log context +
-   render client component), no `connection()`, no `getAppContainer()`,
-   mirrors `users/page.tsx`.
-10. `env.FEATURE_FLAG_PROVIDER` is read in the `GET` route handler,
-    returned as `activeProvider` in the response payload — not read in the
-    page component (corrects the original phrasing of Architecture Guard's
-    constraint #4 above).
-11. Route handlers: `withErrorHandler(withNodeProvisioning(...))`,
-    `await connection()` first — mirrors `invitations/route.ts`.
+**Next.js Runtime:** 9. `feature-flags/page.tsx` — thin RSC shell (metadata + log context +
+render client component), no `connection()`, no `getAppContainer()`,
+mirrors `users/page.tsx`. 10. `env.FEATURE_FLAG_PROVIDER` is read in the `GET` route handler,
+returned as `activeProvider` in the response payload — not read in the
+page component (corrects the original phrasing of Architecture Guard's
+constraint #4 above). 11. Route handlers: `withErrorHandler(withNodeProvisioning(...))`,
+`await connection()` first — mirrors `invitations/route.ts`.
 
 **Explicitly allowed implementation scope:** everything listed in
 `intake.md`'s Requirements/Scenarios, using the file shape below.
@@ -121,11 +116,13 @@ gathered.
 
 - [x] Architecture Guard review
 - [x] Security/Auth review
-- [ ] Next.js Runtime review
-- [ ] Constraint summary
-- [ ] Implementation
-- [ ] Validation
-- [ ] Flip `/admin/page.tsx` card status to `active`
+- [x] Next.js Runtime review
+- [x] Constraint summary
+- [x] Implementation
+- [x] Validation (typecheck, unit, DB integration, skott, depcheck, env:check
+      all green; lint skipped per documented blocker; see
+      `04 - Implementation Agent - Summary.md`)
+- [x] Flip `/admin/page.tsx` card status to `active`
 
 ## Planned Artifacts
 

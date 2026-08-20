@@ -149,6 +149,15 @@ const POLICIES = [
     conditions: {},
   },
   {
+    id: '30000000-0000-4000-8000-000000000016',
+    organizationId: ORGS.acmeHq.id,
+    roleId: ROLES.acmeOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.FEATURE_FLAG,
+    actions: [ACTIONS.FEATURE_FLAG_READ, ACTIONS.FEATURE_FLAG_MANAGE],
+    conditions: {},
+  },
+  {
     id: '30000000-0000-4000-8000-000000000006',
     organizationId: ORGS.acmeHq.id,
     roleId: ROLES.acmeMember.id,
@@ -245,6 +254,15 @@ const POLICIES = [
     effect: 'allow' as const,
     resource: RESOURCES.SECURITY,
     actions: [ACTIONS.SECURITY_READ_AUDIT, ACTIONS.SECURITY_MANAGE_POLICIES],
+    conditions: {},
+  },
+  {
+    id: '30000000-0000-4000-8000-000000000017',
+    organizationId: ORGS.globexHq.id,
+    roleId: ROLES.globexOwner.id,
+    effect: 'allow' as const,
+    resource: RESOURCES.FEATURE_FLAG,
+    actions: [ACTIONS.FEATURE_FLAG_READ, ACTIONS.FEATURE_FLAG_MANAGE],
     conditions: {},
   },
 ];

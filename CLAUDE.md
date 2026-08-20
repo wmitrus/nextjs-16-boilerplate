@@ -32,45 +32,52 @@ For any non-trivial task, in order:
 For middleware-style behavior, request interception lives in `src/proxy.ts`,
 **not** `middleware.ts` — inspect it directly, its absence is not a finding.
 
-## Specialist Roles and Workflows — Read, Don't Assume
+## Specialist Skills and Workflows — Use `.claude/skills/`
 
 This repository defines 11 specialist reviewer/implementer roles and 11
 workflow shapes, each with a tool-neutral source under `docs/ai/general/` and
 a native runtime surface per tool (Zencoder prompt, GitHub Copilot
-`.agent.md`, Codex `SKILL.md`, ZenFlow workflow spec). **Claude Code
-currently has no dedicated `.claude/agents/` or `.claude/skills/` runtime
-surface for these roles** — that infrastructure has not been built yet (see
-"Setting Up Claude Code" below).
+`.agent.md`, Codex `SKILL.md`, ZenFlow workflow spec, **and now Claude Code
+`SKILL.md`**). `.claude/skills/` carries the Claude-native runtime surface
+for every role and workflow that has one — invoke the matching skill via the
+`Skill` tool rather than reading `docs/ai/general/` by hand. Guide layer:
+`docs/ai/claude/README.md`.
 
-Until it exists, when a task matches one of these shapes, use the `Read`
-tool to load the matching `docs/ai/general/` file directly and adopt that
-persona/checklist for the task, the same way Codex falls back to reading a
-skill file as instructions when no bound subagent identity exists:
-
-| # | Role | Source | Use when |
+| # | Role | Claude Skill | Use when |
 | - | --- | --- | --- |
-| 01 | Architecture Guard | `docs/ai/general/01 - Architecture Guard Agent.md` | modular-monolith boundaries, DI/composition, dependency direction, docs-vs-code drift |
-| 02 | Security & Auth | `docs/ai/general/02 - Security & Auth Agent.md` | auth, tenancy, trust boundaries, sensitive data |
-| 03 | Next.js Runtime | `docs/ai/general/03 - Next.js Runtime Agent.md` | App Router, route handlers, proxy, server actions, caching |
-| 04 | Implementation | `docs/ai/general/04 - Implementation Agents.md` | concrete code changes under already-established constraints |
-| 05 | Validation Strategy | `docs/ai/general/05 - Validation Strategy Agent.md` | deciding minimum safe validation scope |
-| 06 | Debug Investigation | `docs/ai/general/06 - Debug Investigation Agent.md` | ambiguous bugs, evidence gathering before remediation |
-| 07 | Playwright E2E | `docs/ai/general/07 - Playwright E2E Agent.md` | real-browser verification, scenario-mapped E2E evidence |
-| 08 | Workflow Orchestrator | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | multi-step sequencing/delegation with an existing brief |
-| 09 | Task Brief Authoring | `docs/ai/general/09 - Task Brief Authoring.md` | messy requirements needing scope/acceptance criteria first |
-| 10 | Leantime Integration | `docs/ai/general/10 - Leantime Integration Agent.md` | task lifecycle open/close (mandatory, see below) |
-| 11 | Leantime Strategy | `docs/ai/general/11 - Leantime Strategy Agent.md` | project structure for large multi-phase tasks |
+| 01 | Architecture Guard | `.claude/skills/architecture-guard/SKILL.md` | modular-monolith boundaries, DI/composition, dependency direction, docs-vs-code drift |
+| 02 | Security & Auth | `.claude/skills/security-auth/SKILL.md` | auth, tenancy, trust boundaries, sensitive data |
+| 03 | Next.js Runtime | `.claude/skills/nextjs-runtime/SKILL.md` | App Router, route handlers, proxy, server actions, caching |
+| 04 | Implementation | `.claude/skills/implementation-agent/SKILL.md` | concrete code changes under already-established constraints |
+| 05 | Validation Strategy | `.claude/skills/validation-strategy/SKILL.md` | deciding minimum safe validation scope |
+| 06 | Debug Investigation | `.claude/skills/debug-investigation/SKILL.md` | ambiguous bugs, evidence gathering before remediation |
+| 07 | Playwright E2E | `.claude/skills/playwright-e2e/SKILL.md` | real-browser verification, scenario-mapped E2E evidence |
+| 08 | Workflow Orchestrator | `.claude/skills/workflow-orchestrator/SKILL.md` | multi-step sequencing/delegation with an existing brief |
+| 09 | Task Brief Authoring | `.claude/skills/task-brief-authoring/SKILL.md` | messy requirements needing scope/acceptance criteria first |
+| 10 | Leantime Integration | `.claude/skills/leantime-integration/SKILL.md` | task lifecycle open/close (mandatory, see below) |
+| 11 | Leantime Strategy | `docs/ai/general/11 - Leantime Strategy Agent.md` | project structure for large multi-phase tasks — **no Claude (or Codex) skill exists for this role**; read the source directly |
 
-Workflow shapes (`docs/ai/general/Workflow NN - *.md`): Safe Feature (01),
-Safe Refactor (02), Security Incident (03), Incident Investigation (04),
-Auth Flow Change Review (05), Playwright E2E Validation (06), Change
-Validation (07), Repository Baseline Validation (08), Architecture Lint
-(09), Codacy Security Review (10), Codacy Findings Review (11).
+Workflow skills (`.claude/skills/<name>-workflow/SKILL.md`, neutral source
+`docs/ai/general/Workflow NN - *.md`): Safe Feature (01), Safe Refactor (02),
+Security Incident (03), Incident Investigation (04), Auth Flow Change Review
+(05), Playwright E2E Validation (06), Change Validation (07), Repository
+Baseline Validation (08), Codacy Security Review (10), Codacy Findings
+Review (11). **Architecture Lint (09) has no Claude skill** — matches Codex,
+which has none either (`.zenflow/workflows/architecture-lint.md` and the
+`docs/ai/general/` source are the only surfaces today); read the source
+directly if this workflow shape ever comes up.
 
 Use `Workflow 01 - Safe Feature` as the default for non-trivial feature work
 (cross-file behavior changes, anything touching boundaries/auth/runtime/
 caching/tests) — skip it for a genuinely small, one-or-two-file, no-security-
 impact change.
+
+Claude Code does not yet have dedicated `.claude/agents/*.md` subagent
+identities for these roles (a real, more capable delegation mechanism than
+Skills, via the `Agent` tool) — that's a deliberately deferred follow-up, not
+part of the current skill layer. Until it exists, treat multi-role work as
+sequential single-session skill invocation, the same fallback Codex uses.
+Detail: `docs/ai/claude/08 - Workflow Orchestrator Agent.md`.
 
 ## Leantime — Mandatory Agent Protocol
 
@@ -155,13 +162,17 @@ reconcile or present a doc claim as fact until it's verified in code.
 
 `AGENTS.md` maintains the authoritative table of every location agent rules
 must be propagated to (`docs/ai/general/REPOSITORY_AI_CONTEXT.md` has the
-full copy). **Claude Code is not yet a row in that table.** Until Claude Code
-gets its own runtime surface (`.claude/agents/`, `.claude/skills/`) and a
-`docs/ai/claude/` guide layer, this file is the only Claude-specific
-location — so a rule change that would normally fan out to
-`.github/agents/*.agent.md`, `.agents/skills/*/SKILL.md`, and
-`.zenflow/workflows/*.md` also needs a check against this file.
+full copy). **Claude Code is now a column in both tables**
+("Agent Numbering and File Correspondence" and "Workflow Entry Point
+Correspondence"), alongside `.claude/skills/*/SKILL.md` and `CLAUDE.md`
+itself as propagation locations in the main location-map table.
 
-When the Claude-native surfaces described above are eventually created,
-update this section and add Claude Code as a column to the propagation
-tables in `AGENTS.md` and `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
+When a role or workflow changes, propagate updates to `.claude/skills/<name>/SKILL.md`
+and its matching `docs/ai/claude/` guide file, same as every other tool
+surface — each ported skill's own "Compatibility Notes" section names the
+exact locations for that role. `.claude/agents/*.md` subagent identities do
+not exist yet (see above) — there is nothing to propagate to there until
+that follow-up phase happens.
+
+Full build history and rationale:
+`.copilot/tasks/2026-08-20-claude-code-agents-skills-setup/`.

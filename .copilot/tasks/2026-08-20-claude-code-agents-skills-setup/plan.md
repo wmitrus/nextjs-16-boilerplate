@@ -2,7 +2,9 @@
 
 ## Status
 
-**PHASES 2, 3, AND 4 COMPLETE.** All 9 specialist-role skills and all 10
+**PHASES 2 THROUGH 5 COMPLETE.** Only Phase 6 (cross-check the existing
+`docs/ai/codex/README.md`, `docs/ai/copilot/*.md`, `docs/ai/zencoder/*.md`
+guides for their own propagation-list enumerations) remains. All 9 specialist-role skills and all 10
 workflow skills are ported to `.claude/skills/` (19 total), diff-verified as
 mechanical-only against their Codex source. The frontmatter-contract risk
 noted below is resolved (confirmed against real on-disk Claude Code skills
@@ -148,17 +150,34 @@ Guide layer (Phase 4) — **DONE**:
       — matches Codex, which also has no skill/guide for it (pre-existing
       gap, not fixed here, per intake.md's Out Of Scope)
 
-Propagation table updates (Phase 5):
+Propagation table updates (Phase 5) — **DONE**:
 
-- [ ] `AGENTS.md` → "Agent Infrastructure — Where to Propagate Rules": add
-      `.claude/skills/*/SKILL.md` row
-- [ ] `AGENTS.md` → "Agent Numbering and File Correspondence": add a Claude
-      Code column
-- [ ] `docs/ai/general/REPOSITORY_AI_CONTEXT.md` → matching two tables
-- [ ] `CLAUDE.md` → "Agent Infrastructure — Propagation" section rewritten to
-      point at the new surface instead of saying it doesn't exist
+- [x] `AGENTS.md` → "Agent Infrastructure — Where to Propagate Rules": added
+      `.claude/skills/*/SKILL.md`, `CLAUDE.md`, and `docs/ai/claude/*.md`
+      rows
+- [x] `AGENTS.md` → "Agent Numbering and File Correspondence": added a
+      Claude Code Skill column (all 11 rows, `.claude/skills/leantime-integration/SKILL.md`
+      included for row 10, `—` for row 11 same as Codex)
+- [x] `AGENTS.md` → "Workflow Entry Point Correspondence": added a Claude
+      Code Skill column (all 10 rows)
+- [x] `docs/ai/general/REPOSITORY_AI_CONTEXT.md` → matching location-map
+      table (3 new rows) and both correspondence tables. Note: this file's
+      own "Agent Numbering and File Correspondence" table only ever had rows
+      01-09 (missing 10 and 11 already, independent of this task) — Claude
+      column added to the existing 9 rows as-is, row count not changed, to
+      keep this task's footprint to "add a column," not "also backfill a
+      separate pre-existing gap."
+- [x] `CLAUDE.md` → "Specialist Skills and Workflows" section now points at
+      `.claude/skills/` skill-for-skill (Skill tool, not manual `Read`); the
+      "Agent Infrastructure — Propagation" section rewritten to say Claude
+      Code is in both tables instead of saying it doesn't exist yet
 
-Cross-check (Phase 6):
+Used mechanical table edits (Python re-parsing each header/row rather than
+hand-retyping padded markdown table columns) for the two large
+correspondence tables in both files — safer against alignment/whitespace
+mismatches than manual retyping, confirmed by re-reading each result.
+
+Cross-check (Phase 6) — not started:
 
 - [ ] `docs/ai/codex/README.md` "Compatibility Notes" per-role propagation
       lists gain the new `.claude/skills/<name>/SKILL.md` path

@@ -2,14 +2,39 @@
 
 ## Status
 
-**PHASE 2 COMPLETE.** All 9 specialist-role skills are ported to
-`.claude/skills/`, diff-verified as mechanical-only against their Codex
-source. The frontmatter-contract risk noted below is resolved (confirmed
-against real on-disk Claude Code skills at `/mnt/skills/`: `name` +
-`description` [+ optional `license`], matching Codex's shape). Phase 3
-(workflow skills) has only the one sample file
-(`safe-feature-workflow`) from the earlier review step; the remaining 9
-workflow skills are not yet ported.
+**PHASES 2 AND 3 COMPLETE.** All 9 specialist-role skills and all 10
+workflow skills are ported to `.claude/skills/` (19 total), diff-verified as
+mechanical-only against their Codex source. The frontmatter-contract risk
+noted below is resolved (confirmed against real on-disk Claude Code skills
+at `/mnt/skills/`: `name` + `description` [+ optional `license`], matching
+Codex's shape).
+
+**Drift found during the Phase 3 inventory check (see "Docs vs Code Drift"
+below): `.agents/skills/` actually contains 20 directories, not 19.** The
+20th is `leantime-integration`, which `.agents/README.md`'s own skill
+inventory omits, and which `intake.md`'s Out Of Scope section incorrectly
+assumed didn't exist for Codex either. Not yet acted on — flagged for a
+scope decision before proceeding further, per `AGENTS.md`'s "trust the
+code, report the drift explicitly, do not silently reconcile" rule.
+
+## Docs vs Code Drift Found (Not Yet Acted On)
+
+`.agents/skills/` on disk has 20 skill directories. `.agents/README.md`'s
+"Skill Types" inventory lists only 19 (9 specialist + 10 workflow) and does
+not mention the 20th: `.agents/skills/leantime-integration/SKILL.md`. This
+also means `intake.md`'s Out Of Scope section is wrong where it says
+"Neither [Leantime Integration nor Leantime Strategy] has a Codex skill
+counterpart today either" — that's true for Leantime Strategy (11), not for
+Leantime Integration (10).
+
+Per the repo's own rule (trust the code over docs, report drift explicitly,
+don't silently reconcile): this is recorded here rather than fixed
+unilaterally. Practical effect: Leantime Integration (10) now fits this
+task's own stated inclusion principle ("port what already exists for
+Codex"), so porting `.claude/skills/leantime-integration/SKILL.md` is
+arguably in scope after all — a small, one-file addition using the same
+script and rules already validated in Phases 2 and 3. Not done without
+sign-off, since it changes `intake.md`'s stated scope after the fact.
 
 ## Objective
 
@@ -66,10 +91,21 @@ content drift, diff-verified against source for all 9):
 - [x] `.claude/skills/workflow-orchestrator/SKILL.md`
 - [x] `.claude/skills/task-brief-authoring/SKILL.md`
 
-Workflow skills (Phase 3) — not started, except the sample below:
+Workflow skills (Phase 3) — **DONE**, all 10 ported and diff-verified clean
+against Codex source (same rule set as Phase 2; only
+`safe-refactor-workflow` has a local propagation checklist, matching the
+earlier grep confirmation that the other 9 workflow files don't have one):
 
-- [x] `.claude/skills/safe-feature-workflow/SKILL.md` (sample, Phase 3 not
-      otherwise started)
+- [x] `.claude/skills/safe-feature-workflow/SKILL.md`
+- [x] `.claude/skills/safe-refactor-workflow/SKILL.md`
+- [x] `.claude/skills/security-incident-workflow/SKILL.md`
+- [x] `.claude/skills/incident-investigation-workflow/SKILL.md`
+- [x] `.claude/skills/auth-flow-change-review-workflow/SKILL.md`
+- [x] `.claude/skills/playwright-e2e-validation-workflow/SKILL.md`
+- [x] `.claude/skills/change-validation-workflow/SKILL.md`
+- [x] `.claude/skills/repository-baseline-validation-workflow/SKILL.md`
+- [x] `.claude/skills/codacy-security-review-workflow/SKILL.md`
+- [x] `.claude/skills/codacy-findings-review-workflow/SKILL.md`
 - [ ] `.claude/skills/safe-refactor-workflow/SKILL.md`
 - [ ] `.claude/skills/security-incident-workflow/SKILL.md`
 - [ ] `.claude/skills/incident-investigation-workflow/SKILL.md`

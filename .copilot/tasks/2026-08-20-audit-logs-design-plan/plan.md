@@ -352,8 +352,16 @@ one `AuditLogService.record()` call added at each mutation branch:
   132 tests) with new real-Postgres(PGlite) coverage for
   `DrizzleAuditLogService`. `pnpm typecheck`, `pnpm test`, `pnpm test:db`,
   `pnpm skott:check:only`, `pnpm depcheck`, `pnpm env:check` all pass.
-  `pnpm lint --fix` skipped per the still-in-force ESLint blocker;
-  `prettier --write` run directly instead. No partitioning, no purge job,
+  `pnpm lint --fix` was initially skipped per the documented blocker, then
+  actually run mid-phase on explicit user instruction that the blocker is
+  Codex-specific and does not reproduce in Claude Code's shell (confirmed:
+  it doesn't) — the resulting 3 new-code `security/detect-object-injection`
+  warnings in `src/modules/audit-log/domain/category.ts`/`.test.ts` were
+  fixed (bracket access on a `Record<AuditCategory, ...>` replaced with a
+  `Map`-backed accessor), leaving only pre-existing, unrelated warnings
+  repo-wide. The blocker note itself was narrowed to Codex-only across
+  `AGENTS.md`, `CLAUDE.md`, `docs/ai/general/REPOSITORY_AI_CONTEXT.md`, and
+  the two Claude skill files that quoted it. No partitioning, no purge job,
   and no explicit admin-route instrumentation yet — `audit_events` grows
   unbounded until Phase 4 ships retention enforcement, which is an
   accepted, deliberate risk of this phase's sequencing (Phase 1 already

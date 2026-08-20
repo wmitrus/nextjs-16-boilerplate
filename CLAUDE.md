@@ -143,13 +143,16 @@ reconcile or present a doc claim as fact until it's verified in code.
 - **Always** run `pnpm lint --fix`, never plain `pnpm lint` — it auto-fixes
   import ordering/formatting; the non-fix form only reports fixable errors
   and wastes effort. Report any errors that remain after `--fix`.
-- **Known blocker (effective 2026-08-14, still in force at last check):**
-  `pnpm lint --fix` has been hanging in the agent shell. Until this is
-  explicitly lifted, do not run `pnpm lint`, `pnpm lint --fix`, ESLint
-  directly, or any script that invokes ESLint — run the other gates and
-  report lint as skipped due to this blocker. Re-verify this note against
-  `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before trusting it long-term, in
-  case the blocker has since been cleared there.
+- **Known blocker — Codex-specific, does not apply to Claude Code (narrowed 2026-08-20):**
+  `pnpm lint --fix` was reported hanging in "the agent shell" (effective
+  2026-08-14). Confirmed 2026-08-20: this is Codex-specific — it does not
+  reproduce in Claude Code's shell (`pnpm lint --fix` runs to completion
+  normally, correct exit code). **Claude Code sessions must run
+  `pnpm lint --fix` as a normal quality gate, not skip it.** If a future
+  Claude Code run does hit a genuine hang, treat that as new evidence
+  (report it, don't just silently skip) rather than assuming this note
+  still applies. Full detail: `AGENTS.md` and
+  `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
 - **Phase-close rule**: use narrower validation mid-phase; run repo-wide
   `pnpm lint --fix` + `pnpm typecheck` before declaring a substantial phase
   complete — not after every small edit.

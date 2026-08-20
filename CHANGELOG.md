@@ -1,3 +1,11 @@
+## [1.35.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.35.0...v1.35.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* **security:** address PR [#71](https://github.com/wmitrus/nextjs-16-boilerplate/issues/71) review — derive create scope, mark unmutable rows read-only ([5e70c58](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5e70c58b0337482d7cd9d49e10d5723d93a995d4))
+* **security:** constrain feature-flag admin mutations to verified tenant scope (SEC-26) ([04a118e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/04a118e1565af742f84b401ad5063ab7d940cf58)), closes [#70](https://github.com/wmitrus/nextjs-16-boilerplate/issues/70)
+
 # [1.35.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.34.0...v1.35.0) (2026-08-20)
 
 

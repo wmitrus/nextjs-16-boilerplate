@@ -108,6 +108,14 @@ export const GET = withErrorHandler(
     return createSuccessResponse({
       flags,
       activeProvider: env.FEATURE_FLAG_PROVIDER,
+      // Lets the client render mutation controls only for rows the caller
+      // can actually mutate -- an ABAC-authorized tenant owner sees global
+      // rows (via listForTenant above) but cannot toggle/edit/delete them;
+      // without this the client has no way to know that (SEC-26 follow-up:
+      // PR #71 review).
+      scope: adminAccess.isPlatformAdmin
+        ? { isPlatformAdmin: true, tenantId: null }
+        : { isPlatformAdmin: false, tenantId: access.tenant.tenantId },
     });
   }),
 );
@@ -150,18 +158,17 @@ export const POST = withErrorHandler(
       );
     }
 
-    const requestedTenantId = parseResult.data.tenantId ?? null;
-
-    // An ABAC-authorized (non-platform-admin) caller may only create rows
-    // scoped to their own verified tenant -- never a global (`null`) row and
-    // never another tenant's row, regardless of what the request body asked
-    // for. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
-    if (
-      !adminAccess.isPlatformAdmin &&
-      requestedTenantId !== access.tenant.tenantId
-    ) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
+    // An ABAC-authorized (non-platform-admin) caller may only ever create
+    // rows scoped to their own verified tenant -- derive the scope from
+    // `access.tenant.tenantId` rather than trusting (or rejecting) the
+    // client-supplied `tenantId`. Rejecting on mismatch instead of deriving
+    // would 403 the normal "Create flag" form for these callers, since the
+    // client has no way to know its own internal tenant id ahead of time
+    // (SEC-26 follow-up: PR #71 review). Platform admins keep full control,
+    // including creating global (`null`) rows.
+    const requestedTenantId = adminAccess.isPlatformAdmin
+      ? (parseResult.data.tenantId ?? null)
+      : access.tenant.tenantId;
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleFeatureFlagAdminService(db);

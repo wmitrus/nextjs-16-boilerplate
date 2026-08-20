@@ -10,6 +10,9 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, tenantId: null };
+const TENANT_SCOPE = { isPlatformAdmin: false, tenantId: 'acme' };
+
 const FLAG = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   key: 'my-flag',
@@ -27,7 +30,13 @@ describe('FeatureFlagsClient', () => {
 
   it('lists flags and shows the active provider on load', async () => {
     vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({ data: { flags: [FLAG], activeProvider: 'db' } }),
+      jsonResponse({
+        data: {
+          flags: [FLAG],
+          activeProvider: 'db',
+          scope: PLATFORM_ADMIN_SCOPE,
+        },
+      }),
     );
 
     render(<FeatureFlagsClient />);
@@ -38,7 +47,13 @@ describe('FeatureFlagsClient', () => {
 
   it('disables mutation controls and warns when the active provider is not db', async () => {
     vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({ data: { flags: [FLAG], activeProvider: 'static' } }),
+      jsonResponse({
+        data: {
+          flags: [FLAG],
+          activeProvider: 'static',
+          scope: PLATFORM_ADMIN_SCOPE,
+        },
+      }),
     );
 
     render(<FeatureFlagsClient />);
@@ -52,11 +67,23 @@ describe('FeatureFlagsClient', () => {
   it('creates a flag and refetches the list on success', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
-        jsonResponse({ data: { flags: [], activeProvider: 'db' } }),
+        jsonResponse({
+          data: {
+            flags: [],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
+        }),
       )
       .mockResolvedValueOnce(jsonResponse({ data: { flag: FLAG } }, 201))
       .mockResolvedValueOnce(
-        jsonResponse({ data: { flags: [FLAG], activeProvider: 'db' } }),
+        jsonResponse({
+          data: {
+            flags: [FLAG],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
+        }),
       );
 
     render(<FeatureFlagsClient />);
@@ -80,7 +107,13 @@ describe('FeatureFlagsClient', () => {
   it('surfaces the duplicate-flag error message', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
-        jsonResponse({ data: { flags: [], activeProvider: 'db' } }),
+        jsonResponse({
+          data: {
+            flags: [],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse(
@@ -113,14 +146,24 @@ describe('FeatureFlagsClient', () => {
   it('toggles a flag and refetches', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
-        jsonResponse({ data: { flags: [FLAG], activeProvider: 'db' } }),
+        jsonResponse({
+          data: {
+            flags: [FLAG],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse({ data: { flag: { ...FLAG, enabled: false } } }),
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          data: { flags: [{ ...FLAG, enabled: false }], activeProvider: 'db' },
+          data: {
+            flags: [{ ...FLAG, enabled: false }],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
         }),
       );
 
@@ -143,7 +186,13 @@ describe('FeatureFlagsClient', () => {
   it('surfaces a toggle failure instead of silently reverting to On/Off', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
-        jsonResponse({ data: { flags: [FLAG], activeProvider: 'db' } }),
+        jsonResponse({
+          data: {
+            flags: [FLAG],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse({ error: 'Forbidden', code: 'FORBIDDEN' }, 403),
@@ -162,11 +211,23 @@ describe('FeatureFlagsClient', () => {
   it('deletes a flag after confirmation', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
-        jsonResponse({ data: { flags: [FLAG], activeProvider: 'db' } }),
+        jsonResponse({
+          data: {
+            flags: [FLAG],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
+        }),
       )
       .mockResolvedValueOnce(jsonResponse({ data: { deleted: true } }))
       .mockResolvedValueOnce(
-        jsonResponse({ data: { flags: [], activeProvider: 'db' } }),
+        jsonResponse({
+          data: {
+            flags: [],
+            activeProvider: 'db',
+            scope: PLATFORM_ADMIN_SCOPE,
+          },
+        }),
       );
 
     render(<FeatureFlagsClient />);
@@ -181,5 +242,77 @@ describe('FeatureFlagsClient', () => {
         expect.objectContaining({ method: 'DELETE' }),
       ),
     );
+  });
+
+  describe('SEC-26 follow-up: ABAC-authorized non-platform-admin scope', () => {
+    const ownFlag = {
+      ...FLAG,
+      id: 'own-flag-id',
+      key: 'own-flag',
+      tenantId: 'acme',
+    };
+    const globalFlag = {
+      ...FLAG,
+      id: 'global-flag-id',
+      key: 'global-flag',
+      tenantId: null,
+    };
+
+    it('marks a global row read-only and disables its mutation controls', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        jsonResponse({
+          data: {
+            flags: [ownFlag, globalFlag],
+            activeProvider: 'db',
+            scope: TENANT_SCOPE,
+          },
+        }),
+      );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('own-flag');
+      await screen.findByText('global-flag');
+
+      expect(screen.getByText(/read-only/i)).toBeInTheDocument();
+
+      const toggleButtons = screen.getAllByRole('button', {
+        name: /^(On|Off)$/,
+      });
+      // Own-tenant row's toggle stays enabled; the global row's is disabled.
+      expect(toggleButtons.some((btn) => !btn.hasAttribute('disabled'))).toBe(
+        true,
+      );
+      expect(toggleButtons.some((btn) => btn.hasAttribute('disabled'))).toBe(
+        true,
+      );
+
+      const editButtons = screen.getAllByRole('button', { name: 'Edit' });
+      expect(editButtons.some((btn) => btn.hasAttribute('disabled'))).toBe(
+        true,
+      );
+      const deleteButtons = screen.getAllByRole('button', { name: 'Delete' });
+      expect(deleteButtons.some((btn) => btn.hasAttribute('disabled'))).toBe(
+        true,
+      );
+    });
+
+    it("locks the create form's Tenant ID field to the caller's own tenant", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        jsonResponse({
+          data: { flags: [], activeProvider: 'db', scope: TENANT_SCOPE },
+        }),
+      );
+
+      render(<FeatureFlagsClient />);
+      await waitFor(() =>
+        expect(screen.getByText('No feature flags found.')).toBeInTheDocument(),
+      );
+
+      const tenantInput = screen.getByLabelText(
+        'Tenant ID (your tenant)',
+      ) as HTMLInputElement;
+      expect(tenantInput).toBeDisabled();
+      expect(tenantInput.value).toBe('acme');
+    });
   });
 });

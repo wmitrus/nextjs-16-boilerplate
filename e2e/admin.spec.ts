@@ -123,6 +123,11 @@ test.describe('Admin Hub (/admin)', () => {
           name: /rbac & policies review and manage/i,
         }),
       ).toBeVisible();
+      await expect(
+        authedPage.getByRole('link', {
+          name: /feature flags toggle features/i,
+        }),
+      ).toBeVisible();
     });
 
     authTest(
@@ -630,6 +635,115 @@ test.describe('Admin Organizations (/admin/organizations)', () => {
         await expect(
           currentAdminRow.getByText(/current role:\s*owner/i),
         ).toBeVisible();
+      },
+    );
+  });
+});
+
+test.describe('Admin Feature Flags (/admin/feature-flags)', () => {
+  test('redirects unauthenticated users away from /admin/feature-flags', async ({
+    page,
+  }) => {
+    await page.goto('/admin/feature-flags');
+    await expect(page).not.toHaveURL(/\/admin\/feature-flags/);
+  });
+
+  authTest.describe('authenticated admin (AuthJS)', () => {
+    authTest.skip(
+      !isAuthjs,
+      'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
+    );
+
+    authTest(
+      'feature flags page loads without error boundary',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/feature-flags');
+        await expect(
+          authedPage.getByText(/something went wrong/i),
+        ).not.toBeVisible();
+        await expect(authedPage).toHaveURL(/\/admin\/feature-flags/);
+      },
+    );
+
+    authTest('feature flags page has correct title', async ({ authedPage }) => {
+      await authedPage.goto('/admin/feature-flags');
+      await expect(authedPage).toHaveTitle(/feature flags.*administration/i);
+    });
+
+    authTest(
+      'feature flags page shows the active provider',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/feature-flags');
+        await expect(authedPage.getByText(/active provider:/i)).toBeVisible();
+      },
+    );
+  });
+
+  // Requires FEATURE_FLAG_PROVIDER=db in the scenario env -- mutations
+  // against the feature_flags table only take effect under that provider,
+  // and the admin page correctly disables Create/Edit/Delete otherwise (see
+  // FeatureFlagsClient.tsx / 01 - Architecture Guard - Summary.md's binding
+  // constraint #3). The default E2E scenario env does not set
+  // FEATURE_FLAG_PROVIDER, so it defaults to 'static' and this whole
+  // sub-suite skips rather than asserting against disabled controls.
+  authTest.describe('authenticated admin (AuthJS), db provider', () => {
+    authTest.skip(
+      !isAuthjs,
+      'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
+    );
+    authTest.skip(
+      process.env['FEATURE_FLAG_PROVIDER'] !== 'db',
+      'Set FEATURE_FLAG_PROVIDER=db to exercise the create/toggle/delete cycle against real mutations.',
+    );
+
+    authTest(
+      'creates, toggles, and deletes a feature flag',
+      async ({ authedPage }) => {
+        await authedPage.goto('/admin/feature-flags');
+
+        const flagKey = `e2e-flag-${Date.now().toString()}`;
+
+        const createResponsePromise = authedPage.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            /\/api\/admin\/feature-flags$/.test(response.url()),
+        );
+
+        await authedPage.getByLabel('Key').fill(flagKey);
+        await authedPage.getByRole('button', { name: 'Create flag' }).click();
+
+        const createResponse = await createResponsePromise;
+        expect(createResponse.status()).toBe(201);
+
+        const flagRow = authedPage
+          .locator('tr')
+          .filter({ has: authedPage.getByText(flagKey, { exact: true }) });
+        await expect(flagRow).toBeVisible();
+
+        const toggleResponsePromise = authedPage.waitForResponse(
+          (response) =>
+            response.request().method() === 'PATCH' &&
+            /\/api\/admin\/feature-flags\/[^/]+$/.test(response.url()),
+        );
+        await flagRow.getByRole('button', { name: /^(on|off)$/i }).click();
+        const toggleResponse = await toggleResponsePromise;
+        expect(toggleResponse.status()).toBe(200);
+
+        await flagRow.getByRole('button', { name: 'Delete' }).click();
+        const deleteResponsePromise = authedPage.waitForResponse(
+          (response) =>
+            response.request().method() === 'DELETE' &&
+            /\/api\/admin\/feature-flags\/[^/]+$/.test(response.url()),
+        );
+        await flagRow.getByRole('button', { name: 'Yes' }).click();
+        const deleteResponse = await deleteResponsePromise;
+        expect(deleteResponse.status()).toBe(200);
+
+        await expect(
+          authedPage
+            .locator('tr')
+            .filter({ has: authedPage.getByText(flagKey, { exact: true }) }),
+        ).toHaveCount(0);
       },
     );
   });

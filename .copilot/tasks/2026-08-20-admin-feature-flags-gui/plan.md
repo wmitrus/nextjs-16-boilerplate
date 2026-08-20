@@ -2,11 +2,20 @@
 
 ## Status
 
-**COMPLETE.** All 3 specialist reviews GO, implementation done, all
-non-lint quality gates green (typecheck, unit tests, DB integration tests,
-skott, depcheck, env:check). `pnpm lint --fix` skipped per the documented
-2026-08-14 blocker — run it once before merge if the blocker has lifted.
-Full detail in `04 - Implementation Agent - Summary.md`.
+**IMPLEMENTATION COMPLETE, ONE REAL GAP OPEN BEFORE MERGE.** All 3 design
+specialists GO, implementation done, all quality gates green including a
+full repo-wide `pnpm lint --fix` (0 errors — the documented 2026-08-14
+blocker did **not** reproduce in this session, worth re-confirming/
+clearing that doc note separately). Validation Strategy identified a real
+E2E-parity gap against every other admin surface; the spec is written,
+typechecked, and lint-clean, but **actual execution is blocked in this
+sandbox by missing Clerk E2E fixture credentials** — a pre-existing
+environment gap, not a defect in this feature. Must be run with real
+credentials (`AUTH_PROVIDER=authjs node scripts/e2e/run-scenario.mjs single -- e2e/admin.spec.ts --grep "Feature Flags"`)
+before this is genuinely merge-ready. Full detail in
+`04 - Implementation Agent - Summary.md`,
+`05 - Validation Strategy - Summary.md`,
+`07 - Playwright E2E - Summary.md`.
 
 ## Consolidated Constraint Summary (Step 5)
 
@@ -123,6 +132,14 @@ gathered.
       all green; lint skipped per documented blocker; see
       `04 - Implementation Agent - Summary.md`)
 - [x] Flip `/admin/page.tsx` card status to `active`
+- [x] Validation Strategy pass (Step 7 close-out) — identified E2E parity
+      gap vs. every other admin surface, see
+      `05 - Validation Strategy - Summary.md`
+- [x] E2E spec written (`e2e/admin.spec.ts`), typechecked, lint-clean —
+      **execution BLOCKED in this sandbox** by missing Clerk E2E fixture
+      credentials (pre-existing environment gap, not a defect in this
+      feature); must be run with real credentials before merge. See
+      `07 - Playwright E2E - Summary.md`.
 
 ## Planned Artifacts
 

@@ -11,26 +11,27 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                   | Classification             | Affected Contexts             |
-| ------ | ------------------ | ----------------------------------------------------- | -------------------------- | ----------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks              | False positive             | Unit test files               |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin   | False positive             | Middleware                    |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param  | Latent risk → fixed        | Middleware                    |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`             | False positive → hardened  | API route                     |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths              | False positive             | E2E helpers                   |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness             | False positive             | E2E specs                     |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config   | Real risk → fixed          | Module-level SDK adapters     |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`        | Latent risk                | Auth/bootstrap UI mapping     |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement        | Latent risk                | Runtime logger helpers        |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop   | Real risk → fixed          | Rate-limit middleware         |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers         | Local lint-backed workflow | Scripts, E2E helpers          |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling   | Local lint-backed workflow | Scripts, E2E helpers          |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...` | AI-pattern backed workflow | `src/**` runtime helpers      |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting    | Real risk → fixed          | Public auth route handlers    |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges | Real risk → fixed          | Email adapters, auth bridges  |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                | Real risk → fixed          | App Router route handlers     |
-| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                     | Not security by itself     | UI state, JSX handlers, tests |
-| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift    | Real risk → fixed          | CI/CD, Vercel, AuthJS env     |
+| #      | Category           | Vulnerability Class                                     | Classification             | Affected Contexts                  |
+| ------ | ------------------ | ------------------------------------------------------- | -------------------------- | ---------------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                | False positive             | Unit test files                    |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin     | False positive             | Middleware                         |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param    | Latent risk → fixed        | Middleware                         |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`               | False positive → hardened  | API route                          |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                | False positive             | E2E helpers                        |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness               | False positive             | E2E specs                          |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config     | Real risk → fixed          | Module-level SDK adapters          |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`          | Latent risk                | Auth/bootstrap UI mapping          |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement          | Latent risk                | Runtime logger helpers             |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop     | Real risk → fixed          | Rate-limit middleware              |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers           | Local lint-backed workflow | Scripts, E2E helpers               |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling     | Local lint-backed workflow | Scripts, E2E helpers               |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`   | AI-pattern backed workflow | `src/**` runtime helpers           |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting      | Real risk → fixed          | Public auth route handlers         |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges   | Real risk → fixed          | Email adapters, auth bridges       |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                  | Real risk → fixed          | App Router route handlers          |
+| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                       | Not security by itself     | UI state, JSX handlers, tests      |
+| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift      | Real risk → fixed          | CI/CD, Vercel, AuthJS env          |
+| SEC-26 | Authorization      | ABAC action check without matching resource-scope check | Real risk → fixed          | Admin CRUD route handlers/services |
 
 ---
 
@@ -1525,3 +1526,133 @@ That would recreate Codacy noise locally. This pattern is enforced primarily thr
 **DO NOT** default to repeated `result[key] = ...` or `plainObject[key]` mutation chains in `src/**` runtime helpers when an entries-based transform, `Map`, or explicit `switch` would express the same behavior more clearly.
 
 **DO** use entries-based transforms, `Map`, or explicit `switch` helpers to keep Phase 2 object-access churn out of future Codacy runs.
+
+---
+
+## SEC-26 — ABAC Action Checks Must Also Constrain Resource Scope, Not Just Action Type
+
+**ID**: SEC-26
+**Category**: Authorization / tenancy
+**Classification**: Real risk — shipped to `main` in the Admin Feature Flags GUI PR (#70), caught post-merge by automated review, fixed as a follow-up
+**Affected contexts**: any admin/tenant-scoped route handler or service where authorization is granted via an ABAC/RBAC policy check (`AuthorizationService.can()` or equivalent) rather than exclusively via a platform-wide admin override
+
+### Risk
+
+`checkAdminAccess()`-style helpers in this repository correctly branch on two distinct
+grants: an environment-based platform admin override (`isEnvBasedPlatformAdmin(email)`,
+which is intentionally unscoped — full access by design) and an ABAC policy check
+(`authzService.can({ tenant: { tenantId: access.tenant.tenantId }, ... })`, which is
+scoped to the caller's own tenant by construction). Both paths return the same boolean.
+
+That boolean answers **"is this action type allowed for this subject"** — it does not
+answer **"is this specific record, tenant, or scope allowed for this subject."** When
+the mutation itself accepts a client-supplied scope identifier (a `tenantId` in the
+request body, an `id` path param naming a row that may belong to another tenant or be
+global) and passes it straight into the DB write without cross-checking it against the
+verified `access.tenant.tenantId`, an ABAC-authorized tenant owner inherits the same
+practical reach as a platform admin — silently, for any resource type the pattern is
+copied to.
+
+This is not the SEC-23 "raw route param into a UUID predicate" defect (SEC-23 is about
+input _validity_; SEC-26 is about input _authority_, even when the ID is a syntactically
+valid, real row). Both can be present in the same route handler.
+
+### Dangerous Pattern
+
+```typescript
+// POST /api/admin/feature-flags
+const isAdmin = await checkAdminAccess(
+  access.identity.email,
+  access.user.id,
+  access.tenant.tenantId,
+  container,
+  ACTIONS.FEATURE_FLAG_MANAGE,
+);
+if (!isAdmin) return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+
+// isAdmin only proves "can this subject manage feature flags", not "for which tenant".
+// A tenant-owner (ABAC path, not platform admin) can still request tenantId: null
+// (global) or another tenant's ID here — the check above never looked at it.
+const flag = await service.create({
+  key: parseResult.data.key,
+  tenantId: parseResult.data.tenantId ?? null, // client-supplied, unconstrained
+  enabled: parseResult.data.enabled,
+  description: parseResult.data.description ?? null,
+});
+```
+
+```typescript
+// PATCH/DELETE /api/admin/feature-flags/[id]
+// Same isAdmin gate as above, then:
+await service.update(idResult.data.id, input); // predicate matches `id` alone —
+// any row's ID reachable via GET can be mutated once *any* MANAGE grant exists,
+// regardless of which tenant that grant was scoped to.
+```
+
+### Correct Pattern
+
+Distinguish the two grant shapes explicitly and constrain the mutation's scope to what
+was actually verified. Platform admins keep full cross-tenant/global reach (that is the
+intended, audited exception); ABAC-authorized callers do not.
+
+```typescript
+const isPlatformAdmin = isEnvBasedPlatformAdmin(access.identity.email);
+const isTenantAuthorized =
+  isPlatformAdmin ||
+  (await authzService.can({
+    tenant: { tenantId: access.tenant.tenantId },
+    subject: { id: access.user.id },
+    resource: { type: RESOURCES.FEATURE_FLAG, id: 'admin-panel' },
+    action: ACTIONS.FEATURE_FLAG_MANAGE,
+  }));
+
+if (!isTenantAuthorized) {
+  return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+}
+
+const requestedTenantId = parseResult.data.tenantId ?? null;
+if (!isPlatformAdmin && requestedTenantId !== access.tenant.tenantId) {
+  // ABAC-authorized callers may only act within their own verified tenant —
+  // never a global (null) row and never another tenant's row.
+  return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+}
+
+const flag = await service.create({
+  key: parseResult.data.key,
+  tenantId: requestedTenantId,
+  enabled: parseResult.data.enabled,
+  description: parseResult.data.description ?? null,
+});
+```
+
+For `[id]`-keyed mutations, load the row first (or add the tenant predicate directly to
+the `update`/`delete` `where` clause) and compare its `tenantId` against
+`access.tenant.tenantId` before mutating, unless the caller is a platform admin.
+
+### Required Validation
+
+Every ABAC-gated admin mutation that accepts a scope identifier (a body `tenantId`, an
+org/tenant field, or an `id` naming a row that carries tenant ownership) must have a
+regression test proving: an ABAC-authorized-but-not-platform-admin caller who supplies
+a foreign or global scope is rejected (`403`), not merely that an unauthorized caller
+with no grant at all is rejected. A test that only exercises "no grant → 403" and
+"platform admin → 200" leaves this exact gap uncovered.
+
+### Rule for Agents
+
+**DO** derive the mutation's tenant/resource scope from the server-verified access
+context (`access.tenant.tenantId` or an equivalent verified claim), not from a
+client-supplied identifier, whenever the grant came from an ABAC/RBAC policy check
+rather than an unscoped platform-admin override.
+
+**DO** write both grant paths (unscoped platform-admin vs. scoped ABAC) as explicitly
+different code paths with different reach, when a route/service supports both.
+
+**DO NOT** treat "the ABAC action check returned true" as sufficient authorization for
+an arbitrary client-supplied scope or record ID. An action-type grant is not a
+resource-scope grant.
+
+**DO NOT** assume this is covered by existing "authorization must be enforced
+server-side" review — that catches missing checks, not checks that are present but too
+coarse. Ask explicitly: "authorized to do X in general, or authorized to do X to
+_this_ tenant/record?"

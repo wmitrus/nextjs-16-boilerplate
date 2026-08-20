@@ -128,6 +128,7 @@ Always flag these if present:
 - Codacy HIGH error-prone TypeScript/JSX findings signed off without checking whether the fix preserved runtime absence handling, async handler error handling, mock behavior, and finite-domain schema narrowing (SEC-24)
 - cache-sensitive or env-sensitive flows with no runtime-sensitive validation
 - deploy/build fixes that make CI pass while leaving a different or missing deployed runtime env contract, especially auth/provider URLs, DB URLs, tenant context, cookies, and redirect origins (SEC-25)
+- an ABAC-gated admin mutation whose tests only prove "no grant → 403" and "platform admin → 200", with no test proving an ABAC-authorized-but-not-platform-admin caller supplying a foreign or global scope (tenantId, org ID, cross-tenant row ID) is also rejected (SEC-26)
 - critical flows covered only by happy-path tests
 - CI gates that miss high-risk repository failure modes
 - duplicated validation that adds cost without increasing confidence

@@ -33,27 +33,39 @@ const createBodySchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
 });
 
+type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
+
+/**
+ * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
+ * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
+ * authorization for a client-supplied scope (tenantId, cross-tenant row) --
+ * check `isPlatformAdmin` before allowing anything outside the caller's own
+ * tenant. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ */
 async function checkAdminAccess(
   email: string | undefined,
   userId: string,
   tenantId: string,
   container: ReturnType<typeof getAppContainer>,
   action: (typeof ACTIONS)[keyof typeof ACTIONS],
-): Promise<boolean> {
-  if (isEnvBasedPlatformAdmin(email)) return true;
+): Promise<AdminAccess> {
+  if (isEnvBasedPlatformAdmin(email)) {
+    return { allowed: true, isPlatformAdmin: true };
+  }
 
   try {
     const authzService = container.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
-    return await authzService.can({
+    const allowed = await authzService.can({
       tenant: { tenantId },
       subject: { id: userId },
       resource: { type: RESOURCES.FEATURE_FLAG, id: 'admin-panel' },
       action,
     });
+    return { allowed, isPlatformAdmin: false };
   } catch {
-    return false;
+    return { allowed: false, isPlatformAdmin: false };
   }
 }
 
@@ -63,7 +75,7 @@ export const GET = withErrorHandler(
 
     const container = getAppContainer();
 
-    const isAdmin = await checkAdminAccess(
+    const adminAccess = await checkAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
@@ -71,13 +83,17 @@ export const GET = withErrorHandler(
       ACTIONS.FEATURE_FLAG_READ,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleFeatureFlagAdminService(db);
-    const flags = await service.listAll();
+    // An ABAC-authorized tenant owner only sees global defaults plus their
+    // own tenant's rows -- never another tenant's overrides (SEC-26).
+    const flags = adminAccess.isPlatformAdmin
+      ? await service.listAll()
+      : await service.listForTenant(access.tenant.tenantId);
 
     logger.info(
       {
@@ -102,7 +118,7 @@ export const POST = withErrorHandler(
 
     const container = getAppContainer();
 
-    const isAdmin = await checkAdminAccess(
+    const adminAccess = await checkAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
@@ -110,7 +126,7 @@ export const POST = withErrorHandler(
       ACTIONS.FEATURE_FLAG_MANAGE,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
@@ -134,13 +150,26 @@ export const POST = withErrorHandler(
       );
     }
 
+    const requestedTenantId = parseResult.data.tenantId ?? null;
+
+    // An ABAC-authorized (non-platform-admin) caller may only create rows
+    // scoped to their own verified tenant -- never a global (`null`) row and
+    // never another tenant's row, regardless of what the request body asked
+    // for. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+    if (
+      !adminAccess.isPlatformAdmin &&
+      requestedTenantId !== access.tenant.tenantId
+    ) {
+      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+    }
+
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleFeatureFlagAdminService(db);
 
     try {
       const flag = await service.create({
         key: parseResult.data.key,
-        tenantId: parseResult.data.tenantId ?? null,
+        tenantId: requestedTenantId,
         enabled: parseResult.data.enabled,
         description: parseResult.data.description ?? null,
       });

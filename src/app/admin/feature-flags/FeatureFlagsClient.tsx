@@ -380,16 +380,20 @@ export function FeatureFlagsClient() {
                       }
                       className={[
                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium disabled:opacity-50',
-                        flag.enabled
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+                        toggleState.get(flag.id) === 'error'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : flag.enabled
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
                       ].join(' ')}
                     >
                       {toggleState.get(flag.id) === 'pending'
                         ? 'Saving…'
-                        : flag.enabled
-                          ? 'On'
-                          : 'Off'}
+                        : toggleState.get(flag.id) === 'error'
+                          ? 'Failed — retry'
+                          : flag.enabled
+                            ? 'On'
+                            : 'Off'}
                     </button>
                   </td>
                   <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
@@ -431,6 +435,11 @@ export function FeatureFlagsClient() {
                         >
                           Cancel
                         </button>
+                        {descEditState.get(flag.id) === 'error' && (
+                          <span className="text-xs text-red-600 dark:text-red-400">
+                            Save failed — try again
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <span>{flag.description ?? '—'}</span>

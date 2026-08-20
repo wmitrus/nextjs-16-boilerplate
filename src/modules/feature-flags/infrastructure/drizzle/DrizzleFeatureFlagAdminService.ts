@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 
 import type { DrizzleDb } from '@/core/db';
 
@@ -31,6 +31,18 @@ export type UpdateFeatureFlagInput = {
   description?: string | null;
 };
 
+/**
+ * The tenant scope a caller is authorized to mutate within.
+ *
+ * `null` means "no additional scope restriction" and must only be passed for
+ * an unscoped platform admin (`isEnvBasedPlatformAdmin`). An ABAC-authorized
+ * caller (ordinary tenant owner) must always pass `{ tenantId }` so mutations
+ * are constrained to their own tenant's rows -- never global (`tenantId:
+ * null`) rows and never another tenant's rows. See SEC-26 in
+ * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ */
+export type MutationScope = { tenantId: string } | null;
+
 function mapFlagRow(row: {
   id: string;
   key: string;
@@ -51,10 +63,56 @@ function mapFlagRow(row: {
   };
 }
 
-function tenantScopePredicate(tenantId: string | null) {
-  return tenantId === null
-    ? isNull(featureFlagsTable.tenantId)
-    : eq(featureFlagsTable.tenantId, tenantId);
+function hasUniqueViolationCode(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'code' in value &&
+    (value as { code?: unknown }).code === '23505'
+  );
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (
+    error.message.includes('unique constraint') ||
+    hasUniqueViolationCode(error)
+  ) {
+    return true;
+  }
+
+  // Drizzle wraps the driver's raw Postgres error in `DrizzleQueryError`; the
+  // top-level error's own `message` is a generic "Failed query: ..." and it
+  // carries no `code`. The actual `23505` unique-violation code and message
+  // live on `.cause` (confirmed against PGlite; node-postgres wraps the same
+  // way). Checking only the top-level error, as similar helpers elsewhere in
+  // this repo do, misses this entirely.
+  const cause =
+    'cause' in error ? (error as { cause?: unknown }).cause : undefined;
+  if (cause instanceof Error) {
+    return (
+      cause.message.includes('unique constraint') ||
+      hasUniqueViolationCode(cause)
+    );
+  }
+
+  return false;
+}
+
+function scopePredicate(id: string, scope: MutationScope) {
+  const idPredicate = eq(featureFlagsTable.id, id);
+
+  if (scope === null) {
+    return idPredicate;
+  }
+
+  // Deliberately `eq`, not `tenantScopePredicate`'s null-aware form: an
+  // ABAC-authorized (non-platform-admin) caller may mutate only rows that
+  // belong to their own tenant, never global (`tenantId: null`) rows.
+  return and(idPredicate, eq(featureFlagsTable.tenantId, scope.tenantId));
 }
 
 /**
@@ -66,10 +124,16 @@ function tenantScopePredicate(tenantId: string | null) {
  * and directly instantiated at the route-handler call site -- mirrors
  * `DrizzleAdminOrganizationsMutationService`, not `UserRepository`. See
  * `.copilot/tasks/2026-08-20-admin-feature-flags-gui/01 - Architecture Guard - Summary.md`.
+ *
+ * Every mutation method takes a `MutationScope`: callers authorized only via
+ * ABAC (not an unscoped platform admin) must pass their own `tenantId` so the
+ * DB predicate itself enforces tenant isolation, rather than trusting that
+ * the caller already validated the target row's ownership. See SEC-26.
  */
 export class DrizzleFeatureFlagAdminService {
   constructor(private readonly db: DrizzleDb) {}
 
+  /** Full, unscoped list. Only for an unscoped platform admin. */
   async listAll(): Promise<FeatureFlagDto[]> {
     const rows = await this.db
       .select()
@@ -79,42 +143,60 @@ export class DrizzleFeatureFlagAdminService {
     return rows.map(mapFlagRow);
   }
 
-  async create(input: CreateFeatureFlagInput): Promise<FeatureFlagDto> {
-    const existing = await this.db
-      .select({ id: featureFlagsTable.id })
+  /**
+   * Global (`tenantId: null`) rows plus the given tenant's own rows.
+   * For an ABAC-authorized (non-platform-admin) caller -- never surfaces
+   * another tenant's rows.
+   */
+  async listForTenant(tenantId: string): Promise<FeatureFlagDto[]> {
+    const rows = await this.db
+      .select()
       .from(featureFlagsTable)
       .where(
-        and(
-          eq(featureFlagsTable.key, input.key),
-          tenantScopePredicate(input.tenantId),
+        or(
+          isNull(featureFlagsTable.tenantId),
+          eq(featureFlagsTable.tenantId, tenantId),
         ),
       )
-      .limit(1);
+      .orderBy(featureFlagsTable.key, featureFlagsTable.tenantId);
 
-    if (existing.length > 0) {
-      throw new DuplicateFeatureFlagError();
+    return rows.map(mapFlagRow);
+  }
+
+  async create(input: CreateFeatureFlagInput): Promise<FeatureFlagDto> {
+    try {
+      const [row] = await this.db
+        .insert(featureFlagsTable)
+        .values({
+          key: input.key,
+          tenantId: input.tenantId,
+          enabled: input.enabled,
+          description: input.description ?? null,
+        })
+        .returning();
+
+      if (!row) {
+        throw new Error('Failed to create feature flag');
+      }
+
+      return mapFlagRow(row);
+    } catch (error) {
+      // Relying on the DB's own `uq_feature_flags_key_tenant` unique
+      // constraint (rather than a preliminary select-then-insert check)
+      // keeps duplicate detection atomic under concurrent creates for the
+      // same (key, tenantId) pair.
+      if (isUniqueViolation(error)) {
+        throw new DuplicateFeatureFlagError();
+      }
+
+      throw error;
     }
-
-    const [row] = await this.db
-      .insert(featureFlagsTable)
-      .values({
-        key: input.key,
-        tenantId: input.tenantId,
-        enabled: input.enabled,
-        description: input.description ?? null,
-      })
-      .returning();
-
-    if (!row) {
-      throw new Error('Failed to create feature flag');
-    }
-
-    return mapFlagRow(row);
   }
 
   async update(
     id: string,
     input: UpdateFeatureFlagInput,
+    scope: MutationScope,
   ): Promise<FeatureFlagDto> {
     const [row] = await this.db
       .update(featureFlagsTable)
@@ -125,7 +207,7 @@ export class DrizzleFeatureFlagAdminService {
           : {}),
         updatedAt: new Date(),
       })
-      .where(eq(featureFlagsTable.id, id))
+      .where(scopePredicate(id, scope))
       .returning();
 
     if (!row) {
@@ -135,10 +217,10 @@ export class DrizzleFeatureFlagAdminService {
     return mapFlagRow(row);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, scope: MutationScope): Promise<void> {
     const deleted = await this.db
       .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.id, id))
+      .where(scopePredicate(id, scope))
       .returning();
 
     if (deleted.length === 0) {

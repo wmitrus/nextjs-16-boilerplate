@@ -114,6 +114,7 @@ Always flag these if present:
 - direct database access from delivery code
 - delivery-layer route handlers binding raw or insufficiently validated route params to database identifiers, especially UUID columns (SEC-23)
 - state or schema designs that lie about runtime absence or finite domains, such as sparse UI state typed as full `Record<string, T>` or finite request options parsed as broad `z.string()` (SEC-24)
+- admin/tenant-scoped mutation designs where an ABAC action-type check is the only gate on a client-supplied scope identifier (tenant ID, org ID, or a row ID that carries tenant ownership), with no requirement that the scope be cross-checked against the caller's verified tenant context (SEC-26)
 - hidden service-locator patterns in request-sensitive flows
 - ad hoc API response envelopes in normal JSON route handlers when the shared `response-service` and `with-error-handler` pattern should be used
 

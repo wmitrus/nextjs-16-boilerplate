@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
   listAll: vi.fn(),
+  listForTenant: vi.fn(),
   create: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
@@ -85,6 +86,7 @@ describe('GET /api/admin/feature-flags', () => {
     vi.mocked(DrizzleFeatureFlagAdminService).mockImplementation(function () {
       return {
         listAll: mocks.listAll,
+        listForTenant: mocks.listForTenant,
         create: mocks.create,
       } as unknown as DrizzleFeatureFlagAdminService;
     });
@@ -115,7 +117,7 @@ describe('GET /api/admin/feature-flags', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 200 with flags and activeProvider for env-based admin', async () => {
+  it('returns 200 with flags and activeProvider for env-based admin, using the unscoped listAll', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
     mocks.listAll.mockResolvedValue([TEST_FLAG]);
@@ -129,6 +131,23 @@ describe('GET /api/admin/feature-flags', () => {
     };
     expect(body.data.flags).toHaveLength(1);
     expect(body.data.activeProvider).toBe('db');
+    expect(mocks.listAll).toHaveBeenCalledTimes(1);
+    expect(mocks.listForTenant).not.toHaveBeenCalled();
+  });
+
+  it('SEC-26: uses the tenant-scoped listForTenant for an ABAC-authorized non-platform-admin, never the unscoped listAll', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.listForTenant.mockResolvedValue([TEST_FLAG]);
+
+    const { GET } = await import('./route');
+    const res = await GET(makeGetRequest(), mockContext);
+    expect(res.status).toBe(200);
+    expect(mocks.listForTenant).toHaveBeenCalledWith('tenant_test_1');
+    expect(mocks.listAll).not.toHaveBeenCalled();
   });
 });
 
@@ -141,6 +160,7 @@ describe('POST /api/admin/feature-flags', () => {
     vi.mocked(DrizzleFeatureFlagAdminService).mockImplementation(function () {
       return {
         listAll: mocks.listAll,
+        listForTenant: mocks.listForTenant,
         create: mocks.create,
       } as unknown as DrizzleFeatureFlagAdminService;
     });
@@ -214,5 +234,64 @@ describe('POST /api/admin/feature-flags', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.data.flag.key).toBe('my-flag');
+  });
+
+  describe('SEC-26 regression: ABAC-authorized non-platform-admin scope constraint', () => {
+    beforeEach(() => {
+      mocks.isEnvAdmin.mockReturnValue(false);
+      mocks.registry.set(AUTHORIZATION.SERVICE, {
+        can: vi.fn().mockResolvedValue(true),
+      });
+    });
+
+    it('rejects creating a global (null tenantId) flag', async () => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+
+      const { POST } = await import('./route');
+      const res = await POST(
+        makePostRequest({ key: 'x', tenantId: null, enabled: true }),
+        mockContext,
+      );
+      expect(res.status).toBe(403);
+      expect(mocks.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects creating a flag scoped to another tenant', async () => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+
+      const { POST } = await import('./route');
+      const res = await POST(
+        makePostRequest({
+          key: 'x',
+          tenantId: 'some-other-tenant',
+          enabled: true,
+        }),
+        mockContext,
+      );
+      expect(res.status).toBe(403);
+      expect(mocks.create).not.toHaveBeenCalled();
+    });
+
+    it("allows creating a flag scoped to the caller's own tenant", async () => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+      mocks.create.mockResolvedValue({
+        ...TEST_FLAG,
+        tenantId: 'tenant_test_1',
+      });
+
+      const { POST } = await import('./route');
+      const res = await POST(
+        makePostRequest({
+          key: 'x',
+          tenantId: 'tenant_test_1',
+          enabled: true,
+        }),
+        mockContext,
+      );
+      expect(res.status).toBe(201);
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'tenant_test_1' }),
+      );
+    });
   });
 });

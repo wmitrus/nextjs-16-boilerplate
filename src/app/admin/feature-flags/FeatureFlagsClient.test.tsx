@@ -140,6 +140,25 @@ describe('FeatureFlagsClient', () => {
     );
   });
 
+  it('surfaces a toggle failure instead of silently reverting to On/Off', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({ data: { flags: [FLAG], activeProvider: 'db' } }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ error: 'Forbidden', code: 'FORBIDDEN' }, 403),
+      );
+
+    render(<FeatureFlagsClient />);
+    await screen.findByText('my-flag');
+
+    fireEvent.click(screen.getByRole('button', { name: 'On' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Failed — retry' }),
+    ).toBeInTheDocument();
+  });
+
   it('deletes a flag after confirmation', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(

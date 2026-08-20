@@ -12,7 +12,7 @@ import {
 describe('audit category taxonomy', () => {
   it('every category has a default entry within the allowed retention bounds', () => {
     for (const category of AUDIT_CATEGORIES) {
-      const def = AUDIT_CATEGORY_DEFAULTS[category];
+      const def = getAuditCategoryDefault(category);
       expect(def).toBeDefined();
       expect(def.retentionDays).toBeGreaterThanOrEqual(
         AUDIT_RETENTION_DAYS_MIN,
@@ -34,7 +34,7 @@ describe('audit category taxonomy', () => {
 
   it('no category captures full input on success by default', () => {
     for (const category of AUDIT_CATEGORIES) {
-      expect(AUDIT_CATEGORY_DEFAULTS[category].captureInputOnSuccess).toBe(
+      expect(getAuditCategoryDefault(category).captureInputOnSuccess).toBe(
         false,
       );
     }

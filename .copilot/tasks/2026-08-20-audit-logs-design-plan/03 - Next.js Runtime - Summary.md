@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement Phase 1 (audit-log category settings: schema, admin CRUD, admin API route, admin toggle UI).
-- Current Run Scope: runtime placement of the new route handler and admin page.
+- Task Objective: Implement the audit-logging plan phase by phase. Phase 1 (settings) and Phase 2 (writer wiring) are both complete.
+- Current Run Scope: Phase 2 — runtime placement of the new writer path (no new routes/pages this phase; `logActionAudit`/`logSecurityEvent` are called from within existing Node-runtime server-action/security code, not from any new App Router surface).
 - Status: COMPLETED
-- Last Updated: 2026-08-20
+- Last Updated: 2026-08-20 (Phase 2)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -72,9 +72,9 @@
 
 ## Handoff Notes
 
-- what the next agent should rely on: the `connection()`-first ordering and the ResponseService convention are both settled — copy them exactly, do not improvise a variant.
-- what should not be re-decided without new evidence: Node-only placement (no Edge component in Phase 1).
-- recommended next specialist or step: Implementation.
+- what the next agent should rely on: the `connection()`-first ordering and the ResponseService convention are both settled — copy them exactly, do not improvise a variant. As of Phase 2: the writer is Node-only and must stay that way; if a future phase wires `security_event`-worthy detections that originate in `src/proxy.ts` (Edge), route them through the existing edge->node `/api/logs` ingest bridge per `plan.md` A.6, not a direct DB call from Edge.
+- what should not be re-decided without new evidence: Node-only placement for the writer path.
+- recommended next specialist or step: Phase 3's admin-route instrumentation stays Node-only (every `/api/admin/**` route already is) — no new runtime review needed there unless a route turns out to run on Edge.
 
 ## Update Log
 
@@ -84,3 +84,10 @@
 - Trigger: Phase 1 implementation kickoff
 - Summary of change: Runtime placement confirmed as a direct structural mirror of the feature-flags admin surface; no deviations required.
 - Sections refreshed: all
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 2 implementation kickoff
+- Summary of change: Confirmed both new call sites (`logActionAudit` in `src/security/actions/action-audit.ts`, invoked from `createSecureAction`; `logSecurityEvent` in `src/security/utils/security-logger.ts`) are already exclusively Node-runtime today — `createSecureAction`'s existing DB-backed ABAC authorization already required Node, and `logSecurityEvent` was never called from `src/proxy.ts` (Edge) at all (confirmed by grep: its only callers before this phase were its own test file and the docs example). Adding a `getAppContainer()`/DB-touching call inside both is therefore safe under the Edge-vs-Node boundary rule (`docs/architecture/15 - Edge vs Node Composition Root Boundary.md`) without any new runtime guard. No `src/proxy.ts` changes were needed or made. `AUDIT_LOG.SERVICE` registration in `src/core/runtime/bootstrap.ts`'s `createRequestContainer()` runs in the same Node composition-root path as every other service there (`FEATURE_FLAGS.SERVICE`, `PROVISIONING.SERVICE`) — no new lifecycle concern.
+- Sections refreshed: Scope Handled, Runtime Boundary Assessment, Runtime Decisions / Constraints, Handoff Notes

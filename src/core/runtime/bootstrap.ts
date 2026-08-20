@@ -3,7 +3,12 @@ import 'server-only';
 import { cache } from 'react';
 
 import { Container } from '@/core/container';
-import { FEATURE_FLAGS, INFRASTRUCTURE, PROVISIONING } from '@/core/contracts';
+import {
+  AUDIT_LOG,
+  FEATURE_FLAGS,
+  INFRASTRUCTURE,
+  PROVISIONING,
+} from '@/core/contracts';
 import type { DbConfig } from '@/core/db/types';
 import {
   env,
@@ -16,6 +21,7 @@ import {
 } from '@/core/observability/new-relic';
 import { getInfrastructure } from '@/core/runtime/infrastructure';
 
+import { createAuditLogService } from '@/modules/audit-log/factory';
 import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
 import { createAuthorizationModule } from '@/modules/authorization';
@@ -113,6 +119,8 @@ export function createRequestContainer(config: AppConfig): Container {
       config.provisioning.crossProviderEmailLinking,
     ),
   );
+
+  container.register(AUDIT_LOG.SERVICE, createAuditLogService(dbRuntime.db));
 
   return container;
 }

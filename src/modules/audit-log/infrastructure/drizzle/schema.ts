@@ -1,6 +1,8 @@
 import {
+  bigserial,
   boolean,
   index,
+  jsonb,
   pgEnum,
   pgTable,
   real,
@@ -69,5 +71,76 @@ export const auditLogSettingsTable = pgTable(
       .on(t.category, t.tenantId)
       .nullsNotDistinct(),
     index('idx_audit_log_settings_category').on(t.category),
+  ],
+);
+
+/**
+ * The append-only audit trail. Phase 2 only: a plain table, no native
+ * Postgres partitioning yet (that is a hand-authored follow-up migration —
+ * Drizzle has no first-class partition DDL — deferred to Phase 4 per
+ * `.copilot/tasks/2026-08-20-audit-logs-design-plan/plan.md` Part A.4/B.3),
+ * and no scheduled purge job yet either. Retention configured in
+ * `auditLogSettingsTable` is not yet enforced by anything that deletes
+ * rows -- this table grows unbounded until Phase 4 ships the purge job.
+ *
+ * `id` is a `bigserial`, not a `uuid`: cheaper index/storage for a
+ * high-volume append-only log where no external caller needs to guess the
+ * id ahead of time (unlike `auditLogSettingsTable`, which is a small,
+ * admin-managed table where `uuid` matches the rest of the repo's
+ * convention).
+ *
+ * `tenantId` is `text`, not `uuid`+FK, matching `featureFlagsTable` and
+ * `auditLogSettingsTable` (not the internal `tenants`/`organizations`
+ * tables): `RequestScopedTenantResolver` can populate `SecurityContext`'s
+ * `tenantId` with a raw external provider org ID (e.g. a Clerk org id)
+ * rather than an internal `tenants.id` UUID, depending on
+ * `TENANT_CONTEXT_SOURCE` -- a `uuid` FK column would hard-fail on insert
+ * for exactly that (common) configuration. No `organizationId` column yet
+ * either, for the same reason: nothing in Phase 2 populates one, and
+ * `RequestScopedTenantResolver` shows `organizationId` has the identical
+ * internal-UUID-vs-external-provider-ID ambiguity -- add it once a real
+ * caller (a later phase) settles which one it needs.
+ *
+ * `actorUserId` uses `onDelete: 'set null'`, not `cascade` like every
+ * other FK in this repo's schemas: deleting a user must never delete the
+ * history of what they did -- an audit trail is the opposite of a normal
+ * owned-row relationship. (`actorUserId` is safe as a `uuid` FK to
+ * `users.id`: `SecurityContext.user.id` is always the internal app user
+ * id, never an external provider id.)
+ */
+export const auditEventsTable = pgTable(
+  'audit_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    category: auditCategoryEnum('category').notNull(),
+    action: text('action').notNull(),
+    outcome: text('outcome', {
+      enum: ['success', 'failure', 'denied'],
+    }).notNull(),
+    tenantId: text('tenant_id'),
+    actorUserId: uuid('actor_user_id').references(
+      () => usersReferenceTable.id,
+      { onDelete: 'set null' },
+    ),
+    targetType: text('target_type'),
+    targetId: text('target_id'),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    correlationId: text('correlation_id'),
+    requestId: text('request_id'),
+    /** Caller-redacted, size-capped by the writer before insert. */
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('idx_audit_events_tenant_occurred').on(t.tenantId, t.occurredAt),
+    index('idx_audit_events_category_occurred').on(t.category, t.occurredAt),
+    index('idx_audit_events_actor_occurred').on(t.actorUserId, t.occurredAt),
+    index('idx_audit_events_target').on(t.targetType, t.targetId),
   ],
 );

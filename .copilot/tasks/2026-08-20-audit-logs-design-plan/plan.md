@@ -323,7 +323,43 @@ one `AuditLogService.record()` call added at each mutation branch:
   directly on every changed file instead. No `audit_events` table, no
   writer, and no existing route/action instrumentation in this phase —
   those remain Phase 2+.
-- **Phases 2-5 — not started.**
+- **Phase 2 — COMPLETE (2026-08-20).** `audit_events` table + migration
+  (`0016_wise_norman_osborn.sql`), `AuditLogService` contract
+  (`src/core/contracts/audit-log.ts`) + `AUDIT_LOG.SERVICE` DI token,
+  **DI-registered** (unlike Phase 1's admin CRUD service) in
+  `src/core/runtime/bootstrap.ts`, `DrizzleAuditLogService` (effective-setting
+  resolution, enabled/sampling/`captureInputOnSuccess` gating, redaction-cap,
+  insert), `ResilientAuditLogService` (fail-open wrapper), and redaction
+  extracted to `src/security/actions/redact.ts`. `logActionAudit`
+  (category `server_action`) and `logSecurityEvent` (category
+  `security_event`, outcome `failure`) both now call
+  `AuditLogService.record()` alongside their unchanged Pino calls.
+  Two design deviations from this doc's original sketch, found while
+  wiring the writer (see `01 - Architecture Guard - Summary.md`'s Phase 2
+  entry for full reasoning): redaction lives in `src/security/actions/`,
+  not `src/modules/audit-log` (module dependency direction forbids it);
+  `audit_events.tenantId` is `text`, not `uuid`+FK (a real external
+  provider org id can appear there, not just internal `tenants.id` UUIDs),
+  and `organizationId` was dropped from the schema until a real caller
+  needs it. Both resolution-of-the-service and `record()` itself are
+  wrapped fail-open at the call site (`action-audit.ts`/`security-logger.ts`),
+  since a container that never registered `AUDIT_LOG.SERVICE` (confirmed:
+  the global unit-test double in `tests/setup.tsx`) throws on `resolve()`
+  before `ResilientAuditLogService`'s own guarantee ever applies. Verified
+  against the full unit suite (207 files / 1437 tests) including
+  `src/testing/integration/server-actions.test.ts` (the one test file using
+  the real, non-mocked composition root) and the full DB suite (16 files /
+  132 tests) with new real-Postgres(PGlite) coverage for
+  `DrizzleAuditLogService`. `pnpm typecheck`, `pnpm test`, `pnpm test:db`,
+  `pnpm skott:check:only`, `pnpm depcheck`, `pnpm env:check` all pass.
+  `pnpm lint --fix` skipped per the still-in-force ESLint blocker;
+  `prettier --write` run directly instead. No partitioning, no purge job,
+  and no explicit admin-route instrumentation yet — `audit_events` grows
+  unbounded until Phase 4 ships retention enforcement, which is an
+  accepted, deliberate risk of this phase's sequencing (Phase 1 already
+  shipped the retention *configuration* surface before any row was ever
+  written; only the *enforcement* job is still pending).
+- **Phases 3-5 — not started.**
 
 ## Rollout sequencing (recommended, low blast radius first)
 

@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement Phase 1 of the audit-logging plan — settings schema, admin CRUD service, admin API route, admin toggle UI. No writer/instrumentation yet.
-- Current Run Scope: Phase 1 only (`audit_log_settings`, not `audit_events`).
+- Task Objective: Implement the audit-logging plan phase by phase. Phase 1 (settings schema/CRUD/API/UI) and Phase 2 (writer + automatic instrumentation of `logActionAudit`/`logSecurityEvent`) are both complete.
+- Current Run Scope: Phase 2 — `audit_events` table, `AuditLogService` (DI-registered), `DrizzleAuditLogService`, `ResilientAuditLogService`, extracted `src/security/actions/redact.ts`, wiring into `logActionAudit`/`logSecurityEvent`.
 - Status: COMPLETED
-- Last Updated: 2026-08-20
+- Last Updated: 2026-08-20 (Phase 2)
 - Related Control Artifacts: `plan.md`, `intake.md`
 
 ## Scope Handled
@@ -67,9 +67,9 @@
 
 ## Handoff Notes
 
-- what the next agent should rely on: the `/admin/security` routing decision and the non-DI-registered admin-CRUD-service pattern are both settled — do not re-litigate without new evidence.
-- what should not be re-decided without new evidence: resource/action reuse (`RESOURCES.SECURITY` + `SECURITY_MANAGE_AUDIT_SETTINGS`), module placement, migration mechanism (`pnpm db:generate` against the existing glob config).
-- recommended next specialist or step: Security/Auth review (SEC-26 tenant-scoping on the new route), then Implementation.
+- what the next agent should rely on: the `/admin/security` routing decision and the non-DI-registered admin-CRUD-service pattern are both settled — do not re-litigate without new evidence. As of Phase 2: redaction-stays-in-security, `tenantId: text` (no FK) on `audit_events`, and `AUDIT_LOG.SERVICE` being DI-registered are all settled too.
+- what should not be re-decided without new evidence: resource/action reuse (`RESOURCES.SECURITY` + `SECURITY_MANAGE_AUDIT_SETTINGS`), module placement, migration mechanism (`pnpm db:generate` against the existing glob config), the `text`-not-`uuid` tenantId column type on both `audit_log_settings` and `audit_events`.
+- recommended next specialist or step: Phase 3 (instrument the explicit admin API routes) should start with a Security/Auth pass on which category each route maps to, then Implementation.
 
 ## Update Log
 
@@ -79,3 +79,13 @@
 - Trigger: Phase 1 implementation kickoff
 - Summary of change: Initial architecture review completed; `/admin/security` routing correction identified and approved.
 - Sections refreshed: all
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 2 implementation kickoff
+- Summary of change: Reviewed the writer path's module-boundary implications. Two decisions worth recording:
+  1. **Redaction stays in `src/security/actions/redact.ts`, not in `src/modules/audit-log`.** The plan's Part A.4 said "extract redaction to a shared location" without naming where; `modules -> security` is not an allowed dependency direction (`docs/architecture/10 - Modular Monolith - File Catalog.md` §2.1), so the audit-log module cannot import a security-owned redactor. Redaction now happens on the caller's side (`action-audit.ts`/`security-logger.ts`) before the already-redacted value crosses the `AuditLogService` contract; the module only decides whether to *persist* it (via `captureInputOnSuccess`) and applies its own generic size cap. Documented in `02 - Security & Auth - Summary.md`.
+  2. **`audit_events.tenantId` is `text`, not `uuid`+FK** (differs from the plan's Part A.3 sketch, which proposed `uuid` referencing `tenants.id`). Found while wiring the writer: `RequestScopedTenantResolver` (`src/modules/auth/infrastructure/RequestScopedTenantResolver.ts`) can populate `SecurityContext.user.tenantId` with a raw external provider org id (not a `tenants.id` UUID) depending on `TENANT_CONTEXT_SOURCE`. A `uuid` FK column would hard-fail on insert for that configuration. Fixed to match `featureFlagsTable`/`auditLogSettingsTable`'s existing `text`, no-FK convention. `organizationId` was dropped from the Phase 2 schema for the identical reason — nothing populates it yet, and the same resolver shows the same internal-UUID-vs-external-id ambiguity for it; add it once a real caller (a later phase) settles which one it needs. `actorUserId` stays `uuid`+FK — `SecurityContext.user.id` is always the internal app user id.
+  3. **`AuditLogService` is DI-registered** (`AUDIT_LOG.SERVICE` in `src/core/runtime/bootstrap.ts`, bound to `createAuditLogService(dbRuntime.db)`), unlike Phase 1's admin CRUD service — this is the real runtime writer, resolved via `getAppContainer()` from `logActionAudit`/`logSecurityEvent`, matching `FEATURE_FLAGS.SERVICE`'s registration shape exactly.
+- Sections refreshed: Task Context, Boundary And Dependency Assessment (implicitly, via this entry), Handoff Notes

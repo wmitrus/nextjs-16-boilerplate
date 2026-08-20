@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement Phase 1 (audit-log category settings: schema, admin CRUD, admin API route, admin toggle UI).
-- Current Run Scope: authorization/tenancy correctness of the new admin route and CRUD service.
+- Task Objective: Implement the audit-logging plan phase by phase. Phase 1 (settings) and Phase 2 (writer wiring) are both complete.
+- Current Run Scope: Phase 2 — the write path's fail-open guarantee, redaction reuse, and the metadata that ends up persisted (sensitive-data exposure).
 - Status: COMPLETED
-- Last Updated: 2026-08-20
+- Last Updated: 2026-08-20 (Phase 2)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -75,9 +75,9 @@
 
 ## Handoff Notes
 
-- what the next agent should rely on: the derive-don't-reject SEC-26 pattern is settled; implement it exactly as in `feature-flags/route.ts`, not a variant.
-- what should not be re-decided without new evidence: the GET/PATCH action split (`SECURITY_READ_AUDIT` vs. `SECURITY_MANAGE_AUDIT_SETTINGS`).
-- recommended next specialist or step: Next.js Runtime review (route/page placement, `connection()` usage, `cacheComponents` constraints), then Implementation.
+- what the next agent should rely on: the derive-don't-reject SEC-26 pattern is settled; implement it exactly as in `feature-flags/route.ts`, not a variant. As of Phase 2: the two-layer fail-open pattern (resolution try/catch + `ResilientAuditLogService`) and caller-side redaction are also settled — new call sites (Phase 3's admin route instrumentation) should copy `action-audit.ts`'s `recordAuditEvent` pattern rather than inventing a variant.
+- what should not be re-decided without new evidence: the GET/PATCH action split (`SECURITY_READ_AUDIT` vs. `SECURITY_MANAGE_AUDIT_SETTINGS`); redaction happening before the `AuditLogService` contract boundary, never after.
+- recommended next specialist or step: Phase 3 — map each `src/app/api/admin/**` mutation route to its audit category (per `plan.md` Part B.5) and add the equivalent `recordAuditEvent`-shaped call at each mutation branch.
 
 ## Update Log
 
@@ -87,3 +87,14 @@
 - Trigger: Phase 1 implementation kickoff
 - Summary of change: SEC-26 pattern re-confirmed applicable and mapped onto the new route/service design.
 - Sections refreshed: all
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 2 implementation kickoff
+- Summary of change:
+  - **Fail-open, at two layers.** `AuditLogService.record()` (the DI-registered `ResilientAuditLogService`) never throws — but `logActionAudit`/`logSecurityEvent` also wrap the *resolution* of the service (`getAppContainer().resolve(AUDIT_LOG.SERVICE)`) in their own try/catch, because resolution itself can throw (confirmed in practice: the global test double for `getAppContainer()` in `tests/setup.tsx` never registers `AUDIT_LOG.SERVICE` at all, so every one of the ~200 existing unit test files that transitively exercise a secure action would have started failing with "Service not found" if only `record()`'s own fail-open guarantee were relied on). Verified via the full unit suite (207 files / 1437 tests, all passing) plus `src/testing/integration/server-actions.test.ts`, which uses the *real* (non-mocked) composition root and confirms the production resolution path also degrades safely when the underlying PGlite instance has no migrated `audit_log_settings` table.
+  - **Redaction is caller-side, not module-side** (see the Architecture Guard entry above for the dependency-direction reasoning). Practical consequence for security review: `action-audit.ts`/`security-logger.ts` now call `redactAuditInput()` **unconditionally** (both success and failure), not only on failure as the Pino path still does — this is what lets a category's `captureInputOnSuccess` setting actually capture something on success. Verified the redactor itself did not change behavior during extraction: all 7 pre-existing redaction scenarios (nested fields, `URLSearchParams`, arrays, non-object values, circular references) pass unchanged via the new `src/security/actions/redact.test.ts`, and `action-audit.test.ts`'s original assertions (unmodified) still pass against the re-exported function.
+  - **What gets persisted vs. logged differs by design**, and this is intentional, not drift: Pino continues to log full redacted input only on failure (unchanged); the DB path persists redacted input on failure always, and on success only when the category's admin-configured `captureInputOnSuccess` is true. Both paths use the same redaction rules, so nothing unredacted is ever persisted through either path.
+  - **`security_event` outcome mapped to `'failure'`**, not `'denied'` — a judgment call (documented inline in `security-logger.ts`) since every event that utility logs (`ssrf_attempt`, `tenant_violation`, `rate_limit_bypass`, `replay_attack`, `auth_failure`) represents a blocked/flagged attempt rather than a completed action, and `auth_failure` in particular doesn't fit "denied" cleanly. Revisit if Phase 4's read UI needs finer-grained outcome filtering.
+- Sections refreshed: Actions Performed, Sensitive Data And Exposure Notes, Security Decisions / Constraints, Handoff Notes

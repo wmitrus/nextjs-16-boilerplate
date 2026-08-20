@@ -21,6 +21,10 @@ export const FEATURE_FLAGS = {
   SERVICE: Symbol('FeatureFlagService'),
 };
 
+export const AUDIT_LOG = {
+  SERVICE: Symbol('AuditLogService'),
+};
+
 export const LOGGER = {
   SERVER: Symbol('ServerLogger'),
   EDGE: Symbol('EdgeLogger'),

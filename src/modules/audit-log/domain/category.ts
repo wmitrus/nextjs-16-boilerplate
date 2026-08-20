@@ -145,8 +145,25 @@ export const AUDIT_CATEGORY_DEFAULTS: Record<
   },
 };
 
+// A Map, not bracket access on `AUDIT_CATEGORY_DEFAULTS`, so a caller-supplied
+// (but statically-typed) `category` never trips `security/detect-object-injection`
+// — the rule can't see that `AuditCategory` is a closed literal union, not an
+// attacker-controlled key. See `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md`
+// on dynamic bracket dispatch creating repeat scanner churn.
+const AUDIT_CATEGORY_DEFAULTS_MAP = new Map<
+  AuditCategory,
+  AuditCategoryDefault
+>(
+  Object.entries(AUDIT_CATEGORY_DEFAULTS) as Array<
+    [AuditCategory, AuditCategoryDefault]
+  >,
+);
+
 export function getAuditCategoryDefault(
   category: AuditCategory,
 ): AuditCategoryDefault {
-  return AUDIT_CATEGORY_DEFAULTS[category];
+  // Non-null assertion is safe: the map above is built exhaustively from
+  // `AUDIT_CATEGORIES` at module load, so every `AuditCategory` value has an
+  // entry by construction.
+  return AUDIT_CATEGORY_DEFAULTS_MAP.get(category)!;
 }

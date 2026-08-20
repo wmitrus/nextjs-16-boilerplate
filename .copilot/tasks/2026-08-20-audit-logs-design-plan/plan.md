@@ -168,10 +168,16 @@ migration cost of adding a category later.
 ### A.5 Admin controls — the actual "switch on/off per feature" UI
 
 - `/admin/audit-logs` — read/browse/filter the trail (category, actor,
-  target, date range, outcome), paginated.
-- `/admin/audit-logs/settings` — the toggle matrix: one row per category
-  with enabled / retention days / sample rate / capture-on-success /
-  scope (global vs. this tenant's override) / last changed by+when.
+  target, date range, outcome), paginated. (Phase 2+ — no trail exists yet.)
+- `/admin/security` — the toggle matrix: one row per category with
+  enabled / retention days / sample rate / capture-on-success / scope
+  (global vs. this tenant's override) / last changed by+when. **Shipped in
+  Phase 1 at this path, not `/admin/audit-logs/settings`** as originally
+  sketched here — `src/app/admin/page.tsx` already advertised a "Security"
+  hub card at `/admin/security` (status `coming-soon`) before this task;
+  routing here fulfills that existing promise instead of creating a second,
+  competing admin nav entry. See
+  `01 - Architecture Guard - Summary.md`.
 - Reuses the feature-flags admin pattern exactly:
   - `DrizzleAuditLogSettingsAdminService` — admin-only CRUD, **not**
     DI-registered (operator-only, low-frequency — same rationale documented
@@ -277,11 +283,11 @@ one `AuditLogService.record()` call added at each mutation branch:
 
 ### B.7 Admin UI
 
-- `src/app/admin/audit-logs/page.tsx` + `AuditLogsClient.tsx` (list/filter, mirrors `feature-flags/page.tsx` + `FeatureFlagsClient.tsx`)
-- `src/app/admin/audit-logs/settings/page.tsx` + `AuditSettingsClient.tsx` (the toggle matrix)
-- `src/app/admin/page.tsx` — add nav entry
-- `src/app/api/admin/audit-log-settings/route.ts` — GET/PATCH, mirrors `feature-flags/route.ts`
-- `src/app/api/admin/audit-logs/route.ts` — GET list with filters/pagination, gated by `SECURITY_READ_AUDIT`
+- `src/app/admin/audit-logs/page.tsx` + `AuditLogsClient.tsx` (list/filter, mirrors `feature-flags/page.tsx` + `FeatureFlagsClient.tsx`) — Phase 2+, no trail table yet.
+- `src/app/admin/security/page.tsx` + `AuditSettingsClient.tsx` (the toggle matrix) — **shipped in Phase 1**, at `/admin/security` (see A.5 note on the path correction).
+- `src/app/admin/page.tsx` — Security hub card flipped from `coming-soon` to `active` — **shipped in Phase 1**.
+- `src/app/api/admin/audit-log-settings/route.ts` — GET/PATCH/DELETE, mirrors `feature-flags/route.ts` (DELETE added for "reset to default", body-keyed by `category` rather than a URL `[id]` since categories are a fixed natural key, not an opaque row id) — **shipped in Phase 1**.
+- `src/app/api/admin/audit-logs/route.ts` — GET list with filters/pagination, gated by `SECURITY_READ_AUDIT` — Phase 2+, no trail table yet.
 
 ### B.8 Tests
 
@@ -298,6 +304,26 @@ one `AuditLogService.record()` call added at each mutation branch:
 - `.env.example` + `src/core/env.ts` — new vars if introduced (e.g. `AUDIT_LOG_PURGE_ENABLED`)
 
 ---
+
+## Phase status
+
+- **Phase 1 — COMPLETE (2026-08-20).** `audit_log_settings` schema +
+  migration (`0015_messy_doctor_faustus.sql`), `DrizzleAuditLogSettingsAdminService`
+  (admin CRUD, not DI-registered), `ACTIONS.SECURITY_MANAGE_AUDIT_SETTINGS`
+  (+ granted in the admin/owner policy template, `POLICY_TEMPLATE_VERSION`
+  bumped to 2 so existing tenants get reconciled), `/api/admin/audit-log-settings`
+  (GET/PATCH/DELETE), `/admin/security` toggle-matrix UI, and the admin hub
+  card flipped from `coming-soon` to `active`. Full test coverage: domain
+  unit tests, a real-DB (PGlite) service test suite including SEC-26
+  tenant-scoping regressions, a mocked route test suite (also SEC-26), and
+  a component test for the client. `pnpm typecheck`, `pnpm test`,
+  `pnpm test:db`, `pnpm skott:check:only`, `pnpm depcheck`, `pnpm env:check`
+  all pass. `pnpm lint --fix` skipped per the documented ESLint agent-shell
+  blocker (still in force at time of writing) — `prettier --write` run
+  directly on every changed file instead. No `audit_events` table, no
+  writer, and no existing route/action instrumentation in this phase —
+  those remain Phase 2+.
+- **Phases 2-5 — not started.**
 
 ## Rollout sequencing (recommended, low blast radius first)
 

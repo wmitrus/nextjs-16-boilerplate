@@ -218,9 +218,9 @@ const adminCards: AdminCard[] = [
   {
     title: 'Security',
     description:
-      'View audit logs, review security events, and manage API access policies.',
+      'Switch audit log categories on or off and set retention. Reviewing security events and managing API access policies is coming soon.',
     href: '/admin/security',
-    status: 'coming-soon',
+    status: 'active',
     icon: <ShieldIcon />,
   },
   {

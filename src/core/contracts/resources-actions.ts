@@ -29,6 +29,10 @@ export const ACTIONS = {
 
   SECURITY_READ_AUDIT: createAction(RESOURCES.SECURITY, 'read_audit'),
   SECURITY_MANAGE_POLICIES: createAction(RESOURCES.SECURITY, 'manage_policies'),
+  SECURITY_MANAGE_AUDIT_SETTINGS: createAction(
+    RESOURCES.SECURITY,
+    'manage_audit_settings',
+  ),
 
   PROVISIONING_ENSURE: createAction(RESOURCES.PROVISIONING, 'ensure'),
 

@@ -26,6 +26,7 @@ import {
 } from '@/modules/waitlist/domain/errors';
 import { DefaultWaitlistService } from '@/modules/waitlist/infrastructure/DefaultWaitlistService';
 import { DrizzleWaitlistRepository } from '@/modules/waitlist/infrastructure/drizzle/DrizzleWaitlistRepository';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const logger = resolveServerLogger().child({
@@ -118,7 +119,7 @@ function isWaitlistError(
  * Requires: authenticated provisioned user (admin).
  */
 export const POST = withErrorHandler(
-  withNodeProvisioning(async (_request, context) => {
+  withNodeProvisioning(async (_request, context, access) => {
     await connection();
 
     const params = await context.params;
@@ -191,6 +192,16 @@ export const POST = withErrorHandler(
           );
         }
 
+        await recordAdminAuditEvent({
+          category: 'waitlist',
+          action: 'waitlist.approve',
+          outcome: 'success',
+          tenantId: access.tenant.tenantId,
+          actorUserId: access.user.id,
+          targetType: 'waitlist_entry',
+          targetId: id,
+        });
+
         return createSuccessResponse({ entry });
       }
 
@@ -216,6 +227,16 @@ export const POST = withErrorHandler(
           );
         }
       }
+
+      await recordAdminAuditEvent({
+        category: 'waitlist',
+        action: 'waitlist.reject',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'waitlist_entry',
+        targetId: id,
+      });
 
       return createSuccessResponse({ entry });
     } catch (error) {

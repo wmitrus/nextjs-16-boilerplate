@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
+  recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -51,6 +52,10 @@ vi.mock('@/core/env', () => ({
   env: {
     FEATURE_FLAG_PROVIDER: 'db',
   },
+}));
+
+vi.mock('@/security/actions/record-admin-audit-event', () => ({
+  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 function makeGetRequest() {
@@ -250,6 +255,15 @@ describe('POST /api/admin/feature-flags', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.data.flag.key).toBe('my-flag');
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'feature_flag',
+        action: 'feature_flag.create',
+        outcome: 'success',
+        targetType: 'feature_flag',
+        targetId: TEST_FLAG.id,
+      }),
+    );
   });
 
   describe('SEC-26 regression: ABAC-authorized non-platform-admin scope constraint', () => {

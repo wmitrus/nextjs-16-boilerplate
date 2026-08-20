@@ -17,6 +17,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
 import { DuplicateFeatureFlagError } from '@/modules/feature-flags/domain/errors';
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -191,6 +192,16 @@ export const POST = withErrorHandler(
         },
         'Feature flag created by admin',
       );
+
+      await recordAdminAuditEvent({
+        category: 'feature_flag',
+        action: 'feature_flag.create',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'feature_flag',
+        targetId: flag.id,
+      });
 
       return createSuccessResponse({ flag }, 201);
     } catch (error) {

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn(),
   },
+  recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -43,6 +44,10 @@ vi.mock('@/core/env', () => ({
     ADMIN_USER_EMAILS: 'admin@test.dev',
     NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
   },
+}));
+
+vi.mock('@/security/actions/record-admin-audit-event', () => ({
+  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 function makeRequest(method: 'GET' | 'PATCH', body?: unknown) {
@@ -186,6 +191,15 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
     expect(mocks.userRepo.updateProfile).toHaveBeenCalledWith(USER_ID, {
       displayName: 'New Name',
     });
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'admin_access',
+        action: 'user.update',
+        outcome: 'success',
+        targetType: 'user',
+        targetId: USER_ID,
+      }),
+    );
   });
 });
 
@@ -226,6 +240,15 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
     expect(mocks.userRepo.deactivate).toHaveBeenCalledWith(
       USER_ID,
       expect.any(Date),
+    );
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'admin_access',
+        action: 'user.deactivate',
+        outcome: 'success',
+        targetType: 'user',
+        targetId: USER_ID,
+      }),
     );
   });
 

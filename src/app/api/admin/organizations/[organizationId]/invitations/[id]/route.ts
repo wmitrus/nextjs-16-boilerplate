@@ -25,6 +25,7 @@ import { invitationsTable } from '@/modules/authorization/infrastructure/drizzle
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const invitationIdSchema = z.object({
@@ -129,6 +130,16 @@ export const DELETE = withErrorHandler(
 
     const service = createInvitationService(db);
     await service.revokeInvitation(invitationId);
+
+    await recordAdminAuditEvent({
+      category: 'membership',
+      action: 'invitation.revoke',
+      outcome: 'success',
+      tenantId: access.tenant.tenantId,
+      actorUserId: access.user.id,
+      targetType: 'invitation',
+      targetId: invitationId,
+    });
 
     return createSuccessResponse({ id: invitationId });
   }),

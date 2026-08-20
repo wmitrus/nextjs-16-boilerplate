@@ -17,14 +17,14 @@
 
 ### A.1 What exists today vs. what's missing
 
-| Capability | Today | Gap |
-| --- | --- | --- |
-| Structured logging of mutations | ✅ `logActionAudit` (Pino, redacted, Logflare-shippable) | Log lines only — not queryable in-app, not retained on a schedule you control |
-| High-severity security events | ✅ `logSecurityEvent` (fatal-level, alertable) | Same — log-only |
-| On/off control | ✅ `SECURITY_AUDIT_LOG_ENABLED` env var | Single global switch, redeploy to change, no per-category granularity, no admin UI |
-| Admin-viewable trail | ❌ | No in-app browse/search/filter of what happened |
-| Retention / DB-space control | ❌ (nothing persists to DB yet) | Needs explicit design before any DB writer ships |
-| RBAC for reading/managing audit config | 🟡 `SECURITY_READ_AUDIT` action already defined and already granted in the admin policy template | Defined but nothing implements it yet |
+| Capability                             | Today                                                                                            | Gap                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Structured logging of mutations        | ✅ `logActionAudit` (Pino, redacted, Logflare-shippable)                                         | Log lines only — not queryable in-app, not retained on a schedule you control      |
+| High-severity security events          | ✅ `logSecurityEvent` (fatal-level, alertable)                                                   | Same — log-only                                                                    |
+| On/off control                         | ✅ `SECURITY_AUDIT_LOG_ENABLED` env var                                                          | Single global switch, redeploy to change, no per-category granularity, no admin UI |
+| Admin-viewable trail                   | ❌                                                                                               | No in-app browse/search/filter of what happened                                    |
+| Retention / DB-space control           | ❌ (nothing persists to DB yet)                                                                  | Needs explicit design before any DB writer ships                                   |
+| RBAC for reading/managing audit config | 🟡 `SECURITY_READ_AUDIT` action already defined and already granted in the admin policy template | Defined but nothing implements it yet                                              |
 
 The design below **adds a DB-backed, admin-manageable trail as a second
 sink alongside** the existing Pino/Logflare pipeline — it does not replace
@@ -38,18 +38,18 @@ Toggling must happen at a **category** granularity — coarse enough to be a
 usable admin UI (not one switch per literal action name), fine enough that
 turning off noisy, low-value categories actually saves meaningful DB space.
 
-| Category | Covers | Suggested default | Suggested default retention |
-| --- | --- | --- | --- |
-| `auth` | sign-in/out, sign-up, password reset, session revocation | ON | 180 days |
-| `admin_access` | admin-panel grant/deny (`admin_guard:*`) | ON | 180 days |
-| `organization` | org create/update/status change | ON | 365 days |
-| `membership` | invite, accept, revoke, role change | ON | 365 days |
-| `rbac_policy` | role/policy create/update/delete | ON | 365 days |
-| `feature_flag` | flag create/update/delete | ON | 90 days |
-| `waitlist` | approve/reject | OFF | 30 days |
-| `billing` | plan/subscription changes | ON | 365 days |
-| `security_event` | SSRF attempts, tenant violations, rate-limit trips | ON, never sampled | 365 days |
-| `server_action` | generic `createSecureAction` catch-all not covered above | ON, success events capture minimal metadata only | 30 days |
+| Category         | Covers                                                   | Suggested default                                | Suggested default retention |
+| ---------------- | -------------------------------------------------------- | ------------------------------------------------ | --------------------------- |
+| `auth`           | sign-in/out, sign-up, password reset, session revocation | ON                                               | 180 days                    |
+| `admin_access`   | admin-panel grant/deny (`admin_guard:*`)                 | ON                                               | 180 days                    |
+| `organization`   | org create/update/status change                          | ON                                               | 365 days                    |
+| `membership`     | invite, accept, revoke, role change                      | ON                                               | 365 days                    |
+| `rbac_policy`    | role/policy create/update/delete                         | ON                                               | 365 days                    |
+| `feature_flag`   | flag create/update/delete                                | ON                                               | 90 days                     |
+| `waitlist`       | approve/reject                                           | OFF                                              | 30 days                     |
+| `billing`        | plan/subscription changes                                | ON                                               | 365 days                    |
+| `security_event` | SSRF attempts, tenant violations, rate-limit trips       | ON, never sampled                                | 365 days                    |
+| `server_action`  | generic `createSecureAction` catch-all not covered above | ON, success events capture minimal metadata only | 30 days                     |
 
 Categories are a curated, rarely-changing list — adding one is a deliberate
 migration, not a runtime free-for-all. This keeps the admin toggle screen a
@@ -264,15 +264,15 @@ migration cost of adding a category later.
 These currently log via ad hoc `logger.info({ event: 'admin:...' })` and need
 one `AuditLogService.record()` call added at each mutation branch:
 
-| Route | Category |
-| --- | --- |
-| `src/app/api/admin/users/route.ts`, `.../[id]/route.ts` | `admin_access` |
-| `src/app/api/admin/organizations/route.ts`, `.../[organizationId]/route.ts` | `organization` |
-| `src/app/api/admin/organizations/[organizationId]/policies/**` | `rbac_policy` |
+| Route                                                                                                                    | Category                     |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| `src/app/api/admin/users/route.ts`, `.../[id]/route.ts`                                                                  | `admin_access`               |
+| `src/app/api/admin/organizations/route.ts`, `.../[organizationId]/route.ts`                                              | `organization`               |
+| `src/app/api/admin/organizations/[organizationId]/policies/**`                                                           | `rbac_policy`                |
 | `src/app/admin/organizations/[organizationId]/roles/**`, `.../members/**`, `.../invitations/**` (+ their server actions) | `rbac_policy` / `membership` |
-| `src/app/api/admin/feature-flags/route.ts`, `.../[id]/route.ts` | `feature_flag` |
-| `src/app/api/admin/waitlist/route.ts`, `.../[id]/route.ts` | `waitlist` |
-| `src/app/admin/layout.tsx` (`admin_guard:access_allowed_*` / `access_denied`) | `admin_access` |
+| `src/app/api/admin/feature-flags/route.ts`, `.../[id]/route.ts`                                                          | `feature_flag`               |
+| `src/app/api/admin/waitlist/route.ts`, `.../[id]/route.ts`                                                               | `waitlist`                   |
+| `src/app/admin/layout.tsx` (`admin_guard:access_allowed_*` / `access_denied`)                                            | `admin_access`               |
 
 ### B.6 Auth events
 
@@ -365,9 +365,58 @@ one `AuditLogService.record()` call added at each mutation branch:
   and no explicit admin-route instrumentation yet — `audit_events` grows
   unbounded until Phase 4 ships retention enforcement, which is an
   accepted, deliberate risk of this phase's sequencing (Phase 1 already
-  shipped the retention *configuration* surface before any row was ever
-  written; only the *enforcement* job is still pending).
-- **Phases 3-5 — not started.**
+  shipped the retention _configuration_ surface before any row was ever
+  written; only the _enforcement_ job is still pending).
+- **Phase 3 — COMPLETE (2026-08-20).** Instrumented every existing
+  `/api/admin/**` mutation route (confirmed: none use `createSecureAction`,
+  so none had Phase 2's automatic coverage) plus `src/app/admin/layout.tsx`'s
+  admin-panel access-grant/deny events. New shared helper
+  `src/security/actions/record-admin-audit-event.ts` (a standalone copy of
+  Phase 2's resolve+record+catch pattern, not a further extraction of
+  `action-audit.ts`/`security-logger.ts` — three call sites wasn't enough
+  duplication to justify coupling already-shipped code to a new shared
+  module) is called at ~19 mutation success points across 15 route files:
+  `feature_flag` (create/update/delete), `organization` (update_status),
+  `rbac_policy` (policy create/update/delete, role create/rename/delete),
+  `membership` (member role update, invitation create/revoke ×2 route
+  shapes), `admin_access` (user update/deactivate, admin-panel
+  access-granted/denied ×3), `waitlist` (approve/reject). Category
+  mapping matches `plan.md` Part B.5 exactly. Scope intentionally limited
+  to each route's existing mutation-success point (matching the plan's own
+  text) — 403/404/409 branches are not separately audited, and where a
+  route had no pre-existing `logger.info` call, none was added; only the
+  new `recordAdminAuditEvent` call was.
+  Wiring-verification test assertions were added to 5 representative
+  existing route test files spanning 4 of the 5 touched categories
+  (`feature-flags/route.test.ts`, `organizations/[organizationId]/route.test.ts`,
+  `organizations/[organizationId]/members/[userId]/route.test.ts`,
+  `users/[id]/route.test.ts`, `invitations/route.test.ts`) plus a full unit
+  suite for the new helper itself
+  (`record-admin-audit-event.test.ts`, 3 tests). **Not** added to every one
+  of the ~15 touched files: the `rbac_policy` route test files
+  (`policies/route.test.ts`, `policies/[policyId]/route.test.ts`,
+  `roles/route.test.ts`, `roles/[roleId]/route.test.ts`) have **no existing
+  success-path test at all** (pre-existing gap, not introduced by this
+  phase — they only test the archived-organization 409 guard), and
+  `waitlist/[id]/route.ts` has **no test file at all** (also pre-existing).
+  Adding those from scratch was out of scope for this phase; flagged as
+  residual test-coverage debt below.
+  **Security finding (out of scope for this phase, reported separately to
+  the user, not silently fixed):** while reading `waitlist/[id]/route.ts`'s
+  `POST` handler to wire its audit event, found it has **no admin
+  authorization check at all** — unlike its sibling `GET` handler (which
+  calls `checkAdminAccess`), `POST` only relies on `withNodeProvisioning`
+  (authenticated + provisioned, not admin). Any authenticated, provisioned
+  user can call `POST /api/admin/waitlist/[id]?action=approve` today,
+  which creates a real invitation. See
+  `02 - Security & Auth - Summary.md`'s Phase 3 entry for the full
+  writeup; not fixed as part of this phase per "never hide a
+  security-behavior change inside an unrelated commit."
+  Validated: `pnpm typecheck`, `pnpm test` (208 files/1440 tests), `pnpm test:db`
+  (16 files/132 tests), `pnpm skott:check:only`, `pnpm depcheck`,
+  `pnpm env:check`, and `pnpm lint --fix` (0 errors, only pre-existing
+  unrelated warnings) all pass.
+- **Phases 4-5 — not started.**
 
 ## Rollout sequencing (recommended, low blast radius first)
 

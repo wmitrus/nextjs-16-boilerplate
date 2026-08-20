@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phase 1 (settings) and Phase 2 (writer wiring) are both complete.
-- Current Run Scope: Phase 2 — the write path's fail-open guarantee, redaction reuse, and the metadata that ends up persisted (sensitive-data exposure).
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-3 are complete.
+- Current Run Scope: Phase 3 — category/outcome mapping correctness for every explicit admin route, plus an **out-of-scope security finding surfaced during route review** (see below — not fixed as part of this phase).
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 2)
+- Last Updated: 2026-08-20 (Phase 3)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -34,6 +34,7 @@
 - Confirmed: the repo's now-settled fix pattern for SEC-26 is to **derive** the tenant scope from `access.tenant.tenantId` for a non-platform-admin caller rather than reject a mismatched client-supplied value (see `feature-flags/route.ts` POST handler and its SEC-26-regression tests) — the new route follows the same derive-don't-reject shape for consistency with the rest of the admin surface.
 - Risks: none novel — this is a faithful application of an already-validated pattern, not new territory.
 - Drift: none.
+- **CRITICAL (Phase 3):** `POST /api/admin/waitlist/[id]` has no admin authorization check — see the Phase 3 Update Log entry below for the full writeup. Reported to the user; not fixed in this task.
 
 ## Trust Boundary Assessment
 
@@ -72,12 +73,13 @@
 - unresolved questions: none for Phase 1.
 - blockers: none.
 - evidence still needed: a SEC-26-shaped regression test (ABAC-authorized-but-not-platform-admin caller supplying a foreign/global `tenantId` must be rejected/derived, not merely "no grant → 403") is **required** before this is considered done — tracked in the route test file.
+- **open, user-facing (Phase 3):** whether/when to fix `POST /api/admin/waitlist/[id]`'s missing authorization check is the user's decision, not this task's — raised directly in the session response. If approved, the fix is small (add the same `checkAdminAccess()` call the sibling `GET` already has) but is a distinct security-incident-shaped change, not an audit-logging one.
 
 ## Handoff Notes
 
-- what the next agent should rely on: the derive-don't-reject SEC-26 pattern is settled; implement it exactly as in `feature-flags/route.ts`, not a variant. As of Phase 2: the two-layer fail-open pattern (resolution try/catch + `ResilientAuditLogService`) and caller-side redaction are also settled — new call sites (Phase 3's admin route instrumentation) should copy `action-audit.ts`'s `recordAuditEvent` pattern rather than inventing a variant.
+- what the next agent should rely on: the derive-don't-reject SEC-26 pattern is settled; implement it exactly as in `feature-flags/route.ts`, not a variant. As of Phase 2: the two-layer fail-open pattern (resolution try/catch + `ResilientAuditLogService`) and caller-side redaction are also settled — new call sites (Phase 3's admin route instrumentation) should copy `action-audit.ts`'s `recordAuditEvent` pattern rather than inventing a variant. As of Phase 3: `src/security/actions/record-admin-audit-event.ts` is the settled pattern for `/api/admin/**` routes specifically (not `action-audit.ts`'s `recordAuditEvent`, which is action-audit-specific) — reuse it for any new admin route rather than inventing a fourth copy.
 - what should not be re-decided without new evidence: the GET/PATCH action split (`SECURITY_READ_AUDIT` vs. `SECURITY_MANAGE_AUDIT_SETTINGS`); redaction happening before the `AuditLogService` contract boundary, never after.
-- recommended next specialist or step: Phase 3 — map each `src/app/api/admin/**` mutation route to its audit category (per `plan.md` Part B.5) and add the equivalent `recordAuditEvent`-shaped call at each mutation branch.
+- recommended next specialist or step: if the user approves fixing the waitlist authorization gap, that is a `security-incident-workflow`-shaped task, not a continuation of this audit-logging plan — treat it as a separate task. Otherwise, Phase 4 (partitioning, purge job, `/admin/audit-logs` read UI) per `plan.md`.
 
 ## Update Log
 
@@ -93,8 +95,64 @@
 - Date: 2026-08-20
 - Trigger: Phase 2 implementation kickoff
 - Summary of change:
-  - **Fail-open, at two layers.** `AuditLogService.record()` (the DI-registered `ResilientAuditLogService`) never throws — but `logActionAudit`/`logSecurityEvent` also wrap the *resolution* of the service (`getAppContainer().resolve(AUDIT_LOG.SERVICE)`) in their own try/catch, because resolution itself can throw (confirmed in practice: the global test double for `getAppContainer()` in `tests/setup.tsx` never registers `AUDIT_LOG.SERVICE` at all, so every one of the ~200 existing unit test files that transitively exercise a secure action would have started failing with "Service not found" if only `record()`'s own fail-open guarantee were relied on). Verified via the full unit suite (207 files / 1437 tests, all passing) plus `src/testing/integration/server-actions.test.ts`, which uses the *real* (non-mocked) composition root and confirms the production resolution path also degrades safely when the underlying PGlite instance has no migrated `audit_log_settings` table.
+  - **Fail-open, at two layers.** `AuditLogService.record()` (the DI-registered `ResilientAuditLogService`) never throws — but `logActionAudit`/`logSecurityEvent` also wrap the _resolution_ of the service (`getAppContainer().resolve(AUDIT_LOG.SERVICE)`) in their own try/catch, because resolution itself can throw (confirmed in practice: the global test double for `getAppContainer()` in `tests/setup.tsx` never registers `AUDIT_LOG.SERVICE` at all, so every one of the ~200 existing unit test files that transitively exercise a secure action would have started failing with "Service not found" if only `record()`'s own fail-open guarantee were relied on). Verified via the full unit suite (207 files / 1437 tests, all passing) plus `src/testing/integration/server-actions.test.ts`, which uses the _real_ (non-mocked) composition root and confirms the production resolution path also degrades safely when the underlying PGlite instance has no migrated `audit_log_settings` table.
   - **Redaction is caller-side, not module-side** (see the Architecture Guard entry above for the dependency-direction reasoning). Practical consequence for security review: `action-audit.ts`/`security-logger.ts` now call `redactAuditInput()` **unconditionally** (both success and failure), not only on failure as the Pino path still does — this is what lets a category's `captureInputOnSuccess` setting actually capture something on success. Verified the redactor itself did not change behavior during extraction: all 7 pre-existing redaction scenarios (nested fields, `URLSearchParams`, arrays, non-object values, circular references) pass unchanged via the new `src/security/actions/redact.test.ts`, and `action-audit.test.ts`'s original assertions (unmodified) still pass against the re-exported function.
   - **What gets persisted vs. logged differs by design**, and this is intentional, not drift: Pino continues to log full redacted input only on failure (unchanged); the DB path persists redacted input on failure always, and on success only when the category's admin-configured `captureInputOnSuccess` is true. Both paths use the same redaction rules, so nothing unredacted is ever persisted through either path.
   - **`security_event` outcome mapped to `'failure'`**, not `'denied'` — a judgment call (documented inline in `security-logger.ts`) since every event that utility logs (`ssrf_attempt`, `tenant_violation`, `rate_limit_bypass`, `replay_attack`, `auth_failure`) represents a blocked/flagged attempt rather than a completed action, and `auth_failure` in particular doesn't fit "denied" cleanly. Revisit if Phase 4's read UI needs finer-grained outcome filtering.
 - Sections refreshed: Actions Performed, Sensitive Data And Exposure Notes, Security Decisions / Constraints, Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 3 implementation kickoff
+- Summary of change: Reviewed every `/api/admin/**` route's authorization gate while mapping it to its audit category (a necessary step, since `access.tenant.tenantId`/`access.user.id` needed for the audit record come from the same `withNodeProvisioning` result the authorization check uses).
+
+  **CRITICAL — real finding, not fixed in this phase:**
+  `POST /api/admin/waitlist/[id]?action=approve|reject`
+  (`src/app/api/admin/waitlist/[id]/route.ts`) has **no admin authorization
+  check at all**. Its sibling `GET /api/admin/waitlist` on the same
+  resource calls `checkAdminAccess()` (env-based platform admin OR ABAC
+  `SECURITY_MANAGE_POLICIES`) before listing entries. `POST` skips that
+  entirely — it only passes through `withNodeProvisioning`, which verifies
+  the caller is authenticated and provisioned (onboarded, has tenant
+  context), **not** that they hold any admin grant. Concretely: any
+  authenticated, provisioned, non-admin user in the app can call this
+  endpoint directly (it is not gated by the `/admin` page layout's guard —
+  that guard only wraps page rendering, not this API route) to:
+  - approve an arbitrary waitlist entry, which creates a **real invitation
+    email** to whatever organization/role the approval resolves to
+    (`WAITLIST_INVITE_ORGANIZATION_ID`/`WAITLIST_INVITE_ROLE_ID`, or the
+    single-tenancy auto-resolved org/role), or
+  - reject an arbitrary waitlist entry, sending a rejection email on the
+    product's behalf.
+
+  This is confirmed by direct code reading (`_request, context` are the
+  only params destructured in the current handler — no `access`, so
+  `checkAdminAccess`/`isEnvBasedPlatformAdmin` are never called on this
+  path), not inferred. This is exactly the kind of gap
+  `docs/ai/general/SECURITY_CODING_PATTERNS.md`'s catalogue exists to
+  track once remediated (a new SEC-XX entry, likely closest in shape to a
+  missing-authorization-check pattern rather than SEC-26's scope-not-type
+  issue, since here there is no authorization check of any kind, not an
+  under-scoped one).
+
+  **Not fixed here.** Per `AGENTS.md`'s Change Management guidance ("never
+  hide architectural changes inside 'small' edits... mix unrelated cleanup
+  with risky behavioral changes without saying so") and the general
+  "confirm first for hard-to-reverse or outward-facing changes" posture,
+  an authorization-tightening fix is a distinct, user-facing behavior
+  change from audit-log instrumentation and must not ride along inside
+  this phase's commit. I only added the third `access` parameter to the
+  handler signature (needed to populate `tenantId`/`actorUserId` on the
+  audit record) — that alone changes no authorization behavior. Reported
+  directly to the user in this session's response, not silently deferred
+  to a task-artifact note only.
+
+  Every other route reviewed in this phase already has a real
+  authorization check before its mutation (`checkAdminAccess`,
+  `checkOrganizationsAdminAccess`, or `checkOrganizationsActionAccess`,
+  each with the `isEnvBasedPlatformAdmin` OR ABAC `can()` shape) — this
+  appears to be an isolated oversight on this one route, not a systemic
+  pattern across the admin surface.
+
+- Sections refreshed: Current-State Findings, Trust Boundary Assessment, Open Questions / Blockers, Handoff Notes

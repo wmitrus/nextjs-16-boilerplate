@@ -29,6 +29,7 @@ import {
 } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { DrizzleAdminPoliciesMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminPoliciesMutationService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const allowedResources = new Set<string>(Object.values(RESOURCES));
@@ -160,6 +161,16 @@ export const PATCH = withErrorHandler(
         actions: bodyResult.data.actions,
       });
 
+      await recordAdminAuditEvent({
+        category: 'rbac_policy',
+        action: 'rbac_policy.update',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'policy',
+        targetId: policyResult.data.policyId,
+      });
+
       return createSuccessResponse({ policy });
     } catch (error) {
       if (
@@ -253,6 +264,16 @@ export const DELETE = withErrorHandler(
       await mutationService.deleteRolePolicy({
         organizationId: organizationResult.data.id,
         policyId: policyResult.data.policyId,
+      });
+
+      await recordAdminAuditEvent({
+        category: 'rbac_policy',
+        action: 'rbac_policy.delete',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'policy',
+        targetId: policyResult.data.policyId,
       });
 
       return createSuccessResponse({ policyId: policyResult.data.policyId });

@@ -30,6 +30,7 @@ import {
 } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { DrizzleAdminPoliciesMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminPoliciesMutationService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const allowedResources = new Set<string>(Object.values(RESOURCES));
@@ -148,6 +149,16 @@ export const POST = withErrorHandler(
         effect: bodyResult.data.effect,
         resource: bodyResult.data.resource,
         actions: bodyResult.data.actions,
+      });
+
+      await recordAdminAuditEvent({
+        category: 'rbac_policy',
+        action: 'rbac_policy.create',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'policy',
+        targetId: policy.id,
       });
 
       return createSuccessResponse({ policy }, 201);

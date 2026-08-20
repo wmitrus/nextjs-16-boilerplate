@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phase 1 (settings) and Phase 2 (writer wiring) are both complete.
-- Current Run Scope: Phase 2 — runtime placement of the new writer path (no new routes/pages this phase; `logActionAudit`/`logSecurityEvent` are called from within existing Node-runtime server-action/security code, not from any new App Router surface).
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-3 are complete.
+- Current Run Scope: Phase 3 — confirming every instrumented call site (route handlers + `src/app/admin/layout.tsx`) is Node-runtime and that adding an `await recordAdminAuditEvent(...)` call doesn't change any route's existing dynamic-rendering/response-shape behavior.
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 2)
+- Last Updated: 2026-08-20 (Phase 3)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -91,3 +91,10 @@
 - Trigger: Phase 2 implementation kickoff
 - Summary of change: Confirmed both new call sites (`logActionAudit` in `src/security/actions/action-audit.ts`, invoked from `createSecureAction`; `logSecurityEvent` in `src/security/utils/security-logger.ts`) are already exclusively Node-runtime today — `createSecureAction`'s existing DB-backed ABAC authorization already required Node, and `logSecurityEvent` was never called from `src/proxy.ts` (Edge) at all (confirmed by grep: its only callers before this phase were its own test file and the docs example). Adding a `getAppContainer()`/DB-touching call inside both is therefore safe under the Edge-vs-Node boundary rule (`docs/architecture/15 - Edge vs Node Composition Root Boundary.md`) without any new runtime guard. No `src/proxy.ts` changes were needed or made. `AUDIT_LOG.SERVICE` registration in `src/core/runtime/bootstrap.ts`'s `createRequestContainer()` runs in the same Node composition-root path as every other service there (`FEATURE_FLAGS.SERVICE`, `PROVISIONING.SERVICE`) — no new lifecycle concern.
 - Sections refreshed: Scope Handled, Runtime Boundary Assessment, Runtime Decisions / Constraints, Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 3 implementation kickoff
+- Summary of change: All ~15 touched route files already call `await connection()` first (unchanged); the new `await recordAdminAuditEvent(...)` calls were inserted after each mutation's own DB work completes and before its `return createSuccessResponse(...)`, so no route's response shape, status code, or error-branch behavior changed — confirmed by the full existing route-test suite (208 files) passing unchanged plus wiring assertions added to 5 representative test files. `src/app/admin/layout.tsx` is an RSC (Server Component), not a route handler, but is already `await connection()`-gated (via `getServerRequestLogContext`) before any of the three new audit calls — same dynamic-rendering posture as the rest of the file, no change needed. All instrumented call sites remain Node-only; `src/proxy.ts` was not touched.
+- Sections refreshed: Scope Handled, Actions Performed, Current-State Findings

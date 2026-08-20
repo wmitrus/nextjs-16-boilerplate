@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn(),
   },
+  recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -44,6 +45,10 @@ vi.mock('@/security/core/platform-admin', () => ({
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => mocks.container,
+}));
+
+vi.mock('@/security/actions/record-admin-audit-event', () => ({
+  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 vi.mock(
@@ -192,5 +197,14 @@ describe('PATCH /api/admin/organizations/[organizationId]/members/[userId]', () 
       userId: USER_ID,
       roleId: ROLE_ID,
     });
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'membership',
+        action: 'membership.update_role',
+        outcome: 'success',
+        targetType: 'user',
+        targetId: USER_ID,
+      }),
+    );
   });
 });

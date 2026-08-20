@@ -17,6 +17,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
 import { FeatureFlagNotFoundError } from '@/modules/feature-flags/domain/errors';
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -157,6 +158,16 @@ export const PATCH = withErrorHandler(
         'Feature flag updated by admin',
       );
 
+      await recordAdminAuditEvent({
+        category: 'feature_flag',
+        action: 'feature_flag.update',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'feature_flag',
+        targetId: id,
+      });
+
       return createSuccessResponse({ flag });
     } catch (error) {
       if (error instanceof FeatureFlagNotFoundError) {
@@ -217,6 +228,16 @@ export const DELETE = withErrorHandler(
         },
         'Feature flag deleted by admin',
       );
+
+      await recordAdminAuditEvent({
+        category: 'feature_flag',
+        action: 'feature_flag.delete',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'feature_flag',
+        targetId: id,
+      });
 
       return createSuccessResponse({ deleted: true });
     } catch (error) {

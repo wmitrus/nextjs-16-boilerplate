@@ -14,6 +14,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -142,6 +143,16 @@ export const PATCH = withErrorHandler(
         'User deactivated by admin',
       );
 
+      await recordAdminAuditEvent({
+        category: 'admin_access',
+        action: 'user.deactivate',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'user',
+        targetId: id,
+      });
+
       return createSuccessResponse({ deactivatedAt });
     }
 
@@ -186,6 +197,16 @@ export const PATCH = withErrorHandler(
       },
       'User profile updated by admin',
     );
+
+    await recordAdminAuditEvent({
+      category: 'admin_access',
+      action: 'user.update',
+      outcome: 'success',
+      tenantId: access.tenant.tenantId,
+      actorUserId: access.user.id,
+      targetType: 'user',
+      targetId: id,
+    });
 
     return createSuccessResponse({ updated: true });
   }),

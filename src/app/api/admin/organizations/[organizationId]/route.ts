@@ -23,6 +23,7 @@ import {
 import { OrganizationNotFoundError } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsMutationService';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const patchBodySchema = z.object({
@@ -138,6 +139,16 @@ export const PATCH = withErrorHandler(
           organizationId: parseResult.data.id,
           status: bodyResult.data.status,
         });
+
+      await recordAdminAuditEvent({
+        category: 'organization',
+        action: 'organization.update_status',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'organization',
+        targetId: parseResult.data.id,
+      });
 
       return createSuccessResponse({ organization: updatedOrganization });
     } catch (error) {

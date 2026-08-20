@@ -17,6 +17,7 @@ import { InvitationNotFoundError } from '@/modules/invitations/domain/errors';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -90,6 +91,17 @@ export const DELETE = withErrorHandler(
 
     try {
       await service.revokeInvitation(id);
+
+      await recordAdminAuditEvent({
+        category: 'membership',
+        action: 'invitation.revoke',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'invitation',
+        targetId: id,
+      });
+
       return createSuccessResponse({ id });
     } catch (error) {
       if (error instanceof InvitationNotFoundError) {

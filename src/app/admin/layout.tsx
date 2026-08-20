@@ -12,6 +12,7 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
 
 import { buildBootstrapRedirectUrl } from '@/app/auth/post-auth-redirect';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -90,6 +91,16 @@ export async function AdminLayoutGuard({
       },
       'Admin access granted via ADMIN_USER_EMAILS env var (bootstrap mode)',
     );
+    await recordAdminAuditEvent({
+      category: 'admin_access',
+      action: 'admin_panel.access_granted',
+      outcome: 'success',
+      tenantId: access.tenant.tenantId,
+      actorUserId: access.user.id,
+      targetType: 'admin_panel',
+      targetId: 'admin-panel',
+      metadata: { source: 'env' },
+    });
     return <AdminLayoutShell>{children}</AdminLayoutShell>;
   }
 
@@ -127,6 +138,15 @@ export async function AdminLayoutGuard({
       },
       'Admin access denied — user lacks SECURITY_MANAGE_POLICIES permission and is not in ADMIN_USER_EMAILS',
     );
+    await recordAdminAuditEvent({
+      category: 'admin_access',
+      action: 'admin_panel.access_denied',
+      outcome: 'denied',
+      tenantId: access.tenant.tenantId,
+      actorUserId: access.user.id,
+      targetType: 'admin_panel',
+      targetId: 'admin-panel',
+    });
     redirect('/');
   }
 
@@ -139,6 +159,17 @@ export async function AdminLayoutGuard({
     },
     'Admin access granted via ABAC SECURITY_MANAGE_POLICIES',
   );
+
+  await recordAdminAuditEvent({
+    category: 'admin_access',
+    action: 'admin_panel.access_granted',
+    outcome: 'success',
+    tenantId: access.tenant.tenantId,
+    actorUserId: access.user.id,
+    targetType: 'admin_panel',
+    targetId: 'admin-panel',
+    metadata: { source: 'abac' },
+  });
 
   return <AdminLayoutShell>{children}</AdminLayoutShell>;
 }

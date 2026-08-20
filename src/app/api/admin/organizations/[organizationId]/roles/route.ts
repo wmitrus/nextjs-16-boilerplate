@@ -24,6 +24,7 @@ import {
 } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { DrizzleAdminRolesMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminRolesMutationService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const bodySchema = z.object({
@@ -100,6 +101,16 @@ export const POST = withErrorHandler(
       const role = await mutationService.createCustomRole({
         organizationId: paramsResult.data.id,
         name: bodyResult.data.name,
+      });
+
+      await recordAdminAuditEvent({
+        category: 'rbac_policy',
+        action: 'role.create',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'role',
+        targetId: role.id,
       });
 
       return createSuccessResponse({ role }, 201);

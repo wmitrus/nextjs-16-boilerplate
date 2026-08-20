@@ -26,6 +26,7 @@ import {
 } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminMembershipsMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminMembershipsMutationService';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const userIdSchema = z.object({
@@ -115,6 +116,16 @@ export const PATCH = withErrorHandler(
         organizationId: organizationResult.data.id,
         userId: userResult.data.userId,
         roleId: bodyResult.data.roleId,
+      });
+
+      await recordAdminAuditEvent({
+        category: 'membership',
+        action: 'membership.update_role',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'user',
+        targetId: userResult.data.userId,
       });
 
       return createSuccessResponse({ membership });

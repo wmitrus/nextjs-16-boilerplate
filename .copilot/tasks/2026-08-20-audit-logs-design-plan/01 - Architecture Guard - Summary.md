@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phase 1 (settings schema/CRUD/API/UI) and Phase 2 (writer + automatic instrumentation of `logActionAudit`/`logSecurityEvent`) are both complete.
-- Current Run Scope: Phase 2 — `audit_events` table, `AuditLogService` (DI-registered), `DrizzleAuditLogService`, `ResilientAuditLogService`, extracted `src/security/actions/redact.ts`, wiring into `logActionAudit`/`logSecurityEvent`.
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-3 are complete.
+- Current Run Scope: Phase 3 — explicit instrumentation of every `/api/admin/**` mutation route plus `src/app/admin/layout.tsx`'s admin-panel access events, via a new shared `recordAdminAuditEvent` helper.
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 2)
+- Last Updated: 2026-08-20 (Phase 3)
 - Related Control Artifacts: `plan.md`, `intake.md`
 
 ## Scope Handled
@@ -85,7 +85,14 @@
 - Date: 2026-08-20
 - Trigger: Phase 2 implementation kickoff
 - Summary of change: Reviewed the writer path's module-boundary implications. Two decisions worth recording:
-  1. **Redaction stays in `src/security/actions/redact.ts`, not in `src/modules/audit-log`.** The plan's Part A.4 said "extract redaction to a shared location" without naming where; `modules -> security` is not an allowed dependency direction (`docs/architecture/10 - Modular Monolith - File Catalog.md` §2.1), so the audit-log module cannot import a security-owned redactor. Redaction now happens on the caller's side (`action-audit.ts`/`security-logger.ts`) before the already-redacted value crosses the `AuditLogService` contract; the module only decides whether to *persist* it (via `captureInputOnSuccess`) and applies its own generic size cap. Documented in `02 - Security & Auth - Summary.md`.
+  1. **Redaction stays in `src/security/actions/redact.ts`, not in `src/modules/audit-log`.** The plan's Part A.4 said "extract redaction to a shared location" without naming where; `modules -> security` is not an allowed dependency direction (`docs/architecture/10 - Modular Monolith - File Catalog.md` §2.1), so the audit-log module cannot import a security-owned redactor. Redaction now happens on the caller's side (`action-audit.ts`/`security-logger.ts`) before the already-redacted value crosses the `AuditLogService` contract; the module only decides whether to _persist_ it (via `captureInputOnSuccess`) and applies its own generic size cap. Documented in `02 - Security & Auth - Summary.md`.
   2. **`audit_events.tenantId` is `text`, not `uuid`+FK** (differs from the plan's Part A.3 sketch, which proposed `uuid` referencing `tenants.id`). Found while wiring the writer: `RequestScopedTenantResolver` (`src/modules/auth/infrastructure/RequestScopedTenantResolver.ts`) can populate `SecurityContext.user.tenantId` with a raw external provider org id (not a `tenants.id` UUID) depending on `TENANT_CONTEXT_SOURCE`. A `uuid` FK column would hard-fail on insert for that configuration. Fixed to match `featureFlagsTable`/`auditLogSettingsTable`'s existing `text`, no-FK convention. `organizationId` was dropped from the Phase 2 schema for the identical reason — nothing populates it yet, and the same resolver shows the same internal-UUID-vs-external-id ambiguity for it; add it once a real caller (a later phase) settles which one it needs. `actorUserId` stays `uuid`+FK — `SecurityContext.user.id` is always the internal app user id.
   3. **`AuditLogService` is DI-registered** (`AUDIT_LOG.SERVICE` in `src/core/runtime/bootstrap.ts`, bound to `createAuditLogService(dbRuntime.db)`), unlike Phase 1's admin CRUD service — this is the real runtime writer, resolved via `getAppContainer()` from `logActionAudit`/`logSecurityEvent`, matching `FEATURE_FLAGS.SERVICE`'s registration shape exactly.
 - Sections refreshed: Task Context, Boundary And Dependency Assessment (implicitly, via this entry), Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 3 implementation kickoff
+- Summary of change: Confirmed the plan's Part B.5 premise directly against the code: none of the ~17 `/api/admin/**` route files use `createSecureAction` (grep-confirmed), so none had Phase 2's automatic coverage — every mutation genuinely needed explicit instrumentation. Added one new shared helper, `src/security/actions/record-admin-audit-event.ts`, deliberately a standalone copy of the resolve+record+catch pattern already in `action-audit.ts`/`security-logger.ts` rather than a further extraction shared with them — three call sites (now four, counting this one) is not yet enough duplication to justify coupling two already-shipped, already-tested modules to a new one; revisit this decision if a Phase 4+ need calls for a fourth near-identical copy. A secondary finding while reading every route for correct category mapping: several routes (`organizations/[organizationId]/route.ts`, all four `roles`/`policies` route files) have **no pre-existing `logger.info` call on their mutation success path at all** — the plan's assumption that "each of these currently already logs" only held for `users`, `feature-flags`, and `waitlist`. Where missing, only the new audit-record call was added; backfilling missing Pino observability logging was treated as out of scope for this phase (a distinct, if related, gap).
+- Sections refreshed: Scope Handled, Boundary And Dependency Assessment, Handoff Notes

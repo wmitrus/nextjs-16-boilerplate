@@ -1,3 +1,10 @@
+# [1.35.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.34.0...v1.35.0) (2026-08-20)
+
+
+### Features
+
+* **admin:** add Feature Flags management GUI ([c2eefcb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c2eefcb8a596897446d622d37529e29982eae264))
+
 # [1.34.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.33.0...v1.34.0) (2026-08-15)
 
 

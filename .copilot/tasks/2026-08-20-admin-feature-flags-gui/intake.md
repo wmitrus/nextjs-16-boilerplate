@@ -87,17 +87,34 @@ missing.
 
 ## Acceptance Criteria
 
-- [ ] `/admin/feature-flags` renders for a platform admin, gated the same
-      way as other admin pages.
-- [ ] All CRUD operations work against the `feature_flags` table via the
+- [x] `/admin/feature-flags` renders for a platform admin, gated the same
+      way as other admin pages. **⚠️ Proven at unit/DB/component-test level
+      only — real-browser (E2E) confirmation is BLOCKED, see below.**
+- [x] All CRUD operations work against the `feature_flags` table via the
       new admin-only service (not through `FeatureFlagService`).
-- [ ] Non-admin and unauthenticated requests are rejected per S7/S8.
-- [ ] `env.FEATURE_FLAG_PROVIDER` is visible on the page; non-`db` providers
+- [x] Non-admin and unauthenticated requests are rejected per S7/S8.
+- [x] `env.FEATURE_FLAG_PROVIDER` is visible on the page; non-`db` providers
       are clearly flagged and mutations are not presented as effective.
-- [ ] `seed.ts` grants the new actions to the appropriate seeded role(s),
+- [x] `seed.ts` grants the new actions to the appropriate seeded role(s),
       consistent with how other admin-reachable resources are seeded.
-- [ ] `/admin` card status flips to `'active'`.
-- [ ] Unit + DB-integration tests pass; `pnpm typecheck` passes.
+- [x] `/admin` card status flips to `'active'`.
+- [x] Unit + DB-integration tests pass; `pnpm typecheck` passes.
+
+### ⚠️ BLOCKED — Outstanding Before Merge
+
+- [ ] **E2E execution** (`e2e/admin.spec.ts`, `describe('Admin Feature
+    Flags (/admin/feature-flags)')`, 6 scenarios). Spec is written,
+      typechecked, and lint-clean, but could **not be executed** in this
+      sandbox — missing Clerk E2E fixture credentials
+      (`scripts/check-e2e-auth-env.mjs` requires them unconditionally for
+      the `single` scenario even under `AUTH_PROVIDER=authjs`). This is a
+      pre-existing repository/environment gap, not a defect in this
+      feature — every existing AuthJS admin E2E spec would hit the same
+      wall in this sandbox. **Must be run with real Clerk credentials
+      before this task is genuinely merge-ready:**
+      `AUTH_PROVIDER=authjs node scripts/e2e/run-scenario.mjs single -- e2e/admin.spec.ts --project=chromium --reporter=line --grep "Feature Flags"`
+      (add `FEATURE_FLAG_PROVIDER=db` for the optional CRUD-cycle test).
+      Full detail: `07 - Playwright E2E - Summary.md`.
 
 ## Verification Sources
 

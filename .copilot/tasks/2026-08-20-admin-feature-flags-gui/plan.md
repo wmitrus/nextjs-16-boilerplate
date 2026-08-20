@@ -2,20 +2,30 @@
 
 ## Status
 
-**IMPLEMENTATION COMPLETE, ONE REAL GAP OPEN BEFORE MERGE.** All 3 design
-specialists GO, implementation done, all quality gates green including a
-full repo-wide `pnpm lint --fix` (0 errors — the documented 2026-08-14
-blocker did **not** reproduce in this session, worth re-confirming/
-clearing that doc note separately). Validation Strategy identified a real
-E2E-parity gap against every other admin surface; the spec is written,
-typechecked, and lint-clean, but **actual execution is blocked in this
-sandbox by missing Clerk E2E fixture credentials** — a pre-existing
-environment gap, not a defect in this feature. Must be run with real
-credentials (`AUTH_PROVIDER=authjs node scripts/e2e/run-scenario.mjs single -- e2e/admin.spec.ts --grep "Feature Flags"`)
-before this is genuinely merge-ready. Full detail in
+**⚠️ NOT MERGE-READY — 🔴 E2E EXECUTION BLOCKED (environment).**
+IMPLEMENTATION COMPLETE, ONE REAL GAP OPEN BEFORE MERGE. All 3 design
+specialists GO, implementation done, all quality gates green (typecheck,
+lint --fix repo-wide 0 errors, 1383/1383 unit tests, 102/102 DB tests,
+skott, depcheck, env:check — re-confirmed 2026-08-20; the documented
+2026-08-14 `pnpm lint --fix` hang did **not** reproduce in this session,
+worth re-confirming/clearing that doc note separately). Validation
+Strategy identified a real E2E-parity gap against every other admin
+surface; the spec is written, typechecked, and lint-clean, but **actual
+execution is blocked in this sandbox by missing Clerk E2E fixture
+credentials** — a pre-existing environment gap, not a defect in this
+feature. Must be run with real credentials
+(`AUTH_PROVIDER=authjs node scripts/e2e/run-scenario.mjs single -- e2e/admin.spec.ts --grep "Feature Flags"`)
+**before merge.** Full detail in
 `04 - Implementation Agent - Summary.md`,
 `05 - Validation Strategy - Summary.md`,
 `07 - Playwright E2E - Summary.md`.
+
+**PR readiness (mechanical checks, 2026-08-20):** branch
+`feature/admin-feature-flags-gui` is 0 behind / 3 ahead of `origin/main`,
+no merge conflicts (`git merge-tree`), working tree clean. Ready to open
+a PR — but the PR description/reviewers should carry forward the 🔴 E2E
+blocker above; do not represent this as fully validated until a real
+Clerk-credentialed E2E run confirms the 6 new scenarios.
 
 ## Consolidated Constraint Summary (Step 5)
 
@@ -135,11 +145,14 @@ gathered.
 - [x] Validation Strategy pass (Step 7 close-out) — identified E2E parity
       gap vs. every other admin surface, see
       `05 - Validation Strategy - Summary.md`
-- [x] E2E spec written (`e2e/admin.spec.ts`), typechecked, lint-clean —
-      **execution BLOCKED in this sandbox** by missing Clerk E2E fixture
-      credentials (pre-existing environment gap, not a defect in this
-      feature); must be run with real credentials before merge. See
-      `07 - Playwright E2E - Summary.md`.
+- [x] E2E spec written (`e2e/admin.spec.ts`), typechecked, lint-clean
+- [ ] 🔴 **BLOCKED — E2E execution** (environment: missing Clerk E2E
+      fixture credentials in this sandbox, pre-existing gap, not a defect
+      in this feature). **Outstanding before merge.** Run with real
+      credentials:
+      `AUTH_PROVIDER=authjs node scripts/e2e/run-scenario.mjs single -- e2e/admin.spec.ts --project=chromium --reporter=line --grep "Feature Flags"`
+      (add `FEATURE_FLAG_PROVIDER=db` for the optional CRUD-cycle test).
+      See `07 - Playwright E2E - Summary.md`.
 
 ## Planned Artifacts
 

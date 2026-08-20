@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-4 are complete.
-- Current Run Scope: Phase 4 — read/browse UI (`/admin/security/audit-logs`), `GET /api/admin/audit-logs`, and the retention-enforcement purge job (`scripts/audit-log/purge-expired.ts` + daily GitHub Actions workflow).
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-5 are complete, plus the Phase-3-flagged test-coverage gap.
+- Current Run Scope: Phase 5 — documentation only (`docs/features/36 - Audit Logging & Retention.md`, `docs/features/20` §6/§7 update, `docs/architecture/10` §8.4 module catalog entry). No code changes.
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 4)
+- Last Updated: 2026-08-20 (Phase 5)
 - Related Control Artifacts: `plan.md`, `intake.md`
 
 ## Scope Handled
@@ -103,3 +103,10 @@
 - Trigger: Phase 4 implementation kickoff
 - Summary of change: Reviewed the read/browse UI and purge job for boundary correctness before implementation, then again after. Three decisions worth recording: (1) `DrizzleAuditLogReadService` follows the same non-DI-registered, directly-instantiated-at-the-route-call-site shape as Phase 1's `DrizzleAuditLogSettingsAdminService` — admin-only, low-frequency reads don't need composition-root wiring. (2) The purge job's actual DB logic (`listPresentCategoryTenantPairs`, `purgeExpiredAuditEvents`) was placed in `src/modules/audit-log/infrastructure/drizzle/purge-expired-events.ts`, not inline in `scripts/audit-log/purge-expired.ts` — this repo's test convention only runs `src/**/*.db.test.ts` against a real (PGlite) DB; `scripts/**` DB-touching logic is not covered by that convention (confirmed by reading `scripts/flags/migrate.test.ts` and `scripts/db-seed.test.ts`, both of which only unit-test pure URL-resolution helpers and mock `createDb` entirely). Moving the actual delete logic into `src/modules` gets it real-DB test coverage under the existing convention instead of shipping an under-tested retention-enforcement path; `scripts/audit-log/purge-expired.ts` is now a thin CLI wrapper matching every other standalone DB script's shape (`import '../load-env'`, local `resolveProvider`/`resolveDriver`/`resolveDatabaseUrl`, `dbRuntime.close?.()` in `finally`). (3) `resolveEffectiveSetting` was extracted out of `DrizzleAuditLogService` into a shared `effective-settings.ts` specifically so the write path and the purge job cannot independently drift on what "the currently effective retention" means for a given (category, tenantId) pair — re-validated with the full DB suite (`DrizzleAuditLogService.db.test.ts`'s existing assertions) after the extraction, no behavior change. Native Postgres table partitioning (plan Part A.4 item 7 / Part B.3) remains explicitly deferred — this is not a boundary/module-placement decision, it is a data-migration risk call, documented in `plan.md`'s Phase 4 entry.
 - Sections refreshed: Scope Handled, Boundary And Dependency Assessment, Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: residual test-coverage-gap fix (flagged in Phase 3), then Phase 5 implementation kickoff
+- Summary of change: No architectural surface changed in either of these two follow-ups — both were docs/tests-only. Recorded here only because both touch this task's artifacts: (1) the `policies`/`roles` route test files' missing success-path coverage (flagged as residual debt in the Phase 3 entry above) was closed with 18 new tests, no route code changed, no boundary reconsidered. (2) Phase 5 added `docs/features/36 - Audit Logging & Retention.md` and updated two existing docs (`docs/features/20` §6/§7, `docs/architecture/10` §8.4) to describe the module shipped in Phases 1-4 — a documentation-catch-up phase by design, not a review of new code. One finding worth flagging as architectural housekeeping, not fixed: `modules/feature-flags` (the structural precedent this whole module was modeled on) has never had a catalog entry in `docs/architecture/10`'s §8.4, and still doesn't — `modules/audit-log`'s new entry was added without backfilling that pre-existing sibling gap, to keep this phase's diff scoped to what it actually shipped. Flagging it here so a future pass doesn't have to rediscover it.
+- Sections refreshed: Artifact Synchronization, Handoff Notes

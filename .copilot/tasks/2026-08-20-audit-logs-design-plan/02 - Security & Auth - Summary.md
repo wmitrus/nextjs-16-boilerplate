@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-4 are complete.
-- Current Run Scope: Phase 4 — authorization gating for the new read route (`GET /api/admin/audit-logs`) and SEC-26-correct tenant scoping for both it and the purge job.
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-5 are complete, plus the Phase-3-flagged test-coverage gap.
+- Current Run Scope: Phase 5 — documentation only; plus a security-relevant drift correction found while writing it (`SECURITY_AUDIT_LOG_ENABLED` does not actually gate anything, contrary to existing docs).
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 4)
+- Last Updated: 2026-08-20 (Phase 5)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -182,3 +182,10 @@
   Outcome-mapping question raised in the Phase 3 entry above ("revisit if Phase 4's read UI needs finer-grained outcome filtering") — resolved as no: the read UI's outcome filter uses the same three-value `success | failure | denied` enum already stored on every row; no finer granularity was needed to make the browse UI useful.
 
 - Sections refreshed: Trust Boundary Assessment, Security Decisions / Constraints, Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: residual test-coverage-gap fix (flagged in Phase 3), then Phase 5 implementation kickoff
+- Summary of change: (1) The `policies`/`roles` route test coverage gap closed this session is a test-completeness fix, not a security-behavior change — every added success-path test asserts the _existing_ authorization/audit-recording behavior fires correctly (403 for a non-admin caller, `recordAdminAuditEvent` called with the right category/action/target on success, not called on a domain-error branch); no route handler code changed. (2) While writing `docs/features/36 - Audit Logging & Retention.md` §8 (Security Notes) and updating `docs/features/20`'s §7 config table, re-verified `SECURITY_AUDIT_LOG_ENABLED`'s actual behavior directly against the code rather than trusting this task's own `intake.md`, which had characterized it (Phase 0, unverified) as "a single global on/off switch read from env at process start" gating the existing Pino audit logging. **Grep-confirmed: `src/security/actions/action-audit.ts` and `src/security/utils/security-logger.ts` never reference `env` at all** — `SECURITY_AUDIT_LOG_ENABLED` is defined in `src/core/env.ts`'s schema but is not read anywhere to gate `logActionAudit`, `logSecurityEvent`, or `recordAdminAuditEvent`. This is a **security-relevant documentation drift**, not a vulnerability introduced by this task: an operator reading `docs/features/20`'s §7 table (as it read before this update) would reasonably believe setting `SECURITY_AUDIT_LOG_ENABLED=false` disables audit logging, when in fact it currently does nothing. Corrected the table entry to state the actual (unwired) behavior rather than perpetuate the inaccurate description, per this repo's "trust the code, report drift explicitly" precedence rule. Did **not** attempt to wire the var up or remove it — that's a distinct, separately-scoped fix (touches `action-audit.ts`/`security-logger.ts` behavior, not this task's `audit-log` module) and was not requested.
+- Sections refreshed: Current-State Findings, Sensitive Data And Exposure Notes, Handoff Notes

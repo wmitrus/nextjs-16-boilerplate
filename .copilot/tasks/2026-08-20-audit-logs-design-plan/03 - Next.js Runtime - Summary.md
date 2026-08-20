@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-4 are complete.
-- Current Run Scope: Phase 4 — runtime placement for the new `GET /api/admin/audit-logs` route, the `/admin/security/audit-logs` RSC page + client component, and the out-of-band purge job/scheduled workflow (which runs entirely outside the Next.js runtime).
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-5 are complete, plus the Phase-3-flagged test-coverage gap.
+- Current Run Scope: Phase 5 — documentation only, describing runtime placement decisions already made and validated in Phases 1-4. No runtime surfaces changed.
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 4)
+- Last Updated: 2026-08-20 (Phase 5)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -108,3 +108,10 @@
   2. `/admin/security/audit-logs` (`src/app/admin/security/audit-logs/page.tsx`) — an `async` Server Component calling `await getServerRequestLogContext({ pathname: '/admin/security/audit-logs' })` before rendering, identical to the existing `/admin/security` and `/admin/feature-flags` pages' pattern (this call is itself what makes the page correctly dynamic under `cacheComponents: true`, without needing `export const dynamic`, which this repo's `next.config` bans). `AuditLogsClient` is a plain `'use client'` component that fetches from the new route on mount/filter-change/pagination — no server-side data fetching in the page itself, matching `AuditSettingsClient`'s existing shape exactly (client-fetches-its-own-data, not RSC-fetched-then-passed-as-props).
   3. `scripts/audit-log/purge-expired.ts` + `.github/workflows/audit-log-purge.yml` — **not** part of the Next.js request/render runtime at all. It is a standalone Node script invoked by a scheduled GitHub Actions job, using `createDb()` directly (the same composition pattern every other standalone script in `scripts/` already uses — `db-seed.ts`, `flags/migrate.ts`) rather than going through `getAppContainer()`/the request-scoped composition root. No Edge/Node boundary question applies to it; it never runs inside a request. Confirmed no raw `DATABASE_URL` GitHub secret exists in this repo for scheduled workflows (grepped `.github/workflows/*.yml`) — the workflow reuses `prod-deploy.yml`'s already-proven `vercel pull --environment=production --token=${{ secrets.VERCEL_TOKEN }}` step to materialize `.vercel/.env.production.local`, then invokes `pnpm audit-log:purge:vercel:prod` (`node --env-file=.vercel/.env.production.local --import tsx ...`), matching the existing `tenant:readiness:vercel:prod` script's env-file convention exactly.
 - Sections refreshed: Scope Handled, Actions Performed, Runtime Boundary Assessment, Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: residual test-coverage-gap fix (flagged in Phase 3), then Phase 5 implementation kickoff
+- Summary of change: No runtime surface changed in either follow-up. The `policies`/`roles` route test additions exercise existing runtime behavior (`await connection()`, `withNodeProvisioning`) without modifying it. Phase 5 is a docs-only pass describing the runtime placement decisions already recorded above (Phase 4 entry) — `docs/features/36 - Audit Logging & Retention.md` §2's layer map and the new `docs/architecture/10` §8.4 catalog entry both restate, rather than revise, those decisions. Nothing new to assess here.
+- Sections refreshed: Handoff Notes

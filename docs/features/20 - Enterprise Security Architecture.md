@@ -213,17 +213,28 @@ await logSecurityEvent({
 });
 ```
 
+### 6.3 DB-Backed Audit Trail
+
+Both `logActionAudit` and `logSecurityEvent` above (plus every `/api/admin/**`
+mutation route) also write to a second, DB-backed sink: `audit_events`. Unlike
+the Pino/Logflare output in 6.1/6.2, this trail is queryable in-app
+(`/admin/security/audit-logs`), admin-toggleable per category at runtime (no
+redeploy), and retention-governed by a scheduled purge job — the table does
+not grow unbounded. Fail-open: a write failure to this sink never affects the
+underlying request. Full design, category taxonomy, and retention details:
+[36 - Audit Logging & Retention.md](./36%20-%20Audit%20Logging%20%26%20Retention.md).
+
 ---
 
 ## 7. Configuration
 
 Manage security settings via [./src/core/env.ts](@/core/env.ts):
 
-| Variable                     | Description                                |
-| ---------------------------- | ------------------------------------------ |
-| `INTERNAL_API_KEY`           | Secret key for `/api/internal` routes.     |
-| `SECURITY_AUDIT_LOG_ENABLED` | Toggle structured audit logging.           |
-| `LOG_INGEST_SECRET`          | Secret for secure log ingestion endpoints. |
+| Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INTERNAL_API_KEY`           | Secret key for `/api/internal` routes.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `SECURITY_AUDIT_LOG_ENABLED` | Defined in the env schema; not currently read by `logActionAudit`/`logSecurityEvent`/`recordAdminAuditEvent` or anywhere else in `src/security/` — pre-existing drift between this description and the code, not something the DB-backed audit trail (§6.3) depends on or introduced. Per-category on/off for that trail is controlled by admin-managed DB settings instead — see [36 - Audit Logging & Retention.md](./36%20-%20Audit%20Logging%20%26%20Retention.md) §4. |
+| `LOG_INGEST_SECRET`          | Secret for secure log ingestion endpoints.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### 7.1 Generating Secrets
 

@@ -495,13 +495,60 @@ one `AuditLogService.record()` call added at each mutation branch:
   `pnpm test:db` (18 files/145 tests), `pnpm skott:check:only`,
   `pnpm depcheck`, `pnpm env:check`, and `pnpm lint --fix` (0 errors, only
   pre-existing unrelated warnings) all pass.
-- **Phase 5 — not started.** Remaining scope per Part B: docs
-  (`docs/features/36 - Audit Logging & Retention.md`,
-  `docs/architecture/10 - Modular Monolith - File Catalog.md` update,
-  `docs/features/20 - Enterprise Security Architecture.md` §6/§7 update)
-  and the residual test-coverage debt flagged in Phase 3 (missing
-  success-path tests on `policies`/`roles` route test files, pre-existing,
-  not introduced by this work).
+- **Residual test-coverage debt (flagged in Phase 3) — CLOSED (2026-08-20).**
+  `policies/route.test.ts`, `policies/[policyId]/route.test.ts`,
+  `roles/route.test.ts`, `roles/[roleId]/route.test.ts` previously only
+  exercised the 409-archived-organization branch, with no success-path
+  coverage at all. Added, per route: a 403 (non-organizations-admin caller)
+  case, a success case for an active organization asserting the mutation
+  service is called with the right arguments and that
+  `recordAdminAuditEvent` fires with the correct
+  category/action/outcome/target, and one representative domain-error
+  branch (404/409/400, matching each route's own catch block) confirming
+  the audit event is **not** recorded when the mutation fails. 18 new tests
+  (1467 → 1485). `pnpm typecheck`, `pnpm lint --fix` (0 errors), and the
+  full unit suite (212 files/1485 tests) all pass. Shipped as its own
+  commit, separate from Phase 5's docs work.
+- **Phase 5 — COMPLETE (2026-08-20).** Docs-only phase, no code changes.
+  New `docs/features/36 - Audit Logging & Retention.md`: full design
+  writeup (architecture, category taxonomy table, settings model, write
+  path + wired call sites, browse UI, purge job + scheduled workflow +
+  the partitioning-deferral rationale, security notes, testing, "adding a
+  new category" runbook). `docs/features/20 - Enterprise Security
+Architecture.md` §6 gained a new §6.3 pointing at the new doc and
+  distinguishing the DB-backed trail from the existing Pino/Logflare
+  sink; §7's config table entry for `SECURITY_AUDIT_LOG_ENABLED` was
+  corrected rather than left inaccurate (see drift note below).
+  `docs/architecture/10 - Modular Monolith - File Catalog.md` §8.4 gained
+  a `modules/audit-log` entry cataloguing every file in the module,
+  matching the format already used for `modules/auth`/`modules/authorization`/`modules/user`.
+  No new env vars were introduced by Phases 1-4, so `.env.example` /
+  `src/core/env.ts` needed no changes (the plan's original
+  `AUDIT_LOG_PURGE_ENABLED` was an illustrative placeholder, never
+  actually needed — retention is governed entirely by per-category DB
+  settings plus the scheduled workflow, with no separate kill-switch env
+  var).
+  **Drift found and corrected, not silently reconciled:** while writing
+  §6.3/§7, confirmed by direct grep that `SECURITY_AUDIT_LOG_ENABLED`
+  (`src/core/env.ts`) is defined in the env schema but is **not** read by
+  `logActionAudit`, `logSecurityEvent`, `recordAdminAuditEvent`, or
+  anywhere else in `src/security/` — it does not actually gate anything
+  today, despite `docs/features/20`'s §7 table (pre-existing, before this
+  task) describing it as "Toggle structured audit logging" and this
+  task's own `intake.md` (Phase 0) having repeated that same
+  characterization without independently re-verifying it. The table entry
+  now states the actual (unwired) state of the code and points at where
+  the DB-backed trail's real on/off control lives instead. The
+  underlying dead-code cleanup (wiring the var up, or removing it) is out
+  of scope for this task and was not attempted.
+  **Also noted, not fixed (separate pre-existing gaps, out of scope):**
+  `modules/feature-flags` has no catalog entry in
+  `docs/architecture/10 - Modular Monolith - File Catalog.md` §8.4 either
+  (predates this task) — `modules/audit-log` was added without
+  backfilling that sibling gap, to keep this phase's diff scoped to the
+  module it actually shipped. §9.4's DB-ownership traceability matrix
+  also does not list `feature_flags`' or `audit_events`'/`audit_log_settings`'
+  schema anchors — same reasoning, left alone.
 
 ## Rollout sequencing (recommended, low blast radius first)
 

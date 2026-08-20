@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
   listAll: vi.fn(),
+  listForTenant: vi.fn(),
   create: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
@@ -85,6 +86,7 @@ describe('GET /api/admin/feature-flags', () => {
     vi.mocked(DrizzleFeatureFlagAdminService).mockImplementation(function () {
       return {
         listAll: mocks.listAll,
+        listForTenant: mocks.listForTenant,
         create: mocks.create,
       } as unknown as DrizzleFeatureFlagAdminService;
     });
@@ -115,7 +117,7 @@ describe('GET /api/admin/feature-flags', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 200 with flags and activeProvider for env-based admin', async () => {
+  it('returns 200 with flags and activeProvider for env-based admin, using the unscoped listAll', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
     mocks.listAll.mockResolvedValue([TEST_FLAG]);
@@ -125,10 +127,43 @@ describe('GET /api/admin/feature-flags', () => {
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
-      data: { flags: unknown[]; activeProvider: string };
+      data: {
+        flags: unknown[];
+        activeProvider: string;
+        scope: { isPlatformAdmin: boolean; tenantId: string | null };
+      };
     };
     expect(body.data.flags).toHaveLength(1);
     expect(body.data.activeProvider).toBe('db');
+    expect(mocks.listAll).toHaveBeenCalledTimes(1);
+    expect(mocks.listForTenant).not.toHaveBeenCalled();
+    expect(body.data.scope).toEqual({ isPlatformAdmin: true, tenantId: null });
+  });
+
+  it('SEC-26: uses the tenant-scoped listForTenant for an ABAC-authorized non-platform-admin, never the unscoped listAll', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.listForTenant.mockResolvedValue([TEST_FLAG]);
+
+    const { GET } = await import('./route');
+    const res = await GET(makeGetRequest(), mockContext);
+    expect(res.status).toBe(200);
+    expect(mocks.listForTenant).toHaveBeenCalledWith('tenant_test_1');
+    expect(mocks.listAll).not.toHaveBeenCalled();
+
+    const body = (await res.json()) as {
+      data: { scope: { isPlatformAdmin: boolean; tenantId: string | null } };
+    };
+    // SEC-26 follow-up: the client needs this to render global rows as
+    // read-only for a non-platform-admin, since listForTenant() above
+    // includes global rows but the caller cannot mutate them.
+    expect(body.data.scope).toEqual({
+      isPlatformAdmin: false,
+      tenantId: 'tenant_test_1',
+    });
   });
 });
 
@@ -141,6 +176,7 @@ describe('POST /api/admin/feature-flags', () => {
     vi.mocked(DrizzleFeatureFlagAdminService).mockImplementation(function () {
       return {
         listAll: mocks.listAll,
+        listForTenant: mocks.listForTenant,
         create: mocks.create,
       } as unknown as DrizzleFeatureFlagAdminService;
     });
@@ -214,5 +250,79 @@ describe('POST /api/admin/feature-flags', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.data.flag.key).toBe('my-flag');
+  });
+
+  describe('SEC-26 regression: ABAC-authorized non-platform-admin scope constraint', () => {
+    beforeEach(() => {
+      mocks.isEnvAdmin.mockReturnValue(false);
+      mocks.registry.set(AUTHORIZATION.SERVICE, {
+        can: vi.fn().mockResolvedValue(true),
+      });
+    });
+
+    it("ignores a requested global (null tenantId) flag and derives the caller's own tenant instead", async () => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+      mocks.create.mockResolvedValue({
+        ...TEST_FLAG,
+        tenantId: 'tenant_test_1',
+      });
+
+      const { POST } = await import('./route');
+      const res = await POST(
+        makePostRequest({ key: 'x', tenantId: null, enabled: true }),
+        mockContext,
+      );
+      // Deriving (not rejecting) means the normal "Create flag" form -- which
+      // defaults to an empty/null Tenant ID -- keeps working for an
+      // ABAC-authorized non-platform-admin rather than always 403ing.
+      expect(res.status).toBe(201);
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'tenant_test_1' }),
+      );
+    });
+
+    it("ignores a requested foreign tenantId and derives the caller's own tenant instead", async () => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+      mocks.create.mockResolvedValue({
+        ...TEST_FLAG,
+        tenantId: 'tenant_test_1',
+      });
+
+      const { POST } = await import('./route');
+      const res = await POST(
+        makePostRequest({
+          key: 'x',
+          tenantId: 'some-other-tenant',
+          enabled: true,
+        }),
+        mockContext,
+      );
+      expect(res.status).toBe(201);
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'tenant_test_1' }),
+      );
+    });
+
+    it("allows creating a flag scoped to the caller's own tenant", async () => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+      mocks.create.mockResolvedValue({
+        ...TEST_FLAG,
+        tenantId: 'tenant_test_1',
+      });
+
+      const { POST } = await import('./route');
+      const res = await POST(
+        makePostRequest({
+          key: 'x',
+          tenantId: 'tenant_test_1',
+          enabled: true,
+        }),
+        mockContext,
+      );
+      expect(res.status).toBe(201);
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'tenant_test_1' }),
+      );
+    });
   });
 });

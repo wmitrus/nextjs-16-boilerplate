@@ -166,12 +166,36 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
       makeContext(),
     );
     expect(res.status).toBe(200);
-    expect(mocks.update).toHaveBeenCalledWith(FLAG_ID, {
-      enabled: false,
-      description: undefined,
-    });
+    expect(mocks.update).toHaveBeenCalledWith(
+      FLAG_ID,
+      {
+        enabled: false,
+        description: undefined,
+      },
+      null,
+    );
     const body = await res.json();
     expect(body.data.flag.enabled).toBe(false);
+  });
+
+  it("SEC-26: scopes the update to the caller's own tenant for an ABAC-authorized non-platform-admin", async () => {
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.update.mockResolvedValue({ ...MOCK_FLAG, enabled: false });
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { enabled: false }),
+      makeContext(),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith(
+      FLAG_ID,
+      { enabled: false, description: undefined },
+      { tenantId: 'tenant_test_1' },
+    );
   });
 });
 
@@ -212,6 +236,21 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
     expect(res.status).toBe(200);
-    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID);
+    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, null);
+  });
+
+  it("SEC-26: scopes the delete to the caller's own tenant for an ABAC-authorized non-platform-admin", async () => {
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.delete.mockResolvedValue(undefined);
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(makeRequest('DELETE'), makeContext());
+    expect(res.status).toBe(200);
+    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, {
+      tenantId: 'tenant_test_1',
+    });
   });
 });

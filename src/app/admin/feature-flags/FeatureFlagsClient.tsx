@@ -14,6 +14,15 @@ interface AdminFeatureFlag {
 
 type ActiveProvider = 'static' | 'db' | 'growthbook';
 
+/**
+ * The caller's own mutation scope, as derived server-side. A platform admin
+ * can mutate any row; an ABAC-authorized tenant owner can only mutate rows
+ * belonging to their own `tenantId` -- global rows and other tenants' rows
+ * are visible (for context) but not mutable for them. See SEC-26 in
+ * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ */
+type AdminScope = { isPlatformAdmin: boolean; tenantId: string | null };
+
 type FetchState =
   | { status: 'idle' }
   | { status: 'loading' }
@@ -21,10 +30,16 @@ type FetchState =
       status: 'success';
       flags: AdminFeatureFlag[];
       activeProvider: ActiveProvider;
+      scope: AdminScope;
     }
   | { status: 'error'; message: string };
 
 type RowActionStatus = 'pending' | 'done' | 'error';
+
+function canMutateFlag(flag: AdminFeatureFlag, scope: AdminScope): boolean {
+  if (scope.isPlatformAdmin) return true;
+  return flag.tenantId !== null && flag.tenantId === scope.tenantId;
+}
 
 function formatDate(d: string): string {
   return new Date(d).toLocaleDateString('en-GB', {
@@ -79,12 +94,17 @@ export function FeatureFlagsClient() {
         return;
       }
       const json = (await res.json()) as {
-        data: { flags: AdminFeatureFlag[]; activeProvider: ActiveProvider };
+        data: {
+          flags: AdminFeatureFlag[];
+          activeProvider: ActiveProvider;
+          scope: AdminScope;
+        };
       };
       setState({
         status: 'success',
         flags: json.data.flags,
         activeProvider: json.data.activeProvider,
+        scope: json.data.scope,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Network error';
@@ -98,6 +118,12 @@ export function FeatureFlagsClient() {
 
   const mutationsAllowed =
     state.status === 'success' && state.activeProvider === 'db';
+  const scope = state.status === 'success' ? state.scope : null;
+  // An ABAC-authorized tenant owner can only ever create rows for their own
+  // tenant -- the server derives and enforces this regardless of what's
+  // submitted, so lock the field rather than let the caller type a value
+  // that will silently be overridden (SEC-26 follow-up: PR #71 review).
+  const tenantFieldLocked = scope !== null && !scope.isPlatformAdmin;
 
   async function handleCreate(
     event: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
@@ -252,14 +278,16 @@ export function FeatureFlagsClient() {
             htmlFor="ff-tenant"
             className="text-xs font-medium text-zinc-500 dark:text-zinc-400"
           >
-            Tenant ID (empty = global)
+            {tenantFieldLocked
+              ? 'Tenant ID (your tenant)'
+              : 'Tenant ID (empty = global)'}
           </label>
           <input
             id="ff-tenant"
             type="text"
-            value={createTenantId}
+            value={tenantFieldLocked ? (scope?.tenantId ?? '') : createTenantId}
             onChange={(e) => setCreateTenantId(e.target.value)}
-            disabled={!mutationsAllowed}
+            disabled={!mutationsAllowed || tenantFieldLocked}
             className="w-40 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
@@ -355,160 +383,180 @@ export function FeatureFlagsClient() {
                   </td>
                 </tr>
               )}
-              {state.flags.map((flag) => (
-                <tr
-                  key={flag.id}
-                  className="bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-800 dark:text-zinc-200">
-                    {flag.key}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {flag.tenantId ?? (
-                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                        Global
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => void handleToggle(flag)}
-                      disabled={
-                        !mutationsAllowed ||
-                        toggleState.get(flag.id) === 'pending'
-                      }
-                      className={[
-                        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium disabled:opacity-50',
-                        flag.enabled
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
-                      ].join(' ')}
-                    >
-                      {toggleState.get(flag.id) === 'pending'
-                        ? 'Saving…'
-                        : flag.enabled
-                          ? 'On'
-                          : 'Off'}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {descEditOpen.get(flag.id) ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={
-                            descEditValues.get(flag.id) ??
-                            flag.description ??
-                            ''
-                          }
-                          onChange={(e) =>
-                            setDescEditValues((prev) =>
-                              new Map(prev).set(flag.id, e.target.value),
-                            )
-                          }
-                          className="w-40 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-800"
-                          aria-label="Description"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handleSaveDescription(flag.id)}
-                          disabled={descEditState.get(flag.id) === 'pending'}
-                          className="text-xs text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400"
-                        >
-                          {descEditState.get(flag.id) === 'pending'
-                            ? 'Saving…'
-                            : 'Save'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDescEditOpen((prev) =>
-                              new Map(prev).set(flag.id, false),
-                            )
-                          }
-                          className="text-xs text-zinc-400 hover:underline"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <span>{flag.description ?? '—'}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
-                    {formatDate(flag.updatedAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {!descEditOpen.get(flag.id) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDescEditValues((prev) =>
-                              new Map(prev).set(
-                                flag.id,
-                                flag.description ?? '',
-                              ),
-                            );
-                            setDescEditOpen((prev) =>
-                              new Map(prev).set(flag.id, true),
-                            );
-                          }}
-                          disabled={!mutationsAllowed}
-                          className="text-xs text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400"
-                        >
-                          Edit
-                        </button>
+              {state.flags.map((flag) => {
+                const mutable = state.scope
+                  ? canMutateFlag(flag, state.scope)
+                  : false;
+                return (
+                  <tr
+                    key={flag.id}
+                    className="bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-800 dark:text-zinc-200">
+                      {flag.key}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      {flag.tenantId ?? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                          Global
+                          {!mutable && (
+                            <span className="text-blue-500 dark:text-blue-400/70">
+                              · read-only
+                            </span>
+                          )}
+                        </span>
                       )}
-                      {confirmDelete.get(flag.id) ? (
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-zinc-500 dark:text-zinc-400">
-                            Are you sure?
-                          </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleToggle(flag)}
+                        disabled={
+                          !mutationsAllowed ||
+                          !mutable ||
+                          toggleState.get(flag.id) === 'pending'
+                        }
+                        className={[
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium disabled:opacity-50',
+                          toggleState.get(flag.id) === 'error'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            : flag.enabled
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+                        ].join(' ')}
+                      >
+                        {toggleState.get(flag.id) === 'pending'
+                          ? 'Saving…'
+                          : toggleState.get(flag.id) === 'error'
+                            ? 'Failed — retry'
+                            : flag.enabled
+                              ? 'On'
+                              : 'Off'}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      {descEditOpen.get(flag.id) ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={
+                              descEditValues.get(flag.id) ??
+                              flag.description ??
+                              ''
+                            }
+                            onChange={(e) =>
+                              setDescEditValues((prev) =>
+                                new Map(prev).set(flag.id, e.target.value),
+                              )
+                            }
+                            className="w-40 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-800"
+                            aria-label="Description"
+                          />
                           <button
                             type="button"
-                            onClick={() => void handleDelete(flag.id)}
-                            disabled={deleteState.get(flag.id) === 'pending'}
-                            className="text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                            onClick={() => void handleSaveDescription(flag.id)}
+                            disabled={descEditState.get(flag.id) === 'pending'}
+                            className="text-xs text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400"
                           >
-                            {deleteState.get(flag.id) === 'pending'
-                              ? 'Deleting…'
-                              : deleteState.get(flag.id) === 'error'
-                                ? 'Failed — retry'
-                                : 'Yes'}
+                            {descEditState.get(flag.id) === 'pending'
+                              ? 'Saving…'
+                              : 'Save'}
                           </button>
                           <button
                             type="button"
                             onClick={() =>
-                              setConfirmDelete((prev) =>
+                              setDescEditOpen((prev) =>
                                 new Map(prev).set(flag.id, false),
                               )
                             }
-                            disabled={deleteState.get(flag.id) === 'pending'}
-                            className="text-zinc-400 hover:underline disabled:opacity-50"
+                            className="text-xs text-zinc-400 hover:underline"
                           >
-                            No
+                            Cancel
                           </button>
+                          {descEditState.get(flag.id) === 'error' && (
+                            <span className="text-xs text-red-600 dark:text-red-400">
+                              Save failed — try again
+                            </span>
+                          )}
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setConfirmDelete((prev) =>
-                              new Map(prev).set(flag.id, true),
-                            )
-                          }
-                          disabled={!mutationsAllowed}
-                          className="text-xs text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
-                        >
-                          Delete
-                        </button>
+                        <span>{flag.description ?? '—'}</span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
+                      {formatDate(flag.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {!descEditOpen.get(flag.id) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDescEditValues((prev) =>
+                                new Map(prev).set(
+                                  flag.id,
+                                  flag.description ?? '',
+                                ),
+                              );
+                              setDescEditOpen((prev) =>
+                                new Map(prev).set(flag.id, true),
+                              );
+                            }}
+                            disabled={!mutationsAllowed || !mutable}
+                            className="text-xs text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {confirmDelete.get(flag.id) ? (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-zinc-500 dark:text-zinc-400">
+                              Are you sure?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void handleDelete(flag.id)}
+                              disabled={deleteState.get(flag.id) === 'pending'}
+                              className="text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                            >
+                              {deleteState.get(flag.id) === 'pending'
+                                ? 'Deleting…'
+                                : deleteState.get(flag.id) === 'error'
+                                  ? 'Failed — retry'
+                                  : 'Yes'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmDelete((prev) =>
+                                  new Map(prev).set(flag.id, false),
+                                )
+                              }
+                              disabled={deleteState.get(flag.id) === 'pending'}
+                              className="text-zinc-400 hover:underline disabled:opacity-50"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmDelete((prev) =>
+                                new Map(prev).set(flag.id, true),
+                              )
+                            }
+                            disabled={!mutationsAllowed || !mutable}
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

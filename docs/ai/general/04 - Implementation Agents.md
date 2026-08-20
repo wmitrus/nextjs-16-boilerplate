@@ -100,6 +100,7 @@ You do not own:
 - `Math.random()` must never be used for tokens, secrets, session identifiers, or any security-sensitive value — use `crypto.getRandomValues()` or `node:crypto` `randomBytes()` instead (SEC-06 in `SECURITY_CODING_PATTERNS.md`).
 - In unit tests, prefer `vi.Mocked<Interface>` object mocks over repeated `vi.mocked(object.method)` unbound method references (SEC-24).
 - For finite domain options in request bodies or form state, use `z.enum(...)` or an existing typed schema instead of broad `z.string()` followed by downstream assumptions (SEC-24).
+- Do not treat a passing ABAC/RBAC action-type check (`authzService.can(...)` returning `true`) as authorization for a client-supplied scope identifier (a body `tenantId`, an `id` naming a row owned by another tenant). Derive the mutation's tenant/resource scope from the verified `access.tenant.tenantId` (or equivalent server-verified claim) and reject client-supplied scope that does not match it, unless the caller is an unscoped platform admin (SEC-26).
 
 ## Script and Tooling Security Rules
 

@@ -1,5 +1,20 @@
 # Task Plan — Admin Feature Flags GUI
 
+## Post-Merge Follow-Up (2026-08-20)
+
+PR #70 merged. Post-merge automated review (chatgpt-codex-connector) found 2
+**P1** tenant-scope bypass bugs and 2 **P2** issues (race condition, silent
+UI failure) in the shipped code. All 4 fixed in follow-up PR
+[#71](https://github.com/wmitrus/nextjs-16-boilerplate/pull/71)
+(`fix/feature-flags-tenant-scope`), plus a 3rd P1-class leak on `GET` found
+while fixing the others (not in the bot's findings, same root cause). Root
+cause cataloged as **SEC-26** in
+`docs/ai/general/SECURITY_CODING_PATTERNS.md`, with cross-references added
+to the Architecture Guard, Security & Auth, Implementation Agents, and
+Validation Strategy shared docs — updated once in the shared source per
+explicit user instruction, not duplicated across every AI tool's own skill
+surface. See PR #71's description for full detail.
+
 ## Status
 
 **⚠️ NOT MERGE-READY — 🔴 E2E EXECUTION BLOCKED (environment).**

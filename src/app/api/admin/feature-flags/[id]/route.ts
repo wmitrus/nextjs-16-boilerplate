@@ -33,26 +33,39 @@ const patchBodySchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
 });
 
+type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
+
+/**
+ * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
+ * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
+ * authorization for a client-supplied `id` naming a row that may belong to
+ * another tenant -- check `isPlatformAdmin` and pass the resulting
+ * `MutationScope` through to the service. See SEC-26 in
+ * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ */
 async function checkAdminAccess(
   email: string | undefined,
   userId: string,
   tenantId: string,
   container: ReturnType<typeof getAppContainer>,
-): Promise<boolean> {
-  if (isEnvBasedPlatformAdmin(email)) return true;
+): Promise<AdminAccess> {
+  if (isEnvBasedPlatformAdmin(email)) {
+    return { allowed: true, isPlatformAdmin: true };
+  }
 
   try {
     const authzService = container.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
-    return await authzService.can({
+    const allowed = await authzService.can({
       tenant: { tenantId },
       subject: { id: userId },
       resource: { type: RESOURCES.FEATURE_FLAG, id: 'admin-panel' },
       action: ACTIONS.FEATURE_FLAG_MANAGE,
     });
+    return { allowed, isPlatformAdmin: false };
   } catch {
-    return false;
+    return { allowed: false, isPlatformAdmin: false };
   }
 }
 
@@ -72,14 +85,14 @@ export const PATCH = withErrorHandler(
 
     const container = getAppContainer();
 
-    const isAdmin = await checkAdminAccess(
+    const adminAccess = await checkAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
       container,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
@@ -116,12 +129,22 @@ export const PATCH = withErrorHandler(
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleFeatureFlagAdminService(db);
+    // An ABAC-authorized (non-platform-admin) caller may only mutate rows
+    // scoped to their own verified tenant, regardless of which `id` they
+    // supply -- the service enforces this in the DB predicate (SEC-26).
+    const scope = adminAccess.isPlatformAdmin
+      ? null
+      : { tenantId: access.tenant.tenantId };
 
     try {
-      const flag = await service.update(id, {
-        enabled: parseResult.data.enabled,
-        description: parseResult.data.description,
-      });
+      const flag = await service.update(
+        id,
+        {
+          enabled: parseResult.data.enabled,
+          description: parseResult.data.description,
+        },
+        scope,
+      );
 
       logger.info(
         {
@@ -165,22 +188,25 @@ export const DELETE = withErrorHandler(
 
     const container = getAppContainer();
 
-    const isAdmin = await checkAdminAccess(
+    const adminAccess = await checkAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
       container,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleFeatureFlagAdminService(db);
+    const scope = adminAccess.isPlatformAdmin
+      ? null
+      : { tenantId: access.tenant.tenantId };
 
     try {
-      await service.delete(id);
+      await service.delete(id, scope);
 
       logger.info(
         {

@@ -2,7 +2,7 @@
 
 ## Status
 
-**PHASES 2 AND 3 COMPLETE.** All 9 specialist-role skills and all 10
+**PHASES 2, 3, AND 4 COMPLETE.** All 9 specialist-role skills and all 10
 workflow skills are ported to `.claude/skills/` (19 total), diff-verified as
 mechanical-only against their Codex source. The frontmatter-contract risk
 noted below is resolved (confirmed against real on-disk Claude Code skills
@@ -121,12 +121,32 @@ earlier grep confirmation that the other 9 workflow files don't have one):
 - [ ] `.claude/skills/codacy-security-review-workflow/SKILL.md`
 - [ ] `.claude/skills/codacy-findings-review-workflow/SKILL.md`
 
-Guide layer (Phase 4):
+Guide layer (Phase 4) — **DONE**:
 
-- [ ] `docs/ai/claude/README.md` (quick start + recommended starting points,
-      mirroring `docs/ai/codex/README.md`)
-- [ ] One `docs/ai/claude/<NN or Workflow NN> - *.md` guide file per ported
-      skill, mirroring the `docs/ai/codex/*.md` per-role guides
+- [x] `docs/ai/claude/README.md` — adapted (not blind-copied) from
+      `docs/ai/codex/README.md`'s structure: skill inventory, recommended
+      starting points, 08-vs-09, feature-workflow guidance, and a
+      Claude Code Delegation Note explaining today's fallback vs. the
+      not-yet-built `.claude/agents/` subagent layer
+- [x] 19 `docs/ai/claude/<NN or Workflow NN> - *.md` guide files, ported via
+      `scripts/port_guide.py` (mechanical: retargets the "real skill file"
+      pointer to `.claude/skills/`, adds Codex as sibling; everything else
+      byte-identical) plus 3 small, deliberate hand-edits for content that
+      was genuinely Codex-specific rather than link paths:
+  - `08 - Workflow Orchestrator Agent.md`: replaced "Codex Delegation Note"
+    with an accurate "Claude Code Delegation Note" (Claude has a more
+    capable native subagent model via the `Agent` tool, but this repo
+    hasn't built `.claude/agents/*.md` identities yet, so the practical
+    fallback today matches Codex's)
+  - `Workflow 01 - Safe Feature Workflow.md`: "for Codex" → "for Claude Code"
+  - `Workflow 02 - Safe Refactor Workflow.md`: "inside Codex" → "inside
+    Claude Code"
+- [x] `10 - Leantime Integration Agent` intentionally has **no** guide file
+      — matches `docs/ai/codex/`'s own gap (no guide for that role either),
+      documented instead of silently copied
+- [x] `Workflow 09 - Architecture Lint` intentionally has **no** guide file
+      — matches Codex, which also has no skill/guide for it (pre-existing
+      gap, not fixed here, per intake.md's Out Of Scope)
 
 Propagation table updates (Phase 5):
 

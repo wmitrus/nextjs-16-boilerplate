@@ -27,6 +27,35 @@ a PR — but the PR description/reviewers should carry forward the 🔴 E2E
 blocker above; do not represent this as fully validated until a real
 Clerk-credentialed E2E run confirms the 6 new scenarios.
 
+**🔴 CI FINDING (2026-08-20): `e2e/admin.spec.ts` does not run in CI at
+all, on this PR or any other.** Checked every workflow in
+`.github/workflows/` and every `e2e:*` script in `package.json`:
+
+- `pr-validation.yml` (runs automatically on every PR to `main`) has no
+  E2E step whatsoever — only lint, typecheck, unit tests, `env:check`,
+  skott, madge, depcheck.
+- `e2e-matrix.yml` and `e2e-label.yml` (the only workflows that run
+  Playwright) trigger **only** on a `run-e2e-matrix` / `run-e2e` PR
+  label or manual `workflow_dispatch` — never automatically on PR open.
+- Even when triggered, neither workflow's underlying script
+  (`pnpm e2e:ci` → `e2e:matrix`; `pnpm e2e:auth-matrix:ci` →
+  `e2e:auth-matrix`) references `e2e/admin.spec.ts` — both only run
+  `e2e/auth.spec.ts` and `e2e/provisioning-runtime.spec.ts`.
+  Grepped `e2e/admin.spec.ts` across every workflow file and every
+  `e2e:*` `package.json` script: **zero matches.**
+
+So this is not just "blocked in this sandbox by missing Clerk
+credentials" — **no CI path exercises this file at all**, for the new
+Feature Flags scenarios _or_ the 4 pre-existing admin surfaces (Users,
+Waitlist, Invitations, Organizations) already in the same file. This is
+a pre-existing repository/CI-wiring gap, not something this task
+introduced. Opening this PR will get green CI without any of
+`e2e/admin.spec.ts` ever having run — reviewers should know that going
+in. Fixing the CI wiring (e.g. adding `e2e/admin.spec.ts` to the label-
+triggered workflows' script args) is out of scope for this task and
+would need its own decision (which label, which script, credential
+availability) — flagged here for a separate follow-up, not actioned.
+
 ## Consolidated Constraint Summary (Step 5)
 
 **Architecture:**

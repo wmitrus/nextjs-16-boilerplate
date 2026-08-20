@@ -152,6 +152,19 @@
   credentials configured — a developer machine or CI, not this sandbox.
   For the optional CRUD-cycle scenario, also set
   `FEATURE_FLAG_PROVIDER=db` for that run.
+- **CI wiring finding (2026-08-20, added post-handoff):** checked every
+  `.github/workflows/*.yml` and every `e2e:*` `package.json` script —
+  `e2e/admin.spec.ts` is referenced nowhere. `pr-validation.yml` (runs
+  automatically on PR) has no E2E step at all; `e2e-matrix.yml` /
+  `e2e-label.yml` (the only Playwright-running workflows) are
+  label-gated (not automatic) and their scripts
+  (`e2e:ci`→`e2e:matrix`, `e2e:auth-matrix:ci`→`e2e:auth-matrix`) only
+  run `e2e/auth.spec.ts` + `e2e/provisioning-runtime.spec.ts` — never
+  `e2e/admin.spec.ts`. So the manual run above is not just a sandbox
+  workaround, it is **the only way** this spec (new or pre-existing
+  scenarios) gets executed anywhere today. Wiring it into CI is a
+  separate, pre-existing gap affecting all 4 existing admin surfaces
+  too — out of scope for this task, flagged for a follow-up.
 
 ## Update Log
 

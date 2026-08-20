@@ -2,8 +2,14 @@
 
 ## Status
 
-**PLANNED — AWAITING REVIEW.** No implementation has started. This file and
-`intake.md` are the only artifacts produced so far.
+**PHASE 2 COMPLETE.** All 9 specialist-role skills are ported to
+`.claude/skills/`, diff-verified as mechanical-only against their Codex
+source. The frontmatter-contract risk noted below is resolved (confirmed
+against real on-disk Claude Code skills at `/mnt/skills/`: `name` +
+`description` [+ optional `license`], matching Codex's shape). Phase 3
+(workflow skills) has only the one sample file
+(`safe-feature-workflow`) from the earlier review step; the remaining 9
+workflow skills are not yet ported.
 
 ## Objective
 
@@ -45,21 +51,25 @@ port, not a code or architecture change.
 
 ## Task List
 
-Specialist-role skills (Phase 2):
+Specialist-role skills (Phase 2) — **DONE**, ported via
+`/tmp/.../scratchpad/port_skill.py` (mechanical: heading rename, Codex
+sibling bullet, runtime-surface clause, propagation-checklist entry; no
+content drift, diff-verified against source for all 9):
 
-- [ ] `.claude/skills/architecture-guard/SKILL.md`
-- [ ] `.claude/skills/security-auth/SKILL.md`
-- [ ] `.claude/skills/nextjs-runtime/SKILL.md`
-- [ ] `.claude/skills/implementation-agent/SKILL.md`
-- [ ] `.claude/skills/validation-strategy/SKILL.md`
-- [ ] `.claude/skills/debug-investigation/SKILL.md`
-- [ ] `.claude/skills/playwright-e2e/SKILL.md`
-- [ ] `.claude/skills/workflow-orchestrator/SKILL.md`
-- [ ] `.claude/skills/task-brief-authoring/SKILL.md`
+- [x] `.claude/skills/architecture-guard/SKILL.md`
+- [x] `.claude/skills/security-auth/SKILL.md`
+- [x] `.claude/skills/nextjs-runtime/SKILL.md`
+- [x] `.claude/skills/implementation-agent/SKILL.md`
+- [x] `.claude/skills/validation-strategy/SKILL.md`
+- [x] `.claude/skills/debug-investigation/SKILL.md`
+- [x] `.claude/skills/playwright-e2e/SKILL.md`
+- [x] `.claude/skills/workflow-orchestrator/SKILL.md`
+- [x] `.claude/skills/task-brief-authoring/SKILL.md`
 
-Workflow skills (Phase 3):
+Workflow skills (Phase 3) — not started, except the sample below:
 
-- [ ] `.claude/skills/safe-feature-workflow/SKILL.md`
+- [x] `.claude/skills/safe-feature-workflow/SKILL.md` (sample, Phase 3 not
+      otherwise started)
 - [ ] `.claude/skills/safe-refactor-workflow/SKILL.md`
 - [ ] `.claude/skills/security-incident-workflow/SKILL.md`
 - [ ] `.claude/skills/incident-investigation-workflow/SKILL.md`
@@ -101,10 +111,22 @@ Cross-check (Phase 6):
   (accidentally changing role substance while adapting tool references), not
   design risk. Mitigate with a final diff self-review against the Codex
   source (Phase 6 in Expected Sequence).
-- **Frontmatter contract**: Claude Code's `SKILL.md` frontmatter fields
-  (`name`, `description`, optionally `allowed-tools`) need to be confirmed
-  against current Claude Code docs before Phase 2 starts, in case the schema
-  differs from Codex's in a way that isn't just cosmetic.
+- ~~**Frontmatter contract**~~ — **RESOLVED**: confirmed against real
+  on-disk Claude Code skills (`/mnt/skills/public/*/SKILL.md`,
+  `/mnt/skills/examples/*/SKILL.md`) rather than assumption. Frontmatter is
+  `name` + `description` (+ optional `license`), matching Codex's shape
+  closely enough that no schema-driven rewrite was needed.
+- **Wording variants found during Phase 2**: the "runtime surface" sentence
+  in each skill's Compatibility Notes is not verbatim-identical across
+  files — some use capitalized "This skill is..." (with trailing period,
+  e.g. `architecture-guard`), others use lowercase "this skill is..." (no
+  trailing period, bullet-list style, e.g. `security-auth`,
+  `nextjs-runtime`, and the rest). The port script (now handling both
+  variants) initially missed the lowercase form on the first run across the
+  8 remaining specialist skills — caught by the per-rule hit-count log
+  (0 hits reported), fixed before anything was committed. Apply the same
+  caution in Phase 3: check hit counts before trusting a batch run, don't
+  assume Phase 2's fixed patterns cover every workflow file's phrasing.
 - **Table format churn**: `AGENTS.md`'s tables are wide already (5-6
   columns); adding a 6th/7th may need reflowing for readability rather than
   a naive column append.

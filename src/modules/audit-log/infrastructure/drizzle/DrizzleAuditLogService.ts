@@ -1,5 +1,3 @@
-import { and, asc, eq, isNull, or } from 'drizzle-orm';
-
 import type {
   AuditEventInput,
   AuditLogService,
@@ -7,13 +5,10 @@ import type {
 import type { DrizzleDb } from '@/core/db';
 import { resolveServerLogger } from '@/core/logger/di';
 
-import {
-  getAuditCategoryDefault,
-  isAuditCategory,
-  type AuditCategory,
-} from '../../domain/category';
+import { isAuditCategory } from '../../domain/category';
 
-import { auditEventsTable, auditLogSettingsTable } from './schema';
+import { resolveEffectiveAuditSetting } from './effective-settings';
+import { auditEventsTable } from './schema';
 
 const logger = resolveServerLogger().child({
   type: 'API',
@@ -23,12 +18,6 @@ const logger = resolveServerLogger().child({
 
 /** Hard cap on serialized metadata size (bytes) — see plan A.4 item 5. */
 const METADATA_MAX_BYTES = 8192;
-
-type EffectiveWriteSetting = {
-  enabled: boolean;
-  sampleRate: number | null;
-  captureInputOnSuccess: boolean;
-};
 
 function capMetadata(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined) return null;
@@ -67,7 +56,8 @@ export class DrizzleAuditLogService implements AuditLogService {
     }
     const category = event.category;
 
-    const setting = await this.resolveEffectiveSetting(
+    const setting = await resolveEffectiveAuditSetting(
+      this.db,
       category,
       event.tenantId ?? null,
     );
@@ -104,46 +94,5 @@ export class DrizzleAuditLogService implements AuditLogService {
       requestId: event.requestId ?? null,
       metadata,
     });
-  }
-
-  /**
-   * Tenant override row if present, else the global row, else the
-   * taxonomy default. A single query: ordering by `tenantId ASC` sorts a
-   * real tenant string before `NULL` (Postgres's default `NULLS LAST` for
-   * ascending order), so `LIMIT 1` naturally prefers the tenant-specific
-   * row when both exist.
-   */
-  private async resolveEffectiveSetting(
-    category: AuditCategory,
-    tenantId: string | null,
-  ): Promise<EffectiveWriteSetting> {
-    const scopePredicate =
-      tenantId === null
-        ? isNull(auditLogSettingsTable.tenantId)
-        : or(
-            eq(auditLogSettingsTable.tenantId, tenantId),
-            isNull(auditLogSettingsTable.tenantId),
-          );
-
-    const rows = await this.db
-      .select({
-        enabled: auditLogSettingsTable.enabled,
-        sampleRate: auditLogSettingsTable.sampleRate,
-        captureInputOnSuccess: auditLogSettingsTable.captureInputOnSuccess,
-      })
-      .from(auditLogSettingsTable)
-      .where(and(eq(auditLogSettingsTable.category, category), scopePredicate))
-      .orderBy(asc(auditLogSettingsTable.tenantId))
-      .limit(1);
-
-    const row = rows[0];
-    if (row) return row;
-
-    const def = getAuditCategoryDefault(category);
-    return {
-      enabled: def.enabled,
-      sampleRate: def.sampleRate,
-      captureInputOnSuccess: def.captureInputOnSuccess,
-    };
   }
 }

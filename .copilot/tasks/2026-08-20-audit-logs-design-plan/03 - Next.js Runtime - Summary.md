@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-3 are complete.
-- Current Run Scope: Phase 3 — confirming every instrumented call site (route handlers + `src/app/admin/layout.tsx`) is Node-runtime and that adding an `await recordAdminAuditEvent(...)` call doesn't change any route's existing dynamic-rendering/response-shape behavior.
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-4 are complete.
+- Current Run Scope: Phase 4 — runtime placement for the new `GET /api/admin/audit-logs` route, the `/admin/security/audit-logs` RSC page + client component, and the out-of-band purge job/scheduled workflow (which runs entirely outside the Next.js runtime).
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 3)
+- Last Updated: 2026-08-20 (Phase 4)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -98,3 +98,13 @@
 - Trigger: Phase 3 implementation kickoff
 - Summary of change: All ~15 touched route files already call `await connection()` first (unchanged); the new `await recordAdminAuditEvent(...)` calls were inserted after each mutation's own DB work completes and before its `return createSuccessResponse(...)`, so no route's response shape, status code, or error-branch behavior changed — confirmed by the full existing route-test suite (208 files) passing unchanged plus wiring assertions added to 5 representative test files. `src/app/admin/layout.tsx` is an RSC (Server Component), not a route handler, but is already `await connection()`-gated (via `getServerRequestLogContext`) before any of the three new audit calls — same dynamic-rendering posture as the rest of the file, no change needed. All instrumented call sites remain Node-only; `src/proxy.ts` was not touched.
 - Sections refreshed: Scope Handled, Actions Performed, Current-State Findings
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 4 implementation kickoff
+- Summary of change: Three new/changed runtime surfaces reviewed:
+  1. `GET /api/admin/audit-logs` (`src/app/api/admin/audit-logs/route.ts`) — same shape as every other admin route this task has touched: `await connection()` first, `withNodeProvisioning` wraps the handler (Node-only, DB-backed authorization), `getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB)` for the read service. No caching directives needed or added — this is an always-dynamic, always-fresh admin read, matching the settings route's precedent.
+  2. `/admin/security/audit-logs` (`src/app/admin/security/audit-logs/page.tsx`) — an `async` Server Component calling `await getServerRequestLogContext({ pathname: '/admin/security/audit-logs' })` before rendering, identical to the existing `/admin/security` and `/admin/feature-flags` pages' pattern (this call is itself what makes the page correctly dynamic under `cacheComponents: true`, without needing `export const dynamic`, which this repo's `next.config` bans). `AuditLogsClient` is a plain `'use client'` component that fetches from the new route on mount/filter-change/pagination — no server-side data fetching in the page itself, matching `AuditSettingsClient`'s existing shape exactly (client-fetches-its-own-data, not RSC-fetched-then-passed-as-props).
+  3. `scripts/audit-log/purge-expired.ts` + `.github/workflows/audit-log-purge.yml` — **not** part of the Next.js request/render runtime at all. It is a standalone Node script invoked by a scheduled GitHub Actions job, using `createDb()` directly (the same composition pattern every other standalone script in `scripts/` already uses — `db-seed.ts`, `flags/migrate.ts`) rather than going through `getAppContainer()`/the request-scoped composition root. No Edge/Node boundary question applies to it; it never runs inside a request. Confirmed no raw `DATABASE_URL` GitHub secret exists in this repo for scheduled workflows (grepped `.github/workflows/*.yml`) — the workflow reuses `prod-deploy.yml`'s already-proven `vercel pull --environment=production --token=${{ secrets.VERCEL_TOKEN }}` step to materialize `.vercel/.env.production.local`, then invokes `pnpm audit-log:purge:vercel:prod` (`node --env-file=.vercel/.env.production.local --import tsx ...`), matching the existing `tenant:readiness:vercel:prod` script's env-file convention exactly.
+- Sections refreshed: Scope Handled, Actions Performed, Runtime Boundary Assessment, Handoff Notes

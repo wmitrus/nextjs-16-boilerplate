@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-3 are complete.
-- Current Run Scope: Phase 3 — explicit instrumentation of every `/api/admin/**` mutation route plus `src/app/admin/layout.tsx`'s admin-panel access events, via a new shared `recordAdminAuditEvent` helper.
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-4 are complete.
+- Current Run Scope: Phase 4 — read/browse UI (`/admin/security/audit-logs`), `GET /api/admin/audit-logs`, and the retention-enforcement purge job (`scripts/audit-log/purge-expired.ts` + daily GitHub Actions workflow).
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 3)
+- Last Updated: 2026-08-20 (Phase 4)
 - Related Control Artifacts: `plan.md`, `intake.md`
 
 ## Scope Handled
@@ -95,4 +95,11 @@
 - Date: 2026-08-20
 - Trigger: Phase 3 implementation kickoff
 - Summary of change: Confirmed the plan's Part B.5 premise directly against the code: none of the ~17 `/api/admin/**` route files use `createSecureAction` (grep-confirmed), so none had Phase 2's automatic coverage — every mutation genuinely needed explicit instrumentation. Added one new shared helper, `src/security/actions/record-admin-audit-event.ts`, deliberately a standalone copy of the resolve+record+catch pattern already in `action-audit.ts`/`security-logger.ts` rather than a further extraction shared with them — three call sites (now four, counting this one) is not yet enough duplication to justify coupling two already-shipped, already-tested modules to a new one; revisit this decision if a Phase 4+ need calls for a fourth near-identical copy. A secondary finding while reading every route for correct category mapping: several routes (`organizations/[organizationId]/route.ts`, all four `roles`/`policies` route files) have **no pre-existing `logger.info` call on their mutation success path at all** — the plan's assumption that "each of these currently already logs" only held for `users`, `feature-flags`, and `waitlist`. Where missing, only the new audit-record call was added; backfilling missing Pino observability logging was treated as out of scope for this phase (a distinct, if related, gap).
+- Sections refreshed: Scope Handled, Boundary And Dependency Assessment, Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 4 implementation kickoff
+- Summary of change: Reviewed the read/browse UI and purge job for boundary correctness before implementation, then again after. Three decisions worth recording: (1) `DrizzleAuditLogReadService` follows the same non-DI-registered, directly-instantiated-at-the-route-call-site shape as Phase 1's `DrizzleAuditLogSettingsAdminService` — admin-only, low-frequency reads don't need composition-root wiring. (2) The purge job's actual DB logic (`listPresentCategoryTenantPairs`, `purgeExpiredAuditEvents`) was placed in `src/modules/audit-log/infrastructure/drizzle/purge-expired-events.ts`, not inline in `scripts/audit-log/purge-expired.ts` — this repo's test convention only runs `src/**/*.db.test.ts` against a real (PGlite) DB; `scripts/**` DB-touching logic is not covered by that convention (confirmed by reading `scripts/flags/migrate.test.ts` and `scripts/db-seed.test.ts`, both of which only unit-test pure URL-resolution helpers and mock `createDb` entirely). Moving the actual delete logic into `src/modules` gets it real-DB test coverage under the existing convention instead of shipping an under-tested retention-enforcement path; `scripts/audit-log/purge-expired.ts` is now a thin CLI wrapper matching every other standalone DB script's shape (`import '../load-env'`, local `resolveProvider`/`resolveDriver`/`resolveDatabaseUrl`, `dbRuntime.close?.()` in `finally`). (3) `resolveEffectiveSetting` was extracted out of `DrizzleAuditLogService` into a shared `effective-settings.ts` specifically so the write path and the purge job cannot independently drift on what "the currently effective retention" means for a given (category, tenantId) pair — re-validated with the full DB suite (`DrizzleAuditLogService.db.test.ts`'s existing assertions) after the extraction, no behavior change. Native Postgres table partitioning (plan Part A.4 item 7 / Part B.3) remains explicitly deferred — this is not a boundary/module-placement decision, it is a data-migration risk call, documented in `plan.md`'s Phase 4 entry.
 - Sections refreshed: Scope Handled, Boundary And Dependency Assessment, Handoff Notes

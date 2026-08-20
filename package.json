@@ -126,6 +126,10 @@
     "flags:export": "tsx scripts/flags/export.ts",
     "flags:import": "tsx scripts/flags/import.ts",
     "flags:migrate": "tsx scripts/flags/migrate.ts",
+    "audit-log:purge": "tsx scripts/audit-log/purge-expired.ts",
+    "audit-log:purge:dry-run": "tsx scripts/audit-log/purge-expired.ts --dry-run",
+    "audit-log:purge:prod:local": "node --env-file=.env.production --import tsx scripts/audit-log/purge-expired.ts",
+    "audit-log:purge:vercel:prod": "node --env-file=.vercel/.env.production.local --import tsx scripts/audit-log/purge-expired.ts",
     "release": "semantic-release"
   },
   "lint-staged": {

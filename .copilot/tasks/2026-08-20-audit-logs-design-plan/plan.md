@@ -420,7 +420,88 @@ one `AuditLogService.record()` call added at each mutation branch:
   (16 files/132 tests), `pnpm skott:check:only`, `pnpm depcheck`,
   `pnpm env:check`, and `pnpm lint --fix` (0 errors, only pre-existing
   unrelated warnings) all pass.
-- **Phases 4-5 — not started.**
+- **Phase 4 — COMPLETE (2026-08-20).** Shipped the read/browse UI and
+  retention-enforcement job — the two pieces `audit_events` needed to stop
+  being a table nothing ever reads or deletes from.
+  `DrizzleAuditLogReadService` (deliberately not DI-registered, same
+  rationale as Phase 1's settings-admin service) backs a new
+  `GET /api/admin/audit-logs` route: filterable (category, outcome,
+  actorUserId, targetType/targetId, date range), paginated (`limit` capped
+  at 200, default 50), gated on `ACTIONS.SECURITY_READ_AUDIT` (pre-existing,
+  previously-unused) or `isEnvBasedPlatformAdmin`. SEC-26-correct: a
+  non-platform-admin caller's requests are always routed through
+  `listForTenant(access.tenant.tenantId, …)`, never the unscoped
+  `listGlobal`, and `listForTenant` scopes strictly to
+  `tenantId = callerTenantId` — no override/overlay semantic like the
+  settings table has, since an audit trail has no "global default" a
+  tenant-scoped viewer should ever see. `/admin/security/audit-logs`
+  (new `page.tsx` + `AuditLogsClient.tsx`) is a sibling of the existing
+  `/admin/security` settings page, linked from it via a "View audit trail →"
+  header link (the settings URL itself did not move); filter form, a
+  paginated table with expandable per-row metadata detail, and a scope
+  banner distinguishing "all tenants" from "your tenant only".
+  Retention enforcement: `resolveEffectiveSetting` was extracted out of
+  `DrizzleAuditLogService` into a shared
+  `infrastructure/drizzle/effective-settings.ts` (`resolveEffectiveAuditSetting`)
+  so the write path and the purge job resolve "is this enabled / what's the
+  retention" identically and can never drift apart. The purge logic itself
+  lives in `infrastructure/drizzle/purge-expired-events.ts`
+  (`listPresentCategoryTenantPairs` + `purgeExpiredAuditEvents`, batched
+  `DELETE`s of 500 rows at a time per (category, tenantId) pair, looping
+  until nothing older than that pair's currently-effective retention
+  remains) so it gets real-DB test coverage under the existing
+  `src/**/*.db.test.ts` convention; `scripts/audit-log/purge-expired.ts` is
+  a thin CLI wrapper (env/driver resolution, `--dry-run` flag, structured
+  console output, `dbRuntime.close?.()` cleanup, non-zero exit on fatal
+  error) following this repo's established standalone-script pattern
+  (`import '../load-env'`, per-script `resolveProvider`/`resolveDriver`/
+  `resolveDatabaseUrl`, duplicated rather than shared — same as
+  `scripts/db-seed.ts` and `scripts/flags/migrate.ts`). Wired as a daily
+  scheduled job: `.github/workflows/audit-log-purge.yml` (cron `0 3 * * *`
+  UTC + `workflow_dispatch`), using the same
+  `vercel pull --environment=production --token=…` pattern
+  `prod-deploy.yml` already uses to obtain `.vercel/.env.production.local`
+  — confirmed via `.github/workflows/*.yml` that this repo has no raw
+  `DATABASE_URL` secret pattern for scheduled workflows, so this reuses the
+  existing one rather than inventing a new secret. New `package.json`
+  scripts: `audit-log:purge`, `audit-log:purge:dry-run`,
+  `audit-log:purge:prod:local`, `audit-log:purge:vercel:prod` (the last is
+  what the workflow invokes).
+  **Deliberately deferred, not attempted this phase: native Postgres table
+  partitioning** (this doc's Part A.4 item 7 / Part B.3). Converting the
+  already-created plain `audit_events` table to a partitioned one is a real
+  data migration this remote session cannot safely verify against the
+  actual production database, and the plan's own text already flagged it as
+  needing hosting-tier confirmation first (Neon/Supabase declarative
+  partitioning support — see "Known risks" below). The row-level
+  batched-`DELETE` purge job shipped this phase fully satisfies the
+  retention-enforcement requirement on its own — partitioning is a
+  performance/VACUUM-cost optimization on top of working retention
+  enforcement, not a prerequisite for it. Revisit once the row-level purge
+  job's real-world volume/duration is known from production runs.
+  New tests: `purge-expired-events.db.test.ts` (9 cases: taxonomy-default
+  retention, admin-configured retention override, dry-run, batching loop,
+  null-tenant vs. real-tenant scoping, empty-table edge case),
+  `DrizzleAuditLogReadService.db.test.ts` (7 cases: global listing,
+  category/outcome filters, newest-first pagination, SEC-26 tenant
+  scoping, combined tenant+filter scoping), `route.test.ts` for
+  `/api/admin/audit-logs` (8 cases mirroring the audit-log-settings route
+  test's auth/SEC-26/validation shape), `AuditLogsClient.test.tsx` (7
+  cases: listing, scope banners, empty state, error state, row expansion,
+  filter submission, pagination), and `purge-expired.test.ts` (pure
+  `resolveDatabaseUrl` coverage, mirroring `db-seed.test.ts`'s convention
+  of not exercising DB-query-chaining logic directly in `scripts/`).
+  Validated: `pnpm typecheck`, `pnpm test` (212 files/1467 tests),
+  `pnpm test:db` (18 files/145 tests), `pnpm skott:check:only`,
+  `pnpm depcheck`, `pnpm env:check`, and `pnpm lint --fix` (0 errors, only
+  pre-existing unrelated warnings) all pass.
+- **Phase 5 — not started.** Remaining scope per Part B: docs
+  (`docs/features/36 - Audit Logging & Retention.md`,
+  `docs/architecture/10 - Modular Monolith - File Catalog.md` update,
+  `docs/features/20 - Enterprise Security Architecture.md` §6/§7 update)
+  and the residual test-coverage debt flagged in Phase 3 (missing
+  success-path tests on `policies`/`roles` route test files, pre-existing,
+  not introduced by this work).
 
 ## Rollout sequencing (recommended, low blast radius first)
 

@@ -3,10 +3,10 @@
 ## Task Context
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
-- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-3 are complete.
-- Current Run Scope: Phase 3 — category/outcome mapping correctness for every explicit admin route, plus a security finding surfaced during route review (`SEC-27`, missing authorization check on `waitlist/[id]/route.ts` POST) — kept out of the Phase 3 commit, then fixed as its own follow-up commit at the user's request.
+- Task Objective: Implement the audit-logging plan phase by phase. Phases 1-4 are complete.
+- Current Run Scope: Phase 4 — authorization gating for the new read route (`GET /api/admin/audit-logs`) and SEC-26-correct tenant scoping for both it and the purge job.
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 3 + SEC-27 follow-up)
+- Last Updated: 2026-08-20 (Phase 4)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -166,3 +166,19 @@
   pattern across the admin surface.
 
 - Sections refreshed: Current-State Findings, Trust Boundary Assessment, Open Questions / Blockers, Handoff Notes
+
+### Update Entry
+
+- Date: 2026-08-20
+- Trigger: Phase 4 implementation kickoff
+- Summary of change: Gated the new `GET /api/admin/audit-logs` route the same way as `GET /api/admin/audit-log-settings` (Phase 1) and every SEC-27-audited mutation route: `isEnvBasedPlatformAdmin(access.identity.email)` OR ABAC `authzService.can(...)` against `ACTIONS.SECURITY_READ_AUDIT` (the taxonomy already had this action defined and granted in the admin/owner policy template since before this task started — it had simply never had a route to gate yet). No new resource/action was introduced.
+
+  **SEC-26 re-applied, not re-litigated:** the route branches on `adminAccess.isPlatformAdmin` exactly like the settings route does — an env-based platform admin gets `service.listGlobal(...)` (unscoped), an ABAC-authorized non-platform-admin gets `service.listForTenant(access.tenant.tenantId, ...)`, deriving the tenant scope from the server-verified `SecurityContext`, never from a client-supplied query parameter (there is no `tenantId` query parameter on this route at all — filters are category/outcome/actorUserId/targetType/targetId/date-range only, none of which can widen the caller's own tenant scope).
+
+  **A stricter scoping rule than the settings table, by design:** `DrizzleAuditLogReadService.listForTenant` uses a plain `eq(auditEventsTable.tenantId, tenantId)` predicate, not the settings table's override/overlay `OR (tenantId = X OR tenantId IS NULL)` pattern. An audit trail has no "global default row a tenant inherits from" concept the way settings does — a tenant-scoped viewer must never see `tenantId: null` (platform-level) events or another tenant's events, full stop. Verified by a dedicated `DrizzleAuditLogReadService.db.test.ts` test ("SEC-26: never returns another tenant or null-tenant rows") inserting all three shapes and asserting exactly one row (the caller's own tenant) comes back.
+
+  **The purge job (`purgeExpiredAuditEvents`) does not need an authorization gate** — it runs out-of-band via a scheduled GitHub Actions workflow, authenticated at the infrastructure level (`VERCEL_TOKEN` pulling production environment variables, same trust boundary as `prod-deploy.yml`'s own database access), not as an admin-facing HTTP endpoint. It does still respect tenant boundaries operationally: it purges strictly by (category, tenantId) pair rather than a single global cutoff, so a tenant with a longer retention override is never truncated to another tenant's or the global default's shorter window.
+
+  Outcome-mapping question raised in the Phase 3 entry above ("revisit if Phase 4's read UI needs finer-grained outcome filtering") — resolved as no: the read UI's outcome filter uses the same three-value `success | failure | denied` enum already stored on every row; no finer granularity was needed to make the browse UI useful.
+
+- Sections refreshed: Trust Boundary Assessment, Security Decisions / Constraints, Handoff Notes

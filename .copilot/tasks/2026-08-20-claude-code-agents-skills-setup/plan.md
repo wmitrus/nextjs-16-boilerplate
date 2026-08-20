@@ -2,9 +2,17 @@
 
 ## Status
 
-**PHASES 2 THROUGH 5 COMPLETE.** Only Phase 6 (cross-check the existing
-`docs/ai/codex/README.md`, `docs/ai/copilot/*.md`, `docs/ai/zencoder/*.md`
-guides for their own propagation-list enumerations) remains. All 9 specialist-role skills and all 10
+**ALL PHASES (2–6) COMPLETE.** Every acceptance criterion in `intake.md` is
+met: 20 `.claude/skills/*/SKILL.md` files (19 originally scoped + the
+leantime-integration drift correction), the `docs/ai/claude/` guide layer,
+both propagation tables in `AGENTS.md` and `REPOSITORY_AI_CONTEXT.md`,
+`CLAUDE.md` updated to point at the new surface, and every ported skill's
+own Compatibility Notes plus `docs/ai/codex/README.md`'s propagation lists
+all name the new Claude path. Remaining open items are the two explicitly
+deferred ones already recorded in `intake.md`'s Open Questions
+(`.claude/agents/*.md` subagents; whether to also fix Codex's own
+Leantime Strategy / Architecture Lint gaps) — neither blocks calling this
+task done. All 9 specialist-role skills and all 10
 workflow skills are ported to `.claude/skills/` (19 total), diff-verified as
 mechanical-only against their Codex source. The frontmatter-contract risk
 noted below is resolved (confirmed against real on-disk Claude Code skills
@@ -177,12 +185,24 @@ hand-retyping padded markdown table columns) for the two large
 correspondence tables in both files — safer against alignment/whitespace
 mismatches than manual retyping, confirmed by re-reading each result.
 
-Cross-check (Phase 6) — not started:
+Cross-check (Phase 6) — **DONE**:
 
-- [ ] `docs/ai/codex/README.md` "Compatibility Notes" per-role propagation
-      lists gain the new `.claude/skills/<name>/SKILL.md` path
-- [ ] Spot-check `docs/ai/copilot/*.md` and `docs/ai/zencoder/*.md` for the
-      same enumeration pattern and update if present
+- [x] `docs/ai/codex/README.md` "Compatibility Notes" per-role propagation
+      lists gain the new `.claude/skills/<name>/SKILL.md` path — 10 blocks
+      (9 specialist roles + Safe Refactor workflow), each also gaining
+      `docs/ai/claude/` in its guide-enumeration line; the "Codex workflow
+      layer changes more broadly" trailing list also gains a
+      `.claude/skills/*-workflow/SKILL.md` and a
+      `docs/ai/claude/Workflow NN - *.md` bullet. Scoped the edit to text
+      after the `## Compatibility Notes` heading only — the same
+      `.agents/skills/<name>/SKILL.md` path also appears earlier in the
+      file's "Real Codex Skill" inventory, which must NOT gain a Claude
+      line (it's Codex's own inventory, not a propagation list).
+- [x] Spot-checked `docs/ai/copilot/*.md` and `docs/ai/zencoder/*.md` via
+      grep for "propagate updates to" / "non-authoritative guides" /
+      "Compatibility Notes" — zero matches in either directory. Only
+      `docs/ai/codex/README.md` has this enumeration pattern; nothing to
+      update in the other two guide layers.
 
 ## Known Risks / Unknowns
 

@@ -212,7 +212,7 @@ const adminCards: AdminCard[] = [
     description:
       'Toggle features per tenant or globally. Manage feature flag values and overrides.',
     href: '/admin/feature-flags',
-    status: 'coming-soon',
+    status: 'active',
     icon: <FeatureFlagsIcon />,
   },
   {

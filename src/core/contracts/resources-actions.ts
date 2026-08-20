@@ -7,6 +7,7 @@ export const RESOURCES = {
   BILLING: 'billing',
   SECURITY: 'security',
   PROVISIONING: 'provisioning',
+  FEATURE_FLAG: 'feature_flag',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -30,6 +31,9 @@ export const ACTIONS = {
   SECURITY_MANAGE_POLICIES: createAction(RESOURCES.SECURITY, 'manage_policies'),
 
   PROVISIONING_ENSURE: createAction(RESOURCES.PROVISIONING, 'ensure'),
+
+  FEATURE_FLAG_READ: createAction(RESOURCES.FEATURE_FLAG, 'read'),
+  FEATURE_FLAG_MANAGE: createAction(RESOURCES.FEATURE_FLAG, 'manage'),
 } as const;
 
 export type ActionKey = keyof typeof ACTIONS;

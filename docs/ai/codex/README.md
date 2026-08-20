@@ -168,7 +168,8 @@ When the Architecture Guard role changes, propagate updates to:
 - `docs/ai/general/01 - Architecture Guard Agent.md`
 - `.github/agents/architecture-guard.agent.md`
 - `.agents/skills/architecture-guard/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/architecture-guard/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Security & Auth role changes, propagate updates to:
 
@@ -176,7 +177,8 @@ When the Security & Auth role changes, propagate updates to:
 - `docs/ai/general/02 - Security & Auth Agent.md`
 - `.github/agents/security-auth.agent.md`
 - `.agents/skills/security-auth/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/security-auth/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Next.js Runtime role changes, propagate updates to:
 
@@ -184,7 +186,8 @@ When the Next.js Runtime role changes, propagate updates to:
 - `docs/ai/general/03 - Next.js Runtime Agent.md`
 - `.github/agents/nextjs-runtime.agent.md`
 - `.agents/skills/nextjs-runtime/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/nextjs-runtime/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Implementation role changes, propagate updates to:
 
@@ -192,7 +195,8 @@ When the Implementation role changes, propagate updates to:
 - `docs/ai/general/04 - Implementation Agents.md`
 - `.github/agents/implementation-agent.agent.md`
 - `.agents/skills/implementation-agent/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/implementation-agent/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Validation Strategy role changes, propagate updates to:
 
@@ -200,7 +204,8 @@ When the Validation Strategy role changes, propagate updates to:
 - `docs/ai/general/05 - Validation Strategy Agent.md`
 - `.github/agents/validation-strategy.agent.md`
 - `.agents/skills/validation-strategy/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/validation-strategy/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Debug Investigation role changes, propagate updates to:
 
@@ -208,7 +213,8 @@ When the Debug Investigation role changes, propagate updates to:
 - `docs/ai/general/06 - Debug Investigation Agent.md`
 - `.github/agents/debug-investigation.agent.md`
 - `.agents/skills/debug-investigation/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/debug-investigation/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Playwright E2E role changes, propagate updates to:
 
@@ -216,7 +222,8 @@ When the Playwright E2E role changes, propagate updates to:
 - `docs/ai/general/07 - Playwright E2E Agent.md`
 - `.github/agents/playwright-e2e.agent.md`
 - `.agents/skills/playwright-e2e/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/playwright-e2e/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Workflow Orchestrator role changes, propagate updates to:
 
@@ -224,15 +231,17 @@ When the Workflow Orchestrator role changes, propagate updates to:
 - `docs/ai/general/08 - Workflow Orchestrator Agent.md`
 - `.github/agents/workflow-orchestrator.agent.md`
 - `.agents/skills/workflow-orchestrator/SKILL.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- `.claude/skills/workflow-orchestrator/SKILL.md`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Task Brief Authoring role changes, propagate updates to:
 
 - `AGENTS.md`
 - `docs/ai/general/09 - Task Brief Authoring.md`
 - `.agents/skills/task-brief-authoring/SKILL.md`
+- `.claude/skills/task-brief-authoring/SKILL.md`
 - `docs/ai/zencoder/09 - Task Brief Authoring.md`
-- the non-authoritative guides under `docs/ai/codex/`
+- the non-authoritative guides under `docs/ai/codex/` and `docs/ai/claude/`
 
 When the Safe Refactor workflow changes, propagate updates to:
 
@@ -241,8 +250,9 @@ When the Safe Refactor workflow changes, propagate updates to:
 - `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md`
 - `.github/prompts/safe-refactor.prompt.md`
 - `.agents/skills/safe-refactor-workflow/SKILL.md`
+- `.claude/skills/safe-refactor-workflow/SKILL.md`
 - `.zenflow/workflows/safe-refactor.md`
-- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, and `docs/ai/codex/`
+- the non-authoritative guides under `docs/ai/copilot/`, `docs/ai/zencoder/`, `docs/ai/codex/`, and `docs/ai/claude/`
 
 When the Codex workflow layer changes more broadly, also keep these workflow surfaces
 in sync when applicable:
@@ -258,4 +268,6 @@ in sync when applicable:
 - `docs/ai/general/Workflow 11 - Codacy Findings Review Workflow.md`
 - the matching `.github/prompts/*.prompt.md` files when they exist
 - the matching `.agents/skills/*-workflow/SKILL.md` files
+- the matching `.claude/skills/*-workflow/SKILL.md` files
 - the matching `.zenflow/workflows/*.md` files
+- the matching `docs/ai/claude/Workflow NN - *.md` guide files

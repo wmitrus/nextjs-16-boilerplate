@@ -1,7 +1,9 @@
 import { and, eq } from 'drizzle-orm';
 import { connection } from 'next/server';
 
-import { INFRASTRUCTURE } from '@/core/contracts';
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
+import type { AuthorizationService } from '@/core/contracts/authorization';
+import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 import type { DrizzleDb } from '@/core/db/types';
 import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
@@ -28,6 +30,39 @@ import { DefaultWaitlistService } from '@/modules/waitlist/infrastructure/Defaul
 import { DrizzleWaitlistRepository } from '@/modules/waitlist/infrastructure/drizzle/DrizzleWaitlistRepository';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
+import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
+
+/**
+ * SEC finding (2026-08-20, found while wiring Phase 3 audit logging):
+ * this POST handler previously had no admin authorization check at all --
+ * unlike the sibling GET in ../route.ts, which already gates on this same
+ * check. Mirrors that check exactly (duplicated, not imported, matching
+ * the existing local-`checkAdminAccess`-per-route-file convention used
+ * across /api/admin/** — see feature-flags/route.ts and
+ * feature-flags/[id]/route.ts for the same pattern).
+ */
+async function checkAdminAccess(
+  email: string | undefined,
+  userId: string,
+  tenantId: string,
+  container: ReturnType<typeof getAppContainer>,
+): Promise<boolean> {
+  if (isEnvBasedPlatformAdmin(email)) return true;
+
+  try {
+    const authzService = container.resolve<AuthorizationService>(
+      AUTHORIZATION.SERVICE,
+    );
+    return await authzService.can({
+      tenant: { tenantId },
+      subject: { id: userId },
+      resource: { type: RESOURCES.SECURITY, id: 'admin-panel' },
+      action: ACTIONS.SECURITY_MANAGE_POLICIES,
+    });
+  } catch {
+    return false;
+  }
+}
 
 const logger = resolveServerLogger().child({
   type: 'API',
@@ -121,6 +156,17 @@ function isWaitlistError(
 export const POST = withErrorHandler(
   withNodeProvisioning(async (_request, context, access) => {
     await connection();
+
+    const container = getAppContainer();
+    const isAdmin = await checkAdminAccess(
+      access.identity.email,
+      access.user.id,
+      access.tenant.tenantId,
+      container,
+    );
+    if (!isAdmin) {
+      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+    }
 
     const params = await context.params;
     const id = params['id'];

@@ -397,22 +397,26 @@ one `AuditLogService.record()` call added at each mutation branch:
   (`policies/route.test.ts`, `policies/[policyId]/route.test.ts`,
   `roles/route.test.ts`, `roles/[roleId]/route.test.ts`) have **no existing
   success-path test at all** (pre-existing gap, not introduced by this
-  phase — they only test the archived-organization 409 guard), and
-  `waitlist/[id]/route.ts` has **no test file at all** (also pre-existing).
-  Adding those from scratch was out of scope for this phase; flagged as
-  residual test-coverage debt below.
-  **Security finding (out of scope for this phase, reported separately to
-  the user, not silently fixed):** while reading `waitlist/[id]/route.ts`'s
-  `POST` handler to wire its audit event, found it has **no admin
-  authorization check at all** — unlike its sibling `GET` handler (which
-  calls `checkAdminAccess`), `POST` only relies on `withNodeProvisioning`
-  (authenticated + provisioned, not admin). Any authenticated, provisioned
-  user can call `POST /api/admin/waitlist/[id]?action=approve` today,
-  which creates a real invitation. See
-  `02 - Security & Auth - Summary.md`'s Phase 3 entry for the full
-  writeup; not fixed as part of this phase per "never hide a
-  security-behavior change inside an unrelated commit."
-  Validated: `pnpm typecheck`, `pnpm test` (208 files/1440 tests), `pnpm test:db`
+  phase — they only test the archived-organization 409 guard). Adding
+  those from scratch was out of scope for this phase; flagged as residual
+  test-coverage debt below.
+  **Security finding — found here, fixed as a separate follow-up commit
+  at the user's request (not folded into the Phase 3 commit):** while
+  reading `waitlist/[id]/route.ts`'s `POST` handler to wire its audit
+  event, found it had **no admin authorization check at all** — unlike
+  its sibling `GET` handler (which calls `checkAdminAccess`), `POST` only
+  relied on `withNodeProvisioning` (authenticated + provisioned, not
+  admin). Any authenticated, provisioned user could call
+  `POST /api/admin/waitlist/[id]?action=approve` and create a real
+  invitation. Reported via `AskUserQuestion`; user chose to fix it
+  immediately. Fixed by adding the same `checkAdminAccess()` gate the
+  sibling `GET` already has, plus a full new test file for this route
+  (`waitlist/[id]/route.test.ts` — it had none before, itself a
+  pre-existing gap now closed) covering the 403/admin-grant/success/audit
+  paths. Documented as `SEC-27` in
+  `docs/ai/general/SECURITY_CODING_PATTERNS.md`. Full writeup:
+  `02 - Security & Auth - Summary.md`'s Phase 3 entry.
+  Validated: `pnpm typecheck`, `pnpm test` (209 files/1446 tests), `pnpm test:db`
   (16 files/132 tests), `pnpm skott:check:only`, `pnpm depcheck`,
   `pnpm env:check`, and `pnpm lint --fix` (0 errors, only pre-existing
   unrelated warnings) all pass.

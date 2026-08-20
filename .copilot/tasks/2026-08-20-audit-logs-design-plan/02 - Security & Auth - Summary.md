@@ -4,9 +4,9 @@
 
 - Task ID: `2026-08-20-audit-logs-design-plan`
 - Task Objective: Implement the audit-logging plan phase by phase. Phases 1-3 are complete.
-- Current Run Scope: Phase 3 — category/outcome mapping correctness for every explicit admin route, plus an **out-of-scope security finding surfaced during route review** (see below — not fixed as part of this phase).
+- Current Run Scope: Phase 3 — category/outcome mapping correctness for every explicit admin route, plus a security finding surfaced during route review (`SEC-27`, missing authorization check on `waitlist/[id]/route.ts` POST) — kept out of the Phase 3 commit, then fixed as its own follow-up commit at the user's request.
 - Status: COMPLETED
-- Last Updated: 2026-08-20 (Phase 3)
+- Last Updated: 2026-08-20 (Phase 3 + SEC-27 follow-up)
 - Related Control Artifacts: `plan.md`, `01 - Architecture Guard - Summary.md`
 
 ## Scope Handled
@@ -73,7 +73,7 @@
 - unresolved questions: none for Phase 1.
 - blockers: none.
 - evidence still needed: a SEC-26-shaped regression test (ABAC-authorized-but-not-platform-admin caller supplying a foreign/global `tenantId` must be rejected/derived, not merely "no grant → 403") is **required** before this is considered done — tracked in the route test file.
-- **open, user-facing (Phase 3):** whether/when to fix `POST /api/admin/waitlist/[id]`'s missing authorization check is the user's decision, not this task's — raised directly in the session response. If approved, the fix is small (add the same `checkAdminAccess()` call the sibling `GET` already has) but is a distinct security-incident-shaped change, not an audit-logging one.
+- ~~open, user-facing (Phase 3): whether/when to fix `POST /api/admin/waitlist/[id]`'s missing authorization check~~ — **resolved**: user chose to fix it now; shipped as its own commit (`SEC-27`).
 
 ## Handoff Notes
 
@@ -136,17 +136,27 @@
   issue, since here there is no authorization check of any kind, not an
   under-scoped one).
 
-  **Not fixed here.** Per `AGENTS.md`'s Change Management guidance ("never
-  hide architectural changes inside 'small' edits... mix unrelated cleanup
-  with risky behavioral changes without saying so") and the general
-  "confirm first for hard-to-reverse or outward-facing changes" posture,
-  an authorization-tightening fix is a distinct, user-facing behavior
-  change from audit-log instrumentation and must not ride along inside
-  this phase's commit. I only added the third `access` parameter to the
-  handler signature (needed to populate `tenantId`/`actorUserId` on the
-  audit record) — that alone changes no authorization behavior. Reported
-  directly to the user in this session's response, not silently deferred
-  to a task-artifact note only.
+  **Not fixed inside the Phase 3 commit.** Per `AGENTS.md`'s Change
+  Management guidance ("never hide architectural changes inside 'small'
+  edits... mix unrelated cleanup with risky behavioral changes without
+  saying so"), an authorization-tightening fix is a distinct, user-facing
+  behavior change from audit-log instrumentation and was kept out of that
+  commit. Reported directly to the user via `AskUserQuestion`
+  immediately after Phase 3 shipped; **user chose "fix it now" as its own
+  separate commit on this branch.**
+
+  **FIXED (2026-08-20, separate commit):** added the same `checkAdminAccess()`
+  gate the sibling `GET` already has to `POST`'s handler in
+  `waitlist/[id]/route.ts` (duplicated per-file, matching the existing
+  `checkAdminAccess`-per-route-file convention used elsewhere, e.g.
+  `feature-flags/route.ts` / `feature-flags/[id]/route.ts`) — env-based
+  platform admin OR ABAC `SECURITY_MANAGE_POLICIES`, checked before any
+  business logic runs. Added a full new test file for this route (it had
+  none before, a pre-existing gap): `waitlist/[id]/route.test.ts`,
+  covering the 403-for-non-admin case, both admin grant paths (env +
+  ABAC), and the approve/reject success + audit-record paths. Documented
+  as `SEC-27` in `docs/ai/general/SECURITY_CODING_PATTERNS.md` per this
+  repo's mandatory post-fix pattern-catalogue update.
 
   Every other route reviewed in this phase already has a real
   authorization check before its mutation (`checkAdminAccess`,

@@ -276,25 +276,42 @@ jobs:
       - name: Run Lighthouse Audit
         run: |
           echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
-          # Five rounds of tuning this job's OWN Chrome launch (bypass
-          # cookie flavor x3, --no-sandbox --disable-dev-shm-usage,
-          # --headless=new, a 90s FCP budget) all produced the identical
-          # NO_FCP failure, while a control audit of example.com on this
-          # exact runner with the exact same flags succeeded every time
-          # (real FCP in under 1s) -- proving the runner's Chrome was
-          # never broken and none of those flags were the actual
-          # difference. The one thing genuinely unverified was WHICH
-          # Chrome build chrome-launcher was finding at all: this job had
-          # no "Install Chromium" step, unlike Verify Preview Runtime
-          # (which passes on this exact URL every run), so it was running
-          # whatever (possibly stale) Chrome ubuntu-latest happens to
-          # ship. Installing the same pinned Playwright Chromium here and
-          # pointing CHROME_PATH at it removes that as a variable
-          # entirely, using the exact browser build already proven to
-          # load and fully hydrate this deployment.
+          # Six rounds of tuning THIS JOB'S handling of Chrome (three
+          # bypass-cookie flavors, --no-sandbox --disable-dev-shm-usage,
+          # --headless=new, a 90s FCP budget, and finally pointing
+          # CHROME_PATH at the exact same pinned Playwright Chromium
+          # binary that Verify Preview Runtime uses successfully on this
+          # exact URL every single run) all produced the identical NO_FCP
+          # failure -- even with the literal same Chrome build lhci still
+          # couldn't get a paint, while a control audit of example.com
+          # under the identical flags succeeded every time. That rules out
+          # the Chrome binary entirely: the difference is in HOW
+          # Lighthouse itself drives navigation/tracing over CDP, not
+          # which Chrome it drives.
+          #
+          # So stop letting Lighthouse launch and drive Chrome at all.
+          # Launch the same Playwright Chromium ourselves with a
+          # debugging port open, and have Lighthouse attach to that
+          # already-running, already-proven-working instance instead of
+          # using its own chrome-launcher/navigation path.
           CHROME_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
           echo "Using Chromium at: $CHROME_PATH"
-          CHROME_PATH="$CHROME_PATH" npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
+          "$CHROME_PATH" --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu --remote-debugging-port=9222 about:blank &
+          CHROME_PID=$!
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+              echo "Chrome CDP endpoint ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sS http://127.0.0.1:9222/json/version || echo "CDP endpoint never became ready"
+          set +e
+          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.port=9222 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
+          LHCI_EXIT=$?
+          set -e
+          kill "$CHROME_PID" 2>/dev/null || true
+          exit $LHCI_EXIT
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

@@ -266,25 +266,24 @@ jobs:
       - name: Run Lighthouse Audit
         run: |
           echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
-          # No x-vercel-set-bypass-cookie: that header makes Vercel issue a
-          # 307-redirect-back-to-self with a Set-Cookie, priming a cookie so
-          # a *browser session* doesn't need to keep resending the bypass
-          # header on later navigations. Neither value ("samesitenone" nor
-          # "true") got this job's Chrome past that redirect within the
-          # default FCP wait budget (NO_FCP both times), even though a
-          # cookie-jar-enabled curl sailed through the identical chain in
-          # under 3s -- whatever the exact mechanism, it is specific to the
-          # Chrome this job launches (no "Install Chromium" step here,
-          # unlike Verify Preview Runtime -- @lhci/cli's chrome-launcher
-          # picks up ubuntu-latest's preinstalled system Chrome, a
-          # different binary than Playwright's pinned bundled Chromium that
-          # DOES pass the same redirect+cookie flow in Verify Preview
-          # Runtime). extraHeaders re-sends x-vercel-protection-bypass on
-          # every request for the whole navigation anyway, so the cookie
-          # buys nothing here -- dropping the bypass-cookie header removes
-          # the redirect from the equation entirely: Vercel serves 200
-          # directly off the bypass header on every request.
-          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
+          # Neither bypass-cookie flavor, nor dropping it, changed the
+          # outcome: every attempt failed at exactly ~31s (Lighthouse's
+          # default max-wait-for-FCP), a hard consistent timeout rather
+          # than a flake -- ruling out the Vercel bypass redirect/cookie
+          # dance as the cause. The deployment itself is proven healthy: a
+          # cookie-jar curl and Playwright's own Chromium both load this
+          # exact URL, with the same bypass header, in a few seconds. This
+          # job has no "Install Chromium" step (unlike Verify Preview
+          # Runtime), so chrome-launcher falls back to ubuntu-latest's
+          # preinstalled system Chrome with lighthouse's default flags --
+          # a classic setup for a silently hung/crashed renderer in a
+          # container with a small /dev/shm, which presents exactly like
+          # this (Chrome connects and starts navigating, then nothing ever
+          # paints). --disable-dev-shm-usage (write Chrome's shared memory
+          # to /tmp instead) and --no-sandbox (this runner user may not
+          # have the namespace privileges Chrome's sandboxing wants) are
+          # the standard fix for that class of failure in CI containers.
+          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

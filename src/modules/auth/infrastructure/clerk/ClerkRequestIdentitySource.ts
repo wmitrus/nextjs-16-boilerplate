@@ -6,39 +6,14 @@ import type {
 } from '@/core/contracts/identity';
 import { resolveServerLogger } from '@/core/logger/di';
 
+import { extractClerkEmailClaim } from '@/modules/auth/lib/clerk-session-claims';
+
 type ClerkSessionClaims = Record<string, unknown> | null | undefined;
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'auth',
   module: 'clerk-request-identity-source',
 });
-
-function readStringClaim(
-  sessionClaims: ClerkSessionClaims,
-  claimNames: readonly string[],
-): string | undefined {
-  const claimMap = new Map<string, unknown>(
-    sessionClaims && typeof sessionClaims === 'object'
-      ? Object.entries(sessionClaims)
-      : [],
-  );
-
-  for (const claimName of claimNames) {
-    const value = claimMap.get(claimName);
-    if (typeof value === 'string' && value.length > 0) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function extractEmail(sessionClaims: ClerkSessionClaims): string | undefined {
-  // Clerk Session Token v2 exposes `email` by default. We also support
-  // `primaryEmail` as an explicit custom-claim contract for apps that
-  // customize the session token instead of relying on default claims.
-  return readStringClaim(sessionClaims, ['email', 'primaryEmail']);
-}
 
 function resolveEmailClaimSource(
   sessionClaims: ClerkSessionClaims,
@@ -75,7 +50,7 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
       this.cached = auth().then(({ userId, orgId, orgRole, sessionClaims }) => {
-        const email = extractEmail(sessionClaims);
+        const email = extractClerkEmailClaim(sessionClaims);
         const emailClaimSource = resolveEmailClaimSource(sessionClaims);
         const sessionClaimKeys =
           sessionClaims && typeof sessionClaims === 'object'

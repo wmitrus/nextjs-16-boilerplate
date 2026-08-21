@@ -3,8 +3,18 @@ import type { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/core/env';
 
 /**
- * Hardens the response with security headers.
- * Implements CSP, HSTS, and other browser-level protections.
+ * Builds the Content-Security-Policy header value.
+ *
+ * Exported (not just used internally by withHeaders) because it must be
+ * set on BOTH the response and, when a nonce is present, the request —
+ * see proxy.ts's terminalHandler. Next.js auto-applies a nonce to its own
+ * internally-generated inline scripts (RSC hydration payload pushes, etc.)
+ * by reading the incoming REQUEST's Content-Security-Policy header for a
+ * `nonce-` source; it does not use an arbitrary custom header for this.
+ * Forwarding only `x-nonce` (for our own <Script>/<ClerkProvider> nonce
+ * props) without also forwarding this exact CSP string left Next's own
+ * bootstrap scripts un-nonced — under strict-dynamic with no unsafe-inline
+ * fallback, the browser blocks them and the page never hydrates.
  *
  * @param nonce - Per-request CSP nonce from RouteContext.nonce (set only
  * when CSP_SCRIPT_STRICT_MODE is on). When present, script-src uses
@@ -13,41 +23,7 @@ import { env } from '@/core/env';
  * own NextResponse without going through the proxy pipeline) falls back to
  * the legacy CSP unconditionally — there's no nonce to reference.
  */
-export function withHeaders(
-  req: NextRequest,
-  res: NextResponse,
-  nonce?: string,
-): NextResponse {
-  // 1. Basic Hardening
-  res.headers.set('X-Frame-Options', 'DENY');
-  res.headers.set('X-Content-Type-Options', 'nosniff');
-  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.headers.set(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=()',
-  );
-  // X-XSS-Protection intentionally omitted: deprecated, removed from modern
-  // browser engines, and superseded by the Content-Security-Policy below.
-
-  // 1b. Cross-origin isolation headers.
-  // COOP uses `same-origin-allow-popups`, not plain `same-origin` — Clerk's
-  // hosted auth flows may rely on popup/opener communication, and the
-  // `-allow-popups` variant keeps most of the isolation benefit without
-  // risking breaking sign-in.
-  res.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  res.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
-  res.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
-  res.headers.set('Origin-Agent-Cluster', '?1');
-
-  // 2. HSTS (Production only)
-  if (env.NODE_ENV === 'production') {
-    res.headers.set(
-      'Strict-Transport-Security',
-      'max-age=31536000; includeSubDomains; preload',
-    );
-  }
-
-  // 3. Content Security Policy (Environment Aware)
+export function buildContentSecurityPolicy(nonce?: string): string {
   const isPreview = env.VERCEL_ENV === 'preview';
   const isDev = env.NODE_ENV === 'development';
 
@@ -113,7 +89,7 @@ export function withHeaders(
   const unsafeEvalIfDev = isDev ? "'unsafe-eval'" : '';
 
   // A nonce is only meaningful together with CSP_SCRIPT_STRICT_MODE — see
-  // the withHeaders() doc comment for why a missing nonce always falls back
+  // this function's doc comment for why a missing nonce always falls back
   // to the legacy CSP rather than emitting a nonce directive with nothing
   // to reference.
   const isStrictCsp = env.CSP_SCRIPT_STRICT_MODE && Boolean(nonce);
@@ -201,7 +177,7 @@ export function withHeaders(
     .filter(Boolean)
     .join(' ');
 
-  const csp = [
+  return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     `script-src-elem ${scriptSrc}`,
@@ -222,8 +198,51 @@ export function withHeaders(
     "frame-ancestors 'none'",
     env.VERCEL_ENV === 'production' ? 'upgrade-insecure-requests' : '',
   ].join('; ');
+}
 
-  res.headers.set('Content-Security-Policy', csp);
+/**
+ * Hardens the response with security headers.
+ * Implements CSP, HSTS, and other browser-level protections.
+ *
+ * @param nonce - Forwarded to buildContentSecurityPolicy() — see its doc
+ * comment.
+ */
+export function withHeaders(
+  req: NextRequest,
+  res: NextResponse,
+  nonce?: string,
+): NextResponse {
+  // 1. Basic Hardening
+  res.headers.set('X-Frame-Options', 'DENY');
+  res.headers.set('X-Content-Type-Options', 'nosniff');
+  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.headers.set(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=()',
+  );
+  // X-XSS-Protection intentionally omitted: deprecated, removed from modern
+  // browser engines, and superseded by the Content-Security-Policy below.
+
+  // 1b. Cross-origin isolation headers.
+  // COOP uses `same-origin-allow-popups`, not plain `same-origin` — Clerk's
+  // hosted auth flows may rely on popup/opener communication, and the
+  // `-allow-popups` variant keeps most of the isolation benefit without
+  // risking breaking sign-in.
+  res.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  res.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
+  res.headers.set('Origin-Agent-Cluster', '?1');
+
+  // 2. HSTS (Production only)
+  if (env.NODE_ENV === 'production') {
+    res.headers.set(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload',
+    );
+  }
+
+  // 3. Content Security Policy (Environment Aware)
+  res.headers.set('Content-Security-Policy', buildContentSecurityPolicy(nonce));
 
   return res;
 }

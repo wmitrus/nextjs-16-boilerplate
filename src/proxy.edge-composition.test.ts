@@ -72,6 +72,13 @@ vi.mock('@/core/env', async (importOriginal) => {
       NEXT_PUBLIC_CSP_IMG_EXTRA: '',
       NEXT_PUBLIC_CSP_STYLE_EXTRA: '',
       NEXT_PUBLIC_CSP_FONT_EXTRA: '',
+      // T3-Env's proxy hides server-only keys from `{...actual.env}`
+      // enumeration in this jsdom test environment (it treats jsdom's
+      // `window` as a client context) — server vars must be listed
+      // explicitly here, same as INTERNAL_API_KEY etc above, or they
+      // silently come out `undefined` rather than their schema default.
+      CSP_SCRIPT_STRICT_MODE: true,
+      DEMO_SHOWCASE_ENABLED: false,
     },
   };
 });
@@ -160,5 +167,39 @@ describe('Proxy edge composition root', () => {
     for (const call of registerMock.mock.calls) {
       expect(call[2]).toEqual({ override: true });
     }
+  });
+
+  it('forwards both x-nonce and a matching Content-Security-Policy on the request (not just x-nonce)', async () => {
+    // Regression test: Next.js auto-nonces its own framework-generated
+    // inline scripts (RSC hydration payload pushes, etc.) by reading the
+    // incoming REQUEST's Content-Security-Policy header for a `nonce-`
+    // source — a custom x-nonce header alone does not reach that
+    // mechanism. See SEC-30 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+    // Uses a public route ("/") so the request reaches terminalHandler
+    // directly — this test's identity resolves to null, and a protected
+    // route like /dashboard would redirect to sign-in before ever
+    // reaching it.
+    const request = new NextRequest(new URL('http://localhost/'));
+
+    const response = await proxy(request, {} as unknown as NextFetchEvent);
+    expect(response).toBeTruthy();
+
+    const overridden = response!.headers.get('x-middleware-override-headers');
+    expect(overridden).toContain('x-nonce');
+    expect(overridden).toContain('content-security-policy');
+
+    const forwardedNonce = response!.headers.get(
+      'x-middleware-request-x-nonce',
+    );
+    const forwardedCsp = response!.headers.get(
+      'x-middleware-request-content-security-policy',
+    );
+    expect(forwardedNonce).toBeTruthy();
+    expect(forwardedCsp).toBeTruthy();
+    // The same nonce value must appear in both — Next's auto-nonce
+    // detection and our own <Script>/<ClerkProvider> nonce props must
+    // agree, or only one half of the page's scripts would be trusted.
+    expect(forwardedCsp).toContain(`'nonce-${forwardedNonce}'`);
+    expect(forwardedCsp).toContain("'strict-dynamic'");
   });
 });

@@ -2,6 +2,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import * as React from 'react';
 
+import { env } from '@/core/env';
+
 import PolymorphicElement from '@/shared/components/ui/polymorphic-element';
 import { cn } from '@/shared/utils/cn';
 
@@ -57,14 +59,16 @@ const Footer = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
                     Use Cases
                   </Link>
                 </li>
-                <li>
-                  <Link
-                    href="/feature-flags-demo"
-                    className="text-sm text-zinc-600 hover:text-black dark:text-zinc-400 dark:hover:text-white"
-                  >
-                    Feature Flags Demo
-                  </Link>
-                </li>
+                {env.DEMO_SHOWCASE_ENABLED && (
+                  <li>
+                    <Link
+                      href="/feature-flags-demo"
+                      className="text-sm text-zinc-600 hover:text-black dark:text-zinc-400 dark:hover:text-white"
+                    >
+                      Feature Flags Demo
+                    </Link>
+                  </li>
+                )}
               </ul>
             </div>
             <div>

@@ -14,6 +14,7 @@ const ctx: RouteContext = {
   isOnboardingRoute: false,
   isBootstrapRoute: false,
   isPublicRoute: true,
+  isDemoRoute: false,
   isStaticFile: false,
   correlationId: 'correlation-1',
   requestId: 'request-1',

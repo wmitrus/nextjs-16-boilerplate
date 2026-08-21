@@ -87,6 +87,18 @@ export const env = createEnv({
       .default(
         'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
       ),
+    // Gates the demo/showcase routes in DEMO_ROUTE_PREFIXES
+    // (src/security/middleware/route-policy.ts). Off by default in every
+    // environment, including production — flip on temporarily in Vercel
+    // when giving a live demo, then flip back off.
+    DEMO_SHOWCASE_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    // Optional extra restriction on top of DEMO_SHOWCASE_ENABLED: when set,
+    // only the signed-in user with this exact email can reach a demo route
+    // even while the flag is on. Leave unset to allow any authenticated
+    // user (fine for a single-operator personal app).
+    DEMO_SHOWCASE_ALLOWED_EMAIL: z.email().optional(),
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
@@ -238,6 +250,8 @@ export const env = createEnv({
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
+    DEMO_SHOWCASE_ENABLED: process.env.DEMO_SHOWCASE_ENABLED,
+    DEMO_SHOWCASE_ALLOWED_EMAIL: process.env.DEMO_SHOWCASE_ALLOWED_EMAIL,
     E2E_ENABLED: process.env.E2E_ENABLED,
     AUTH_PROVIDER: process.env.AUTH_PROVIDER,
     DB_PROVIDER: process.env.DB_PROVIDER,

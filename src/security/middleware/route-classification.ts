@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 
 import {
   AUTH_ROUTE_PREFIXES,
+  DEMO_ROUTE_PREFIXES,
   PUBLIC_ROUTE_PREFIXES,
   matchesAnyRoutePrefix,
 } from './route-policy';
@@ -14,6 +15,7 @@ export interface RouteContext {
   isOnboardingRoute: boolean;
   isBootstrapRoute: boolean;
   isPublicRoute: boolean;
+  isDemoRoute: boolean;
   isStaticFile: boolean;
   correlationId: string;
   requestId: string;
@@ -44,6 +46,7 @@ export function classifyRequest(req: NextRequest): RouteContext {
 
   const isPublicRoute =
     matchesAnyRoutePrefix(path, PUBLIC_ROUTE_PREFIXES) || isAuthRoute;
+  const isDemoRoute = matchesAnyRoutePrefix(path, DEMO_ROUTE_PREFIXES);
 
   return {
     isApi,
@@ -53,6 +56,7 @@ export function classifyRequest(req: NextRequest): RouteContext {
     isOnboardingRoute,
     isBootstrapRoute,
     isPublicRoute,
+    isDemoRoute,
     isStaticFile,
     correlationId,
     requestId,

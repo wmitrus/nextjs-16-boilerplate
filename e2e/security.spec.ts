@@ -69,4 +69,36 @@ test.describe('Security Architecture E2E', () => {
     expect(body.status).toBe('ok');
     expect(body.scope).toBe('internal');
   });
+
+  test.describe('demo/showcase routes are gated off by default', () => {
+    // DEMO_SHOWCASE_ENABLED is unset in the default scenario runtime — every
+    // demo route must 404 regardless of auth state, unauthenticated
+    // included. See SEC-29 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+    for (const path of [
+      '/security-showcase',
+      '/sentry-example-page',
+      '/feature-flags-demo',
+      '/env-summary',
+    ]) {
+      test(`${path} returns a real 404, not a sign-in redirect`, async ({
+        page,
+      }) => {
+        const response = await page.goto(path);
+        expect(response?.status()).toBe(404);
+        // Must not have been redirected to sign-in — a demo route with the
+        // flag off must behave as if it doesn't exist, not "exists, but
+        // requires auth".
+        expect(page.url()).not.toContain('sign-in');
+      });
+    }
+
+    test('/api/security-test/ssrf returns a JSON 404', async ({ request }) => {
+      const response = await request.get(
+        '/api/security-test/ssrf?url=https://example.com',
+      );
+      expect(response.status()).toBe(404);
+      const body = await response.json();
+      expect(body.code).toBe('NOT_FOUND');
+    });
+  });
 });

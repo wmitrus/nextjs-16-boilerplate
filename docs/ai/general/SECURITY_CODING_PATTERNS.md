@@ -34,6 +34,7 @@ Update it after every security review group.
 | SEC-26 | Authorization      | ABAC action check without matching resource-scope check | Real risk → fixed          | Admin CRUD route handlers/services |
 | SEC-27 | Authorization      | Mutating admin route with no authorization check at all | Real risk → fixed          | Admin API route handlers           |
 | SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense   | Real risk → fixed          | Outbound fetch helpers             |
+| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes             | Real risk → fixed          | Demo/showcase route policy         |
 
 ---
 
@@ -1771,6 +1772,16 @@ route file, whether it calls an admin-authorization gate — do not assume
 "this directory is admin-gated" or "the sibling handler checks it" extends
 protection to a handler that never calls the check itself.
 
+**DO** treat a missing authorization check as a `security-incident-workflow`
+finding, distinct from whatever task you were doing when you found it (in this
+case, audit-log instrumentation) — report it and let the change ship as its
+own reviewable diff, not folded into an unrelated commit.
+
+**DO NOT** assume a route is safe because it lives under `/api/admin/` or
+because the corresponding UI page is behind `src/app/admin/layout.tsx`'s
+guard — that guard protects page rendering only, never the underlying API
+route, which remains directly callable by anyone who can reach it.
+
 ---
 
 ## SEC-28 — SSRF Guard Must Cover IPv6/Link-Local Ranges and Resolve-Before-Fetch
@@ -1860,12 +1871,81 @@ just the literal-string check. **DO NOT** silently drop the DNS-resolution
 step to fix a slow test or a sandbox without network access — mock
 `node:dns/promises`'s `lookup`, don't skip the check it backs.
 
-**DO** treat a missing authorization check as a `security-incident-workflow`
-finding, distinct from whatever task you were doing when you found it (in this
-case, audit-log instrumentation) — report it and let the change ship as its
-own reviewable diff, not folded into an unrelated commit.
+---
 
-**DO NOT** assume a route is safe because it lives under `/api/admin/` or
-because the corresponding UI page is behind `src/app/admin/layout.tsx`'s
-guard — that guard protects page rendering only, never the underlying API
-route, which remains directly callable by anyone who can reach it.
+## SEC-29 — Demo/Showcase Routes Must Not Be Public By Default
+
+**ID**: SEC-29
+**Category**: Attack surface
+**Classification**: Real risk — found during a repository-wide security audit
+(2026-08-21), fixed same day
+**Affected contexts**: `PUBLIC_ROUTE_PREFIXES` in
+`src/security/middleware/route-policy.ts`, any future demo/showcase/example
+route
+
+### Risk
+
+`PUBLIC_ROUTE_PREFIXES` included `/security-showcase`, `/sentry-example-page`,
+`/feature-flags-demo`, `/env-summary`, and `/api/security-test/ssrf` —
+teaching/demo routes meant to showcase the security architecture, not
+application features. Being in `PUBLIC_ROUTE_PREFIXES` meant they were
+reachable by anyone on the internet, unauthenticated, with no way to turn
+that off short of a code change. `/api/security-test/ssrf` is the sharpest
+case: it takes a raw `?url=` query parameter and passes it straight into
+`secureFetch()` (see SEC-28) — a public, unauthenticated SSRF-guard oracle.
+`/env-summary` discloses which integrations/config are present, which is
+recon value even with secrets redacted.
+
+### Correct Pattern
+
+Demo routes get their own prefix list, gated by an env flag (default off in
+every environment including production) plus normal authentication, instead
+of living in `PUBLIC_ROUTE_PREFIXES`:
+
+```typescript
+// route-policy.ts
+export const DEMO_ROUTE_PREFIXES = [
+  '/env-summary',
+  '/security-showcase',
+  '/sentry-example-page',
+  '/feature-flags-demo',
+  '/api/security-test/ssrf',
+] as const;
+// NOT in PUBLIC_ROUTE_PREFIXES — they still require sign-in when the flag
+// enables them, same as any other private route.
+```
+
+```typescript
+// with-demo-guard.ts — runs BEFORE withAuth in the proxy pipeline
+export function withDemoGuard(handler: ProxyHandler): ProxyHandler {
+  return async (req, ctx) => {
+    if (ctx.isDemoRoute && !env.DEMO_SHOWCASE_ENABLED) {
+      return demoNotFound(req, ctx); // 404, not 403 — never confirm existence
+    }
+    return handler(req, ctx);
+  };
+}
+```
+
+The flag-off case runs pre-auth so an unauthenticated caller gets a plain
+404 (route doesn't exist), never a sign-in redirect (route exists, requires
+auth) — the latter still leaks that something is there. An optional
+`DEMO_SHOWCASE_ALLOWED_EMAIL` check runs in a second guard positioned AFTER
+`withAuth`, since it needs the resolved identity.
+
+### Real Infrastructure Is Not A Demo Route
+
+`/monitoring` looks like it belongs in this category by name but is
+Sentry's `tunnelRoute` (`next.config.ts`) — real production error-reporting
+infrastructure. It stays in `PUBLIC_ROUTE_PREFIXES` unconditionally. Gating
+it the same way as the demo routes would silently break Sentry in
+production. Always check what a route actually does before assuming a name
+pattern implies "demo."
+
+### Rule for Agents
+
+**DO** default any new example/demo/showcase/diagnostic route to gated-off,
+not public — public-by-default is the wrong starting assumption for
+anything that exists to demonstrate the system rather than serve the
+product. **DO NOT** gate a route just because its name sounds like a demo
+(`/monitoring`) without first checking what it actually does.

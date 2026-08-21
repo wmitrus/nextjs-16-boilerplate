@@ -14,6 +14,8 @@ const defaultEnv: MutableEnv = {
   INTERNAL_API_KEY: 'test-secret',
   SECURITY_ALLOWED_OUTBOUND_HOSTS:
     'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
+  DEMO_SHOWCASE_ENABLED: false,
+  DEMO_SHOWCASE_ALLOWED_EMAIL: undefined,
   VERCEL_ENV: 'development',
   NEXT_PUBLIC_CSP_SCRIPT_EXTRA: '',
   NEXT_PUBLIC_CSP_CONNECT_EXTRA: '',

@@ -18,6 +18,7 @@ export function createMockRouteContext(
     isOnboardingRoute: false,
     isBootstrapRoute: false,
     isPublicRoute: false,
+    isDemoRoute: false,
     isStaticFile: false,
     correlationId: 'test-correlation-id',
     requestId: 'test-request-id',

@@ -66,4 +66,24 @@ describe('Route Classification', () => {
     const ctx = classifyRequest(createMockRequest({ path: '/dashboard' }));
     expect(ctx.isPublicRoute).toBe(false);
   });
+
+  it('should classify demo/showcase routes as demo routes, not public', () => {
+    for (const path of [
+      '/security-showcase',
+      '/sentry-example-page',
+      '/feature-flags-demo',
+      '/env-summary',
+      '/api/security-test/ssrf',
+    ]) {
+      const ctx = classifyRequest(createMockRequest({ path }));
+      expect(ctx.isDemoRoute).toBe(true);
+      expect(ctx.isPublicRoute).toBe(false);
+    }
+  });
+
+  it('should keep the Sentry tunnel route public and not a demo route', () => {
+    const ctx = classifyRequest(createMockRequest({ path: '/monitoring' }));
+    expect(ctx.isDemoRoute).toBe(false);
+    expect(ctx.isPublicRoute).toBe(true);
+  });
 });

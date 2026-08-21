@@ -18,6 +18,10 @@ import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/Reque
 import type { EdgeSecurityDependencies } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 import { withAuth } from '@/security/middleware/with-auth';
+import {
+  withDemoAllowlistGuard,
+  withDemoGuard,
+} from '@/security/middleware/with-demo-guard';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
 import { withRegistrationMode } from '@/security/middleware/with-registration-mode';
@@ -108,6 +112,9 @@ function createSecurityPipeline(
 ) {
   const appSecurityPipeline = composeMiddlewares(
     [
+      // Runs before auth: a disabled demo route 404s regardless of the
+      // caller's auth state (see with-demo-guard.ts).
+      withDemoGuard,
       withInternalApiGuard,
       withRateLimit,
       withRegistrationMode,
@@ -116,6 +123,10 @@ function createSecurityPipeline(
           dependencies: securityDependencies,
           enforceResourceAuthorization: false,
         }),
+      // Runs after auth: needs the resolved identity for the optional
+      // DEMO_SHOWCASE_ALLOWED_EMAIL check.
+      (next: ProxyHandler) =>
+        withDemoAllowlistGuard(next, { dependencies: securityDependencies }),
     ],
     terminalHandler,
   );
@@ -183,10 +194,13 @@ async function nonClerkProxy(request: NextRequest): Promise<NextResponse> {
  *
  * Shared execution order:
  * 1. withSecurity (Classification, Correlation, Security Headers)
- * 2. withInternalApiGuard (Internal API Key Validation)
- * 3. withRateLimit (API Throttling)
- * 4. withAuth (Session presence gate only in Edge mode)
- * 5. terminalHandler (NextResponse.next())
+ * 2. withDemoGuard (404s a disabled demo/showcase route pre-auth)
+ * 3. withInternalApiGuard (Internal API Key Validation)
+ * 4. withRateLimit (API Throttling)
+ * 5. withRegistrationMode
+ * 6. withAuth (Session presence gate only in Edge mode)
+ * 7. withDemoAllowlistGuard (optional DEMO_SHOWCASE_ALLOWED_EMAIL check)
+ * 8. terminalHandler (NextResponse.next())
  */
 const proxyHandler =
   env.AUTH_PROVIDER === 'clerk'

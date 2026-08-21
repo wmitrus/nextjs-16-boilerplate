@@ -1,0 +1,51 @@
+name: Audit Log E2E
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-audit-log'
+    name: Playwright Admin Audit Log E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run Admin Audit Log E2E Tests
+        run: pnpm e2e:admin:audit-logs
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # Add other mandatory E2E env vars here
+
+      - name: Upload Admin Audit Log Playwright Artifacts
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # actions/upload-artifact@v7
+        with:
+          name: playwright-admin-audit-log-e2e-artifacts
+          path: |
+            logs/playwright/
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

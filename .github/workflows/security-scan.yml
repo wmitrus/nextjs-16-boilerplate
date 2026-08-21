@@ -30,8 +30,14 @@ jobs:
         with:
           node-version: 24
 
-      - name: Run pnpm audit
+      - name: Run pnpm audit (High+, blocking)
         run: pnpm audit --audit-level high
+
+      - name: Run pnpm audit (Moderate+, visibility only)
+        # Non-blocking: surfaces moderate-severity advisories in the CI log
+        # without failing the build. High+ above stays the merge gate.
+        continue-on-error: true
+        run: pnpm audit --audit-level moderate
 
   secret-scan:
     name: Secret Scanning

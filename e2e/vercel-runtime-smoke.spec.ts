@@ -44,14 +44,16 @@ test.describe('Vercel runtime smoke', () => {
   });
 
   // A "CSP script-src nonce is fresh per request" test lived here briefly.
-  // It targeted "/" under the assumption that CSP_SCRIPT_STRICT_MODE would
-  // be on there. That assumption doesn't hold: nonce-based CSP is
-  // currently incompatible with this app's cacheComponents/PPR (see
-  // CSP_SCRIPT_STRICT_MODE's doc comment in src/core/env.ts and SEC-30 in
-  // docs/ai/general/SECURITY_CODING_PATTERNS.md), so the flag now defaults
-  // off, and the planned route-class CSP profile follow-up (public-
-  // cacheable vs dynamic-strict) keeps "/" permanently in the
-  // unsafe-inline, non-nonce'd public-cacheable profile by design -- not
-  // just "for now". Its real home is a future test against a
-  // dynamic-strict route (e.g. /dashboard) once that profile exists.
+  // It targeted "/" under the assumption that CSP_SCRIPT_MODE would be
+  // 'nonce-dynamic' there. That assumption doesn't hold: nonce-based CSP
+  // is currently incompatible with this app's cacheComponents/PPR (see
+  // CSP_SCRIPT_MODE's doc comment in src/core/env.ts and SEC-30/SEC-31 in
+  // docs/ai/general/SECURITY_CODING_PATTERNS.md), so the mode defaults to
+  // 'cache-compatible'. CSP_SCRIPT_MODE is a deployment-wide choice, not a
+  // per-route one (SEC-31 explains why mixing profiles on one origin
+  // doesn't work under App Router client-side navigation) — "/" stays in
+  // 'cache-compatible' mode as long as this deployment does. Its real home
+  // is e2e/csp-nonce-dynamic.spec.ts, run via the opt-in
+  // `pnpm e2e:csp-nonce-dynamic` scenario against a deployment with
+  // CSP_SCRIPT_MODE=nonce-dynamic.
 });

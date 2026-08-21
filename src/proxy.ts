@@ -40,8 +40,8 @@ type ProxyMiddleware = (next: ProxyHandler) => ProxyHandler;
  * The only "continue to render the app" exit point in the pipeline —
  * everything else either short-circuits (guard rejection, redirect) or
  * calls through to this. When a CSP nonce was generated for this request
- * (RouteContext.nonce, set only under CSP_SCRIPT_STRICT_MODE), two REQUEST
- * headers are carried forward so the RSC render can read them via
+ * (RouteContext.nonce, set only when CSP_SCRIPT_MODE is 'nonce-dynamic'),
+ * two REQUEST headers are carried forward so the RSC render can read them via
  * headers() — a middleware-set response header never reaches the app's
  * server components, only the request headers Next.js forwards do:
  *

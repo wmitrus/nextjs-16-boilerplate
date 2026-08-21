@@ -95,22 +95,22 @@ describe('Route Classification', () => {
     expect(ctx.isPublicRoute).toBe(true);
   });
 
-  it('should generate a nonce when CSP_SCRIPT_STRICT_MODE is on', () => {
-    mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+  it("should generate a nonce when CSP_SCRIPT_MODE is 'nonce-dynamic'", () => {
+    mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
     const ctx = classifyRequest(createMockRequest({ path: '/' }));
     expect(ctx.nonce).toBeTruthy();
     expect(typeof ctx.nonce).toBe('string');
   });
 
   it('should generate a different nonce per request', () => {
-    mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+    mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
     const first = classifyRequest(createMockRequest({ path: '/' }));
     const second = classifyRequest(createMockRequest({ path: '/' }));
     expect(first.nonce).not.toBe(second.nonce);
   });
 
-  it('should not generate a nonce when CSP_SCRIPT_STRICT_MODE is off', () => {
-    mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+  it("should not generate a nonce when CSP_SCRIPT_MODE is 'cache-compatible'", () => {
+    mockEnv.CSP_SCRIPT_MODE = 'cache-compatible';
     const ctx = classifyRequest(createMockRequest({ path: '/' }));
     expect(ctx.nonce).toBeUndefined();
   });

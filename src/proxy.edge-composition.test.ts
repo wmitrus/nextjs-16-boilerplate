@@ -77,7 +77,7 @@ vi.mock('@/core/env', async (importOriginal) => {
       // `window` as a client context) — server vars must be listed
       // explicitly here, same as INTERNAL_API_KEY etc above, or they
       // silently come out `undefined` rather than their schema default.
-      CSP_SCRIPT_STRICT_MODE: true,
+      CSP_SCRIPT_MODE: 'nonce-dynamic',
       DEMO_SHOWCASE_ENABLED: false,
     },
   };

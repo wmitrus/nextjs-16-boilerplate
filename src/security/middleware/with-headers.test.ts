@@ -137,7 +137,7 @@ describe('Headers Middleware', () => {
     expect(csp).toContain('https://extra.com');
   });
 
-  describe('nonce-based script-src (CSP_SCRIPT_STRICT_MODE)', () => {
+  describe("nonce-based script-src (CSP_SCRIPT_MODE = 'nonce-dynamic')", () => {
     function scriptSrcDirective(csp: string | null): string {
       const directive = csp
         ?.split('; ')
@@ -146,8 +146,8 @@ describe('Headers Middleware', () => {
       return directive!;
     }
 
-    it('uses nonce + strict-dynamic when strict mode is on and a nonce is given', () => {
-      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+    it("uses nonce + strict-dynamic when mode is 'nonce-dynamic' and a nonce is given", () => {
+      mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
       const req = createMockRequest();
       const res = NextResponse.next();
       withHeaders(req, res, 'test-nonce-123');
@@ -160,8 +160,8 @@ describe('Headers Middleware', () => {
       expect(scriptSrc).not.toContain("'unsafe-inline'");
     });
 
-    it('falls back to the legacy CSP when strict mode is on but no nonce is given', () => {
-      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+    it("falls back to the legacy CSP when mode is 'nonce-dynamic' but no nonce is given", () => {
+      mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
       const req = createMockRequest();
       const res = NextResponse.next();
       withHeaders(req, res);
@@ -174,8 +174,8 @@ describe('Headers Middleware', () => {
       expect(scriptSrc).not.toContain("'strict-dynamic'");
     });
 
-    it('uses the legacy CSP when strict mode is off, even with a nonce given', () => {
-      mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+    it("uses the legacy CSP in 'cache-compatible' mode, even with a nonce given", () => {
+      mockEnv.CSP_SCRIPT_MODE = 'cache-compatible';
       const req = createMockRequest();
       const res = NextResponse.next();
       withHeaders(req, res, 'test-nonce-123');
@@ -190,14 +190,14 @@ describe('Headers Middleware', () => {
     it('never includes unsafe-eval in production, in either mode', () => {
       mockEnv.NODE_ENV = 'production';
 
-      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+      mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
       const strictRes = NextResponse.next();
       withHeaders(createMockRequest(), strictRes, 'test-nonce-123');
       expect(
         scriptSrcDirective(strictRes.headers.get('Content-Security-Policy')),
       ).not.toContain("'unsafe-eval'");
 
-      mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+      mockEnv.CSP_SCRIPT_MODE = 'cache-compatible';
       const legacyRes = NextResponse.next();
       withHeaders(createMockRequest(), legacyRes);
       expect(
@@ -208,14 +208,14 @@ describe('Headers Middleware', () => {
     it('includes unsafe-eval in development, in either mode', () => {
       mockEnv.NODE_ENV = 'development';
 
-      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+      mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
       const strictRes = NextResponse.next();
       withHeaders(createMockRequest(), strictRes, 'test-nonce-123');
       expect(
         scriptSrcDirective(strictRes.headers.get('Content-Security-Policy')),
       ).toContain("'unsafe-eval'");
 
-      mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+      mockEnv.CSP_SCRIPT_MODE = 'cache-compatible';
       const legacyRes = NextResponse.next();
       withHeaders(createMockRequest(), legacyRes);
       expect(

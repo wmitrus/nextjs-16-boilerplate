@@ -22,10 +22,10 @@ export interface RouteContext {
   correlationId: string;
   requestId: string;
   /**
-   * Per-request CSP script-src nonce, set only when CSP_SCRIPT_STRICT_MODE
-   * is on (see with-headers.ts). undefined in legacy/relaxed CSP mode —
-   * callers must not force dynamic rendering (e.g. via headers()) to look
-   * for a nonce that was never generated.
+   * Per-request CSP script-src nonce, set only when CSP_SCRIPT_MODE is
+   * 'nonce-dynamic' (see with-headers.ts). undefined in 'cache-compatible'
+   * mode — callers must not force dynamic rendering (e.g. via headers())
+   * to look for a nonce that was never generated.
    */
   nonce: string | undefined;
 }
@@ -59,9 +59,10 @@ export function classifyRequest(req: NextRequest): RouteContext {
 
   // btoa(randomUUID()) rather than a raw UUID: CSP nonces are conventionally
   // base64 tokens, and this keeps the value opaque in response headers.
-  const nonce = env.CSP_SCRIPT_STRICT_MODE
-    ? btoa(crypto.randomUUID())
-    : undefined;
+  const nonce =
+    env.CSP_SCRIPT_MODE === 'nonce-dynamic'
+      ? btoa(crypto.randomUUID())
+      : undefined;
 
   return {
     isApi,

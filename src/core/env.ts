@@ -99,33 +99,46 @@ export const env = createEnv({
     // even while the flag is on. Leave unset to allow any authenticated
     // user (fine for a single-operator personal app).
     DEMO_SHOWCASE_ALLOWED_EMAIL: z.email().optional(),
-    // Nonce-based CSP script-src (nonce + 'strict-dynamic', no
-    // unsafe-inline/unsafe-eval in production/preview) vs. the legacy
-    // unsafe-inline/unsafe-eval CSP.
+    // Which script-src CSP this deployment serves — a deployment-wide
+    // choice, not a per-route one (see SEC-31 in
+    // docs/ai/general/SECURITY_CODING_PATTERNS.md for why per-route mixing
+    // doesn't work under App Router client-side navigation: CSP is a
+    // document-level policy, so a <Link> soft-navigation into a "stricter"
+    // route keeps enforcing the CSP of whatever document the browser
+    // actually loaded).
     //
-    // Default OFF (changed 2026-08-21 — was briefly `true` by default).
-    // Per-request nonce CSP is currently incompatible with this app's
-    // cacheComponents: true (Partial Prerendering) — confirmed both by
-    // Next.js's own docs ("Partial Prerendering (PPR) is incompatible
-    // with nonce-based CSP since static shell scripts won't have access
-    // to the nonce") and by a Next.js maintainer on an Aug 2026 issue
-    // against Next 16.3.0 confirming unsafe-inline is "the only way for
-    // the time being" while upstream React/Next work lands (tracked
-    // upstream: vercel/next.js#89754, #95354, #96665). Turning this on
-    // with cacheComponents enabled breaks hydration app-wide — reproduced
-    // live on a real mobile device and confirmed via CSP violation
-    // console errors from an emulated Chrome run against the deployed
-    // preview. See SEC-30 in docs/ai/general/SECURITY_CODING_PATTERNS.md
-    // for the full writeup and the route-class CSP profile work
-    // (public-cacheable vs dynamic-strict) planned to properly resolve
-    // this without disabling PPR app-wide.
+    // 'cache-compatible' (default): legacy 'unsafe-inline' script-src (no
+    // 'unsafe-eval' in production/preview). Compatible with this app's
+    // cacheComponents: true (Partial Prerendering) setup. Renamed from the
+    // old boolean CSP_SCRIPT_STRICT_MODE=false on 2026-08-21 — same
+    // behavior, clearer contract (a boolean's "off" implied an insecure
+    // fallback, when it's actually the only mode this architecture
+    // supports today).
     //
-    // Safe to flip true only once that follow-up lands, or for a route
-    // tree that isn't using cacheComponents/PPR at all. See
-    // with-headers.ts and layout.tsx.
-    CSP_SCRIPT_STRICT_MODE: z
-      .preprocess((val) => val === 'true' || val === true, z.boolean())
-      .default(false),
+    // 'nonce-dynamic': nonce + 'strict-dynamic', no 'unsafe-inline'/
+    // 'unsafe-eval'. Per-request nonce CSP is currently incompatible with
+    // cacheComponents/PPR — confirmed both by Next.js's own docs ("Partial
+    // Prerendering (PPR) is incompatible with nonce-based CSP since static
+    // shell scripts won't have access to the nonce") and by a Next.js
+    // maintainer on an Aug 2026 issue against Next 16.3.0 confirming
+    // unsafe-inline is "the only way for the time being" while upstream
+    // React/Next work lands (tracked upstream: vercel/next.js#89754,
+    // #95354, #96665). Turning this on reproduced an app-wide hydration
+    // failure live on a real mobile device (see SEC-30's incident
+    // writeup). Only safe for a deployment that doesn't rely on
+    // cacheComponents/PPR at all — see with-headers.ts, layout.tsx, and
+    // the e2e:csp-nonce-dynamic scenario that verifies this mode
+    // end-to-end (script-tag nonces, zero CSP violations, real hydration).
+    //
+    // 'hash-ppr' (reserved, not implemented): once Next/React ship
+    // build-time hash-source support for Partial Prerendering's inline
+    // Flight bootstrap scripts, this will let a cache-compatible
+    // deployment go fully strict (no unsafe-inline, no nonce, hash-source
+    // CSP) without losing PPR. Not available upstream yet — do not
+    // implement ahead of framework support.
+    CSP_SCRIPT_MODE: z
+      .enum(['cache-compatible', 'nonce-dynamic'])
+      .default('cache-compatible'),
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
@@ -279,7 +292,7 @@ export const env = createEnv({
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
     DEMO_SHOWCASE_ENABLED: process.env.DEMO_SHOWCASE_ENABLED,
     DEMO_SHOWCASE_ALLOWED_EMAIL: process.env.DEMO_SHOWCASE_ALLOWED_EMAIL,
-    CSP_SCRIPT_STRICT_MODE: process.env.CSP_SCRIPT_STRICT_MODE,
+    CSP_SCRIPT_MODE: process.env.CSP_SCRIPT_MODE,
     E2E_ENABLED: process.env.E2E_ENABLED,
     AUTH_PROVIDER: process.env.AUTH_PROVIDER,
     DB_PROVIDER: process.env.DB_PROVIDER,

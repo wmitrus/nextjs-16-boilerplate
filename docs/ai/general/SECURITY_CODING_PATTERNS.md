@@ -2080,13 +2080,25 @@ product. **DO NOT** gate a route just because its name sounds like a demo
 
 ## SEC-30 — Nonce-Based CSP script-src, Not Unconditional unsafe-inline/unsafe-eval
 
+> **Renamed 2026-08-21 (A.7.1)**: `CSP_SCRIPT_STRICT_MODE` (boolean) is now
+> `CSP_SCRIPT_MODE` (`'cache-compatible' | 'nonce-dynamic'`, default
+> `'cache-compatible'`). Same behavior as the old `false` default — just a
+> clearer contract (see SEC-31 for why). Everything below was written under
+> the old name; read `CSP_SCRIPT_STRICT_MODE=true`/`false` as
+> `CSP_SCRIPT_MODE='nonce-dynamic'`/`'cache-compatible'` respectively — kept
+> as-written since it's an accurate historical record of the incident, not
+> rewritten in place.
+
 **ID**: SEC-30
 **Category**: CSP hardening
 **Classification**: Real risk → partially fixed, deferred (2026-08-21) — the
-mechanics below are implemented and correct, but `CSP_SCRIPT_STRICT_MODE`
-now defaults to `false` because it's incompatible with this app's
-`cacheComponents`/PPR setup (see "Update 2026-08-21" below). Full fix is a
-planned follow-up (route-class CSP profiles), not yet implemented.
+mechanics below are implemented and correct, but the flag (`CSP_SCRIPT_MODE`,
+see rename note above) now defaults to `'cache-compatible'` because
+`'nonce-dynamic'` is incompatible with this app's `cacheComponents`/PPR setup
+(see "Update 2026-08-21" below). The originally-planned follow-up
+("route-class CSP profiles" — different CSP per route on one origin) was
+itself found unsound by external review and replaced by SEC-31's
+origin-split guidance — see SEC-31 for the corrected plan.
 **Affected contexts**: `src/security/middleware/with-headers.ts`,
 `src/security/middleware/route-classification.ts`, `src/proxy.ts`,
 `src/app/layout.tsx`, `src/security/rsc/csp-nonce.ts`
@@ -2197,11 +2209,11 @@ is a deliberate boundary, not an oversight.
 
 ### Rollback Path
 
-`CSP_SCRIPT_STRICT_MODE=false` in Vercel + redeploy reverts to the legacy
-CSP with zero code change, if a third-party script is ever found that
-doesn't tolerate strict-dynamic. This is why the flag exists — verify it
-still works (i.e., don't remove the legacy branch) before ever proposing to
-delete it as "dead code."
+`CSP_SCRIPT_MODE=cache-compatible` in Vercel + redeploy reverts to the
+legacy CSP with zero code change, if a third-party script is ever found
+that doesn't tolerate strict-dynamic. This is why the flag exists — verify
+it still works (i.e., don't remove the legacy branch) before ever proposing
+to delete it as "dead code."
 
 ### Update 2026-08-21 — Nonce CSP Is Incompatible With cacheComponents/PPR; Default Flipped Off
 
@@ -2270,34 +2282,39 @@ version — it produces a hard `next build` failure on `/_not-found`
 Suspense-wrapping rule, and `/_not-found` can't reasonably be wrapped.
 Don't reach for this as a quick fix.
 
-**Resolution shipped now**: `CSP_SCRIPT_STRICT_MODE` defaults to `false`.
+**Resolution shipped now**: `CSP_SCRIPT_MODE` defaults to `'cache-compatible'`.
 Every other part of this hardening pass (baseline CSP directives, COOP/
 CORP/etc., `unsafe-eval` scoped to dev-only, SSRF hardening, demo-route
 gating) is unaffected and stays in place. This is a deliberate, documented
 tradeoff — not a silent regression — matching the maintainer's own
 current guidance.
 
-**Planned real fix (tracked as a follow-up, not yet implemented)**: a
-route-class CSP profile split —
+**Originally-planned follow-up, superseded 2026-08-21 (A.7)**: this section
+used to describe a route-class CSP profile split — `public-cacheable`
+routes keeping PPR + legacy CSP, `dynamic-strict` routes (dashboard, admin)
+opting out of PPR per-segment for full nonce CSP, all on one origin. An
+external review correctly identified this as unsound: CSP is a
+**document-level** policy, and a `<Link>` soft-navigation from a
+`public-cacheable` page into a `dynamic-strict` route does not fetch a new
+document — the browser keeps enforcing the CSP of whatever document it
+actually loaded, so the "strict" route would silently run under the
+relaxed policy for anyone who arrived via client-side navigation. This plan
+is dropped, not revised. See **SEC-31** for the corrected guidance: a
+deployment/origin genuinely needing both profiles at once should split by
+origin (subdomain), not by route on one origin — never re-propose a
+same-origin per-route CSP split.
 
-- `public-cacheable` routes (`/`, marketing/docs pages, future blog
-  content) keep `cacheComponents`/PPR and the legacy `unsafe-inline`
-  script-src (no `unsafe-eval` in prod), accepted as a documented,
-  upstream-tracked limitation.
-- `dynamic-strict` routes (the authenticated app shell — dashboard, and
-  future `/admin`/`/billing`-style routes) opt out of PPR **on their own
-  layout/page segments specifically** (not the root layout — see the
-  `/_not-found` failure above for why that blast radius matters) and get
-  the full nonce + `strict-dynamic` CSP with zero `unsafe-inline`.
-
-Until that lands, do not flip `CSP_SCRIPT_STRICT_MODE` back to `true` for
-this app's current single shared root layout — it will reproduce the same
-app-wide hydration failure.
+Until an upstream `hash-ppr`-style fix lands (see `CSP_SCRIPT_MODE`'s doc
+comment in `src/core/env.ts`), do not flip `CSP_SCRIPT_MODE` to
+`'nonce-dynamic'` for this app's current single shared root layout unless
+the entire deployment is deliberately opting out of `cacheComponents`/PPR —
+it will otherwise reproduce the same app-wide hydration failure.
 
 ### Rule for Agents
 
-**DO** treat "a nonce was generated" and "CSP_SCRIPT_STRICT_MODE is on" as
-two independently-necessary conditions before emitting strict CSP — a
+**DO** treat "a nonce was generated" and "`CSP_SCRIPT_MODE` is
+`'nonce-dynamic'`" as two independently-necessary conditions before
+emitting strict CSP — a
 missing nonce with the flag on must fall back to legacy, never emit a
 broken directive. **DO NOT** call a Next.js Dynamic API (`headers()`,
 `cookies()`, `connection()`) from the top of a layout/page component when a

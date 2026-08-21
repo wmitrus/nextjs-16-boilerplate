@@ -77,10 +77,11 @@ const NEW_RELIC_BEACON_DOMAINS = [
 /**
  * `script-src` (and identically, `script-src-elem`).
  *
- * @param nonce - When present together with `CSP_SCRIPT_STRICT_MODE`, uses
- * `'nonce-<value>' 'strict-dynamic'` instead of `'unsafe-inline'
- * 'unsafe-eval'`. See buildContentSecurityPolicy()'s doc comment for why a
- * missing nonce always falls back to the legacy directive.
+ * @param nonce - When present together with `CSP_SCRIPT_MODE ===
+ * 'nonce-dynamic'`, uses `'nonce-<value>' 'strict-dynamic'` instead of
+ * `'unsafe-inline' 'unsafe-eval'`. See buildContentSecurityPolicy()'s doc
+ * comment for why a missing nonce always falls back to the legacy
+ * directive.
  */
 function buildScriptSrc(
   cspEnv: CspEnvironment,
@@ -105,8 +106,8 @@ function buildScriptSrc(
   // CSP mode.
   const unsafeEvalIfDev = cspEnv.isDev ? "'unsafe-eval'" : '';
 
-  // A nonce is only meaningful together with CSP_SCRIPT_STRICT_MODE.
-  const isStrictCsp = env.CSP_SCRIPT_STRICT_MODE && Boolean(nonce);
+  // A nonce is only meaningful in 'nonce-dynamic' mode.
+  const isStrictCsp = env.CSP_SCRIPT_MODE === 'nonce-dynamic' && Boolean(nonce);
 
   return (
     isStrictCsp
@@ -211,9 +212,9 @@ function buildFontSrc(): string {
  * fallback, the browser blocks them and the page never hydrates.
  *
  * @param nonce - Per-request CSP nonce from RouteContext.nonce (set only
- * when CSP_SCRIPT_STRICT_MODE is on). Absent nonce (strict mode off, or a
- * caller that built its own NextResponse without going through the proxy
- * pipeline) falls back to the legacy CSP unconditionally — there's no
+ * when CSP_SCRIPT_MODE is 'nonce-dynamic'). Absent nonce ('cache-compatible'
+ * mode, or a caller that built its own NextResponse without going through
+ * the proxy pipeline) falls back to the legacy CSP unconditionally — there's no
  * nonce to reference. See buildScriptSrc() for how it's applied.
  */
 export function buildContentSecurityPolicy(nonce?: string): string {

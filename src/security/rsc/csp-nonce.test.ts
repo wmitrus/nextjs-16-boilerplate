@@ -18,8 +18,8 @@ describe('getCspNonce', () => {
     mockHeaders.mockClear();
   });
 
-  it('returns undefined without calling headers() when strict mode is off', async () => {
-    mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+  it("returns undefined without calling headers() in 'cache-compatible' mode", async () => {
+    mockEnv.CSP_SCRIPT_MODE = 'cache-compatible';
     const { getCspNonce } = await import('./csp-nonce');
 
     const nonce = await getCspNonce();
@@ -28,8 +28,8 @@ describe('getCspNonce', () => {
     expect(mockHeaders).not.toHaveBeenCalled();
   });
 
-  it('reads x-nonce from headers() when strict mode is on', async () => {
-    mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+  it("reads x-nonce from headers() in 'nonce-dynamic' mode", async () => {
+    mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
     mockHeadersGet.mockReturnValue('abc123');
     const { getCspNonce } = await import('./csp-nonce');
 
@@ -39,8 +39,8 @@ describe('getCspNonce', () => {
     expect(mockHeadersGet).toHaveBeenCalledWith('x-nonce');
   });
 
-  it('returns undefined when strict mode is on but no nonce header is present', async () => {
-    mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+  it("returns undefined in 'nonce-dynamic' mode when no nonce header is present", async () => {
+    mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
     mockHeadersGet.mockReturnValue(null);
     const { getCspNonce } = await import('./csp-nonce');
 

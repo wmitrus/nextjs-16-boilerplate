@@ -22,15 +22,17 @@ test.describe('Security Architecture E2E', () => {
     expect(headers['cross-origin-resource-policy']).toBe('same-origin');
     expect(headers['x-xss-protection']).toBeUndefined();
 
-    // CSP_SCRIPT_STRICT_MODE defaults off — nonce-based CSP is currently
-    // incompatible with cacheComponents/PPR (see SEC-30 in
-    // docs/ai/general/SECURITY_CODING_PATTERNS.md and the env.ts doc
-    // comment for CSP_SCRIPT_STRICT_MODE). The default scenario therefore
-    // uses the legacy unsafe-inline script-src, not a nonce. Strict mode's
-    // own script-src shape (nonce + strict-dynamic, no unsafe-inline) is
-    // covered directly, with env mocked, in with-headers.test.ts and
-    // csp-nonce.test.ts — this e2e test only needs to confirm the shipped
-    // default is what actually gets served.
+    // CSP_SCRIPT_MODE defaults to 'cache-compatible' — nonce-based CSP
+    // ('nonce-dynamic') is currently incompatible with cacheComponents/PPR
+    // (see SEC-30/SEC-31 in docs/ai/general/SECURITY_CODING_PATTERNS.md and
+    // the env.ts doc comment for CSP_SCRIPT_MODE). The default scenario
+    // therefore uses the legacy unsafe-inline script-src, not a nonce.
+    // 'nonce-dynamic' mode's own script-src shape (nonce + strict-dynamic,
+    // no unsafe-inline) is covered with env mocked in with-headers.test.ts
+    // and csp-nonce.test.ts, and end-to-end against a real deployment in
+    // the e2e:csp-nonce-dynamic scenario (e2e/csp-nonce-dynamic.spec.ts) —
+    // this e2e test only needs to confirm the shipped default is what
+    // actually gets served.
     const scriptSrc = headers['content-security-policy']
       ?.split('; ')
       .find((entry) => entry.startsWith('script-src '));

@@ -231,24 +231,6 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Debug - curl homepage with protection bypass (follow redirects + cookies)
-        run: |
-          echo "--- Headers + redirect chain ---"
-          curl -sS -L -D - -o /tmp/home-body.html --max-time 30 \
-            -c /tmp/cookiejar.txt -b /tmp/cookiejar.txt \
-            -w '\n--- curl stats: num_redirects=%{num_redirects} final_http_code=%{http_code} time_total=%{time_total} ---\n' \
-            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
-            -H "x-vercel-set-bypass-cookie: samesitenone" \
-            "${PREVIEW_URL}/" || echo "curl exit code: $?"
-          echo "--- Body (first 3000 bytes) ---"
-          head -c 3000 /tmp/home-body.html || true
-          echo
-          echo "--- Body byte count ---"
-          wc -c /tmp/home-body.html || true
-        env:
-          PREVIEW_URL: ${{ needs.deploy-preview.outputs.preview_url }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-
       - name: Run hosted runtime smoke
         run: pnpm vercel:runtime:smoke
         env:
@@ -284,7 +266,21 @@ jobs:
       - name: Run Lighthouse Audit
         run: |
           echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
-          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'", "x-vercel-set-bypass-cookie": "samesitenone"}'
+          # "samesitenone" (the earlier value here) makes Vercel's bypass
+          # emit its cross-origin/iframe-embedding cookie-priming flow: a
+          # 307 redirect back to the same path with a SameSite=None
+          # Set-Cookie. That flow is for embedding a protected preview in a
+          # third-party iframe context, not a plain top-level navigation --
+          # and headless Chrome as driven by @lhci/cli's Puppeteer session
+          # never came out the other side of it (NO_FCP timeout), even
+          # though curl (a diagnostic, not a browser -- it doesn't
+          # implement SameSite policy at all) followed the same redirect
+          # and cookie chain and got a normal 200 with the real page in
+          # under 3s. "true" (already used by playwright.vercel-smoke.config.ts
+          # for the exact same bypass, and proven working in "Verify
+          # Preview Runtime" every run) sets a plain first-party cookie for
+          # a normal top-level navigation with no such redirect required.
+          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'", "x-vercel-set-bypass-cookie": "true"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

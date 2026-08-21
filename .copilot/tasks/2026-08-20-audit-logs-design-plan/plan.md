@@ -736,3 +736,40 @@ that bot findings are verified bug reports, not open design questions.
 Regression tests added for every finding. `pnpm typecheck`, `pnpm lint
 --fix` (0 errors), the full unit suite (212 files/1489 tests, +4 new), and
 `pnpm test:db` (18 files/147 tests, +2 new) all pass.
+
+## E2E CI wiring and real-run attempts (2026-08-21)
+
+Wired `pnpm e2e:admin:audit-logs` into a new CI workflow
+(`.github/workflows/e2e-audit-log.yml`) and ran it 3 times on PR #72 — this
+is the first time this suite (or, incidentally, the underlying `single`
+Playwright scenario at all) has actually been exercised against real CI
+infrastructure. Each failure was root-caused against real log output and
+fixed forward, not guessed at:
+
+1. `next build` failed — the workflow's own bug, not the app or the tests:
+   build and test were separate steps and only the test step carried the
+   Clerk env block, but the production build itself prerenders pages
+   needing `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`. Fixed by merging into one
+   step.
+2. Playwright's global setup for the `single` scenario then demanded
+   `E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME/PASSWORD` and
+   `E2E_CLERK_SINGLE_NEW_USER_USERNAME/PASSWORD` — unconditionally,
+   regardless of `AUTH_PROVIDER=authjs`. Neither of this repo's two
+   existing e2e workflows sets these either; this is a **pre-existing gap**
+   this task's CI run happened to be the first to surface, not something
+   this task introduced. Wired the canonical names from
+   `scripts/e2e-clerk-fixtures.md`.
+3. Identical failure a third time — but this time the job's own env dump
+   showed all four values as blank. `${{ secrets.X }}` silently resolves to
+   empty when the named secret doesn't exist in the repo (no error). This
+   confirms these four credentials are genuinely **not configured** in this
+   repository's GitHub Actions secrets at all, under any name this task can
+   guess. **This is a real infrastructure gap requiring a repo admin to
+   provision Clerk test-user credentials** — it is not fixable by further
+   code changes, and no further blind retries were attempted once this was
+   confirmed.
+
+Full detail and the exact re-run steps once secrets exist:
+`07 - Playwright E2E - Summary.md`. The 6 audit-log E2E scenarios remain
+genuinely unverified against a live browser — reported as such, not implied
+as passing.

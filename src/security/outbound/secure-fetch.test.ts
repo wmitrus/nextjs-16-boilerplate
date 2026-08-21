@@ -18,6 +18,28 @@ vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
 }));
 
+/**
+ * Builds a fetch mock that returns `responsesByCallIndex[n]` for the nth
+ * call (clamped to the last entry once exhausted), so redirect-chain tests
+ * can script a sequence of hops without re-implementing a fake server.
+ * Records every `[url, init]` pair it was called with.
+ */
+function mockFetchSequence(responses: Response[]) {
+  const calls: [string, RequestInit | undefined][] = [];
+  const fn = vi
+    .fn()
+    .mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const urlString = typeof url === 'string' ? url : url.toString();
+      calls.push([urlString, init]);
+      const index = Math.min(calls.length - 1, responses.length - 1);
+      // False-positive scanner finding: `index` is a Math.min-clamped
+      // integer derived from array lengths, not attacker-controlled input.
+      // eslint-disable-next-line security/detect-object-injection
+      return responses[index];
+    });
+  return { fn, calls };
+}
+
 describe('Secure Fetch (SSRF Protection)', () => {
   const originalFetch = global.fetch;
 
@@ -28,13 +50,12 @@ describe('Secure Fetch (SSRF Protection)', () => {
       const urlString = typeof url === 'string' ? url : url.toString();
       // Avoid tracking logflare calls in tests
       if (urlString.includes('logflare')) {
-        return { ok: true } as Response;
+        return new Response(null, { status: 200 });
       }
-      return {
-        ok: true,
-        json: () => Promise.resolve({}),
-        text: () => Promise.resolve(''),
-      } as Response;
+      return new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     });
     // Default DNS resolution: any allowed hostname resolves to a public
     // address. Individual tests override this to simulate rebinding/failure.
@@ -157,5 +178,116 @@ describe('Secure Fetch (SSRF Protection)', () => {
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '203.0.113.10';
     await expect(secureFetch('http://203.0.113.10')).resolves.toBeDefined();
     expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('should pin the connection via a per-request dispatcher, never the bare global fetch defaults', async () => {
+    await secureFetch('https://example.com/api');
+    const [, init] = vi.mocked(global.fetch).mock.calls[0] as [
+      string,
+      (RequestInit & { dispatcher?: unknown }) | undefined,
+    ];
+    expect(init?.dispatcher).toBeDefined();
+    expect(init?.redirect).toBe('manual');
+  });
+
+  describe('redirect handling', () => {
+    it('follows a redirect to another allowed host and returns the final response', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+        new Response('{"ok":true}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      const response = await secureFetch('https://example.com/start');
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ ok: true });
+      expect(calls).toHaveLength(2);
+      expect(calls[1][0]).toBe('https://trusted.org/final');
+    });
+
+    it('re-validates the allowlist for a redirect target and rejects an unlisted host', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://malicious.com/steal' },
+        }),
+      ]);
+      global.fetch = fn;
+
+      await expect(secureFetch('https://example.com/start')).rejects.toThrow(
+        'SSRF Protection',
+      );
+      // Never actually reached the malicious host.
+      expect(calls).toHaveLength(1);
+      expect(mockChildLogger.error).toHaveBeenCalled();
+    });
+
+    it('re-validates the resolved address for a redirect target and rejects a rebound one', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+      ]);
+      global.fetch = fn;
+      vi.mocked(lookup)
+        .mockResolvedValueOnce([
+          { address: '93.184.216.34', family: 4 },
+        ] as unknown as Awaited<ReturnType<typeof lookup>>) // example.com: public
+        .mockResolvedValueOnce([
+          { address: '127.0.0.1', family: 4 },
+        ] as unknown as Awaited<ReturnType<typeof lookup>>); // trusted.org: rebound
+
+      await expect(secureFetch('https://example.com/start')).rejects.toThrow(
+        'SSRF Protection',
+      );
+      expect(calls).toHaveLength(1);
+    });
+
+    it('rejects a redirect with no Location header', async () => {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValue(new Response(null, { status: 302 }));
+
+      await expect(secureFetch('https://example.com/start')).rejects.toThrow(
+        'no Location header',
+      );
+    });
+
+    it('gives up after too many redirect hops', async () => {
+      global.fetch = vi.fn().mockImplementation(
+        async () =>
+          new Response(null, {
+            status: 302,
+            headers: { location: 'https://example.com/next' },
+          }),
+      );
+
+      await expect(secureFetch('https://example.com/start')).rejects.toThrow(
+        'Too many redirects',
+      );
+    });
+
+    it('downgrades method and drops the body on a 303, but preserves both on a 307', async () => {
+      const seen: (string | undefined)[] = [];
+      global.fetch = vi
+        .fn()
+        .mockImplementation(async (_url: string, init?: RequestInit) => {
+          seen.push(init?.method);
+          if (seen.length === 1) {
+            return new Response(null, {
+              status: 303,
+              headers: { location: 'https://example.com/two' },
+            });
+          }
+          return new Response(null, { status: 200 });
+        });
+
+      await secureFetch('https://example.com/one', { method: 'POST' });
+      expect(seen).toEqual(['POST', 'GET']);
+    });
   });
 });

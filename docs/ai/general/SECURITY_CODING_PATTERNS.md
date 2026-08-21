@@ -11,31 +11,31 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                       | Classification                                                | Affected Contexts                  |
-| ------ | ------------------ | --------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                  | False positive                                                | Unit test files                    |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin       | False positive                                                | Middleware                         |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param      | Latent risk → fixed                                           | Middleware                         |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                 | False positive → hardened                                     | API route                          |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                  | False positive                                                | E2E helpers                        |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                 | False positive                                                | E2E specs                          |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config       | Real risk → fixed                                             | Module-level SDK adapters          |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`            | Latent risk                                                   | Auth/bootstrap UI mapping          |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement            | Latent risk                                                   | Runtime logger helpers             |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop       | Real risk → fixed                                             | Rate-limit middleware              |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers             | Local lint-backed workflow                                    | Scripts, E2E helpers               |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling       | Local lint-backed workflow                                    | Scripts, E2E helpers               |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`     | AI-pattern backed workflow                                    | `src/**` runtime helpers           |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting        | Real risk → fixed                                             | Public auth route handlers         |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges     | Real risk → fixed                                             | Email adapters, auth bridges       |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                    | Real risk → fixed                                             | App Router route handlers          |
-| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                         | Not security by itself                                        | UI state, JSX handlers, tests      |
-| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift        | Real risk → fixed                                             | CI/CD, Vercel, AuthJS env          |
-| SEC-26 | Authorization      | ABAC action check without matching resource-scope check   | Real risk → fixed                                             | Admin CRUD route handlers/services |
-| SEC-27 | Authorization      | Mutating admin route with no authorization check at all   | Real risk → fixed                                             | Admin API route handlers           |
-| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense     | Real risk → fixed                                             | Outbound fetch helpers             |
-| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes               | Real risk → fixed                                             | Demo/showcase route policy         |
-| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally | Real risk → partially fixed, deferred (see Update 2026-08-21) | with-headers.ts, layout.tsx        |
+| #      | Category           | Vulnerability Class                                       | Classification                                                    | Affected Contexts                  |
+| ------ | ------------------ | --------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                  | False positive                                                    | Unit test files                    |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin       | False positive                                                    | Middleware                         |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param      | Latent risk → fixed                                               | Middleware                         |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                 | False positive → hardened                                         | API route                          |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                  | False positive                                                    | E2E helpers                        |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                 | False positive                                                    | E2E specs                          |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config       | Real risk → fixed                                                 | Module-level SDK adapters          |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`            | Latent risk                                                       | Auth/bootstrap UI mapping          |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement            | Latent risk                                                       | Runtime logger helpers             |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop       | Real risk → fixed                                                 | Rate-limit middleware              |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers             | Local lint-backed workflow                                        | Scripts, E2E helpers               |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling       | Local lint-backed workflow                                        | Scripts, E2E helpers               |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`     | AI-pattern backed workflow                                        | `src/**` runtime helpers           |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting        | Real risk → fixed                                                 | Public auth route handlers         |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges     | Real risk → fixed                                                 | Email adapters, auth bridges       |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                    | Real risk → fixed                                                 | App Router route handlers          |
+| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                         | Not security by itself                                            | UI state, JSX handlers, tests      |
+| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift        | Real risk → fixed                                                 | CI/CD, Vercel, AuthJS env          |
+| SEC-26 | Authorization      | ABAC action check without matching resource-scope check   | Real risk → fixed                                                 | Admin CRUD route handlers/services |
+| SEC-27 | Authorization      | Mutating admin route with no authorization check at all   | Real risk → fixed                                                 | Admin API route handlers           |
+| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense     | Real risk → fixed (see Update 2026-08-21: first fix was a TOCTOU) | Outbound fetch helpers             |
+| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes               | Real risk → fixed                                                 | Demo/showcase route policy         |
+| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally | Real risk → partially fixed, deferred (see Update 2026-08-21)     | with-headers.ts, layout.tsx        |
 
 ---
 
@@ -1790,7 +1790,8 @@ route, which remains directly callable by anyone who can reach it.
 **ID**: SEC-28
 **Category**: SSRF
 **Classification**: Real risk — found during a repository-wide security audit
-(2026-08-21), fixed same day
+(2026-08-21); the same-day fix below was itself incomplete (a TOCTOU plus an
+unrelated redirect bypass — see "Update 2026-08-21"), corrected same day
 **Affected contexts**: `src/security/outbound/secure-fetch.ts` and any future
 outbound-fetch helper that accepts a URL derived, even indirectly, from
 request input
@@ -1851,6 +1852,13 @@ async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
 }
 ```
 
+> ⚠️ The `resolvesToPrivateAddress()` shape above resolves-and-checks but
+> then discards the result, handing the bare hostname back to `fetch()` —
+> which resolves it again independently. That gap (plus an unrelated
+> redirect bypass) is corrected in "Update 2026-08-21" below; this block is
+> kept for the private/reserved-address predicate, which is still correct,
+> not as a template for the resolve step.
+
 ### False-Positive Scanner Note
 
 The bounded-quantifier regexes above (`{1,3}`, fixed `{3}` repetition, no
@@ -1871,6 +1879,123 @@ takes a URL touched by request input needs the resolve-then-check step, not
 just the literal-string check. **DO NOT** silently drop the DNS-resolution
 step to fix a slow test or a sandbox without network access — mock
 `node:dns/promises`'s `lookup`, don't skip the check it backs.
+
+### Update 2026-08-21 — "Resolve-Then-Check" Above Did Not Actually Close The Gap; Plus An Unrelated Redirect Bypass
+
+An external security review of this branch caught two real problems in the
+fix shipped earlier the same day above — both confirmed by reproducing them
+locally before fixing, not taken on faith:
+
+**1. The resolve-then-check pattern was a TOCTOU, not a fix.**
+`resolvesToPrivateAddress()` resolved the hostname, checked the result, and
+then threw the result away — the actual request still went out as
+`fetch(targetUrl, init)`, i.e. by hostname, not by the validated address.
+Node's `fetch` resolves DNS again, independently, deep inside its own HTTP
+client, at connect time. Between those two lookups there is a window: an
+attacker who controls the DNS record for an allowlisted-looking hostname can
+serve a public address to the check and a private one to the actual
+connect. "Resolve, check, then fetch the same hostname" only proves the
+hostname resolved safely _once_ — it proves nothing about what it resolves
+to a moment later. This is exactly what "DNS rebinding" means, and the
+original fix's own name for itself ("resolve-then-check... closes the
+DNS-rebinding gap") over-promised what it actually did.
+
+**2. A validated host could redirect anywhere, unchecked.**
+`fetch(targetUrl, init)` used the default redirect mode
+(`follow`) with no override. A 302 from an allowlisted, correctly-validated
+host straight to `http://169.254.169.254/...` (or any other private/
+disallowed target) was followed automatically, with zero re-validation —
+the entire allowlist + private-address guard applied only to the URL the
+caller originally passed in, never to where a redirect actually sent the
+request.
+
+**The fix — pin the connection, don't just check a discarded resolution;
+validate every redirect hop the same way as the original URL:**
+
+```typescript
+// resolveAndValidateHost() now RETURNS the validated address instead of
+// throwing it away — the only way the caller actually knows what to pin to.
+async function resolveAndValidateHost(
+  hostname,
+  urlForLogging,
+): Promise<PinnedAddress> {
+  // ...allowlist + literal-IP checks unchanged...
+  const records = await lookup(hostname, { all: true, verbatim: true });
+  // ...private-address check over `records` unchanged...
+  const [chosen] = records;
+  return { address: chosen.address, family: chosen.family === 6 ? 6 : 4 };
+}
+
+// A dns.lookup-shaped resolver that always returns the one address already
+// validated, regardless of what hostname is asked. Handed to a per-request
+// undici Agent as connect.lookup — net.connect's own DNS step is
+// short-circuited to that exact address, so there is no second query left
+// to race. The hostname itself is untouched everywhere else (URL, Host
+// header, TLS SNI/servername), so certificate validation keeps working.
+function buildPinnedLookup(pinned: PinnedAddress): LookupFunction {
+  return (_hostname, options, callback) => {
+    if (options.all)
+      callback(null, [{ address: pinned.address, family: pinned.family }]);
+    else callback(null, pinned.address, pinned.family);
+  };
+}
+
+// secureFetch(): redirect: 'manual' + a bounded loop that re-runs
+// resolveAndValidateHost() on every hop's target before following it.
+for (;;) {
+  const pinned = await resolveAndValidateHost(
+    currentUrl.hostname,
+    currentUrl.toString(),
+  );
+  const agent = new Agent({ connect: { lookup: buildPinnedLookup(pinned) } });
+  try {
+    const raw = await fetch(currentUrl, {
+      ...currentInit,
+      redirect: 'manual',
+      dispatcher: agent,
+    });
+    if (!REDIRECT_STATUSES.has(raw.status)) {
+      /* buffer + return */
+    }
+    // else: validate hopsRemaining, resolve Location against currentUrl,
+    // loop back to the top — the new currentUrl.hostname goes through the
+    // exact same resolveAndValidateHost() before anything connects to it.
+  } finally {
+    await agent.close();
+  }
+}
+```
+
+Verified two ways, not just by reasoning about the code: a unit suite
+(`secure-fetch.test.ts`) covering redirect-follow, redirect-to-disallowed-
+host rejection, redirect-to-rebound-address rejection, missing-Location
+rejection, the `MAX_REDIRECTS` bound, and 303/301/302 method downgrading —
+plus a dedicated wiring test (`secure-fetch.network.test.ts`) that mocks
+`undici`'s `Agent` to capture the exact `connect.lookup` function built for
+each hop and asserts it resolves to precisely the address that hop's
+`resolveAndValidateHost()` call validated, never an earlier hop's address.
+A true end-to-end real-socket test was considered and rejected: the only
+address this sandbox can bind a test server to is loopback, which the
+private-address check correctly refuses to connect to — fighting that check
+for test convenience would be testing something other than what ships.
+
+`undici` moved from `devDependencies` to `dependencies` in `package.json`
+as part of this fix — it's now used in production runtime code
+(`secure-fetch.ts`'s `Agent`), not just tooling.
+
+### Rule for Agents (extended)
+
+**DO** treat "validated" and "used for the connection" as the same address,
+not two related-but-separate values — if a check resolves or validates an
+address and the code that follows doesn't hand that exact value to whatever
+performs the connection, the check is decorative. **DO** treat every
+redirect hop from an outbound-fetch helper as a brand-new URL that needs
+the full validation pipeline, not an extension of trust already granted to
+the original URL — a validated host is not a validated destination if it
+can redirect. **DO NOT** call a generic `fetch()`/HTTP client against a
+security-sensitive target without either disabling automatic redirects and
+validating each hop yourself, or being certain nothing reachable from that
+target can 30x to somewhere unvalidated.
 
 ---
 

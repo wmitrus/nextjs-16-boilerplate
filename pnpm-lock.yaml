@@ -161,6 +161,9 @@ importers:
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
+      undici:
+        specifier: '>=7.29.0 <8'
+        version: 7.29.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -375,9 +378,6 @@ importers:
       typescript-eslint:
         specifier: ^8.56.1
         version: 8.56.1(eslint@9.39.3(jiti@2.6.1)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
-      undici:
-        specifier: '>=7.29.0 <8'
-        version: 7.29.0
       vercel:
         specifier: 59.0.0
         version: 59.0.0(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(rollup@4.59.0)(supports-color@8.1.1)
@@ -5627,6 +5627,7 @@ packages:
   eslint@9.39.3:
     resolution: {integrity: sha512-VmQ+sifHUbI/IcSopBCF/HO3YiHQx/AVd3UVyYL6weuwW+HvON9VYn5l6Zl1WZzPWXPNZrSQpxwkkZ/VuvJZzg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

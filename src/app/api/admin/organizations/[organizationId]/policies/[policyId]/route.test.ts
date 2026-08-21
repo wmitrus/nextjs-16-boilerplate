@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
+  recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -68,12 +69,56 @@ vi.mock(
   }),
 );
 
+vi.mock('@/security/actions/record-admin-audit-event', () => ({
+  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+}));
+
 function makeContext(
   organizationId: string = ORG_ID,
   policyId: string = POLICY_ID,
 ) {
   return { params: Promise.resolve({ organizationId, policyId }) };
 }
+
+function makePatchRequest(body: unknown) {
+  return new NextRequest(
+    `http://localhost/api/admin/organizations/${ORG_ID}/policies/${POLICY_ID}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+function makeDeleteRequest() {
+  return new NextRequest(
+    `http://localhost/api/admin/organizations/${ORG_ID}/policies/${POLICY_ID}`,
+    { method: 'DELETE' },
+  );
+}
+
+const VALID_PATCH_BODY = {
+  effect: 'allow',
+  resource: 'security',
+  actions: ['security:manage_policies'],
+};
+
+const ACTIVE_ORG = {
+  organization: {
+    id: ORG_ID,
+    name: 'Acme HQ',
+    slug: 'acme-hq',
+    status: 'active',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  stats: {
+    memberCount: 2,
+    roleCount: 2,
+    pendingInvitationCount: 0,
+    policyCount: 4,
+  },
+};
 
 describe('policy mutation routes reject archived organizations', () => {
   beforeEach(() => {
@@ -150,5 +195,163 @@ describe('policy mutation routes reject archived organizations', () => {
 
     expect(response.status).toBe(409);
     expect(mocks.deleteRolePolicy).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /api/admin/organizations/[organizationId]/policies/[policyId]', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.connection.mockResolvedValue(undefined);
+    mocks.registry.clear();
+    mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+    mocks.registry.set(AUTHORIZATION.SERVICE, mocks.authzService);
+    mocks.authzService.can.mockResolvedValue(true);
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'admin-1', email: 'owner@test.dev' },
+        tenant: {
+          organizationId: ORG_ID,
+          tenantId: 'tenant-acme',
+          userId: 'admin-1',
+        },
+        user: {
+          id: 'admin-1',
+          email: 'owner@test.dev',
+          onboardingComplete: true,
+        },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.readService.getDetailInActiveScope.mockResolvedValue(ACTIVE_ORG);
+  });
+
+  it('returns 403 when the caller is not an organizations admin', async () => {
+    mocks.authzService.can.mockResolvedValue(false);
+
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest(VALID_PATCH_BODY),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.updateRolePolicy).not.toHaveBeenCalled();
+  });
+
+  it('updates a policy for an active organization and records the audit event', async () => {
+    const updatedPolicy = {
+      id: POLICY_ID,
+      organizationId: ORG_ID,
+      effect: 'allow',
+      resource: 'security',
+      actions: ['security:manage_policies'],
+    };
+    mocks.updateRolePolicy.mockResolvedValue(updatedPolicy);
+
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest(VALID_PATCH_BODY),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { policy: unknown } };
+    expect(body.data.policy).toEqual(updatedPolicy);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'rbac_policy',
+        action: 'rbac_policy.update',
+        outcome: 'success',
+        targetType: 'policy',
+        targetId: POLICY_ID,
+      }),
+    );
+  });
+
+  it('returns 404 when the policy does not exist', async () => {
+    const { PolicyNotFoundError } =
+      await import('@/modules/authorization/domain/errors');
+    mocks.updateRolePolicy.mockRejectedValue(new PolicyNotFoundError());
+
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest(VALID_PATCH_BODY),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/admin/organizations/[organizationId]/policies/[policyId]', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.connection.mockResolvedValue(undefined);
+    mocks.registry.clear();
+    mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+    mocks.registry.set(AUTHORIZATION.SERVICE, mocks.authzService);
+    mocks.authzService.can.mockResolvedValue(true);
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'admin-1', email: 'owner@test.dev' },
+        tenant: {
+          organizationId: ORG_ID,
+          tenantId: 'tenant-acme',
+          userId: 'admin-1',
+        },
+        user: {
+          id: 'admin-1',
+          email: 'owner@test.dev',
+          onboardingComplete: true,
+        },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.readService.getDetailInActiveScope.mockResolvedValue(ACTIVE_ORG);
+  });
+
+  it('returns 403 when the caller is not an organizations admin', async () => {
+    mocks.authzService.can.mockResolvedValue(false);
+
+    const { DELETE } = await import('./route');
+    const response = await DELETE(makeDeleteRequest(), makeContext());
+
+    expect(response.status).toBe(403);
+    expect(mocks.deleteRolePolicy).not.toHaveBeenCalled();
+  });
+
+  it('deletes a policy for an active organization and records the audit event', async () => {
+    mocks.deleteRolePolicy.mockResolvedValue(undefined);
+
+    const { DELETE } = await import('./route');
+    const response = await DELETE(makeDeleteRequest(), makeContext());
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { policyId: string } };
+    expect(body.data.policyId).toBe(POLICY_ID);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'rbac_policy',
+        action: 'rbac_policy.delete',
+        outcome: 'success',
+        targetType: 'policy',
+        targetId: POLICY_ID,
+      }),
+    );
+  });
+
+  it('returns 400 when the policy is protected from deletion', async () => {
+    const { ProtectedPolicyDeletionError } =
+      await import('@/modules/authorization/domain/errors');
+    mocks.deleteRolePolicy.mockRejectedValue(
+      new ProtectedPolicyDeletionError(),
+    );
+
+    const { DELETE } = await import('./route');
+    const response = await DELETE(makeDeleteRequest(), makeContext());
+
+    expect(response.status).toBe(400);
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
   });
 });

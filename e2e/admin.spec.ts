@@ -748,3 +748,299 @@ test.describe('Admin Feature Flags (/admin/feature-flags)', () => {
     );
   });
 });
+
+test.describe('Admin Audit Logs (/admin/security)', () => {
+  test('redirects unauthenticated users away from /admin/security', async ({
+    page,
+  }) => {
+    await page.goto('/admin/security');
+    await expect(page).not.toHaveURL(/\/admin\/security/);
+  });
+
+  test('redirects unauthenticated users away from /admin/security/audit-logs', async ({
+    page,
+  }) => {
+    await page.goto('/admin/security/audit-logs');
+    await expect(page).not.toHaveURL(/\/admin\/security\/audit-logs/);
+  });
+
+  // Requires FEATURE_FLAG_PROVIDER=db (feature_flag category mutations must
+  // actually persist -- see the sibling "db provider" block above) and
+  // REGISTRATION_MODE=invite-only (the waitlist scenario below creates its
+  // own pending entry via the public POST /api/auth/waitlist, which 400s
+  // outside invite-only mode). Neither is set by the default E2E scenario
+  // env -- see the pnpm e2e:admin:audit-logs script, which sets both plus
+  // AUTH_PROVIDER=authjs and E2E_BACKEND_MODE=container.
+  authTest.describe(
+    'authenticated admin (AuthJS), db provider, audit trail',
+    () => {
+      authTest.skip(
+        !isAuthjs,
+        'Set AUTH_PROVIDER=authjs for authenticated admin E2E tests.',
+      );
+      authTest.skip(
+        process.env['FEATURE_FLAG_PROVIDER'] !== 'db',
+        'Set FEATURE_FLAG_PROVIDER=db to exercise feature_flag-category audit events against real mutations.',
+      );
+
+      authTest(
+        'enables the waitlist audit category via the settings UI (feature_flag stays on by default)',
+        async ({ authedPage }) => {
+          await authedPage.goto('/admin/security');
+
+          const featureFlagRow = authedPage.locator('tr').filter({
+            has: authedPage.getByText('feature_flag', { exact: true }),
+          });
+          await expect(
+            featureFlagRow.getByRole('button', { name: /^on$/i }),
+          ).toBeVisible();
+
+          const waitlistRow = authedPage.locator('tr').filter({
+            has: authedPage.getByText('waitlist', { exact: true }),
+          });
+          await expect(
+            waitlistRow.getByRole('button', { name: /^off$/i }),
+          ).toBeVisible();
+
+          const enableWaitlistResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'PATCH' &&
+              response.url().includes('/api/admin/audit-log-settings'),
+          );
+          await waitlistRow.getByRole('button', { name: /^off$/i }).click();
+          const enableWaitlistResponse = await enableWaitlistResponsePromise;
+          expect(enableWaitlistResponse.status()).toBe(200);
+
+          await expect(
+            waitlistRow.getByRole('button', { name: /^on$/i }),
+          ).toBeVisible();
+        },
+      );
+
+      authTest(
+        'a feature-flag create/update/delete cycle records feature_flag category audit events',
+        async ({ authedPage }) => {
+          await authedPage.goto('/admin/feature-flags');
+
+          const flagKey = `e2e-audit-flag-${Date.now().toString()}`;
+
+          const createResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'POST' &&
+              /\/api\/admin\/feature-flags$/.test(response.url()),
+          );
+          await authedPage.getByLabel('Key').fill(flagKey);
+          await authedPage.getByRole('button', { name: 'Create flag' }).click();
+          const createResponse = await createResponsePromise;
+          expect(createResponse.status()).toBe(201);
+          const createJson = (await createResponse.json()) as {
+            data: { flag: { id: string } };
+          };
+          const flagId = createJson.data.flag.id;
+
+          const flagRow = authedPage
+            .locator('tr')
+            .filter({ has: authedPage.getByText(flagKey, { exact: true }) });
+          await expect(flagRow).toBeVisible();
+
+          const toggleResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'PATCH' &&
+              /\/api\/admin\/feature-flags\/[^/]+$/.test(response.url()),
+          );
+          await flagRow.getByRole('button', { name: /^(on|off)$/i }).click();
+          const toggleResponse = await toggleResponsePromise;
+          expect(toggleResponse.status()).toBe(200);
+
+          const deleteResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'DELETE' &&
+              /\/api\/admin\/feature-flags\/[^/]+$/.test(response.url()),
+          );
+          await flagRow.getByRole('button', { name: 'Delete' }).click();
+          await flagRow.getByRole('button', { name: 'Yes' }).click();
+          const deleteResponse = await deleteResponsePromise;
+          expect(deleteResponse.status()).toBe(200);
+
+          const auditRes = await authedPage.request.get(
+            `/api/admin/audit-logs?category=feature_flag&targetType=feature_flag&targetId=${flagId}&limit=50`,
+          );
+          expect(auditRes.ok()).toBe(true);
+          const auditJson = (await auditRes.json()) as {
+            data: { events: { action: string; category: string }[] };
+          };
+          const actions = auditJson.data.events.map((e) => e.action).sort();
+          expect(actions).toEqual([
+            'feature_flag.create',
+            'feature_flag.delete',
+            'feature_flag.update',
+          ]);
+          for (const event of auditJson.data.events) {
+            expect(event.category).toBe('feature_flag');
+          }
+        },
+      );
+
+      authTest(
+        'approving a newly created waitlist entry records a waitlist category audit event now that the category is enabled',
+        async ({ authedPage }) => {
+          const email = `e2e+audit-waitlist-${Date.now().toString()}@example.com`;
+
+          const joinResponse = await authedPage.request.post(
+            '/api/auth/waitlist',
+            { data: { email } },
+          );
+          expect(
+            joinResponse.ok(),
+            'Expected POST /api/auth/waitlist to succeed -- set REGISTRATION_MODE=invite-only for this scenario (see pnpm e2e:admin:audit-logs)',
+          ).toBe(true);
+
+          await authedPage.goto('/admin/waitlist');
+          const entryRow = authedPage
+            .locator('tr')
+            .filter({ has: authedPage.getByText(email, { exact: true }) });
+          await expect(entryRow).toBeVisible();
+
+          const approveResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'POST' &&
+              /\/api\/admin\/waitlist\/[^/]+\?action=approve$/.test(
+                response.url(),
+              ),
+          );
+          await entryRow
+            .getByRole('button', { name: /approve waitlist application/i })
+            .click();
+          const approveResponse = await approveResponsePromise;
+          expect(approveResponse.status()).toBe(200);
+
+          const auditRes = await authedPage.request.get(
+            '/api/admin/audit-logs?category=waitlist&limit=50',
+          );
+          expect(auditRes.ok()).toBe(true);
+          const auditJson = (await auditRes.json()) as {
+            data: { events: { action: string; category: string }[] };
+          };
+          expect(
+            auditJson.data.events.some(
+              (e) =>
+                e.action === 'waitlist.approve' && e.category === 'waitlist',
+            ),
+          ).toBe(true);
+        },
+      );
+
+      authTest(
+        'disabling admin_access via the settings UI stops new admin panel access audit events from being recorded',
+        async ({ authedPage }) => {
+          async function countAdminAccessEvents(): Promise<number> {
+            const res = await authedPage.request.get(
+              '/api/admin/audit-logs?category=admin_access&limit=1',
+            );
+            expect(res.ok()).toBe(true);
+            const json = (await res.json()) as { data: { total: number } };
+            return json.data.total;
+          }
+
+          const countBeforeNav = await countAdminAccessEvents();
+
+          // A hard navigation (page.goto), not a client-side <Link>
+          // transition, is required here -- it forces AdminLayoutGuard to
+          // re-run on the server and record a fresh admin_access grant
+          // event. A soft navigation between sibling /admin/* routes can
+          // reuse the already-rendered layout segment and would not prove
+          // anything about the write path.
+          await authedPage.goto('/admin/security', { waitUntil: 'load' });
+          const countAfterNav = await countAdminAccessEvents();
+          expect(countAfterNav).toBe(countBeforeNav + 1);
+
+          const adminAccessRow = authedPage.locator('tr').filter({
+            has: authedPage.getByText('admin_access', { exact: true }),
+          });
+          const disableResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'PATCH' &&
+              response.url().includes('/api/admin/audit-log-settings'),
+          );
+          await adminAccessRow.getByRole('button', { name: /^on$/i }).click();
+          const disableResponse = await disableResponsePromise;
+          expect(disableResponse.status()).toBe(200);
+          await expect(
+            adminAccessRow.getByRole('button', { name: /^off$/i }),
+          ).toBeVisible();
+
+          // The settings PATCH itself never touches admin_access audit
+          // events -- it's a mutation on audit_log_settings, not a
+          // recordAdminAuditEvent call -- so the count should be
+          // unaffected by the toggle alone.
+          const countAfterDisable = await countAdminAccessEvents();
+          expect(countAfterDisable).toBe(countAfterNav);
+
+          await authedPage.goto('/admin/waitlist', { waitUntil: 'load' });
+          const countAfterSecondNav = await countAdminAccessEvents();
+          expect(countAfterSecondNav).toBe(countAfterDisable);
+
+          // Re-enable so a later interactive re-run against the same
+          // container DB (outside the normal per-run reset) finds
+          // admin_access back in its default state.
+          await authedPage.goto('/admin/security', { waitUntil: 'load' });
+          const adminAccessRowAgain = authedPage.locator('tr').filter({
+            has: authedPage.getByText('admin_access', { exact: true }),
+          });
+          const reenableResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'PATCH' &&
+              response.url().includes('/api/admin/audit-log-settings'),
+          );
+          await adminAccessRowAgain
+            .getByRole('button', { name: /^off$/i })
+            .click();
+          const reenableResponse = await reenableResponsePromise;
+          expect(reenableResponse.status()).toBe(200);
+        },
+      );
+
+      authTest(
+        'category filters on GET /api/admin/audit-logs and the browse UI never mix categories',
+        async ({ authedPage }) => {
+          for (const category of ['feature_flag', 'waitlist', 'admin_access']) {
+            const res = await authedPage.request.get(
+              `/api/admin/audit-logs?category=${category}&limit=50`,
+            );
+            expect(res.ok()).toBe(true);
+            const json = (await res.json()) as {
+              data: { events: { category: string }[] };
+            };
+            expect(json.data.events.length).toBeGreaterThan(0);
+            for (const event of json.data.events) {
+              expect(event.category).toBe(category);
+            }
+          }
+
+          await authedPage.goto('/admin/security/audit-logs');
+          await authedPage.getByLabel('Category').selectOption('feature_flag');
+          const filterResponsePromise = authedPage.waitForResponse(
+            (response) =>
+              response.request().method() === 'GET' &&
+              response.url().includes('/api/admin/audit-logs') &&
+              response.url().includes('category=feature_flag'),
+          );
+          await authedPage.getByRole('button', { name: 'Filter' }).click();
+          await filterResponsePromise;
+
+          await expect(
+            authedPage.getByText('feature_flag.create', { exact: true }),
+          ).toBeVisible();
+          await expect(
+            authedPage.getByText('waitlist.approve', { exact: true }),
+          ).not.toBeVisible();
+          await expect(
+            authedPage.getByText('admin_panel.access_granted', {
+              exact: true,
+            }),
+          ).not.toBeVisible();
+        },
+      );
+    },
+  );
+});

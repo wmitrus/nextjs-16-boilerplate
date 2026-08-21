@@ -26,6 +26,7 @@ import { DuplicateInvitationError } from '@/modules/invitations/domain/errors';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const bodySchema = z.object({
@@ -145,6 +146,16 @@ export const POST = withErrorHandler(
         organizationId: paramsResult.data.id,
         invitedByUserId: access.user.id,
         expiresInHours: 72,
+      });
+
+      await recordAdminAuditEvent({
+        category: 'membership',
+        action: 'invitation.create',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'invitation',
+        targetId: invitation.id,
       });
 
       return createSuccessResponse(

@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
+  recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -57,6 +58,10 @@ vi.mock(
     DrizzleInvitationRepository: vi.fn().mockImplementation(() => ({})),
   }),
 );
+
+vi.mock('@/security/actions/record-admin-audit-event', () => ({
+  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+}));
 
 vi.mock('@/modules/invitations/infrastructure/EmailServiceFactory', () => ({
   createEmailService: vi.fn().mockReturnValue({}),
@@ -261,6 +266,15 @@ describe('POST /api/admin/invitations', () => {
     expect(body.data.invitationId).toBe('inv-1');
     expect(body.data.email).toBe('a@b.com');
     expect(body.data.expiresAt).toBe(expiresAt.toISOString());
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'membership',
+        action: 'invitation.create',
+        outcome: 'success',
+        targetType: 'invitation',
+        targetId: 'inv-1',
+      }),
+    );
   });
 });
 

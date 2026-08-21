@@ -188,7 +188,7 @@ Run focused validation with strong signal for the actual risk surface.
 
 Prefer:
 
-- **Temporary ESLint execution blocker (effective 2026-08-14):** do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. The command repeatedly hangs in the agent shell; run other relevant checks and report lint as skipped until this block is explicitly removed after a verified fix.
+- **ESLint execution blocker — does not apply to Claude Code (narrowed 2026-08-20):** the earlier "repeatedly hangs in the agent shell" report (effective 2026-08-14) is confirmed Codex-specific and does not reproduce in Claude Code's shell. Claude Code sessions must run `pnpm lint --fix` normally as a quality gate, not skip it. Full detail: `AGENTS.md`.
 - targeted tests for the touched behavior
 - explicit documentation of residual risk when validation is intentionally limited
 

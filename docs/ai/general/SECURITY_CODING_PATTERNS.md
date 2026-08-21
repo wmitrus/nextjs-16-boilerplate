@@ -32,6 +32,7 @@ Update it after every security review group.
 | SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                       | Not security by itself     | UI state, JSX handlers, tests      |
 | SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift      | Real risk → fixed          | CI/CD, Vercel, AuthJS env          |
 | SEC-26 | Authorization      | ABAC action check without matching resource-scope check | Real risk → fixed          | Admin CRUD route handlers/services |
+| SEC-27 | Authorization      | Mutating admin route with no authorization check at all | Real risk → fixed          | Admin API route handlers           |
 
 ---
 
@@ -1656,3 +1657,125 @@ resource-scope grant.
 server-side" review — that catches missing checks, not checks that are present but too
 coarse. Ask explicitly: "authorized to do X in general, or authorized to do X to
 _this_ tenant/record?"
+
+---
+
+## SEC-27 — Mutating Admin Routes Must Not Skip Authorization Just Because a Sibling Route Has It
+
+**ID**: SEC-27
+**Category**: Authorization
+**Classification**: Real risk — found while wiring audit-logging instrumentation (2026-08-20), fixed same day
+**Affected contexts**: `/api/admin/**` route handlers, especially a `POST`/`PATCH`/`DELETE` handler that lives in the same file or directory as a `GET` handler which does have an authorization check
+
+### Risk
+
+`src/app/api/admin/waitlist/[id]/route.ts`'s `POST` handler (approve/reject a
+waitlist entry) had **no admin authorization check of any kind**. Its sibling
+`GET /api/admin/waitlist` (`src/app/api/admin/waitlist/route.ts`) calls
+`checkAdminAccess()` — the standard `isEnvBasedPlatformAdmin(email)` OR
+`authzService.can({ action: ACTIONS.SECURITY_MANAGE_POLICIES, ... })` gate used
+across every other `/api/admin/**` route. `POST` only passed through
+`withNodeProvisioning`, which verifies the caller is authenticated and
+provisioned (onboarded, has tenant context) — **not** that they hold any admin
+grant. This is a different defect shape from SEC-26: SEC-26 is about an
+authorization check that exists but is scoped too coarsely; this is about a
+mutating endpoint with **no** authorization check at all, sitting right next to
+a sibling handler that has the correct one — the kind of gap that's easy to miss
+precisely because "this resource is admin-gated" reads as true at a glance
+(the directory is under `/api/admin/`, the neighboring `GET` is gated, the page
+that links to it is behind the `/admin` layout guard) when in fact one specific
+handler was never wired.
+
+Concretely, before the fix: any authenticated, provisioned, non-admin user
+could call `POST /api/admin/waitlist/[id]?action=approve` directly (this route
+is not protected by the `/admin` page layout's guard — that guard wraps page
+rendering only, not this API route) and create a real invitation email to
+whichever organization/role the approval resolved to, or call `?action=reject`
+to send a rejection email on the product's behalf for an arbitrary entry.
+
+### Dangerous Pattern
+
+```typescript
+// GET has the check:
+export const GET = withErrorHandler(
+  withNodeProvisioning(async (_request, _context, access) => {
+    const isAdmin = await checkAdminAccess(
+      access.identity.email,
+      access.user.id,
+      access.tenant.tenantId,
+      container,
+    );
+    if (!isAdmin)
+      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+    // ...
+  }),
+);
+
+// POST in the sibling [id]/route.ts — no isAdmin check, no `access` even used:
+export const POST = withErrorHandler(
+  withNodeProvisioning(async (_request, context) => {
+    // straight into business logic — withNodeProvisioning only proves
+    // "authenticated + provisioned", never "admin"
+    const entry = await waitlistService.approveEntry(id);
+    // ...
+  }),
+);
+```
+
+### Correct Pattern
+
+Every mutating `/api/admin/**` handler must call the same admin-authorization
+gate its sibling handlers use, even if that means duplicating (not sharing
+mutable state with) the check into a file that doesn't otherwise import it:
+
+```typescript
+export const POST = withErrorHandler(
+  withNodeProvisioning(async (_request, context, access) => {
+    await connection();
+
+    const container = getAppContainer();
+    const isAdmin = await checkAdminAccess(
+      access.identity.email,
+      access.user.id,
+      access.tenant.tenantId,
+      container,
+    );
+    if (!isAdmin) {
+      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    // ... business logic, now behind a real admin gate
+  }),
+);
+```
+
+`checkAdminAccess` itself is duplicated per route file across this codebase
+(see `feature-flags/route.ts` and `feature-flags/[id]/route.ts`, which each
+have their own local copy) rather than shared via an import — matching that
+existing convention is correct here, not a shortcut.
+
+### Required Validation
+
+Every `/api/admin/**` route file must have at least one test asserting a
+non-admin, authenticated-and-provisioned caller gets `403` from **every**
+exported HTTP method in that file, not just the ones that already had a test.
+A file with a tested `GET` and an untested `POST`/`PATCH`/`DELETE` is exactly
+the blind spot this incident came from — the existing test suite's green
+result said nothing about the untested handler.
+
+### Rule for Agents
+
+**DO** check, for every exported HTTP method handler in an `/api/admin/**`
+route file, whether it calls an admin-authorization gate — do not assume
+"this directory is admin-gated" or "the sibling handler checks it" extends
+protection to a handler that never calls the check itself.
+
+**DO** treat a missing authorization check as a `security-incident-workflow`
+finding, distinct from whatever task you were doing when you found it (in this
+case, audit-log instrumentation) — report it and let the change ship as its
+own reviewable diff, not folded into an unrelated commit.
+
+**DO NOT** assume a route is safe because it lives under `/api/admin/` or
+because the corresponding UI page is behind `src/app/admin/layout.tsx`'s
+guard — that guard protects page rendering only, never the underlying API
+route, which remains directly callable by anyone who can reach it.

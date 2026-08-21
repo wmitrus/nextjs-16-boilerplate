@@ -17,6 +17,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
 import { DuplicateFeatureFlagError } from '@/modules/feature-flags/domain/errors';
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -191,6 +192,21 @@ export const POST = withErrorHandler(
         },
         'Feature flag created by admin',
       );
+
+      await recordAdminAuditEvent({
+        category: 'feature_flag',
+        action: 'feature_flag.create',
+        outcome: 'success',
+        // The flag's own scope, not the acting admin's active tenant -- a
+        // platform admin can create a flag for a different tenant (or
+        // global, tenantId: null); attributing the event to the admin's
+        // own tenant would hide it from the flag's real tenant and
+        // mislabel it into an unrelated one (Codex review, PR #72).
+        tenantId: flag.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'feature_flag',
+        targetId: flag.id,
+      });
 
       return createSuccessResponse({ flag }, 201);
     } catch (error) {

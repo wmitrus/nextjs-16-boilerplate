@@ -217,14 +217,16 @@ export class DrizzleFeatureFlagAdminService {
     return mapFlagRow(row);
   }
 
-  async delete(id: string, scope: MutationScope): Promise<void> {
-    const deleted = await this.db
+  async delete(id: string, scope: MutationScope): Promise<FeatureFlagDto> {
+    const [row] = await this.db
       .delete(featureFlagsTable)
       .where(scopePredicate(id, scope))
       .returning();
 
-    if (deleted.length === 0) {
+    if (!row) {
       throw new FeatureFlagNotFoundError();
     }
+
+    return mapFlagRow(row);
   }
 }

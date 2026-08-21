@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
+  recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -47,6 +48,10 @@ vi.mock(
     DrizzleFeatureFlagAdminService: vi.fn(),
   }),
 );
+
+vi.mock('@/security/actions/record-admin-audit-event', () => ({
+  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+}));
 
 function makeRequest(method: 'PATCH' | 'DELETE', body?: unknown) {
   return new NextRequest(
@@ -178,6 +183,23 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     expect(body.data.flag.enabled).toBe(false);
   });
 
+  it('attributes the audit event to the updated flag’s own tenant, not the platform admin’s active tenant', async () => {
+    // The caller's active tenant is 'tenant_test_1' (makeAllowedProvisioningAccess's
+    // default); a platform admin can update a flag belonging to a different
+    // tenant, and the audit event must reflect the flag's real scope.
+    mocks.update.mockResolvedValue({ ...MOCK_FLAG, tenantId: 'tenant_other' });
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { enabled: false }),
+      makeContext(),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant_other' }),
+    );
+  });
+
   it("SEC-26: scopes the update to the caller's own tenant for an ABAC-authorized non-platform-admin", async () => {
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
@@ -231,7 +253,7 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
   });
 
   it('returns 200 and deletes the flag', async () => {
-    mocks.delete.mockResolvedValue(undefined);
+    mocks.delete.mockResolvedValue(MOCK_FLAG);
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
@@ -244,7 +266,7 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
-    mocks.delete.mockResolvedValue(undefined);
+    mocks.delete.mockResolvedValue(MOCK_FLAG);
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
@@ -252,5 +274,16 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, {
       tenantId: 'tenant_test_1',
     });
+  });
+
+  it('attributes the audit event to the deleted flag’s own tenant, not the platform admin’s active tenant', async () => {
+    mocks.delete.mockResolvedValue({ ...MOCK_FLAG, tenantId: 'tenant_other' });
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(makeRequest('DELETE'), makeContext());
+    expect(res.status).toBe(200);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant_other' }),
+    );
   });
 });

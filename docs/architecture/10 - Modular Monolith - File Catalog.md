@@ -347,6 +347,20 @@ This section documents each implemented runtime/support file (excluding test fil
 
 - `src/modules/user/index.ts` — registers user module dependencies in DI.
 
+### `modules/audit-log`
+
+- `src/modules/audit-log/index.ts` — module entry point.
+- `src/modules/audit-log/factory.ts` — `createAuditLogService(db)`, wraps `DrizzleAuditLogService` in `ResilientAuditLogService`; the wrapped instance is what gets DI-registered as `AUDIT_LOG.SERVICE`.
+- `src/modules/audit-log/domain/category.ts` — the audit category taxonomy (`AUDIT_CATEGORIES`) and per-category defaults (enabled/retention/sampling/capture-on-success); single source of truth, mirrored by `auditCategoryEnum` in the Drizzle schema.
+- `src/modules/audit-log/domain/errors.ts` — domain error types (e.g. `AuditSettingNotFoundError`).
+- `src/modules/audit-log/infrastructure/drizzle/schema.ts` — `audit_log_settings` (admin-managed per-category on/off + retention, global/tenant-override model) and `audit_events` (the append-only trail) tables.
+- `src/modules/audit-log/infrastructure/drizzle/effective-settings.ts` — `resolveEffectiveAuditSetting()`, the single query that resolves "is this category enabled, at what retention" for a (category, tenantId) pair; shared by the writer and the purge job so both can never disagree.
+- `src/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogService.ts` — the write path: enabled/sampling/capture-on-success gating, metadata redaction-cap, insert into `audit_events`. Not DI-registered directly — always wrapped by `ResilientAuditLogService` (see `factory.ts`).
+- `src/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogReadService.ts` — the admin browse/read path (`listGlobal`/`listForTenant`), backing `GET /api/admin/audit-logs`. Deliberately **not** DI-registered — admin-only, low-frequency, instantiated directly at the route call site (same pattern as the settings admin service below).
+- `src/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService.ts` — admin CRUD for `audit_log_settings` (list effective settings, upsert an override, reset to default). Not DI-registered, instantiated directly in the route handler.
+- `src/modules/audit-log/infrastructure/drizzle/purge-expired-events.ts` — retention-enforcement logic (`purgeExpiredAuditEvents`), batched deletes per (category, tenantId) pair against each pair's currently-effective retention. Invoked by `scripts/audit-log/purge-expired.ts`, not by any request path.
+- `src/modules/audit-log/infrastructure/resilient/ResilientAuditLogService.ts` — fail-open wrapper: `record()` never throws back to the caller, logs and swallows on failure.
+
 ## 8.5 Security layer
 
 ### Core and context

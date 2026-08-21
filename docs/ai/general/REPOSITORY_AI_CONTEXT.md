@@ -316,7 +316,7 @@ Unit tests are co-located with source files.
 
 **Lint rule**: Always run `pnpm lint --fix`, never plain `pnpm lint`. The linter auto-fixes import ordering and formatting issues on save; running without `--fix` only reports fixable errors and wastes tokens. If unfixable errors remain after `--fix`, report them.
 
-**Temporary ESLint execution blocker (effective 2026-08-14):** `pnpm lint --fix` repeatedly hangs in the agent shell. Until this block is explicitly removed after a verified fix, do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. Run other relevant checks and report lint as skipped because of this blocker.
+**Temporary ESLint execution blocker (effective 2026-08-14, narrowed 2026-08-20):** `pnpm lint --fix` repeatedly hung in some agent shells. **Confirmed Codex-specific** — Claude Code's shell does not reproduce the hang (verified 2026-08-20). **Claude Code agents must run `pnpm lint --fix` normally.** Codex agents (and any other tool that still reproduces the hang) should continue to skip `pnpm lint`, `pnpm lint --fix`, ESLint directly, and any script that invokes ESLint, and report lint as skipped because of this blocker. See `AGENTS.md` for the full note.
 
 **Phase-close rule**: For substantial phase-based implementation work, use narrower validation during the phase and run repo-wide `pnpm lint --fix` plus `pnpm typecheck` before declaring the phase complete. Do not run both after every tiny code edit unless the task specifically requires it.
 

@@ -117,7 +117,7 @@ Always follow the repository's mandatory coding patterns from
 - shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats
 - `path.resolve()` plus sink-level confinement for dynamic `fs` paths
 - URL parsing and hostname/protocol validation before HTTP calls
-- **Temporary ESLint execution blocker (effective 2026-08-14):** `pnpm lint --fix` repeatedly hangs in the agent shell. Until this block is explicitly removed after a verified fix, do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. Run other relevant checks and report lint as skipped because of this blocker.
+- **ESLint execution blocker — does not apply to Claude Code (narrowed 2026-08-20):** the earlier "repeatedly hangs in the agent shell" report (effective 2026-08-14) is confirmed Codex-specific and does not reproduce in Claude Code's shell. Claude Code sessions must run `pnpm lint --fix` normally as a quality gate, not skip it. Full detail: `AGENTS.md`.
 - `pnpm lint --fix`, never plain `pnpm lint`
 - `node scripts/e2e/run-scenario.mjs ...` or a package script built on it for Playwright validation when scenario env or DB setup matters
 - `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`

@@ -1,4 +1,9 @@
+import { AUDIT_LOG } from '@/core/contracts';
+import type { AuditLogService } from '@/core/contracts/audit-log';
 import { resolveServerLogger } from '@/core/logger/di';
+import { getAppContainer } from '@/core/runtime/bootstrap';
+
+import { redactAuditInput } from './redact';
 
 import type { SecurityContext } from '@/security/core/security-context';
 
@@ -8,21 +13,6 @@ const logger = resolveServerLogger().child({
   module: 'action-audit',
 });
 
-const REDACTED_AUDIT_VALUE = '[REDACTED]';
-const CIRCULAR_AUDIT_VALUE = '[Circular]';
-const BINARY_AUDIT_VALUE = '[Binary]';
-const SENSITIVE_AUDIT_FIELD_PATTERNS = [
-  /token/i,
-  /secret/i,
-  /password/i,
-  /authorization/i,
-  /cookie/i,
-  /credential/i,
-  /session/i,
-  /^key$/i,
-  /api[-_]?key/i,
-];
-
 export interface AuditLogOptions {
   actionName: string;
   input: unknown;
@@ -31,82 +21,51 @@ export interface AuditLogOptions {
   context: SecurityContext;
 }
 
-function isSensitiveAuditField(key: string): boolean {
-  return SENSITIVE_AUDIT_FIELD_PATTERNS.some((pattern) => pattern.test(key));
-}
-
-function redactAuditInput(
-  value: unknown,
-  seen: WeakSet<object> = new WeakSet(),
-): unknown {
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  if (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  if (typeof FormData !== 'undefined' && value instanceof FormData) {
-    const entries: Array<[string, unknown]> = [];
-    for (const [key, entryValue] of value.entries()) {
-      entries.push([
-        key,
-        isSensitiveAuditField(key)
-          ? REDACTED_AUDIT_VALUE
-          : typeof entryValue === 'string'
-            ? entryValue
-            : BINARY_AUDIT_VALUE,
-      ]);
-    }
-    return Object.fromEntries(entries);
-  }
-
-  if (
-    typeof URLSearchParams !== 'undefined' &&
-    value instanceof URLSearchParams
-  ) {
-    return Object.fromEntries(
-      [...value.entries()].map(([key, entryValue]) => [
-        key,
-        isSensitiveAuditField(key) ? REDACTED_AUDIT_VALUE : entryValue,
-      ]),
+/**
+ * Best-effort DB persistence, alongside the always-on Pino log below.
+ *
+ * Resolution AND `record()` are both wrapped here: `AuditLogService.record()`
+ * itself never throws (it is always the `ResilientAuditLogService` fail-open
+ * wrapper), but *resolving* the service can still throw -- most notably in
+ * unit tests, where the global test double for `getAppContainer()`
+ * (`tests/setup.tsx`) never registers `AUDIT_LOG.SERVICE` at all. Either
+ * failure mode must never affect the caller's mutation or its Pino audit
+ * log, which is why this is a fully separate try/catch from the logging
+ * below rather than something threaded through `logActionAudit`'s callers.
+ */
+async function recordAuditEvent(
+  actionName: string,
+  outcome: 'success' | 'failure',
+  context: SecurityContext,
+  metadata: unknown,
+): Promise<void> {
+  try {
+    const auditLogService = getAppContainer().resolve<AuditLogService>(
+      AUDIT_LOG.SERVICE,
+    );
+    await auditLogService.record({
+      category: 'server_action',
+      action: actionName,
+      outcome,
+      tenantId: context.user?.tenantId ?? null,
+      actorUserId: context.user?.id ?? null,
+      ip: context.ip,
+      userAgent: context.userAgent ?? null,
+      correlationId: context.correlationId,
+      requestId: context.requestId,
+      metadata,
+    });
+  } catch (err) {
+    logger.warn(
+      {
+        event: 'action-audit:db-write-unavailable',
+        actionName,
+        errorMessage: err instanceof Error ? err.message : String(err),
+        errorName: err instanceof Error ? err.name : 'UnknownError',
+      },
+      'Audit log DB write unavailable; Pino audit log still recorded',
     );
   }
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => redactAuditInput(entry, seen));
-  }
-
-  if (typeof value !== 'object') {
-    return String(value);
-  }
-
-  if (seen.has(value)) {
-    return CIRCULAR_AUDIT_VALUE;
-  }
-
-  seen.add(value);
-
-  const redactedEntries: Array<[string, unknown]> = [];
-  for (const [key, entryValue] of Object.entries(value)) {
-    redactedEntries.push([
-      key,
-      isSensitiveAuditField(key)
-        ? REDACTED_AUDIT_VALUE
-        : redactAuditInput(entryValue, seen),
-    ]);
-  }
-
-  return Object.fromEntries(redactedEntries);
 }
 
 /**
@@ -119,8 +78,12 @@ export async function logActionAudit({
   error,
   context,
 }: AuditLogOptions): Promise<void> {
-  // In a real production app, you might send this to a dedicated audit database
-  // or a specialized security monitoring tool.
+  // Redacted unconditionally (cheap, no I/O) so the DB path can honor a
+  // category's `captureInputOnSuccess` setting independently of the Pino
+  // path below, which always omits input on success regardless of that
+  // per-category setting -- see recordAuditEvent's `metadata` argument.
+  const redactedInput = redactAuditInput(input);
+
   const logPayload = {
     event: 'server_action_mutation',
     actionName,
@@ -132,7 +95,7 @@ export async function logActionAudit({
     requestId: context.requestId,
     result,
     error,
-    input: result === 'failure' ? redactAuditInput(input) : undefined,
+    input: result === 'failure' ? redactedInput : undefined,
   };
 
   if (result === 'failure') {
@@ -140,4 +103,6 @@ export async function logActionAudit({
   } else {
     logger.debug(logPayload, `Action ${actionName} successful`);
   }
+
+  await recordAuditEvent(actionName, result, context, redactedInput);
 }

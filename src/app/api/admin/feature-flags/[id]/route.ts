@@ -17,6 +17,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
 import { FeatureFlagNotFoundError } from '@/modules/feature-flags/domain/errors';
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -157,6 +158,19 @@ export const PATCH = withErrorHandler(
         'Feature flag updated by admin',
       );
 
+      await recordAdminAuditEvent({
+        category: 'feature_flag',
+        action: 'feature_flag.update',
+        outcome: 'success',
+        // The flag's own scope, not the acting admin's active tenant --
+        // see the identical note on the create handler (Codex review,
+        // PR #72).
+        tenantId: flag.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'feature_flag',
+        targetId: id,
+      });
+
       return createSuccessResponse({ flag });
     } catch (error) {
       if (error instanceof FeatureFlagNotFoundError) {
@@ -206,7 +220,7 @@ export const DELETE = withErrorHandler(
       : { tenantId: access.tenant.tenantId };
 
     try {
-      await service.delete(id, scope);
+      const flag = await service.delete(id, scope);
 
       logger.info(
         {
@@ -217,6 +231,19 @@ export const DELETE = withErrorHandler(
         },
         'Feature flag deleted by admin',
       );
+
+      await recordAdminAuditEvent({
+        category: 'feature_flag',
+        action: 'feature_flag.delete',
+        outcome: 'success',
+        // The flag's own scope, not the acting admin's active tenant --
+        // see the identical note on the create handler (Codex review,
+        // PR #72).
+        tenantId: flag.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'feature_flag',
+        targetId: id,
+      });
 
       return createSuccessResponse({ deleted: true });
     } catch (error) {

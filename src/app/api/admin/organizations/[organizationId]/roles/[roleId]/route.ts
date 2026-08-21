@@ -27,6 +27,7 @@ import {
 } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { DrizzleAdminRolesMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminRolesMutationService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const bodySchema = z.object({
@@ -117,6 +118,16 @@ export const PATCH = withErrorHandler(
         name: bodyResult.data.name,
       });
 
+      await recordAdminAuditEvent({
+        category: 'rbac_policy',
+        action: 'role.rename',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'role',
+        targetId: roleResult.data.roleId,
+      });
+
       return createSuccessResponse({ role });
     } catch (error) {
       if (error instanceof RoleNotFoundError) {
@@ -200,6 +211,16 @@ export const DELETE = withErrorHandler(
       await mutationService.deleteCustomRole({
         organizationId: organizationResult.data.id,
         roleId: roleResult.data.roleId,
+      });
+
+      await recordAdminAuditEvent({
+        category: 'rbac_policy',
+        action: 'role.delete',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'role',
+        targetId: roleResult.data.roleId,
       });
 
       return createSuccessResponse({ roleId: roleResult.data.roleId });

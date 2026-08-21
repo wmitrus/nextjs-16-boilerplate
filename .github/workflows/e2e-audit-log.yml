@@ -29,11 +29,15 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
 
-      - name: Build
-        run: pnpm build
-
-      - name: Run Admin Audit Log E2E Tests
-        run: pnpm e2e:admin:audit-logs
+      - name: Build and run Admin Audit Log E2E Tests
+        # Build and test share one step (not split, as they were before)
+        # because the Next.js production build itself prerenders pages that
+        # need NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY at build time -- a separate
+        # "Build" step without this env block fails prerendering
+        # /_not-found with "Missing publishableKey". Matches the exact
+        # `pnpm build && ...` shape already proven in e2e-label.yml /
+        # e2e-matrix.yml's `e2e:*:ci` scripts.
+        run: pnpm build && pnpm e2e:admin:audit-logs
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}

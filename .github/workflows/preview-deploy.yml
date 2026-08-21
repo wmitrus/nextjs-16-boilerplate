@@ -258,60 +258,43 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
+
       - name: Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
         with:
           node-version: 24
+          cache: 'pnpm'
 
-      - name: Debug - sanity-check this runner's Chrome against a control URL
-        run: |
-          # A 90s FCP budget still timed out identically to the 30s default
-          # -- content genuinely never paints, however long we wait, ruling
-          # out "just slow" theories entirely. Before looking any further
-          # at our own deployment (which curl and Playwright's own Chromium
-          # both load and fully hydrate in a few seconds), rule out a
-          # broken/misconfigured Chrome on THIS runner as the cause: this
-          # job has no "Install Chromium" step, so lighthouse's
-          # chrome-launcher falls back to whatever ubuntu-latest ships. If
-          # even a trivial, unauthenticated, no-CSP page like example.com
-          # can't get an FCP here, the problem is this runner's Chrome, not
-          # our app or Vercel's bypass mechanism.
-          npx lighthouse https://example.com --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage" --output=json --output-path=/tmp/control-lh.json --quiet || echo "control lighthouse exit code: $?"
-          echo "--- control run result ---"
-          node -e '
-            const fs = require("node:fs");
-            try {
-              const r = JSON.parse(fs.readFileSync("/tmp/control-lh.json", "utf8"));
-              console.log(JSON.stringify({ runtimeError: r.runtimeError ?? null, fcpMs: r.audits?.["first-contentful-paint"]?.numericValue ?? null }, null, 2));
-            } catch (e) {
-              console.log("Could not read/parse control-lh.json:", e.message);
-            }
-          '
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Lighthouse Audit
         run: |
           echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
-          # Four different fixes to the bypass/redirect/Chrome-launch side
-          # (samesitenone, then true, then no bypass-cookie at all, then
-          # --no-sandbox --disable-dev-shm-usage) all produced the IDENTICAL
-          # failure: NO_FCP at ~30.9s every single time, to the
-          # millisecond -- Lighthouse's default maxWaitForFcp is 30000ms.
-          # Raising the budget to 90s still timed out identically (at ~92s
-          # wall time) -- content genuinely never paints, no matter how
-          # long we wait. The control-URL sanity check step above (plain
-          # `npx lighthouse` against example.com, same runner, same
-          # --no-sandbox --disable-dev-shm-usage) succeeded cleanly
-          # (fcpMs: 810), proving this runner's Chrome itself is healthy --
-          # the problem is specific to our deployment. One uncontrolled
-          # variable between that passing control and this failing run:
-          # the control explicitly requested --headless=new; this
-          # @lhci/cli invocation never had, so chrome-launcher's own
-          # default (legacy --headless, deprecated by Chrome and known to
-          # have rendering/process-model quirks under stricter
-          # COOP/frame-ancestors configurations that a bare page like
-          # example.com never exercises) is what's actually launching.
-          # Matching the proven-working flag set.
-          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--headless=new --no-sandbox --disable-dev-shm-usage" --collect.settings.maxWaitForFcp=90000 --collect.settings.maxWaitForLoad=120000 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
+          # Five rounds of tuning this job's OWN Chrome launch (bypass
+          # cookie flavor x3, --no-sandbox --disable-dev-shm-usage,
+          # --headless=new, a 90s FCP budget) all produced the identical
+          # NO_FCP failure, while a control audit of example.com on this
+          # exact runner with the exact same flags succeeded every time
+          # (real FCP in under 1s) -- proving the runner's Chrome was
+          # never broken and none of those flags were the actual
+          # difference. The one thing genuinely unverified was WHICH
+          # Chrome build chrome-launcher was finding at all: this job had
+          # no "Install Chromium" step, unlike Verify Preview Runtime
+          # (which passes on this exact URL every run), so it was running
+          # whatever (possibly stale) Chrome ubuntu-latest happens to
+          # ship. Installing the same pinned Playwright Chromium here and
+          # pointing CHROME_PATH at it removes that as a variable
+          # entirely, using the exact browser build already proven to
+          # load and fully hydrate this deployment.
+          CHROME_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          echo "Using Chromium at: $CHROME_PATH"
+          CHROME_PATH="$CHROME_PATH" npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

@@ -11,31 +11,32 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                       | Classification                                                    | Affected Contexts                  |
-| ------ | ------------------ | --------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                  | False positive                                                    | Unit test files                    |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin       | False positive                                                    | Middleware                         |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param      | Latent risk → fixed                                               | Middleware                         |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                 | False positive → hardened                                         | API route                          |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                  | False positive                                                    | E2E helpers                        |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                 | False positive                                                    | E2E specs                          |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config       | Real risk → fixed                                                 | Module-level SDK adapters          |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`            | Latent risk                                                       | Auth/bootstrap UI mapping          |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement            | Latent risk                                                       | Runtime logger helpers             |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop       | Real risk → fixed                                                 | Rate-limit middleware              |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers             | Local lint-backed workflow                                        | Scripts, E2E helpers               |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling       | Local lint-backed workflow                                        | Scripts, E2E helpers               |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`     | AI-pattern backed workflow                                        | `src/**` runtime helpers           |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting        | Real risk → fixed                                                 | Public auth route handlers         |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges     | Real risk → fixed                                                 | Email adapters, auth bridges       |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                    | Real risk → fixed                                                 | App Router route handlers          |
-| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                         | Not security by itself                                            | UI state, JSX handlers, tests      |
-| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift        | Real risk → fixed                                                 | CI/CD, Vercel, AuthJS env          |
-| SEC-26 | Authorization      | ABAC action check without matching resource-scope check   | Real risk → fixed                                                 | Admin CRUD route handlers/services |
-| SEC-27 | Authorization      | Mutating admin route with no authorization check at all   | Real risk → fixed                                                 | Admin API route handlers           |
-| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense     | Real risk → fixed (see Update 2026-08-21: first fix was a TOCTOU) | Outbound fetch helpers             |
-| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes               | Real risk → fixed                                                 | Demo/showcase route policy         |
-| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally | Real risk → partially fixed, deferred (see Update 2026-08-21)     | with-headers.ts, layout.tsx        |
+| #      | Category           | Vulnerability Class                                          | Classification                                                    | Affected Contexts                  |
+| ------ | ------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------- | ---------------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                     | False positive                                                    | Unit test files                    |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin          | False positive                                                    | Middleware                         |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param         | Latent risk → fixed                                               | Middleware                         |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                    | False positive → hardened                                         | API route                          |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                     | False positive                                                    | E2E helpers                        |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                    | False positive                                                    | E2E specs                          |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config          | Real risk → fixed                                                 | Module-level SDK adapters          |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`               | Latent risk                                                       | Auth/bootstrap UI mapping          |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement               | Latent risk                                                       | Runtime logger helpers             |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop          | Real risk → fixed                                                 | Rate-limit middleware              |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers                | Local lint-backed workflow                                        | Scripts, E2E helpers               |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling          | Local lint-backed workflow                                        | Scripts, E2E helpers               |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`        | AI-pattern backed workflow                                        | `src/**` runtime helpers           |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting           | Real risk → fixed                                                 | Public auth route handlers         |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges        | Real risk → fixed                                                 | Email adapters, auth bridges       |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                       | Real risk → fixed                                                 | App Router route handlers          |
+| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                            | Not security by itself                                            | UI state, JSX handlers, tests      |
+| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift           | Real risk → fixed                                                 | CI/CD, Vercel, AuthJS env          |
+| SEC-26 | Authorization      | ABAC action check without matching resource-scope check      | Real risk → fixed                                                 | Admin CRUD route handlers/services |
+| SEC-27 | Authorization      | Mutating admin route with no authorization check at all      | Real risk → fixed                                                 | Admin API route handlers           |
+| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense        | Real risk → fixed (see Update 2026-08-21: first fix was a TOCTOU) | Outbound fetch helpers             |
+| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes                  | Real risk → fixed                                                 | Demo/showcase route policy         |
+| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally    | Real risk → partially fixed, deferred (see Update 2026-08-21)     | with-headers.ts, layout.tsx        |
+| SEC-31 | CSP architecture   | Same-origin mixed CSP profiles don't survive client-side nav | Architectural guidance, not a bug fix                             | CSP profile decisions repo-wide    |
 
 ---
 
@@ -2417,3 +2418,123 @@ test suite cleanly first. **DO NOT** assume a Suspense-scoped `headers()`/
 build-output symbol (`◐` vs `ƒ`) is the real signal, and Next's own
 chunk-loader scripts are part of the shell, not the app's component tree,
 so no Suspense boundary placed in application code can ever reach them.
+
+---
+
+## SEC-31 — CSP Is a Document-Level Policy: Same-Origin Mixed Profiles Don't Work
+
+**ID**: SEC-31
+**Category**: CSP architecture
+**Classification**: Architectural guidance — corrects a plan from this
+repo's own history (A.7, 2026-08-21), not a code-level bug fix
+**Affected contexts**: any future decision to give a route or route group a
+different CSP than the rest of the app; `next.config.ts` (`cacheComponents`
+
+- `CSP_SCRIPT_MODE`); `src/security/middleware/with-headers.ts`
+
+### The Plan This Corrects
+
+An earlier version of this repo's Phase 2 CSP plan proposed a **route-class
+CSP profile split** on one origin: `/` and other marketing/public routes
+would keep `cacheComponents`/PPR and the legacy `unsafe-inline` script-src
+(`public-cacheable`), while `/dashboard` and other authenticated routes
+would opt out of PPR **on their own layout/page segments** and get the
+full nonce + `strict-dynamic` CSP with zero `unsafe-inline`
+(`dynamic-strict`) — different `Content-Security-Policy` header values
+per route, computed per-request in `with-headers.ts` based on which route
+matched.
+
+An external review of this plan caught the flaw before it was built:
+**this doesn't actually protect the "strict" routes for a real user.**
+
+### Why It Doesn't Work
+
+CSP is enforced against **the document**, not against each individual
+response. A browser tab has exactly one active CSP at a time: whatever
+`Content-Security-Policy` header came back on the response that created
+the currently-loaded document (a full/hard navigation). Every subsequent
+same-document interaction — including a Next.js App Router `<Link>`
+client-side ("soft") navigation, which fetches an RSC payload and patches
+the DOM in place without a new top-level navigation — does **not** replace
+that policy. The RSC response for `/dashboard` can carry a
+`dynamic-strict` `Content-Security-Policy` header in its own HTTP
+response, and the browser will simply never look at it, because no new
+document was created.
+
+Concretely:
+
+```text
+1. User opens https://example.com/ directly (hard nav).
+   Document CSP = public-cacheable (unsafe-inline, no nonce).
+
+2. User clicks <Link href="/dashboard"> inside the app.
+   Next.js does a soft navigation: fetches the RSC payload for
+   /dashboard, patches the DOM. No new document. No new CSP.
+
+3. /dashboard's scripts now execute under the ORIGINAL /'s
+   unsafe-inline CSP, not the dynamic-strict CSP that route's own
+   response headers claimed to have.
+```
+
+Anyone who reaches `/dashboard` by clicking through the app (the normal
+path for a logged-in user navigating your own product) never gets the
+strict policy at all. Only a user who directly hard-navigates or reloads
+on `/dashboard` would. The security boundary this profile split exists to
+draw is real for some traffic and silently absent for the rest — worse
+than a single consistent policy, because it looks like defense in depth
+in code review and in a curl check, and isn't one in a browser.
+
+### The Correct Pattern: Split By Origin, Not By Route
+
+A deployment that genuinely needs both a cache-compatible public zone
+(marketing, docs, a future blog) and a nonce-dynamic private zone
+(account, admin, billing) at the same time should run them as **separate
+origins** — e.g. `www.example.com` for the public zone,
+`app.example.com` for the private one:
+
+```text
+www.example.com                        app.example.com
+────────────────                       ─────────────────
+public-cacheable CSP                   nonce-dynamic CSP
+cacheComponents: true                  cacheComponents: false
+(CSP_SCRIPT_MODE=cache-compatible)     (CSP_SCRIPT_MODE=nonce-dynamic)
+marketing, docs, blog                  account, admin, billing
+```
+
+This isn't a workaround for the soft-navigation problem above — it makes
+the problem structurally impossible. `<Link>` (and every other browser
+navigation primitive) only ever performs a soft navigation within the
+**same origin**; crossing from `www.example.com` to `app.example.com` is
+inherently a hard navigation, a new document, a new CSP, every time,
+whether the app author remembers to force it or not. Each origin also
+gets its own independent `next.config.ts`/`CSP_SCRIPT_MODE` — the exact
+mechanism SEC-30 already documents — so this requires no new CSP
+machinery, only a deployment-topology decision: two Next.js deployments
+(or two apps sharing this boilerplate) instead of one, fronted by two
+subdomains.
+
+This repo is single-origin today and isn't taking on that split
+speculatively — this section exists so a future feature that seems to
+want route-level CSP variance reaches for the origin split instead of
+re-proposing the same-origin version this section corrects. Building a
+live second origin as a "demo" was explicitly considered and rejected for
+this boilerplate: it's real infrastructure (DNS, hosting config,
+cross-subdomain session cookies for whichever auth provider is in use)
+that's specific to a consuming app's actual domain, not something a
+generic boilerplate can meaningfully fake. The worked example is this
+section itself, plus SEC-30's existing `CSP_SCRIPT_MODE` mechanism —
+wiring a second origin, when one is actually needed, is applying that
+same mechanism to a second deployment, not inventing anything new.
+
+### Rule for Agents
+
+**DO NOT** give different routes on the same origin different
+`Content-Security-Policy` header values as a security boundary — a
+client-side navigation between them will not pick up the new policy, so
+the boundary silently fails for exactly the traffic pattern (in-app
+navigation) that matters most. **DO** treat `CSP_SCRIPT_MODE` as a
+per-deployment, not per-route, setting — see SEC-30. **DO** reach for an
+origin split (subdomain), not a route split, the moment a real requirement
+for two different CSP postures at once appears — and treat "two
+deployments" as a legitimate, expected shape for this boilerplate to grow
+into, not a sign something went wrong.

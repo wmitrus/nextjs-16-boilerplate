@@ -163,6 +163,30 @@ describe('purgeExpiredAuditEvents', () => {
     expect(await testDb.db.select().from(auditEventsTable)).toHaveLength(1);
   });
 
+  it('counts every expired row in dry-run mode even when the backlog exceeds one batch', async () => {
+    // Regression: dry-run previously reused the same batched-select loop as
+    // the real delete path, which stops after the first batch since nothing
+    // is ever actually deleted to advance past it -- a backlog larger than
+    // batchSize was undercounted at exactly batchSize.
+    const now = new Date('2026-06-01T00:00:00Z');
+    for (let i = 0; i < 5; i += 1) {
+      await insertEvent({
+        category: 'server_action',
+        tenantId: 'acme',
+        occurredAt: new Date(now.getTime() - 31 * DAY_MS - i * 1000),
+      });
+    }
+
+    const results = await purgeExpiredAuditEvents(testDb.db, {
+      dryRun: true,
+      now,
+      batchSize: 2,
+    });
+
+    expect(results[0]?.deleted).toBe(5);
+    expect(await testDb.db.select().from(auditEventsTable)).toHaveLength(5);
+  });
+
   it('purges in batches, looping until nothing older than the cutoff remains', async () => {
     const now = new Date('2026-06-01T00:00:00Z');
     for (let i = 0; i < 5; i += 1) {

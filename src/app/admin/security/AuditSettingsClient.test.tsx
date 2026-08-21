@@ -204,6 +204,28 @@ describe('AuditSettingsClient', () => {
     expect(resetButtons).toHaveLength(1);
   });
 
+  it('hides "Reset to default" for a tenant admin\'s inherited global row (no tenant override to delete)', async () => {
+    // For a non-platform tenant admin, a 'global' row is inherited, not an
+    // override they own -- DELETE always targets their own tenant scope, so
+    // there is no row for it to find and it 404s. Only a platform admin's
+    // 'global' row is an actual global override DELETE can find.
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        data: {
+          settings: [WAITLIST_SETTING],
+          scope: TENANT_SCOPE,
+        },
+      }),
+    );
+
+    render(<AuditSettingsClient />);
+    await screen.findByText('Waitlist');
+
+    expect(
+      screen.queryByRole('button', { name: 'Reset to default' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('resets a category to its default and refetches', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(

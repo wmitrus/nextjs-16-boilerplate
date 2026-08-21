@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, lt } from 'drizzle-orm';
 
 import type { DrizzleDb } from '@/core/db';
 
@@ -60,14 +60,12 @@ export async function listPresentCategoryTenantPairs(
 /**
  * Deletes rows older than `cutoff` for a single (category, tenantId) pair,
  * one `batchSize` batch at a time, until nothing older than the cutoff
- * remains. Returns the total number of rows deleted (or, in dry-run mode,
- * that would have been deleted) for this pair.
+ * remains. Returns the total number of rows deleted for this pair.
  */
-async function purgePair(
+async function deleteExpiredForPair(
   db: DrizzleDb,
   pair: CategoryTenantPair,
   cutoff: Date,
-  dryRun: boolean,
   batchSize: number,
 ): Promise<number> {
   const scopePredicate =
@@ -92,25 +90,51 @@ async function purgePair(
 
     if (batch.length === 0) break;
 
-    if (!dryRun) {
-      await db.delete(auditEventsTable).where(
-        inArray(
-          auditEventsTable.id,
-          batch.map((row) => row.id),
-        ),
-      );
-    }
+    await db.delete(auditEventsTable).where(
+      inArray(
+        auditEventsTable.id,
+        batch.map((row) => row.id),
+      ),
+    );
 
     totalDeleted += batch.length;
 
-    // In dry-run mode nothing was actually deleted, so re-selecting the
-    // same predicate would loop forever; a batch that filled up to
-    // batchSize just means "there may be more", which the reported count
-    // already communicates without needing to enumerate every row.
-    if (dryRun || batch.length < batchSize) break;
+    if (batch.length < batchSize) break;
   }
 
   return totalDeleted;
+}
+
+/**
+ * Counts rows older than `cutoff` for a single (category, tenantId) pair,
+ * without deleting anything -- the `--dry-run` path. A single aggregate
+ * query, not the batched-select loop `deleteExpiredForPair` uses: nothing
+ * is being deleted, so there's no lock-duration reason to paginate, and
+ * paginating here previously capped the reported count at `batchSize` for
+ * any backlog larger than one batch (Codex review, PR #72).
+ */
+async function countExpiredForPair(
+  db: DrizzleDb,
+  pair: CategoryTenantPair,
+  cutoff: Date,
+): Promise<number> {
+  const scopePredicate =
+    pair.tenantId === null
+      ? isNull(auditEventsTable.tenantId)
+      : eq(auditEventsTable.tenantId, pair.tenantId);
+
+  const [row] = await db
+    .select({ total: count() })
+    .from(auditEventsTable)
+    .where(
+      and(
+        eq(auditEventsTable.category, pair.category),
+        scopePredicate,
+        lt(auditEventsTable.occurredAt, cutoff),
+      ),
+    );
+
+  return row?.total ?? 0;
 }
 
 /**
@@ -139,13 +163,9 @@ export async function purgeExpiredAuditEvents(
     const cutoff = new Date(
       now.getTime() - setting.retentionDays * 24 * 60 * 60 * 1000,
     );
-    const deleted = await purgePair(
-      db,
-      pair,
-      cutoff,
-      options.dryRun,
-      batchSize,
-    );
+    const deleted = options.dryRun
+      ? await countExpiredForPair(db, pair, cutoff)
+      : await deleteExpiredForPair(db, pair, cutoff, batchSize);
     results.push({ pair, retentionDays: setting.retentionDays, deleted });
   }
 

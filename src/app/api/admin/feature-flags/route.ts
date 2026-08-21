@@ -197,7 +197,12 @@ export const POST = withErrorHandler(
         category: 'feature_flag',
         action: 'feature_flag.create',
         outcome: 'success',
-        tenantId: access.tenant.tenantId,
+        // The flag's own scope, not the acting admin's active tenant -- a
+        // platform admin can create a flag for a different tenant (or
+        // global, tenantId: null); attributing the event to the admin's
+        // own tenant would hide it from the flag's real tenant and
+        // mislabel it into an unrelated one (Codex review, PR #72).
+        tenantId: flag.tenantId,
         actorUserId: access.user.id,
         targetType: 'feature_flag',
         targetId: flag.id,

@@ -176,6 +176,24 @@ describe('DrizzleAuditLogService (real DB)', () => {
         (row?.metadata as { originalSizeBytes: number }).originalSizeBytes,
       ).toBeGreaterThan(8192);
     });
+
+    it('measures the size cap in UTF-8 bytes, not UTF-16 code units', async () => {
+      // Each CJK character below is 1 UTF-16 code unit but 3 UTF-8 bytes --
+      // 3,000 of them is 3,000 code units (under the 8,192 cap by `.length`)
+      // but 9,000 bytes (over the cap by actual encoded size). A byte-count
+      // regression would store this raw instead of truncating it.
+      const wideString = '漢'.repeat(3000);
+
+      await svc.record(
+        makeEvent({ outcome: 'failure', metadata: { wide: wideString } }),
+      );
+
+      const [row] = await testDb.db.select().from(auditEventsTable);
+      expect(row?.metadata).toMatchObject({ truncated: true });
+      expect(
+        (row?.metadata as { originalSizeBytes: number }).originalSizeBytes,
+      ).toBeGreaterThan(8192);
+    });
   });
 
   describe('sampling', () => {

@@ -162,7 +162,10 @@ export const PATCH = withErrorHandler(
         category: 'feature_flag',
         action: 'feature_flag.update',
         outcome: 'success',
-        tenantId: access.tenant.tenantId,
+        // The flag's own scope, not the acting admin's active tenant --
+        // see the identical note on the create handler (Codex review,
+        // PR #72).
+        tenantId: flag.tenantId,
         actorUserId: access.user.id,
         targetType: 'feature_flag',
         targetId: id,
@@ -217,7 +220,7 @@ export const DELETE = withErrorHandler(
       : { tenantId: access.tenant.tenantId };
 
     try {
-      await service.delete(id, scope);
+      const flag = await service.delete(id, scope);
 
       logger.info(
         {
@@ -233,7 +236,10 @@ export const DELETE = withErrorHandler(
         category: 'feature_flag',
         action: 'feature_flag.delete',
         outcome: 'success',
-        tenantId: access.tenant.tenantId,
+        // The flag's own scope, not the acting admin's active tenant --
+        // see the identical note on the create handler (Codex review,
+        // PR #72).
+        tenantId: flag.tenantId,
         actorUserId: access.user.id,
         targetType: 'feature_flag',
         targetId: id,

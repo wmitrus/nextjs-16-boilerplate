@@ -266,6 +266,32 @@ describe('POST /api/admin/feature-flags', () => {
     );
   });
 
+  it('attributes the audit event to the created flag’s own tenant, not the platform admin’s active tenant', async () => {
+    // The caller's active tenant is 'tenant_test_1' (makeAllowedProvisioningAccess's
+    // default), but a platform admin can create a flag for a different tenant
+    // entirely -- the audit event must reflect the flag's real scope, or the
+    // target tenant never sees the mutation in its own trail while an
+    // unrelated tenant sees an event that never happened to it.
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.create.mockResolvedValue({ ...TEST_FLAG, tenantId: 'tenant_other' });
+
+    const { POST } = await import('./route');
+    const res = await POST(
+      makePostRequest({
+        key: 'my-flag',
+        tenantId: 'tenant_other',
+        enabled: true,
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(201);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant_other' }),
+    );
+  });
+
   describe('SEC-26 regression: ABAC-authorized non-platform-admin scope constraint', () => {
     beforeEach(() => {
       mocks.isEnvAdmin.mockReturnValue(false);

@@ -44,7 +44,12 @@ function capMetadata(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined) return null;
 
   const serialized = JSON.stringify(value);
-  if (serialized.length <= METADATA_MAX_BYTES) {
+  // `.length` counts UTF-16 code units, not bytes -- for non-ASCII content
+  // (CJK, emoji) that undercounts the real payload size against a cap that
+  // is documented and enforced in bytes. Buffer.byteLength measures the
+  // actual UTF-8 encoded size (Codex review, PR #72).
+  const sizeBytes = Buffer.byteLength(serialized, 'utf8');
+  if (sizeBytes <= METADATA_MAX_BYTES) {
     // value is already a plain object/array/primitive from the caller's
     // redaction pass; JSON round-trip guarantees jsonb-storable shape.
     return JSON.parse(serialized) as Record<string, unknown>;
@@ -52,7 +57,7 @@ function capMetadata(value: unknown): Record<string, unknown> | null {
 
   return {
     truncated: true,
-    originalSizeBytes: serialized.length,
+    originalSizeBytes: sizeBytes,
   };
 }
 

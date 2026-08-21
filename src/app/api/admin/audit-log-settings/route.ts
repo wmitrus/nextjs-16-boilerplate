@@ -23,6 +23,7 @@ import {
 } from '@/modules/audit-log/domain/category';
 import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
 import { DrizzleAuditLogSettingsAdminService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService';
+import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -216,6 +217,25 @@ export const PATCH = withErrorHandler(
       'Audit log setting updated by admin',
     );
 
+    // Recorded under 'rbac_policy' (governance/policy config), never under
+    // the category being changed -- an admin disabling category X must not
+    // also erase the record of having disabled it (Codex review, PR #72).
+    await recordAdminAuditEvent({
+      category: 'rbac_policy',
+      action: 'audit_log_setting.update',
+      outcome: 'success',
+      tenantId: setting.tenantId,
+      actorUserId: access.user.id,
+      targetType: 'audit_log_setting',
+      targetId: setting.category,
+      metadata: {
+        enabled: setting.enabled,
+        retentionDays: setting.retentionDays,
+        sampleRate: setting.sampleRate,
+        captureInputOnSuccess: setting.captureInputOnSuccess,
+      },
+    });
+
     return createSuccessResponse({ setting });
   }),
 );
@@ -285,6 +305,19 @@ export const DELETE = withErrorHandler(
         },
         'Audit log setting reset to default by admin',
       );
+
+      // See the identical note on the PATCH handler above (Codex review,
+      // PR #72): recorded under 'rbac_policy', never under the category
+      // whose override was just removed.
+      await recordAdminAuditEvent({
+        category: 'rbac_policy',
+        action: 'audit_log_setting.reset',
+        outcome: 'success',
+        tenantId: requestedTenantId,
+        actorUserId: access.user.id,
+        targetType: 'audit_log_setting',
+        targetId: parseResult.data.category,
+      });
 
       return createSuccessResponse({ deleted: true });
     } catch (error) {

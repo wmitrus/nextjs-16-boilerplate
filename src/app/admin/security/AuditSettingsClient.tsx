@@ -464,7 +464,15 @@ export function AuditSettingsClient() {
                         >
                           Edit
                         </button>
-                        {setting.source !== 'taxonomy-default' && (
+                        {/* A tenant-scoped admin's 'global' row is inherited,
+                            not an override they own -- there is no
+                            tenant-scoped row for DELETE to find, so it
+                            404s. Only offer reset for a row the caller can
+                            actually delete: their own tenant override, or
+                            (for a platform admin) a real global row. */}
+                        {(setting.source === 'tenant-override' ||
+                          (setting.source === 'global' &&
+                            scope.isPlatformAdmin)) && (
                           <button
                             type="button"
                             onClick={() => void handleReset(setting)}

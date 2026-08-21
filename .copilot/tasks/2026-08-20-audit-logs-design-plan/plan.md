@@ -676,3 +676,63 @@ both are fixed directly on this branch:
 files/1485 tests), and `pnpm test:db` (18 files/145 tests — confirmed
 flaky-not-broken via two consecutive full runs, both 18/18 green) all pass
 on this branch after both fixes.
+
+## PR #72 Codex review findings (2026-08-21)
+
+`chatgpt-codex-connector[bot]`'s automated review of commit `89289c88a1`
+left 6 findings (2 P1, 4 P2) — all verified as real defects in code this
+task shipped, not design disagreements, and fixed directly on this branch:
+
+- **P1 — scheduled purge silently no-ops in production.**
+  `pnpm audit-log:purge:vercel:prod` never set `NODE_ENV=production` or
+  `DB_DRIVER=postgres`; `resolveDriver()` (`scripts/audit-log/purge-expired.ts`)
+  falls back to `pglite` whenever neither is set, which a GitHub Actions
+  runner does by default. The daily scheduled workflow
+  (`.github/workflows/audit-log-purge.yml`) calls this exact script, so
+  production `audit_events` rows were never actually being expired — the
+  purge job was silently deleting from a throwaway local PGlite directory
+  instead. Fixed by adding `cross-env DB_DRIVER=postgres` to both
+  `audit-log:purge:prod:local` and `audit-log:purge:vercel:prod`.
+- **P1 — feature-flag audit events misattributed to the wrong tenant.** All
+  three feature-flag mutation routes (create/update/delete) recorded
+  `tenantId: access.tenant.tenantId` (the acting admin's own active tenant)
+  instead of the flag's actual tenant scope. A platform admin creating or
+  changing a flag for a _different_ tenant (or globally) produced an event
+  the target tenant would never see in its own trail, misattributed to an
+  unrelated tenant instead — a real SEC-26-adjacent correctness bug, not
+  hypothetical. Fixed by using the mutated flag's own `tenantId` for all
+  three events; `DrizzleFeatureFlagAdminService.delete()` now returns the
+  deleted row (previously `void`) so the route has it to attribute with.
+  Added regression tests for all three routes.
+- **P2 — audit-setting changes were themselves unaudited.** PATCH/DELETE on
+  `/api/admin/audit-log-settings` never called `recordAdminAuditEvent` —
+  an admin silently disabling a category (or shortening its retention) left
+  no trace of having done so. Fixed by recording both mutations under
+  `rbac_policy` (never under the category being changed — an admin
+  disabling category X must not also erase the record of having disabled
+  it).
+- **P2 — settings UI offered a "Reset to default" that always 404s for
+  inherited global rows.** For a non-platform tenant admin, a `source:
+'global'` row is inherited (no tenant override exists), but the button
+  was shown for every non-`taxonomy-default` row regardless — clicking it
+  always hit DELETE's tenant-derived scope and found no matching row.
+  Fixed by only showing reset for an actual `tenant-override` row, or a
+  platform admin's real `global` row.
+- **P2 — purge `--dry-run` undercounted large backlogs.** Dry-run reused
+  the same batched-select loop as the real delete path, which stops after
+  the first batch since nothing is ever deleted to advance past it — any
+  backlog larger than `batchSize` (500) was reported as exactly `batchSize`
+  regardless of the true count. Fixed by giving dry-run its own single
+  `count()` query instead of paginating; the batched-delete path is
+  unchanged.
+- **P2 — metadata size cap measured UTF-16 code units, not bytes.**
+  `capMetadata()` used `serialized.length` against the documented 8,192-
+  _byte_ cap; for non-ASCII content (CJK, emoji) that undercounts the real
+  UTF-8 size, letting oversized payloads through uncapped. Fixed with
+  `Buffer.byteLength(serialized, 'utf8')`.
+
+All six fixes are small and local, matching this repo's PR-driving rule
+that bot findings are verified bug reports, not open design questions.
+Regression tests added for every finding. `pnpm typecheck`, `pnpm lint
+--fix` (0 errors), the full unit suite (212 files/1489 tests, +4 new), and
+`pnpm test:db` (18 files/147 tests, +2 new) all pass.

@@ -101,13 +101,31 @@ export const env = createEnv({
     DEMO_SHOWCASE_ALLOWED_EMAIL: z.email().optional(),
     // Nonce-based CSP script-src (nonce + 'strict-dynamic', no
     // unsafe-inline/unsafe-eval in production/preview) vs. the legacy
-    // unsafe-inline/unsafe-eval CSP. Default on. Flip to false in Vercel
-    // and redeploy as an emergency rollback if a third-party script breaks
-    // under strict mode — no code change needed. See with-headers.ts and
-    // layout.tsx.
+    // unsafe-inline/unsafe-eval CSP.
+    //
+    // Default OFF (changed 2026-08-21 — was briefly `true` by default).
+    // Per-request nonce CSP is currently incompatible with this app's
+    // cacheComponents: true (Partial Prerendering) — confirmed both by
+    // Next.js's own docs ("Partial Prerendering (PPR) is incompatible
+    // with nonce-based CSP since static shell scripts won't have access
+    // to the nonce") and by a Next.js maintainer on an Aug 2026 issue
+    // against Next 16.3.0 confirming unsafe-inline is "the only way for
+    // the time being" while upstream React/Next work lands (tracked
+    // upstream: vercel/next.js#89754, #95354, #96665). Turning this on
+    // with cacheComponents enabled breaks hydration app-wide — reproduced
+    // live on a real mobile device and confirmed via CSP violation
+    // console errors from an emulated Chrome run against the deployed
+    // preview. See SEC-30 in docs/ai/general/SECURITY_CODING_PATTERNS.md
+    // for the full writeup and the route-class CSP profile work
+    // (public-cacheable vs dynamic-strict) planned to properly resolve
+    // this without disabling PPR app-wide.
+    //
+    // Safe to flip true only once that follow-up lands, or for a route
+    // tree that isn't using cacheComponents/PPR at all. See
+    // with-headers.ts and layout.tsx.
     CSP_SCRIPT_STRICT_MODE: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
-      .default(true),
+      .default(false),
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),

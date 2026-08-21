@@ -22,15 +22,22 @@ test.describe('Security Architecture E2E', () => {
     expect(headers['cross-origin-resource-policy']).toBe('same-origin');
     expect(headers['x-xss-protection']).toBeUndefined();
 
-    // CSP_SCRIPT_STRICT_MODE defaults on — script-src must use a per-request
-    // nonce + strict-dynamic, not unsafe-inline, in the default scenario.
+    // CSP_SCRIPT_STRICT_MODE defaults off — nonce-based CSP is currently
+    // incompatible with cacheComponents/PPR (see SEC-30 in
+    // docs/ai/general/SECURITY_CODING_PATTERNS.md and the env.ts doc
+    // comment for CSP_SCRIPT_STRICT_MODE). The default scenario therefore
+    // uses the legacy unsafe-inline script-src, not a nonce. Strict mode's
+    // own script-src shape (nonce + strict-dynamic, no unsafe-inline) is
+    // covered directly, with env mocked, in with-headers.test.ts and
+    // csp-nonce.test.ts — this e2e test only needs to confirm the shipped
+    // default is what actually gets served.
     const scriptSrc = headers['content-security-policy']
       ?.split('; ')
       .find((entry) => entry.startsWith('script-src '));
     expect(scriptSrc).toBeDefined();
-    expect(scriptSrc).toMatch(/'nonce-[^']+'/);
-    expect(scriptSrc).toContain("'strict-dynamic'");
-    expect(scriptSrc).not.toContain("'unsafe-inline'");
+    expect(scriptSrc).toContain("'unsafe-inline'");
+    expect(scriptSrc).not.toMatch(/'nonce-[^']+'/);
+    expect(scriptSrc).not.toContain("'strict-dynamic'");
   });
 
   test('should redirect unauthenticated user from protected route', async ({

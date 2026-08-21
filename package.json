@@ -28,6 +28,7 @@
     "e2e:smoke": "node scripts/e2e/run-scenario.mjs single -- e2e/home.spec.ts e2e/security.spec.ts e2e/auth.spec.ts --project=chromium",
     "e2e:auth": "node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts --project=chromium",
     "e2e:authjs:core": "AUTH_PROVIDER=authjs E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/authjs-session.spec.ts e2e/authjs-dashboard-entry.spec.ts e2e/authjs-onboarding-entry.spec.ts --project=chromium --reporter=line",
+    "e2e:admin:audit-logs": "AUTH_PROVIDER=authjs FEATURE_FLAG_PROVIDER=db REGISTRATION_MODE=invite-only E2E_BACKEND_MODE=container node scripts/e2e/run-scenario.mjs single -- e2e/admin.spec.ts --project=chromium --reporter=line",
     "e2e:auth-matrix": "pnpm e2e:auth-matrix:phase1 && pnpm e2e:auth-matrix:phase2 && pnpm e2e:auth-matrix:phase3 && pnpm e2e:auth-matrix:phase4 && pnpm e2e:auth-matrix:phase5 && pnpm e2e:auth-matrix:phase6 && pnpm e2e:auth-matrix:phase7",
     "e2e:auth-matrix:phase1": "node scripts/e2e/run-scenario.mjs single -- e2e/auth.spec.ts e2e/provisioning-runtime.spec.ts --project=chromium --reporter=line --grep @auth-matrix-phase1",
     "e2e:auth-matrix:phase2": "pnpm e2e:auth-matrix:phase2:returning-state && pnpm e2e:auth-matrix:phase2:direct-entry",

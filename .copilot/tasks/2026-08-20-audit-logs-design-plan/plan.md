@@ -550,6 +550,43 @@ Architecture.md` §6 gained a new §6.3 pointing at the new doc and
   also does not list `feature_flags`' or `audit_events`'/`audit_log_settings`'
   schema anchors — same reasoning, left alone.
 
+- **Phase 6 — IMPLEMENTATION COMPLETE / EXECUTION BLOCKED (2026-08-21).**
+  E2E validation of the shipped feature, at the user's explicit request:
+  enable a normally-off category, disable a normally-on category, perform
+  real actions mapped to each, assert enabled categories record events and
+  disabled categories record none, and assert category filters never mix
+  categories. New `Admin Audit Logs (/admin/security)` describe block in
+  `e2e/admin.spec.ts` (6 cases) plus a new `pnpm e2e:admin:audit-logs`
+  script (`AUTH_PROVIDER=authjs FEATURE_FLAG_PROVIDER=db
+REGISTRATION_MODE=invite-only E2E_BACKEND_MODE=container`).
+  **Confirmed via `AskUserQuestion` before implementing:** "login" has no
+  wired audit write path at all — grep-confirmed the `auth` category (see
+  the still-open "Auth event hook points" risk noted above, never resolved
+  in Phases 1-4) has zero call sites in production code, only taxonomy
+  defaults. Substituted admin-panel access (`admin_access`, genuinely
+  wired via `admin/layout.tsx`) as the login-analog, per the user's choice.
+  Categories exercised: `feature_flag` (enable-by-default, create/update/delete
+  cycle), `waitlist` (explicitly toggled on via the settings UI, entry
+  created via the public `POST /api/auth/waitlist` + approved via the admin
+  UI), `admin_access` (explicitly toggled off via the settings UI —
+  demonstrates a normally-on category's write stops immediately, no
+  redeploy, while admin-panel access itself keeps working since the audit
+  toggle never gates authorization). Category-isolation asserted both via
+  `GET /api/admin/audit-logs?category=...` (every returned event's
+  `category` field matches the filter) and via the `/admin/security/audit-logs`
+  browse UI. `pnpm typecheck` and `pnpm lint --fix` both pass clean.
+  **Execution blocked in this session**, not by anything in the new test
+  code: no Docker daemon (blocks the shipped script's
+  `E2E_BACKEND_MODE=container`) and no Clerk E2E test credentials anywhere
+  this session can read (blocks Playwright's global setup unconditionally
+  — confirmed this would block the pre-existing `pnpm e2e:authjs:core`
+  identically in this same session, so it is a session/environment gap,
+  not something specific to this work). Full detail, evidence, and the
+  exact re-run command: `07 - Playwright E2E - Summary.md`. Do not treat
+  this coverage as verified until it has actually been run somewhere with
+  Docker + Clerk credentials and that summary's Scenario Status Mapping
+  has been updated with real results.
+
 ## Rollout sequencing (recommended, low blast radius first)
 
 1. **Schema + settings CRUD + admin toggle UI**, no writers yet — ships the

@@ -2022,6 +2022,41 @@ dedicated async Server Components (`NrBrowserScripts`,
 `RootLayout` itself, so the dynamic-rendering cost stays scoped to what
 actually needs the nonce instead of forcing the entire app dynamic.
 
+**A scoped component is necessary but not sufficient — it must also be
+wrapped in `<Suspense>` at its call site, or the build fails hard.**
+`ClerkProviderWithNonce` already sits inside the layout's existing
+`<Suspense fallback={<RootLayoutShell />}>`, but `NrBrowserScripts` in
+`<head>` initially did not — every route shares that `<head>`, so every
+single prerendered page failed the production build with:
+
+```text
+Error: Route "/some-route": Uncached data was accessed outside of
+<Suspense>. This delays the entire page from rendering, resulting in a
+slow user experience. Learn more:
+https://nextjs.org/docs/messages/blocking-route
+    at head (<anonymous>)
+    at html (<anonymous>)
+```
+
+This is a hard `next build` failure under `cacheComponents: true`, not a
+soft dynamic-rendering fallback — it doesn't surface in `pnpm typecheck` or
+`pnpm test`, only in an actual `pnpm build` (or the Vercel deploy build).
+Fix: wrap the call site, not the component definition —
+
+```tsx
+<head>
+  <Suspense fallback={null}>
+    <NrBrowserScripts cdnConfig={cdnConfig} ... />
+  </Suspense>
+</head>
+```
+
+After the fix, `next build`'s route table shows every route as `◐` (Partial
+Prerender — static shell + dynamic server-streamed content), not `ƒ` (fully
+dynamic) — confirming the Suspense boundary is doing its job of keeping the
+static shell intact around the nonce-dependent hole, not just silently
+making the whole route dynamic.
+
 ### Scope Boundary — script-src Only, Not style-src
 
 `style-src` keeps `'unsafe-inline'` unconditionally. Inline `style=""`
@@ -2051,4 +2086,9 @@ follows the component that calls the API, and scoping it matters under
 `cacheComponents: true`. **DO NOT** add `nonce` to a third-party provider
 without checking whether it has its own additional required prop (like
 Clerk's `dynamic`) — verify against the installed package's actual types,
-not documentation memory.
+not documentation memory. **DO** run an actual `pnpm build` (not just
+`pnpm typecheck` + `pnpm test`) before treating any change that adds a
+Dynamic API call to `layout.tsx` or another shared-shell component as
+verified — the "Uncached data accessed outside Suspense" failure above
+only surfaces during real prerendering and passed typecheck and the full
+test suite cleanly first.

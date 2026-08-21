@@ -186,10 +186,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <NrBrowserScripts
-          cdnConfig={cdnConfig}
-          isNewRelicApmBrowserEnabled={isNewRelicApmBrowserEnabled}
-        />
+        {/* getCspNonce() inside NrBrowserScripts reads headers() — a Dynamic
+            API. Under cacheComponents:true, Next.js requires that be
+            wrapped in Suspense or the build fails hard ("Uncached data
+            accessed outside Suspense"): every route shares this <head>, so
+            every prerendered page hit the same error. */}
+        <Suspense fallback={null}>
+          <NrBrowserScripts
+            cdnConfig={cdnConfig}
+            isNewRelicApmBrowserEnabled={isNewRelicApmBrowserEnabled}
+          />
+        </Suspense>
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

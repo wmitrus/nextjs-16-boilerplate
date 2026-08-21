@@ -231,6 +231,22 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Debug - curl homepage with protection bypass
+        run: |
+          echo "--- Headers ---"
+          curl -sS -D - -o /tmp/home-body.html --max-time 30 \
+            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+            -H "x-vercel-set-bypass-cookie: samesitenone" \
+            "${PREVIEW_URL}/" || echo "curl exit code: $?"
+          echo "--- Body (first 3000 bytes) ---"
+          head -c 3000 /tmp/home-body.html || true
+          echo
+          echo "--- Body byte count ---"
+          wc -c /tmp/home-body.html || true
+        env:
+          PREVIEW_URL: ${{ needs.deploy-preview.outputs.preview_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
       - name: Run hosted runtime smoke
         run: pnpm vercel:runtime:smoke
         env:

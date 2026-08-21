@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 
-import { readScriptNonces, trackCspViolations } from './support/csp-violations';
+import {
+  describeScripts,
+  isExecutableScript,
+  trackCspViolations,
+} from './support/csp-violations';
 
 /**
  * Only meaningful against a deployment/scenario running with
@@ -45,17 +49,21 @@ test.describe('CSP nonce-dynamic mode', () => {
     // after waiting past the initial paint, not on first response.
     await page.waitForTimeout(5000);
 
-    // 2. Every <script> element actually in the DOM must carry the SAME
+    // 2. Every EXECUTABLE <script> element in the DOM must carry the SAME
     // nonce as the header — not just "a nonce". This is the exact gap the
     // header-only check couldn't see: Next's own framework/bootstrap
     // scripts could in principle end up un-nonced (see SEC-30's incident)
     // while a hand-written <Script nonce={...}> tag looks fine in
-    // isolation.
-    const scriptNonces = await readScriptNonces(page);
-    expect(scriptNonces.length).toBeGreaterThan(0);
-    for (const nonce of scriptNonces) {
-      expect(nonce).toBe(headerNonce);
-    }
+    // isolation. Non-executable script blocks (JSON-LD, import maps) are
+    // excluded — CSP's script-src doesn't apply to them, so they carry no
+    // nonce and need none.
+    const scripts = await describeScripts(page);
+    const executableScripts = scripts.filter(isExecutableScript);
+    expect(executableScripts.length).toBeGreaterThan(0);
+    const mismatched = executableScripts.filter(
+      (script) => script.nonce !== headerNonce,
+    );
+    expect(mismatched, JSON.stringify(mismatched, null, 2)).toEqual([]);
 
     // 3. Zero CSP violations across the full page lifecycle so far. This
     // is the direct, load-bearing assertion — the original bug's signature

@@ -86,3 +86,54 @@ export function readScriptNonces(page: Page): Promise<(string | null)[]> {
     }),
   );
 }
+
+export interface ScriptDescriptor {
+  nonce: string | null;
+  src: string | null;
+  type: string | null;
+  id: string | null;
+  textSnippet: string | null;
+}
+
+/**
+ * CSP's script-src directive does not apply to non-executable script
+ * block types — the browser never treats these as code, so they carry no
+ * nonce and need none. A blanket "every <script> tag must have a matching
+ * nonce" check would false-fail on legitimate JSON-LD structured data or
+ * an import map.
+ */
+const NON_EXECUTABLE_SCRIPT_TYPES = new Set([
+  'application/json',
+  'application/ld+json',
+  'importmap',
+  'speculationrules',
+]);
+
+export function isExecutableScript(descriptor: ScriptDescriptor): boolean {
+  return (
+    !descriptor.type ||
+    !NON_EXECUTABLE_SCRIPT_TYPES.has(descriptor.type.toLowerCase())
+  );
+}
+
+/**
+ * Richer per-`<script>` diagnostic than readScriptNonces() — src/type/id/a
+ * text snippet alongside the live nonce, so a nonce-mismatch test failure
+ * names the actual offending element instead of just "null vs <nonce>".
+ */
+export function describeScripts(page: Page): Promise<ScriptDescriptor[]> {
+  return page.locator('script').evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const script = node as HTMLScriptElement;
+      return {
+        nonce: script.nonce || null,
+        src: script.getAttribute('src'),
+        type: script.getAttribute('type'),
+        id: script.id || null,
+        textSnippet: script.textContent
+          ? script.textContent.slice(0, 80)
+          : null,
+      };
+    }),
+  );
+}

@@ -266,21 +266,25 @@ jobs:
       - name: Run Lighthouse Audit
         run: |
           echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
-          # "samesitenone" (the earlier value here) makes Vercel's bypass
-          # emit its cross-origin/iframe-embedding cookie-priming flow: a
-          # 307 redirect back to the same path with a SameSite=None
-          # Set-Cookie. That flow is for embedding a protected preview in a
-          # third-party iframe context, not a plain top-level navigation --
-          # and headless Chrome as driven by @lhci/cli's Puppeteer session
-          # never came out the other side of it (NO_FCP timeout), even
-          # though curl (a diagnostic, not a browser -- it doesn't
-          # implement SameSite policy at all) followed the same redirect
-          # and cookie chain and got a normal 200 with the real page in
-          # under 3s. "true" (already used by playwright.vercel-smoke.config.ts
-          # for the exact same bypass, and proven working in "Verify
-          # Preview Runtime" every run) sets a plain first-party cookie for
-          # a normal top-level navigation with no such redirect required.
-          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'", "x-vercel-set-bypass-cookie": "true"}'
+          # No x-vercel-set-bypass-cookie: that header makes Vercel issue a
+          # 307-redirect-back-to-self with a Set-Cookie, priming a cookie so
+          # a *browser session* doesn't need to keep resending the bypass
+          # header on later navigations. Neither value ("samesitenone" nor
+          # "true") got this job's Chrome past that redirect within the
+          # default FCP wait budget (NO_FCP both times), even though a
+          # cookie-jar-enabled curl sailed through the identical chain in
+          # under 3s -- whatever the exact mechanism, it is specific to the
+          # Chrome this job launches (no "Install Chromium" step here,
+          # unlike Verify Preview Runtime -- @lhci/cli's chrome-launcher
+          # picks up ubuntu-latest's preinstalled system Chrome, a
+          # different binary than Playwright's pinned bundled Chromium that
+          # DOES pass the same redirect+cookie flow in Verify Preview
+          # Runtime). extraHeaders re-sends x-vercel-protection-bypass on
+          # every request for the whole navigation anyway, so the cookie
+          # buys nothing here -- dropping the bypass-cookie header removes
+          # the redirect from the equation entirely: Vercel serves 200
+          # directly off the bypass header on every request.
+          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

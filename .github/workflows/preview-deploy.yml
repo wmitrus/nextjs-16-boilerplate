@@ -231,10 +231,12 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Debug - curl homepage with protection bypass
+      - name: Debug - curl homepage with protection bypass (follow redirects + cookies)
         run: |
-          echo "--- Headers ---"
-          curl -sS -D - -o /tmp/home-body.html --max-time 30 \
+          echo "--- Headers + redirect chain ---"
+          curl -sS -L -D - -o /tmp/home-body.html --max-time 30 \
+            -c /tmp/cookiejar.txt -b /tmp/cookiejar.txt \
+            -w '\n--- curl stats: num_redirects=%{num_redirects} final_http_code=%{http_code} time_total=%{time_total} ---\n' \
             -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
             -H "x-vercel-set-bypass-cookie: samesitenone" \
             "${PREVIEW_URL}/" || echo "curl exit code: $?"

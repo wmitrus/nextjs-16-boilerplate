@@ -1,3 +1,5 @@
+import { randomInt } from 'node:crypto';
+
 import type {
   AuditEventInput,
   AuditLogService,
@@ -18,6 +20,25 @@ const logger = resolveServerLogger().child({
 
 /** Hard cap on serialized metadata size (bytes) — see plan A.4 item 5. */
 const METADATA_MAX_BYTES = 8192;
+
+/**
+ * Resolution used to turn a cryptographically-random integer into a uniform
+ * float in `[0, 1)` for sampling — six decimal digits is far finer than any
+ * configured `sampleRate` (bounded to 2 decimal-ish granularity in the admin
+ * UI), so this never biases the sampling decision.
+ */
+const SAMPLE_RANDOM_RESOLUTION = 1_000_000;
+
+/**
+ * A uniform random float in `[0, 1)`, used only to decide whether a
+ * `success` event survives sampling. Not a security control (see the
+ * comment at the call site), but `Math.random()` is a static-analysis
+ * red flag every reviewer/scanner has to re-triage — `crypto.randomInt`
+ * is exactly as cheap here and avoids the noise entirely.
+ */
+function randomUnitInterval(): number {
+  return randomInt(0, SAMPLE_RANDOM_RESOLUTION) / SAMPLE_RANDOM_RESOLUTION;
+}
 
 function capMetadata(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined) return null;
@@ -71,7 +92,7 @@ export class DrizzleAuditLogService implements AuditLogService {
     if (
       event.outcome === 'success' &&
       setting.sampleRate !== null &&
-      Math.random() >= setting.sampleRate
+      randomUnitInterval() >= setting.sampleRate
     ) {
       return;
     }

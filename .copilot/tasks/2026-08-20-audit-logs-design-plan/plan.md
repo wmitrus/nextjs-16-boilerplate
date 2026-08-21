@@ -640,3 +640,39 @@ exists to control them.
 - **Auth event hook points**: depend on which auth provider is active
   (`src/modules/auth/infrastructure/**`); confirm exact hook surface at
   implementation time rather than assuming Clerk-only.
+
+## PR #72 CI fixes (2026-08-21)
+
+Two failures surfaced on PR #72 after Phase 6 pushed — neither is new scope,
+both are fixed directly on this branch:
+
+- **Deploy Preview failure (root cause, not a symptom of my E2E work):**
+  `pnpm db:migrate:prod` — which the preview build runs before `pnpm build`
+  — applies migrations via `drizzle-kit migrate` successfully, then calls
+  `repairKnownMigrationJournalDrift()`/`validateMigrationJournal()`
+  (`scripts/validate-migration-journal.ts`) to reconcile the journal against
+  the live DB. Both funnel through `readMigrationSql()`, a hardcoded switch
+  over every known migration tag that must be updated by hand per new
+  migration — Phase 1 and Phase 2's migrations
+  (`0015_messy_doctor_faustus`, `0016_wise_norman_osborn`) were never added
+  to it, so the switch's `default` throws `Unsupported journal entry`,
+  which the wrapper script treats as fatal even though the actual SQL had
+  already applied cleanly. Fixed by adding both as new `case` entries,
+  exactly matching every prior entry's shape. Verified locally (no live DB
+  needed for this part): `resolveExpectedMigrations()` now resolves all 17
+  entries without throwing.
+- **Codacy critical (Security, `DrizzleAuditLogService.ts:74`):** flagged
+  `Math.random()` as a weak PRNG. Not a real vulnerability here — it only
+  decides whether a `success` event survives sampling, never a
+  security-significant value — but fixing it outright is cheaper than
+  carrying a suppression annotation forward, so replaced with
+  `crypto.randomInt`-backed `randomUnitInterval()` (six-decimal-digit
+  resolution, far finer than any configured `sampleRate`). No behavior
+  change: `sampleRate: 0`/`1` boundary tests are unaffected (deterministic
+  regardless of RNG), and the "never drop failure/denied" sampling
+  invariant is untouched.
+
+`pnpm typecheck`, `pnpm lint --fix` (0 errors), the full unit suite (212
+files/1485 tests), and `pnpm test:db` (18 files/145 tests — confirmed
+flaky-not-broken via two consecutive full runs, both 18/18 green) all pass
+on this branch after both fixes.

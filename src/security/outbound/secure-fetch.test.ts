@@ -2,6 +2,8 @@
 import '@/testing/infrastructure/env';
 import '@/testing/infrastructure/logger';
 
+import { lookup } from 'node:dns/promises';
+
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { secureFetch } from './secure-fetch';
@@ -11,6 +13,10 @@ import {
   mockChildLogger,
   resetAllInfrastructureMocks,
 } from '@/testing';
+
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
 
 describe('Secure Fetch (SSRF Protection)', () => {
   const originalFetch = global.fetch;
@@ -30,6 +36,18 @@ describe('Secure Fetch (SSRF Protection)', () => {
         text: () => Promise.resolve(''),
       } as Response;
     });
+    // Default DNS resolution: any allowed hostname resolves to a public
+    // address. Individual tests override this to simulate rebinding/failure.
+    vi.mocked(lookup)
+      .mockReset()
+      .mockResolvedValue(
+        // The `{ all: true }` overload resolves to LookupAddress[], but
+        // vi.mocked() infers the single-result overload — cast through
+        // unknown to match the array shape actually used at the call site.
+        [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+          ReturnType<typeof lookup>
+        >,
+      );
   });
 
   afterAll(() => {
@@ -92,5 +110,52 @@ describe('Secure Fetch (SSRF Protection)', () => {
   });
   it('should allow subdomains of allowed hosts', async () => {
     await expect(secureFetch('https://api.example.com')).resolves.toBeDefined();
+  });
+
+  it('should block IPv6 loopback, link-local, and 0.0.0.0/169.254 addresses even if allowlisted', async () => {
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS =
+      '::1, fe80::1, 169.254.169.254, 0.0.0.0';
+    await expect(secureFetch('http://[::1]')).rejects.toThrow(
+      'SSRF Protection',
+    );
+    await expect(secureFetch('http://[fe80::1]')).rejects.toThrow(
+      'SSRF Protection',
+    );
+    await expect(secureFetch('http://169.254.169.254')).rejects.toThrow(
+      'SSRF Protection',
+    );
+    await expect(secureFetch('http://0.0.0.0')).rejects.toThrow(
+      'SSRF Protection',
+    );
+  });
+
+  it('should block an IPv4-mapped IPv6 address pointing at a private range', async () => {
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '::ffff:10.0.0.5';
+    await expect(secureFetch('http://[::ffff:10.0.0.5]')).rejects.toThrow(
+      'SSRF Protection',
+    );
+  });
+
+  it('should block a hostname that resolves to a private address (DNS rebinding)', async () => {
+    vi.mocked(lookup).mockResolvedValueOnce([
+      { address: '127.0.0.1', family: 4 },
+    ] as unknown as Awaited<ReturnType<typeof lookup>>);
+    await expect(secureFetch('https://example.com/api')).rejects.toThrow(
+      'SSRF Protection',
+    );
+    expect(mockChildLogger.error).toHaveBeenCalled();
+  });
+
+  it('should fail closed when DNS resolution errors', async () => {
+    vi.mocked(lookup).mockRejectedValueOnce(new Error('ENOTFOUND'));
+    await expect(secureFetch('https://example.com/api')).rejects.toThrow(
+      'SSRF Protection',
+    );
+  });
+
+  it('should skip DNS resolution for literal IP hosts', async () => {
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '203.0.113.10';
+    await expect(secureFetch('http://203.0.113.10')).resolves.toBeDefined();
+    expect(lookup).not.toHaveBeenCalled();
   });
 });

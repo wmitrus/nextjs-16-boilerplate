@@ -12,6 +12,15 @@ test.describe('Security Architecture E2E', () => {
     expect(headers['x-content-type-options']).toBe('nosniff');
     expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
     expect(headers['content-security-policy']).toBeDefined();
+    expect(headers['content-security-policy']).toContain("object-src 'none'");
+    expect(headers['content-security-policy']).toContain(
+      "frame-ancestors 'none'",
+    );
+    expect(headers['cross-origin-opener-policy']).toBe(
+      'same-origin-allow-popups',
+    );
+    expect(headers['cross-origin-resource-policy']).toBe('same-origin');
+    expect(headers['x-xss-protection']).toBeUndefined();
   });
 
   test('should redirect unauthenticated user from protected route', async ({

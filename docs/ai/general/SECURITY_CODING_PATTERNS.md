@@ -33,6 +33,7 @@ Update it after every security review group.
 | SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift      | Real risk → fixed          | CI/CD, Vercel, AuthJS env          |
 | SEC-26 | Authorization      | ABAC action check without matching resource-scope check | Real risk → fixed          | Admin CRUD route handlers/services |
 | SEC-27 | Authorization      | Mutating admin route with no authorization check at all | Real risk → fixed          | Admin API route handlers           |
+| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense   | Real risk → fixed          | Outbound fetch helpers             |
 
 ---
 
@@ -1769,6 +1770,95 @@ result said nothing about the untested handler.
 route file, whether it calls an admin-authorization gate — do not assume
 "this directory is admin-gated" or "the sibling handler checks it" extends
 protection to a handler that never calls the check itself.
+
+---
+
+## SEC-28 — SSRF Guard Must Cover IPv6/Link-Local Ranges and Resolve-Before-Fetch
+
+**ID**: SEC-28
+**Category**: SSRF
+**Classification**: Real risk — found during a repository-wide security audit
+(2026-08-21), fixed same day
+**Affected contexts**: `src/security/outbound/secure-fetch.ts` and any future
+outbound-fetch helper that accepts a URL derived, even indirectly, from
+request input
+
+### Risk
+
+`secureFetch()`'s private-address check was an IPv4-only regex covering
+RFC1918 + the literal string `localhost`. It missed IPv6 loopback (`::1`),
+IPv6 link-local (`fe80::/10`), IPv4 link-local (`169.254.0.0/16` — notably
+the cloud-metadata address range), `0.0.0.0`, and IPv4-mapped IPv6
+(`::ffff:10.0.0.1`). It also only checked the **literal hostname**, never
+what that hostname actually **resolves to** — an allowlisted-looking domain
+name is not evidence the address it resolves to at fetch time is safe
+(classic DNS-rebinding: attacker controls the DNS record for a domain that
+passes the allowlist check, points it at an internal address).
+
+This is a live risk, not theoretical, in this repository:
+`src/app/api/security-test/ssrf/route.ts` is a public, unauthenticated route
+(see `PUBLIC_ROUTE_PREFIXES` in `route-policy.ts`) that takes a raw `?url=`
+query parameter and passes it straight into `secureFetch()` — anyone on the
+internet could probe it (see SEC-29 for how that route is now gated).
+
+### Correct Pattern
+
+Two additions, both required — hardening the literal-address predicate alone
+does not close the DNS-rebinding gap:
+
+```typescript
+function isPrivateOrReservedAddress(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  const ipv4Mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(normalized);
+  const ipv4Candidate = ipv4Mapped ? ipv4Mapped[1] : normalized;
+
+  const isPrivateIPv4 =
+    /^(?:10|127|0|169\.254|172\.(?:1[6-9]|2[0-9]|3[01])|192\.168)\./.test(
+      ipv4Candidate,
+    );
+  const isPrivateIPv6 =
+    normalized === '::1' ||
+    normalized === '::' ||
+    /^fe[89ab][0-9a-f]:/.test(normalized) ||
+    /^f[cd][0-9a-f]{2}:/.test(normalized);
+
+  return isPrivateIPv4 || isPrivateIPv6 || normalized === 'localhost';
+}
+
+// Resolve-then-check: re-run the same predicate against what the hostname
+// actually resolves to, not just its literal text. Fail closed on a
+// resolution error.
+async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
+  if (isIpLiteral(hostname)) return false;
+  try {
+    const records = await lookup(hostname, { all: true, verbatim: true });
+    return records.some((r) => isPrivateOrReservedAddress(r.address));
+  } catch {
+    return true; // fail closed — cannot confirm safety
+  }
+}
+```
+
+### False-Positive Scanner Note
+
+The bounded-quantifier regexes above (`{1,3}`, fixed `{3}` repetition, no
+nested unbounded groups) trip `security/detect-unsafe-regex` as a false
+positive — this is linear-time matching against a length-bounded hostname
+string, not catastrophic backtracking. Suppress with a scoped
+`eslint-disable-next-line security/detect-unsafe-regex` and a comment
+pointing back to this entry, same convention as SEC-01/SEC-05. Do not rewrite
+the regex into something more "scanner-friendly" that's harder to read —
+the pattern itself is correct.
+
+### Rule for Agents
+
+**DO** treat "hostname is on the allowlist" and "hostname is not a private
+IP literal" as two separate, both-required checks from "the address this
+request will actually reach is safe." Any new outbound-fetch helper that
+takes a URL touched by request input needs the resolve-then-check step, not
+just the literal-string check. **DO NOT** silently drop the DNS-resolution
+step to fix a slow test or a sandbox without network access — mock
+`node:dns/promises`'s `lookup`, don't skip the check it backs.
 
 **DO** treat a missing authorization check as a `security-incident-workflow`
 finding, distinct from whatever task you were doing when you found it (in this

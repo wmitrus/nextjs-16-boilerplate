@@ -38,6 +38,26 @@ describe('Headers Middleware', () => {
     );
   });
 
+  it('should not set the deprecated X-XSS-Protection header', () => {
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+    expect(res.headers.get('X-XSS-Protection')).toBeNull();
+  });
+
+  it('should set cross-origin isolation headers', () => {
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+
+    expect(res.headers.get('Cross-Origin-Opener-Policy')).toBe(
+      'same-origin-allow-popups',
+    );
+    expect(res.headers.get('Cross-Origin-Resource-Policy')).toBe('same-origin');
+    expect(res.headers.get('X-Permitted-Cross-Domain-Policies')).toBe('none');
+    expect(res.headers.get('Origin-Agent-Cluster')).toBe('?1');
+  });
+
   it('should set HSTS in production', () => {
     const req = createMockRequest();
     const res = NextResponse.next();
@@ -54,6 +74,17 @@ describe('Headers Middleware', () => {
     expect(csp).toContain("script-src 'self'");
     expect(csp).toContain('upgrade-insecure-requests');
     expect(csp).toContain('https://challenges.cloudflare.com');
+  });
+
+  it('should set baseline CSP hardening directives', () => {
+    const req = createMockRequest();
+    const res = NextResponse.next();
+    withHeaders(req, res);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'self'");
+    expect(csp).toContain("form-action 'self'");
+    expect(csp).toContain("frame-ancestors 'none'");
   });
 
   it('should not include upgrade-insecure-requests outside Vercel production', () => {

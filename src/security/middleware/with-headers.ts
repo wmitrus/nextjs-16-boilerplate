@@ -15,7 +15,18 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=()',
   );
-  res.headers.set('X-XSS-Protection', '1; mode=block');
+  // X-XSS-Protection intentionally omitted: deprecated, removed from modern
+  // browser engines, and superseded by the Content-Security-Policy below.
+
+  // 1b. Cross-origin isolation headers.
+  // COOP uses `same-origin-allow-popups`, not plain `same-origin` — Clerk's
+  // hosted auth flows may rely on popup/opener communication, and the
+  // `-allow-popups` variant keeps most of the isolation benefit without
+  // risking breaking sign-in.
+  res.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  res.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
+  res.headers.set('Origin-Agent-Cluster', '?1');
 
   // 2. HSTS (Production only)
   if (env.NODE_ENV === 'production') {
@@ -165,6 +176,15 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     `connect-src ${connectSrc}`,
     `frame-src ${frameSrc}`,
     "worker-src 'self' blob:",
+    // Baseline hardening directives: block plugin content entirely, stop a
+    // <base> tag from rebasing relative URLs off-origin, and stop forms from
+    // submitting anywhere but this origin.
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    // Modern superset of X-Frame-Options: DENY, kept alongside it for
+    // older-browser defense in depth.
+    "frame-ancestors 'none'",
     env.VERCEL_ENV === 'production' ? 'upgrade-insecure-requests' : '',
   ].join('; ');
 

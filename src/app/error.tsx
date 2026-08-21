@@ -12,20 +12,26 @@ const logger = baseLogger.child({
   module: 'root-error',
 });
 
-export default function ErrorBoundary({ error, unstable_retry }: ErrorInfo) {
-  const digest = (error as Error & { digest?: string }).digest;
+export default function ErrorBoundary({ error, retry }: ErrorInfo) {
+  // Next's ErrorInfo types `error` as `unknown` -- App Router's own
+  // documented contract for this prop is an Error carrying an optional
+  // `digest` (attached server-side for logged/redacted errors), so narrow
+  // it once here rather than casting at every use site.
+  const typedError = error as Error & { digest?: string };
+  const digest = typedError.digest;
 
   useEffect(() => {
     const errorPayload = {
-      errorName: error.name,
-      errorMessage: error.message,
+      errorName: typedError.name,
+      errorMessage: typedError.message,
       digest,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      stack:
+        process.env.NODE_ENV === 'development' ? typedError.stack : undefined,
     };
 
     logger.error(errorPayload, 'Root Error Boundary caught an error');
 
-    Sentry.captureException(error, {
+    Sentry.captureException(typedError, {
       contexts: {
         error_boundary: {
           level: 'route',
@@ -33,7 +39,7 @@ export default function ErrorBoundary({ error, unstable_retry }: ErrorInfo) {
         },
       },
     });
-  }, [error, digest]);
+  }, [typedError, digest]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-8 text-center">
@@ -79,9 +85,9 @@ export default function ErrorBoundary({ error, unstable_retry }: ErrorInfo) {
               Debug Information
             </p>
             <pre className="mt-2 overflow-auto text-xs text-red-600">
-              {error.message}
+              {typedError.message}
               {'\n\n'}
-              {error.stack}
+              {typedError.stack}
             </pre>
           </div>
         )}
@@ -89,7 +95,7 @@ export default function ErrorBoundary({ error, unstable_retry }: ErrorInfo) {
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
         <button
-          onClick={() => unstable_retry()}
+          onClick={() => retry()}
           className="rounded-md bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
         >
           Try again

@@ -5,13 +5,16 @@ import { useEffect } from 'react';
 
 import { logger } from '@/core/logger/client';
 
-export default function UsersErrorBoundary({
-  error,
-  unstable_retry,
-}: ErrorInfo) {
+export default function UsersErrorBoundary({ error, retry }: ErrorInfo) {
+  // Next's ErrorInfo types `error` as `unknown` -- App Router's own
+  // documented contract for this prop is an Error carrying an optional
+  // `digest` (attached server-side for logged/redacted errors), so narrow
+  // it once here rather than casting at every use site.
+  const typedError = error as Error & { digest?: string };
+
   useEffect(() => {
-    logger.error(error, 'Users route error boundary caught an error');
-  }, [error]);
+    logger.error(typedError, 'Users route error boundary caught an error');
+  }, [typedError]);
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
@@ -36,13 +39,13 @@ export default function UsersErrorBoundary({
       </p>
       {process.env.NODE_ENV !== 'production' && (
         <pre className="mt-4 max-w-full overflow-auto rounded bg-gray-100 p-4 text-left text-xs">
-          {error.message}
-          {error.stack}
+          {typedError.message}
+          {typedError.stack}
         </pre>
       )}
       <div className="mt-6 flex gap-3">
         <button
-          onClick={() => unstable_retry()}
+          onClick={() => retry()}
           className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:outline-none"
         >
           Retry users page

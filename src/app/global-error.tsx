@@ -12,20 +12,26 @@ const logger = baseLogger.child({
   module: 'global-error',
 });
 
-export default function GlobalError({ error, unstable_retry }: ErrorInfo) {
-  const digest = (error as Error & { digest?: string }).digest;
+export default function GlobalError({ error, retry }: ErrorInfo) {
+  // Next's ErrorInfo types `error` as `unknown` -- App Router's own
+  // documented contract for this prop is an Error carrying an optional
+  // `digest` (attached server-side for logged/redacted errors), so narrow
+  // it once here rather than casting at every use site.
+  const typedError = error as Error & { digest?: string };
+  const digest = typedError.digest;
 
   useEffect(() => {
     const errorPayload = {
-      errorName: error.name,
-      errorMessage: error.message,
+      errorName: typedError.name,
+      errorMessage: typedError.message,
       digest,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      stack:
+        process.env.NODE_ENV === 'development' ? typedError.stack : undefined,
     };
 
     logger.error(errorPayload, 'Global Error caught');
 
-    Sentry.captureException(error, {
+    Sentry.captureException(typedError, {
       contexts: {
         error_boundary: {
           level: 'global',
@@ -33,7 +39,7 @@ export default function GlobalError({ error, unstable_retry }: ErrorInfo) {
         },
       },
     });
-  }, [error, digest]);
+  }, [typedError, digest]);
 
   return (
     <html lang="en">
@@ -74,7 +80,7 @@ export default function GlobalError({ error, unstable_retry }: ErrorInfo) {
           )}
 
           <button
-            onClick={() => unstable_retry()}
+            onClick={() => retry()}
             style={buttonStyles}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = '#bb2d3b';

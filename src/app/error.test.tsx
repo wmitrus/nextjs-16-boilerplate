@@ -20,15 +20,15 @@ vi.mock('@sentry/nextjs', () => ({
 }));
 
 describe('Root error boundary UI', () => {
-  it('renders fallback and calls unstable_retry', async () => {
+  it('renders fallback and calls retry', async () => {
     const user = userEvent.setup();
-    const unstable_retry = vi.fn();
+    const retry = vi.fn();
 
     render(
       <ErrorBoundary
         error={new Error('Crash')}
         reset={vi.fn()}
-        unstable_retry={unstable_retry}
+        retry={retry}
       />,
     );
 
@@ -36,7 +36,7 @@ describe('Root error boundary UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
-    expect(unstable_retry).toHaveBeenCalled();
+    expect(retry).toHaveBeenCalled();
     expect(mockLogger.child).toHaveBeenCalled();
   });
 });

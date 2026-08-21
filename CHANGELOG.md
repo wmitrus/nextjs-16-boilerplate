@@ -1,3 +1,22 @@
+# [1.36.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.35.1...v1.36.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **audit-log:** address codex review findings on PR [#72](https://github.com/wmitrus/nextjs-16-boilerplate/issues/72) ([8196d6b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8196d6b15d58c437744cbc16ff901688ab90900f))
+* **ci:** merge build+test into one e2e-audit-log step so build has Clerk env ([c5190f1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c5190f10c95d0841555d8bd9c92deb94b67e4ce9))
+* **ci:** pass Clerk single-mode fixture credentials to the e2e-audit-log workflow ([3539989](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3539989ee8f2af2ac3d94145516eaa8400321c67))
+* **ci:** register audit-log migrations and drop weak PRNG for sampling ([1b929c9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1b929c952c113f5f968472a850009aae2b013fab))
+* **security:** require admin authorization on waitlist approve/reject (SEC-27) ([624217a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/624217aabc966c98a77e42e3f9c077a745996eab))
+
+
+### Features
+
+* **audit-log:** Phase 1 — admin-toggleable audit category settings ([dc821a3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dc821a3ff2f46de729d00c9377abd252c36c65cf))
+* **audit-log:** Phase 2 — writer + automatic instrumentation ([5c848e2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5c848e22fd5d511b545b5d1d0cdbde2f09309b23)), closes [hi#severity](https://github.com/hi/issues/severity)
+* **audit-log:** phase 3 - instrument every explicit admin mutation route ([ac013cc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ac013ccae889612143fbfef7cfe70bb1c0aad60d))
+* **audit-log:** phase 4 - audit trail browse UI and retention purge job ([71f99b0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/71f99b00703c8fffb7993aee93db73a2292ebdd8))
+
 ## [1.35.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.35.0...v1.35.1) (2026-08-20)
 
 

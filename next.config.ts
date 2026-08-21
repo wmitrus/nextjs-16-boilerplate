@@ -13,8 +13,27 @@ const buildWorkerCpuLimit = Math.min(
 // from Next.js' reserved runtime NEXT_DEPLOYMENT_ID contract.
 const deploymentId = process.env.VERCEL_PREBUILT_DEPLOYMENT_ID;
 
+// cacheComponents (Partial Prerendering) is incompatible with nonce-based
+// CSP: Next's own framework/chunk-loader <script> tags live in a static
+// shell built once, before any request exists, with no per-request nonce
+// ever available -- regardless of Suspense boundaries placed around
+// app-level nonce-consuming components (that only carves out small dynamic
+// holes; the framework's own scripts aren't part of this app's component
+// tree at all). Confirmed empirically, not just by reading Next's docs: a
+// CSP_SCRIPT_MODE=nonce-dynamic build still shipped every chunk-loader
+// script with nonce=null while cacheComponents stayed on. See SEC-30/
+// SEC-31 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+//
+// A deployment that opts into CSP_SCRIPT_MODE=nonce-dynamic is
+// deliberately trading away cacheComponents/PPR for the ENTIRE build in
+// exchange for a real, zero-unsafe-inline CSP -- decided here, at build
+// time (process.env, not the validated T3-Env schema -- next.config.ts
+// loads before the app runtime does), because PPR's static/dynamic split
+// for a route is baked in once at build, not re-decided per request.
+const isNonceDynamicMode = process.env.CSP_SCRIPT_MODE === 'nonce-dynamic';
+
 const nextConfig: NextConfig = {
-  cacheComponents: true,
+  cacheComponents: !isNonceDynamicMode,
   deploymentId,
   reactCompiler: true,
   serverExternalPackages: [

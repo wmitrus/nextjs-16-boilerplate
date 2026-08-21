@@ -2351,10 +2351,47 @@ origin (subdomain), not by route on one origin — never re-propose a
 same-origin per-route CSP split.
 
 Until an upstream `hash-ppr`-style fix lands (see `CSP_SCRIPT_MODE`'s doc
-comment in `src/core/env.ts`), do not flip `CSP_SCRIPT_MODE` to
-`'nonce-dynamic'` for this app's current single shared root layout unless
-the entire deployment is deliberately opting out of `cacheComponents`/PPR —
-it will otherwise reproduce the same app-wide hydration failure.
+comment in `src/core/env.ts`), `'nonce-dynamic'` mode only works for a
+deployment that gives up `cacheComponents`/PPR entirely — see "Update
+2026-08-21 (A.7.2)" below for how that's now enforced automatically, not
+left as a manual precondition.
+
+### Update 2026-08-21 (A.7.2) — `nonce-dynamic` Didn't Actually Disable PPR; Fixed in `next.config.ts`
+
+A.7.1 renamed the flag and set `CSP_SCRIPT_MODE=nonce-dynamic` for the
+_build_ step (not just runtime start) in the new `e2e:csp-nonce-dynamic:ci`
+script, reasoning that PPR's static/dynamic split is decided once at build
+time. That reasoning was correct but incomplete: setting the env var
+before `pnpm build` changed nothing on its own, because `cacheComponents`
+in `next.config.ts` was still unconditionally `true`. `getCspNonce()`'s
+Suspense-scoped `headers()` calls (`NrBrowserScripts`,
+`ClerkProviderWithNonce`) only carve out small dynamic _holes_ in an
+otherwise-static shell — they don't, and structurally can't, make the
+_route_ dynamic. Confirmed empirically, not just re-derived from docs: the
+first real run of `e2e/csp-nonce-dynamic.spec.ts` against a live browser
+(this app's actual first-ever E2E execution of `nonce-dynamic` mode) built
+with `CSP_SCRIPT_MODE=nonce-dynamic` and found `/` still `◐` (Partial
+Prerender) in the build output, with **every single Next.js chunk-loader
+`<script src="/_next/static/chunks/...">` tag carrying `nonce: null`** —
+the header nonce was real and fresh, but not one framework script picked
+it up, because they're all still part of a static shell built once with no
+request in scope.
+
+**Fix**: `next.config.ts` now sets
+`cacheComponents: process.env.CSP_SCRIPT_MODE !== 'nonce-dynamic'` — a
+`nonce-dynamic` build disables `cacheComponents` for the entire
+deployment automatically, not as a precondition agents have to remember to
+uphold by hand. Verified: with the flag set, every route in the build
+output moved from `◐` to `ƒ` (fully dynamic), including `/`. The default
+(`cache-compatible`) build is unaffected — confirmed the condition only
+evaluates true for `nonce-dynamic`, and a `pnpm build` without the env var
+still produces the same `◐` PPR output as before this change.
+
+This is why "harden the E2E test until it passes" would have been the
+wrong response to the original failure — the test was correct; the
+_implementation_ of `nonce-dynamic` mode was incomplete. Confirming this
+required the empirical test failure itself, not a re-read of the docs —
+the takeaway for future agents in the **Rule for Agents** section below.
 
 ### Rule for Agents
 
@@ -2374,4 +2411,9 @@ not documentation memory. **DO** run an actual `pnpm build` (not just
 Dynamic API call to `layout.tsx` or another shared-shell component as
 verified — the "Uncached data accessed outside Suspense" failure above
 only surfaces during real prerendering and passed typecheck and the full
-test suite cleanly first.
+test suite cleanly first. **DO NOT** assume a Suspense-scoped `headers()`/
+`cookies()` call makes its _route_ dynamic under `cacheComponents: true`
+— it only opts that specific subtree out of the static shell; the route's
+build-output symbol (`◐` vs `ƒ`) is the real signal, and Next's own
+chunk-loader scripts are part of the shell, not the app's component tree,
+so no Suspense boundary placed in application code can ever reach them.

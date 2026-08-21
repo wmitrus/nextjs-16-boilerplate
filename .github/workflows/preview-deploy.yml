@@ -266,24 +266,20 @@ jobs:
       - name: Run Lighthouse Audit
         run: |
           echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
-          # Neither bypass-cookie flavor, nor dropping it, changed the
-          # outcome: every attempt failed at exactly ~31s (Lighthouse's
-          # default max-wait-for-FCP), a hard consistent timeout rather
-          # than a flake -- ruling out the Vercel bypass redirect/cookie
-          # dance as the cause. The deployment itself is proven healthy: a
-          # cookie-jar curl and Playwright's own Chromium both load this
-          # exact URL, with the same bypass header, in a few seconds. This
-          # job has no "Install Chromium" step (unlike Verify Preview
-          # Runtime), so chrome-launcher falls back to ubuntu-latest's
-          # preinstalled system Chrome with lighthouse's default flags --
-          # a classic setup for a silently hung/crashed renderer in a
-          # container with a small /dev/shm, which presents exactly like
-          # this (Chrome connects and starts navigating, then nothing ever
-          # paints). --disable-dev-shm-usage (write Chrome's shared memory
-          # to /tmp instead) and --no-sandbox (this runner user may not
-          # have the namespace privileges Chrome's sandboxing wants) are
-          # the standard fix for that class of failure in CI containers.
-          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
+          # Four different fixes to the bypass/redirect/Chrome-launch side
+          # (samesitenone, then true, then no bypass-cookie at all, then
+          # --no-sandbox --disable-dev-shm-usage) all produced the IDENTICAL
+          # failure: NO_FCP at ~30.9s every single time, to the
+          # millisecond -- Lighthouse's default maxWaitForFcp is 30000ms.
+          # That precision rules out an intermittent hang; it means FCP is
+          # either never happening at all, or happening just past the
+          # default budget. This experiment isolates which: give it a much
+          # longer budget and see whether it actually completes (revealing
+          # a real, if slow, FCP time) or times out again regardless (which
+          # would mean genuinely nothing ever paints, pointing at something
+          # else entirely, e.g. a Chrome-CDP-tracing quirk rather than an
+          # app or infra problem).
+          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" --collect.settings.maxWaitForFcp=90000 --collect.settings.maxWaitForLoad=120000 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

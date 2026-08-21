@@ -11,30 +11,31 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                     | Classification             | Affected Contexts                  |
-| ------ | ------------------ | ------------------------------------------------------- | -------------------------- | ---------------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                | False positive             | Unit test files                    |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin     | False positive             | Middleware                         |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param    | Latent risk → fixed        | Middleware                         |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`               | False positive → hardened  | API route                          |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                | False positive             | E2E helpers                        |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness               | False positive             | E2E specs                          |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config     | Real risk → fixed          | Module-level SDK adapters          |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`          | Latent risk                | Auth/bootstrap UI mapping          |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement          | Latent risk                | Runtime logger helpers             |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop     | Real risk → fixed          | Rate-limit middleware              |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers           | Local lint-backed workflow | Scripts, E2E helpers               |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling     | Local lint-backed workflow | Scripts, E2E helpers               |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`   | AI-pattern backed workflow | `src/**` runtime helpers           |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting      | Real risk → fixed          | Public auth route handlers         |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges   | Real risk → fixed          | Email adapters, auth bridges       |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                  | Real risk → fixed          | App Router route handlers          |
-| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                       | Not security by itself     | UI state, JSX handlers, tests      |
-| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift      | Real risk → fixed          | CI/CD, Vercel, AuthJS env          |
-| SEC-26 | Authorization      | ABAC action check without matching resource-scope check | Real risk → fixed          | Admin CRUD route handlers/services |
-| SEC-27 | Authorization      | Mutating admin route with no authorization check at all | Real risk → fixed          | Admin API route handlers           |
-| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense   | Real risk → fixed          | Outbound fetch helpers             |
-| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes             | Real risk → fixed          | Demo/showcase route policy         |
+| #      | Category           | Vulnerability Class                                       | Classification             | Affected Contexts                  |
+| ------ | ------------------ | --------------------------------------------------------- | -------------------------- | ---------------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                  | False positive             | Unit test files                    |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin       | False positive             | Middleware                         |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param      | Latent risk → fixed        | Middleware                         |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                 | False positive → hardened  | API route                          |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                  | False positive             | E2E helpers                        |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                 | False positive             | E2E specs                          |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config       | Real risk → fixed          | Module-level SDK adapters          |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`            | Latent risk                | Auth/bootstrap UI mapping          |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement            | Latent risk                | Runtime logger helpers             |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop       | Real risk → fixed          | Rate-limit middleware              |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers             | Local lint-backed workflow | Scripts, E2E helpers               |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling       | Local lint-backed workflow | Scripts, E2E helpers               |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`     | AI-pattern backed workflow | `src/**` runtime helpers           |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting        | Real risk → fixed          | Public auth route handlers         |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges     | Real risk → fixed          | Email adapters, auth bridges       |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                    | Real risk → fixed          | App Router route handlers          |
+| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                         | Not security by itself     | UI state, JSX handlers, tests      |
+| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift        | Real risk → fixed          | CI/CD, Vercel, AuthJS env          |
+| SEC-26 | Authorization      | ABAC action check without matching resource-scope check   | Real risk → fixed          | Admin CRUD route handlers/services |
+| SEC-27 | Authorization      | Mutating admin route with no authorization check at all   | Real risk → fixed          | Admin API route handlers           |
+| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense     | Real risk → fixed          | Outbound fetch helpers             |
+| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes               | Real risk → fixed          | Demo/showcase route policy         |
+| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally | Real risk → fixed          | with-headers.ts, layout.tsx        |
 
 ---
 
@@ -1949,3 +1950,105 @@ not public — public-by-default is the wrong starting assumption for
 anything that exists to demonstrate the system rather than serve the
 product. **DO NOT** gate a route just because its name sounds like a demo
 (`/monitoring`) without first checking what it actually does.
+
+---
+
+## SEC-30 — Nonce-Based CSP script-src, Not Unconditional unsafe-inline/unsafe-eval
+
+**ID**: SEC-30
+**Category**: CSP hardening
+**Classification**: Real risk → fixed (2026-08-21)
+**Affected contexts**: `src/security/middleware/with-headers.ts`,
+`src/security/middleware/route-classification.ts`, `src/proxy.ts`,
+`src/app/layout.tsx`, `src/security/rsc/csp-nonce.ts`
+
+### Risk
+
+`script-src` carried `'unsafe-inline' 'unsafe-eval'` unconditionally. With
+either present, a nonce or hash-based CSP provides no real XSS backstop —
+`unsafe-inline` alone lets any injected `<script>` tag execute regardless of
+origin allowlisting.
+
+### Correct Pattern — a per-request nonce, not a per-build one
+
+A CSP nonce must be regenerated every request (a fixed nonce is equivalent
+to no nonce — an attacker who ever observes one can reuse it indefinitely).
+That has to flow through: proxy → response header → the RSC render that
+emits `<script nonce=...>` tags — a nonce baked in at build time or read
+from an env var is **not** a correct implementation, however tempting it
+looks.
+
+1. `route-classification.ts` generates the nonce once per request
+   (`RouteContext.nonce`), gated on `CSP_SCRIPT_STRICT_MODE`.
+2. `proxy.ts`'s `terminalHandler` — the only "continue to render" exit
+   point — carries it forward as a **request** header
+   (`NextResponse.next({ request: { headers } })`). A response header set
+   by middleware never reaches the RSC render; only forwarded request
+   headers do.
+3. `with-headers.ts` builds `script-src 'self' 'nonce-<x>' 'strict-dynamic'
+<host-allowlist-as-CSP2-fallback>` instead of `'unsafe-inline'
+'unsafe-eval'` — but only when BOTH `CSP_SCRIPT_STRICT_MODE` is on AND a
+   nonce was actually supplied; a missing nonce always falls back to the
+   legacy CSP rather than emitting `'nonce-undefined'` or similar.
+4. `src/security/rsc/csp-nonce.ts`'s `getCspNonce()` reads the nonce back
+   via `headers()` for RSC consumers (inline `<Script nonce={...}>` tags,
+   `<ClerkProvider nonce={...} dynamic>`).
+
+### Clerk Requires Both `nonce` AND `dynamic`
+
+Verified in the installed `@clerk/clerk-react` types (not assumed from
+memory): `ClerkProviderProps.nonce` "will be passed through to the
+`@clerk/clerk-js` script tag... Requires the `dynamic` prop to also be
+set." Passing `nonce` without `dynamic` is silently incomplete — Clerk's
+own script tag won't actually pick it up.
+
+```tsx
+<ClerkProvider nonce={nonce} dynamic={Boolean(nonce)} {...otherProps}>
+```
+
+Only pass `dynamic` when a nonce actually exists — passing it unconditionally
+forces Clerk into per-request dynamic rendering even when
+`CSP_SCRIPT_STRICT_MODE` is off, defeating that flag's purpose as a
+zero-cost rollback.
+
+### `headers()` Forces Dynamic Rendering — Scope the Blast Radius
+
+`getCspNonce()` deliberately checks `env.CSP_SCRIPT_STRICT_MODE` **before**
+calling `headers()` — `headers()` is a Dynamic API that opts the calling
+Server Component into per-request rendering the instant it's called,
+regardless of whether a nonce is actually found. Call it from small,
+dedicated async Server Components (`NrBrowserScripts`,
+`ClerkProviderWithNonce` in `layout.tsx`) rather than from the top of
+`RootLayout` itself, so the dynamic-rendering cost stays scoped to what
+actually needs the nonce instead of forcing the entire app dynamic.
+
+### Scope Boundary — script-src Only, Not style-src
+
+`style-src` keeps `'unsafe-inline'` unconditionally. Inline `style=""`
+attributes (as opposed to `<style>` blocks) cannot be nonce'd under CSP2/3 —
+only allow-listed via `unsafe-inline` or per-value hashes. Auditing every
+inline `style` prop across the app for a much lower-severity vector (CSS
+injection, not code execution) was ruled out of scope for this pass — this
+is a deliberate boundary, not an oversight.
+
+### Rollback Path
+
+`CSP_SCRIPT_STRICT_MODE=false` in Vercel + redeploy reverts to the legacy
+CSP with zero code change, if a third-party script is ever found that
+doesn't tolerate strict-dynamic. This is why the flag exists — verify it
+still works (i.e., don't remove the legacy branch) before ever proposing to
+delete it as "dead code."
+
+### Rule for Agents
+
+**DO** treat "a nonce was generated" and "CSP_SCRIPT_STRICT_MODE is on" as
+two independently-necessary conditions before emitting strict CSP — a
+missing nonce with the flag on must fall back to legacy, never emit a
+broken directive. **DO NOT** call a Next.js Dynamic API (`headers()`,
+`cookies()`, `connection()`) from the top of a layout/page component when a
+small child component can call it instead — the dynamic-rendering cost
+follows the component that calls the API, and scoping it matters under
+`cacheComponents: true`. **DO NOT** add `nonce` to a third-party provider
+without checking whether it has its own additional required prop (like
+Clerk's `dynamic`) — verify against the installed package's actual types,
+not documentation memory.

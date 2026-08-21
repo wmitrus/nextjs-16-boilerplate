@@ -16,6 +16,7 @@ const defaultEnv: MutableEnv = {
     'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
   DEMO_SHOWCASE_ENABLED: false,
   DEMO_SHOWCASE_ALLOWED_EMAIL: undefined,
+  CSP_SCRIPT_STRICT_MODE: true,
   VERCEL_ENV: 'development',
   NEXT_PUBLIC_CSP_SCRIPT_EXTRA: '',
   NEXT_PUBLIC_CSP_CONNECT_EXTRA: '',

@@ -136,4 +136,91 @@ describe('Headers Middleware', () => {
     const csp = res.headers.get('Content-Security-Policy');
     expect(csp).toContain('https://extra.com');
   });
+
+  describe('nonce-based script-src (CSP_SCRIPT_STRICT_MODE)', () => {
+    function scriptSrcDirective(csp: string | null): string {
+      const directive = csp
+        ?.split('; ')
+        .find((entry) => entry.startsWith('script-src '));
+      expect(directive).toBeDefined();
+      return directive!;
+    }
+
+    it('uses nonce + strict-dynamic when strict mode is on and a nonce is given', () => {
+      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res, 'test-nonce-123');
+      const scriptSrc = scriptSrcDirective(
+        res.headers.get('Content-Security-Policy'),
+      );
+
+      expect(scriptSrc).toContain("'nonce-test-nonce-123'");
+      expect(scriptSrc).toContain("'strict-dynamic'");
+      expect(scriptSrc).not.toContain("'unsafe-inline'");
+    });
+
+    it('falls back to the legacy CSP when strict mode is on but no nonce is given', () => {
+      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const scriptSrc = scriptSrcDirective(
+        res.headers.get('Content-Security-Policy'),
+      );
+
+      expect(scriptSrc).toContain("'unsafe-inline'");
+      expect(scriptSrc).not.toContain("'nonce-");
+      expect(scriptSrc).not.toContain("'strict-dynamic'");
+    });
+
+    it('uses the legacy CSP when strict mode is off, even with a nonce given', () => {
+      mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res, 'test-nonce-123');
+      const scriptSrc = scriptSrcDirective(
+        res.headers.get('Content-Security-Policy'),
+      );
+
+      expect(scriptSrc).toContain("'unsafe-inline'");
+      expect(scriptSrc).not.toContain("'nonce-");
+    });
+
+    it('never includes unsafe-eval in production, in either mode', () => {
+      mockEnv.NODE_ENV = 'production';
+
+      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+      const strictRes = NextResponse.next();
+      withHeaders(createMockRequest(), strictRes, 'test-nonce-123');
+      expect(
+        scriptSrcDirective(strictRes.headers.get('Content-Security-Policy')),
+      ).not.toContain("'unsafe-eval'");
+
+      mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+      const legacyRes = NextResponse.next();
+      withHeaders(createMockRequest(), legacyRes);
+      expect(
+        scriptSrcDirective(legacyRes.headers.get('Content-Security-Policy')),
+      ).not.toContain("'unsafe-eval'");
+    });
+
+    it('includes unsafe-eval in development, in either mode', () => {
+      mockEnv.NODE_ENV = 'development';
+
+      mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+      const strictRes = NextResponse.next();
+      withHeaders(createMockRequest(), strictRes, 'test-nonce-123');
+      expect(
+        scriptSrcDirective(strictRes.headers.get('Content-Security-Policy')),
+      ).toContain("'unsafe-eval'");
+
+      mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+      const legacyRes = NextResponse.next();
+      withHeaders(createMockRequest(), legacyRes);
+      expect(
+        scriptSrcDirective(legacyRes.headers.get('Content-Security-Policy')),
+      ).toContain("'unsafe-eval'");
+    });
+  });
 });

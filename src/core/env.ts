@@ -99,6 +99,15 @@ export const env = createEnv({
     // even while the flag is on. Leave unset to allow any authenticated
     // user (fine for a single-operator personal app).
     DEMO_SHOWCASE_ALLOWED_EMAIL: z.email().optional(),
+    // Nonce-based CSP script-src (nonce + 'strict-dynamic', no
+    // unsafe-inline/unsafe-eval in production/preview) vs. the legacy
+    // unsafe-inline/unsafe-eval CSP. Default on. Flip to false in Vercel
+    // and redeploy as an emergency rollback if a third-party script breaks
+    // under strict mode — no code change needed. See with-headers.ts and
+    // layout.tsx.
+    CSP_SCRIPT_STRICT_MODE: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(true),
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
@@ -252,6 +261,7 @@ export const env = createEnv({
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
     DEMO_SHOWCASE_ENABLED: process.env.DEMO_SHOWCASE_ENABLED,
     DEMO_SHOWCASE_ALLOWED_EMAIL: process.env.DEMO_SHOWCASE_ALLOWED_EMAIL,
+    CSP_SCRIPT_STRICT_MODE: process.env.CSP_SCRIPT_STRICT_MODE,
     E2E_ENABLED: process.env.E2E_ENABLED,
     AUTH_PROVIDER: process.env.AUTH_PROVIDER,
     DB_PROVIDER: process.env.DB_PROVIDER,

@@ -1,10 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 import { classifyRequest } from './route-classification';
 
-import { createMockRequest } from '@/testing';
+import {
+  createMockRequest,
+  mockEnv,
+  resetAllInfrastructureMocks,
+} from '@/testing';
 
 describe('Route Classification', () => {
+  beforeEach(() => {
+    resetAllInfrastructureMocks();
+  });
+
   it('should classify root as public', () => {
     const ctx = classifyRequest(createMockRequest({ path: '/' }));
     expect(ctx.isPublicRoute).toBe(true);
@@ -85,5 +93,25 @@ describe('Route Classification', () => {
     const ctx = classifyRequest(createMockRequest({ path: '/monitoring' }));
     expect(ctx.isDemoRoute).toBe(false);
     expect(ctx.isPublicRoute).toBe(true);
+  });
+
+  it('should generate a nonce when CSP_SCRIPT_STRICT_MODE is on', () => {
+    mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+    const ctx = classifyRequest(createMockRequest({ path: '/' }));
+    expect(ctx.nonce).toBeTruthy();
+    expect(typeof ctx.nonce).toBe('string');
+  });
+
+  it('should generate a different nonce per request', () => {
+    mockEnv.CSP_SCRIPT_STRICT_MODE = true;
+    const first = classifyRequest(createMockRequest({ path: '/' }));
+    const second = classifyRequest(createMockRequest({ path: '/' }));
+    expect(first.nonce).not.toBe(second.nonce);
+  });
+
+  it('should not generate a nonce when CSP_SCRIPT_STRICT_MODE is off', () => {
+    mockEnv.CSP_SCRIPT_STRICT_MODE = false;
+    const ctx = classifyRequest(createMockRequest({ path: '/' }));
+    expect(ctx.nonce).toBeUndefined();
   });
 });

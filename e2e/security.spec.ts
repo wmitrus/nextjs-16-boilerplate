@@ -21,6 +21,16 @@ test.describe('Security Architecture E2E', () => {
     );
     expect(headers['cross-origin-resource-policy']).toBe('same-origin');
     expect(headers['x-xss-protection']).toBeUndefined();
+
+    // CSP_SCRIPT_STRICT_MODE defaults on — script-src must use a per-request
+    // nonce + strict-dynamic, not unsafe-inline, in the default scenario.
+    const scriptSrc = headers['content-security-policy']
+      ?.split('; ')
+      .find((entry) => entry.startsWith('script-src '));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).toMatch(/'nonce-[^']+'/);
+    expect(scriptSrc).toContain("'strict-dynamic'");
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
   });
 
   test('should redirect unauthenticated user from protected route', async ({

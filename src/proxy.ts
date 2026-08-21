@@ -34,7 +34,24 @@ type ProxyHandler = (
 
 type ProxyMiddleware = (next: ProxyHandler) => ProxyHandler;
 
-const terminalHandler: ProxyHandler = async () => NextResponse.next();
+/**
+ * The only "continue to render the app" exit point in the pipeline —
+ * everything else either short-circuits (guard rejection, redirect) or
+ * calls through to this. When a CSP nonce was generated for this request
+ * (RouteContext.nonce, set only under CSP_SCRIPT_STRICT_MODE), it's carried
+ * forward as a REQUEST header here so the RSC render can read it via
+ * headers() — a middleware-set response header never reaches the app's
+ * server components, only the request headers Next.js forwards do.
+ */
+const terminalHandler: ProxyHandler = async (req, ctx) => {
+  if (!ctx.nonce) {
+    return NextResponse.next();
+  }
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-nonce', ctx.nonce);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+};
 
 function createAuthResultGetter<TAuthResult>(auth: () => Promise<TAuthResult>) {
   let cachedAuthResult: Promise<TAuthResult> | undefined;

@@ -5,8 +5,19 @@ import { env } from '@/core/env';
 /**
  * Hardens the response with security headers.
  * Implements CSP, HSTS, and other browser-level protections.
+ *
+ * @param nonce - Per-request CSP nonce from RouteContext.nonce (set only
+ * when CSP_SCRIPT_STRICT_MODE is on). When present, script-src uses
+ * `'nonce-<value>' 'strict-dynamic'` instead of `'unsafe-inline'
+ * 'unsafe-eval'`. Absent nonce (strict mode off, or a caller that built its
+ * own NextResponse without going through the proxy pipeline) falls back to
+ * the legacy CSP unconditionally — there's no nonce to reference.
  */
-export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
+export function withHeaders(
+  req: NextRequest,
+  res: NextResponse,
+  nonce?: string,
+): NextResponse {
   // 1. Basic Hardening
   res.headers.set('X-Frame-Options', 'DENY');
   res.headers.set('X-Content-Type-Options', 'nosniff');
@@ -82,10 +93,11 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
   ];
 
   const newRelicScriptDomain = 'https://js-agent.newrelic.com';
-  const scriptSrc = [
-    "'self'",
-    "'unsafe-inline'",
-    "'unsafe-eval'",
+
+  // Shared host allowlist for both CSP modes. In strict mode this is a
+  // fallback for CSP2-only browsers that don't understand 'strict-dynamic'
+  // (which browsers that DO support it will ignore in favor of the nonce).
+  const scriptSrcAllowlist = [
     ...clerkDomains,
     ...cloudflareDomains,
     ...sentryScriptDomains,
@@ -93,7 +105,30 @@ export function withHeaders(req: NextRequest, res: NextResponse): NextResponse {
     ...(isPreview || isDev ? vercelInsightsScriptDomains : []),
     isPreview ? 'https://vercel.live' : '',
     parseExtra(env.NEXT_PUBLIC_CSP_SCRIPT_EXTRA),
-  ]
+  ].filter(Boolean);
+
+  // 'unsafe-eval' is only ever needed for dev-mode HMR (Turbopack/webpack
+  // eval-based source maps) — never in production or preview, in either
+  // CSP mode.
+  const unsafeEvalIfDev = isDev ? "'unsafe-eval'" : '';
+
+  // A nonce is only meaningful together with CSP_SCRIPT_STRICT_MODE — see
+  // the withHeaders() doc comment for why a missing nonce always falls back
+  // to the legacy CSP rather than emitting a nonce directive with nothing
+  // to reference.
+  const isStrictCsp = env.CSP_SCRIPT_STRICT_MODE && Boolean(nonce);
+
+  const scriptSrc = (
+    isStrictCsp
+      ? [
+          "'self'",
+          `'nonce-${nonce}'`,
+          "'strict-dynamic'",
+          ...scriptSrcAllowlist,
+          unsafeEvalIfDev,
+        ]
+      : ["'self'", "'unsafe-inline'", unsafeEvalIfDev, ...scriptSrcAllowlist]
+  )
     .filter(Boolean)
     .join(' ');
 

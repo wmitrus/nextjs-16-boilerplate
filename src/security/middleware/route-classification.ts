@@ -1,5 +1,7 @@
 import type { NextRequest } from 'next/server';
 
+import { env } from '@/core/env';
+
 import {
   AUTH_ROUTE_PREFIXES,
   DEMO_ROUTE_PREFIXES,
@@ -19,6 +21,13 @@ export interface RouteContext {
   isStaticFile: boolean;
   correlationId: string;
   requestId: string;
+  /**
+   * Per-request CSP script-src nonce, set only when CSP_SCRIPT_STRICT_MODE
+   * is on (see with-headers.ts). undefined in legacy/relaxed CSP mode —
+   * callers must not force dynamic rendering (e.g. via headers()) to look
+   * for a nonce that was never generated.
+   */
+  nonce: string | undefined;
 }
 
 /**
@@ -48,6 +57,12 @@ export function classifyRequest(req: NextRequest): RouteContext {
     matchesAnyRoutePrefix(path, PUBLIC_ROUTE_PREFIXES) || isAuthRoute;
   const isDemoRoute = matchesAnyRoutePrefix(path, DEMO_ROUTE_PREFIXES);
 
+  // btoa(randomUUID()) rather than a raw UUID: CSP nonces are conventionally
+  // base64 tokens, and this keeps the value opaque in response headers.
+  const nonce = env.CSP_SCRIPT_STRICT_MODE
+    ? btoa(crypto.randomUUID())
+    : undefined;
+
   return {
     isApi,
     isWebhook,
@@ -60,5 +75,6 @@ export function classifyRequest(req: NextRequest): RouteContext {
     isStaticFile,
     correlationId,
     requestId,
+    nonce,
   };
 }

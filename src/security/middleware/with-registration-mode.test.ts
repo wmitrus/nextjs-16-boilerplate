@@ -16,6 +16,7 @@ const ctx: RouteContext = {
   isPublicRoute: true,
   isDemoRoute: false,
   isStaticFile: false,
+  nonce: undefined,
   correlationId: 'correlation-1',
   requestId: 'request-1',
 };

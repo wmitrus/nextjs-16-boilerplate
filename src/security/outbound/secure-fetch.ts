@@ -258,6 +258,16 @@ export async function secureFetch(
     const agent = new Agent({ connect: { lookup: buildPinnedLookup(pinned) } });
 
     try {
+      // A generic "user-controlled URL reaches an HTTP client" SAST rule
+      // will always flag this line in any implementation of this pattern —
+      // it can't see that `currentUrl` was just validated (allowlist +
+      // private-address + DNS-rebinding check) two lines up, on every
+      // iteration of this loop, for the original URL and for every
+      // redirect hop alike. This fetch() call, right here, is the
+      // sanctioned exit point that validation exists to gate. See SEC-28's
+      // "SAST Finding — Reviewed and Accepted" note in
+      // docs/ai/general/SECURITY_CODING_PATTERNS.md before assuming this
+      // needs a different shape.
       const rawResponse = await fetch(currentUrl, {
         ...currentInit,
         redirect: 'manual',

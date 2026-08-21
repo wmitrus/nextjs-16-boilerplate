@@ -1997,6 +1997,52 @@ security-sensitive target without either disabling automatic redirects and
 validating each hop yourself, or being certain nothing reachable from that
 target can 30x to somewhere unvalidated.
 
+### SAST Finding — Reviewed and Accepted (2026-08-21)
+
+Codacy (via its `opengrep`/Semgrep-based analysis) flags a **critical
+security** finding on this file: "This application allows user-controlled
+URLs to be passed directly to HTTP client libraries," pointing at the
+`fetch(currentUrl, {...})` call inside `secureFetch()`'s redirect loop.
+
+**Reviewed and accepted as a false positive, for a specific, checkable
+reason** — not dismissed on assumption:
+
+- Every single value `currentUrl` can hold when that line executes — the
+  original URL on the first iteration, or a redirect target on every
+  subsequent one — has, on that exact same loop iteration, two lines
+  earlier, already gone through `resolveAndValidateHost()`: the allowlist
+  check, the private/reserved-address check, and DNS-rebinding-safe
+  resolution. A rejection there throws before the loop body ever reaches
+  the `fetch()` call. There is no path to this line with an unvalidated
+  URL — confirmed by reading the control flow, not assumed, and covered by
+  `secure-fetch.test.ts`'s redirect-to-disallowed-host and
+  redirect-to-rebound-address tests, which assert the fetch mock is never
+  even called for those cases.
+- This is close to an inherent property of any correct SSRF-guard
+  implementation: the guard has to call the underlying HTTP client
+  _somewhere_, after its checks — a rule that pattern-matches "URL reaches
+  fetch()" without tracing what validated it will flag that call site in
+  any correctly-written guard, this one included. The pre-fix version of
+  this same function had the identical shape (`return fetch(targetUrl,
+init)` after equivalent checks).
+
+**What NOT to do in response to this class of finding**: don't restructure
+or obscure the call to dodge the pattern-matcher — that trades real
+clarity for a scanner appeasement with zero actual security benefit (same
+philosophy as the regex false-positive notes above: fix the finding if
+it's real, document why not if it's a false positive, never make working
+code worse to satisfy a scanner that can't see the fix). If this
+specific line's validation is ever weakened or reordered, re-evaluate
+this note — it holds only as long as the control-flow property above still
+holds.
+
+**Follow-up outside this session's reach**: dashboard access (marking the
+finding as a false positive / won't-fix in Codacy's UI) requires
+Codacy-side credentials this session doesn't have — the repository owner
+should do that in the dashboard if they agree with this assessment, per
+the same access limitation noted for engine verification generally
+(see the readiness-audit A4 item).
+
 ---
 
 ## SEC-29 — Demo/Showcase Routes Must Not Be Public By Default

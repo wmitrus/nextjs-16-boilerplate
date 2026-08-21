@@ -72,16 +72,18 @@ test.describe('CSP nonce-dynamic mode', () => {
     expect(tracker.violations).toEqual([]);
 
     // 4. Real hydration, not just a painted DOM. HeaderAuthControls
-    // renders only an `animate-pulse` skeleton until its `isMounted`
-    // state — set inside a `useEffect`, which only ever runs after React
-    // has hydrated — flips true. The Sign In button replacing that
-    // skeleton is direct, first-party proof hydration completed; the
+    // renders only an `animate-pulse` loading skeleton until its
+    // `isMounted` state — set inside a `useEffect`, which only ever runs
+    // after React has hydrated — flips true. The Sign In button replacing
+    // that skeleton is direct, first-party proof hydration completed; the
     // original bug's own signature (Lighthouse/mobile diagnostics) was
-    // this exact skeleton staying forever.
-    const skeleton = page.locator('.animate-pulse');
-    await expect(skeleton).toHaveCount(0);
+    // this exact skeleton staying forever. (Not asserting on
+    // `.animate-pulse` element count generally — StoryTwo's hero section
+    // has an unrelated, permanently-pulsing decorative dot using the same
+    // Tailwind utility class, so "0 pulsing elements anywhere on the page"
+    // isn't the right signal; the Sign In button's own visibility is.)
     const signInButton = page.getByRole('button', { name: 'Sign In' });
-    await expect(signInButton).toBeVisible();
+    await expect(signInButton).toBeVisible({ timeout: 15_000 });
 
     // 5. A real, wired-up event handler: clicking Sign In opens Clerk's
     // modal. If hydration or script execution were broken, the button

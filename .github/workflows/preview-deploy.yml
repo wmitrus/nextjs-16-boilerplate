@@ -298,8 +298,20 @@ jobs:
           # millisecond -- Lighthouse's default maxWaitForFcp is 30000ms.
           # Raising the budget to 90s still timed out identically (at ~92s
           # wall time) -- content genuinely never paints, no matter how
-          # long we wait. See the control-URL sanity check step above.
-          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" --collect.settings.maxWaitForFcp=90000 --collect.settings.maxWaitForLoad=120000 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
+          # long we wait. The control-URL sanity check step above (plain
+          # `npx lighthouse` against example.com, same runner, same
+          # --no-sandbox --disable-dev-shm-usage) succeeded cleanly
+          # (fcpMs: 810), proving this runner's Chrome itself is healthy --
+          # the problem is specific to our deployment. One uncontrolled
+          # variable between that passing control and this failing run:
+          # the control explicitly requested --headless=new; this
+          # @lhci/cli invocation never had, so chrome-launcher's own
+          # default (legacy --headless, deprecated by Chrome and known to
+          # have rendering/process-model quirks under stricter
+          # COOP/frame-ancestors configurations that a bare page like
+          # example.com never exercises) is what's actually launching.
+          # Matching the proven-working flag set.
+          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--headless=new --no-sandbox --disable-dev-shm-usage" --collect.settings.maxWaitForFcp=90000 --collect.settings.maxWaitForLoad=120000 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}

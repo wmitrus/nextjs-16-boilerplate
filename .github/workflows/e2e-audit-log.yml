@@ -41,6 +41,15 @@ jobs:
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # The 'single' scenario's global setup provisions/validates these
+          # Clerk test identities unconditionally, regardless of the app's
+          # own active AUTH_PROVIDER -- see scripts/e2e-clerk-fixtures.md.
+          # Neither e2e-label.yml nor e2e-matrix.yml sets these either
+          # (pre-existing gap in both, not specific to this workflow).
+          E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME }}
+          E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD }}
+          E2E_CLERK_SINGLE_NEW_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_USERNAME }}
+          E2E_CLERK_SINGLE_NEW_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_PASSWORD }}
           # Add other mandatory E2E env vars here
 
       - name: Upload Admin Audit Log Playwright Artifacts

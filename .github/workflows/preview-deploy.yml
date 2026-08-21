@@ -263,6 +263,31 @@ jobs:
         with:
           node-version: 24
 
+      - name: Debug - sanity-check this runner's Chrome against a control URL
+        run: |
+          # A 90s FCP budget still timed out identically to the 30s default
+          # -- content genuinely never paints, however long we wait, ruling
+          # out "just slow" theories entirely. Before looking any further
+          # at our own deployment (which curl and Playwright's own Chromium
+          # both load and fully hydrate in a few seconds), rule out a
+          # broken/misconfigured Chrome on THIS runner as the cause: this
+          # job has no "Install Chromium" step, so lighthouse's
+          # chrome-launcher falls back to whatever ubuntu-latest ships. If
+          # even a trivial, unauthenticated, no-CSP page like example.com
+          # can't get an FCP here, the problem is this runner's Chrome, not
+          # our app or Vercel's bypass mechanism.
+          npx lighthouse https://example.com --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage" --output=json --output-path=/tmp/control-lh.json --quiet || echo "control lighthouse exit code: $?"
+          echo "--- control run result ---"
+          node -e '
+            const fs = require("node:fs");
+            try {
+              const r = JSON.parse(fs.readFileSync("/tmp/control-lh.json", "utf8"));
+              console.log(JSON.stringify({ runtimeError: r.runtimeError ?? null, fcpMs: r.audits?.["first-contentful-paint"]?.numericValue ?? null }, null, 2));
+            } catch (e) {
+              console.log("Could not read/parse control-lh.json:", e.message);
+            }
+          '
+
       - name: Run Lighthouse Audit
         run: |
           echo "Running Lighthouse audit on URL: ${{ needs.deploy-preview.outputs.preview_url }}"
@@ -271,14 +296,9 @@ jobs:
           # --no-sandbox --disable-dev-shm-usage) all produced the IDENTICAL
           # failure: NO_FCP at ~30.9s every single time, to the
           # millisecond -- Lighthouse's default maxWaitForFcp is 30000ms.
-          # That precision rules out an intermittent hang; it means FCP is
-          # either never happening at all, or happening just past the
-          # default budget. This experiment isolates which: give it a much
-          # longer budget and see whether it actually completes (revealing
-          # a real, if slow, FCP time) or times out again regardless (which
-          # would mean genuinely nothing ever paints, pointing at something
-          # else entirely, e.g. a Chrome-CDP-tracing quirk rather than an
-          # app or infra problem).
+          # Raising the budget to 90s still timed out identically (at ~92s
+          # wall time) -- content genuinely never paints, no matter how
+          # long we wait. See the control-URL sanity check step above.
           npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" --collect.settings.maxWaitForFcp=90000 --collect.settings.maxWaitForLoad=120000 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

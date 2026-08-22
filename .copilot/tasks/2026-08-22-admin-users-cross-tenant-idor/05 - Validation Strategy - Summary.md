@@ -49,7 +49,7 @@
   - `pnpm test` (route-handler unit tests, including new SEC-26-labeled regression cases for both routes)
   - `pnpm test:db` (new `DrizzleAdminUsersService.db.test.ts`, proving real cross-tenant denial)
   - `pnpm skott:check:only`, `pnpm depcheck`, `pnpm env:check`
-- optional additional validation: a dedicated Playwright E2E spec with two real `org-db` tenant sessions proving cross-tenant denial in a real browser (not implemented in this task; flagged as a possible follow-up).
+- optional additional validation: a dedicated Playwright E2E spec with two real `org-db` tenant sessions proving cross-tenant denial in a real browser — logged as `PE-01` in `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` rather than restated here.
 - validation explicitly not required: no change to `e2e/admin-users.spec.ts` (its mocked-response UI-rendering assertions are unaffected by this backend-only fix); no change to `DrizzleUserRepository.db.test.ts` (that repository's self-service contract and tests are untouched).
 
 ## Validation Commands / Checks

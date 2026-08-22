@@ -81,9 +81,7 @@ suite including E2E.
   but were never propagated there. Pre-existing drift, out of this task's
   blast radius — flagged to the user, not silently fixed or left unmentioned.
 - No real-browser (Playwright) cross-tenant proof was added; unit + real-DB
-  integration tests close the vulnerability at the layer where it lives
-  (the SQL predicate), matching the validation depth of the original SEC-26
-  fix for feature flags. A dedicated `org-db`-scenario E2E spec proving
-  cross-tenant denial in a real browser session is a reasonable further
-  hardening step if the user wants it, but was not treated as required to
-  close this vulnerability.
+  integration tests close the vulnerability at the layer where it lives,
+  matching the validation depth of the original SEC-26 fix. Logged as
+  `PE-01` in `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` for the user to
+  triage later, rather than duplicated here in full.

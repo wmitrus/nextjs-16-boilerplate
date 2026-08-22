@@ -219,6 +219,32 @@ describe('env', () => {
   });
 });
 
+describe('UPSTASH_REDIS_REST_URL', () => {
+  // The Upstash dashboard offers both a REST URL and a `rediss://`
+  // connection string. Pasting the wrong one used to pass a bare z.url(),
+  // deploy cleanly, and only fail at runtime as `TypeError: fetch failed` --
+  // silently degrading every Redis-backed control (notably SEC-34's login
+  // abuse counter) to a process-local fallback that is not durable on
+  // serverless. Reject it at config time instead.
+  it('rejects a rediss:// connection string', async () => {
+    setEnv({
+      UPSTASH_REDIS_REST_URL: 'rediss://default:pw@eu1-x.upstash.io:6379',
+    });
+    vi.resetModules();
+
+    await expect(loadEnv()).rejects.toThrow();
+  });
+
+  it('accepts the https REST endpoint', async () => {
+    setEnv({ UPSTASH_REDIS_REST_URL: 'https://eu1-x.upstash.io' });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.UPSTASH_REDIS_REST_URL).toBe('https://eu1-x.upstash.io');
+  });
+});
+
 describe('tenancy env vars', () => {
   it('TENANCY_MODE defaults to single', async () => {
     setEnv({ TENANCY_MODE: undefined });

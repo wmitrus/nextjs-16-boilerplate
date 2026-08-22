@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mockEnv, resetEnvMocks } from '@/testing/infrastructure/env';
 
+const { mockWarn } = vi.hoisted(() => ({ mockWarn: vi.fn() }));
+
+vi.mock('@/core/logger/di', () => ({
+  resolveServerLogger: () => ({
+    child: () => ({ warn: mockWarn, debug: vi.fn() }),
+  }),
+}));
+
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   pttl: vi.fn(),
@@ -223,6 +231,43 @@ describe('login-abuse-control', () => {
       await recordSuccessfulLogin('acct-1');
 
       expect(mocks.del).toHaveBeenCalledWith('login-abuse:account:acct-1');
+    });
+
+    // A Redis outage silently swaps a shared, durable counter for a
+    // process-local Map. On serverless that is not an equivalent fallback --
+    // instances are ephemeral and unshared, so the escalation thresholds
+    // stop being reliably reachable and the abuse control is weakened. The
+    // log has to carry enough to diagnose it (and say it is degraded),
+    // because nothing else surfaces the downgrade. See SEC-34.
+    it('logs the Redis host and a degraded marker when a read fails', async () => {
+      mockWarn.mockClear();
+      mocks.get.mockRejectedValue(new TypeError('fetch failed'));
+      mocks.pttl.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { getLoginAbuseState } = await import('./login-abuse-control');
+      await getLoginAbuseState('acct-diagnostics');
+
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'login_abuse:redis_read_failed',
+          errorMessage: 'fetch failed',
+          errorName: 'TypeError',
+          redisHost: 'test.upstash.io',
+          degraded: true,
+        }),
+        expect.stringContaining('not durable across serverless instances'),
+      );
+    });
+
+    it('never logs the Upstash token', async () => {
+      mockWarn.mockClear();
+      mocks.incr.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { recordFailedLoginAttempt } =
+        await import('./login-abuse-control');
+      await recordFailedLoginAttempt('acct-no-token-leak');
+
+      expect(JSON.stringify(mockWarn.mock.calls)).not.toContain('test-token');
     });
 
     it('falls back to local state when a Redis read fails', async () => {

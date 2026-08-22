@@ -32,7 +32,20 @@ export const env = createEnv({
     LOGFLARE_EDGE_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    UPSTASH_REDIS_REST_URL: z.url().optional(),
+    // Must be the Upstash **REST** endpoint (https://<id>.upstash.io), not
+    // the `rediss://` connection string. A bare z.url() accepts either, and
+    // the @upstash/redis client fetch()es whatever it is given -- so the
+    // wrong one passes validation, passes deploy, and only surfaces at
+    // runtime as an opaque `TypeError: fetch failed` that silently degrades
+    // every Redis-backed control to its in-memory fallback. Reject it here,
+    // where the mistake is obvious, instead.
+    UPSTASH_REDIS_REST_URL: z
+      .url()
+      .refine(
+        (value) => value.startsWith('https://') || value.startsWith('http://'),
+        'UPSTASH_REDIS_REST_URL must be the Upstash REST URL (https://<id>.upstash.io), not a rediss:// connection string',
+      )
+      .optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     API_RATE_LIMIT_REQUESTS: z.coerce.number().default(10),
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),

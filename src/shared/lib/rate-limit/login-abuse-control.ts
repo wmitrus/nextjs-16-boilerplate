@@ -8,6 +8,34 @@ import { parseDurationToMs } from './rate-limit-helper';
 
 const REDIS_KEY_PREFIX = 'login-abuse:account:';
 
+/**
+ * Host of the configured Upstash REST endpoint, for diagnostics only. The
+ * hostname alone is not a credential (the token is, and is never logged) --
+ * but without it a `fetch failed` gives no clue whether the URL is wrong,
+ * the database is gone, or egress is blocked.
+ */
+function getRedisHostForDiagnostics(): string | undefined {
+  const url = env.UPSTASH_REDIS_REST_URL;
+  if (!url) return undefined;
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'unparseable';
+  }
+}
+
+/**
+ * Every Redis failure below degrades this control to a process-local `Map`.
+ * On a serverless platform that is NOT an equivalent fallback: instances are
+ * ephemeral and not shared, so the failure counter effectively resets per
+ * instance and the escalation thresholds stop being reliably reachable. The
+ * login still works (fail-open is deliberate -- a Redis outage must not lock
+ * everyone out), but the abuse control is materially weakened until Redis is
+ * healthy, so these logs must say so rather than read as routine noise.
+ */
+const DEGRADED_FALLBACK_NOTE =
+  'abuse counter is process-local until Redis recovers (not durable across serverless instances)';
+
 let _logger:
   | ReturnType<ReturnType<typeof resolveServerLogger>['child']>
   | undefined;
@@ -132,8 +160,10 @@ export async function getLoginAbuseState(
           event: 'login_abuse:redis_read_failed',
           errorMessage: err.message,
           errorName: err.name,
+          redisHost: getRedisHostForDiagnostics(),
+          degraded: true,
         },
-        'Login abuse Redis read failed, falling back to local state',
+        `Login abuse Redis read failed -- ${DEGRADED_FALLBACK_NOTE}`,
       );
       // fall through to local
     }
@@ -170,8 +200,10 @@ export async function recordFailedLoginAttempt(
           event: 'login_abuse:redis_write_failed',
           errorMessage: err.message,
           errorName: err.name,
+          redisHost: getRedisHostForDiagnostics(),
+          degraded: true,
         },
-        'Login abuse Redis write failed, falling back to local state',
+        `Login abuse Redis write failed -- ${DEGRADED_FALLBACK_NOTE}`,
       );
       // fall through to local
     }
@@ -194,8 +226,10 @@ export async function recordSuccessfulLogin(accountKey: string): Promise<void> {
           event: 'login_abuse:redis_reset_failed',
           errorMessage: err.message,
           errorName: err.name,
+          redisHost: getRedisHostForDiagnostics(),
+          degraded: true,
         },
-        'Login abuse Redis reset failed, clearing local state only',
+        `Login abuse Redis reset failed -- ${DEGRADED_FALLBACK_NOTE}`,
       );
       // fall through to local
     }

@@ -4,6 +4,10 @@ import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 
+import { env } from '@/core/env';
+
+import { TurnstileWidget } from '@/shared/components/captcha/TurnstileWidget';
+
 import { buildBootstrapRedirectUrl } from '../post-auth-redirect';
 
 interface SignInClientProps {
@@ -17,6 +21,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   NoCredentials: 'Incorrect email or password.',
   EmailNotVerified:
     'Your email address has not been verified. Please check your inbox or request a new verification link.',
+  CaptchaRequired: 'Please complete the security check below and try again.',
+  AccountTemporarilyLocked:
+    'Too many failed attempts. This account is temporarily locked — please try again later.',
   Default: 'Something went wrong. Please try again.',
 };
 
@@ -42,6 +49,12 @@ export function SignInClient({
   const [formError, setFormError] = useState<string | null>(
     resolveErrorMessage(error),
   );
+  // Rendered only after the server tells us to (a prior attempt returned
+  // CaptchaRequired) -- this repository's account-abuse-control decides
+  // when a challenge is needed, not the client. See SEC-34 in
+  // docs/ai/general/SECURITY_CODING_PATTERNS.md.
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   async function handleSubmit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,6 +71,7 @@ export function SignInClient({
         password,
         callbackUrl: postAuthRedirectUrl,
         redirect: false,
+        ...(captchaToken ? { cfTurnstileToken: captchaToken } : {}),
       });
 
       if (result?.error) {
@@ -65,6 +79,10 @@ export function SignInClient({
         if (result.error === 'EmailNotVerified') {
           router.replace('/auth/verify-email-pending');
           return;
+        }
+        if (result.error === 'CaptchaRequired') {
+          setShowCaptcha(true);
+          setCaptchaToken(null);
         }
         setFormError(errorMsg);
         setIsLoading(false);
@@ -83,6 +101,8 @@ export function SignInClient({
       setIsLoading(false);
     }
   }
+
+  const captchaRequiredButNotCompleted = showCaptcha && !captchaToken;
 
   return (
     <form
@@ -145,9 +165,16 @@ export function SignInClient({
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
         />
       </div>
+      {showCaptcha && env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+        <TurnstileWidget
+          siteKey={env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+          onVerify={setCaptchaToken}
+          onExpire={() => setCaptchaToken(null)}
+        />
+      )}
       <button
         type="submit"
-        disabled={isLoading}
+        disabled={isLoading || captchaRequiredButNotCompleted}
         className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:opacity-50 dark:focus:ring-offset-gray-950"
       >
         {isLoading ? 'Signing in…' : 'Sign In'}

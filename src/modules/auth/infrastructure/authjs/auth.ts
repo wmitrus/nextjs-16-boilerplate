@@ -11,6 +11,17 @@ import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import {
+  isTurnstileConfigured,
+  verifyTurnstileToken,
+} from '@/shared/lib/captcha/turnstile';
+import {
+  getLoginAbuseState,
+  normalizeLoginAccountKey,
+  recordFailedLoginAttempt,
+  recordSuccessfulLogin,
+} from '@/shared/lib/rate-limit/login-abuse-control';
+
 import { userCredentialsTable } from '../drizzle/schema';
 
 import { authConfig } from './auth.config';
@@ -28,10 +39,18 @@ function getLogger() {
 const credentialsSchema = z.object({
   email: z.email(),
   password: z.string().min(1),
+  // Present only once the account-bucket abuse control (see
+  // login-abuse-control.ts) requires it. Verified server-side in
+  // authorize() -- never trusted just because it's present.
+  cfTurnstileToken: z.string().optional(),
 });
 
 function getDb(): DrizzleDb {
   return getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export const authOptions: AuthOptions = {
@@ -49,7 +68,54 @@ export const authOptions: AuthOptions = {
           return null;
         }
 
-        const { email, password } = parsed.data;
+        const { email, password, cfTurnstileToken } = parsed.data;
+        const accountKey = normalizeLoginAccountKey(email);
+        // E2E fixtures reuse a small number of stable accounts across many
+        // parallel/sequential specs -- exempting them here (mirrors the
+        // existing E2E rate-limit bypass convention) avoids one spec's
+        // deliberate wrong-password test locking out every other spec that
+        // needs the same account. See SEC-34.
+        const abuseControlActive = !env.E2E_ENABLED;
+
+        if (abuseControlActive) {
+          const abuseState = await getLoginAbuseState(accountKey);
+
+          if (abuseState.lockedUntil) {
+            getLogger().warn(
+              {
+                event: 'auth:login_account_locked',
+                failedAttempts: abuseState.failedAttempts,
+                lockedUntil: abuseState.lockedUntil.toISOString(),
+              },
+              'AuthJS credentials sign-in blocked: account temporarily locked',
+            );
+            throw new Error('AccountTemporarilyLocked');
+          }
+
+          if (abuseState.requiresCaptcha && isTurnstileConfigured()) {
+            const captchaValid = await verifyTurnstileToken(cfTurnstileToken);
+            if (!captchaValid) {
+              getLogger().warn(
+                {
+                  event: 'auth:login_captcha_required',
+                  failedAttempts: abuseState.failedAttempts,
+                },
+                'AuthJS credentials sign-in blocked: CAPTCHA required or invalid',
+              );
+              throw new Error('CaptchaRequired');
+            }
+          }
+
+          if (abuseState.progressiveDelayMs > 0) {
+            await delay(abuseState.progressiveDelayMs);
+          }
+        }
+
+        async function recordFailure(): Promise<void> {
+          if (abuseControlActive) {
+            await recordFailedLoginAttempt(accountKey);
+          }
+        }
 
         try {
           const db = getDb();
@@ -72,9 +138,11 @@ export const authOptions: AuthOptions = {
               .limit(1);
 
             if (userExists) {
+              await recordFailure();
               throw new Error('NoCredentials');
             }
 
+            await recordFailure();
             return null;
           }
 
@@ -83,6 +151,7 @@ export const authOptions: AuthOptions = {
             credRecord.hashedPassword,
           );
           if (!passwordValid) {
+            await recordFailure();
             return null;
           }
 
@@ -93,11 +162,19 @@ export const authOptions: AuthOptions = {
             .limit(1);
 
           if (!user) {
+            await recordFailure();
             return null;
           }
 
           if (!credRecord.emailVerified) {
+            // A correct password for an unverified account is not evidence
+            // of an attack -- don't count it as a failure, and don't reset
+            // the counter either (neutral).
             throw new Error('EmailNotVerified');
+          }
+
+          if (abuseControlActive) {
+            await recordSuccessfulLogin(accountKey);
           }
 
           getLogger().debug(

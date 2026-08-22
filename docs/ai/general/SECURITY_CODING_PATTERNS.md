@@ -11,34 +11,35 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category                  | Vulnerability Class                                                                                      | Classification                                                                                                                               | Affected Contexts                                    |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| SEC-01 | Cryptography              | Timing attack — Symbol `===` in DI mocks                                                                 | False positive                                                                                                                               | Unit test files                                      |
-| SEC-02 | Routes                    | Open redirect — hardcoded path via `req.url` origin                                                      | False positive                                                                                                                               | Middleware                                           |
-| SEC-03 | Routes                    | Open redirect — forwarded `redirect_url` query param                                                     | Latent risk → fixed                                                                                                                          | Middleware                                           |
-| SEC-04 | Command injection         | Dynamic logger dispatch `logger[level]()`                                                                | False positive → hardened                                                                                                                    | API route                                            |
-| SEC-05 | File access               | Dynamic `fs.*` with static literal paths                                                                 | False positive                                                                                                                               | E2E helpers                                          |
-| SEC-06 | Cryptography              | `Math.random()` for test email uniqueness                                                                | False positive                                                                                                                               | E2E specs                                            |
-| SEC-11 | Caching                   | SDK client cache key missing differentiating config                                                      | Real risk → fixed                                                                                                                            | Module-level SDK adapters                            |
-| SEC-15 | Object access             | User-controlled key lookup via `key in object`                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Auth/bootstrap UI mapping                            |
-| SEC-16 | File access               | Reusable helper fs paths lack sink confinement                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Runtime logger helpers                               |
-| SEC-17 | Observability             | Rate-limit WARN missing `path` causes edge-log loop                                                      | Real risk → fixed                                                                                                                            | Rate-limit middleware                                |
-| SEC-18 | Tooling env access        | Dynamic `process.env[key]` in scripts/helpers                                                            | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                 |
-| SEC-19 | File access               | Shared sink-confined fs helpers for scripts/tooling                                                      | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                 |
-| SEC-20 | Object access             | Dynamic object transformation via `result[key] = ...`                                                    | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers                             |
-| SEC-21 | Abuse prevention          | Public email/write endpoints without rate limiting                                                       | Real risk → fixed                                                                                                                            | Public auth route handlers                           |
-| SEC-22 | Observability             | Raw email/token/URL logging in no-op/provider bridges                                                    | Real risk → fixed                                                                                                                            | Email adapters, auth bridges                         |
-| SEC-23 | Routes / DB input         | Raw route params bound to UUID columns                                                                   | Real risk → fixed                                                                                                                            | App Router route handlers                            |
-| SEC-24 | Error-prone TS/JSX        | Scanner HIGH error-prone patterns                                                                        | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                        |
-| SEC-25 | Deploy/runtime env        | Build-only env fallback masks runtime config drift                                                       | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                            |
-| SEC-26 | Authorization             | ABAC action check without matching resource-scope check                                                  | Real risk → fixed (Update 2026-08-22: second real-world occurrence, `/api/admin/users`, cross-tenant IDOR/BOLA)                              | Admin CRUD route handlers/services                   |
-| SEC-27 | Authorization             | Mutating admin route with no authorization check at all                                                  | Real risk → fixed                                                                                                                            | Admin API route handlers                             |
-| SEC-28 | SSRF                      | IPv4-only private-IP check + no DNS-rebinding defense                                                    | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                               |
-| SEC-29 | Attack surface            | Public unauthenticated demo/showcase routes                                                              | Real risk → fixed                                                                                                                            | Demo/showcase route policy                           |
-| SEC-30 | CSP hardening             | script-src used unsafe-inline/unsafe-eval unconditionally                                                | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx                          |
-| SEC-31 | CSP architecture          | Same-origin mixed CSP profiles don't survive client-side nav                                             | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide                      |
-| SEC-32 | CSP hardening             | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                | with-headers.ts, csp-violations.ts, secure-fetch.ts  |
-| SEC-33 | Authorization / lifecycle | Central access evaluator(s) never check `user.deactivatedAt`                                             | Real risk → fixed                                                                                                                            | `node-provisioning-access.ts`, `security-context.ts` |
+| #      | Category                  | Vulnerability Class                                                                                       | Classification                                                                                                                               | Affected Contexts                                    |
+| ------ | ------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| SEC-01 | Cryptography              | Timing attack — Symbol `===` in DI mocks                                                                  | False positive                                                                                                                               | Unit test files                                      |
+| SEC-02 | Routes                    | Open redirect — hardcoded path via `req.url` origin                                                       | False positive                                                                                                                               | Middleware                                           |
+| SEC-03 | Routes                    | Open redirect — forwarded `redirect_url` query param                                                      | Latent risk → fixed                                                                                                                          | Middleware                                           |
+| SEC-04 | Command injection         | Dynamic logger dispatch `logger[level]()`                                                                 | False positive → hardened                                                                                                                    | API route                                            |
+| SEC-05 | File access               | Dynamic `fs.*` with static literal paths                                                                  | False positive                                                                                                                               | E2E helpers                                          |
+| SEC-06 | Cryptography              | `Math.random()` for test email uniqueness                                                                 | False positive                                                                                                                               | E2E specs                                            |
+| SEC-11 | Caching                   | SDK client cache key missing differentiating config                                                       | Real risk → fixed                                                                                                                            | Module-level SDK adapters                            |
+| SEC-15 | Object access             | User-controlled key lookup via `key in object`                                                            | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Auth/bootstrap UI mapping                            |
+| SEC-16 | File access               | Reusable helper fs paths lack sink confinement                                                            | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Runtime logger helpers                               |
+| SEC-17 | Observability             | Rate-limit WARN missing `path` causes edge-log loop                                                       | Real risk → fixed                                                                                                                            | Rate-limit middleware                                |
+| SEC-18 | Tooling env access        | Dynamic `process.env[key]` in scripts/helpers                                                             | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                 |
+| SEC-19 | File access               | Shared sink-confined fs helpers for scripts/tooling                                                       | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                 |
+| SEC-20 | Object access             | Dynamic object transformation via `result[key] = ...`                                                     | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers                             |
+| SEC-21 | Abuse prevention          | Public email/write endpoints without rate limiting                                                        | Real risk → fixed                                                                                                                            | Public auth route handlers                           |
+| SEC-22 | Observability             | Raw email/token/URL logging in no-op/provider bridges                                                     | Real risk → fixed                                                                                                                            | Email adapters, auth bridges                         |
+| SEC-23 | Routes / DB input         | Raw route params bound to UUID columns                                                                    | Real risk → fixed                                                                                                                            | App Router route handlers                            |
+| SEC-24 | Error-prone TS/JSX        | Scanner HIGH error-prone patterns                                                                         | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                        |
+| SEC-25 | Deploy/runtime env        | Build-only env fallback masks runtime config drift                                                        | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                            |
+| SEC-26 | Authorization             | ABAC action check without matching resource-scope check                                                   | Real risk → fixed (Update 2026-08-22: second real-world occurrence, `/api/admin/users`, cross-tenant IDOR/BOLA)                              | Admin CRUD route handlers/services                   |
+| SEC-27 | Authorization             | Mutating admin route with no authorization check at all                                                   | Real risk → fixed                                                                                                                            | Admin API route handlers                             |
+| SEC-28 | SSRF                      | IPv4-only private-IP check + no DNS-rebinding defense                                                     | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                               |
+| SEC-29 | Attack surface            | Public unauthenticated demo/showcase routes                                                               | Real risk → fixed                                                                                                                            | Demo/showcase route policy                           |
+| SEC-30 | CSP hardening             | script-src used unsafe-inline/unsafe-eval unconditionally                                                 | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx                          |
+| SEC-31 | CSP architecture          | Same-origin mixed CSP profiles don't survive client-side nav                                              | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide                      |
+| SEC-32 | CSP hardening             | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout  | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                | with-headers.ts, csp-violations.ts, secure-fetch.ts  |
+| SEC-33 | Authorization / lifecycle | Central access evaluator(s) never check `user.deactivatedAt`                                              | Real risk → fixed                                                                                                                            | `node-provisioning-access.ts`, `security-context.ts` |
+| SEC-34 | Abuse prevention          | AuthJS Credentials login had no dedicated throttling/lockout beyond a generic reuse of `API_RATE_LIMIT_*` | Real risk → fixed                                                                                                                            | Credentials `authorize()`, `/api/auth/[...nextauth]` |
 
 ---
 
@@ -3103,3 +3104,147 @@ feature (external-id mapping, provider API calls, partial-failure handling, its 
 audit trail) that should be tracked and triaged separately (see
 `docs/ai/general/POSSIBLE_ENHANCEMENTS.md`) rather than bundled into the fix that
 closes the actual access-control gap.
+
+---
+
+## SEC-34 — Login Endpoints Need Dedicated Two-Bucket Abuse Control, Not a Reused Generic Rate Limit
+
+**ID**: SEC-34
+**Category**: Abuse prevention (brute force, credential stuffing, password spraying)
+**Classification**: Real risk → fixed, same day (third case of an ongoing multi-case security-audit remediation series)
+**Affected contexts**: any authentication endpoint that verifies a password/secret server-side (not just AuthJS's Credentials provider)
+
+### Risk
+
+`AUTHJS_PROTOCOL_RATE_LIMIT_BYPASS_PATHS` in `src/security/middleware/with-rate-limit.ts`
+exempts `/api/auth/callback/credentials` (and a few read-only AuthJS protocol
+routes) from the generic per-IP `withRateLimit()` middleware. That exemption is
+correct on its own — but the route handler
+(`src/app/api/auth/[...nextauth]/route.ts`) that's supposed to compensate for
+it only called the _generic_ `checkRateLimit()` helper (`API_RATE_LIMIT_*`,
+the same config used for every other API route) against two identifiers
+(`signin:ip:...`, `signin:identifier:...`). Two problems:
+
+1. **Wrong tool for the job.** `API_RATE_LIMIT_*` is tuned for general API
+   traffic tolerance, not a password-verification endpoint. A flat sliding
+   window sized for "don't annoy normal API users" is far too permissive for
+   brute force / credential stuffing / password spraying, and does nothing to
+   slow down repeated attempts against one specific account beyond the same
+   generic cutoff every other endpoint gets.
+2. **No lifecycle signal, only a request-volume signal.** A flat rate limit
+   only asks "how many requests recently" — it can't distinguish 10 wrong
+   passwords in a row (clearly suspicious) from 10 mixed successful logins
+   from a shared corporate NAT IP (not suspicious at all), and it has no way
+   to escalate its response (CAPTCHA, slow down, lock) as evidence
+   accumulates — it just flips from "allow" to "flat reject" at one threshold,
+   with no signal fed back into how suspicious the account itself currently
+   looks.
+
+Additionally: `Credentials.authorize()` runs a bcrypt comparison (deliberately
+CPU-expensive) on every attempt that gets a real password to compare against —
+an attacker who stays just under the volumetric limit can still force a lot of
+bcrypt work per unit time (a CPU-amplification concern distinct from the
+brute-force concern itself).
+
+### Correct Pattern
+
+Two **independent** buckets, so rotating either dimension alone doesn't bypass
+the control:
+
+```typescript
+// src/app/api/auth/[...nextauth]/route.ts -- IP bucket, dedicated config,
+// checked before NextAuth even runs.
+const allowed = await checkSignInIpRateLimit(ip); // LOGIN_RATE_LIMIT_IP_REQUESTS / _WINDOW
+if (!allowed) return new Response(..., { status: 429 });
+```
+
+```typescript
+// src/modules/auth/infrastructure/authjs/auth.ts -- account bucket, a
+// progressive FAILURE counter (not a flat request counter), checked inside
+// authorize() itself, before any DB/bcrypt work:
+const abuseState = await getLoginAbuseState(accountKey);
+if (abuseState.lockedUntil) throw new Error('AccountTemporarilyLocked'); // never touches the DB
+if (abuseState.requiresCaptcha && isTurnstileConfigured()) {
+  if (!(await verifyTurnstileToken(cfTurnstileToken)))
+    throw new Error('CaptchaRequired');
+}
+if (abuseState.progressiveDelayMs > 0)
+  await delay(abuseState.progressiveDelayMs);
+
+// ... real credential check happens only after the above ...
+
+// On any wrong-password/unknown-email outcome:
+await recordFailedLoginAttempt(accountKey);
+// On success:
+await recordSuccessfulLogin(accountKey); // resets the counter
+```
+
+Three escalating thresholds on the same counter (`src/shared/lib/rate-limit/login-abuse-control.ts`),
+each independently configurable via env (`LOGIN_ABUSE_CAPTCHA_THRESHOLD`,
+`LOGIN_ABUSE_DELAY_THRESHOLD`, `LOGIN_ABUSE_LOCK_THRESHOLD`, defaults `3` /
+`8` / `15`, within a `LOGIN_ABUSE_WINDOW` rolling window, default 30 min):
+
+- **CAPTCHA required** — the cheapest, lowest-friction speed bump. A
+  Cloudflare Turnstile check in Managed mode (Cloudflare's own risk engine
+  decides invisible-pass vs. checkbox vs. interactive puzzle — this repo only
+  decides _when_ to ask, never _how hard_ the challenge is).
+- **Progressive delay** — an artificially increasing response delay (2s, 4s,
+  8s, capped at 10s to stay well under serverless function timeouts),
+  directly countering the bcrypt-CPU-amplification concern by slowing the
+  attacker's achievable request rate regardless of raw rate-limit counters.
+- **Temporary lock** — once clearly past normal user error territory, deny
+  outright (`AccountTemporarilyLocked`) **before any DB query or bcrypt
+  call**, for the remainder of the rolling window.
+
+CAPTCHA verification is optional and self-disabling: `isTurnstileConfigured()`
+returns `false` when either `TURNSTILE_SECRET_KEY` or
+`NEXT_PUBLIC_TURNSTILE_SITE_KEY` is unset, and the gate is skipped entirely in
+that case (the delay/lock tiers still apply) — a login-abuse fix must not
+hard-fail every login in an environment (local dev, most CI) that hasn't
+configured a third-party CAPTCHA provider.
+
+### Required Validation
+
+- Direct unit tests against the failure-counter function itself (not mocked
+  away) proving each threshold's escalation, and proving the check order
+  (deactivation/lock must win over a simultaneously-eligible lesser tier —
+  same "check the strongest signal first" principle as SEC-33).
+- A test proving a locked/captcha-blocked attempt never reaches the
+  credential-comparison code path (assert the DB mock was never called) —
+  this is what actually addresses the CPU-amplification angle, not just the
+  brute-force angle.
+- A test proving the two buckets are independent (a different IP, or a
+  different account, is unaffected by the other's state).
+- An explicit `E2E_ENABLED` bypass test for both buckets: shared/stable test
+  accounts and CI runner IPs are reused across many specs, and a real
+  abuse-control mechanism will otherwise start captcha-gating or locking them
+  out of unrelated specs.
+
+### Rule for Agents
+
+**DO NOT** treat "this endpoint calls `checkRateLimit()`" as equivalent to
+"this login endpoint is protected against brute force" — check what config
+that call is actually using. Reusing a config tuned for general API tolerance
+on a password-verification endpoint is a materially weaker control even
+though a rate limiter is technically present.
+
+**DO** use two independent identifiers (account + IP) for any login-style
+endpoint, never a single combined key or only one dimension — either alone is
+trivially bypassed by rotating the other (many accounts from one IP, or one
+account from many IPs).
+
+**DO** prefer a progressive response (CAPTCHA → delay → lock) over a single
+flat cutoff for the account-side bucket specifically — it degrades gracefully
+for a real user who mistyped their password twice, while still meaningfully
+slowing down a real attacker.
+
+**DO** check any account-lockout-style gate _before_ the expensive
+credential-comparison work (DB query, password hash comparison) it exists to
+protect — a lock check that runs after the bcrypt call has already defeated
+its own CPU-amplification purpose.
+
+**DO NOT** forget the `E2E_ENABLED` bypass when adding this kind of
+progressive/stateful control to a path exercised by this repository's
+E2E fixtures — see the existing convention in
+`E2E_RATE_LIMIT_BYPASS_API_PREFIXES` (`with-rate-limit.ts`) for the same
+reasoning applied to the generic rate limiter.

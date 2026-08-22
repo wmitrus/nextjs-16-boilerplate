@@ -1,3 +1,10 @@
+## [1.36.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.36.0...v1.36.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **security:** harden response headers, CSP baseline, SSRF guard, and CSP architecture ([#73](https://github.com/wmitrus/nextjs-16-boilerplate/issues/73)) ([56b6c8e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/56b6c8e26714795576f6f1542d9d5e12181d4298))
+
 # [1.36.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.35.1...v1.36.0) (2026-08-21)
 
 

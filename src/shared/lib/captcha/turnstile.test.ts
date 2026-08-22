@@ -4,15 +4,22 @@ import { isTurnstileConfigured, verifyTurnstileToken } from './turnstile';
 
 import { mockEnv, resetEnvMocks } from '@/testing/infrastructure/env';
 
+const { mockWarn, mockDebug } = vi.hoisted(() => ({
+  mockWarn: vi.fn(),
+  mockDebug: vi.fn(),
+}));
+
 vi.mock('@/core/logger/di', () => ({
   resolveServerLogger: () => ({
-    child: () => ({ warn: vi.fn() }),
+    child: () => ({ warn: mockWarn, debug: mockDebug }),
   }),
 }));
 
 describe('turnstile', () => {
   beforeEach(() => {
     resetEnvMocks();
+    mockWarn.mockClear();
+    mockDebug.mockClear();
     vi.stubGlobal('fetch', vi.fn());
   });
 
@@ -65,6 +72,49 @@ describe('turnstile', () => {
         'https://challenges.cloudflare.com/turnstile/v0/siteverify',
         expect.objectContaining({ method: 'POST' }),
       );
+    });
+
+    it("logs Cloudflare's error-codes, hostname and action when a token is rejected", async () => {
+      mockEnv.TURNSTILE_SECRET_KEY = 'secret';
+      vi.mocked(fetch).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            success: false,
+            'error-codes': ['timeout-or-duplicate'],
+            hostname: 'example.vercel.app',
+            action: 'signin',
+          }),
+          { status: 200 },
+        ),
+      );
+
+      await expect(verifyTurnstileToken('spent-token')).resolves.toBe(false);
+
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'turnstile:verify_rejected',
+          errorCodes: ['timeout-or-duplicate'],
+          hostname: 'example.vercel.app',
+          action: 'signin',
+        }),
+        expect.any(String),
+      );
+    });
+
+    it('never logs the token or the secret', async () => {
+      mockEnv.TURNSTILE_SECRET_KEY = 'super-secret';
+      vi.mocked(fetch).mockResolvedValue(
+        new Response(
+          JSON.stringify({ success: false, 'error-codes': ['bad'] }),
+          { status: 200 },
+        ),
+      );
+
+      await verifyTurnstileToken('a-secret-token');
+
+      const logged = JSON.stringify(mockWarn.mock.calls);
+      expect(logged).not.toContain('a-secret-token');
+      expect(logged).not.toContain('super-secret');
     });
 
     it('returns false when Cloudflare reports failure', async () => {

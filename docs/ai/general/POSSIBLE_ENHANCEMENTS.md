@@ -152,7 +152,12 @@ several PE-tracked E2E ideas from this audit series are triaged together
   of the security-audit series), follow-up after the user provisioned a real
   Cloudflare Turnstile account
 - **Date added**: 2026-08-22
-- **Status**: Open
+- **Status**: Partially superseded -- a real-browser run against live
+  Cloudflare was performed manually by the repo owner on a Vercel Preview
+  deployment and found three genuine implementation defects that every unit
+  test had passed (widget remount loop, single-use token replay, discarded
+  error codes). All three are now fixed with regression coverage. What
+  remains open here is only the _automated_ Playwright run.
 
 **Description**: `e2e/authjs-login-abuse-control.spec.ts` (wired via
 `pnpm e2e:authjs:login-abuse`) drives two wrong-password attempts against a

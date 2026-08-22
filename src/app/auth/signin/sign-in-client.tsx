@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { env } from '@/core/env';
 
@@ -55,6 +55,20 @@ export function SignInClient({
   // docs/ai/general/SECURITY_CODING_PATTERNS.md.
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  // Bumped to force the widget to issue a fresh token. A Turnstile token is
+  // single-use: once the server has redeemed it via `siteverify`, replaying
+  // it on the next attempt always fails, so any submit that actually spent
+  // one must discard it and re-run the challenge. See SEC-34.
+  const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
+
+  const discardSpentCaptchaToken = useCallback(() => {
+    setCaptchaToken(null);
+    setCaptchaResetSignal((signal) => signal + 1);
+  }, []);
+
+  const handleCaptchaExpire = useCallback(() => {
+    setCaptchaToken(null);
+  }, []);
 
   async function handleSubmit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,6 +78,7 @@ export function SignInClient({
     const formData = new FormData(event.currentTarget);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
+    const submittedCaptchaToken = captchaToken;
 
     try {
       const result = await signIn('credentials', {
@@ -71,7 +86,9 @@ export function SignInClient({
         password,
         callbackUrl: postAuthRedirectUrl,
         redirect: false,
-        ...(captchaToken ? { cfTurnstileToken: captchaToken } : {}),
+        ...(submittedCaptchaToken
+          ? { cfTurnstileToken: submittedCaptchaToken }
+          : {}),
       });
 
       if (result?.error) {
@@ -82,6 +99,12 @@ export function SignInClient({
         }
         if (result.error === 'CaptchaRequired') {
           setShowCaptcha(true);
+        }
+        // The server consumed this token (successfully or not) -- it can
+        // never be replayed, so always ask the widget for a new one.
+        if (submittedCaptchaToken) {
+          discardSpentCaptchaToken();
+        } else if (result.error === 'CaptchaRequired') {
           setCaptchaToken(null);
         }
         setFormError(errorMsg);
@@ -169,7 +192,8 @@ export function SignInClient({
         <TurnstileWidget
           siteKey={env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
           onVerify={setCaptchaToken}
-          onExpire={() => setCaptchaToken(null)}
+          onExpire={handleCaptchaExpire}
+          resetSignal={captchaResetSignal}
         />
       )}
       <button

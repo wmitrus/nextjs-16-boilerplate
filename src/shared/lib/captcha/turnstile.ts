@@ -22,6 +22,10 @@ function getLogger() {
 interface TurnstileSiteverifyResponse {
   success?: boolean;
   'error-codes'?: string[];
+  /** Hostname Cloudflare saw the challenge solved on. */
+  hostname?: string;
+  /** Echoes the `action` the widget was rendered with. */
+  action?: string;
 }
 
 /**
@@ -77,7 +81,34 @@ export async function verifyTurnstileToken(
     }
 
     const data = (await response.json()) as TurnstileSiteverifyResponse;
-    return data.success === true;
+
+    // Cloudflare's own diagnosis of WHY a token was rejected lives in
+    // `error-codes` (e.g. `invalid-input-response` for a replayed
+    // single-use token, `timeout-or-duplicate`, `invalid-input-secret`).
+    // Discarding it turns every failure into an indistinguishable "CAPTCHA
+    // invalid", so log it -- never the token or the secret. See SEC-34.
+    if (data.success !== true) {
+      getLogger().warn(
+        {
+          event: 'turnstile:verify_rejected',
+          errorCodes: data['error-codes'] ?? [],
+          hostname: data.hostname,
+          action: data.action,
+        },
+        'Turnstile siteverify rejected the token',
+      );
+      return false;
+    }
+
+    getLogger().debug(
+      {
+        event: 'turnstile:verify_succeeded',
+        hostname: data.hostname,
+        action: data.action,
+      },
+      'Turnstile siteverify accepted the token',
+    );
+    return true;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     getLogger().warn(

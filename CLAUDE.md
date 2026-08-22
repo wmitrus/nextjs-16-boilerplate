@@ -28,6 +28,10 @@ For any non-trivial task, in order:
 6. `docs/ai/general/SECURITY_CODING_PATTERNS.md` — whenever the task touches
    redirects, logging, file access, auth, route handlers, scripts, or any
    security-sensitive path.
+7. `docs/ai/general/NEXTJS_IMPLEMENTATION_PLAYBOOK.md` — when building a new
+   API route, page/route segment, or test; it's the concrete "how", cross-
+   linked to the `SEC-XX` entries and anti-patterns above rather than
+   duplicating them.
 
 For middleware-style behavior, request interception lives in `src/proxy.ts`,
 **not** `middleware.ts` — inspect it directly, its absence is not a finding.
@@ -43,19 +47,19 @@ for every role and workflow that has one — invoke the matching skill via the
 `Skill` tool rather than reading `docs/ai/general/` by hand. Guide layer:
 `docs/ai/claude/README.md`.
 
-| # | Role | Claude Skill | Use when |
-| - | --- | --- | --- |
-| 01 | Architecture Guard | `.claude/skills/architecture-guard/SKILL.md` | modular-monolith boundaries, DI/composition, dependency direction, docs-vs-code drift |
-| 02 | Security & Auth | `.claude/skills/security-auth/SKILL.md` | auth, tenancy, trust boundaries, sensitive data |
-| 03 | Next.js Runtime | `.claude/skills/nextjs-runtime/SKILL.md` | App Router, route handlers, proxy, server actions, caching |
-| 04 | Implementation | `.claude/skills/implementation-agent/SKILL.md` | concrete code changes under already-established constraints |
-| 05 | Validation Strategy | `.claude/skills/validation-strategy/SKILL.md` | deciding minimum safe validation scope |
-| 06 | Debug Investigation | `.claude/skills/debug-investigation/SKILL.md` | ambiguous bugs, evidence gathering before remediation |
-| 07 | Playwright E2E | `.claude/skills/playwright-e2e/SKILL.md` | real-browser verification, scenario-mapped E2E evidence |
-| 08 | Workflow Orchestrator | `.claude/skills/workflow-orchestrator/SKILL.md` | multi-step sequencing/delegation with an existing brief |
-| 09 | Task Brief Authoring | `.claude/skills/task-brief-authoring/SKILL.md` | messy requirements needing scope/acceptance criteria first |
-| 10 | Leantime Integration | `.claude/skills/leantime-integration/SKILL.md` | task lifecycle open/close (mandatory, see below) |
-| 11 | Leantime Strategy | `docs/ai/general/11 - Leantime Strategy Agent.md` | project structure for large multi-phase tasks — **no Claude (or Codex) skill exists for this role**; read the source directly |
+| #   | Role                  | Claude Skill                                      | Use when                                                                                                                      |
+| --- | --------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 01  | Architecture Guard    | `.claude/skills/architecture-guard/SKILL.md`      | modular-monolith boundaries, DI/composition, dependency direction, docs-vs-code drift                                         |
+| 02  | Security & Auth       | `.claude/skills/security-auth/SKILL.md`           | auth, tenancy, trust boundaries, sensitive data                                                                               |
+| 03  | Next.js Runtime       | `.claude/skills/nextjs-runtime/SKILL.md`          | App Router, route handlers, proxy, server actions, caching                                                                    |
+| 04  | Implementation        | `.claude/skills/implementation-agent/SKILL.md`    | concrete code changes under already-established constraints                                                                   |
+| 05  | Validation Strategy   | `.claude/skills/validation-strategy/SKILL.md`     | deciding minimum safe validation scope                                                                                        |
+| 06  | Debug Investigation   | `.claude/skills/debug-investigation/SKILL.md`     | ambiguous bugs, evidence gathering before remediation                                                                         |
+| 07  | Playwright E2E        | `.claude/skills/playwright-e2e/SKILL.md`          | real-browser verification, scenario-mapped E2E evidence                                                                       |
+| 08  | Workflow Orchestrator | `.claude/skills/workflow-orchestrator/SKILL.md`   | multi-step sequencing/delegation with an existing brief                                                                       |
+| 09  | Task Brief Authoring  | `.claude/skills/task-brief-authoring/SKILL.md`    | messy requirements needing scope/acceptance criteria first                                                                    |
+| 10  | Leantime Integration  | `.claude/skills/leantime-integration/SKILL.md`    | task lifecycle open/close (mandatory, see below)                                                                              |
+| 11  | Leantime Strategy     | `docs/ai/general/11 - Leantime Strategy Agent.md` | project structure for large multi-phase tasks — **no Claude (or Codex) skill exists for this role**; read the source directly |
 
 Workflow skills (`.claude/skills/<name>-workflow/SKILL.md`, neutral source
 `docs/ai/general/Workflow NN - *.md`): Safe Feature (01), Safe Refactor (02),
@@ -131,14 +135,14 @@ reconcile or present a doc claim as fact until it's verified in code.
 
 ## Build & Quality Gates
 
-| Gate | Command |
-| --- | --- |
-| Type check | `pnpm typecheck` |
-| Lint (with fix) | `pnpm lint --fix` |
-| Unit tests | `pnpm test` |
+| Gate                      | Command                 |
+| ------------------------- | ----------------------- |
+| Type check                | `pnpm typecheck`        |
+| Lint (with fix)           | `pnpm lint --fix`       |
+| Unit tests                | `pnpm test`             |
 | Circular dependency check | `pnpm skott:check:only` |
-| Unused dependency check | `pnpm depcheck` |
-| Env consistency | `pnpm env:check` |
+| Unused dependency check   | `pnpm depcheck`         |
+| Env consistency           | `pnpm env:check`        |
 
 - **Always** run `pnpm lint --fix`, never plain `pnpm lint` — it auto-fixes
   import ordering/formatting; the non-fix form only reports fixable errors

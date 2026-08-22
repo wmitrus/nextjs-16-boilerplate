@@ -112,6 +112,22 @@ reconcile or present a doc claim as fact until it's verified in code.
 
 ---
 
+## Pending Scheduled Security Follow-Ups — Check Every Session
+
+**Any Claude Code session working in this repository on or after
+2026-08-26 must read `AGENTS.md`'s "Pending Scheduled Security
+Follow-Ups" section before finishing a security-adjacent task** — Next.js
+has announced a Critical security release targeted for that date, and
+this repo's current `next@16.3.2` is NOT confirmed to already contain the
+embargoed fix (its public release notes as of 2026-08-22 describe only
+unrelated changes). `AGENTS.md` carries the full check/upgrade/verify
+procedure; this file does not duplicate it per this repo's own
+bridge-file convention (see top of this file). Delete this pointer only
+once that section is deleted from `AGENTS.md` (i.e. once the follow-up is
+actually completed or confirmed not applicable).
+
+---
+
 ## Testing Conventions
 
 - **Co-location**: all unit tests MUST live next to their source file

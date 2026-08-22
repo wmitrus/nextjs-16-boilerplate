@@ -63,20 +63,126 @@ function resolveEffectiveCspMode(): 'cache-compatible' | 'nonce-dynamic' {
   return buildMode;
 }
 
+// The only quoted CSP keyword sources this repo's own CSP-building code
+// ever needs to accept from an *_EXTRA env var. Every other quoted token
+// (`'unsafe-inline'`, `'unsafe-eval'`, `'nonce-...'`, `'sha256-...'`,
+// `'strict-dynamic'`, etc.) is either already emitted by this file's own
+// logic when actually needed, or actively dangerous to let an env var
+// inject — see SEC-32 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+const ALLOWED_CSP_KEYWORD_SOURCES = new Set(['self', 'none']);
+
+// Keyword-shaped tokens rejected even when NOT quoted -- CSP keyword
+// sources are only meaningful quoted, but this repo's baseline should
+// never treat a bare `unsafe-inline`/`nonce-x`/`strict-dynamic` typo as
+// "just an unusual hostname" (it would otherwise pass a plain hostname
+// pattern, since these are all syntactically valid DNS labels).
+const DANGEROUS_CSP_KEYWORD_PATTERN =
+  /^(unsafe-|nonce-|sha256-|sha384-|sha512-)|^(strict-dynamic|wasm-unsafe-eval|unsafe-hashes|report-sample|inline-speculation-rules)$/i;
+
+// scheme: or scheme://host[...] -- no whitespace, semicolon, quote,
+// angle-bracket, or backtick anywhere (any of those could break out of
+// the single-source-token context once embedded in the CSP header).
+// False-positive scanner finding: the two quantified groups
+// (`[a-z0-9+.-]*` and `[^\s;'"<>\`]+`) are disjoint, non-nested character
+// classes with no shared characters to backtrack ambiguously over, so
+// this is linear-time -- verified empirically (sub-millisecond) against
+// 50,000-100,000 character adversarial inputs before suppressing, same
+// discipline as SEC-28's regex false-positive notes in
+// docs/ai/general/SECURITY_CODING_PATTERNS.md.
+// eslint-disable-next-line security/detect-unsafe-regex
+const CSP_SCHEME_SOURCE_PATTERN = /^[a-z][a-z0-9+.-]*:(\/\/[^\s;'"<>`]+)?$/i;
+
+// A bare hostname or wildcard-hostname (`example.com`, `*.example.com`,
+// `cdn.example.com:8443`) -- standard DNS label syntax, optional port.
+// False-positive scanner finding: every quantifier is bounded ({0,61},
+// matching a DNS label's real 63-octet limit) with no nested unbounded
+// groups, so this is linear-time, not exponential-backtracking -- same
+// reasoning as SEC-28's regex false-positive notes in
+// docs/ai/general/SECURITY_CODING_PATTERNS.md.
+const CSP_HOST_SOURCE_PATTERN =
+  // eslint-disable-next-line security/detect-unsafe-regex
+  /^\*?\.?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?$/i;
+
+/**
+ * Validates one whitespace/comma-delimited token from an *_EXTRA env var
+ * as a legitimate CSP source expression, rather than trusting it as
+ * pre-formed CSP syntax. Returns the canonical output form (quoted for a
+ * keyword source, as-is for a host/scheme source) or `null` if the token
+ * isn't a valid source expression at all.
+ *
+ * Without this, a config value like
+ * `"https://cdn.example.com; object-src *"` passed straight through
+ * (the previous implementation) would silently inject a whole extra
+ * `object-src *` directive into the header — and since CSP takes the
+ * *first* occurrence of a duplicate directive, that injected value would
+ * WIN over this file's own `object-src 'none'` baseline hardening
+ * directive, completely defeating it. Confirmed empirically before
+ * fixing (SEC-32), not assumed: this exact input was traced through the
+ * old `parseExtra()` and the resulting header construction.
+ *
+ * Wrapping quotes are stripped unconditionally before classifying, not
+ * just for keyword sources — a copy-pasted env value like
+ * `"https://cdn.example.com"` (literal quote characters, e.g. from a
+ * JSON config) is a plain host source once unquoted, same as if it had
+ * never been quoted; CSP itself never quotes host/scheme sources, only
+ * keyword sources.
+ */
+function classifyCspSourceToken(rawToken: string): string | null {
+  const stripped = rawToken.replace(/^['"]+|['"]+$/g, '');
+  if (!stripped || /[;\r\n<>`\s]/.test(stripped)) {
+    return null;
+  }
+
+  const lower = stripped.toLowerCase();
+  if (ALLOWED_CSP_KEYWORD_SOURCES.has(lower)) {
+    return `'${lower}'`;
+  }
+  // Keyword-shaped tokens (unsafe-inline, nonce-x, strict-dynamic, ...)
+  // are rejected here even though they'd otherwise pass CSP_HOST_SOURCE_PATTERN
+  // as a syntactically-valid-looking single-label hostname -- this repo's
+  // baseline must never treat one as "just an unusual host".
+  if (DANGEROUS_CSP_KEYWORD_PATTERN.test(lower)) {
+    return null;
+  }
+  if (
+    CSP_SCHEME_SOURCE_PATTERN.test(stripped) ||
+    CSP_HOST_SOURCE_PATTERN.test(stripped)
+  ) {
+    return stripped;
+  }
+  return null;
+}
+
 /**
  * Parses an extra-allowlist env var (space/comma separated, optionally
- * quoted tokens) into a CSP-ready, space-separated source list fragment.
+ * quoted tokens) into a CSP-ready, space-separated source list fragment
+ * — validating every token as a legitimate CSP source expression first
+ * (`classifyCspSourceToken`), not just splitting/trimming/quote-stripping
+ * pre-formed CSP syntax. A rejected token is dropped and logged, not
+ * silently swallowed, so a misconfiguration is visible rather than a
+ * quiet no-op.
  */
 function parseExtra(val: string): string {
   if (!val) {
     return '';
   }
 
-  return val
-    .split(/[\s,]+/)
-    .map((token) => token.trim().replace(/^['"]+|['"]+$/g, ''))
-    .filter(Boolean)
-    .join(' ');
+  const rawTokens = val.split(/[\s,]+/).filter(Boolean);
+  const validTokens: string[] = [];
+
+  for (const rawToken of rawTokens) {
+    const classified = classifyCspSourceToken(rawToken);
+    if (classified) {
+      validTokens.push(classified);
+    } else {
+      getLogger().warn(
+        { rawToken },
+        'CSP *_EXTRA config token rejected: not a valid CSP source expression',
+      );
+    }
+  }
+
+  return validTokens.join(' ');
 }
 
 /**
@@ -294,6 +400,16 @@ export function buildContentSecurityPolicy(nonce?: string): string {
     // <base> tag from rebasing relative URLs off-origin, and stop forms from
     // submitting anywhere but this origin.
     "object-src 'none'",
+    // script-src-attr overrides script-src specifically for inline
+    // event-handler attributes (onclick=, onerror=, etc.) -- this repo
+    // (React/Next) never emits those, so this is free additional hardening
+    // on top of whatever script-src itself allows, independent of
+    // CSP_SCRIPT_MODE: even in cache-compatible mode, where script-src
+    // still needs 'unsafe-inline' for Next's own bootstrap scripts, an
+    // inline event-handler attribute injected via some other vector (e.g.
+    // a stored-XSS payload landing in unescaped HTML) stays blocked. See
+    // SEC-32 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+    "script-src-attr 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     // Modern superset of X-Frame-Options: DENY, kept alongside it for

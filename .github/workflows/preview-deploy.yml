@@ -313,7 +313,7 @@ jobs:
           done
           curl -sS http://127.0.0.1:9222/json/version || echo "CDP endpoint never became ready"
           set +e
-          npx @lhci/cli autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.port=9222 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
+          pnpm exec lhci autorun --collect.url=${{ needs.deploy-preview.outputs.preview_url }} --collect.settings.port=9222 --collect.settings.extraHeaders='{"x-vercel-protection-bypass": "'"${VERCEL_AUTOMATION_BYPASS_SECRET}"'"}'
           LHCI_EXIT=$?
           set -e
           kill "$CHROME_PID" 2>/dev/null || true

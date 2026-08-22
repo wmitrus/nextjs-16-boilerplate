@@ -152,6 +152,44 @@ function toPinnedFamily(record: LookupAddress): 4 | 6 {
 }
 
 /**
+ * Races `promise` against `signal` firing, rejecting the moment the signal
+ * aborts rather than waiting for `promise` to settle on its own.
+ *
+ * This exists specifically because `dns.promises.lookup()` has no
+ * `AbortSignal` support at all -- confirmed empirically before relying on
+ * this (SEC-32 / A.8 follow-up): passing a `signal` option to it is
+ * silently ignored, and an already-aborted signal doesn't stop it either.
+ * `promise` itself keeps running to completion in the background (its
+ * result is simply never awaited by the caller past the deadline) — this
+ * doesn't cancel the underlying c-ares DNS resolution, since Node gives no
+ * way to do that, but it does stop `secureFetch()`'s caller from being
+ * left waiting on it past `SECURITY_OUTBOUND_FETCH_TIMEOUT_MS`, which is
+ * the actual guarantee this function exists to make good on.
+ */
+function raceWithSignal<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new Error('Aborted'));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error('Aborted'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error as Error);
+      },
+    );
+  });
+}
+
+/**
  * Validates `hostname` (allowlist + not private/reserved) and, for a
  * resolvable name, resolves it to a single address to pin the actual
  * connection to.
@@ -173,15 +211,36 @@ function toPinnedFamily(record: LookupAddress): 4 | 6 {
  * each function's line count readable — this is the "not a literal IP"
  * path: resolve via `node:dns/promises`, then apply the same
  * private/reserved-address classification to every returned record.
+ *
+ * `overallSignal` is the same one call-`secureFetch()`-wide budget that
+ * guards `fetchHop()`'s `fetch()` call — threaded in here too so DNS
+ * resolution, which happens *before* any `fetch()` call and previously had
+ * no deadline of its own, is covered by the same
+ * `SECURITY_OUTBOUND_FETCH_TIMEOUT_MS` guarantee instead of being able to
+ * hang indefinitely (SEC-32 / A.8 follow-up — see `raceWithSignal()`'s doc
+ * comment for why this can't just pass `signal` to `lookup()` directly).
  */
 async function resolveViaDns(
   normalizedHostname: string,
   redactedUrl: string,
+  overallSignal: AbortSignal,
 ): Promise<PinnedAddress> {
   let records: LookupAddress[];
   try {
-    records = await lookup(normalizedHostname, { all: true, verbatim: true });
+    records = await raceWithSignal(
+      lookup(normalizedHostname, { all: true, verbatim: true }),
+      overallSignal,
+    );
   } catch (error) {
+    if (overallSignal.aborted) {
+      logger.error(
+        { hostname: normalizedHostname, url: redactedUrl },
+        'SSRF Protection: DNS resolution exceeded the overall request deadline, failing closed',
+      );
+      throw new Error(
+        `SSRF Protection: DNS resolution for ${normalizedHostname} timed out`,
+      );
+    }
     logger.error(
       {
         hostname: normalizedHostname,
@@ -215,6 +274,7 @@ async function resolveViaDns(
 async function resolveAndValidateHost(
   hostname: string,
   urlForLogging: URL,
+  overallSignal: AbortSignal,
 ): Promise<PinnedAddress> {
   // Normalize once, up front -- `currentUrl.hostname` brackets a literal
   // IPv6 address (see stripBrackets()'s doc comment), and every check
@@ -240,7 +300,7 @@ async function resolveAndValidateHost(
   }
 
   if (!isIpLiteral(normalizedHostname)) {
-    return resolveViaDns(normalizedHostname, redactedUrl);
+    return resolveViaDns(normalizedHostname, redactedUrl, overallSignal);
   }
 
   if (isPrivateOrReservedAddress(normalizedHostname)) {
@@ -535,9 +595,10 @@ function prepareNextHop(
  * Also bounded in two other ways (A.8.3): an overall wall-clock timeout
  * (`SECURITY_OUTBOUND_FETCH_TIMEOUT_MS`) spanning every hop combined — not
  * reset per hop, so a chain of redirects can't add up to an unbounded
- * total wait — and a response-body size cap
- * (`SECURITY_OUTBOUND_FETCH_MAX_BYTES`), read via `readBoundedResponseBody`
- * rather than an unconditional full buffer.
+ * total wait, and covering DNS resolution too (`raceWithSignal()`, SEC-32 /
+ * A.8 follow-up), not just each hop's `fetch()` call — and a response-body
+ * size cap (`SECURITY_OUTBOUND_FETCH_MAX_BYTES`), read via
+ * `readBoundedResponseBody` rather than an unconditional full buffer.
  */
 export async function secureFetch(
   url: string | URL,
@@ -560,6 +621,7 @@ export async function secureFetch(
     const pinned = await resolveAndValidateHost(
       currentUrl.hostname,
       currentUrl,
+      overallSignal,
     );
     const agent = new Agent({ connect: { lookup: buildPinnedLookup(pinned) } });
 

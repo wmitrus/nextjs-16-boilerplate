@@ -11,32 +11,33 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                          | Classification                                                                                                                               | Affected Contexts                  |
-| ------ | ------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                     | False positive                                                                                                                               | Unit test files                    |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin          | False positive                                                                                                                               | Middleware                         |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param         | Latent risk → fixed                                                                                                                          | Middleware                         |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                    | False positive → hardened                                                                                                                    | API route                          |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                     | False positive                                                                                                                               | E2E helpers                        |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                    | False positive                                                                                                                               | E2E specs                          |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config          | Real risk → fixed                                                                                                                            | Module-level SDK adapters          |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`               | Latent risk                                                                                                                                  | Auth/bootstrap UI mapping          |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement               | Latent risk                                                                                                                                  | Runtime logger helpers             |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop          | Real risk → fixed                                                                                                                            | Rate-limit middleware              |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers                | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers               |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling          | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers               |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`        | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers           |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting           | Real risk → fixed                                                                                                                            | Public auth route handlers         |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges        | Real risk → fixed                                                                                                                            | Email adapters, auth bridges       |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                       | Real risk → fixed                                                                                                                            | App Router route handlers          |
-| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                            | Not security by itself                                                                                                                       | UI state, JSX handlers, tests      |
-| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift           | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env          |
-| SEC-26 | Authorization      | ABAC action check without matching resource-scope check      | Real risk → fixed                                                                                                                            | Admin CRUD route handlers/services |
-| SEC-27 | Authorization      | Mutating admin route with no authorization check at all      | Real risk → fixed                                                                                                                            | Admin API route handlers           |
-| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense        | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers             |
-| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes                  | Real risk → fixed                                                                                                                            | Demo/showcase route policy         |
-| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally    | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx        |
-| SEC-31 | CSP architecture   | Same-origin mixed CSP profiles don't survive client-side nav | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide    |
+| #      | Category           | Vulnerability Class                                                                                      | Classification                                                                                                                               | Affected Contexts                                   |
+| ------ | ------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                                                                 | False positive                                                                                                                               | Unit test files                                     |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin                                                      | False positive                                                                                                                               | Middleware                                          |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param                                                     | Latent risk → fixed                                                                                                                          | Middleware                                          |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                                                                | False positive → hardened                                                                                                                    | API route                                           |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                                                                 | False positive                                                                                                                               | E2E helpers                                         |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                                                                | False positive                                                                                                                               | E2E specs                                           |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config                                                      | Real risk → fixed                                                                                                                            | Module-level SDK adapters                           |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Auth/bootstrap UI mapping                           |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Runtime logger helpers                              |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop                                                      | Real risk → fixed                                                                                                                            | Rate-limit middleware                               |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers                                                            | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling                                                      | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`                                                    | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers                            |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting                                                       | Real risk → fixed                                                                                                                            | Public auth route handlers                          |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges                                                    | Real risk → fixed                                                                                                                            | Email adapters, auth bridges                        |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                                                                   | Real risk → fixed                                                                                                                            | App Router route handlers                           |
+| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                                                                        | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                       |
+| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift                                                       | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                           |
+| SEC-26 | Authorization      | ABAC action check without matching resource-scope check                                                  | Real risk → fixed                                                                                                                            | Admin CRUD route handlers/services                  |
+| SEC-27 | Authorization      | Mutating admin route with no authorization check at all                                                  | Real risk → fixed                                                                                                                            | Admin API route handlers                            |
+| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense                                                    | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                              |
+| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes                                                              | Real risk → fixed                                                                                                                            | Demo/showcase route policy                          |
+| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally                                                | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx                         |
+| SEC-31 | CSP architecture   | Same-origin mixed CSP profiles don't survive client-side nav                                             | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide                     |
+| SEC-32 | CSP hardening      | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                | with-headers.ts, csp-violations.ts, secure-fetch.ts |
 
 ---
 
@@ -1081,6 +1082,18 @@ Always use a valid v4 UUID in test fixtures for fields validated with `z.uuid()`
 
 **ID**: SEC-15
 **Category**: Object access / prototype-chain trust boundary
+**Classification**: Fixed — verified 2026-08-22, not left indeterminate as
+"latent risk" (A.8 follow-up review explicitly asked for this entry to be
+reclassified either FIXED-with-test or ACCEPTED/NOT-REACHABLE-with-evidence).
+The repository's one concrete instance of this pattern,
+`src/app/auth/bootstrap/page.tsx`'s `ERROR_BY_REASON` lookup, already uses
+the correct `Object.hasOwn(ERROR_BY_REASON, reason)` guard, not `reason in
+ERROR_BY_REASON` — confirmed by reading the current file, not assumed, and
+by a repo-wide grep for `<identifier> in <PLAIN_OBJECT_LOOKUP_TABLE>` that
+found no other user-controlled-key guard using the dangerous pattern
+anywhere in `src/`. This entry stays in the document as the rule for any
+_future_ lookup table indexed by request/query input — the dangerous
+pattern below is a pattern to keep rejecting, not a currently-open finding.
 **Surface**: Auth/bootstrap mappings, route-handler lookup tables, any plain-object record indexed by request or query input
 
 ### Scanner / Review Signal
@@ -1148,6 +1161,21 @@ if (resolved) return resolved;
 
 **ID**: SEC-16
 **Category**: File access / path confinement
+**Classification**: Fixed — verified 2026-08-22, not left indeterminate as
+"latent risk" (A.8 follow-up review explicitly asked for this entry to be
+reclassified either FIXED-with-test or ACCEPTED/NOT-REACHABLE-with-evidence).
+The repository's concrete instance, `src/core/logger/utils.ts`'s
+`ensureLogDirectory()`/`createFileStream()`, already resolves and confines
+every path argument at the sink via `assertPathWithinBase()` /
+`resolvePathWithinBase()` — the exact "Correct Pattern" shape below, not
+the dangerous unconfined shape — confirmed by reading the current file, not
+assumed. `src/core/logger/utils.test.ts` has a dedicated regression test
+("should reject paths that escape the workspace root", asserting
+`ensureLogDirectory('../logs')` returns `false`) and a matching one for
+`createFileStream('test.log', '../logs')` returning `null`. This entry
+stays in the document as the rule for any _future_ reusable fs helper that
+accepts a dynamic path argument — the dangerous pattern below is a pattern
+to keep rejecting, not a currently-open finding.
 **Surface**: Reusable helpers in runtime code or scripts that accept a path, directory, or filename argument and call `fs.*`
 
 ### Review Signal
@@ -2646,3 +2674,149 @@ origin split (subdomain), not a route split, the moment a real requirement
 for two different CSP postures at once appears — and treat "two
 deployments" as a legitimate, expected shape for this boilerplate to grow
 into, not a sign something went wrong.
+
+---
+
+## SEC-32 — CSP Correctness Follow-Up: `speculationrules`, `*_EXTRA` Injection, DNS Timeout
+
+**ID**: SEC-32
+**Category**: CSP hardening / outbound-fetch hardening
+**Classification**: Real risk → fixed (2026-08-22). Found by a second
+external re-review of the A.8 diff (commit `5fc9fb4`), each item verified
+empirically against the actual running code before fixing — never taken on
+the reviewer's word alone, same discipline as SEC-28.
+**Affected contexts**: `e2e/support/csp-violations.ts`,
+`src/security/middleware/with-headers.ts`, `src/security/outbound/secure-fetch.ts`
+
+This is a follow-up to SEC-28 (SSRF/`secureFetch()` hardening) and SEC-30
+(nonce CSP). Three independent findings, grouped here because they came
+from the same review pass and the same "verify empirically, then fix"
+discipline, not because they share a root cause.
+
+### 1. `<script type="speculationrules">` is NOT a non-executable script type
+
+`e2e/support/csp-violations.ts`'s `NON_EXECUTABLE_SCRIPT_TYPES` treated
+`speculationrules` the same as genuinely inert block types
+(`application/json`, `application/ld+json`, `importmap`) — script blocks a
+browser never executes as code, so CSP's `script-src` doesn't govern them
+and a nonce check on them is a false-fail waiting to happen. Confirmed via
+WebSearch against MDN/the WICG spec (direct `developer.mozilla.org` access
+is blocked by this environment's egress proxy; the MDN markdown source
+mirrored on `github.com/mdn/content` was used instead) that
+`speculationrules` is the opposite case: it **is** governed by
+`script-src`, and isn't even covered by `'unsafe-inline'` — it requires an
+explicit `'inline-speculation-rules'` source expression, a nonce, or a
+hash. Treating it as non-executable meant the E2E nonce-matching helper
+(`isExecutableScript`) would have silently stopped checking its nonce the
+moment React/Next ever emitted one (prefetch/prerender resource hints can
+generate exactly this block type) — the `securitypolicyviolation` listener
+elsewhere in the same test harness remained a backstop, so this was a test
+correctness bug more than a live exploit, but the test was asserting a
+false rule about what CSP actually does.
+
+**Fix**: removed `speculationrules` from `NON_EXECUTABLE_SCRIPT_TYPES`.
+`e2e/support/csp-violations.test.ts` (new, unit-level — previously this
+logic was only exercised indirectly via the opt-in Playwright spec) proves
+a `speculationrules` descriptor is classified executable, alongside the
+genuinely-inert types staying excluded, and a case-insensitivity check.
+
+### 2. `NEXT_PUBLIC_CSP_*_EXTRA` env vars accepted arbitrary CSP syntax, including directive injection
+
+`with-headers.ts`'s `parseExtra()` split an `*_EXTRA` env value on
+whitespace/commas and passed each token through with only quote-stripping
+— no validation that a token was a legitimate CSP source expression. A
+value like `"https://cdn.example.com; object-src *"` would inject a
+literal `;` into the built header, adding a whole extra `object-src *`
+directive. Reproduced through the exact old logic before fixing, not
+assumed: CSP honors only the **first** occurrence of a duplicate directive
+in one header, and the app's own `object-src 'none'` baseline hardening
+directive is emitted later in the same `buildContentSecurityPolicy()`
+array — so the injected value would have WON, silently disarming
+`object-src 'none'` entirely. Not a remote-input vuln (`*_EXTRA` vars are
+operator-set, not request-derived), but unacceptable for a reusable
+security boilerplate whose whole premise is "the baseline directives hold
+regardless of what an integrator adds."
+
+**Fix**: added `classifyCspSourceToken()`, which validates every token as
+one of: the two safe quoted keyword sources (`'self'`, `'none'`); a
+scheme-qualified source (`CSP_SCHEME_SOURCE_PATTERN`); or a bare/wildcard
+hostname (`CSP_HOST_SOURCE_PATTERN`) — rejecting (and logging, not
+silently dropping) anything containing `;`, `\r`, `\n`, `<`, `>`, a
+backtick, or internal whitespace, and rejecting keyword-_shaped_ tokens
+(`unsafe-*`, `nonce-*`, `sha256-*`/`sha384-*`/`sha512-*`,
+`strict-dynamic`, `wasm-unsafe-eval`, `unsafe-hashes`, `report-sample`,
+`inline-speculation-rules`) even though they'd otherwise pass as
+syntactically-valid single-label hostnames. Both new regexes were
+empirically verified ReDoS-safe (sub-millisecond against 50,000–100,000
+character adversarial inputs) before suppressing the scanner's
+`security/detect-unsafe-regex` finding on each — same discipline as
+SEC-28's regex false-positive notes. `with-headers.test.ts` has four new
+regression tests: the glued-semicolon injection payload is fully rejected
+and `object-src 'none'` is unaffected; the same payload with a
+space-separated `;` token still rejects the injected directive while
+keeping the legitimate host (proving this isn't an overbroad
+reject-everything fix); dangerous keyword-shaped tokens are rejected
+whether quoted or bare; `'self'`/`'none'` are still accepted.
+
+### 3. DNS resolution had no timeout — the "overall" fetch timeout didn't actually cover it
+
+A.8.3 added `SECURITY_OUTBOUND_FETCH_TIMEOUT_MS`, an `AbortSignal`-based
+overall budget — but that signal was only ever passed to `fetchHop()`'s
+`fetch()` call. `resolveViaDns()`'s `dns.promises.lookup()` call, which
+runs _before_ any `fetch()` on every hop, had no deadline of its own.
+Confirmed empirically before fixing: `dns.promises.lookup()` has no
+`AbortSignal` support at all — passing a `signal` option (even an
+already-aborted one) is silently ignored, and Node's c-ares-backed DNS
+resolution has no cancellation mechanism to hook into. Not an SSRF bypass
+(the address is still validated once resolution completes), but a
+resource-exhaustion/availability gap: a slow or non-responding DNS server
+could hang a `secureFetch()` call indefinitely, contradicting the
+timeout's own documented "spans every hop" guarantee.
+
+**Fix**: added `raceWithSignal()`, which races the `lookup()` promise
+against the same call-wide `overallSignal` `secureFetch()` already builds
+(one absolute deadline covering DNS resolution _and_ every hop's connect
+and body read — not a fresh per-phase budget) and rejects the moment the
+signal fires, regardless of whether the underlying DNS call itself ever
+settles. `resolveViaDns()` distinguishes a deadline-triggered rejection
+(`overallSignal.aborted`) from a genuine DNS failure (`ENOTFOUND`, etc.)
+so the timeout case gets its own clearly-labeled error, matching
+`fetchHop()`'s existing timeout-labeling pattern rather than folding into
+the generic "DNS resolution failed" message. `secure-fetch.test.ts` has a
+new regression test: a `lookup()` mock that never resolves on its own
+still causes `secureFetch()` to reject with a DNS-timeout-labeled error
+within the configured budget, and `fetch()` is never reached — proving the
+deadline fires during DNS resolution, not just during the eventual
+`fetch()` call.
+
+### Also added while in this code (free hardening, not a fix for a live bug)
+
+`script-src-attr 'none'` was added to `buildContentSecurityPolicy()` —
+overrides `script-src` specifically for inline event-handler attributes
+(`onclick=`, `onerror=`, etc., per MDN). This repo/React never emits those,
+so it's free additional hardening on top of whatever `script-src` allows,
+independent of `CSP_SCRIPT_MODE` — even in `cache-compatible` mode, where
+`script-src` still needs `'unsafe-inline'` for Next's own bootstrap
+scripts, an inline event-handler attribute injected via some other vector
+stays blocked.
+
+### Rule for Agents
+
+**DO NOT** classify a `<script type="...">` block as CSP-inert without
+checking the actual CSP spec/MDN for that exact type — `script-src`'s
+governed-type list is not "anything that isn't `text/javascript`."
+
+**DO NOT** let an env-configured CSP "extra" value pass through as raw CSP
+syntax — validate each source-expression token, don't just
+split/trim/quote-strip.
+
+**DO NOT** assume an `AbortSignal` passed to a Node API actually cancels
+it — `dns.promises.lookup()` is a concrete counterexample; verify
+cancellation support per-API before relying on it, and race-with-signal
+(reject on abort, let the underlying call run to completion unobserved)
+when the API itself can't be cancelled.
+
+**DO** treat "one overall deadline for a multi-phase operation" as
+covering every phase (DNS → connect → every redirect hop → body read) by
+construction — a signal only threaded through the _last_ phase isn't an
+overall deadline, it's a per-phase one with a misleading name.

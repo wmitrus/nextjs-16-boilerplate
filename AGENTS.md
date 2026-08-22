@@ -575,6 +575,73 @@ When auth, org, role, permission, policy, or tenant logic is involved, increase 
 
 ---
 
+## Pending Scheduled Security Follow-Ups — Check Every Session
+
+**Any AI agent working in this repository on or after the date below must
+check this section before finishing a security-adjacent task.** This is a
+standing instruction, independent of which session or conversation created
+it — not a one-time note to the session that wrote it. `CLAUDE.md` carries
+a pointer to this section per this repo's own propagation convention; this
+is the authoritative copy.
+
+### Next.js Critical security release — check on/after 2026-08-26
+
+**Status as of 2026-08-22**: Next.js has publicly announced a **Critical**
+severity security release targeted for **2026-08-26**, naming `16.3.2` and
+`15.5.24` as the patched versions-to-be. This repository is already on
+`next@16.3.2` (upgraded 2026-08-21, the day before that version's public
+release) — but **do not assume this repo already has the fix**. As of
+2026-08-22, `next@16.3.2`'s public release notes describe only unrelated
+backport fixes (app-entry validation, catch-all routing, Turbopack) — there
+is no evidence yet that the embargoed Critical fix is already in the
+published `16.3.2`, since the advisory itself hadn't been published as of
+that date. Treat "we're on 16.3.2" and "we have the fix" as two separate,
+unverified claims until the official advisory confirms which exact
+version(s) actually carry it.
+
+**On or after 2026-08-26, any session touching this repo's security
+surface (or asked to check for pending security work) MUST**:
+
+1. Check whether Next.js has published the official advisory (npm
+   registry release notes for `next`, the Next.js GitHub security
+   advisories page, or a web search for "Next.js critical security
+   advisory 16.3" / "15.5.24").
+2. If published: read the advisory's actual affected-version range and
+   actual patched version — do not assume it's `16.3.2`/`15.5.24` just
+   because those were the pre-announced targets; the real patched version
+   could differ once the advisory ships.
+3. If this repo's current `next` version is inside the affected range and
+   below the real patched version, upgrade:
+   `pnpm add next@<patched-version> eslint-config-next@<patched-version>`
+   (mirroring how the 16.3.2 upgrade updated the pinned `@next/*` and
+   `eslint-config-next` versions in `pnpm-workspace.yaml`'s
+   `minimumReleaseAgeExclude` list — update those pins too).
+4. Run the full security-relevant gate before calling this done: frozen
+   lockfile install (`pnpm install --frozen-lockfile`), `pnpm audit`
+   (or the repo's `audit` config in `pnpm-workspace.yaml`), `pnpm test`,
+   `pnpm typecheck`, a real `CSP_SCRIPT_MODE=nonce-dynamic pnpm build`
+   plus the nonce-dynamic E2E suite (`e2e-label.yml`'s
+   `e2e-csp-nonce-dynamic` job, or the path-triggered workflow at
+   `.github/workflows/e2e-csp-nonce-dynamic-paths.yml`), a Preview deploy,
+   and a Preview runtime smoke check.
+5. Only after all of the above passes does this constitute a genuine
+   production GO for this dependency — do not treat "the app is on
+   16.3.2" alone as sufficient at any point before this checklist
+   completes.
+6. If this section is still unresolved by the time you read it (advisory
+   not yet published, or published but not yet actioned): say so
+   explicitly rather than silently skipping it, and if a tracked task for
+   this doesn't already exist (check Leantime per this file's mandatory
+   protocol, and this repo's `.copilot/tasks/` history), create one so the
+   follow-up isn't lost between sessions.
+
+Once this follow-up is actually completed (patch applied and the full gate
+above passes, or the advisory turns out not to affect this repo's version
+range), delete this subsection from both this file and `CLAUDE.md` — do
+not leave a stale "pending" notice pointing at a date that already passed.
+
+---
+
 ## Forward-Compatibility Constraints
 
 This boilerplate must remain compatible with stronger tenancy, authorization, and release-control models over time.

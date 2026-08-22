@@ -96,17 +96,27 @@ export interface ScriptDescriptor {
 }
 
 /**
- * CSP's script-src directive does not apply to non-executable script
- * block types — the browser never treats these as code, so they carry no
- * nonce and need none. A blanket "every <script> tag must have a matching
- * nonce" check would false-fail on legitimate JSON-LD structured data or
- * an import map.
+ * CSP's script-src directive does not apply to these non-executable
+ * script block types — the browser never treats them as code, so they
+ * carry no nonce and need none. A blanket "every <script> tag must have a
+ * matching nonce" check would false-fail on legitimate JSON-LD structured
+ * data or an import map.
+ *
+ * `speculationrules` is deliberately NOT in this set, unlike an earlier
+ * version of this file — confirmed against MDN/the WICG spec before
+ * fixing, not assumed: `<script type="speculationrules">` IS governed by
+ * `script-src` and requires an explicit `'inline-speculation-rules'`
+ * source expression, a nonce, or a hash — it isn't even covered by
+ * `'unsafe-inline'`. Treating it as non-executable would have silently
+ * stopped checking its nonce the moment one appeared (React/Next can
+ * emit these via prefetch/prerender resource hints), exactly the kind of
+ * gap this file exists to catch. See SEC-32 in
+ * docs/ai/general/SECURITY_CODING_PATTERNS.md.
  */
 const NON_EXECUTABLE_SCRIPT_TYPES = new Set([
   'application/json',
   'application/ld+json',
   'importmap',
-  'speculationrules',
 ]);
 
 export function isExecutableScript(descriptor: ScriptDescriptor): boolean {

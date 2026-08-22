@@ -67,8 +67,27 @@ overrides:
   'tar@>=7.0.0 <7.5.21': 7.5.21
 
 audit:
-  # image-size@2.0.3 is the advisory fix, but npm currently publishes only
-  # 2.0.2. This dev-only path is tracked in the audit remediation artifact.
+  # --- GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq (image-size@2.0.2) ---
+  # Reason: both advisories are in `image-size`, upstream published only
+  # 2.0.2 as of this writing -- 2.0.3 (the advisory fix) does not exist on
+  # npm yet, so there is no newer version to bump to. Re-check
+  # `npm view image-size versions` periodically; bump the moment a fixed
+  # version publishes.
+  # Dependency path (confirmed via `pnpm why image-size`, 2026-08-22):
+  #   image-size@2.0.2
+  #   └─ vite-plugin-storybook-nextjs@3.1.9
+  #      └─ @storybook/nextjs-vite@10.2.13
+  #         └─ this repo (devDependencies)
+  # Dev-only proof: reached exclusively through @storybook/nextjs-vite, a
+  # devDependency -- Storybook's build/dev tooling never ships into the
+  # production Next.js bundle or a deployed server, so this advisory has no
+  # production attack surface in this repo regardless of its severity.
+  # Owner: repository maintainers (wmitrus) -- re-review on every quarterly
+  # dependency-audit pass, not just when this comment is read.
+  # Review expiry: 2026-11-22 (quarterly) -- if still unresolved upstream
+  # at that date, re-confirm the dev-only reachability proof still holds
+  # (a future refactor could theoretically pull @storybook/nextjs-vite into
+  # a non-dev path) rather than silently re-extending the ignore.
   ignore:
     - GHSA-w3rx-r6r6-pgpr
     - GHSA-5p2g-fcmc-qvqq

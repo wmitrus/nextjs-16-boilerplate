@@ -85,6 +85,11 @@ describe('Headers Middleware', () => {
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("form-action 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
+    // SEC-32: free additional hardening -- blocks inline event-handler
+    // attributes (onclick=, etc.) regardless of CSP_SCRIPT_MODE, even when
+    // script-src itself still carries 'unsafe-inline' in cache-compatible
+    // mode.
+    expect(csp).toContain("script-src-attr 'none'");
   });
 
   it('should not include upgrade-insecure-requests outside Vercel production', () => {
@@ -174,6 +179,91 @@ describe('Headers Middleware', () => {
       // No double spaces / empty tokens from an unset extra value.
       expect(scriptSrc).not.toContain('  ');
       expect(scriptSrc?.trim()).toBe(scriptSrc);
+    });
+
+    it('SEC-32: does not let a semicolon in an extra value inject a directive that overrides object-src none', () => {
+      // A naive split-and-join implementation carries a literal ";" straight
+      // through into the header, letting a config typo (or a malicious
+      // config value) inject a whole extra directive -- and because CSP
+      // uses only the FIRST occurrence of a duplicate directive, an
+      // injected "object-src *" here would silently win over this file's
+      // own object-src 'none' baseline hardening directive.
+      mockEnv.NEXT_PUBLIC_CSP_SCRIPT_EXTRA =
+        'https://cdn.example.com; object-src *';
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const csp = res.headers.get('Content-Security-Policy')!;
+
+      // No literal ";" survived from the config value -- only the "; "
+      // directive separators this file itself joins with remain, so no
+      // new directive was injected by the config.
+      const directives = csp.split('; ');
+      expect(directives.every((entry) => !entry.includes(';'))).toBe(true);
+      const objectSrcDirectives = directives.filter((entry) =>
+        entry.startsWith('object-src '),
+      );
+      expect(objectSrcDirectives).toEqual(["object-src 'none'"]);
+      // The wildcard from the injection attempt never got through as a
+      // source expression on its own either.
+      expect(csp).not.toContain(' * ');
+      // The whole malformed token is dropped, not partially recovered --
+      // "https://cdn.example.com;" (semicolon glued on, no separating
+      // whitespace) is rejected as one token rather than the parser
+      // trying to salvage the part before the ";", which would add
+      // complexity and risk getting the split wrong.
+      expect(csp).not.toContain('https://cdn.example.com');
+    });
+
+    it('SEC-32: with the ";" as its own whitespace-separated token, still rejects the injected directive but keeps the legitimate host', () => {
+      mockEnv.NEXT_PUBLIC_CSP_SCRIPT_EXTRA =
+        'https://cdn.example.com ; object-src *';
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const csp = res.headers.get('Content-Security-Policy')!;
+
+      const directives = csp.split('; ');
+      expect(directives.every((entry) => !entry.includes(';'))).toBe(true);
+      expect(
+        directives.filter((entry) => entry.startsWith('object-src ')),
+      ).toEqual(["object-src 'none'"]);
+      expect(csp).not.toContain(' * ');
+      // Here the host is a genuinely separate token (whitespace before the
+      // lone ";"), so it's still accepted on its own merits.
+      expect(csp).toContain('https://cdn.example.com');
+    });
+
+    it('SEC-32: rejects dangerous CSP keyword tokens even when quoted or bare', () => {
+      mockEnv.NEXT_PUBLIC_CSP_SCRIPT_EXTRA =
+        "'unsafe-inline' unsafe-eval 'nonce-abc' strict-dynamic https://cdn.example.com";
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const scriptSrc = res.headers
+        .get('Content-Security-Policy')!
+        .split('; ')
+        .find((entry) => entry.startsWith('script-src '))!;
+
+      expect(scriptSrc).not.toContain("'nonce-abc'");
+      expect(scriptSrc).not.toContain('strict-dynamic');
+      // The legitimate host survives even though the same value carried
+      // several rejected tokens.
+      expect(scriptSrc).toContain('https://cdn.example.com');
+    });
+
+    it("SEC-32: accepts the 'self' and 'none' keyword sources", () => {
+      mockEnv.NEXT_PUBLIC_CSP_FRAME_EXTRA = "'self' none";
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const frameSrc = res.headers
+        .get('Content-Security-Policy')!
+        .split('; ')
+        .find((entry) => entry.startsWith('frame-src '))!;
+
+      expect(frameSrc).toContain("'self'");
+      expect(frameSrc).toContain("'none'");
     });
   });
 

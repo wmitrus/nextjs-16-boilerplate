@@ -5,12 +5,14 @@ import { isExecutableScript, type ScriptDescriptor } from './csp-violations';
 /**
  * Unit coverage for `isExecutableScript()` -- previously only exercised
  * indirectly via `e2e/csp-nonce-dynamic.spec.ts` (a real-browser
- * Playwright spec, opt-in and not part of the default suite). This proves
- * the classification logic itself directly, including the
- * `speculationrules` case A.8.4 specifically asked for: CSP's script-src
- * directive does not apply to non-executable script block types, so a
- * blanket "every <script> needs a matching nonce" check would false-fail
- * on a legitimate speculationrules/JSON-LD/import-map block.
+ * Playwright spec, opt-in and not part of the default suite). Proves the
+ * classification logic directly: CSP's script-src directive does not
+ * apply to genuinely non-executable script block types (JSON-LD, import
+ * maps), so a blanket "every <script> needs a matching nonce" check would
+ * false-fail on those -- but `speculationrules` IS governed by
+ * script-src (confirmed against MDN/the WICG spec, SEC-32) and must NOT
+ * be excluded, unlike an earlier version of both this file and
+ * csp-violations.ts.
  */
 function scriptDescriptor(
   overrides: Partial<ScriptDescriptor> = {},
@@ -40,10 +42,14 @@ describe('isExecutableScript', () => {
     expect(isExecutableScript(scriptDescriptor({ type: 'module' }))).toBe(true);
   });
 
-  it('excludes a speculationrules block', () => {
+  it('treats a speculationrules block as executable -- script-src DOES govern it', () => {
+    // <script type="speculationrules"> requires an explicit
+    // 'inline-speculation-rules' source expression, a nonce, or a hash --
+    // it is not even covered by 'unsafe-inline'. Excluding it here would
+    // silently stop checking its nonce (SEC-32).
     expect(
       isExecutableScript(scriptDescriptor({ type: 'speculationrules' })),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('excludes an application/json block', () => {
@@ -67,7 +73,7 @@ describe('isExecutableScript', () => {
   it('is case-insensitive on the type attribute', () => {
     expect(
       isExecutableScript(scriptDescriptor({ type: 'SPECULATIONRULES' })),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isExecutableScript(scriptDescriptor({ type: 'Application/Ld+Json' })),
     ).toBe(false);

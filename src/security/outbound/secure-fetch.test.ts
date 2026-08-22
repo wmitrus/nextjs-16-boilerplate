@@ -446,6 +446,31 @@ describe('Secure Fetch (SSRF Protection)', () => {
       );
     });
 
+    it('rejects with a timeout-labeled error once the overall budget expires during DNS resolution -- not just during fetch()', async () => {
+      // dns.promises.lookup() has no AbortSignal support at all (confirmed
+      // empirically, SEC-32 / A.8 follow-up) -- a never-resolving mock here
+      // stands in for that: nothing in this test ever settles this
+      // promise, proving the timeout comes from secureFetch()'s own
+      // overall-deadline race (raceWithSignal()), not from the lookup call
+      // itself ever giving up.
+      mockEnv.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS = 10;
+      vi.mocked(lookup)
+        .mockReset()
+        .mockImplementation(
+          () =>
+            new Promise(() => undefined) as unknown as ReturnType<
+              typeof lookup
+            >,
+        );
+
+      await expect(secureFetch('https://example.com/slow-dns')).rejects.toThrow(
+        /SSRF Protection.*DNS resolution.*timed out/,
+      );
+      // fetch() must never have been reached -- the deadline fired while
+      // still resolving the host, before any hop's fetch() call.
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it('rejects once the response body exceeds the configured byte cap, without buffering past it', async () => {
       mockEnv.SECURITY_OUTBOUND_FETCH_MAX_BYTES = 10;
       let chunksProduced = 0;

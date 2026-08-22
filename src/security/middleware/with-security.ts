@@ -54,7 +54,7 @@ export function withSecurity(
     let response = await handler(request, ctx);
 
     // Apply Security Headers & Metadata
-    response = withHeaders(request, response);
+    response = withHeaders(request, response, ctx.nonce);
     response.headers.set('x-correlation-id', ctx.correlationId);
     response.headers.set('x-request-id', ctx.requestId);
 

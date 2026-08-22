@@ -11,28 +11,33 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                     | Classification             | Affected Contexts                  |
-| ------ | ------------------ | ------------------------------------------------------- | -------------------------- | ---------------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                | False positive             | Unit test files                    |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin     | False positive             | Middleware                         |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param    | Latent risk → fixed        | Middleware                         |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`               | False positive → hardened  | API route                          |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                | False positive             | E2E helpers                        |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness               | False positive             | E2E specs                          |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config     | Real risk → fixed          | Module-level SDK adapters          |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`          | Latent risk                | Auth/bootstrap UI mapping          |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement          | Latent risk                | Runtime logger helpers             |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop     | Real risk → fixed          | Rate-limit middleware              |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers           | Local lint-backed workflow | Scripts, E2E helpers               |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling     | Local lint-backed workflow | Scripts, E2E helpers               |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`   | AI-pattern backed workflow | `src/**` runtime helpers           |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting      | Real risk → fixed          | Public auth route handlers         |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges   | Real risk → fixed          | Email adapters, auth bridges       |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                  | Real risk → fixed          | App Router route handlers          |
-| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                       | Not security by itself     | UI state, JSX handlers, tests      |
-| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift      | Real risk → fixed          | CI/CD, Vercel, AuthJS env          |
-| SEC-26 | Authorization      | ABAC action check without matching resource-scope check | Real risk → fixed          | Admin CRUD route handlers/services |
-| SEC-27 | Authorization      | Mutating admin route with no authorization check at all | Real risk → fixed          | Admin API route handlers           |
+| #      | Category           | Vulnerability Class                                                                                      | Classification                                                                                                                               | Affected Contexts                                   |
+| ------ | ------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                                                                 | False positive                                                                                                                               | Unit test files                                     |
+| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin                                                      | False positive                                                                                                                               | Middleware                                          |
+| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param                                                     | Latent risk → fixed                                                                                                                          | Middleware                                          |
+| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                                                                | False positive → hardened                                                                                                                    | API route                                           |
+| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                                                                 | False positive                                                                                                                               | E2E helpers                                         |
+| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                                                                | False positive                                                                                                                               | E2E specs                                           |
+| SEC-11 | Caching            | SDK client cache key missing differentiating config                                                      | Real risk → fixed                                                                                                                            | Module-level SDK adapters                           |
+| SEC-15 | Object access      | User-controlled key lookup via `key in object`                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Auth/bootstrap UI mapping                           |
+| SEC-16 | File access        | Reusable helper fs paths lack sink confinement                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Runtime logger helpers                              |
+| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop                                                      | Real risk → fixed                                                                                                                            | Rate-limit middleware                               |
+| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers                                                            | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                |
+| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling                                                      | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                |
+| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`                                                    | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers                            |
+| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting                                                       | Real risk → fixed                                                                                                                            | Public auth route handlers                          |
+| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges                                                    | Real risk → fixed                                                                                                                            | Email adapters, auth bridges                        |
+| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                                                                   | Real risk → fixed                                                                                                                            | App Router route handlers                           |
+| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                                                                        | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                       |
+| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift                                                       | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                           |
+| SEC-26 | Authorization      | ABAC action check without matching resource-scope check                                                  | Real risk → fixed                                                                                                                            | Admin CRUD route handlers/services                  |
+| SEC-27 | Authorization      | Mutating admin route with no authorization check at all                                                  | Real risk → fixed                                                                                                                            | Admin API route handlers                            |
+| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense                                                    | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                              |
+| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes                                                              | Real risk → fixed                                                                                                                            | Demo/showcase route policy                          |
+| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally                                                | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx                         |
+| SEC-31 | CSP architecture   | Same-origin mixed CSP profiles don't survive client-side nav                                             | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide                     |
+| SEC-32 | CSP hardening      | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                | with-headers.ts, csp-violations.ts, secure-fetch.ts |
 
 ---
 
@@ -1077,6 +1082,18 @@ Always use a valid v4 UUID in test fixtures for fields validated with `z.uuid()`
 
 **ID**: SEC-15
 **Category**: Object access / prototype-chain trust boundary
+**Classification**: Fixed — verified 2026-08-22, not left indeterminate as
+"latent risk" (A.8 follow-up review explicitly asked for this entry to be
+reclassified either FIXED-with-test or ACCEPTED/NOT-REACHABLE-with-evidence).
+The repository's one concrete instance of this pattern,
+`src/app/auth/bootstrap/page.tsx`'s `ERROR_BY_REASON` lookup, already uses
+the correct `Object.hasOwn(ERROR_BY_REASON, reason)` guard, not `reason in
+ERROR_BY_REASON` — confirmed by reading the current file, not assumed, and
+by a repo-wide grep for `<identifier> in <PLAIN_OBJECT_LOOKUP_TABLE>` that
+found no other user-controlled-key guard using the dangerous pattern
+anywhere in `src/`. This entry stays in the document as the rule for any
+_future_ lookup table indexed by request/query input — the dangerous
+pattern below is a pattern to keep rejecting, not a currently-open finding.
 **Surface**: Auth/bootstrap mappings, route-handler lookup tables, any plain-object record indexed by request or query input
 
 ### Scanner / Review Signal
@@ -1144,6 +1161,21 @@ if (resolved) return resolved;
 
 **ID**: SEC-16
 **Category**: File access / path confinement
+**Classification**: Fixed — verified 2026-08-22, not left indeterminate as
+"latent risk" (A.8 follow-up review explicitly asked for this entry to be
+reclassified either FIXED-with-test or ACCEPTED/NOT-REACHABLE-with-evidence).
+The repository's concrete instance, `src/core/logger/utils.ts`'s
+`ensureLogDirectory()`/`createFileStream()`, already resolves and confines
+every path argument at the sink via `assertPathWithinBase()` /
+`resolvePathWithinBase()` — the exact "Correct Pattern" shape below, not
+the dangerous unconfined shape — confirmed by reading the current file, not
+assumed. `src/core/logger/utils.test.ts` has a dedicated regression test
+("should reject paths that escape the workspace root", asserting
+`ensureLogDirectory('../logs')` returns `false`) and a matching one for
+`createFileStream('test.log', '../logs')` returning `null`. This entry
+stays in the document as the rule for any _future_ reusable fs helper that
+accepts a dynamic path argument — the dangerous pattern below is a pattern
+to keep rejecting, not a currently-open finding.
 **Surface**: Reusable helpers in runtime code or scripts that accept a path, directory, or filename argument and call `fs.*`
 
 ### Review Signal
@@ -1779,3 +1811,1034 @@ own reviewable diff, not folded into an unrelated commit.
 because the corresponding UI page is behind `src/app/admin/layout.tsx`'s
 guard — that guard protects page rendering only, never the underlying API
 route, which remains directly callable by anyone who can reach it.
+
+---
+
+## SEC-28 — SSRF Guard Must Cover IPv6/Link-Local Ranges and Resolve-Before-Fetch
+
+**ID**: SEC-28
+**Category**: SSRF
+**Classification**: Real risk — found during a repository-wide security audit
+(2026-08-21); the same-day fix below was itself incomplete (a TOCTOU plus an
+unrelated redirect bypass — see "Update 2026-08-21"), corrected same day;
+a second review (2026-08-22, "Update 2026-08-22 (A.8)") found the
+private-address check's IP-literal normalization was itself broken
+(bracketed IPv6 literals silently bypassed it), plus missing cross-origin
+credential stripping, timeout, and response-size bounds — all corrected
+**Affected contexts**: `src/security/outbound/secure-fetch.ts` and any future
+outbound-fetch helper that accepts a URL derived, even indirectly, from
+request input
+
+### Risk
+
+`secureFetch()`'s private-address check was an IPv4-only regex covering
+RFC1918 + the literal string `localhost`. It missed IPv6 loopback (`::1`),
+IPv6 link-local (`fe80::/10`), IPv4 link-local (`169.254.0.0/16` — notably
+the cloud-metadata address range), `0.0.0.0`, and IPv4-mapped IPv6
+(`::ffff:10.0.0.1`). It also only checked the **literal hostname**, never
+what that hostname actually **resolves to** — an allowlisted-looking domain
+name is not evidence the address it resolves to at fetch time is safe
+(classic DNS-rebinding: attacker controls the DNS record for a domain that
+passes the allowlist check, points it at an internal address).
+
+This is a live risk, not theoretical, in this repository:
+`src/app/api/security-test/ssrf/route.ts` is a public, unauthenticated route
+(see `PUBLIC_ROUTE_PREFIXES` in `route-policy.ts`) that takes a raw `?url=`
+query parameter and passes it straight into `secureFetch()` — anyone on the
+internet could probe it (see SEC-29 for how that route is now gated).
+
+### Correct Pattern
+
+Two additions, both required — hardening the literal-address predicate alone
+does not close the DNS-rebinding gap:
+
+```typescript
+function isPrivateOrReservedAddress(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  const ipv4Mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(normalized);
+  const ipv4Candidate = ipv4Mapped ? ipv4Mapped[1] : normalized;
+
+  const isPrivateIPv4 =
+    /^(?:10|127|0|169\.254|172\.(?:1[6-9]|2[0-9]|3[01])|192\.168)\./.test(
+      ipv4Candidate,
+    );
+  const isPrivateIPv6 =
+    normalized === '::1' ||
+    normalized === '::' ||
+    /^fe[89ab][0-9a-f]:/.test(normalized) ||
+    /^f[cd][0-9a-f]{2}:/.test(normalized);
+
+  return isPrivateIPv4 || isPrivateIPv6 || normalized === 'localhost';
+}
+
+// Resolve-then-check: re-run the same predicate against what the hostname
+// actually resolves to, not just its literal text. Fail closed on a
+// resolution error.
+async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
+  if (isIpLiteral(hostname)) return false;
+  try {
+    const records = await lookup(hostname, { all: true, verbatim: true });
+    return records.some((r) => isPrivateOrReservedAddress(r.address));
+  } catch {
+    return true; // fail closed — cannot confirm safety
+  }
+}
+```
+
+> ⚠️ The `resolvesToPrivateAddress()` shape above resolves-and-checks but
+> then discards the result, handing the bare hostname back to `fetch()` —
+> which resolves it again independently. That gap (plus an unrelated
+> redirect bypass) is corrected in "Update 2026-08-21" below; this block is
+> kept for the private/reserved-address predicate, which is still correct,
+> not as a template for the resolve step.
+
+### False-Positive Scanner Note
+
+The bounded-quantifier regexes above (`{1,3}`, fixed `{3}` repetition, no
+nested unbounded groups) trip `security/detect-unsafe-regex` as a false
+positive — this is linear-time matching against a length-bounded hostname
+string, not catastrophic backtracking. Suppress with a scoped
+`eslint-disable-next-line security/detect-unsafe-regex` and a comment
+pointing back to this entry, same convention as SEC-01/SEC-05. Do not rewrite
+the regex into something more "scanner-friendly" that's harder to read —
+the pattern itself is correct.
+
+### Rule for Agents
+
+**DO** treat "hostname is on the allowlist" and "hostname is not a private
+IP literal" as two separate, both-required checks from "the address this
+request will actually reach is safe." Any new outbound-fetch helper that
+takes a URL touched by request input needs the resolve-then-check step, not
+just the literal-string check. **DO NOT** silently drop the DNS-resolution
+step to fix a slow test or a sandbox without network access — mock
+`node:dns/promises`'s `lookup`, don't skip the check it backs.
+
+### Update 2026-08-21 — "Resolve-Then-Check" Above Did Not Actually Close The Gap; Plus An Unrelated Redirect Bypass
+
+An external security review of this branch caught two real problems in the
+fix shipped earlier the same day above — both confirmed by reproducing them
+locally before fixing, not taken on faith:
+
+**1. The resolve-then-check pattern was a TOCTOU, not a fix.**
+`resolvesToPrivateAddress()` resolved the hostname, checked the result, and
+then threw the result away — the actual request still went out as
+`fetch(targetUrl, init)`, i.e. by hostname, not by the validated address.
+Node's `fetch` resolves DNS again, independently, deep inside its own HTTP
+client, at connect time. Between those two lookups there is a window: an
+attacker who controls the DNS record for an allowlisted-looking hostname can
+serve a public address to the check and a private one to the actual
+connect. "Resolve, check, then fetch the same hostname" only proves the
+hostname resolved safely _once_ — it proves nothing about what it resolves
+to a moment later. This is exactly what "DNS rebinding" means, and the
+original fix's own name for itself ("resolve-then-check... closes the
+DNS-rebinding gap") over-promised what it actually did.
+
+**2. A validated host could redirect anywhere, unchecked.**
+`fetch(targetUrl, init)` used the default redirect mode
+(`follow`) with no override. A 302 from an allowlisted, correctly-validated
+host straight to `http://169.254.169.254/...` (or any other private/
+disallowed target) was followed automatically, with zero re-validation —
+the entire allowlist + private-address guard applied only to the URL the
+caller originally passed in, never to where a redirect actually sent the
+request.
+
+**The fix — pin the connection, don't just check a discarded resolution;
+validate every redirect hop the same way as the original URL:**
+
+```typescript
+// resolveAndValidateHost() now RETURNS the validated address instead of
+// throwing it away — the only way the caller actually knows what to pin to.
+async function resolveAndValidateHost(
+  hostname,
+  urlForLogging,
+): Promise<PinnedAddress> {
+  // ...allowlist + literal-IP checks unchanged...
+  const records = await lookup(hostname, { all: true, verbatim: true });
+  // ...private-address check over `records` unchanged...
+  const [chosen] = records;
+  return { address: chosen.address, family: chosen.family === 6 ? 6 : 4 };
+}
+
+// A dns.lookup-shaped resolver that always returns the one address already
+// validated, regardless of what hostname is asked. Handed to a per-request
+// undici Agent as connect.lookup — net.connect's own DNS step is
+// short-circuited to that exact address, so there is no second query left
+// to race. The hostname itself is untouched everywhere else (URL, Host
+// header, TLS SNI/servername), so certificate validation keeps working.
+function buildPinnedLookup(pinned: PinnedAddress): LookupFunction {
+  return (_hostname, options, callback) => {
+    if (options.all)
+      callback(null, [{ address: pinned.address, family: pinned.family }]);
+    else callback(null, pinned.address, pinned.family);
+  };
+}
+
+// secureFetch(): redirect: 'manual' + a bounded loop that re-runs
+// resolveAndValidateHost() on every hop's target before following it.
+for (;;) {
+  const pinned = await resolveAndValidateHost(
+    currentUrl.hostname,
+    currentUrl.toString(),
+  );
+  const agent = new Agent({ connect: { lookup: buildPinnedLookup(pinned) } });
+  try {
+    const raw = await fetch(currentUrl, {
+      ...currentInit,
+      redirect: 'manual',
+      dispatcher: agent,
+    });
+    if (!REDIRECT_STATUSES.has(raw.status)) {
+      /* buffer + return */
+    }
+    // else: validate hopsRemaining, resolve Location against currentUrl,
+    // loop back to the top — the new currentUrl.hostname goes through the
+    // exact same resolveAndValidateHost() before anything connects to it.
+  } finally {
+    await agent.close();
+  }
+}
+```
+
+Verified two ways, not just by reasoning about the code: a unit suite
+(`secure-fetch.test.ts`) covering redirect-follow, redirect-to-disallowed-
+host rejection, redirect-to-rebound-address rejection, missing-Location
+rejection, the `MAX_REDIRECTS` bound, and 303/301/302 method downgrading —
+plus a dedicated wiring test (`secure-fetch.network.test.ts`) that mocks
+`undici`'s `Agent` to capture the exact `connect.lookup` function built for
+each hop and asserts it resolves to precisely the address that hop's
+`resolveAndValidateHost()` call validated, never an earlier hop's address.
+A true end-to-end real-socket test was considered and rejected: the only
+address this sandbox can bind a test server to is loopback, which the
+private-address check correctly refuses to connect to — fighting that check
+for test convenience would be testing something other than what ships.
+
+`undici` moved from `devDependencies` to `dependencies` in `package.json`
+as part of this fix — it's now used in production runtime code
+(`secure-fetch.ts`'s `Agent`), not just tooling.
+
+### Rule for Agents (extended)
+
+**DO** treat "validated" and "used for the connection" as the same address,
+not two related-but-separate values — if a check resolves or validates an
+address and the code that follows doesn't hand that exact value to whatever
+performs the connection, the check is decorative. **DO** treat every
+redirect hop from an outbound-fetch helper as a brand-new URL that needs
+the full validation pipeline, not an extension of trust already granted to
+the original URL — a validated host is not a validated destination if it
+can redirect. **DO NOT** call a generic `fetch()`/HTTP client against a
+security-sensitive target without either disabling automatic redirects and
+validating each hop yourself, or being certain nothing reachable from that
+target can 30x to somewhere unvalidated.
+
+### Update 2026-08-22 (A.8) — `secureFetch()` Hardened Into a Real Central SSRF Primitive
+
+A second external review of this PR gave qualified praise for the
+direction above (DNS pinning, demo-route gating, the CSP nonce/hydration
+E2E test) but a **HOLD** on `secureFetch()` specifically: not yet solid
+enough to be the shared boilerplate's central SSRF primitive. Three
+mandatory gaps, each verified empirically against the running code before
+fixing — not taken on the review's word alone:
+
+**1. IP-literal normalization was a real, confirmed bug, not a
+theoretical concern.** `new URL('http://[::1]/').hostname` returns
+`"[::1]"` **with brackets** (Node 22, WHATWG-spec-correct — `.host` and
+`.hostname` both serialize a literal IPv6 address bracketed). A stale doc
+comment on `isIpLiteral()` claimed the opposite ("unbracketed"). Traced
+through the actual code: every regex in the old `isPrivateOrReservedAddress()`
+(`normalized === '::1'`, `/^fe[89ab].../`, etc.) matched against a
+hostname string starting with `[`, so **none of them ever matched a
+literal IPv6 address**. The existing test "blocks IPv6 loopback... even
+if allowlisted" (`secure-fetch.test.ts`) was passing for the wrong
+reason: it configured the allowlist with the _unbracketed_ form, so the
+request was rejected at the **allowlist** check
+(`"[::1]" !== "::1"`), never reaching the private-address check the test
+claimed to exercise. Had a bracketed IPv6 literal ever been allowlisted
+(or reached this predicate via any other path), it would have sailed
+through as "not private."
+
+Fixed by stripping brackets once, up front (`stripBrackets()`), applied
+consistently before every IP-literal check, and by replacing the whole
+hand-maintained regex/CIDR list with `ipaddr.js`'s `.range()` classifier
+under a **default-deny** posture: block anything that isn't exactly
+`'unicast'`, instead of enumerating known-bad ranges that can (and did)
+drift out of date. This closes CGNAT (100.64.0.0/10), the TEST-NET
+ranges, 198.18.0.0/15 (benchmarking), multicast, reserved, broadcast,
+NAT64 (`64:ff9b::/96`), and 6to4 (`2002::/16`) — none of which the old
+list covered — by construction rather than by remembering to add each
+one. `ipaddr.js` added as a real (not dev) dependency.
+
+**2. Cross-origin redirects carried credentials forward verbatim.**
+`requestInitForRedirect()` only adjusted `method`/`body` for 301/302/303
+semantics — never touched `init.headers`. A caller-supplied
+`Authorization` (or any credential-bearing header) was replayed on every
+redirect hop, including a hop landing on a _different, but still
+allowlisted_, origin — unlike a spec-compliant browser fetch, which
+strips `Authorization` on a cross-origin redirect automatically. Because
+`secureFetch()` uses `redirect: 'manual'` and manually replays the
+request init, this repo — not the platform — owns reproducing that
+behavior. Fixed: strip `Authorization`, `Cookie`, `Proxy-Authorization`,
+and anything matching the token/secret/password/credential/session/
+api-key pattern already established in `src/security/actions/redact.ts`
+(exported and reused, not duplicated) whenever a redirect hop's origin
+differs from the current one.
+
+**3. No timeout, no response-size cap, and every log call leaked the
+full URL.** `fetch()` was called with no `signal`; the final response was
+always fully buffered via `arrayBuffer()` with no size check; every
+`logger.error(...)` call in `resolveAndValidateHost()` logged the full
+`currentUrl.toString()`, including query string — contradicting **SEC-22**'s
+already-established "never log full one-time URLs or tokens" rule, just
+never applied to this file. Fixed: an overall `AbortSignal.timeout()`
+budget (`SECURITY_OUTBOUND_FETCH_TIMEOUT_MS`, default 10s) spanning every
+redirect hop combined (not reset per hop), composed with a
+caller-supplied signal via `AbortSignal.any()` when present; a bounded
+stream reader (`SECURITY_OUTBOUND_FETCH_MAX_BYTES`, default 10MB)
+replacing the unconditional full-buffer read; and a
+`redactUrlForLogging()` helper (origin+pathname only) used at every log
+call site.
+
+**Follow-up, once the above landed**: a fourth-round Codacy pass flagged
+3 medium-complexity findings on the resulting diff (`resolveAndValidateHost`
+and `secureFetch` both over Codacy's method-length limit;
+`ClerkProviderWithNonce` in `src/app/layout.tsx` over its parameter-count
+limit, from earlier CSP work). Addressed by extracting `resolveViaDns()`,
+`buildOverallSignal()`, `fetchHop()`, `prepareNextHop()`, and
+`buildFinalResponse()` out of the two oversized functions, and by
+grouping `ClerkProviderWithNonce`'s four redirect-URL props into one
+object param — no behavior change, confirmed by the full test suite
+staying green throughout (same pass count before and after). This
+extraction is also what moved the SAST-flagged `fetch()` call into its
+own `fetchHop()` function — see the "SAST Finding" note below for why the
+false-positive verdict still holds after that move.
+
+Verified: `pnpm test` (1558 passed) and `pnpm test:integration` (72
+passed) green repo-wide at every step, not just the touched files; new
+regression tests reproduce the bracket bug directly (allowlisting the
+bracketed form that actually matches `URL.hostname`'s real output) and
+cover the newly-classified ranges, cross-origin header stripping
+(same-origin preserved, cross-origin stripped, non-sensitive headers
+untouched), the timeout path, and the size cap (asserting the stream
+reader never drains past it).
+
+### SAST Finding — Reviewed and Accepted (2026-08-21, re-verified 2026-08-22 after A.8.1-4)
+
+Codacy (via its `opengrep`/Semgrep-based analysis) flags a **critical
+security** finding on this file: "This application allows user-controlled
+URLs to be passed directly to HTTP client libraries," pointing at the
+`fetch(currentUrl, {...})` call — originally inside `secureFetch()`'s
+redirect loop directly; after A.8.1-4's complexity-driven extraction
+(splitting `secureFetch()` to stay under Codacy's own method-length
+limit), that same call now lives inside a small dedicated helper,
+`fetchHop()`, called from the loop rather than inlined in it. **The
+finding re-fired at the call's new location after that refactor** — worth
+noting explicitly, because the finding is now flagging a call whose
+validating caller is a different function, not a few lines up in the same
+one, which is a meaningfully different (and to a naive scanner,
+more-suspicious-looking) shape than before, even though the underlying
+safety property is identical.
+
+**Reviewed and accepted as a false positive both times, for a specific,
+checkable reason** — not dismissed on assumption:
+
+- Every single value `currentUrl` can hold when `fetchHop()`'s `fetch()`
+  call executes — the original URL on the first iteration of
+  `secureFetch()`'s loop, or a redirect target on every subsequent one —
+  has, on that exact same loop iteration, immediately before `fetchHop()`
+  is called, already gone through `resolveAndValidateHost()`: the
+  allowlist check, the private/reserved-address check, and
+  DNS-rebinding-safe resolution. A rejection there throws before the loop
+  body ever reaches `fetchHop()` at all — `fetchHop()` never receives an
+  unvalidated URL as its `currentUrl` parameter, confirmed by reading the
+  control flow across both functions, not assumed, and covered by
+  `secure-fetch.test.ts`'s redirect-to-disallowed-host and
+  redirect-to-rebound-address tests, which assert the fetch mock is never
+  even called for those cases.
+- This is close to an inherent property of any correct SSRF-guard
+  implementation: the guard has to call the underlying HTTP client
+  _somewhere_, after its checks — a rule that pattern-matches "URL reaches
+  fetch()" without tracing what validated it (and, now, without tracing
+  across a function boundary to find that validation) will flag that call
+  site in any correctly-written guard, this one included, regardless of
+  whether the validation and the call live in one function or two. The
+  pre-fix version of this same function had the identical shape (`return
+fetch(targetUrl, init)` after equivalent checks, inline).
+
+**What NOT to do in response to this class of finding**: don't restructure
+or obscure the call to dodge the pattern-matcher — that trades real
+clarity for a scanner appeasement with zero actual security benefit (same
+philosophy as the regex false-positive notes above: fix the finding if
+it's real, document why not if it's a false positive, never make working
+code worse to satisfy a scanner that can't see the fix). If this
+specific line's validation is ever weakened or reordered, re-evaluate
+this note — it holds only as long as the control-flow property above still
+holds.
+
+**Follow-up outside this session's reach**: dashboard access (marking the
+finding as a false positive / won't-fix in Codacy's UI) requires
+Codacy-side credentials this session doesn't have — the repository owner
+should do that in the dashboard if they agree with this assessment, per
+the same access limitation noted for engine verification generally
+(see the readiness-audit A4 item).
+
+---
+
+## SEC-29 — Demo/Showcase Routes Must Not Be Public By Default
+
+**ID**: SEC-29
+**Category**: Attack surface
+**Classification**: Real risk — found during a repository-wide security audit
+(2026-08-21), fixed same day
+**Affected contexts**: `PUBLIC_ROUTE_PREFIXES` in
+`src/security/middleware/route-policy.ts`, any future demo/showcase/example
+route
+
+### Risk
+
+`PUBLIC_ROUTE_PREFIXES` included `/security-showcase`, `/sentry-example-page`,
+`/feature-flags-demo`, `/env-summary`, and `/api/security-test/ssrf` —
+teaching/demo routes meant to showcase the security architecture, not
+application features. Being in `PUBLIC_ROUTE_PREFIXES` meant they were
+reachable by anyone on the internet, unauthenticated, with no way to turn
+that off short of a code change. `/api/security-test/ssrf` is the sharpest
+case: it takes a raw `?url=` query parameter and passes it straight into
+`secureFetch()` (see SEC-28) — a public, unauthenticated SSRF-guard oracle.
+`/env-summary` discloses which integrations/config are present, which is
+recon value even with secrets redacted.
+
+### Correct Pattern
+
+Demo routes get their own prefix list, gated by an env flag (default off in
+every environment including production) plus normal authentication, instead
+of living in `PUBLIC_ROUTE_PREFIXES`:
+
+```typescript
+// route-policy.ts
+export const DEMO_ROUTE_PREFIXES = [
+  '/env-summary',
+  '/security-showcase',
+  '/sentry-example-page',
+  '/feature-flags-demo',
+  '/api/security-test/ssrf',
+] as const;
+// NOT in PUBLIC_ROUTE_PREFIXES — they still require sign-in when the flag
+// enables them, same as any other private route.
+```
+
+```typescript
+// with-demo-guard.ts — runs BEFORE withAuth in the proxy pipeline
+export function withDemoGuard(handler: ProxyHandler): ProxyHandler {
+  return async (req, ctx) => {
+    if (ctx.isDemoRoute && !env.DEMO_SHOWCASE_ENABLED) {
+      return demoNotFound(req, ctx); // 404, not 403 — never confirm existence
+    }
+    return handler(req, ctx);
+  };
+}
+```
+
+The flag-off case runs pre-auth so an unauthenticated caller gets a plain
+404 (route doesn't exist), never a sign-in redirect (route exists, requires
+auth) — the latter still leaks that something is there. An optional
+`DEMO_SHOWCASE_ALLOWED_EMAIL` check runs in a second guard positioned AFTER
+`withAuth`, since it needs the resolved identity.
+
+### Real Infrastructure Is Not A Demo Route
+
+`/monitoring` looks like it belongs in this category by name but is
+Sentry's `tunnelRoute` (`next.config.ts`) — real production error-reporting
+infrastructure. It stays in `PUBLIC_ROUTE_PREFIXES` unconditionally. Gating
+it the same way as the demo routes would silently break Sentry in
+production. Always check what a route actually does before assuming a name
+pattern implies "demo."
+
+### Rule for Agents
+
+**DO** default any new example/demo/showcase/diagnostic route to gated-off,
+not public — public-by-default is the wrong starting assumption for
+anything that exists to demonstrate the system rather than serve the
+product. **DO NOT** gate a route just because its name sounds like a demo
+(`/monitoring`) without first checking what it actually does.
+
+---
+
+## SEC-30 — Nonce-Based CSP script-src, Not Unconditional unsafe-inline/unsafe-eval
+
+> **Renamed 2026-08-21 (A.7.1)**: `CSP_SCRIPT_STRICT_MODE` (boolean) is now
+> `CSP_SCRIPT_MODE` (`'cache-compatible' | 'nonce-dynamic'`, default
+> `'cache-compatible'`). Same behavior as the old `false` default — just a
+> clearer contract (see SEC-31 for why). Everything below was written under
+> the old name; read `CSP_SCRIPT_STRICT_MODE=true`/`false` as
+> `CSP_SCRIPT_MODE='nonce-dynamic'`/`'cache-compatible'` respectively — kept
+> as-written since it's an accurate historical record of the incident, not
+> rewritten in place.
+
+**ID**: SEC-30
+**Category**: CSP hardening
+**Classification**: Real risk → partially fixed, deferred (2026-08-21) — the
+mechanics below are implemented and correct, but the flag (`CSP_SCRIPT_MODE`,
+see rename note above) now defaults to `'cache-compatible'` because
+`'nonce-dynamic'` is incompatible with this app's `cacheComponents`/PPR setup
+(see "Update 2026-08-21" below). The originally-planned follow-up
+("route-class CSP profiles" — different CSP per route on one origin) was
+itself found unsound by external review and replaced by SEC-31's
+origin-split guidance — see SEC-31 for the corrected plan.
+**Affected contexts**: `src/security/middleware/with-headers.ts`,
+`src/security/middleware/route-classification.ts`, `src/proxy.ts`,
+`src/app/layout.tsx`, `src/security/rsc/csp-nonce.ts`
+
+### Risk
+
+`script-src` carried `'unsafe-inline' 'unsafe-eval'` unconditionally. With
+either present, a nonce or hash-based CSP provides no real XSS backstop —
+`unsafe-inline` alone lets any injected `<script>` tag execute regardless of
+origin allowlisting.
+
+### Correct Pattern — a per-request nonce, not a per-build one
+
+A CSP nonce must be regenerated every request (a fixed nonce is equivalent
+to no nonce — an attacker who ever observes one can reuse it indefinitely).
+That has to flow through: proxy → response header → the RSC render that
+emits `<script nonce=...>` tags — a nonce baked in at build time or read
+from an env var is **not** a correct implementation, however tempting it
+looks.
+
+1. `route-classification.ts` generates the nonce once per request
+   (`RouteContext.nonce`), gated on `CSP_SCRIPT_STRICT_MODE`.
+2. `proxy.ts`'s `terminalHandler` — the only "continue to render" exit
+   point — carries it forward as a **request** header
+   (`NextResponse.next({ request: { headers } })`). A response header set
+   by middleware never reaches the RSC render; only forwarded request
+   headers do.
+3. `with-headers.ts` builds `script-src 'self' 'nonce-<x>' 'strict-dynamic'
+<host-allowlist-as-CSP2-fallback>` instead of `'unsafe-inline'
+'unsafe-eval'` — but only when BOTH `CSP_SCRIPT_STRICT_MODE` is on AND a
+   nonce was actually supplied; a missing nonce always falls back to the
+   legacy CSP rather than emitting `'nonce-undefined'` or similar.
+4. `src/security/rsc/csp-nonce.ts`'s `getCspNonce()` reads the nonce back
+   via `headers()` for RSC consumers (inline `<Script nonce={...}>` tags,
+   `<ClerkProvider nonce={...} dynamic>`).
+
+### Clerk Requires Both `nonce` AND `dynamic`
+
+Verified in the installed `@clerk/clerk-react` types (not assumed from
+memory): `ClerkProviderProps.nonce` "will be passed through to the
+`@clerk/clerk-js` script tag... Requires the `dynamic` prop to also be
+set." Passing `nonce` without `dynamic` is silently incomplete — Clerk's
+own script tag won't actually pick it up.
+
+```tsx
+<ClerkProvider nonce={nonce} dynamic={Boolean(nonce)} {...otherProps}>
+```
+
+Only pass `dynamic` when a nonce actually exists — passing it unconditionally
+forces Clerk into per-request dynamic rendering even when
+`CSP_SCRIPT_STRICT_MODE` is off, defeating that flag's purpose as a
+zero-cost rollback.
+
+### `headers()` Forces Dynamic Rendering — Scope the Blast Radius
+
+`getCspNonce()` deliberately checks `env.CSP_SCRIPT_STRICT_MODE` **before**
+calling `headers()` — `headers()` is a Dynamic API that opts the calling
+Server Component into per-request rendering the instant it's called,
+regardless of whether a nonce is actually found. Call it from small,
+dedicated async Server Components (`NrBrowserScripts`,
+`ClerkProviderWithNonce` in `layout.tsx`) rather than from the top of
+`RootLayout` itself, so the dynamic-rendering cost stays scoped to what
+actually needs the nonce instead of forcing the entire app dynamic.
+
+**A scoped component is necessary but not sufficient — it must also be
+wrapped in `<Suspense>` at its call site, or the build fails hard.**
+`ClerkProviderWithNonce` already sits inside the layout's existing
+`<Suspense fallback={<RootLayoutShell />}>`, but `NrBrowserScripts` in
+`<head>` initially did not — every route shares that `<head>`, so every
+single prerendered page failed the production build with:
+
+```text
+Error: Route "/some-route": Uncached data was accessed outside of
+<Suspense>. This delays the entire page from rendering, resulting in a
+slow user experience. Learn more:
+https://nextjs.org/docs/messages/blocking-route
+    at head (<anonymous>)
+    at html (<anonymous>)
+```
+
+This is a hard `next build` failure under `cacheComponents: true`, not a
+soft dynamic-rendering fallback — it doesn't surface in `pnpm typecheck` or
+`pnpm test`, only in an actual `pnpm build` (or the Vercel deploy build).
+Fix: wrap the call site, not the component definition —
+
+```tsx
+<head>
+  <Suspense fallback={null}>
+    <NrBrowserScripts cdnConfig={cdnConfig} ... />
+  </Suspense>
+</head>
+```
+
+After the fix, `next build`'s route table shows every route as `◐` (Partial
+Prerender — static shell + dynamic server-streamed content), not `ƒ` (fully
+dynamic) — confirming the Suspense boundary is doing its job of keeping the
+static shell intact around the nonce-dependent hole, not just silently
+making the whole route dynamic.
+
+### Scope Boundary — script-src Only, Not style-src
+
+`style-src` keeps `'unsafe-inline'` unconditionally. Inline `style=""`
+attributes (as opposed to `<style>` blocks) cannot be nonce'd under CSP2/3 —
+only allow-listed via `unsafe-inline` or per-value hashes. Auditing every
+inline `style` prop across the app for a much lower-severity vector (CSS
+injection, not code execution) was ruled out of scope for this pass — this
+is a deliberate boundary, not an oversight.
+
+### Rollback Path
+
+`CSP_SCRIPT_MODE=cache-compatible` in Vercel + redeploy reverts to the
+legacy CSP with zero code change, if a third-party script is ever found
+that doesn't tolerate strict-dynamic. This is why the flag exists — verify
+it still works (i.e., don't remove the legacy branch) before ever proposing
+to delete it as "dead code."
+
+### Update 2026-08-21 — Nonce CSP Is Incompatible With cacheComponents/PPR; Default Flipped Off
+
+Everything above (the Suspense-wrapping mechanics, the request-header
+forwarding, Clerk's `nonce`+`dynamic` requirement) is correct and still how
+strict mode works when it's on. What it doesn't mention, because it wasn't
+known yet: **`CSP_SCRIPT_STRICT_MODE=true` does not actually work in this
+app while `cacheComponents: true` is set**, and shipping it as the default
+broke the app for real users.
+
+**How this was found**: not from a test — from a live bug report. A real
+Android Chrome device hitting the deployed preview got stuck showing only
+`RootLayoutShell`'s loading skeleton, forever. Reproduced deterministically
+via a Playwright run using a mobile device emulation profile (`devices['Pixel
+7']`) against the same deployed URL, capturing `console` and
+`securitypolicyviolation` events. The console showed **every single script
+on the page blocked by CSP** — every Next.js chunk-loader `<script src>`,
+and the framework's own inline bootstrap scripts — with page errors like
+`$RC is not defined` confirming hydration never started at all.
+
+**Root cause**: per Next.js's own docs (`content-security-policy.mdx`,
+fetched directly from `vercel/next.js` — WebFetch to `nextjs.org` itself is
+blocked in some sandboxed environments, `raw.githubusercontent.com` is not):
+
+> Partial Prerendering (PPR) is incompatible with nonce-based CSP since
+> static shell scripts won't have access to the nonce.
+
+Scoping `getCspNonce()`/`headers()` to small `<Suspense>`-wrapped
+components (`NrBrowserScripts`, `ClerkProviderWithNonce`) satisfies
+`cacheComponents`' _build-time_ rule ("Dynamic API must be inside
+Suspense"), but does **not** solve the real problem: Next's own framework
+bootstrap/chunk-loader scripts are injected into the **static shell**
+(built once, before any request exists, so no nonce is available) —
+they're not part of this app's component tree at all, so no Suspense
+boundary we add can reach them. Under `'strict-dynamic'` with no
+`unsafe-inline` fallback, a browser then blocks literally everything the
+shell shipped, and the page never progresses past the loading skeleton.
+`x-vercel-cache: PRERENDER` / `x-nextjs-prerender: 1` on the response is
+the visible symptom of exactly this: the static shell (containing those
+scripts) being served from cache, with no per-request nonce ever
+reachable inside it.
+
+This is a known, currently-unresolved upstream limitation, not a defect
+in this app's proxy/header wiring:
+
+- `vercel/next.js#89754` — nonce-based CSP vs. `cacheComponents` tracked as
+  open.
+- `vercel/next.js#95354` — the more precise gap: even Turbopack's SRI
+  (Subresource Integrity, added in Next 16.2 for **external** script
+  assets) doesn't cover React Flight's own **inline**
+  `<script>self.__next_f.push(...)</script>` bootstrap payload — SRI
+  secures externally-loaded chunks, not this inline payload, so it isn't a
+  full substitute for nonce/unsafe-inline either.
+- `vercel/next.js#96665` — a Next.js maintainer (`icyJoseph`), responding
+  on an issue filed against **Next 16.3.0** in August 2026 (i.e. current,
+  not stale-docs), confirmed `unsafe-inline` remains "the only way for the
+  time being" while the real fix requires upstream React work.
+
+**Attempted fix that made it worse, for the record**: forcing the entire
+`RootLayout` dynamic via an unconditional `await connection()` at its top
+(the pattern Next's docs show for opting a _page_ out of PPR) does not
+work at the _layout_ level under `cacheComponents: true` in this Next
+version — it produces a hard `next build` failure on `/_not-found`
+("Uncached data was accessed outside of `<Suspense>`"), because
+`connection()` is itself a traced Dynamic API subject to the same
+Suspense-wrapping rule, and `/_not-found` can't reasonably be wrapped.
+Don't reach for this as a quick fix.
+
+**Resolution shipped now**: `CSP_SCRIPT_MODE` defaults to `'cache-compatible'`.
+Every other part of this hardening pass (baseline CSP directives, COOP/
+CORP/etc., `unsafe-eval` scoped to dev-only, SSRF hardening, demo-route
+gating) is unaffected and stays in place. This is a deliberate, documented
+tradeoff — not a silent regression — matching the maintainer's own
+current guidance.
+
+**Originally-planned follow-up, superseded 2026-08-21 (A.7)**: this section
+used to describe a route-class CSP profile split — `public-cacheable`
+routes keeping PPR + legacy CSP, `dynamic-strict` routes (dashboard, admin)
+opting out of PPR per-segment for full nonce CSP, all on one origin. An
+external review correctly identified this as unsound: CSP is a
+**document-level** policy, and a `<Link>` soft-navigation from a
+`public-cacheable` page into a `dynamic-strict` route does not fetch a new
+document — the browser keeps enforcing the CSP of whatever document it
+actually loaded, so the "strict" route would silently run under the
+relaxed policy for anyone who arrived via client-side navigation. This plan
+is dropped, not revised. See **SEC-31** for the corrected guidance: a
+deployment/origin genuinely needing both profiles at once should split by
+origin (subdomain), not by route on one origin — never re-propose a
+same-origin per-route CSP split.
+
+Until an upstream `hash-ppr`-style fix lands (see `CSP_SCRIPT_MODE`'s doc
+comment in `src/core/env.ts`), `'nonce-dynamic'` mode only works for a
+deployment that gives up `cacheComponents`/PPR entirely — see "Update
+2026-08-21 (A.7.2)" below for how that's now enforced automatically, not
+left as a manual precondition.
+
+### Update 2026-08-21 (A.7.2) — `nonce-dynamic` Didn't Actually Disable PPR; Fixed in `next.config.ts`
+
+A.7.1 renamed the flag and set `CSP_SCRIPT_MODE=nonce-dynamic` for the
+_build_ step (not just runtime start) in the new `e2e:csp-nonce-dynamic:ci`
+script, reasoning that PPR's static/dynamic split is decided once at build
+time. That reasoning was correct but incomplete: setting the env var
+before `pnpm build` changed nothing on its own, because `cacheComponents`
+in `next.config.ts` was still unconditionally `true`. `getCspNonce()`'s
+Suspense-scoped `headers()` calls (`NrBrowserScripts`,
+`ClerkProviderWithNonce`) only carve out small dynamic _holes_ in an
+otherwise-static shell — they don't, and structurally can't, make the
+_route_ dynamic. Confirmed empirically, not just re-derived from docs: the
+first real run of `e2e/csp-nonce-dynamic.spec.ts` against a live browser
+(this app's actual first-ever E2E execution of `nonce-dynamic` mode) built
+with `CSP_SCRIPT_MODE=nonce-dynamic` and found `/` still `◐` (Partial
+Prerender) in the build output, with **every single Next.js chunk-loader
+`<script src="/_next/static/chunks/...">` tag carrying `nonce: null`** —
+the header nonce was real and fresh, but not one framework script picked
+it up, because they're all still part of a static shell built once with no
+request in scope.
+
+**Fix**: `next.config.ts` now sets
+`cacheComponents: process.env.CSP_SCRIPT_MODE !== 'nonce-dynamic'` — a
+`nonce-dynamic` build disables `cacheComponents` for the entire
+deployment automatically, not as a precondition agents have to remember to
+uphold by hand. Verified: with the flag set, every route in the build
+output moved from `◐` to `ƒ` (fully dynamic), including `/`. The default
+(`cache-compatible`) build is unaffected — confirmed the condition only
+evaluates true for `nonce-dynamic`, and a `pnpm build` without the env var
+still produces the same `◐` PPR output as before this change.
+
+This is why "harden the E2E test until it passes" would have been the
+wrong response to the original failure — the test was correct; the
+_implementation_ of `nonce-dynamic` mode was incomplete. Confirming this
+required the empirical test failure itself, not a re-read of the docs —
+the takeaway for future agents in the **Rule for Agents** section below.
+
+### Rule for Agents
+
+**DO** treat "a nonce was generated" and "`CSP_SCRIPT_MODE` is
+`'nonce-dynamic'`" as two independently-necessary conditions before
+emitting strict CSP — a
+missing nonce with the flag on must fall back to legacy, never emit a
+broken directive. **DO NOT** call a Next.js Dynamic API (`headers()`,
+`cookies()`, `connection()`) from the top of a layout/page component when a
+small child component can call it instead — the dynamic-rendering cost
+follows the component that calls the API, and scoping it matters under
+`cacheComponents: true`. **DO NOT** add `nonce` to a third-party provider
+without checking whether it has its own additional required prop (like
+Clerk's `dynamic`) — verify against the installed package's actual types,
+not documentation memory. **DO** run an actual `pnpm build` (not just
+`pnpm typecheck` + `pnpm test`) before treating any change that adds a
+Dynamic API call to `layout.tsx` or another shared-shell component as
+verified — the "Uncached data accessed outside Suspense" failure above
+only surfaces during real prerendering and passed typecheck and the full
+test suite cleanly first. **DO NOT** assume a Suspense-scoped `headers()`/
+`cookies()` call makes its _route_ dynamic under `cacheComponents: true`
+— it only opts that specific subtree out of the static shell; the route's
+build-output symbol (`◐` vs `ƒ`) is the real signal, and Next's own
+chunk-loader scripts are part of the shell, not the app's component tree,
+so no Suspense boundary placed in application code can ever reach them.
+
+---
+
+## SEC-31 — CSP Is a Document-Level Policy: Same-Origin Mixed Profiles Don't Work
+
+**ID**: SEC-31
+**Category**: CSP architecture
+**Classification**: Architectural guidance — corrects a plan from this
+repo's own history (A.7, 2026-08-21), not a code-level bug fix
+**Affected contexts**: any future decision to give a route or route group a
+different CSP than the rest of the app; `next.config.ts` (`cacheComponents`
+
+- `CSP_SCRIPT_MODE`); `src/security/middleware/with-headers.ts`
+
+### The Plan This Corrects
+
+An earlier version of this repo's Phase 2 CSP plan proposed a **route-class
+CSP profile split** on one origin: `/` and other marketing/public routes
+would keep `cacheComponents`/PPR and the legacy `unsafe-inline` script-src
+(`public-cacheable`), while `/dashboard` and other authenticated routes
+would opt out of PPR **on their own layout/page segments** and get the
+full nonce + `strict-dynamic` CSP with zero `unsafe-inline`
+(`dynamic-strict`) — different `Content-Security-Policy` header values
+per route, computed per-request in `with-headers.ts` based on which route
+matched.
+
+An external review of this plan caught the flaw before it was built:
+**this doesn't actually protect the "strict" routes for a real user.**
+
+### Why It Doesn't Work
+
+CSP is enforced against **the document**, not against each individual
+response. A browser tab has exactly one active CSP at a time: whatever
+`Content-Security-Policy` header came back on the response that created
+the currently-loaded document (a full/hard navigation). Every subsequent
+same-document interaction — including a Next.js App Router `<Link>`
+client-side ("soft") navigation, which fetches an RSC payload and patches
+the DOM in place without a new top-level navigation — does **not** replace
+that policy. The RSC response for `/dashboard` can carry a
+`dynamic-strict` `Content-Security-Policy` header in its own HTTP
+response, and the browser will simply never look at it, because no new
+document was created.
+
+Concretely:
+
+```text
+1. User opens https://example.com/ directly (hard nav).
+   Document CSP = public-cacheable (unsafe-inline, no nonce).
+
+2. User clicks <Link href="/dashboard"> inside the app.
+   Next.js does a soft navigation: fetches the RSC payload for
+   /dashboard, patches the DOM. No new document. No new CSP.
+
+3. /dashboard's scripts now execute under the ORIGINAL /'s
+   unsafe-inline CSP, not the dynamic-strict CSP that route's own
+   response headers claimed to have.
+```
+
+Anyone who reaches `/dashboard` by clicking through the app (the normal
+path for a logged-in user navigating your own product) never gets the
+strict policy at all. Only a user who directly hard-navigates or reloads
+on `/dashboard` would. The security boundary this profile split exists to
+draw is real for some traffic and silently absent for the rest — worse
+than a single consistent policy, because it looks like defense in depth
+in code review and in a curl check, and isn't one in a browser.
+
+### The Correct Pattern: Split By Origin, Not By Route
+
+A deployment that genuinely needs both a cache-compatible public zone
+(marketing, docs, a future blog) and a nonce-dynamic private zone
+(account, admin, billing) at the same time should run them as **separate
+origins** — e.g. `www.example.com` for the public zone,
+`app.example.com` for the private one:
+
+```text
+www.example.com                        app.example.com
+────────────────                       ─────────────────
+public-cacheable CSP                   nonce-dynamic CSP
+cacheComponents: true                  cacheComponents: false
+(CSP_SCRIPT_MODE=cache-compatible)     (CSP_SCRIPT_MODE=nonce-dynamic)
+marketing, docs, blog                  account, admin, billing
+```
+
+This isn't a workaround for the soft-navigation problem above — it makes
+the problem structurally impossible. `<Link>` (and every other browser
+navigation primitive) only ever performs a soft navigation within the
+**same origin**; crossing from `www.example.com` to `app.example.com` is
+inherently a hard navigation, a new document, a new CSP, every time,
+whether the app author remembers to force it or not. Each origin also
+gets its own independent `next.config.ts`/`CSP_SCRIPT_MODE` — the exact
+mechanism SEC-30 already documents — so this requires no new CSP
+machinery, only a deployment-topology decision: two Next.js deployments
+(or two apps sharing this boilerplate) instead of one, fronted by two
+subdomains.
+
+This repo is single-origin today and isn't taking on that split
+speculatively — this section exists so a future feature that seems to
+want route-level CSP variance reaches for the origin split instead of
+re-proposing the same-origin version this section corrects. Building a
+live second origin as a "demo" was explicitly considered and rejected for
+this boilerplate: it's real infrastructure (DNS, hosting config,
+cross-subdomain session cookies for whichever auth provider is in use)
+that's specific to a consuming app's actual domain, not something a
+generic boilerplate can meaningfully fake. The worked example is this
+section itself, plus SEC-30's existing `CSP_SCRIPT_MODE` mechanism —
+wiring a second origin, when one is actually needed, is applying that
+same mechanism to a second deployment, not inventing anything new.
+
+### Rule for Agents
+
+**DO NOT** give different routes on the same origin different
+`Content-Security-Policy` header values as a security boundary — a
+client-side navigation between them will not pick up the new policy, so
+the boundary silently fails for exactly the traffic pattern (in-app
+navigation) that matters most. **DO** treat `CSP_SCRIPT_MODE` as a
+per-deployment, not per-route, setting — see SEC-30. **DO** reach for an
+origin split (subdomain), not a route split, the moment a real requirement
+for two different CSP postures at once appears — and treat "two
+deployments" as a legitimate, expected shape for this boilerplate to grow
+into, not a sign something went wrong.
+
+---
+
+## SEC-32 — CSP Correctness Follow-Up: `speculationrules`, `*_EXTRA` Injection, DNS Timeout
+
+**ID**: SEC-32
+**Category**: CSP hardening / outbound-fetch hardening
+**Classification**: Real risk → fixed (2026-08-22). Found by a second
+external re-review of the A.8 diff (commit `5fc9fb4`), each item verified
+empirically against the actual running code before fixing — never taken on
+the reviewer's word alone, same discipline as SEC-28.
+**Affected contexts**: `e2e/support/csp-violations.ts`,
+`src/security/middleware/with-headers.ts`, `src/security/outbound/secure-fetch.ts`
+
+This is a follow-up to SEC-28 (SSRF/`secureFetch()` hardening) and SEC-30
+(nonce CSP). Three independent findings, grouped here because they came
+from the same review pass and the same "verify empirically, then fix"
+discipline, not because they share a root cause.
+
+### 1. `<script type="speculationrules">` is NOT a non-executable script type
+
+`e2e/support/csp-violations.ts`'s `NON_EXECUTABLE_SCRIPT_TYPES` treated
+`speculationrules` the same as genuinely inert block types
+(`application/json`, `application/ld+json`, `importmap`) — script blocks a
+browser never executes as code, so CSP's `script-src` doesn't govern them
+and a nonce check on them is a false-fail waiting to happen. Confirmed via
+WebSearch against MDN/the WICG spec (direct `developer.mozilla.org` access
+is blocked by this environment's egress proxy; the MDN markdown source
+mirrored on `github.com/mdn/content` was used instead) that
+`speculationrules` is the opposite case: it **is** governed by
+`script-src`, and isn't even covered by `'unsafe-inline'` — it requires an
+explicit `'inline-speculation-rules'` source expression, a nonce, or a
+hash. Treating it as non-executable meant the E2E nonce-matching helper
+(`isExecutableScript`) would have silently stopped checking its nonce the
+moment React/Next ever emitted one (prefetch/prerender resource hints can
+generate exactly this block type) — the `securitypolicyviolation` listener
+elsewhere in the same test harness remained a backstop, so this was a test
+correctness bug more than a live exploit, but the test was asserting a
+false rule about what CSP actually does.
+
+**Fix**: removed `speculationrules` from `NON_EXECUTABLE_SCRIPT_TYPES`.
+`e2e/support/csp-violations.test.ts` (new, unit-level — previously this
+logic was only exercised indirectly via the opt-in Playwright spec) proves
+a `speculationrules` descriptor is classified executable, alongside the
+genuinely-inert types staying excluded, and a case-insensitivity check.
+
+### 2. `NEXT_PUBLIC_CSP_*_EXTRA` env vars accepted arbitrary CSP syntax, including directive injection
+
+`with-headers.ts`'s `parseExtra()` split an `*_EXTRA` env value on
+whitespace/commas and passed each token through with only quote-stripping
+— no validation that a token was a legitimate CSP source expression. A
+value like `"https://cdn.example.com; object-src *"` would inject a
+literal `;` into the built header, adding a whole extra `object-src *`
+directive. Reproduced through the exact old logic before fixing, not
+assumed: CSP honors only the **first** occurrence of a duplicate directive
+in one header, and the app's own `object-src 'none'` baseline hardening
+directive is emitted later in the same `buildContentSecurityPolicy()`
+array — so the injected value would have WON, silently disarming
+`object-src 'none'` entirely. Not a remote-input vuln (`*_EXTRA` vars are
+operator-set, not request-derived), but unacceptable for a reusable
+security boilerplate whose whole premise is "the baseline directives hold
+regardless of what an integrator adds."
+
+**Fix**: added `classifyCspSourceToken()`, which validates every token as
+one of: the two safe quoted keyword sources (`'self'`, `'none'`); a
+scheme-qualified source (`CSP_SCHEME_SOURCE_PATTERN`); or a bare/wildcard
+hostname (`CSP_HOST_SOURCE_PATTERN`) — rejecting (and logging, not
+silently dropping) anything containing `;`, `\r`, `\n`, `<`, `>`, a
+backtick, or internal whitespace, and rejecting keyword-_shaped_ tokens
+(`unsafe-*`, `nonce-*`, `sha256-*`/`sha384-*`/`sha512-*`,
+`strict-dynamic`, `wasm-unsafe-eval`, `unsafe-hashes`, `report-sample`,
+`inline-speculation-rules`) even though they'd otherwise pass as
+syntactically-valid single-label hostnames. Both new regexes were
+empirically verified ReDoS-safe (sub-millisecond against 50,000–100,000
+character adversarial inputs) before suppressing the scanner's
+`security/detect-unsafe-regex` finding on each — same discipline as
+SEC-28's regex false-positive notes. `with-headers.test.ts` has four new
+regression tests: the glued-semicolon injection payload is fully rejected
+and `object-src 'none'` is unaffected; the same payload with a
+space-separated `;` token still rejects the injected directive while
+keeping the legitimate host (proving this isn't an overbroad
+reject-everything fix); dangerous keyword-shaped tokens are rejected
+whether quoted or bare; `'self'`/`'none'` are still accepted.
+
+### 3. DNS resolution had no timeout — the "overall" fetch timeout didn't actually cover it
+
+A.8.3 added `SECURITY_OUTBOUND_FETCH_TIMEOUT_MS`, an `AbortSignal`-based
+overall budget — but that signal was only ever passed to `fetchHop()`'s
+`fetch()` call. `resolveViaDns()`'s `dns.promises.lookup()` call, which
+runs _before_ any `fetch()` on every hop, had no deadline of its own.
+Confirmed empirically before fixing: `dns.promises.lookup()` has no
+`AbortSignal` support at all — passing a `signal` option (even an
+already-aborted one) is silently ignored, and Node's c-ares-backed DNS
+resolution has no cancellation mechanism to hook into. Not an SSRF bypass
+(the address is still validated once resolution completes), but a
+resource-exhaustion/availability gap: a slow or non-responding DNS server
+could hang a `secureFetch()` call indefinitely, contradicting the
+timeout's own documented "spans every hop" guarantee.
+
+**Fix**: added `raceWithSignal()`, which races the `lookup()` promise
+against the same call-wide `overallSignal` `secureFetch()` already builds
+(one absolute deadline covering DNS resolution _and_ every hop's connect
+and body read — not a fresh per-phase budget) and rejects the moment the
+signal fires, regardless of whether the underlying DNS call itself ever
+settles. `resolveViaDns()` distinguishes a deadline-triggered rejection
+(`overallSignal.aborted`) from a genuine DNS failure (`ENOTFOUND`, etc.)
+so the timeout case gets its own clearly-labeled error, matching
+`fetchHop()`'s existing timeout-labeling pattern rather than folding into
+the generic "DNS resolution failed" message. `secure-fetch.test.ts` has a
+new regression test: a `lookup()` mock that never resolves on its own
+still causes `secureFetch()` to reject with a DNS-timeout-labeled error
+within the configured budget, and `fetch()` is never reached — proving the
+deadline fires during DNS resolution, not just during the eventual
+`fetch()` call.
+
+### Also added while in this code (free hardening, not a fix for a live bug)
+
+`script-src-attr 'none'` was added to `buildContentSecurityPolicy()` —
+overrides `script-src` specifically for inline event-handler attributes
+(`onclick=`, `onerror=`, etc., per MDN). This repo/React never emits those,
+so it's free additional hardening on top of whatever `script-src` allows,
+independent of `CSP_SCRIPT_MODE` — even in `cache-compatible` mode, where
+`script-src` still needs `'unsafe-inline'` for Next's own bootstrap
+scripts, an inline event-handler attribute injected via some other vector
+stays blocked.
+
+Pinning `@lhci/cli` as a real devDependency (so `preview-deploy.yml` could
+run it via `pnpm exec` instead of `npx`, going through the frozen-lockfile
+supply chain) surfaced a real new CI failure: `pnpm audit` now sees
+`extract-zip@2.0.1` (a transitive dependency, `@lhci/cli` →
+`lighthouse` → `puppeteer-core` → `@puppeteer/browsers` → `extract-zip`)
+and its symlink-path-traversal advisory (`GHSA-jmr9-qjv8-65gv`) that
+`npx`'s always-fetch-fresh path never surfaced to the audit at all. The
+advisory's patched version (`2.0.2`) isn't published on npm yet — same
+upstream-blocked shape as the pre-existing `image-size@2.0.2` exceptions —
+so it was added to `pnpm-workspace.yaml`'s `audit.ignore` with the same
+structured documentation (reason, dependency path, dev-only proof, owner,
+review-expiry date), plus an extra proof specific to this one: this
+repo's own `preview-deploy.yml` never lets `@puppeteer/browsers` download
+or extract a Chromium binary at all (it launches its own pre-installed
+Chromium and points Lighthouse at it over CDP), so the vulnerable
+extraction code path is dead code on this repo's actual execution path,
+not merely a dev-only one. Pinning didn't introduce the vulnerability —
+it made an audit tool that was already blind to this transitive
+dependency (because `npx` fetched it fresh, outside any lockfile pnpm
+audit could inspect) able to see it, which is the whole point of moving
+off `npx` in the first place.
+
+### Rule for Agents
+
+**DO NOT** classify a `<script type="...">` block as CSP-inert without
+checking the actual CSP spec/MDN for that exact type — `script-src`'s
+governed-type list is not "anything that isn't `text/javascript`."
+
+**DO NOT** let an env-configured CSP "extra" value pass through as raw CSP
+syntax — validate each source-expression token, don't just
+split/trim/quote-strip.
+
+**DO NOT** assume an `AbortSignal` passed to a Node API actually cancels
+it — `dns.promises.lookup()` is a concrete counterexample; verify
+cancellation support per-API before relying on it, and race-with-signal
+(reject on abort, let the underlying call run to completion unobserved)
+when the API itself can't be cancelled.
+
+**DO** treat "one overall deadline for a multi-phase operation" as
+covering every phase (DNS → connect → every redirect hop → body read) by
+construction — a signal only threaded through the _last_ phase isn't an
+overall deadline, it's a per-phase one with a misleading name.

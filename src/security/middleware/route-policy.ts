@@ -9,15 +9,26 @@ export const AUTH_ROUTE_PREFIXES = [
   '/auth/verify-email-pending',
 ] as const;
 
-export const PUBLIC_ROUTE_PREFIXES = [
-  '/',
-  '/waitlist',
+// Demo/showcase routes — gated by DEMO_SHOWCASE_ENABLED (+ optional
+// DEMO_SHOWCASE_ALLOWED_EMAIL) via withDemoGuard in src/proxy.ts, not by
+// public/private status. Deliberately excluded from PUBLIC_ROUTE_PREFIXES:
+// when the flag is on, they still require sign-in like any other private
+// route. See SEC-29 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+export const DEMO_ROUTE_PREFIXES = [
   '/env-summary',
   '/security-showcase',
   '/sentry-example-page',
-  '/monitoring',
   '/feature-flags-demo',
   '/api/security-test/ssrf',
+] as const;
+
+// `/monitoring` is Sentry's tunnelRoute (next.config.ts) — real production
+// error-reporting infrastructure, not a demo page. It must stay public
+// unconditionally; gating it would silently break Sentry in production.
+export const PUBLIC_ROUTE_PREFIXES = [
+  '/',
+  '/waitlist',
+  '/monitoring',
   '/api/logs',
   '/auth/invite',
   '/api/auth',

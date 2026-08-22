@@ -87,6 +87,74 @@ export const env = createEnv({
       .default(
         'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
       ),
+    // Overall wall-clock budget for a secureFetch() call, spanning every
+    // redirect hop (not reset per hop -- a chain of redirects must not be
+    // able to add up to an unbounded total wait). See A.8.3 in
+    // docs/ai/general/SECURITY_CODING_PATTERNS.md (SEC-28).
+    SECURITY_OUTBOUND_FETCH_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10_000),
+    // Response bodies secureFetch() reads are bounded to this many bytes --
+    // never fully buffered without a cap. Default 10MB.
+    SECURITY_OUTBOUND_FETCH_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10_485_760),
+    // Gates the demo/showcase routes in DEMO_ROUTE_PREFIXES
+    // (src/security/middleware/route-policy.ts). Off by default in every
+    // environment, including production — flip on temporarily in Vercel
+    // when giving a live demo, then flip back off.
+    DEMO_SHOWCASE_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
+    // Optional extra restriction on top of DEMO_SHOWCASE_ENABLED: when set,
+    // only the signed-in user with this exact email can reach a demo route
+    // even while the flag is on. Leave unset to allow any authenticated
+    // user (fine for a single-operator personal app).
+    DEMO_SHOWCASE_ALLOWED_EMAIL: z.email().optional(),
+    // Which script-src CSP this deployment serves — a deployment-wide
+    // choice, not a per-route one (see SEC-31 in
+    // docs/ai/general/SECURITY_CODING_PATTERNS.md for why per-route mixing
+    // doesn't work under App Router client-side navigation: CSP is a
+    // document-level policy, so a <Link> soft-navigation into a "stricter"
+    // route keeps enforcing the CSP of whatever document the browser
+    // actually loaded).
+    //
+    // 'cache-compatible' (default): legacy 'unsafe-inline' script-src (no
+    // 'unsafe-eval' in production/preview). Compatible with this app's
+    // cacheComponents: true (Partial Prerendering) setup. Renamed from the
+    // old boolean CSP_SCRIPT_STRICT_MODE=false on 2026-08-21 — same
+    // behavior, clearer contract (a boolean's "off" implied an insecure
+    // fallback, when it's actually the only mode this architecture
+    // supports today).
+    //
+    // 'nonce-dynamic': nonce + 'strict-dynamic', no 'unsafe-inline'/
+    // 'unsafe-eval'. Per-request nonce CSP is currently incompatible with
+    // cacheComponents/PPR — confirmed both by Next.js's own docs ("Partial
+    // Prerendering (PPR) is incompatible with nonce-based CSP since static
+    // shell scripts won't have access to the nonce") and by a Next.js
+    // maintainer on an Aug 2026 issue against Next 16.3.0 confirming
+    // unsafe-inline is "the only way for the time being" while upstream
+    // React/Next work lands (tracked upstream: vercel/next.js#89754,
+    // #95354, #96665). Turning this on reproduced an app-wide hydration
+    // failure live on a real mobile device (see SEC-30's incident
+    // writeup). Only safe for a deployment that doesn't rely on
+    // cacheComponents/PPR at all — see with-headers.ts, layout.tsx, and
+    // the e2e:csp-nonce-dynamic scenario that verifies this mode
+    // end-to-end (script-tag nonces, zero CSP violations, real hydration).
+    //
+    // 'hash-ppr' (reserved, not implemented): once Next/React ship
+    // build-time hash-source support for Partial Prerendering's inline
+    // Flight bootstrap scripts, this will let a cache-compatible
+    // deployment go fully strict (no unsafe-inline, no nonce, hash-source
+    // CSP) without losing PPR. Not available upstream yet — do not
+    // implement ahead of framework support.
+    CSP_SCRIPT_MODE: z
+      .enum(['cache-compatible', 'nonce-dynamic'])
+      .default('cache-compatible'),
     E2E_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
@@ -182,6 +250,23 @@ export const env = createEnv({
     NEXT_PUBLIC_CSP_IMG_EXTRA: z.string().default(''),
     NEXT_PUBLIC_CSP_FONT_EXTRA: z.string().default(''),
     NEXT_PUBLIC_CSP_STYLE_EXTRA: z.string().default(''),
+    // Build-time-inlined copy of CSP_SCRIPT_MODE, set via next.config.ts's
+    // `env` key (NOT hand-set in a .env file -- Next.js's `env` config
+    // option does a textual process.env.KEY replacement at build time, so
+    // this always reflects what the running build was actually compiled
+    // for, regardless of what the RUNTIME env now claims). Compared
+    // against the runtime-read CSP_SCRIPT_MODE in with-headers.ts as a
+    // build/runtime invariant (A.8.4): a mismatch there is the same class
+    // of bug as SEC-30's original incident (nonce CSP emitted for a build
+    // that wasn't actually compiled with cacheComponents disabled) from a
+    // different trigger -- env drift between build and redeploy, not a
+    // missing next.config.ts branch. Optional because it's absent outside
+    // an actual Next.js build (tests, this file's own module-load
+    // validation running under vitest) -- the invariant check only runs
+    // when a build-time value is actually known.
+    NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE: z
+      .enum(['cache-compatible', 'nonce-dynamic'])
+      .optional(),
     // Add public variables here
   },
 
@@ -238,6 +323,13 @@ export const env = createEnv({
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
+    SECURITY_OUTBOUND_FETCH_TIMEOUT_MS:
+      process.env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS,
+    SECURITY_OUTBOUND_FETCH_MAX_BYTES:
+      process.env.SECURITY_OUTBOUND_FETCH_MAX_BYTES,
+    DEMO_SHOWCASE_ENABLED: process.env.DEMO_SHOWCASE_ENABLED,
+    DEMO_SHOWCASE_ALLOWED_EMAIL: process.env.DEMO_SHOWCASE_ALLOWED_EMAIL,
+    CSP_SCRIPT_MODE: process.env.CSP_SCRIPT_MODE,
     E2E_ENABLED: process.env.E2E_ENABLED,
     AUTH_PROVIDER: process.env.AUTH_PROVIDER,
     DB_PROVIDER: process.env.DB_PROVIDER,
@@ -301,6 +393,8 @@ export const env = createEnv({
     NEXT_PUBLIC_CSP_IMG_EXTRA: process.env.NEXT_PUBLIC_CSP_IMG_EXTRA,
     NEXT_PUBLIC_CSP_FONT_EXTRA: process.env.NEXT_PUBLIC_CSP_FONT_EXTRA,
     NEXT_PUBLIC_CSP_STYLE_EXTRA: process.env.NEXT_PUBLIC_CSP_STYLE_EXTRA,
+    NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE:
+      process.env.NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE,
   },
 
   /**

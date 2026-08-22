@@ -15,9 +15,15 @@ import { createEdgeRequestContainer } from '@/core/runtime/edge';
 import { AuthJsEdgeIdentitySource } from '@/modules/auth/infrastructure/authjs/AuthJsEdgeIdentitySource';
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
 import { RequestScopedTenantResolver } from '@/modules/auth/infrastructure/RequestScopedTenantResolver';
+import { extractClerkEmailClaim } from '@/modules/auth/lib/clerk-session-claims';
 import type { EdgeSecurityDependencies } from '@/security/core/security-dependencies';
 import type { RouteContext } from '@/security/middleware/route-classification';
 import { withAuth } from '@/security/middleware/with-auth';
+import {
+  withDemoAllowlistGuard,
+  withDemoGuard,
+} from '@/security/middleware/with-demo-guard';
+import { buildContentSecurityPolicy } from '@/security/middleware/with-headers';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
 import { withRegistrationMode } from '@/security/middleware/with-registration-mode';
@@ -30,7 +36,41 @@ type ProxyHandler = (
 
 type ProxyMiddleware = (next: ProxyHandler) => ProxyHandler;
 
-const terminalHandler: ProxyHandler = async () => NextResponse.next();
+/**
+ * The only "continue to render the app" exit point in the pipeline —
+ * everything else either short-circuits (guard rejection, redirect) or
+ * calls through to this. When a CSP nonce was generated for this request
+ * (RouteContext.nonce, set only when CSP_SCRIPT_MODE is 'nonce-dynamic'),
+ * two REQUEST headers are carried forward so the RSC render can read them via
+ * headers() — a middleware-set response header never reaches the app's
+ * server components, only the request headers Next.js forwards do:
+ *
+ * - `x-nonce`: read by getCspNonce() for our own <Script>/<ClerkProvider>
+ *   nonce props.
+ * - `Content-Security-Policy`: Next.js's own framework-generated inline
+ *   scripts (RSC hydration payload pushes, etc.) are auto-nonced by Next
+ *   reading THIS exact header on the incoming request — x-nonce alone
+ *   only covers scripts we explicitly pass a nonce prop to. Without this,
+ *   Next's own bootstrap scripts have no nonce and strict-dynamic (no
+ *   unsafe-inline fallback) blocks them, breaking hydration entirely.
+ *
+ * Built once here via buildContentSecurityPolicy() and reused verbatim by
+ * with-headers.ts for the response header, so request and response always
+ * carry the identical value for the same nonce.
+ */
+const terminalHandler: ProxyHandler = async (req, ctx) => {
+  if (!ctx.nonce) {
+    return NextResponse.next();
+  }
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-nonce', ctx.nonce);
+  requestHeaders.set(
+    'Content-Security-Policy',
+    buildContentSecurityPolicy(ctx.nonce),
+  );
+  return NextResponse.next({ request: { headers: requestHeaders } });
+};
 
 function createAuthResultGetter<TAuthResult>(auth: () => Promise<TAuthResult>) {
   let cachedAuthResult: Promise<TAuthResult> | undefined;
@@ -57,10 +97,11 @@ function createRequestIdentitySource(
       return {
         userId: userId ?? undefined,
         orgExternalId: orgId ?? undefined,
-        email:
-          typeof sessionClaims?.email === 'string'
-            ? sessionClaims.email
-            : undefined,
+        // Matches ClerkRequestIdentitySource's claim contract (email, then
+        // primaryEmail fallback) — a mismatch here would mean
+        // DEMO_SHOWCASE_ALLOWED_EMAIL silently never matches for a
+        // deployment that uses the primaryEmail custom claim.
+        email: extractClerkEmailClaim(sessionClaims),
       };
     },
   };
@@ -108,6 +149,9 @@ function createSecurityPipeline(
 ) {
   const appSecurityPipeline = composeMiddlewares(
     [
+      // Runs before auth: a disabled demo route 404s regardless of the
+      // caller's auth state (see with-demo-guard.ts).
+      withDemoGuard,
       withInternalApiGuard,
       withRateLimit,
       withRegistrationMode,
@@ -116,6 +160,10 @@ function createSecurityPipeline(
           dependencies: securityDependencies,
           enforceResourceAuthorization: false,
         }),
+      // Runs after auth: needs the resolved identity for the optional
+      // DEMO_SHOWCASE_ALLOWED_EMAIL check.
+      (next: ProxyHandler) =>
+        withDemoAllowlistGuard(next, { dependencies: securityDependencies }),
     ],
     terminalHandler,
   );
@@ -183,10 +231,13 @@ async function nonClerkProxy(request: NextRequest): Promise<NextResponse> {
  *
  * Shared execution order:
  * 1. withSecurity (Classification, Correlation, Security Headers)
- * 2. withInternalApiGuard (Internal API Key Validation)
- * 3. withRateLimit (API Throttling)
- * 4. withAuth (Session presence gate only in Edge mode)
- * 5. terminalHandler (NextResponse.next())
+ * 2. withDemoGuard (404s a disabled demo/showcase route pre-auth)
+ * 3. withInternalApiGuard (Internal API Key Validation)
+ * 4. withRateLimit (API Throttling)
+ * 5. withRegistrationMode
+ * 6. withAuth (Session presence gate only in Edge mode)
+ * 7. withDemoAllowlistGuard (optional DEMO_SHOWCASE_ALLOWED_EMAIL check)
+ * 8. terminalHandler (NextResponse.next())
  */
 const proxyHandler =
   env.AUTH_PROVIDER === 'clerk'

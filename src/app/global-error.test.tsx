@@ -20,15 +20,15 @@ vi.mock('@sentry/nextjs', () => ({
 }));
 
 describe('Global error UI', () => {
-  it('renders fallback and calls unstable_retry', async () => {
+  it('renders fallback and calls retry', async () => {
     const user = userEvent.setup();
-    const unstable_retry = vi.fn();
+    const retry = vi.fn();
 
     render(
       <GlobalError
         error={new Error('Critical')}
         reset={vi.fn()}
-        unstable_retry={unstable_retry}
+        retry={retry}
       />,
     );
 
@@ -38,7 +38,7 @@ describe('Global error UI', () => {
       screen.getByRole('button', { name: 'Refresh Application' }),
     );
 
-    expect(unstable_retry).toHaveBeenCalled();
+    expect(retry).toHaveBeenCalled();
     expect(mockLogger.child).toHaveBeenCalled();
   });
 });

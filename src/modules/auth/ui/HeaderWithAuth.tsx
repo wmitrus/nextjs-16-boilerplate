@@ -11,6 +11,7 @@ export function HeaderWithAuth() {
 
   return (
     <Header
+      showDemoLinks={env.DEMO_SHOWCASE_ENABLED}
       rightContent={
         provider === 'clerk' ? (
           <HeaderAuthControls />

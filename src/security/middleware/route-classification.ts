@@ -1,7 +1,10 @@
 import type { NextRequest } from 'next/server';
 
+import { env } from '@/core/env';
+
 import {
   AUTH_ROUTE_PREFIXES,
+  DEMO_ROUTE_PREFIXES,
   PUBLIC_ROUTE_PREFIXES,
   matchesAnyRoutePrefix,
 } from './route-policy';
@@ -14,9 +17,17 @@ export interface RouteContext {
   isOnboardingRoute: boolean;
   isBootstrapRoute: boolean;
   isPublicRoute: boolean;
+  isDemoRoute: boolean;
   isStaticFile: boolean;
   correlationId: string;
   requestId: string;
+  /**
+   * Per-request CSP script-src nonce, set only when CSP_SCRIPT_MODE is
+   * 'nonce-dynamic' (see with-headers.ts). undefined in 'cache-compatible'
+   * mode — callers must not force dynamic rendering (e.g. via headers())
+   * to look for a nonce that was never generated.
+   */
+  nonce: string | undefined;
 }
 
 /**
@@ -44,6 +55,14 @@ export function classifyRequest(req: NextRequest): RouteContext {
 
   const isPublicRoute =
     matchesAnyRoutePrefix(path, PUBLIC_ROUTE_PREFIXES) || isAuthRoute;
+  const isDemoRoute = matchesAnyRoutePrefix(path, DEMO_ROUTE_PREFIXES);
+
+  // btoa(randomUUID()) rather than a raw UUID: CSP nonces are conventionally
+  // base64 tokens, and this keeps the value opaque in response headers.
+  const nonce =
+    env.CSP_SCRIPT_MODE === 'nonce-dynamic'
+      ? btoa(crypto.randomUUID())
+      : undefined;
 
   return {
     isApi,
@@ -53,8 +72,10 @@ export function classifyRequest(req: NextRequest): RouteContext {
     isOnboardingRoute,
     isBootstrapRoute,
     isPublicRoute,
+    isDemoRoute,
     isStaticFile,
     correlationId,
     requestId,
+    nonce,
   };
 }

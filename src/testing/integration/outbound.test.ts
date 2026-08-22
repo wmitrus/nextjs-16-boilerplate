@@ -1,4 +1,6 @@
 /** @vitest-environment node */
+import { lookup } from 'node:dns/promises';
+
 import { http, HttpResponse } from 'msw';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -11,11 +13,27 @@ import {
   resetLoggerMocks,
 } from '@/testing/infrastructure/logger';
 
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
+
 describe('Outbound Security Integration (SSRF)', () => {
   beforeEach(() => {
     resetEnvMocks();
     resetLoggerMocks();
     vi.clearAllMocks();
+    // The DNS-rebinding guard resolves every allowlisted hostname before
+    // fetching. These are synthetic test domains with no real DNS record, so
+    // resolution is mocked to a public address — MSW intercepts the actual
+    // fetch below, this only satisfies the pre-fetch resolve-then-check.
+    vi.mocked(lookup).mockResolvedValue(
+      // The `{ all: true }` overload resolves to LookupAddress[], but
+      // vi.mocked() infers the single-result overload — cast through
+      // unknown to match the array shape actually used at the call site.
+      [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+        ReturnType<typeof lookup>
+      >,
+    );
   });
 
   it('should allow requests to explicitly allowed hosts', async () => {

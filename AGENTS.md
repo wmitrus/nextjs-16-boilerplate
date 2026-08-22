@@ -512,6 +512,7 @@ For any non-trivial task:
 4. Read `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` for feature, fix, refactor, script, or tooling work.
 5. Read the relevant specialist prompt or workflow file for the task.
 6. Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` when the task touches redirects, logging, file access, auth, route handlers, scripts, or any security-sensitive path.
+7. Read `docs/ai/general/NEXTJS_IMPLEMENTATION_PLAYBOOK.md` when building a new API route, page/route segment, or test — it's the concrete "how", cross-linked to the SEC-XX entries and anti-patterns above rather than duplicating them.
 
 For middleware-style behavior, inspect `src/proxy.ts` first.
 
@@ -571,6 +572,73 @@ When auth, org, role, permission, policy, or tenant logic is involved, increase 
 - where tenant context is derived and validated
 - whether claims are trustworthy
 - whether failure paths are explicit and safe
+
+---
+
+## Pending Scheduled Security Follow-Ups — Check Every Session
+
+**Any AI agent working in this repository on or after the date below must
+check this section before finishing a security-adjacent task.** This is a
+standing instruction, independent of which session or conversation created
+it — not a one-time note to the session that wrote it. `CLAUDE.md` carries
+a pointer to this section per this repo's own propagation convention; this
+is the authoritative copy.
+
+### Next.js Critical security release — check on/after 2026-08-26
+
+**Status as of 2026-08-22**: Next.js has publicly announced a **Critical**
+severity security release targeted for **2026-08-26**, naming `16.3.2` and
+`15.5.24` as the patched versions-to-be. This repository is already on
+`next@16.3.2` (upgraded 2026-08-21, the day before that version's public
+release) — but **do not assume this repo already has the fix**. As of
+2026-08-22, `next@16.3.2`'s public release notes describe only unrelated
+backport fixes (app-entry validation, catch-all routing, Turbopack) — there
+is no evidence yet that the embargoed Critical fix is already in the
+published `16.3.2`, since the advisory itself hadn't been published as of
+that date. Treat "we're on 16.3.2" and "we have the fix" as two separate,
+unverified claims until the official advisory confirms which exact
+version(s) actually carry it.
+
+**On or after 2026-08-26, any session touching this repo's security
+surface (or asked to check for pending security work) MUST**:
+
+1. Check whether Next.js has published the official advisory (npm
+   registry release notes for `next`, the Next.js GitHub security
+   advisories page, or a web search for "Next.js critical security
+   advisory 16.3" / "15.5.24").
+2. If published: read the advisory's actual affected-version range and
+   actual patched version — do not assume it's `16.3.2`/`15.5.24` just
+   because those were the pre-announced targets; the real patched version
+   could differ once the advisory ships.
+3. If this repo's current `next` version is inside the affected range and
+   below the real patched version, upgrade:
+   `pnpm add next@<patched-version> eslint-config-next@<patched-version>`
+   (mirroring how the 16.3.2 upgrade updated the pinned `@next/*` and
+   `eslint-config-next` versions in `pnpm-workspace.yaml`'s
+   `minimumReleaseAgeExclude` list — update those pins too).
+4. Run the full security-relevant gate before calling this done: frozen
+   lockfile install (`pnpm install --frozen-lockfile`), `pnpm audit`
+   (or the repo's `audit` config in `pnpm-workspace.yaml`), `pnpm test`,
+   `pnpm typecheck`, a real `CSP_SCRIPT_MODE=nonce-dynamic pnpm build`
+   plus the nonce-dynamic E2E suite (`e2e-label.yml`'s
+   `e2e-csp-nonce-dynamic` job, or the path-triggered workflow at
+   `.github/workflows/e2e-csp-nonce-dynamic-paths.yml`), a Preview deploy,
+   and a Preview runtime smoke check.
+5. Only after all of the above passes does this constitute a genuine
+   production GO for this dependency — do not treat "the app is on
+   16.3.2" alone as sufficient at any point before this checklist
+   completes.
+6. If this section is still unresolved by the time you read it (advisory
+   not yet published, or published but not yet actioned): say so
+   explicitly rather than silently skipping it, and if a tracked task for
+   this doesn't already exist (check Leantime per this file's mandatory
+   protocol, and this repo's `.copilot/tasks/` history), create one so the
+   follow-up isn't lost between sessions.
+
+Once this follow-up is actually completed (patch applied and the full gate
+above passes, or the advisory turns out not to affect this repo's version
+range), delete this subsection from both this file and `CLAUDE.md` — do
+not leave a stale "pending" notice pointing at a date that already passed.
 
 ---
 
@@ -858,29 +926,30 @@ Reference guides:
 > **IMPORTANT**: When any coding rule, security pattern, or behavioral constraint is added or changed,
 > update **ALL** applicable locations below. Never add to `.zencoder/rules/` — it is deprecated.
 
-| Location                                      | Consumer            | Notes                                                  |
-| --------------------------------------------- | ------------------- | ------------------------------------------------------ |
-| **`AGENTS.md`** (this file)                   | All AI agents       | **Primary always-applied context — update here first** |
-| `docs/ai/general/0[1-9] - *.md`               | Zencoder extension  | Plain markdown prompt files                            |
-| `.github/agents/*.agent.md`                   | GitHub Copilot      | YAML frontmatter + markdown                            |
-| `.github/prompts/*.prompt.md`                 | GitHub Copilot      | YAML frontmatter + markdown                            |
-| `.agents/skills/*/SKILL.md`                   | Codex               | YAML frontmatter + markdown                            |
-| `.claude/skills/*/SKILL.md`                   | Claude Code         | YAML frontmatter + markdown                            |
-| `CLAUDE.md`                                   | Claude Code         | Bridges to this file; update its quick-reference sections when Testing/Env/Quality-Gate rules change |
-| `.zenflow/workflows/*.md`                     | ZenFlow extension   | Step-based workflow files                              |
-| `docs/ai/general/SECURITY_CODING_PATTERNS.md` | All agents + humans | Living security catalogue                              |
-| `docs/ai/zencoder/*.md`                       | Humans              | Description guides pointing to `docs/ai/general/`      |
-| `docs/ai/copilot/*.md`                        | Humans              | Description guides pointing to `.github/agents/`       |
-| `docs/ai/codex/*.md`                          | Humans              | Description guides pointing to `.agents/skills/`       |
-| `docs/ai/claude/*.md`                         | Humans              | Description guides pointing to `.claude/skills/`       |
-| ~~`.zencoder/rules/repo.md`~~                 | ~~Zencoder~~        | **DEPRECATED — April 20, 2026. Do not use.**           |
+| Location                                            | Consumer            | Notes                                                                                                                         |
+| --------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **`AGENTS.md`** (this file)                         | All AI agents       | **Primary always-applied context — update here first**                                                                        |
+| `docs/ai/general/0[1-9] - *.md`                     | Zencoder extension  | Plain markdown prompt files                                                                                                   |
+| `.github/agents/*.agent.md`                         | GitHub Copilot      | YAML frontmatter + markdown                                                                                                   |
+| `.github/prompts/*.prompt.md`                       | GitHub Copilot      | YAML frontmatter + markdown                                                                                                   |
+| `.agents/skills/*/SKILL.md`                         | Codex               | YAML frontmatter + markdown                                                                                                   |
+| `.claude/skills/*/SKILL.md`                         | Claude Code         | YAML frontmatter + markdown                                                                                                   |
+| `CLAUDE.md`                                         | Claude Code         | Bridges to this file; update its quick-reference sections when Testing/Env/Quality-Gate rules change                          |
+| `.zenflow/workflows/*.md`                           | ZenFlow extension   | Step-based workflow files                                                                                                     |
+| `docs/ai/general/SECURITY_CODING_PATTERNS.md`       | All agents + humans | Living security catalogue                                                                                                     |
+| `docs/ai/general/NEXTJS_IMPLEMENTATION_PLAYBOOK.md` | All agents + humans | How to build a new API route, page/route segment, or test — cross-links SEC-XX and anti-patterns rather than duplicating them |
+| `docs/ai/zencoder/*.md`                             | Humans              | Description guides pointing to `docs/ai/general/`                                                                             |
+| `docs/ai/copilot/*.md`                              | Humans              | Description guides pointing to `.github/agents/`                                                                              |
+| `docs/ai/codex/*.md`                                | Humans              | Description guides pointing to `.agents/skills/`                                                                              |
+| `docs/ai/claude/*.md`                               | Humans              | Description guides pointing to `.claude/skills/`                                                                              |
+| ~~`.zencoder/rules/repo.md`~~                       | ~~Zencoder~~        | **DEPRECATED — April 20, 2026. Do not use.**                                                                                  |
 
 Full correspondence table and process ownership rules: `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 
 ### Agent Numbering and File Correspondence
 
-| #   | Role                  | Zencoder Prompt                                       | GitHub Copilot Agent                            | Codex Skill                                     | Claude Code Skill                                | ZenFlow Preset              |
-| --- | --------------------- | ----------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | ------------------------------------------------- | --------------------------- |
+| #   | Role                  | Zencoder Prompt                                       | GitHub Copilot Agent                            | Codex Skill                                     | Claude Code Skill                               | ZenFlow Preset              |
+| --- | --------------------- | ----------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | --------------------------- |
 | 01  | Architecture Guard    | `docs/ai/general/01 - Architecture Guard Agent.md`    | `.github/agents/architecture-guard.agent.md`    | `.agents/skills/architecture-guard/SKILL.md`    | `.claude/skills/architecture-guard/SKILL.md`    | `architecture-guard-agent`  |
 | 02  | Security & Auth       | `docs/ai/general/02 - Security & Auth Agent.md`       | `.github/agents/security-auth.agent.md`         | `.agents/skills/security-auth/SKILL.md`         | `.claude/skills/security-auth/SKILL.md`         | `security-auth-agent`       |
 | 03  | Next.js Runtime       | `docs/ai/general/03 - Next.js Runtime Agent.md`       | `.github/agents/nextjs-runtime.agent.md`        | `.agents/skills/nextjs-runtime/SKILL.md`        | `.claude/skills/nextjs-runtime/SKILL.md`        | `nextjs-runtime-agent`      |
@@ -891,22 +960,22 @@ Full correspondence table and process ownership rules: `docs/ai/general/REPOSITO
 | 08  | Workflow Orchestrator | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | `.github/agents/workflow-orchestrator.agent.md` | `.agents/skills/workflow-orchestrator/SKILL.md` | `.claude/skills/workflow-orchestrator/SKILL.md` | —                           |
 | 09  | Task Brief Authoring  | `docs/ai/general/09 - Task Brief Authoring.md`        | —                                               | `.agents/skills/task-brief-authoring/SKILL.md`  | `.claude/skills/task-brief-authoring/SKILL.md`  | —                           |
 | 10  | Leantime Integration  | `docs/ai/general/10 - Leantime Integration Agent.md`  | `.github/agents/leantime-integration.agent.md`  | `.agents/skills/leantime-integration/SKILL.md`  | `.claude/skills/leantime-integration/SKILL.md`  | —                           |
-| 11  | Leantime Strategy     | `docs/ai/general/11 - Leantime Strategy Agent.md`     | —                                               | —                                               | —                                                  | —                           |
+| 11  | Leantime Strategy     | `docs/ai/general/11 - Leantime Strategy Agent.md`     | —                                               | —                                               | —                                               | —                           |
 
 ### Workflow Entry Point Correspondence
 
-| Workflow | Neutral Spec | GitHub Copilot Prompt | Codex Skill | Claude Code Skill | ZenFlow Workflow |
-| ----------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------- | ----------------- | ------------------------------------------------------ |
-| 01 - Safe Feature | `docs/ai/general/Workflow 01 - Safe Feature Workflow.md` | — | `.agents/skills/safe-feature-workflow/SKILL.md` | `.claude/skills/safe-feature-workflow/SKILL.md` | `.zenflow/workflows/feature-development.md` |
-| 02 - Safe Refactor | `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md` | `.github/prompts/safe-refactor.prompt.md` | `.agents/skills/safe-refactor-workflow/SKILL.md` | `.claude/skills/safe-refactor-workflow/SKILL.md` | `.zenflow/workflows/safe-refactor.md` |
-| 03 - Security Incident | `docs/ai/general/Workflow 03 - Security Incident Workflow.md` | `.github/prompts/security-incident.prompt.md` | `.agents/skills/security-incident-workflow/SKILL.md` | `.claude/skills/security-incident-workflow/SKILL.md` | `.zenflow/workflows/security-incident-workflow.md` |
-| 04 - Incident Investigation | `docs/ai/general/Workflow 04 - Incident Investigation Workflow.md` | `.github/prompts/incident-investigation.prompt.md` | `.agents/skills/incident-investigation-workflow/SKILL.md` | `.claude/skills/incident-investigation-workflow/SKILL.md` | `.zenflow/workflows/incident-investigation.md` |
-| 05 - Auth Flow Change Review | `docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md` | `.github/prompts/auth-flow-change-review.prompt.md` | `.agents/skills/auth-flow-change-review-workflow/SKILL.md` | `.claude/skills/auth-flow-change-review-workflow/SKILL.md` | `.zenflow/workflows/auth-flow-change-review.md` |
-| 06 - Playwright E2E Validation | `docs/ai/general/Workflow 06 - Playwright E2E Validation Workflow.md` | `.github/prompts/playwright-e2e-validation.prompt.md` | `.agents/skills/playwright-e2e-validation-workflow/SKILL.md` | `.claude/skills/playwright-e2e-validation-workflow/SKILL.md` | `.zenflow/workflows/playwright-e2e-validation.md` |
-| 07 - Change Validation | `docs/ai/general/Workflow 07 - Change Validation Workflow.md` | `.github/prompts/change-validation.prompt.md` | `.agents/skills/change-validation-workflow/SKILL.md` | `.claude/skills/change-validation-workflow/SKILL.md` | `.zenflow/workflows/change-validation.md` |
+| Workflow                            | Neutral Spec                                                               | GitHub Copilot Prompt                                      | Codex Skill                                                       | Claude Code Skill                                                 | ZenFlow Workflow                                       |
+| ----------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------ |
+| 01 - Safe Feature                   | `docs/ai/general/Workflow 01 - Safe Feature Workflow.md`                   | —                                                          | `.agents/skills/safe-feature-workflow/SKILL.md`                   | `.claude/skills/safe-feature-workflow/SKILL.md`                   | `.zenflow/workflows/feature-development.md`            |
+| 02 - Safe Refactor                  | `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md`                  | `.github/prompts/safe-refactor.prompt.md`                  | `.agents/skills/safe-refactor-workflow/SKILL.md`                  | `.claude/skills/safe-refactor-workflow/SKILL.md`                  | `.zenflow/workflows/safe-refactor.md`                  |
+| 03 - Security Incident              | `docs/ai/general/Workflow 03 - Security Incident Workflow.md`              | `.github/prompts/security-incident.prompt.md`              | `.agents/skills/security-incident-workflow/SKILL.md`              | `.claude/skills/security-incident-workflow/SKILL.md`              | `.zenflow/workflows/security-incident-workflow.md`     |
+| 04 - Incident Investigation         | `docs/ai/general/Workflow 04 - Incident Investigation Workflow.md`         | `.github/prompts/incident-investigation.prompt.md`         | `.agents/skills/incident-investigation-workflow/SKILL.md`         | `.claude/skills/incident-investigation-workflow/SKILL.md`         | `.zenflow/workflows/incident-investigation.md`         |
+| 05 - Auth Flow Change Review        | `docs/ai/general/Workflow 05 - Auth Flow Change Review Workflow.md`        | `.github/prompts/auth-flow-change-review.prompt.md`        | `.agents/skills/auth-flow-change-review-workflow/SKILL.md`        | `.claude/skills/auth-flow-change-review-workflow/SKILL.md`        | `.zenflow/workflows/auth-flow-change-review.md`        |
+| 06 - Playwright E2E Validation      | `docs/ai/general/Workflow 06 - Playwright E2E Validation Workflow.md`      | `.github/prompts/playwright-e2e-validation.prompt.md`      | `.agents/skills/playwright-e2e-validation-workflow/SKILL.md`      | `.claude/skills/playwright-e2e-validation-workflow/SKILL.md`      | `.zenflow/workflows/playwright-e2e-validation.md`      |
+| 07 - Change Validation              | `docs/ai/general/Workflow 07 - Change Validation Workflow.md`              | `.github/prompts/change-validation.prompt.md`              | `.agents/skills/change-validation-workflow/SKILL.md`              | `.claude/skills/change-validation-workflow/SKILL.md`              | `.zenflow/workflows/change-validation.md`              |
 | 08 - Repository Baseline Validation | `docs/ai/general/Workflow 08 - Repository Baseline Validation Workflow.md` | `.github/prompts/repository-baseline-validation.prompt.md` | `.agents/skills/repository-baseline-validation-workflow/SKILL.md` | `.claude/skills/repository-baseline-validation-workflow/SKILL.md` | `.zenflow/workflows/repository-baseline-validation.md` |
-| 10 - Codacy Security Review | `docs/ai/general/Workflow 10 - Codacy Security Review Workflow.md` | `.github/prompts/codacy-security-review.prompt.md` | `.agents/skills/codacy-security-review-workflow/SKILL.md` | `.claude/skills/codacy-security-review-workflow/SKILL.md` | `.zenflow/workflows/codacy-security-review.md` |
-| 11 - Codacy Findings Review | `docs/ai/general/Workflow 11 - Codacy Findings Review Workflow.md` | `.github/prompts/codacy-findings-review.prompt.md` | `.agents/skills/codacy-findings-review-workflow/SKILL.md` | `.claude/skills/codacy-findings-review-workflow/SKILL.md` | `.zenflow/workflows/codacy-findings-review.md` |
+| 10 - Codacy Security Review         | `docs/ai/general/Workflow 10 - Codacy Security Review Workflow.md`         | `.github/prompts/codacy-security-review.prompt.md`         | `.agents/skills/codacy-security-review-workflow/SKILL.md`         | `.claude/skills/codacy-security-review-workflow/SKILL.md`         | `.zenflow/workflows/codacy-security-review.md`         |
+| 11 - Codacy Findings Review         | `docs/ai/general/Workflow 11 - Codacy Findings Review Workflow.md`         | `.github/prompts/codacy-findings-review.prompt.md`         | `.agents/skills/codacy-findings-review-workflow/SKILL.md`         | `.claude/skills/codacy-findings-review-workflow/SKILL.md`         | `.zenflow/workflows/codacy-findings-review.md`         |
 
 ---
 

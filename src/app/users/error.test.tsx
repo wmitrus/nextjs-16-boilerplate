@@ -13,15 +13,15 @@ vi.mock('@/core/logger/client', () => ({
 }));
 
 describe('Users error boundary UI', () => {
-  it('renders fallback and calls unstable_retry', async () => {
+  it('renders fallback and calls retry', async () => {
     const user = userEvent.setup();
-    const unstable_retry = vi.fn();
+    const retry = vi.fn();
 
     render(
       <UsersErrorBoundary
         error={new Error('Oops')}
         reset={vi.fn()}
-        unstable_retry={unstable_retry}
+        retry={retry}
       />,
     );
 
@@ -29,7 +29,7 @@ describe('Users error boundary UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'Retry users page' }));
 
-    expect(unstable_retry).toHaveBeenCalled();
+    expect(retry).toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalled();
   });
 });

@@ -14,7 +14,14 @@
 const REDACTED_AUDIT_VALUE = '[REDACTED]';
 const CIRCULAR_AUDIT_VALUE = '[Circular]';
 const BINARY_AUDIT_VALUE = '[Binary]';
-const SENSITIVE_AUDIT_FIELD_PATTERNS = [
+
+/**
+ * Exported (not just used internally here) so any other module that needs
+ * to recognize a credential-shaped field/header name reuses this exact
+ * list instead of maintaining a second, driftable copy — e.g.
+ * `secure-fetch.ts`'s cross-origin redirect header stripping (A.8.2).
+ */
+export const SENSITIVE_AUDIT_FIELD_PATTERNS = [
   /token/i,
   /secret/i,
   /password/i,
@@ -26,7 +33,7 @@ const SENSITIVE_AUDIT_FIELD_PATTERNS = [
   /api[-_]?key/i,
 ];
 
-function isSensitiveAuditField(key: string): boolean {
+export function isSensitiveAuditField(key: string): boolean {
   return SENSITIVE_AUDIT_FIELD_PATTERNS.some((pattern) => pattern.test(key));
 }
 

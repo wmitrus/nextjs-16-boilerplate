@@ -7,13 +7,17 @@ import { Suspense } from 'react';
 
 import { env } from '@/core/env';
 import { BetterStackWebVitalsProvider } from '@/core/observability/better-stack-web-vitals';
-import { getNrBrowserCdnConfig } from '@/core/observability/new-relic-browser';
+import {
+  getNrBrowserCdnConfig,
+  type NrBrowserCdnConfig,
+} from '@/core/observability/new-relic-browser';
 
 import { GlobalErrorHandlers } from '@/shared/components/error/global-error-handlers';
 
 import { normalizeClerkPostAuthRedirect } from '@/modules/auth/lib/clerk-redirects';
 import { SessionProvider } from '@/modules/auth/ui/authjs/SessionProvider';
 import { HeaderWithAuth } from '@/modules/auth/ui/HeaderWithAuth';
+import { getCspNonce } from '@/security/rsc/csp-nonce';
 
 import './globals.css';
 
@@ -41,6 +45,100 @@ function RootLayoutShell() {
         <div className="h-9 w-20 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-800" />
       </div>
     </header>
+  );
+}
+
+/**
+ * Reads the CSP nonce and renders the New Relic browser bootstrap scripts.
+ * A dedicated async Server Component so the dynamic-rendering cost of
+ * getCspNonce() (see its doc comment) stays scoped to just this piece of
+ * `<head>`, rather than making the whole RootLayout function dynamic.
+ */
+async function NrBrowserScripts({
+  cdnConfig,
+  isNewRelicApmBrowserEnabled,
+}: {
+  cdnConfig: NrBrowserCdnConfig | null;
+  isNewRelicApmBrowserEnabled: boolean;
+}) {
+  const nonce = await getCspNonce();
+
+  return (
+    <>
+      {cdnConfig && (
+        <>
+          <Script
+            id="nr-browser-cdn-config"
+            strategy="beforeInteractive"
+            nonce={nonce}
+            dangerouslySetInnerHTML={{
+              __html: `window.NREUM||(NREUM={});NREUM.init=${JSON.stringify(cdnConfig.init)};NREUM.loader_config={accountID:${JSON.stringify(cdnConfig.accountId)},trustKey:${JSON.stringify(cdnConfig.accountId)},agentID:${JSON.stringify(cdnConfig.agentId)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.applicationId)}};NREUM.info={beacon:${JSON.stringify(cdnConfig.beacon)},errorBeacon:${JSON.stringify(cdnConfig.beacon)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.applicationId)},sa:1};`,
+            }}
+          />
+          <Script
+            id="nr-browser-cdn"
+            src={cdnConfig.agentUrl}
+            strategy="beforeInteractive"
+            nonce={nonce}
+          />
+        </>
+      )}
+      {isNewRelicApmBrowserEnabled && !cdnConfig && (
+        <Script
+          id="nr-browser-agent"
+          src="/observability/new-relic-browser.js"
+          strategy="afterInteractive"
+          nonce={nonce}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Wraps ClerkProvider with the CSP nonce. Clerk's `nonce` prop requires
+ * `dynamic` to also be set (it threads the nonce through to the
+ * @clerk/clerk-js script tag for a strict-dynamic CSP — see Clerk's
+ * ClerkProviderProps doc comment) — only pass `dynamic` when we actually
+ * have a nonce to give it, so strict mode being off doesn't needlessly
+ * force Clerk into dynamic rendering.
+ */
+interface ClerkRedirectUrls {
+  signInFallbackRedirectUrl: string | undefined;
+  signUpFallbackRedirectUrl: string | undefined;
+  signInForceRedirectUrl: string | undefined;
+  signUpForceRedirectUrl: string | undefined;
+}
+
+async function ClerkProviderWithNonce({
+  children,
+  signInUrl,
+  signUpUrl,
+  waitlistUrl,
+  redirectUrls,
+}: {
+  children: React.ReactNode;
+  signInUrl: string;
+  signUpUrl: string;
+  waitlistUrl: string;
+  redirectUrls: ClerkRedirectUrls;
+}) {
+  const nonce = await getCspNonce();
+
+  return (
+    <ClerkProvider
+      nonce={nonce}
+      dynamic={Boolean(nonce)}
+      signInUrl={signInUrl}
+      signUpUrl={signUpUrl}
+      waitlistUrl={waitlistUrl}
+      signInFallbackRedirectUrl={redirectUrls.signInFallbackRedirectUrl}
+      signUpFallbackRedirectUrl={redirectUrls.signUpFallbackRedirectUrl}
+      signInForceRedirectUrl={redirectUrls.signInForceRedirectUrl}
+      signUpForceRedirectUrl={redirectUrls.signUpForceRedirectUrl}
+    >
+      {children}
+    </ClerkProvider>
   );
 }
 
@@ -89,29 +187,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {cdnConfig && (
-          <>
-            <Script
-              id="nr-browser-cdn-config"
-              strategy="beforeInteractive"
-              dangerouslySetInnerHTML={{
-                __html: `window.NREUM||(NREUM={});NREUM.init=${JSON.stringify(cdnConfig.init)};NREUM.loader_config={accountID:${JSON.stringify(cdnConfig.accountId)},trustKey:${JSON.stringify(cdnConfig.accountId)},agentID:${JSON.stringify(cdnConfig.agentId)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.applicationId)}};NREUM.info={beacon:${JSON.stringify(cdnConfig.beacon)},errorBeacon:${JSON.stringify(cdnConfig.beacon)},licenseKey:${JSON.stringify(cdnConfig.licenseKey)},applicationID:${JSON.stringify(cdnConfig.applicationId)},sa:1};`,
-              }}
-            />
-            <Script
-              id="nr-browser-cdn"
-              src={cdnConfig.agentUrl}
-              strategy="beforeInteractive"
-            />
-          </>
-        )}
-        {isNewRelicApmBrowserEnabled && !cdnConfig && (
-          <Script
-            id="nr-browser-agent"
-            src="/observability/new-relic-browser.js"
-            strategy="afterInteractive"
+        {/* getCspNonce() inside NrBrowserScripts reads headers() — a Dynamic
+            API. Under cacheComponents:true, Next.js requires that be
+            wrapped in Suspense or the build fails hard ("Uncached data
+            accessed outside Suspense"): every route shares this <head>, so
+            every prerendered page hit the same error. */}
+        <Suspense fallback={null}>
+          <NrBrowserScripts
+            cdnConfig={cdnConfig}
+            isNewRelicApmBrowserEnabled={isNewRelicApmBrowserEnabled}
           />
-        )}
+        </Suspense>
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -123,17 +209,19 @@ export default function RootLayout({
         )}
         {isClerkProvider ? (
           <Suspense fallback={<RootLayoutShell />}>
-            <ClerkProvider
+            <ClerkProviderWithNonce
               signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
               signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
               waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
-              signInFallbackRedirectUrl={signInFallbackRedirectUrl}
-              signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
-              signInForceRedirectUrl={signInForceRedirectUrl}
-              signUpForceRedirectUrl={signUpForceRedirectUrl}
+              redirectUrls={{
+                signInFallbackRedirectUrl,
+                signUpFallbackRedirectUrl,
+                signInForceRedirectUrl,
+                signUpForceRedirectUrl,
+              }}
             >
               <AppLayoutContent>{children}</AppLayoutContent>
-            </ClerkProvider>
+            </ClerkProviderWithNonce>
           </Suspense>
         ) : isAuthJsProvider ? (
           <SessionProvider>

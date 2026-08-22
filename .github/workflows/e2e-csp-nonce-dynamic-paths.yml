@@ -1,0 +1,69 @@
+name: Path-Triggered CSP nonce-dynamic E2E
+
+# Runs the CSP nonce-dynamic E2E scenario (e2e-label.yml's
+# e2e-csp-nonce-dynamic job) automatically on a PR that touches a path
+# plausibly affecting CSP/nonce behavior, instead of depending on someone
+# remembering to apply the run-e2e label or dispatch it by hand (A.8.4).
+#
+# Deliberately a SEPARATE workflow file rather than adding `paths:` to
+# e2e-label.yml's own pull_request trigger: `paths:` filters the whole
+# trigger block regardless of `types:`, so adding it there would also
+# gate the existing `labeled` (run-e2e) trigger by path -- silently
+# breaking "apply run-e2e to force a run regardless of what changed",
+# which is the entire point of that manual override. Keeping this as its
+# own file with its own native `paths:` filter adds automatic triggering
+# with zero risk to that existing mechanism.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'src/security/middleware/**'
+      - 'src/security/rsc/**'
+      - 'src/app/layout.tsx'
+      - 'next.config.ts'
+      - 'src/core/env.ts'
+
+jobs:
+  e2e-csp-nonce-dynamic:
+    name: Playwright CSP nonce-dynamic mode E2E (path-triggered)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+
+      # See Part A.7.2 in docs/ai/general/SECURITY_CODING_PATTERNS.md
+      # (SEC-30/SEC-31): CSP_SCRIPT_MODE=nonce-dynamic must be set for the
+      # build itself, not just the runtime start step -- under
+      # cacheComponents:true, which parts of a route are static vs.
+      # dynamic is decided once at build time.
+      - name: Run CSP nonce-dynamic mode E2E Tests
+        run: pnpm e2e:csp-nonce-dynamic:ci
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+
+      - name: Upload CSP nonce-dynamic Playwright Artifacts
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # actions/upload-artifact@v7
+        with:
+          name: playwright-csp-nonce-dynamic-paths-e2e-artifacts
+          path: |
+            logs/playwright/
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

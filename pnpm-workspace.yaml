@@ -67,11 +67,66 @@ overrides:
   'tar@>=7.0.0 <7.5.21': 7.5.21
 
 audit:
-  # image-size@2.0.3 is the advisory fix, but npm currently publishes only
-  # 2.0.2. This dev-only path is tracked in the audit remediation artifact.
+  # --- GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq (image-size@2.0.2) ---
+  # Reason: both advisories are in `image-size`, upstream published only
+  # 2.0.2 as of this writing -- 2.0.3 (the advisory fix) does not exist on
+  # npm yet, so there is no newer version to bump to. Re-check
+  # `npm view image-size versions` periodically; bump the moment a fixed
+  # version publishes.
+  # Dependency path (confirmed via `pnpm why image-size`, 2026-08-22):
+  #   image-size@2.0.2
+  #   └─ vite-plugin-storybook-nextjs@3.1.9
+  #      └─ @storybook/nextjs-vite@10.2.13
+  #         └─ this repo (devDependencies)
+  # Dev-only proof: reached exclusively through @storybook/nextjs-vite, a
+  # devDependency -- Storybook's build/dev tooling never ships into the
+  # production Next.js bundle or a deployed server, so this advisory has no
+  # production attack surface in this repo regardless of its severity.
+  # Owner: repository maintainers (wmitrus) -- re-review on every quarterly
+  # dependency-audit pass, not just when this comment is read.
+  # Review expiry: 2026-11-22 (quarterly) -- if still unresolved upstream
+  # at that date, re-confirm the dev-only reachability proof still holds
+  # (a future refactor could theoretically pull @storybook/nextjs-vite into
+  # a non-dev path) rather than silently re-extending the ignore.
+  #
+  # --- GHSA-jmr9-qjv8-65gv (extract-zip@2.0.1, symlink path traversal) ---
+  # Reason: same upstream-blocked shape as the two exceptions above --
+  # 2.0.2 (the advisory's patched version) does not exist on npm yet
+  # (`npm view extract-zip versions` tops out at 2.0.1 as of this
+  # writing). Surfaced by pinning @lhci/cli (A.8 SEC-32 follow-up,
+  # 2026-08-22) as a real devDependency instead of fetching it via `npx`
+  # -- pinning didn't introduce the vulnerability, it just made pnpm audit
+  # see a transitive dependency that was always being fetched unaudited
+  # before. Re-check periodically; bump the moment a fixed version
+  # publishes.
+  # Dependency path (confirmed via `pnpm why extract-zip`, 2026-08-22):
+  #   extract-zip@2.0.1
+  #   └─ @puppeteer/browsers@2.13.2
+  #      └─ puppeteer-core@24.43.1
+  #         └─ lighthouse@12.6.1
+  #            └─ @lhci/cli@0.15.1 (devDependencies)
+  # Dev-only proof: reached exclusively through @lhci/cli, a
+  # devDependency invoked only in the `preview-deploy.yml` Lighthouse CI
+  # job -- never in the production Next.js bundle or a deployed server.
+  # Additionally not reachable *in practice* even within that job: the
+  # vulnerable code path is inside @puppeteer/browsers' zip-extraction
+  # step for a Chromium binary IT downloads -- this repo's own
+  # `preview-deploy.yml` never lets puppeteer/lighthouse download or
+  # extract a browser at all; it launches its own pre-installed Chromium
+  # (via Playwright, already vetted) and points lighthouse at it over CDP
+  # (`--collect.settings.port=9222`), so extract-zip's actual extraction
+  # logic is dead code on this repo's own execution path, not just an
+  # unreachable production surface.
+  # Owner: repository maintainers (wmitrus) -- re-review on every
+  # quarterly dependency-audit pass, not just when this comment is read.
+  # Review expiry: 2026-11-22 (quarterly) -- if still unresolved upstream
+  # at that date, re-confirm both the dev-only and the
+  # dead-code-on-this-repo's-CDP-path proofs still hold before
+  # re-extending the ignore.
   ignore:
     - GHSA-w3rx-r6r6-pgpr
     - GHSA-5p2g-fcmc-qvqq
+    - GHSA-jmr9-qjv8-65gv
 
 onlyBuiltDependencies:
   - '@clerk/shared'
@@ -121,8 +176,21 @@ minimumReleaseAgeExclude:
   - '@vercel/vc-native-linux-arm64@59.0.0'
   - '@vercel/vc-native-linux-x64@59.0.0'
   - vercel@59.0.0
+  - '@next/env@16.3.2'
+  - '@next/eslint-plugin-next@16.3.2'
+  - '@next/swc-darwin-arm64@16.3.2'
+  - '@next/swc-darwin-x64@16.3.2'
+  - '@next/swc-linux-arm64-gnu@16.3.2'
+  - '@next/swc-linux-arm64-musl@16.3.2'
+  - '@next/swc-linux-x64-gnu@16.3.2'
+  - '@next/swc-linux-x64-musl@16.3.2'
+  - '@next/swc-win32-arm64-msvc@16.3.2'
+  - '@next/swc-win32-x64-msvc@16.3.2'
+  - eslint-config-next@16.3.2
+  - next@16.3.2
 
 auditConfig:
   ignoreGhsas:
     - GHSA-w3rx-r6r6-pgpr
     - GHSA-5p2g-fcmc-qvqq
+    - GHSA-jmr9-qjv8-65gv

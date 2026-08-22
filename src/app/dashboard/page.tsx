@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { env } from '@/core/env';
+
 import { DashboardToolsTable } from './DashboardToolsTable';
 import { getDashboardToolInventory } from './tools-inventory';
 
@@ -10,6 +12,7 @@ const sections = [
     description:
       'Platform administration, invites, and user management. Admin access required.',
     badge: 'restricted',
+    isDemoRoute: false,
   },
   {
     href: '/feature-flags-demo',
@@ -17,6 +20,7 @@ const sections = [
     description:
       'Inspect the integrated feature-flag system and demo toggles in a live route.',
     badge: 'demo',
+    isDemoRoute: true,
   },
   {
     href: '/security-showcase',
@@ -24,6 +28,7 @@ const sections = [
     description:
       'Review security-focused pages and middleware-driven protection examples.',
     badge: 'reference',
+    isDemoRoute: true,
   },
   {
     href: '/env-summary',
@@ -31,11 +36,19 @@ const sections = [
     description:
       'Check runtime wiring and environment-driven integration state in one place.',
     badge: 'ops',
+    isDemoRoute: true,
   },
 ] as const;
 
 export default function DashboardPage() {
   const tools = getDashboardToolInventory();
+  // Demo/showcase routes 404 unless DEMO_SHOWCASE_ENABLED is set — see
+  // SEC-29 in docs/ai/general/SECURITY_CODING_PATTERNS.md. Filter here too,
+  // same as Header/Footer/tools-inventory, so this hub doesn't link to a
+  // route that doesn't exist.
+  const visibleSections = sections.filter(
+    (section) => !section.isDemoRoute || env.DEMO_SHOWCASE_ENABLED,
+  );
   const activeTools = tools.filter(
     (tool) => tool.statusTone === 'active',
   ).length;
@@ -84,7 +97,7 @@ export default function DashboardPage() {
         </section>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {sections.map((section) => (
+          {visibleSections.map((section) => (
             <Link
               key={section.href}
               href={section.href}

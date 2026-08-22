@@ -39,6 +39,20 @@ function hasValue(value: string | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+/**
+ * Demo/showcase routes (security-showcase, feature-flags-demo, env-summary)
+ * 404 unless DEMO_SHOWCASE_ENABLED is set — omit the internal link entirely
+ * rather than pointing the dashboard at a dead page.
+ */
+function demoLink(
+  href: string,
+  label: string,
+): Pick<DashboardToolRow, 'internalHref' | 'internalLabel'> {
+  return env.DEMO_SHOWCASE_ENABLED
+    ? { internalHref: href, internalLabel: label }
+    : {};
+}
+
 function buildTool(
   row: Omit<DashboardToolRow, 'signals'> & { readonly signals?: string[] },
 ): DashboardToolRow {
@@ -84,8 +98,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
         'Server and browser error tracking wired through Next.js instrumentation and runtime env.',
       dashboardHref: 'https://sentry.io/',
       dashboardLabel: 'Open Sentry',
-      internalHref: '/env-summary',
-      internalLabel: 'Inspect runtime env',
+      ...demoLink('/env-summary', 'Inspect runtime env'),
       signals: ['env', 'runtime', 'docs'],
     }),
     buildTool({
@@ -107,8 +120,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
         'APM, browser monitoring, change tracking, and release diagnostics integrated across runtime and workflows.',
       dashboardHref: 'https://one.newrelic.com/',
       dashboardLabel: 'Open New Relic',
-      internalHref: '/env-summary',
-      internalLabel: 'Inspect runtime env',
+      ...demoLink('/env-summary', 'Inspect runtime env'),
       signals: ['env', 'runtime', 'workflow'],
     }),
     buildTool({
@@ -130,8 +142,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
         'Logtail transport, browser vitals, and Better Stack ingest rewrites are wired into the app runtime.',
       dashboardHref: 'https://betterstack.com/',
       dashboardLabel: 'Open Better Stack',
-      internalHref: '/security-showcase',
-      internalLabel: 'Open security showcase',
+      ...demoLink('/security-showcase', 'Open security showcase'),
       signals: ['env', 'runtime', 'route'],
     }),
     buildTool({
@@ -155,8 +166,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
         'Structured pino forwarding for server, edge, and browser log pipelines.',
       dashboardHref: 'https://logflare.app/',
       dashboardLabel: 'Open Logflare',
-      internalHref: '/env-summary',
-      internalLabel: 'Inspect runtime env',
+      ...demoLink('/env-summary', 'Inspect runtime env'),
       signals: ['env', 'runtime'],
     }),
     buildTool({
@@ -171,8 +181,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
         'Feature flag provider integrated in the service factory with a live demo route for runtime inspection.',
       dashboardHref: 'https://app.growthbook.io/',
       dashboardLabel: 'Open GrowthBook',
-      internalHref: '/feature-flags-demo',
-      internalLabel: 'Open demo route',
+      ...demoLink('/feature-flags-demo', 'Open demo route'),
       signals: ['env', 'runtime', 'demo'],
     }),
     buildTool({
@@ -194,8 +203,7 @@ export function getDashboardToolInventory(): DashboardToolRow[] {
         'Rate limiting and edge-safe Redis integration used by the security middleware stack.',
       dashboardHref: 'https://console.upstash.com/',
       dashboardLabel: 'Open Upstash',
-      internalHref: '/security-showcase',
-      internalLabel: 'Open security showcase',
+      ...demoLink('/security-showcase', 'Open security showcase'),
       signals: ['env', 'runtime', 'security'],
     }),
     buildTool({

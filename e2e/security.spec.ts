@@ -12,6 +12,34 @@ test.describe('Security Architecture E2E', () => {
     expect(headers['x-content-type-options']).toBe('nosniff');
     expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
     expect(headers['content-security-policy']).toBeDefined();
+    expect(headers['content-security-policy']).toContain("object-src 'none'");
+    expect(headers['content-security-policy']).toContain(
+      "frame-ancestors 'none'",
+    );
+    expect(headers['cross-origin-opener-policy']).toBe(
+      'same-origin-allow-popups',
+    );
+    expect(headers['cross-origin-resource-policy']).toBe('same-origin');
+    expect(headers['x-xss-protection']).toBeUndefined();
+
+    // CSP_SCRIPT_MODE defaults to 'cache-compatible' — nonce-based CSP
+    // ('nonce-dynamic') is currently incompatible with cacheComponents/PPR
+    // (see SEC-30/SEC-31 in docs/ai/general/SECURITY_CODING_PATTERNS.md and
+    // the env.ts doc comment for CSP_SCRIPT_MODE). The default scenario
+    // therefore uses the legacy unsafe-inline script-src, not a nonce.
+    // 'nonce-dynamic' mode's own script-src shape (nonce + strict-dynamic,
+    // no unsafe-inline) is covered with env mocked in with-headers.test.ts
+    // and csp-nonce.test.ts, and end-to-end against a real deployment in
+    // the e2e:csp-nonce-dynamic scenario (e2e/csp-nonce-dynamic.spec.ts) —
+    // this e2e test only needs to confirm the shipped default is what
+    // actually gets served.
+    const scriptSrc = headers['content-security-policy']
+      ?.split('; ')
+      .find((entry) => entry.startsWith('script-src '));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).toContain("'unsafe-inline'");
+    expect(scriptSrc).not.toMatch(/'nonce-[^']+'/);
+    expect(scriptSrc).not.toContain("'strict-dynamic'");
   });
 
   test('should redirect unauthenticated user from protected route', async ({
@@ -59,5 +87,37 @@ test.describe('Security Architecture E2E', () => {
     const body = await response.json();
     expect(body.status).toBe('ok');
     expect(body.scope).toBe('internal');
+  });
+
+  test.describe('demo/showcase routes are gated off by default', () => {
+    // DEMO_SHOWCASE_ENABLED is unset in the default scenario runtime — every
+    // demo route must 404 regardless of auth state, unauthenticated
+    // included. See SEC-29 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+    for (const path of [
+      '/security-showcase',
+      '/sentry-example-page',
+      '/feature-flags-demo',
+      '/env-summary',
+    ]) {
+      test(`${path} returns a real 404, not a sign-in redirect`, async ({
+        page,
+      }) => {
+        const response = await page.goto(path);
+        expect(response?.status()).toBe(404);
+        // Must not have been redirected to sign-in — a demo route with the
+        // flag off must behave as if it doesn't exist, not "exists, but
+        // requires auth".
+        expect(page.url()).not.toContain('sign-in');
+      });
+    }
+
+    test('/api/security-test/ssrf returns a JSON 404', async ({ request }) => {
+      const response = await request.get(
+        '/api/security-test/ssrf?url=https://example.com',
+      );
+      expect(response.status()).toBe(404);
+      const body = await response.json();
+      expect(body.code).toBe('NOT_FOUND');
+    });
   });
 });

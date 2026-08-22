@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { hash } from 'bcryptjs';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { connection } from 'next/server';
 import { z } from 'zod';
 
@@ -67,12 +67,15 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const db = getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB);
 
-    const [tokenRecord] = await db
-      .select({
-        id: passwordResetTokensTable.id,
-        userId: passwordResetTokensTable.userId,
-        expiresAt: passwordResetTokensTable.expiresAt,
-      })
+    // Cheap pre-check ONLY -- this is a DoS guard, not the security check.
+    // It lets an obviously invalid/expired/already-used token short-circuit
+    // before the deliberately expensive bcrypt hash below, so an attacker
+    // cannot burn CPU by spraying junk tokens. It deliberately decides
+    // nothing: the authoritative single-use decision is the atomic claim
+    // inside the transaction further down. Never add logic here that the
+    // claim does not re-verify.
+    const [candidateToken] = await db
+      .select({ userId: passwordResetTokensTable.userId })
       .from(passwordResetTokensTable)
       .where(
         and(
@@ -83,28 +86,53 @@ export async function POST(request: Request): Promise<Response> {
       )
       .limit(1);
 
-    if (!tokenRecord) {
-      return Response.json({ error: INVALID_TOKEN_ERROR }, { status: 410 });
-    }
-
-    const [user] = await db
-      .select({ id: usersTable.id, email: usersTable.email })
-      .from(usersTable)
-      .where(eq(usersTable.id, tokenRecord.userId))
-      .limit(1);
-
-    if (!user) {
+    if (!candidateToken) {
       return Response.json({ error: INVALID_TOKEN_ERROR }, { status: 410 });
     }
 
     const hashedPassword = await hash(password, BCRYPT_COST);
     const now = new Date();
 
-    await db.transaction(async (tx) => {
-      await tx
+    const outcome = await db.transaction(async (tx) => {
+      // Atomically CLAIM the token: the same statement that marks it used
+      // also re-verifies it was unused and unexpired, and tells us via
+      // RETURNING whether this request is the one that won. Two concurrent
+      // requests carrying the same token therefore cannot both proceed --
+      // exactly one UPDATE matches a row, the other returns nothing.
+      //
+      // Splitting this into "SELECT unused -> hash -> UPDATE used" is the
+      // bug this replaces (SEC-35): bcrypt sits between the check and the
+      // act, holding the race window open for hundreds of milliseconds.
+      // `NOW()` is the database clock, not this process's, so the expiry
+      // comparison is evaluated where the row is locked.
+      const [claimedToken] = await tx
         .update(passwordResetTokensTable)
         .set({ usedAt: now })
-        .where(eq(passwordResetTokensTable.id, tokenRecord.id));
+        .where(
+          and(
+            eq(passwordResetTokensTable.tokenHash, tokenHash),
+            gt(passwordResetTokensTable.expiresAt, sql`NOW()`),
+            isNull(passwordResetTokensTable.usedAt),
+          ),
+        )
+        .returning();
+
+      if (!claimedToken) {
+        return { claimed: false as const };
+      }
+
+      const [user] = await tx
+        .select({ id: usersTable.id, email: usersTable.email })
+        .from(usersTable)
+        .where(eq(usersTable.id, claimedToken.userId))
+        .limit(1);
+
+      if (!user) {
+        // Roll the claim back rather than burning the token on our own
+        // data inconsistency -- the holder did nothing wrong.
+        tx.rollback();
+        return { claimed: false as const };
+      }
 
       const [existingCredentials] = await tx
         .select({ userId: userCredentialsTable.userId })
@@ -144,10 +172,23 @@ export async function POST(request: Request): Promise<Response> {
           });
         }
       }
+
+      return { claimed: true as const, userId: user.id };
     });
 
+    if (!outcome.claimed) {
+      // Lost the race (or the row vanished): the token belongs to whichever
+      // request claimed it. Respond identically to an invalid token -- the
+      // caller must not be able to tell a race from a bad token.
+      logger.warn(
+        { event: 'auth:password_reset_token_claim_lost' },
+        'Password reset token was already claimed by a concurrent request',
+      );
+      return Response.json({ error: INVALID_TOKEN_ERROR }, { status: 410 });
+    }
+
     logger.debug(
-      { event: 'auth:password_reset_success', userId: user.id },
+      { event: 'auth:password_reset_success', userId: outcome.userId },
       'Password reset successful',
     );
 

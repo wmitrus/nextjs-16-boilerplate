@@ -191,3 +191,41 @@ supporting unit-level override (`E2E_LOGIN_ABUSE_CONTROL_ENABLED`, see
 SEC-34) is covered by a passing unit test. What remains is simply _running_
 it somewhere with real Clerk fixtures and open network access to Cloudflare
 -- the user's own CI or local dev machine.
+
+## PE-06 — Run The Password-Reset Concurrency Proof Against Real Postgres
+
+- **Source**: `.copilot/tasks/2026-08-22-password-reset-token-race/` (Case 4)
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: `src/app/api/auth/reset-password/route.db.test.ts` proves
+the single-use guarantee by firing 10 concurrent claims at one token and
+asserting exactly one wins. It runs on PGlite, which serialises operations,
+so it proves the SQL guard rejects the second claim but never exercises two
+genuinely simultaneous transactions. Run the same spec under
+`E2E_BACKEND_MODE=container` (real Postgres, multiple connections) for a
+stronger proof.
+
+**Why deferred**: the property relied upon -- a single
+`UPDATE ... WHERE ... RETURNING` matching at most one row -- is standard
+Postgres behaviour under `READ COMMITTED` and above, and this repository's
+DB suite already runs against real Postgres in container mode, so the
+statement is exercised there. Docker is unavailable in the agent sandbox, so
+this specific stronger run could not be performed at fix time.
+
+## PE-07 — Invalidate A User's Other Outstanding Reset Tokens On Successful Reset
+
+- **Source**: `.copilot/tasks/2026-08-22-password-reset-token-race/` (Case 4)
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: After a password reset succeeds, mark every other unused
+password-reset token for that user as used, so an older link that is still
+within its expiry window cannot be redeemed afterwards. OWASP's
+Forgot-Password cheat sheet recommends it.
+
+**Why deferred**: it is a behaviour change beyond the race this case
+closes, and it has a real UX edge (a user who requests two links in quick
+succession and then clicks the older one gets a rejection that reads as a
+bug). Worth doing deliberately, with the messaging thought through, rather
+than bundled into a concurrency fix.

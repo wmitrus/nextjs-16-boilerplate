@@ -318,7 +318,12 @@ CSP changes are needed to use this.
 — stable AuthJS test fixtures are reused across many specs, and this
 prevents one spec's deliberate wrong-password test from
 captcha-gating/locking an account that a different, unrelated spec needs a
-moment later.
+moment later. `e2e/authjs-login-abuse-control.spec.ts`
+(`pnpm e2e:authjs:login-abuse`) is the one spec that needs the account
+bucket active — it sets `E2E_LOGIN_ABUSE_CONTROL_ENABLED=true` to override
+the bypass for its own run, drives two wrong-password attempts against a
+freshly provisioned user, and completes sign-in using Cloudflare's official
+"always passes" Turnstile test keypair.
 
 Full writeup: SEC-34 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 

@@ -145,3 +145,44 @@ confidence but requires session-capture/reuse fixture wiring beyond this
 fix's minimum required validation; a good candidate to implement once
 several PE-tracked E2E ideas from this audit series are triaged together
 (see also PE-01).
+
+## PE-05 — Verify The Real-Browser CAPTCHA E2E Spec Once Fixtures Are Available
+
+- **Source**: `.copilot/tasks/2026-08-22-authjs-login-abuse-control/` (Case 3
+  of the security-audit series), follow-up after the user provisioned a real
+  Cloudflare Turnstile account
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: `e2e/authjs-login-abuse-control.spec.ts` (wired via
+`pnpm e2e:authjs:login-abuse`) drives two wrong-password attempts against a
+freshly provisioned AuthJS user, asserts the Turnstile widget appears once
+`LOGIN_ABUSE_CAPTCHA_THRESHOLD` is hit, waits for Cloudflare's official
+"always passes" test key (`1x00000000000000000000AA` /
+`1x0000000000000000000000000000000AA`, see
+https://developers.cloudflare.com/turnstile/troubleshooting/testing/) to
+auto-solve, then completes sign-in with the resulting token. It needs a real
+run against a live Cloudflare endpoint to be considered verified.
+
+**Why deferred**: this agent session could not execute it to completion in
+its own sandbox, for two independent reasons, neither of which is expected
+to apply to the user's own machine or CI:
+
+1. `scripts/check-e2e-auth-env.mjs` unconditionally requires real Clerk
+   fixture credentials (`CLERK_SECRET_KEY`,
+   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, provisioned-user fixtures) for every
+   scenario regardless of `AUTH_PROVIDER` -- this sandbox has none
+   configured, so no E2E scenario (not just this one) can run here at all.
+   This is a pre-existing repo/environment gap, not something introduced by
+   this case.
+2. `challenges.cloudflare.com` (both the Turnstile script and the
+   `siteverify` endpoint) is blocked by this sandbox's outbound egress
+   policy (confirmed via the proxy's status endpoint: a 403 policy denial on
+   CONNECT), so even with (1) resolved, the real script-load/verify round
+   trip cannot be observed from inside this session.
+
+The spec itself was written, typechecked, and lint-clean, and its
+supporting unit-level override (`E2E_LOGIN_ABUSE_CONTROL_ENABLED`, see
+SEC-34) is covered by a passing unit test. What remains is simply _running_
+it somewhere with real Clerk fixtures and open network access to Cloudflare
+-- the user's own CI or local dev machine.

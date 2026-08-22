@@ -75,7 +75,13 @@ export const authOptions: AuthOptions = {
         // existing E2E rate-limit bypass convention) avoids one spec's
         // deliberate wrong-password test locking out every other spec that
         // needs the same account. See SEC-34.
-        const abuseControlActive = !env.E2E_ENABLED;
+        //
+        // E2E_LOGIN_ABUSE_CONTROL_ENABLED forces this back on: it's the one
+        // override e2e/authjs-login-abuse-control.spec.ts sets for its own
+        // scenario run, since that spec's entire purpose is to exercise
+        // this control against a real (disposable, per-test) account.
+        const abuseControlActive =
+          !env.E2E_ENABLED || env.E2E_LOGIN_ABUSE_CONTROL_ENABLED;
 
         if (abuseControlActive) {
           const abuseState = await getLoginAbuseState(accountKey);

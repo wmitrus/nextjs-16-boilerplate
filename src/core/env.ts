@@ -238,6 +238,15 @@ export const env = createEnv({
     // CAPTCHA gate is skipped (progressive delay/lock still apply); see
     // `isTurnstileConfigured()` in `src/shared/lib/captcha/turnstile.ts`.
     TURNSTILE_SECRET_KEY: z.string().optional(),
+    // E2E_ENABLED bypasses the account-bucket abuse control entirely (see
+    // auth.ts) so unrelated specs sharing a stable test account never get
+    // captcha-gated/locked by another spec's deliberate wrong-password
+    // test. The one spec that exists specifically to exercise that control
+    // (e2e/authjs-login-abuse-control.spec.ts) sets this flag to force it
+    // back on for its own run only -- never set outside that scenario.
+    E2E_LOGIN_ABUSE_CONTROL_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -400,6 +409,8 @@ export const env = createEnv({
     LOGIN_ABUSE_DELAY_THRESHOLD: process.env.LOGIN_ABUSE_DELAY_THRESHOLD,
     LOGIN_ABUSE_LOCK_THRESHOLD: process.env.LOGIN_ABUSE_LOCK_THRESHOLD,
     TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+    E2E_LOGIN_ABUSE_CONTROL_ENABLED:
+      process.env.E2E_LOGIN_ABUSE_CONTROL_ENABLED,
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,

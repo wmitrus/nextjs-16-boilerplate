@@ -329,6 +329,22 @@ describe('authOptions', () => {
         expect(result).toBeNull();
       });
 
+      it('E2E_LOGIN_ABUSE_CONTROL_ENABLED forces abuse control back on despite E2E_ENABLED', async () => {
+        mockEnv.E2E_ENABLED = true;
+        mockEnv.E2E_LOGIN_ABUSE_CONTROL_ENABLED = true;
+        mockEnv.LOGIN_ABUSE_LOCK_THRESHOLD = 1;
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-e2e-forced@example.com';
+
+        await authorize({ email, password: 'wrong1' });
+        // Threshold is 1, and the override is active -- this must lock.
+        await expect(authorize({ email, password: 'wrong2' })).rejects.toThrow(
+          'AccountTemporarilyLocked',
+        );
+      });
+
       it('resets the failure counter on a successful login', async () => {
         mockEnv.LOGIN_ABUSE_CAPTCHA_THRESHOLD = 1;
         const authorize = await getAuthorize();

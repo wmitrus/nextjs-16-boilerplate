@@ -6,6 +6,12 @@
 multi-case security-audit remediation series; commits land on the same
 branch as Cases 1–2, `claude/security-audit-multi-tenant-idor-e1y3yr`.
 
+**Follow-up (same day)**: user provisioned a real Cloudflare Turnstile
+account and asked for E2E coverage of the CAPTCHA flow. See "Follow-Up:
+E2E Spec" section below — the spec was written and wired but could not be
+executed to completion in this session's sandbox; tracked as `PE-05` in
+`docs/ai/general/POSSIBLE_ENHANCEMENTS.md`.
+
 ## Leantime (mandatory protocol)
 
 **BLOCKED — same session/environment limitation as Cases 1–2** (no
@@ -36,15 +42,15 @@ instruction to ask before any real decision point.
 
 ## Quality Gates (this session)
 
-| Gate                      | Command                 | Result                                               |
-| ------------------------- | ----------------------- | ---------------------------------------------------- |
-| Typecheck                 | `pnpm typecheck`        | ✅ pass                                              |
-| Lint (with fix)           | `pnpm lint --fix`       | ✅ 0 errors, 12 pre-existing unrelated warnings      |
-| Unit tests                | `pnpm test`             | ✅ 222 files / 1628 tests pass (+4 files, +50 tests) |
-| DB integration tests      | `pnpm test:db`          | ✅ 19 files / 160 tests pass (unchanged)             |
-| Circular dependency check | `pnpm skott:check:only` | ✅ no circular dependencies                          |
-| Unused dependency check   | `pnpm depcheck`         | ✅ no issues                                         |
-| Env consistency           | `pnpm env:check`        | ✅ in sync                                           |
+| Gate                      | Command                 | Result                                                                                      |
+| ------------------------- | ----------------------- | ------------------------------------------------------------------------------------------- |
+| Typecheck                 | `pnpm typecheck`        | ✅ pass                                                                                     |
+| Lint (with fix)           | `pnpm lint --fix`       | ✅ 0 errors, 12 pre-existing unrelated warnings                                             |
+| Unit tests                | `pnpm test`             | ✅ 222 files / 1629 tests pass (+4 files, +51 tests; +1 test in the E2E-override follow-up) |
+| DB integration tests      | `pnpm test:db`          | ✅ 19 files / 160 tests pass (unchanged)                                                    |
+| Circular dependency check | `pnpm skott:check:only` | ✅ no circular dependencies                                                                 |
+| Unused dependency check   | `pnpm depcheck`         | ✅ no issues                                                                                |
+| Env consistency           | `pnpm env:check`        | ✅ in sync                                                                                  |
 
 **Not run in this session**: Playwright E2E, and no real Cloudflare
 Turnstile account/keys were used (no such credentials available in this
@@ -66,4 +72,42 @@ verified independent of that.
   `getLoginAbuseState`, `recordFailedLoginAttempt`, `recordSuccessfulLogin`
   all take an arbitrary account key, not something AuthJS-Credentials-specific).
 - Real end-to-end Turnstile verification (real keys, real browser) has not
-  been performed in this session — see Quality Gates note above.
+  been performed in this session — see Quality Gates note above. A spec now
+  exists (see below); running it is what's left.
+
+## Follow-Up: E2E Spec (same day, after user provisioned real Turnstile keys)
+
+Added `e2e/authjs-login-abuse-control.spec.ts` and
+`pnpm e2e:authjs:login-abuse` (uses Cloudflare's official "always passes"
+test keypair — `1x00000000000000000000AA` /
+`1x0000000000000000000000000000000AA` — never real production credentials).
+It drives two wrong-password attempts against a freshly provisioned AuthJS
+user, asserts the Turnstile widget appears once
+`LOGIN_ABUSE_CAPTCHA_THRESHOLD` is hit, waits for the test key to
+auto-solve, then completes sign-in with the resulting token.
+
+Supporting change: added `E2E_LOGIN_ABUSE_CONTROL_ENABLED` (env var, default
+`false`) so this one spec can force the account-bucket abuse control back on
+for its own run, overriding the blanket `E2E_ENABLED` bypass every other
+authjs E2E spec relies on. Covered by a new unit test in `auth.test.ts`
+("E2E_LOGIN_ABUSE_CONTROL_ENABLED forces abuse control back on despite
+E2E_ENABLED") — 21/21 tests pass in that file, full suite unaffected (222
+files / 1629 tests pass).
+
+**Could not run to completion in this session.** Two independent blockers,
+both environment-specific to this sandbox, not the fix:
+
+1. `scripts/check-e2e-auth-env.mjs` unconditionally requires real Clerk
+   fixture credentials for every scenario regardless of `AUTH_PROVIDER` —
+   this sandbox has none configured, so it refused to run _any_ E2E
+   scenario (`❌ Missing or invalid E2E Clerk fixture vars`), not just this
+   new one.
+2. Independent of (1): `challenges.cloudflare.com` (both the Turnstile
+   script and `siteverify`) is blocked by this sandbox's outbound egress
+   policy — confirmed via the proxy's own status endpoint, a 403 policy
+   denial on CONNECT to that host. Even with (1) resolved, the real
+   script-load/verify round trip cannot be observed from inside this
+   session.
+
+Full detail and the recommended next action are tracked as `PE-05` in
+`docs/ai/general/POSSIBLE_ENHANCEMENTS.md` rather than duplicated here.

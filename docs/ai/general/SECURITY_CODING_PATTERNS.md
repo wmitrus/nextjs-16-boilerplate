@@ -3219,6 +3219,14 @@ configured a third-party CAPTCHA provider.
   accounts and CI runner IPs are reused across many specs, and a real
   abuse-control mechanism will otherwise start captcha-gating or locking them
   out of unrelated specs.
+- A real-browser Playwright spec for the CAPTCHA tier specifically —
+  `e2e/authjs-login-abuse-control.spec.ts` (`pnpm e2e:authjs:login-abuse`),
+  using Cloudflare's official "always passes" test keypair. Since that spec
+  needs the account bucket active, it sets `E2E_LOGIN_ABUSE_CONTROL_ENABLED`
+  to override the `E2E_ENABLED` bypass above for its own run only — never set
+  that flag outside this one scenario. See `PE-05` in
+  `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` for this spec's current
+  execution status.
 
 ### Rule for Agents
 

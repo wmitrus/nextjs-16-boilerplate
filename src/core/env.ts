@@ -87,6 +87,22 @@ export const env = createEnv({
       .default(
         'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
       ),
+    // Overall wall-clock budget for a secureFetch() call, spanning every
+    // redirect hop (not reset per hop -- a chain of redirects must not be
+    // able to add up to an unbounded total wait). See A.8.3 in
+    // docs/ai/general/SECURITY_CODING_PATTERNS.md (SEC-28).
+    SECURITY_OUTBOUND_FETCH_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10_000),
+    // Response bodies secureFetch() reads are bounded to this many bytes --
+    // never fully buffered without a cap. Default 10MB.
+    SECURITY_OUTBOUND_FETCH_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10_485_760),
     // Gates the demo/showcase routes in DEMO_ROUTE_PREFIXES
     // (src/security/middleware/route-policy.ts). Off by default in every
     // environment, including production — flip on temporarily in Vercel
@@ -290,6 +306,10 @@ export const env = createEnv({
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
+    SECURITY_OUTBOUND_FETCH_TIMEOUT_MS:
+      process.env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS,
+    SECURITY_OUTBOUND_FETCH_MAX_BYTES:
+      process.env.SECURITY_OUTBOUND_FETCH_MAX_BYTES,
     DEMO_SHOWCASE_ENABLED: process.env.DEMO_SHOWCASE_ENABLED,
     DEMO_SHOWCASE_ALLOWED_EMAIL: process.env.DEMO_SHOWCASE_ALLOWED_EMAIL,
     CSP_SCRIPT_MODE: process.env.CSP_SCRIPT_MODE,

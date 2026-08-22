@@ -111,7 +111,12 @@ describe('secureFetch — connection pinning wiring', () => {
         { address: '93.184.216.34', family: 4 },
       ] as unknown as Awaited<ReturnType<typeof lookup>>) // example.com
       .mockResolvedValueOnce([
-        { address: '203.0.113.9', family: 4 },
+        // A genuinely public address, distinct from hop 1's -- 203.0.113.0/24
+        // (used here previously) is RFC 5737's TEST-NET-3, a
+        // documentation-only range A.8.1's default-deny classifier
+        // correctly rejects, which broke this test for an unrelated reason
+        // once that range gained coverage.
+        { address: '1.1.1.1', family: 4 },
       ] as unknown as Awaited<ReturnType<typeof lookup>>); // trusted.org
 
     global.fetch = vi
@@ -131,7 +136,7 @@ describe('secureFetch — connection pinning wiring', () => {
       agentInstances.map((agent) => resolvePinnedAddresses(agent)),
     );
     expect(hop1).toEqual([{ address: '93.184.216.34', family: 4 }]);
-    expect(hop2).toEqual([{ address: '203.0.113.9', family: 4 }]);
+    expect(hop2).toEqual([{ address: '1.1.1.1', family: 4 }]);
     expect(agentInstances[0].close).toHaveBeenCalledTimes(1);
     expect(agentInstances[1].close).toHaveBeenCalledTimes(1);
   });

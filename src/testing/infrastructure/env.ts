@@ -14,6 +14,8 @@ const defaultEnv: MutableEnv = {
   INTERNAL_API_KEY: 'test-secret',
   SECURITY_ALLOWED_OUTBOUND_HOSTS:
     'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
+  SECURITY_OUTBOUND_FETCH_TIMEOUT_MS: 10_000,
+  SECURITY_OUTBOUND_FETCH_MAX_BYTES: 10_485_760,
   DEMO_SHOWCASE_ENABLED: false,
   DEMO_SHOWCASE_ALLOWED_EMAIL: undefined,
   CSP_SCRIPT_MODE: 'nonce-dynamic',

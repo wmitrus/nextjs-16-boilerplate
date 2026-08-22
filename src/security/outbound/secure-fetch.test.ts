@@ -134,14 +134,37 @@ describe('Secure Fetch (SSRF Protection)', () => {
   });
 
   it('should block IPv6 loopback, link-local, and 0.0.0.0/169.254 addresses even if allowlisted', async () => {
+    // Allowlist entries use the unbracketed form a human would naturally
+    // type. `new URL(...).hostname` brackets an IPv6 literal
+    // (`http://[::1]` -> hostname `[::1]`) -- this test proves the
+    // allowlist check normalizes brackets and correctly MATCHES here (so
+    // these requests reach the private-address check at all), and that the
+    // private-address check is what actually rejects them, not a bracket
+    // mismatch at the allowlist step. See A.8.1 / SEC-28's "Update" for the
+    // bug this regression-tests: before the fix, these were rejected for
+    // the WRONG reason (bracketed hostname never matched the unbracketed
+    // allowlist entry), which meant the private-address predicate was
+    // never actually exercised by this test at all.
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS =
       '::1, fe80::1, 169.254.169.254, 0.0.0.0';
+
     await expect(secureFetch('http://[::1]')).rejects.toThrow(
       'SSRF Protection',
     );
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining('private/reserved literal address'),
+    );
+
+    mockChildLogger.error.mockClear();
     await expect(secureFetch('http://[fe80::1]')).rejects.toThrow(
       'SSRF Protection',
     );
+    expect(mockChildLogger.error).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining('private/reserved literal address'),
+    );
+
     await expect(secureFetch('http://169.254.169.254')).rejects.toThrow(
       'SSRF Protection',
     );
@@ -150,9 +173,65 @@ describe('Secure Fetch (SSRF Protection)', () => {
     );
   });
 
+  it('allows a bracketed public IPv6 literal that matches an unbracketed allowlist entry', async () => {
+    // The other half of the bracket-normalization proof: normalization
+    // must not turn into a blanket rejection. A genuinely public IPv6
+    // address, allowlisted in the natural unbracketed form, must still be
+    // reachable once the hostname's brackets are stripped for comparison.
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '2001:4860:4860::8888';
+    await expect(
+      secureFetch('http://[2001:4860:4860::8888]'),
+    ).resolves.toBeDefined();
+  });
+
   it('should block an IPv4-mapped IPv6 address pointing at a private range', async () => {
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '::ffff:10.0.0.5';
     await expect(secureFetch('http://[::ffff:10.0.0.5]')).rejects.toThrow(
+      'SSRF Protection',
+    );
+  });
+
+  it('blocks non-globally-routable ranges beyond RFC1918/loopback/link-local', async () => {
+    // These were previously NOT covered by the old hand-maintained regex
+    // list at all -- ipaddr.js's default-deny "must classify as exactly
+    // unicast" replaces that enumerated list, so this proves the new
+    // classifier actually covers them rather than assuming it does.
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS =
+      '100.64.0.1, 192.0.2.1, 198.18.0.1, 224.0.0.1, 240.0.0.1, 255.255.255.255';
+
+    await expect(secureFetch('http://100.64.0.1')).rejects.toThrow(
+      'SSRF Protection',
+    ); // CGNAT (100.64.0.0/10)
+    await expect(secureFetch('http://192.0.2.1')).rejects.toThrow(
+      'SSRF Protection',
+    ); // TEST-NET-1
+    await expect(secureFetch('http://198.18.0.1')).rejects.toThrow(
+      'SSRF Protection',
+    ); // benchmarking (198.18.0.0/15)
+    await expect(secureFetch('http://224.0.0.1')).rejects.toThrow(
+      'SSRF Protection',
+    ); // multicast
+    await expect(secureFetch('http://240.0.0.1')).rejects.toThrow(
+      'SSRF Protection',
+    ); // reserved
+    await expect(secureFetch('http://255.255.255.255')).rejects.toThrow(
+      'SSRF Protection',
+    ); // broadcast
+  });
+
+  it('blocks 6to4- and NAT64-encoded IPv6 addresses regardless of the IPv4 they encode', async () => {
+    // 2002:7f00:1:: is the 6to4 (2002::/16) encoding of 127.0.0.1;
+    // 64:ff9b::a00:1 is the NAT64 (64:ff9b::/96, RFC 6052) encoding of
+    // 10.0.0.1. Neither range is ever classified as `unicast` by
+    // ipaddr.js, so both are rejected outright without needing a separate
+    // unwrap-and-recheck step -- this app has no legitimate reason to
+    // dial either IPv6 transition mechanism directly.
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '2002:7f00:1::, 64:ff9b::a00:1';
+
+    await expect(secureFetch('http://[2002:7f00:1::]')).rejects.toThrow(
+      'SSRF Protection',
+    );
+    await expect(secureFetch('http://[64:ff9b::a00:1]')).rejects.toThrow(
       'SSRF Protection',
     );
   });
@@ -175,8 +254,14 @@ describe('Secure Fetch (SSRF Protection)', () => {
   });
 
   it('should skip DNS resolution for literal IP hosts', async () => {
-    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '203.0.113.10';
-    await expect(secureFetch('http://203.0.113.10')).resolves.toBeDefined();
+    // 93.184.216.34 must be a genuinely public (unicast) address for this
+    // test to prove what it claims -- 203.0.113.0/24 (used here
+    // previously) is RFC 5737's TEST-NET-3, a documentation-only range
+    // that A.8.1's default-deny classifier correctly rejects, which made
+    // this test fail for an unrelated reason once that range gained
+    // coverage.
+    mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '93.184.216.34';
+    await expect(secureFetch('http://93.184.216.34')).resolves.toBeDefined();
     expect(lookup).not.toHaveBeenCalled();
   });
 
@@ -288,6 +373,120 @@ describe('Secure Fetch (SSRF Protection)', () => {
 
       await secureFetch('https://example.com/one', { method: 'POST' });
       expect(seen).toEqual(['POST', 'GET']);
+    });
+
+    it('keeps Authorization intact across a same-origin redirect', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://example.com/two' },
+        }),
+        new Response(null, { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await secureFetch('https://example.com/one', {
+        headers: { Authorization: 'Bearer secret-token' },
+      });
+
+      expect(calls).toHaveLength(2);
+      const secondHopHeaders = new Headers(calls[1][1]?.headers);
+      expect(secondHopHeaders.get('authorization')).toBe('Bearer secret-token');
+    });
+
+    it('strips credential-shaped headers on a cross-origin redirect, but keeps ordinary ones', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+        new Response(null, { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await secureFetch('https://example.com/start', {
+        headers: {
+          Authorization: 'Bearer secret-token',
+          Cookie: 'session=abc123',
+          'X-Api-Token': 'another-secret',
+          Accept: 'application/json',
+          'X-Request-Id': 'req-1',
+        },
+      });
+
+      expect(calls).toHaveLength(2);
+      const secondHopHeaders = new Headers(calls[1][1]?.headers);
+      expect(secondHopHeaders.get('authorization')).toBeNull();
+      expect(secondHopHeaders.get('cookie')).toBeNull();
+      expect(secondHopHeaders.get('x-api-token')).toBeNull();
+      // Non-sensitive headers must survive -- this isn't a
+      // strip-everything-on-redirect fix.
+      expect(secondHopHeaders.get('accept')).toBe('application/json');
+      expect(secondHopHeaders.get('x-request-id')).toBe('req-1');
+    });
+  });
+
+  describe('resource limits and log redaction', () => {
+    it('rejects with a timeout-labeled error once the overall budget expires', async () => {
+      mockEnv.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS = 10;
+      // A response that never resolves on its own -- only rejects when the
+      // signal secureFetch built (a real AbortSignal.timeout) fires, the
+      // same way a real fetch() implementation would.
+      global.fetch = vi.fn().mockImplementation(
+        (_url: string | URL, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(init.signal!.reason);
+            });
+          }),
+      );
+
+      await expect(secureFetch('https://example.com/slow')).rejects.toThrow(
+        /SSRF Protection.*timed out/,
+      );
+    });
+
+    it('rejects once the response body exceeds the configured byte cap, without buffering past it', async () => {
+      mockEnv.SECURITY_OUTBOUND_FETCH_MAX_BYTES = 10;
+      let chunksProduced = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          chunksProduced += 1;
+          // 6 bytes/chunk; the cap (10 bytes) is exceeded on the 2nd chunk.
+          // If more than 3 chunks are ever pulled, the reader wasn't
+          // actually cancelled once the cap was hit.
+          if (chunksProduced > 3) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(new TextEncoder().encode('abcdef'));
+        },
+      });
+      global.fetch = vi
+        .fn()
+        .mockResolvedValue(new Response(stream, { status: 200 }));
+
+      await expect(secureFetch('https://example.com/big')).rejects.toThrow(
+        /SSRF Protection.*exceeded/,
+      );
+      expect(chunksProduced).toBeLessThanOrEqual(3);
+    });
+
+    it('never logs the query string of a blocked URL', async () => {
+      await expect(
+        secureFetch('https://malicious.com/steal?token=super-secret-value'),
+      ).rejects.toThrow('SSRF Protection');
+
+      expect(mockChildLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.not.stringContaining('super-secret-value'),
+        }),
+        expect.any(String),
+      );
+      expect(mockChildLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://malicious.com/steal' }),
+        expect.any(String),
+      );
     });
   });
 });

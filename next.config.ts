@@ -34,6 +34,19 @@ const isNonceDynamicMode = process.env.CSP_SCRIPT_MODE === 'nonce-dynamic';
 
 const nextConfig: NextConfig = {
   cacheComponents: !isNonceDynamicMode,
+  // Textually inlines process.env.NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE into
+  // both server and client bundles at build time (Next's `env` config key,
+  // distinct from just prefixing NEXT_PUBLIC_ -- that alone only exposes a
+  // var already present at build time, this actually sets one). Compared
+  // at runtime against the (potentially different, if redeployed with a
+  // changed env without a rebuild) live CSP_SCRIPT_MODE in
+  // with-headers.ts, as a build/runtime invariant (A.8.4) -- see
+  // src/core/env.ts's doc comment on NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE.
+  env: {
+    NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE: isNonceDynamicMode
+      ? 'nonce-dynamic'
+      : 'cache-compatible',
+  },
   deploymentId,
   reactCompiler: true,
   serverExternalPackages: [

@@ -12,7 +12,15 @@ export default defineConfig({
     maxWorkers: 4,
     hookTimeout: 30_000,
     setupFiles: ['./tests/setup.tsx', './tests/polyfills.ts'],
-    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx}'],
+    include: [
+      'src/**/*.test.{ts,tsx}',
+      'scripts/**/*.test.{ts,tsx}',
+      // Pure-function unit tests for E2E support helpers (e.g.
+      // e2e/support/csp-violations.ts) -- these are plain TypeScript, not
+      // Playwright specs (those stay e2e/**/*.spec.ts per this repo's
+      // convention), so they belong in the unit runner, not a browser.
+      'e2e/**/*.test.{ts,tsx}',
+    ],
     exclude: [
       'src/**/*.integration.test.{ts,tsx}',
       'src/**/*.db.test.{ts,tsx}',

@@ -1,6 +1,21 @@
 import type { NextRequest, NextResponse } from 'next/server';
 
 import { env } from '@/core/env';
+import { resolveEdgeLogger } from '@/core/logger/di-edge';
+
+let _logger:
+  | ReturnType<ReturnType<typeof resolveEdgeLogger>['child']>
+  | undefined;
+
+function getLogger() {
+  if (_logger) return _logger;
+  _logger = resolveEdgeLogger().child({
+    type: 'Security',
+    category: 'csp',
+    module: 'with-headers',
+  });
+  return _logger;
+}
 
 /**
  * Shared per-request/per-environment flags used to decide which CSP
@@ -10,6 +25,42 @@ import { env } from '@/core/env';
 interface CspEnvironment {
   isPreview: boolean;
   isDev: boolean;
+}
+
+/**
+ * Reconciles the runtime-read `CSP_SCRIPT_MODE` against what the build was
+ * actually compiled for (`NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE`, inlined by
+ * `next.config.ts` at build time — see its doc comment). Runtime env can
+ * drift from build time on a redeploy that changes a platform env var
+ * without triggering a rebuild — a live `'nonce-dynamic'` runtime value
+ * against a build still compiled `cache-compatible` (`cacheComponents:
+ * true` baked in) is exactly SEC-30's original incident, from a different
+ * trigger: env drift between build and redeploy, not a missing
+ * `next.config.ts` branch.
+ *
+ * When the build-time value is known and doesn't match, fail safe: use
+ * the BUILD's value, since that's what the actually-served bundle can
+ * support, and log loudly so the drift gets noticed and fixed (a
+ * redeploy) rather than silently emitting a broken CSP on every request.
+ * The build-time value is absent (`undefined`) outside an actual Next.js
+ * build (tests, or a build predating this check) — the invariant simply
+ * doesn't run in that case, `env.CSP_SCRIPT_MODE` is used as-is.
+ */
+function resolveEffectiveCspMode(): 'cache-compatible' | 'nonce-dynamic' {
+  const buildMode = env.NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE;
+
+  if (buildMode === undefined || buildMode === env.CSP_SCRIPT_MODE) {
+    return env.CSP_SCRIPT_MODE;
+  }
+
+  getLogger().fatal(
+    { runtimeMode: env.CSP_SCRIPT_MODE, buildMode },
+    'CSP build/runtime invariant violated: runtime CSP_SCRIPT_MODE does not ' +
+      'match what this build was compiled for. Using the build value ' +
+      '(what the served bundle actually supports) -- redeploy to pick up ' +
+      'the runtime env change for real.',
+  );
+  return buildMode;
 }
 
 /**
@@ -106,8 +157,11 @@ function buildScriptSrc(
   // CSP mode.
   const unsafeEvalIfDev = cspEnv.isDev ? "'unsafe-eval'" : '';
 
-  // A nonce is only meaningful in 'nonce-dynamic' mode.
-  const isStrictCsp = env.CSP_SCRIPT_MODE === 'nonce-dynamic' && Boolean(nonce);
+  // A nonce is only meaningful in 'nonce-dynamic' mode. Uses the
+  // build/runtime-reconciled mode (A.8.4), not the raw runtime env value
+  // directly -- see resolveEffectiveCspMode()'s doc comment.
+  const isStrictCsp =
+    resolveEffectiveCspMode() === 'nonce-dynamic' && Boolean(nonce);
 
   return (
     isStrictCsp

@@ -250,6 +250,23 @@ export const env = createEnv({
     NEXT_PUBLIC_CSP_IMG_EXTRA: z.string().default(''),
     NEXT_PUBLIC_CSP_FONT_EXTRA: z.string().default(''),
     NEXT_PUBLIC_CSP_STYLE_EXTRA: z.string().default(''),
+    // Build-time-inlined copy of CSP_SCRIPT_MODE, set via next.config.ts's
+    // `env` key (NOT hand-set in a .env file -- Next.js's `env` config
+    // option does a textual process.env.KEY replacement at build time, so
+    // this always reflects what the running build was actually compiled
+    // for, regardless of what the RUNTIME env now claims). Compared
+    // against the runtime-read CSP_SCRIPT_MODE in with-headers.ts as a
+    // build/runtime invariant (A.8.4): a mismatch there is the same class
+    // of bug as SEC-30's original incident (nonce CSP emitted for a build
+    // that wasn't actually compiled with cacheComponents disabled) from a
+    // different trigger -- env drift between build and redeploy, not a
+    // missing next.config.ts branch. Optional because it's absent outside
+    // an actual Next.js build (tests, this file's own module-load
+    // validation running under vitest) -- the invariant check only runs
+    // when a build-time value is actually known.
+    NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE: z
+      .enum(['cache-compatible', 'nonce-dynamic'])
+      .optional(),
     // Add public variables here
   },
 
@@ -376,6 +393,8 @@ export const env = createEnv({
     NEXT_PUBLIC_CSP_IMG_EXTRA: process.env.NEXT_PUBLIC_CSP_IMG_EXTRA,
     NEXT_PUBLIC_CSP_FONT_EXTRA: process.env.NEXT_PUBLIC_CSP_FONT_EXTRA,
     NEXT_PUBLIC_CSP_STYLE_EXTRA: process.env.NEXT_PUBLIC_CSP_STYLE_EXTRA,
+    NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE:
+      process.env.NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE,
   },
 
   /**

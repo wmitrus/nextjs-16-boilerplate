@@ -137,6 +137,46 @@ describe('Headers Middleware', () => {
     expect(csp).toContain('https://extra.com');
   });
 
+  describe('parseExtra() (via the *_CSP_*_EXTRA env vars)', () => {
+    it('splits comma- and space-separated tokens alike', () => {
+      mockEnv.NEXT_PUBLIC_CSP_SCRIPT_EXTRA =
+        'https://a.example.com, https://b.example.com https://c.example.com';
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const csp = res.headers.get('Content-Security-Policy');
+      expect(csp).toContain('https://a.example.com');
+      expect(csp).toContain('https://b.example.com');
+      expect(csp).toContain('https://c.example.com');
+    });
+
+    it('strips wrapping quotes from a token', () => {
+      mockEnv.NEXT_PUBLIC_CSP_CONNECT_EXTRA = '"https://quoted.example.com"';
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const csp = res.headers.get('Content-Security-Policy');
+      // Confirms the quotes were stripped, not carried into the directive
+      // value verbatim (which would produce an invalid CSP source).
+      expect(csp).toContain('https://quoted.example.com');
+      expect(csp).not.toContain('"https://quoted.example.com"');
+    });
+
+    it('produces no stray tokens for an empty extra value', () => {
+      mockEnv.NEXT_PUBLIC_CSP_SCRIPT_EXTRA = '';
+      const req = createMockRequest();
+      const res = NextResponse.next();
+      withHeaders(req, res);
+      const csp = res.headers.get('Content-Security-Policy');
+      const scriptSrc = csp
+        ?.split('; ')
+        .find((entry) => entry.startsWith('script-src '));
+      // No double spaces / empty tokens from an unset extra value.
+      expect(scriptSrc).not.toContain('  ');
+      expect(scriptSrc?.trim()).toBe(scriptSrc);
+    });
+  });
+
   describe("nonce-based script-src (CSP_SCRIPT_MODE = 'nonce-dynamic')", () => {
     function scriptSrcDirective(csp: string | null): string {
       const directive = csp
@@ -221,6 +261,65 @@ describe('Headers Middleware', () => {
       expect(
         scriptSrcDirective(legacyRes.headers.get('Content-Security-Policy')),
       ).toContain("'unsafe-eval'");
+    });
+  });
+
+  describe('build/runtime CSP invariant (A.8.4)', () => {
+    function scriptSrcDirective(csp: string | null): string {
+      const directive = csp
+        ?.split('; ')
+        .find((entry) => entry.startsWith('script-src '));
+      expect(directive).toBeDefined();
+      return directive!;
+    }
+
+    it('falls back to the legacy CSP when runtime says nonce-dynamic but the build was compiled cache-compatible', () => {
+      // The dangerous direction: a live env change to nonce-dynamic
+      // without a matching rebuild would otherwise emit a strict CSP for
+      // a build whose static shell scripts have no nonce -- exactly
+      // SEC-30's original incident, from a different trigger.
+      mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
+      mockEnv.NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE = 'cache-compatible';
+
+      const res = NextResponse.next();
+      withHeaders(createMockRequest(), res, 'test-nonce-123');
+      const scriptSrc = scriptSrcDirective(
+        res.headers.get('Content-Security-Policy'),
+      );
+
+      expect(scriptSrc).toContain("'unsafe-inline'");
+      expect(scriptSrc).not.toContain("'nonce-");
+      expect(scriptSrc).not.toContain("'strict-dynamic'");
+    });
+
+    it('uses the strict CSP when runtime and build-time CSP_SCRIPT_MODE agree on nonce-dynamic', () => {
+      mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
+      mockEnv.NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE = 'nonce-dynamic';
+
+      const res = NextResponse.next();
+      withHeaders(createMockRequest(), res, 'test-nonce-123');
+      const scriptSrc = scriptSrcDirective(
+        res.headers.get('Content-Security-Policy'),
+      );
+
+      expect(scriptSrc).toContain("'nonce-test-nonce-123'");
+      expect(scriptSrc).toContain("'strict-dynamic'");
+    });
+
+    it('is a no-op when the build-time value is unknown (e.g. a pre-A.8.4 build)', () => {
+      mockEnv.CSP_SCRIPT_MODE = 'nonce-dynamic';
+      mockEnv.NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE = undefined;
+
+      const res = NextResponse.next();
+      withHeaders(createMockRequest(), res, 'test-nonce-123');
+      const scriptSrc = scriptSrcDirective(
+        res.headers.get('Content-Security-Policy'),
+      );
+
+      // Falls through to the raw runtime value, same as before this
+      // invariant existed.
+      expect(scriptSrc).toContain("'nonce-test-nonce-123'");
+      expect(scriptSrc).toContain("'strict-dynamic'");
     });
   });
 });

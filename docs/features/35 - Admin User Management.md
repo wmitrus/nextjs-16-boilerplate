@@ -91,7 +91,17 @@ Two dispatch modes based on request body:
 { "action": "deactivate" }
 ```
 
-Deactivation sets `deactivated_at` timestamp in the DB. Does **not** revoke Clerk sessions — that is a separate concern.
+Deactivation sets `deactivated_at` timestamp in the DB. This is enforced everywhere,
+starting the very next request: both central access evaluators
+(`evaluateNodeProvisioningAccess()` for route handlers and RSC layouts,
+`createSecurityContext()` for Server Actions) check `deactivatedAt` and deny access
+(`FORBIDDEN` / `ACCOUNT_DISABLED`) before onboarding/tenant/membership checks. See
+SEC-33 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`. Deactivation does **not**
+call any provider API to revoke the underlying Clerk/AuthJS session/JWT itself — for
+this repo's AuthJS integration (JWT strategy, no database session adapter) the
+per-request DB check above already makes a stale session functionally useless
+regardless; IdP-side revocation as additional defense-in-depth is tracked as a
+possible enhancement, not required to close access.
 
 ## Database Schema
 

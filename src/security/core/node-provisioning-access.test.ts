@@ -91,6 +91,41 @@ describe('evaluateNodeProvisioningAccess', () => {
     }
   });
 
+  it('returns FORBIDDEN/ACCOUNT_DISABLED when the user has been deactivated (SEC-33)', async () => {
+    const deps = createDeps();
+    deps.userRepository.findById.mockResolvedValue({
+      id: 'u-1',
+      onboardingComplete: true,
+      deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('FORBIDDEN');
+    if (result.status !== 'ALLOWED') {
+      expect(result.code).toBe('ACCOUNT_DISABLED');
+      expect(result.diagnostics.reason).toBe('account_disabled');
+    }
+    // Must never reach the tenant resolver -- deactivation is checked first.
+    expect(deps.tenantResolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('returns FORBIDDEN/ACCOUNT_DISABLED even when onboarding is also incomplete -- deactivation is checked first and wins', async () => {
+    const deps = createDeps();
+    deps.userRepository.findById.mockResolvedValue({
+      id: 'u-1',
+      onboardingComplete: false,
+      deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('FORBIDDEN');
+    if (result.status !== 'ALLOWED') {
+      expect(result.code).toBe('ACCOUNT_DISABLED');
+    }
+  });
+
   it('returns TENANT_CONTEXT_REQUIRED when tenant context is missing', async () => {
     const deps = createDeps();
     deps.tenantResolver.resolve.mockRejectedValue(

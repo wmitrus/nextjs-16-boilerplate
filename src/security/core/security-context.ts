@@ -17,6 +17,7 @@ export type ReadinessStatus =
   | 'ALLOWED'
   | 'BOOTSTRAP_REQUIRED'
   | 'ONBOARDING_REQUIRED'
+  | 'ACCOUNT_DISABLED'
   | 'TENANT_CONTEXT_REQUIRED'
   | 'TENANT_MEMBERSHIP_REQUIRED'
   | 'UNAUTHENTICATED';
@@ -101,6 +102,22 @@ export async function createSecurityContext(
       ...baseContext,
       user: undefined,
       readinessStatus: 'BOOTSTRAP_REQUIRED',
+    };
+  }
+
+  // Lifecycle authorization gate, checked before onboarding-completeness so
+  // a deactivated-but-incomplete-onboarding account can never reach a more
+  // permissive status -- same enforcement point and same reasoning as
+  // `evaluateNodeProvisioningAccess`. Server Actions built on
+  // `createSecureAction` build their `SecurityContext` from this function,
+  // not from `evaluateNodeProvisioningAccess`, so this repository has two
+  // independent readiness evaluators and both must check `deactivatedAt`.
+  // See SEC-33 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+  if (user.deactivatedAt) {
+    return {
+      ...baseContext,
+      user: undefined,
+      readinessStatus: 'ACCOUNT_DISABLED',
     };
   }
 

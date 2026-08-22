@@ -72,6 +72,14 @@ function mapProvisioningDenyToApiResponse(
     );
   }
 
+  if (outcome.status === 'FORBIDDEN' && outcome.code === 'ACCOUNT_DISABLED') {
+    return createServerErrorResponse(
+      'This account has been deactivated',
+      403,
+      'ACCOUNT_DISABLED',
+    );
+  }
+
   return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
 }
 

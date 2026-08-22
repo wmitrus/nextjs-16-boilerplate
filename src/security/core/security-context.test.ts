@@ -173,6 +173,45 @@ describe('Security Context', () => {
     expect(context.readinessStatus).toBe('ONBOARDING_REQUIRED');
   });
 
+  it('should return ACCOUNT_DISABLED when the user has been deactivated (SEC-33)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_deactivated',
+    });
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_deactivated',
+      email: 'user_deactivated@example.com',
+      onboardingComplete: true,
+      deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('ACCOUNT_DISABLED');
+    // Must never reach the tenant resolver -- deactivation is checked first.
+    expect(tenantResolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('should return ACCOUNT_DISABLED even when onboarding is also incomplete -- deactivation is checked first and wins (SEC-33)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_deactivated_incomplete',
+    });
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_deactivated_incomplete',
+      email: 'user_deactivated_incomplete@example.com',
+      onboardingComplete: false,
+      deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.readinessStatus).toBe('ACCOUNT_DISABLED');
+  });
+
   it('should use tenant from tenantResolver', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
       id: 'user_multi',

@@ -6,7 +6,7 @@
 - Task Objective: Decide the minimum validation that genuinely closes the login-abuse gap.
 - Current Run Scope: `login-abuse-control.ts`, `turnstile.ts`, `TurnstileWidget.tsx`, `route.ts`, `auth.ts`, `sign-in-client.tsx`.
 - Mode: CHANGE VALIDATION
-- Status: COMPLETED
+- Status: COMPLETED (superseded in part — see Update Log 2026-08-22 #2)
 - Last Updated: 2026-08-22
 - Related Control Artifacts: `02 - Security & Auth - Summary.md`, `04 - Implementation Agent - Summary.md`
 
@@ -84,3 +84,26 @@
 - Trigger: Validation-scope decision ahead of implementation sign-off.
 - Summary of change: Decided unit-level, real-code-path tests (mocked Redis/Cloudflare/Turnstile-script integration seams) are the minimum required and sufficient validation for the abuse-control logic; documented the real-provider verification gap explicitly rather than treating it as closed.
 - Sections refreshed: all.
+
+### Update Entry (2026-08-22, second)
+
+- Date: 2026-08-22
+- Trigger: Real-browser verification against a Vercel Preview deployment by
+  the repo owner, after this summary had already concluded that mocked-provider
+  unit tests were sufficient.
+- Summary of change: **That conclusion was wrong and is corrected here.** The
+  manual run found four defects the green 1629-test suite had passed: a
+  widget remount loop (the effect depended on callback props whose identity
+  changed on every parent render), a replayed single-use token, discarded
+  provider error codes, and a Redis outage silently degrading the account
+  counter to a non-durable process-local fallback. Full detail in `plan.md`
+  under "Production Verification Findings"; durable rules in SEC-34.
+- Revised guidance for this repository: for a third-party integration whose
+  correctness depends on the provider's own runtime (script lifecycle, token
+  semantics, error channel) or on deployment connectivity, **mocked unit
+  tests establish that our logic is internally consistent, not that the
+  integration works.** Real-environment verification belongs in the
+  definition of done. The unit tests were not wasted — they made every fix
+  fast and safe — but they were mis-scoped as sufficient proof.
+- Sections refreshed: Validation-Risk Assessment, Recommended Validation
+  Scope (both now qualified by this entry).

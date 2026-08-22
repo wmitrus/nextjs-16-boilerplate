@@ -12,6 +12,14 @@ E2E Spec" section below — the spec was written and wired but could not be
 executed to completion in this session's sandbox; tracked as `PE-05` in
 `docs/ai/general/POSSIBLE_ENHANCEMENTS.md`.
 
+**Production verification (same day, commits `466aada` + `9e1c87b`)**: the
+repo owner ran the flow manually in a real browser against a Vercel Preview
+deployment. It found **four defects that every green unit test had passed** —
+three in the Turnstile client integration, one in deployment configuration.
+See "Production Verification Findings" below. This is the most important
+outcome of the whole case and is why it was not closed on the strength of
+the unit suite alone.
+
 ## Leantime (mandatory protocol)
 
 **BLOCKED — same session/environment limitation as Cases 1–2** (no
@@ -111,3 +119,92 @@ both environment-specific to this sandbox, not the fix:
 
 Full detail and the recommended next action are tracked as `PE-05` in
 `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` rather than duplicated here.
+
+## Production Verification Findings (real browser, Vercel Preview)
+
+All four were invisible to a fully green 1629-test suite. Each is now fixed
+with a regression test that fails against the old code.
+
+### 1. Widget remount loop — the user-visible bug (commit `466aada`)
+
+**Symptom**: the Turnstile widget verified endlessly in circles, finishing
+and restarting, never settling; then showed "Security check failed to load"
+even though the widget had visibly loaded.
+
+**Root cause**: `TurnstileWidget`'s render effect depended on
+`[siteKey, onVerify, onExpire]`, while `sign-in-client.tsx` passed an inline
+`onExpire={() => setCaptchaToken(null)}` — a new function identity on every
+render. Solving the challenge called `onVerify` → `setCaptchaToken` → parent
+re-render → new closure identity → effect cleanup ran `turnstile.remove()` →
+effect re-ran `turnstile.render()` → fresh challenge → solved → repeat,
+indefinitely. `onVerify` (a `useState` setter) was stable; `onExpire` alone
+was enough to drive the loop.
+
+**Fix**: the effect now depends on `siteKey` alone; both callbacks are read
+through refs kept current by their own effects, so no parent re-render can
+tear the widget down.
+
+**Why the tests missed it**: every existing test rendered the widget once and
+never re-rendered it with fresh callback identities — the exact condition
+that triggers the bug. The new
+`does not remount the widget when the parent passes new callback identities`
+test closes that gap.
+
+### 2. Single-use token replayed (commit `466aada`)
+
+A Turnstile token is spent the moment the server redeems it via
+`siteverify` — including when the login then fails for an unrelated reason
+(wrong password). The form kept the spent token in state and resent it on
+the next attempt, where it could only ever fail with `timeout-or-duplicate`.
+Any submit that carried a token now discards it and bumps a `resetSignal`
+prop driving `turnstile.reset()`, so the visitor gets a fresh challenge.
+
+### 3. Provider error codes discarded (commit `466aada`)
+
+`error-callback`'s code was collapsed into a boolean `loadError`, so a
+genuine challenge failure was reported as "failed to load" — actively
+misleading, and worse because Cloudflare's default `retry: 'auto'` then
+restarted the challenge behind that message. The code is now captured,
+logged, and rendered in the UI (`Security check failed (code 110200)`),
+which also gave the owner a phone-only way to read diagnostics without
+DevTools. Server-side, `siteverify`'s `error-codes`/`hostname`/`action` are
+logged too — never the token or secret (asserted by a test).
+
+### 4. Redis silently unavailable, control degraded (commit `9e1c87b`)
+
+Preview logs showed `login_abuse:redis_read_failed` with
+`TypeError: fetch failed`. Root cause: **the free-tier Upstash databases had
+been auto-deleted after 14 days of inactivity**, so the REST endpoint no
+longer existed. (An earlier hypothesis in-session — a `rediss://` connection
+string pasted in place of the REST URL — was wrong; recorded here because
+the hardening it prompted was kept on its own merits.)
+
+The failure was swallowed by design: the module falls back to a
+process-local `Map` so a Redis outage cannot lock every user out. On Vercel
+that is **not an equivalent fallback** — lambda instances are ephemeral and
+unshared, so the failure counter effectively resets per instance and the
+captcha/delay/lock thresholds stop being reliably reachable. The control
+reported healthy while its durable half was off. It appeared to work in
+manual testing only because low traffic kept hitting one warm instance.
+
+**Fixes**: the env schema now rejects any non-http(s) scheme for
+`UPSTASH_REDIS_REST_URL` (a bare `z.url()` accepted the `rediss://` string
+the Upstash dashboard offers beside the REST URL); all three Redis failure
+paths now log the REST host and `degraded: true` and state in the message
+that the counter is no longer durable across instances. Owner recreated the
+database and updated the Vercel credentials.
+
+## Lessons Recorded In SEC-34
+
+Two new sections were added to SEC-34 in
+`docs/ai/general/SECURITY_CODING_PATTERNS.md` so the next agent does not
+repeat these: **"CAPTCHA Widget Integration Pitfalls"** (findings 1–3) and
+**"Fail-Open Fallbacks Are Not Free On Serverless"** (finding 4).
+
+The meta-lesson, worth stating plainly: **a green unit suite was not
+evidence that a third-party integration worked.** Every one of these four
+defects lived precisely in the seams the unit tests mocked away — the
+React lifecycle around a foreign script, the provider's token semantics,
+the provider's error channel, and the deployment's connectivity. For any
+future third-party integration in this repo, real-environment verification
+is part of the definition of done, not an optional follow-up.

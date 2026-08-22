@@ -103,24 +103,25 @@ async function NrBrowserScripts({
  * have a nonce to give it, so strict mode being off doesn't needlessly
  * force Clerk into dynamic rendering.
  */
+interface ClerkRedirectUrls {
+  signInFallbackRedirectUrl: string | undefined;
+  signUpFallbackRedirectUrl: string | undefined;
+  signInForceRedirectUrl: string | undefined;
+  signUpForceRedirectUrl: string | undefined;
+}
+
 async function ClerkProviderWithNonce({
   children,
   signInUrl,
   signUpUrl,
   waitlistUrl,
-  signInFallbackRedirectUrl,
-  signUpFallbackRedirectUrl,
-  signInForceRedirectUrl,
-  signUpForceRedirectUrl,
+  redirectUrls,
 }: {
   children: React.ReactNode;
   signInUrl: string;
   signUpUrl: string;
   waitlistUrl: string;
-  signInFallbackRedirectUrl: string | undefined;
-  signUpFallbackRedirectUrl: string | undefined;
-  signInForceRedirectUrl: string | undefined;
-  signUpForceRedirectUrl: string | undefined;
+  redirectUrls: ClerkRedirectUrls;
 }) {
   const nonce = await getCspNonce();
 
@@ -131,10 +132,10 @@ async function ClerkProviderWithNonce({
       signInUrl={signInUrl}
       signUpUrl={signUpUrl}
       waitlistUrl={waitlistUrl}
-      signInFallbackRedirectUrl={signInFallbackRedirectUrl}
-      signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
-      signInForceRedirectUrl={signInForceRedirectUrl}
-      signUpForceRedirectUrl={signUpForceRedirectUrl}
+      signInFallbackRedirectUrl={redirectUrls.signInFallbackRedirectUrl}
+      signUpFallbackRedirectUrl={redirectUrls.signUpFallbackRedirectUrl}
+      signInForceRedirectUrl={redirectUrls.signInForceRedirectUrl}
+      signUpForceRedirectUrl={redirectUrls.signUpForceRedirectUrl}
     >
       {children}
     </ClerkProvider>
@@ -212,10 +213,12 @@ export default function RootLayout({
               signInUrl={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
               signUpUrl={env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
               waitlistUrl={env.NEXT_PUBLIC_CLERK_WAITLIST_URL}
-              signInFallbackRedirectUrl={signInFallbackRedirectUrl}
-              signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
-              signInForceRedirectUrl={signInForceRedirectUrl}
-              signUpForceRedirectUrl={signUpForceRedirectUrl}
+              redirectUrls={{
+                signInFallbackRedirectUrl,
+                signUpFallbackRedirectUrl,
+                signInForceRedirectUrl,
+                signUpForceRedirectUrl,
+              }}
             >
               <AppLayoutContent>{children}</AppLayoutContent>
             </ClerkProviderWithNonce>

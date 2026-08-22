@@ -168,49 +168,16 @@ function toPinnedFamily(record: LookupAddress): 4 | 6 {
  * Fails closed: a resolution error is treated as unsafe rather than
  * silently allowed through.
  */
-async function resolveAndValidateHost(
-  hostname: string,
-  urlForLogging: URL,
+/**
+ * DNS-resolution branch of `resolveAndValidateHost()`, split out to keep
+ * each function's line count readable — this is the "not a literal IP"
+ * path: resolve via `node:dns/promises`, then apply the same
+ * private/reserved-address classification to every returned record.
+ */
+async function resolveViaDns(
+  normalizedHostname: string,
+  redactedUrl: string,
 ): Promise<PinnedAddress> {
-  // Normalize once, up front -- `currentUrl.hostname` brackets a literal
-  // IPv6 address (see stripBrackets()'s doc comment), and every check
-  // below (allowlist match, IP-literal detection, private-range
-  // classification, the DNS lookup call, error messages) must agree on
-  // the same unbracketed form or a bracketed literal silently bypasses
-  // whichever check still expects brackets absent.
-  const normalizedHostname = stripBrackets(hostname);
-  // Redacted once, reused at every log call below -- a full URL can carry
-  // a token/secret/session value in its query string; SEC-22 already
-  // established "never log a full one-time URL or token" for other call
-  // sites in this repo, this file just never had it applied (A.8.3).
-  const redactedUrl = redactUrlForLogging(urlForLogging);
-
-  if (!isHostAllowlisted(normalizedHostname)) {
-    logger.error(
-      { hostname: normalizedHostname, url: redactedUrl },
-      'SSRF Attempt Blocked: Outbound request to untrusted host',
-    );
-    throw new Error(
-      `SSRF Protection: Host ${normalizedHostname} is not allowed`,
-    );
-  }
-
-  if (isIpLiteral(normalizedHostname)) {
-    if (isPrivateOrReservedAddress(normalizedHostname)) {
-      logger.error(
-        { hostname: normalizedHostname, url: redactedUrl },
-        'SSRF Attempt Blocked: Outbound request to private/reserved literal address',
-      );
-      throw new Error(
-        `SSRF Protection: Host ${normalizedHostname} is not allowed`,
-      );
-    }
-    return {
-      address: normalizedHostname,
-      family: normalizedHostname.includes(':') ? 6 : 4,
-    };
-  }
-
   let records: LookupAddress[];
   try {
     records = await lookup(normalizedHostname, { all: true, verbatim: true });
@@ -243,6 +210,52 @@ async function resolveAndValidateHost(
 
   const [chosen] = records;
   return { address: chosen.address, family: toPinnedFamily(chosen) };
+}
+
+async function resolveAndValidateHost(
+  hostname: string,
+  urlForLogging: URL,
+): Promise<PinnedAddress> {
+  // Normalize once, up front -- `currentUrl.hostname` brackets a literal
+  // IPv6 address (see stripBrackets()'s doc comment), and every check
+  // below (allowlist match, IP-literal detection, private-range
+  // classification, the DNS lookup call, error messages) must agree on
+  // the same unbracketed form or a bracketed literal silently bypasses
+  // whichever check still expects brackets absent.
+  const normalizedHostname = stripBrackets(hostname);
+  // Redacted once, reused at every log call below -- a full URL can carry
+  // a token/secret/session value in its query string; SEC-22 already
+  // established "never log a full one-time URL or token" for other call
+  // sites in this repo, this file just never had it applied (A.8.3).
+  const redactedUrl = redactUrlForLogging(urlForLogging);
+
+  if (!isHostAllowlisted(normalizedHostname)) {
+    logger.error(
+      { hostname: normalizedHostname, url: redactedUrl },
+      'SSRF Attempt Blocked: Outbound request to untrusted host',
+    );
+    throw new Error(
+      `SSRF Protection: Host ${normalizedHostname} is not allowed`,
+    );
+  }
+
+  if (!isIpLiteral(normalizedHostname)) {
+    return resolveViaDns(normalizedHostname, redactedUrl);
+  }
+
+  if (isPrivateOrReservedAddress(normalizedHostname)) {
+    logger.error(
+      { hostname: normalizedHostname, url: redactedUrl },
+      'SSRF Attempt Blocked: Outbound request to private/reserved literal address',
+    );
+    throw new Error(
+      `SSRF Protection: Host ${normalizedHostname} is not allowed`,
+    );
+  }
+  return {
+    address: normalizedHostname,
+    family: normalizedHostname.includes(':') ? 6 : 4,
+  };
 }
 
 /**
@@ -383,6 +396,131 @@ async function readBoundedResponseBody(
 }
 
 /**
+ * Composes the per-call overall timeout signal with a caller-supplied one
+ * (if given), so a caller can still cancel independently of secureFetch's
+ * own budget.
+ */
+function buildOverallSignal(
+  callerSignal: AbortSignal | null | undefined,
+  timeoutMs: number,
+): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  return callerSignal
+    ? AbortSignal.any([callerSignal, timeoutSignal])
+    : timeoutSignal;
+}
+
+/**
+ * Performs one hop's actual `fetch()` call against an already-validated,
+ * connection-pinned URL.
+ *
+ * A generic "user-controlled URL reaches an HTTP client" SAST rule will
+ * always flag this call in any implementation of this pattern — it can't
+ * see that `currentUrl` was just validated (allowlist + private-address +
+ * DNS-rebinding check, via `resolveAndValidateHost`) immediately before
+ * this function is called, on every iteration of the caller's loop, for
+ * the original URL and for every redirect hop alike. This fetch() call,
+ * right here, is the sanctioned exit point that validation exists to
+ * gate. See SEC-28's "SAST Finding — Reviewed and Accepted" note in
+ * docs/ai/general/SECURITY_CODING_PATTERNS.md before assuming this needs
+ * a different shape.
+ *
+ * Translates an aborted request (the overall timeout, or a caller's own
+ * signal firing) into a clearly-labeled SSRF Protection error instead of
+ * letting a raw AbortError/DOMException escape.
+ */
+async function fetchHop(
+  currentUrl: URL,
+  currentInit: RequestInit | undefined,
+  overallSignal: AbortSignal,
+  agent: Agent,
+  timeoutMs: number,
+): Promise<Response> {
+  try {
+    return await fetch(currentUrl, {
+      ...currentInit,
+      redirect: 'manual',
+      signal: overallSignal,
+      // undici-specific, not part of the standard RequestInit type —
+      // Node's fetch recognizes it to route the request through a
+      // caller-supplied dispatcher instead of the global one.
+      dispatcher: agent,
+    } as RequestInit & { dispatcher: Agent });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === 'TimeoutError' || error.name === 'AbortError')
+    ) {
+      throw new Error(
+        `SSRF Protection: Request to ${redactUrlForLogging(currentUrl)} ` +
+          `timed out after ${timeoutMs}ms`,
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Buffers a terminal (non-redirect) response into an independent
+ * `Response` object, bounded to `maxBytes` — see
+ * `readBoundedResponseBody()`'s doc comment. Independent of the
+ * per-request pinned Agent, which the caller closes separately.
+ */
+async function buildFinalResponse(
+  rawResponse: Response,
+  maxBytes: number,
+): Promise<Response> {
+  const buffer = await readBoundedResponseBody(rawResponse, maxBytes);
+  return new Response(buffer, {
+    status: rawResponse.status,
+    statusText: rawResponse.statusText,
+    headers: rawResponse.headers,
+  });
+}
+
+interface NextHop {
+  url: URL;
+  init: RequestInit | undefined;
+}
+
+/**
+ * Computes the next hop's URL and request init after a redirect response:
+ * `Location` header validation, the too-many-redirects bound, standard
+ * method/body downgrade semantics (`requestInitForRedirect`), and
+ * cross-origin credential stripping
+ * (`stripSensitiveHeadersForCrossOriginRedirect`, A.8.2).
+ */
+function prepareNextHop(
+  rawResponse: Response,
+  currentUrl: URL,
+  currentInit: RequestInit | undefined,
+  originalUrl: string,
+  hopsRemaining: number,
+): NextHop {
+  const location = rawResponse.headers.get('location');
+  if (!location) {
+    throw new Error(
+      `SSRF Protection: Redirect from ${currentUrl.toString()} had no Location header`,
+    );
+  }
+  if (hopsRemaining <= 0) {
+    throw new Error(
+      `SSRF Protection: Too many redirects starting from ${originalUrl}`,
+    );
+  }
+
+  const nextUrl = new URL(location, currentUrl);
+  let nextInit = requestInitForRedirect(currentInit, rawResponse.status);
+  if (nextUrl.origin !== currentUrl.origin) {
+    nextInit = {
+      ...nextInit,
+      headers: stripSensitiveHeadersForCrossOriginRedirect(nextInit?.headers),
+    };
+  }
+  return { url: nextUrl, init: nextInit };
+}
+
+/**
  * Secure fetch wrapper that prevents SSRF attacks.
  *
  * Every hostname the request ever actually touches — the original URL, and
@@ -410,16 +548,13 @@ export async function secureFetch(
     typeof url === 'string' ? new URL(url) : new URL(url.toString());
   let currentInit = init;
   let hopsRemaining = MAX_REDIRECTS;
-
-  // One overall budget for the whole call, every hop included. Composed
-  // with a caller-supplied signal (if any) so callers can still cancel
-  // independently of this timeout.
-  const timeoutSignal = AbortSignal.timeout(
+  // One overall budget for the whole call, every hop included -- not reset
+  // per hop, so a chain of redirects can't add up to an unbounded total
+  // wait.
+  const overallSignal = buildOverallSignal(
+    init?.signal,
     env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS,
   );
-  const overallSignal = init?.signal
-    ? AbortSignal.any([init.signal, timeoutSignal])
-    : timeoutSignal;
 
   for (;;) {
     const pinned = await resolveAndValidateHost(
@@ -429,81 +564,32 @@ export async function secureFetch(
     const agent = new Agent({ connect: { lookup: buildPinnedLookup(pinned) } });
 
     try {
-      let rawResponse: Response;
-      try {
-        // A generic "user-controlled URL reaches an HTTP client" SAST rule
-        // will always flag this line in any implementation of this
-        // pattern — it can't see that `currentUrl` was just validated
-        // (allowlist + private-address + DNS-rebinding check) two lines
-        // up, on every iteration of this loop, for the original URL and
-        // for every redirect hop alike. This fetch() call, right here, is
-        // the sanctioned exit point that validation exists to gate. See
-        // SEC-28's "SAST Finding — Reviewed and Accepted" note in
-        // docs/ai/general/SECURITY_CODING_PATTERNS.md before assuming
-        // this needs a different shape.
-        rawResponse = await fetch(currentUrl, {
-          ...currentInit,
-          redirect: 'manual',
-          signal: overallSignal,
-          // undici-specific, not part of the standard RequestInit type —
-          // Node's fetch recognizes it to route the request through a
-          // caller-supplied dispatcher instead of the global one.
-          dispatcher: agent,
-        } as RequestInit & { dispatcher: Agent });
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          (error.name === 'TimeoutError' || error.name === 'AbortError')
-        ) {
-          throw new Error(
-            `SSRF Protection: Request to ${redactUrlForLogging(currentUrl)} ` +
-              `timed out after ${env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS}ms`,
-          );
-        }
-        throw error;
-      }
+      const rawResponse = await fetchHop(
+        currentUrl,
+        currentInit,
+        overallSignal,
+        agent,
+        env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS,
+      );
 
       if (!REDIRECT_STATUSES.has(rawResponse.status)) {
-        // Bounded read so the returned Response is independent of this
-        // per-request pinned Agent (closed in `finally` below) and can
-        // never grow unboundedly regardless of what the upstream sends.
-        const buffer = await readBoundedResponseBody(
+        return await buildFinalResponse(
           rawResponse,
           env.SECURITY_OUTBOUND_FETCH_MAX_BYTES,
         );
-        return new Response(buffer, {
-          status: rawResponse.status,
-          statusText: rawResponse.statusText,
-          headers: rawResponse.headers,
-        });
       }
 
-      const location = rawResponse.headers.get('location');
       await rawResponse.body?.cancel().catch(() => undefined);
-
-      if (!location) {
-        throw new Error(
-          `SSRF Protection: Redirect from ${currentUrl.toString()} had no Location header`,
-        );
-      }
-      if (hopsRemaining <= 0) {
-        throw new Error(
-          `SSRF Protection: Too many redirects starting from ${originalUrl}`,
-        );
-      }
-
+      const nextHop = prepareNextHop(
+        rawResponse,
+        currentUrl,
+        currentInit,
+        originalUrl,
+        hopsRemaining,
+      );
       hopsRemaining -= 1;
-      const nextUrl = new URL(location, currentUrl);
-      currentInit = requestInitForRedirect(currentInit, rawResponse.status);
-      if (nextUrl.origin !== currentUrl.origin) {
-        currentInit = {
-          ...currentInit,
-          headers: stripSensitiveHeadersForCrossOriginRedirect(
-            currentInit?.headers,
-          ),
-        };
-      }
-      currentUrl = nextUrl;
+      currentInit = nextHop.init;
+      currentUrl = nextHop.url;
       // Loop back around — the new currentUrl.hostname goes through the
       // exact same resolveAndValidateHost() pipeline on the next
       // iteration before anything is connected to.

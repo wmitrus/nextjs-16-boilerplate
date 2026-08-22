@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
+
+import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
 import '@/testing/infrastructure/logger';
@@ -11,13 +14,13 @@ const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
-  userRepo: {
-    findById: vi.fn(),
-    updateProfile: vi.fn(),
-    deactivate: vi.fn(),
-  },
+  findById: vi.fn(),
+  updateProfile: vi.fn(),
+  deactivate: vi.fn(),
+  db: {},
+  registry: new Map<symbol, unknown>(),
   container: {
-    resolve: vi.fn(),
+    resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
   recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
@@ -50,6 +53,13 @@ vi.mock('@/security/actions/record-admin-audit-event', () => ({
   recordAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
+vi.mock(
+  '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService',
+  () => ({
+    DrizzleAdminUsersService: vi.fn(),
+  }),
+);
+
 function makeRequest(method: 'GET' | 'PATCH', body?: unknown) {
   return new NextRequest(`http://localhost/api/admin/users/${USER_ID}`, {
     method,
@@ -70,11 +80,23 @@ const MOCK_USER = {
   createdAt: new Date('2026-01-01'),
 };
 
+function setupService() {
+  mocks.registry.clear();
+  mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+  vi.mocked(DrizzleAdminUsersService).mockImplementation(function () {
+    return {
+      findById: mocks.findById,
+      updateProfile: mocks.updateProfile,
+      deactivate: mocks.deactivate,
+    } as unknown as DrizzleAdminUsersService;
+  });
+}
+
 describe('GET /api/admin/users/[id]', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.container.resolve.mockReturnValue(mocks.userRepo);
+    setupService();
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -91,6 +113,20 @@ describe('GET /api/admin/users/[id]', () => {
     expect(res.status).toBe(401);
   });
 
+  it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'admin-1', email: 'admin@test.dev' },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(true);
+
+    const { GET } = await import('./route');
+    const res = await GET(makeRequest('GET'), makeContext('not-a-uuid'));
+    expect(res.status).toBe(400);
+    expect(mocks.findById).not.toHaveBeenCalled();
+  });
+
   it('returns 403 when not admin', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
@@ -98,7 +134,7 @@ describe('GET /api/admin/users/[id]', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
-    mocks.container.resolve.mockReturnValue({
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(false),
     });
 
@@ -114,7 +150,7 @@ describe('GET /api/admin/users/[id]', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.userRepo.findById.mockResolvedValue(null);
+    mocks.findById.mockResolvedValue(null);
 
     const { GET } = await import('./route');
     const res = await GET(makeRequest('GET'), makeContext());
@@ -128,27 +164,67 @@ describe('GET /api/admin/users/[id]', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.userRepo.findById.mockResolvedValue(MOCK_USER);
+    mocks.findById.mockResolvedValue(MOCK_USER);
 
     const { GET } = await import('./route');
     const res = await GET(makeRequest('GET'), makeContext());
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { user: { id: string } } };
     expect(body.data.user.id).toBe(USER_ID);
+    expect(mocks.findById).toHaveBeenCalledWith(USER_ID, null);
   });
+
+  it(
+    "SEC-26 regression: an ABAC-authorized non-platform-admin's lookup is " +
+      'scoped to their own tenant, and a user outside that tenant 404s ' +
+      "exactly like a nonexistent id -- never a distinguishing 403 that'd " +
+      'leak cross-tenant existence',
+    async () => {
+      mocks.resolveAccess.mockResolvedValue(
+        makeAllowedProvisioningAccess({
+          identity: { id: 'owner-1', email: 'owner@test.dev' },
+        }),
+      );
+      mocks.isEnvAdmin.mockReturnValue(false);
+      mocks.registry.set(AUTHORIZATION.SERVICE, {
+        can: vi.fn().mockResolvedValue(true),
+      });
+      // The scoped service call itself returns null for an out-of-tenant
+      // user -- the route must not distinguish this from "doesn't exist".
+      mocks.findById.mockResolvedValue(null);
+
+      const { GET } = await import('./route');
+      const res = await GET(makeRequest('GET'), makeContext());
+
+      expect(mocks.findById).toHaveBeenCalledWith(USER_ID, {
+        tenantId: 'tenant_test_1',
+      });
+      expect(res.status).toBe(404);
+    },
+  );
 });
 
 describe('PATCH /api/admin/users/[id] — update displayName', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.container.resolve.mockReturnValue(mocks.userRepo);
+    setupService();
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'admin-1', email: 'admin@test.dev' },
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(true);
+  });
+
+  it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { displayName: 'New Name' }),
+      makeContext('not-a-uuid'),
+    );
+    expect(res.status).toBe(400);
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
   });
 
   it('returns 400 for invalid JSON body', async () => {
@@ -168,7 +244,7 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
   });
 
   it('returns 404 when user not found', async () => {
-    mocks.userRepo.findById.mockResolvedValue(null);
+    mocks.updateProfile.mockResolvedValue(null);
 
     const { PATCH } = await import('./route');
     const res = await PATCH(
@@ -179,8 +255,10 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
   });
 
   it('returns 200 and updates displayName', async () => {
-    mocks.userRepo.findById.mockResolvedValue(MOCK_USER);
-    mocks.userRepo.updateProfile.mockResolvedValue(undefined);
+    mocks.updateProfile.mockResolvedValue({
+      ...MOCK_USER,
+      displayName: 'New Name',
+    });
 
     const { PATCH } = await import('./route');
     const res = await PATCH(
@@ -188,9 +266,11 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
       makeContext(),
     );
     expect(res.status).toBe(200);
-    expect(mocks.userRepo.updateProfile).toHaveBeenCalledWith(USER_ID, {
-      displayName: 'New Name',
-    });
+    expect(mocks.updateProfile).toHaveBeenCalledWith(
+      USER_ID,
+      { displayName: 'New Name' },
+      null,
+    );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         category: 'admin_access',
@@ -201,13 +281,34 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
       }),
     );
   });
+
+  it("SEC-26 regression: scopes the update to the caller's own tenant for an ABAC-authorized non-platform-admin, and a foreign-tenant target 404s", async () => {
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.updateProfile.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { displayName: 'New Name' }),
+      makeContext(),
+    );
+
+    expect(mocks.updateProfile).toHaveBeenCalledWith(
+      USER_ID,
+      { displayName: 'New Name' },
+      { tenantId: 'tenant_test_1' },
+    );
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('PATCH /api/admin/users/[id] — deactivate', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.container.resolve.mockReturnValue(mocks.userRepo);
+    setupService();
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'admin-1', email: 'admin@test.dev' },
@@ -216,8 +317,18 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
     mocks.isEnvAdmin.mockReturnValue(true);
   });
 
+  it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { action: 'deactivate' }),
+      makeContext('not-a-uuid'),
+    );
+    expect(res.status).toBe(400);
+    expect(mocks.deactivate).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when user to deactivate not found', async () => {
-    mocks.userRepo.findById.mockResolvedValue(null);
+    mocks.deactivate.mockResolvedValue(null);
 
     const { PATCH } = await import('./route');
     const res = await PATCH(
@@ -228,8 +339,10 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
   });
 
   it('returns 200 and calls deactivate when user found', async () => {
-    mocks.userRepo.findById.mockResolvedValue(MOCK_USER);
-    mocks.userRepo.deactivate.mockResolvedValue(undefined);
+    mocks.deactivate.mockResolvedValue({
+      ...MOCK_USER,
+      deactivatedAt: new Date(),
+    });
 
     const { PATCH } = await import('./route');
     const res = await PATCH(
@@ -237,9 +350,10 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
       makeContext(),
     );
     expect(res.status).toBe(200);
-    expect(mocks.userRepo.deactivate).toHaveBeenCalledWith(
+    expect(mocks.deactivate).toHaveBeenCalledWith(
       USER_ID,
       expect.any(Date),
+      null,
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -250,6 +364,25 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
         targetId: USER_ID,
       }),
     );
+  });
+
+  it("SEC-26 regression: scopes the deactivate to the caller's own tenant for an ABAC-authorized non-platform-admin, and a foreign-tenant target 404s", async () => {
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.deactivate.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { action: 'deactivate' }),
+      makeContext(),
+    );
+
+    expect(mocks.deactivate).toHaveBeenCalledWith(USER_ID, expect.any(Date), {
+      tenantId: 'tenant_test_1',
+    });
+    expect(res.status).toBe(404);
   });
 
   it('returns 401 when unauthenticated', async () => {

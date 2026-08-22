@@ -1,19 +1,21 @@
 import { connection } from 'next/server';
 import { z } from 'zod';
 
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
-import type { UserRepository } from '@/core/contracts/user';
+import type { DrizzleDb } from '@/core/db';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import {
   createServerErrorResponse,
   createSuccessResponse,
+  createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
@@ -24,6 +26,8 @@ const logger = resolveServerLogger().child({
   module: 'admin-users-id',
 });
 
+const idSchema = z.object({ id: z.uuid() });
+
 const patchBodySchema = z.object({
   displayName: z.string().min(1).max(100),
 });
@@ -32,27 +36,40 @@ const deactivateBodySchema = z.object({
   action: z.literal('deactivate'),
 });
 
+type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
+
+/**
+ * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
+ * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
+ * authorization for a client-supplied `id` naming a user who may belong to
+ * another tenant -- check `isPlatformAdmin` and pass the resulting
+ * `AdminUserScope` through to the service. See SEC-26 in
+ * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ */
 async function checkAdminAccess(
   email: string | undefined,
   userId: string,
   tenantId: string,
   container: ReturnType<typeof getAppContainer>,
   action: (typeof ACTIONS)[keyof typeof ACTIONS],
-): Promise<boolean> {
-  if (isEnvBasedPlatformAdmin(email)) return true;
+): Promise<AdminAccess> {
+  if (isEnvBasedPlatformAdmin(email)) {
+    return { allowed: true, isPlatformAdmin: true };
+  }
 
   try {
     const authzService = container.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
-    return await authzService.can({
+    const allowed = await authzService.can({
       tenant: { tenantId },
       subject: { id: userId },
       resource: { type: RESOURCES.USER, id: 'admin-panel' },
       action,
     });
+    return { allowed, isPlatformAdmin: false };
   } catch {
-    return false;
+    return { allowed: false, isPlatformAdmin: false };
   }
 }
 
@@ -60,12 +77,16 @@ export const GET = withErrorHandler(
   withNodeProvisioning(async (_request, context, access) => {
     await connection();
 
-    const params = await context.params;
-    const id = params['id'] as string;
+    const rawParams = await context.params;
+    const idResult = idSchema.safeParse(rawParams);
+    if (!idResult.success) {
+      return createValidationErrorResponse({ id: ['Invalid user id'] }, 400);
+    }
+    const { id } = idResult.data;
 
     const container = getAppContainer();
 
-    const isAdmin = await checkAdminAccess(
+    const adminAccess = await checkAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
@@ -73,12 +94,22 @@ export const GET = withErrorHandler(
       ACTIONS.USER_READ,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
-    const userRepo = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
-    const user = await userRepo.findById(id);
+    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+    const service = new DrizzleAdminUsersService(db);
+    // An ABAC-authorized (non-platform-admin) caller may only read a user
+    // who belongs to their own tenant, regardless of which `id` they supply
+    // -- enforced in the same DB predicate as the lookup itself (SEC-26).
+    // A user outside the caller's tenant must 404 exactly like a
+    // nonexistent id, never a distinguishing 403 (avoids cross-tenant
+    // existence leaks).
+    const scope = adminAccess.isPlatformAdmin
+      ? null
+      : { tenantId: access.tenant.tenantId };
+    const user = await service.findById(id, scope);
 
     if (!user) {
       return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
@@ -92,8 +123,12 @@ export const PATCH = withErrorHandler(
   withNodeProvisioning(async (request, context, access) => {
     await connection();
 
-    const params = await context.params;
-    const id = params['id'] as string;
+    const rawParams = await context.params;
+    const idResult = idSchema.safeParse(rawParams);
+    if (!idResult.success) {
+      return createValidationErrorResponse({ id: ['Invalid user id'] }, 400);
+    }
+    const { id } = idResult.data;
 
     const container = getAppContainer();
 
@@ -109,9 +144,12 @@ export const PATCH = withErrorHandler(
       );
     }
 
+    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+    const service = new DrizzleAdminUsersService(db);
+
     const deactivateResult = deactivateBodySchema.safeParse(parsedBody);
     if (deactivateResult.success) {
-      const isAdmin = await checkAdminAccess(
+      const adminAccess = await checkAdminAccess(
         access.identity.email,
         access.user.id,
         access.tenant.tenantId,
@@ -119,19 +157,19 @@ export const PATCH = withErrorHandler(
         ACTIONS.USER_DEACTIVATE,
       );
 
-      if (!isAdmin) {
+      if (!adminAccess.allowed) {
         return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
       }
 
-      const userRepo = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
-      const existing = await userRepo.findById(id);
+      const scope = adminAccess.isPlatformAdmin
+        ? null
+        : { tenantId: access.tenant.tenantId };
+      const deactivatedAt = new Date();
+      const deactivated = await service.deactivate(id, deactivatedAt, scope);
 
-      if (!existing) {
+      if (!deactivated) {
         return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
       }
-
-      const deactivatedAt = new Date();
-      await userRepo.deactivate(id, deactivatedAt);
 
       logger.info(
         {
@@ -165,7 +203,7 @@ export const PATCH = withErrorHandler(
       );
     }
 
-    const isAdmin = await checkAdminAccess(
+    const adminAccess = await checkAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
@@ -173,20 +211,22 @@ export const PATCH = withErrorHandler(
       ACTIONS.USER_UPDATE,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
-    const userRepo = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
-    const existing = await userRepo.findById(id);
+    const scope = adminAccess.isPlatformAdmin
+      ? null
+      : { tenantId: access.tenant.tenantId };
+    const updated = await service.updateProfile(
+      id,
+      { displayName: patchResult.data.displayName },
+      scope,
+    );
 
-    if (!existing) {
+    if (!updated) {
       return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
     }
-
-    await userRepo.updateProfile(id, {
-      displayName: patchResult.data.displayName,
-    });
 
     logger.info(
       {

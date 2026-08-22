@@ -31,7 +31,7 @@ Update it after every security review group.
 | SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                                                                   | Real risk → fixed                                                                                                                            | App Router route handlers                           |
 | SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                                                                        | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                       |
 | SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift                                                       | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                           |
-| SEC-26 | Authorization      | ABAC action check without matching resource-scope check                                                  | Real risk → fixed                                                                                                                            | Admin CRUD route handlers/services                  |
+| SEC-26 | Authorization      | ABAC action check without matching resource-scope check                                                  | Real risk → fixed (Update 2026-08-22: second real-world occurrence, `/api/admin/users`, cross-tenant IDOR/BOLA)                              | Admin CRUD route handlers/services                  |
 | SEC-27 | Authorization      | Mutating admin route with no authorization check at all                                                  | Real risk → fixed                                                                                                                            | Admin API route handlers                            |
 | SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense                                                    | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                              |
 | SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes                                                              | Real risk → fixed                                                                                                                            | Demo/showcase route policy                          |
@@ -1689,6 +1689,91 @@ resource-scope grant.
 server-side" review — that catches missing checks, not checks that are present but too
 coarse. Ask explicitly: "authorized to do X in general, or authorized to do X to
 _this_ tenant/record?"
+
+### Update 2026-08-22 — Second Real-World Occurrence: `/api/admin/users` (cross-tenant IDOR/BOLA)
+
+**Found during**: a repository-wide security audit (not the Admin Feature Flags GUI
+work that produced the original entry above), reported directly as a P1 finding.
+**Classification**: Real risk → fixed, same day.
+
+The exact same defect shape recurred in `/api/admin/users` and
+`/api/admin/users/[id]`, in a more severe form: `checkAdminAccess()` there returned a
+bare `boolean` (not `{ allowed, isPlatformAdmin }`), and every DB call went through
+the DI-registered `UserRepository` / `DrizzleUserRepository` — a repository with
+**no tenant concept at all** (used elsewhere exclusively for self-service lookups,
+where a caller's own verified id needs no additional scoping). Any ABAC-authorized
+(non-platform-admin) tenant owner/admin could therefore list, read, rename, or
+deactivate **any user in any tenant** — a strictly worse blast radius than the
+original SEC-26 finding, where at least a `tenantId` column existed on the row and
+only the authorization check forgot to compare it.
+
+**New technique this occurrence required — membership-join scoping for tables with
+no direct tenant column**: unlike `feature_flags` (which has its own `tenant_id`
+column, so the SEC-26 fix could scope with a plain `eq()`), the `users` table has no
+`tenant_id`/`organization_id` column. A user's tenant membership lives in a separate
+`memberships` table (`user_id`, `organization_id`), owned by a different module
+(`authorization`, not `user`). Scoping therefore requires a cross-table predicate:
+
+```typescript
+// src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.ts
+function membershipScopePredicate(db: DrizzleDb, tenantId: string) {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(membershipsReferenceTable)
+      .where(
+        and(
+          eq(membershipsReferenceTable.userId, usersTable.id),
+          eq(membershipsReferenceTable.organizationId, tenantId),
+        ),
+      ),
+  );
+}
+
+// used directly in the same WHERE as the read/mutation, e.g.:
+await db
+  .update(usersTable)
+  .set(updatePayload)
+  .where(
+    and(eq(usersTable.id, id), membershipScopePredicate(db, scope.tenantId)),
+  )
+  .returning();
+```
+
+`membershipsReferenceTable` is a new core-level join reference
+(`src/core/db/schema/references.ts`), mirroring the existing `usersReferenceTable` /
+`organizationsReferenceTable` pattern: a minimal-column `pgTable` pointing at the
+real `memberships` table, letting the `user` module build this predicate **without
+importing `authorization`'s real Drizzle schema** (would otherwise create a
+`user -> authorization` module dependency the architecture doesn't allow). This
+reference table is deliberately excluded from `drizzle-kit generate`'s schema glob
+(`./src/modules/**/infrastructure/drizzle/schema.ts` only) — it must never be
+migrated, only queried.
+
+**DO** treat "the domain repository has no tenant/scope parameter at all" as the same
+class of defect as "the scope parameter exists but isn't checked" — both let an
+ABAC-authorized caller reach every tenant's data, not just their own.
+
+**DO** build the tenant-membership check as a correlated `EXISTS` (or equivalent
+single-statement join) in the same SQL predicate as the read/mutation, never as a
+preceding `isMember()` check followed by a separate unscoped read/write — the latter
+is a TOCTOU and does not match how every other admin surface in this repo enforces
+scope.
+
+**DO** create a purpose-built admin service (never DI-registered, directly
+constructed at the route-handler call site) when the caller needs a scoping
+capability the DI-registered domain repository was never designed to have — do not
+retrofit a scope parameter onto a repository whose other callers are legitimate
+unscoped self-service lookups, since every one of those call sites would then need
+to remember to keep passing `null`/no-scope correctly forever.
+
+**Required validation for this occurrence**: `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.db.test.ts`
+proves, against a real Postgres-compatible DB, that a tenant-scoped caller cannot
+list, read, rename, or deactivate a real user seeded only into a different tenant —
+and that the unscoped (platform-admin) path is unaffected. Route-handler unit tests
+in `src/app/api/admin/users/route.test.ts` and
+`src/app/api/admin/users/[id]/route.test.ts` prove the route derives and forwards
+the correct scope for both grant paths.
 
 ---
 

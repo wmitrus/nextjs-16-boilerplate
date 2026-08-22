@@ -2800,6 +2800,28 @@ independent of `CSP_SCRIPT_MODE` — even in `cache-compatible` mode, where
 scripts, an inline event-handler attribute injected via some other vector
 stays blocked.
 
+Pinning `@lhci/cli` as a real devDependency (so `preview-deploy.yml` could
+run it via `pnpm exec` instead of `npx`, going through the frozen-lockfile
+supply chain) surfaced a real new CI failure: `pnpm audit` now sees
+`extract-zip@2.0.1` (a transitive dependency, `@lhci/cli` →
+`lighthouse` → `puppeteer-core` → `@puppeteer/browsers` → `extract-zip`)
+and its symlink-path-traversal advisory (`GHSA-jmr9-qjv8-65gv`) that
+`npx`'s always-fetch-fresh path never surfaced to the audit at all. The
+advisory's patched version (`2.0.2`) isn't published on npm yet — same
+upstream-blocked shape as the pre-existing `image-size@2.0.2` exceptions —
+so it was added to `pnpm-workspace.yaml`'s `audit.ignore` with the same
+structured documentation (reason, dependency path, dev-only proof, owner,
+review-expiry date), plus an extra proof specific to this one: this
+repo's own `preview-deploy.yml` never lets `@puppeteer/browsers` download
+or extract a Chromium binary at all (it launches its own pre-installed
+Chromium and points Lighthouse at it over CDP), so the vulnerable
+extraction code path is dead code on this repo's actual execution path,
+not merely a dev-only one. Pinning didn't introduce the vulnerability —
+it made an audit tool that was already blind to this transitive
+dependency (because `npx` fetched it fresh, outside any lockfile pnpm
+audit could inspect) able to see it, which is the whole point of moving
+off `npx` in the first place.
+
 ### Rule for Agents
 
 **DO NOT** classify a `<script type="...">` block as CSP-inert without

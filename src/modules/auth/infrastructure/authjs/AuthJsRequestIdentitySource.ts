@@ -41,6 +41,7 @@ export class AuthJsRequestIdentitySource implements RequestIdentitySource {
       const userId = session.user.id;
       const email = session.user.email ?? undefined;
       const emailVerified = session.user.emailVerified === true;
+      const sessionIssuedAt = session.user.sessionIssuedAt;
 
       getLogger().debug(
         {
@@ -57,6 +58,7 @@ export class AuthJsRequestIdentitySource implements RequestIdentitySource {
         userId,
         email,
         emailVerified,
+        sessionIssuedAt,
       };
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));

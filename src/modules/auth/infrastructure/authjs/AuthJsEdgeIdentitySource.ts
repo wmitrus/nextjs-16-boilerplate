@@ -41,11 +41,18 @@ export class AuthJsEdgeIdentitySource implements RequestIdentitySource {
             : undefined;
       const email = typeof token.email === 'string' ? token.email : undefined;
       const emailVerified = token.emailVerified === true;
+      // Carried for contract parity with the Node source. The Edge gate has
+      // no database and is never authoritative for this decision (see
+      // PE-03); the revocation comparison happens in the node-level
+      // evaluators. See SEC-36.
+      const sessionIssuedAt =
+        typeof token.iat === 'number' ? token.iat : undefined;
 
       return {
         userId,
         email,
         emailVerified,
+        sessionIssuedAt,
       };
     } catch {
       return {};

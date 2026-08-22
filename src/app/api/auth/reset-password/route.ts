@@ -173,6 +173,18 @@ export async function POST(request: Request): Promise<Response> {
         }
       }
 
+      // Revoke every session minted before this moment. A password reset is
+      // the canonical account-takeover recovery step, so it must not leave
+      // an attacker's 30-day JWT working -- and because sessions here are
+      // stateless there is nothing to delete, only a marker to raise that
+      // the access evaluators compare against each token's `iat`. Same
+      // transaction as the token claim and the password write: either the
+      // reset happened in full or it did not happen. See SEC-36.
+      await tx
+        .update(usersTable)
+        .set({ sessionsValidFrom: now })
+        .where(eq(usersTable.id, user.id));
+
       return { claimed: true as const, userId: user.id };
     });
 

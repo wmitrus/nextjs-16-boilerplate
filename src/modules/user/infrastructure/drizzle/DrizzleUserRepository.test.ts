@@ -58,6 +58,11 @@ describe('DrizzleUserRepository', () => {
       displayName: 'Alice',
       locale: 'pl-PL',
       timezone: 'Europe/Warsaw',
+      deactivatedAt: undefined,
+      createdAt: undefined,
+      // Null, not undefined: "nothing has ever been revoked for this user",
+      // which is what keeps the SEC-36 gate inert for existing rows.
+      sessionsValidFrom: null,
     });
   });
 });

@@ -11,6 +11,7 @@ import { env } from '@/core/env';
 import { getIP } from '@/shared/lib/network/get-ip';
 
 import type { NodeSecurityContextDependencies } from './security-dependencies';
+import { isSessionRevoked } from './session-revocation';
 export type { SecurityContextDependencies } from './security-dependencies';
 
 export type ReadinessStatus =
@@ -52,7 +53,12 @@ export interface SecurityContext {
 export async function createSecurityContext(
   dependencies: NodeSecurityContextDependencies,
 ): Promise<SecurityContext> {
-  const { identityProvider, tenantResolver, userRepository } = dependencies;
+  const {
+    identityProvider,
+    tenantResolver,
+    userRepository,
+    requestIdentitySource,
+  } = dependencies;
 
   const headerList = await headers();
   const ip = await getIP(headerList);
@@ -119,6 +125,31 @@ export async function createSecurityContext(
       user: undefined,
       readinessStatus: 'ACCOUNT_DISABLED',
     };
+  }
+
+  // Session-revocation gate. This is the second of this repository's two
+  // independent readiness evaluators, so -- exactly as with `deactivatedAt`
+  // under SEC-33 -- the check has to exist here too or Server Actions would
+  // keep honouring a session the API layer already rejects. Ordered after
+  // the deactivation gate for the same reason as in
+  // node-provisioning-access.ts: a disabled account must not be told merely
+  // to sign in again.
+  //
+  // The identity source is consulted ONLY when this user actually carries a
+  // marker. Almost nobody does (it is set by password reset alone), so the
+  // common path costs nothing, and a provider whose session lookup is
+  // unavailable in this context cannot turn an ordinary request into a
+  // failure. See SEC-36.
+  if (user.sessionsValidFrom) {
+    const { sessionIssuedAt } = await requestIdentitySource.get();
+
+    if (isSessionRevoked(user.sessionsValidFrom, sessionIssuedAt)) {
+      return {
+        ...baseContext,
+        user: undefined,
+        readinessStatus: 'UNAUTHENTICATED',
+      };
+    }
   }
 
   if (!user.onboardingComplete) {

@@ -77,7 +77,11 @@ vi.mock('@/modules/auth/infrastructure/drizzle/schema', () => ({
 }));
 
 vi.mock('@/modules/user/infrastructure/drizzle/schema', () => ({
-  usersTable: { id: 'id', email: 'email' },
+  usersTable: {
+    id: 'id',
+    email: 'email',
+    sessionsValidFrom: 'sessionsValidFrom',
+  },
 }));
 
 function makeRequest(body: unknown): Request {
@@ -109,15 +113,19 @@ function mockTransactionWithClaim(claimReturns: unknown[]) {
   const rollback = vi.fn(() => {
     throw new Error('rollback');
   });
+  const setCalls: unknown[] = [];
 
   mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
     const tx = {
       update: vi.fn(() => ({
-        set: () => ({
-          where: () => ({
-            returning: () => Promise.resolve(claimReturns),
-          }),
-        }),
+        set: (values: unknown) => {
+          setCalls.push(values);
+          return {
+            where: () => ({
+              returning: () => Promise.resolve(claimReturns),
+            }),
+          };
+        },
       })),
       select: vi.fn(() => ({
         from: () => ({
@@ -133,7 +141,7 @@ function mockTransactionWithClaim(claimReturns: unknown[]) {
     return fn(tx);
   });
 
-  return { rollback };
+  return { rollback, setCalls };
 }
 
 describe('POST /api/auth/reset-password', () => {
@@ -226,6 +234,35 @@ describe('POST /api/auth/reset-password', () => {
         event: 'auth:password_reset_token_claim_lost',
       }),
       expect.any(String),
+    );
+  });
+
+  // SEC-36: the reset is also the revocation event. Raising the marker in
+  // the same transaction as the token claim and the password write is what
+  // stops an attacker's stolen 30-day JWT from outliving the recovery the
+  // owner just performed.
+  it('raises the session revocation marker in the same transaction as the reset', async () => {
+    mockPreCheckFinds(true);
+    const { setCalls } = mockTransactionWithClaim([{ userId: 'user-1' }]);
+
+    const response = await POST(
+      makeRequest({ token: 'good', password: 'password123' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(setCalls).toContainEqual(
+      expect.objectContaining({ sessionsValidFrom: expect.any(Date) }),
+    );
+  });
+
+  it('does not revoke sessions when the claim was lost', async () => {
+    mockPreCheckFinds(true);
+    const { setCalls } = mockTransactionWithClaim([]);
+
+    await POST(makeRequest({ token: 'contested', password: 'password123' }));
+
+    expect(setCalls).not.toContainEqual(
+      expect.objectContaining({ sessionsValidFrom: expect.any(Date) }),
     );
   });
 

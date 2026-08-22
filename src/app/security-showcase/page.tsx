@@ -2,7 +2,10 @@ import { headers } from 'next/headers';
 import { Suspense } from 'react';
 
 import { AUTH } from '@/core/contracts';
-import type { IdentityProvider } from '@/core/contracts/identity';
+import type {
+  IdentityProvider,
+  RequestIdentitySource,
+} from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import { resolveServerLogger } from '@/core/logger/di';
@@ -89,6 +92,9 @@ export async function SecurityShowcasePageContent() {
       ),
       userRepository: requestContainer.resolve<UserRepository>(
         AUTH.USER_REPOSITORY,
+      ),
+      requestIdentitySource: requestContainer.resolve<RequestIdentitySource>(
+        AUTH.IDENTITY_SOURCE,
       ),
     };
 

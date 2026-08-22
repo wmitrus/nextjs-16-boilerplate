@@ -27,10 +27,19 @@ describe('Security Context', () => {
   let tenantResolver: TenantResolver;
   let userRepository: UserRepository;
 
+  // Sessions in these tests are "current" unless a test says otherwise: a
+  // far-future issue time can never be older than a revocation marker, so
+  // the SEC-36 gate stays inert and each test exercises the branch it is
+  // actually about.
+  let sessionIssuedAt: number | undefined = Math.floor(Date.now() / 1000) + 60;
+
   const getDependencies = () => ({
     identityProvider,
     tenantResolver,
     userRepository,
+    requestIdentitySource: {
+      get: () => Promise.resolve({ sessionIssuedAt }),
+    },
   });
 
   beforeEach(() => {
@@ -41,6 +50,7 @@ describe('Security Context', () => {
     );
     tenantResolver = container.resolve<TenantResolver>(AUTH.TENANT_RESOLVER);
     userRepository = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
+    sessionIssuedAt = Math.floor(Date.now() / 1000) + 60;
     resetAllInfrastructureMocks();
     vi.clearAllMocks();
 
@@ -262,6 +272,51 @@ describe('Security Context', () => {
 
     expect(context.user).toBeUndefined();
     expect(context.readinessStatus).toBe('TENANT_CONTEXT_REQUIRED');
+  });
+
+  it('returns UNAUTHENTICATED when the session predates the revocation marker (SEC-36)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_revoked',
+    });
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_revoked',
+      onboardingComplete: true,
+      sessionsValidFrom: new Date('2026-08-22T12:00:00.000Z'),
+    });
+    sessionIssuedAt = Math.floor(
+      new Date('2026-08-22T11:00:00.000Z').getTime() / 1000,
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.user).toBeUndefined();
+    expect(context.readinessStatus).toBe('UNAUTHENTICATED');
+    // A revoked session must never reach tenant resolution.
+    expect(tenantResolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('allows a session issued after the revocation marker (SEC-36)', async () => {
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue({
+      id: 'user_fresh',
+    });
+    vi.mocked(userRepository.findById).mockResolvedValue({
+      id: 'user_fresh',
+      onboardingComplete: true,
+      sessionsValidFrom: new Date('2026-08-22T12:00:00.000Z'),
+    });
+    sessionIssuedAt = Math.floor(
+      new Date('2026-08-22T12:30:00.000Z').getTime() / 1000,
+    );
+
+    mockNextHeaders.mockReturnValue(new Headers());
+    mockGetIP.mockResolvedValue('127.0.0.1');
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.readinessStatus).not.toBe('UNAUTHENTICATED');
   });
 
   it('should return user=undefined when tenant membership is required (TenantMembershipRequiredError)', async () => {

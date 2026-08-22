@@ -327,6 +327,28 @@ freshly provisioned user, and completes sign-in using Cloudflare's official
 
 Full writeup: SEC-34 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
+### Session Revocation (SEC-36)
+
+Sessions are stateless JWTs (`strategy: 'jwt'`, 30 days), so there is no
+server-side session record to delete. Revocation is therefore a **refusal
+marker** rather than a deletion: `users.sessions_valid_from` is compared
+against each token's own `iat` claim, and any session minted before it is
+rejected.
+
+A completed password reset raises the marker in the same transaction as the
+token claim and the password write, so recovering a compromised account
+evicts the attacker's session immediately instead of leaving it valid for up
+to 30 more days.
+
+The comparison lives in `src/security/core/session-revocation.ts` and is
+enforced by **both** central evaluators (`evaluateNodeProvisioningAccess`
+and `createSecurityContext`), immediately after the SEC-33 deactivation
+gate. A revoked session reports `UNAUTHENTICATED` — "sign in again" is the
+correct remedy and every consumer already routes that to the sign-in page.
+Users who have never reset carry `NULL` and are never age-checked at all.
+
+Full writeup: SEC-36 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
 ---
 
 ## Known Constraints

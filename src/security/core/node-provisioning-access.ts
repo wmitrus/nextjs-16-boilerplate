@@ -13,6 +13,8 @@ import {
 } from '@/core/contracts/tenancy';
 import type { User, UserRepository } from '@/core/contracts/user';
 
+import { isSessionRevoked } from './session-revocation';
+
 export type ProvisioningTenancyMode = 'single' | 'personal' | 'org';
 
 export type NodeProvisioningAccessStatus =
@@ -40,6 +42,7 @@ export type UsersGuardDecisionReason =
   | 'provisioning_required'
   | 'missing_user'
   | 'account_disabled'
+  | 'session_revoked'
   | 'missing_tenant'
   | 'missing_membership'
   | 'missing_onboarding_state'
@@ -200,6 +203,38 @@ export async function evaluateNodeProvisioningAccess(
         onboardingComplete: user.onboardingComplete,
         provisioningRequired: false,
         reason: 'account_disabled',
+      },
+    };
+  }
+
+  // Session-revocation gate. Ordered deliberately AFTER the deactivation
+  // gate: both invalidate a still-cryptographically-valid session, but
+  // deactivation is the stronger, more permanent statement, and SEC-33's
+  // rule that it must never be masked by a lesser branch applies to this one
+  // too. A disabled account must hear "your account is disabled", not
+  // "sign in again". A revoked session is
+  // reported as UNAUTHENTICATED rather than as a new status -- the correct
+  // remedy really is "sign in again", and every existing consumer already
+  // routes that to the sign-in page, so no consumer needed changing. The
+  // distinguishing detail lives in `reason` for the logs. See SEC-36.
+  if (
+    isSessionRevoked(user.sessionsValidFrom, deps.rawIdentity?.sessionIssuedAt)
+  ) {
+    return {
+      status: 'UNAUTHENTICATED',
+      code: 'UNAUTHENTICATED',
+      message: 'Your session is no longer valid. Please sign in again.',
+      diagnostics: {
+        externalUserId,
+        externalOrgId,
+        tenancyMode: deps.tenancyMode,
+        userRecordExists: true,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: null,
+        onboardingComplete: user.onboardingComplete,
+        provisioningRequired: false,
+        reason: 'session_revoked',
       },
     };
   }

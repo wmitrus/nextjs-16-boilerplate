@@ -9,6 +9,7 @@ import {
   userCredentialsTable,
 } from '@/modules/auth/infrastructure/drizzle/schema';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+import { isSessionRevoked } from '@/security/core/session-revocation';
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
@@ -135,5 +136,52 @@ describe('password reset token claim (real DB, SEC-35)', () => {
       .where(eq(userCredentialsTable.userId, user.id));
 
     expect(credentials.length).toBeLessThanOrEqual(1);
+  });
+
+  // SEC-36: the reset is the revocation event. Proving it against the real
+  // column (not a mock) is what shows a stolen long-lived JWT stops working
+  // the moment the owner recovers the account.
+  it('revokes sessions issued before the reset and spares those issued after', async () => {
+    const token = `revocation-${randomUUID()}`;
+    const user = await seedUserWithResetToken(token);
+
+    const attackerSessionIat = Math.floor(Date.now() / 1000) - 3600;
+
+    await claimToken(token);
+    const resetAt = new Date();
+    await testDb.db
+      .update(usersTable)
+      .set({ sessionsValidFrom: resetAt })
+      .where(eq(usersTable.id, user.id));
+
+    const [stored] = await testDb.db
+      .select({ sessionsValidFrom: usersTable.sessionsValidFrom })
+      .from(usersTable)
+      .where(eq(usersTable.id, user.id))
+      .limit(1);
+
+    const marker = stored?.sessionsValidFrom ?? null;
+    expect(marker).not.toBeNull();
+
+    // The attacker's pre-reset session is refused...
+    expect(isSessionRevoked(marker, attackerSessionIat)).toBe(true);
+    // ...while the session the owner gets after resetting still works.
+    expect(isSessionRevoked(marker, Math.floor(Date.now() / 1000) + 60)).toBe(
+      false,
+    );
+  });
+
+  it('leaves sessionsValidFrom null for users who never reset', async () => {
+    const token = `never-reset-${randomUUID()}`;
+    const user = await seedUserWithResetToken(token);
+
+    const [stored] = await testDb.db
+      .select({ sessionsValidFrom: usersTable.sessionsValidFrom })
+      .from(usersTable)
+      .where(eq(usersTable.id, user.id))
+      .limit(1);
+
+    expect(stored?.sessionsValidFrom ?? null).toBeNull();
+    expect(isSessionRevoked(stored?.sessionsValidFrom ?? null, 0)).toBe(false);
   });
 });

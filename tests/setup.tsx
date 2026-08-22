@@ -45,6 +45,14 @@ vi.mock('../src/core/runtime/bootstrap', async () => {
   container.register(AUTH.IDENTITY_PROVIDER, {
     getCurrentIdentity: vi.fn().mockResolvedValue(null),
   });
+  // Registered alongside IDENTITY_PROVIDER because the real container
+  // (`createAuthModule` / the edge module) always registers the two
+  // together. A harness that omits it does not fail honestly -- it makes
+  // any consumer of AUTH.IDENTITY_SOURCE look broken in tests while being
+  // fine in production. See SEC-36.
+  container.register(AUTH.IDENTITY_SOURCE, {
+    get: vi.fn().mockResolvedValue({}),
+  });
   container.register(AUTH.TENANT_RESOLVER, {
     resolve: vi.fn().mockResolvedValue({
       tenantId: 'test-tenant',
@@ -79,6 +87,14 @@ vi.mock('../src/core/runtime/edge', async () => {
   const container = new Container();
   container.register(AUTH.IDENTITY_PROVIDER, {
     getCurrentIdentity: vi.fn().mockResolvedValue(null),
+  });
+  // Registered alongside IDENTITY_PROVIDER because the real container
+  // (`createAuthModule` / the edge module) always registers the two
+  // together. A harness that omits it does not fail honestly -- it makes
+  // any consumer of AUTH.IDENTITY_SOURCE look broken in tests while being
+  // fine in production. See SEC-36.
+  container.register(AUTH.IDENTITY_SOURCE, {
+    get: vi.fn().mockResolvedValue({}),
   });
   container.register(AUTH.TENANT_RESOLVER, {
     resolve: vi.fn().mockResolvedValue({

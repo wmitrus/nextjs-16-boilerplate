@@ -32,6 +32,12 @@ function createDeps() {
     },
     tenancyMode: 'single' as const,
     tenantExistsProbe: vi.fn().mockResolvedValue(true),
+    // Fresh by default: a far-future issue time can never predate a
+    // revocation marker, so the SEC-36 gate stays inert unless a test
+    // deliberately sets one up.
+    rawIdentity: {
+      sessionIssuedAt: Math.floor(Date.now() / 1000) + 60,
+    } as { sessionIssuedAt?: number },
   };
 }
 
@@ -117,6 +123,87 @@ describe('evaluateNodeProvisioningAccess', () => {
       onboardingComplete: false,
       deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('FORBIDDEN');
+    if (result.status !== 'ALLOWED') {
+      expect(result.code).toBe('ACCOUNT_DISABLED');
+    }
+  });
+
+  it('returns UNAUTHENTICATED when the session predates the revocation marker (SEC-36)', async () => {
+    const deps = createDeps();
+    deps.userRepository.findById.mockResolvedValue({
+      id: 'u-1',
+      onboardingComplete: true,
+      sessionsValidFrom: new Date('2026-08-22T12:00:00.000Z'),
+    });
+    deps.rawIdentity = {
+      sessionIssuedAt: Math.floor(
+        new Date('2026-08-22T11:00:00.000Z').getTime() / 1000,
+      ),
+    };
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('UNAUTHENTICATED');
+    if (result.status !== 'ALLOWED') {
+      expect(result.code).toBe('UNAUTHENTICATED');
+      expect(result.diagnostics.reason).toBe('session_revoked');
+    }
+    // A revoked session must never reach tenant resolution.
+    expect(deps.tenantResolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('allows a session issued after the revocation marker (SEC-36)', async () => {
+    const deps = createDeps();
+    deps.userRepository.findById.mockResolvedValue({
+      id: 'u-1',
+      onboardingComplete: true,
+      sessionsValidFrom: new Date('2026-08-22T12:00:00.000Z'),
+    });
+    deps.rawIdentity = {
+      sessionIssuedAt: Math.floor(
+        new Date('2026-08-22T12:30:00.000Z').getTime() / 1000,
+      ),
+    };
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('ALLOWED');
+  });
+
+  // Fail closed: the marker means this user's sessions get age-checked, and a
+  // session with no issue time cannot be shown to be current.
+  it('returns UNAUTHENTICATED when a marker exists but the session has no issue time (SEC-36)', async () => {
+    const deps = createDeps();
+    deps.userRepository.findById.mockResolvedValue({
+      id: 'u-1',
+      onboardingComplete: true,
+      sessionsValidFrom: new Date('2026-08-22T12:00:00.000Z'),
+    });
+    deps.rawIdentity = {};
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('UNAUTHENTICATED');
+  });
+
+  // Deactivation is the stronger signal and must not be masked by revocation.
+  it('still reports ACCOUNT_DISABLED when the user is both deactivated and revoked (SEC-36)', async () => {
+    const deps = createDeps();
+    deps.userRepository.findById.mockResolvedValue({
+      id: 'u-1',
+      onboardingComplete: true,
+      deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      sessionsValidFrom: new Date('2026-08-22T12:00:00.000Z'),
+    });
+    deps.rawIdentity = {
+      sessionIssuedAt: Math.floor(
+        new Date('2026-08-22T11:00:00.000Z').getTime() / 1000,
+      ),
+    };
 
     const result = await evaluateNodeProvisioningAccess(deps);
 

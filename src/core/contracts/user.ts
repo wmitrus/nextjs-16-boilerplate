@@ -11,6 +11,12 @@ export interface User {
   readonly locale?: string;
   readonly timezone?: string;
   readonly deactivatedAt?: Date;
+  /**
+   * Sessions issued before this instant are rejected. Set by account-security
+   * events (today: a completed password reset). Undefined/null means nothing
+   * has ever been revoked for this user. See SEC-36.
+   */
+  readonly sessionsValidFrom?: Date | null;
   readonly createdAt?: Date;
 }
 

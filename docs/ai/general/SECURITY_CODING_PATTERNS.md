@@ -41,6 +41,7 @@ Update it after every security review group.
 | SEC-33 | Authorization / lifecycle | Central access evaluator(s) never check `user.deactivatedAt`                                                                           | Real risk → fixed                                                                                                                            | `node-provisioning-access.ts`, `security-context.ts` |
 | SEC-34 | Abuse prevention          | AuthJS Credentials login had no dedicated throttling/lockout beyond a generic reuse of `API_RATE_LIMIT_*`                              | Real risk → fixed                                                                                                                            | Credentials `authorize()`, `/api/auth/[...nextauth]` |
 | SEC-35 | Race conditions           | Password reset token validated and marked used in two statements with bcrypt between them, so concurrent requests could both redeem it | Real risk → fixed                                                                                                                            | `/api/auth/reset-password`                           |
+| SEC-36 | Session lifecycle         | Stateless 30-day JWTs had no revocation path, so a password reset left a stolen session working until it expired                       | Real risk → fixed                                                                                                                            | `users.sessions_valid_from`, both central evaluators |
 
 ---
 
@@ -3372,3 +3373,115 @@ flow to this repository, mirror
 `DrizzleInvitationRepository.markAccepted` — both were already correct when
 this defect was found in password reset, which is exactly why "we have this
 pattern elsewhere" is no substitute for checking the flow in front of you.
+
+## SEC-36 — A Stateless JWT Needs A Server-Side Revocation Marker, Not Hope
+
+**ID**: SEC-36
+**Category**: Session lifecycle / account-takeover recovery
+**Classification**: Real risk → fixed, same day (fifth case of the multi-case security-audit remediation series)
+**Affected contexts**: any deployment using `session.strategy: 'jwt'` with no database session store — i.e. this repository's entire AuthJS path
+
+### Risk
+
+`auth.config.ts` sets a stateless 30-day JWT session:
+
+```typescript
+session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 }
+```
+
+There is no server-side session record, so there was **nothing to delete**
+and no mechanism by which any event could stop an already-issued token from
+being honoured. A completed password reset changed the stored hash and
+nothing else. The account-takeover recovery story therefore did not work:
+
+```
+attacker steals a session cookie
+        ↓
+owner notices, resets their password
+        ↓
+attacker's JWT keeps working for up to 30 more days
+```
+
+The owner performs the one action every product tells them to perform, and
+it does not evict the attacker. This is precisely the case OWASP's
+Forgot-Password guidance is aimed at.
+
+Note the interaction with SEC-33: deactivation was already enforced per
+request against the database, so _disabling_ an account did evict a stale
+session. Password reset had no equivalent, which is exactly the kind of gap
+that survives review — one lifecycle event was covered, so the class looked
+handled.
+
+### Correct Pattern
+
+Add a revocation marker to the user row and refuse any session minted before
+it. This repository uses a **timestamp** (`users.sessions_valid_from`)
+compared against the JWT's own `iat` claim, rather than a version counter
+plus a new claim:
+
+```typescript
+export function isSessionRevoked(
+  sessionsValidFrom: Date | null | undefined,
+  sessionIssuedAtSeconds: number | undefined,
+): boolean {
+  if (!sessionsValidFrom) return false; // nothing ever revoked
+  if (typeof sessionIssuedAtSeconds !== 'number') return true; // fail closed
+  return (
+    sessionIssuedAtSeconds < Math.floor(sessionsValidFrom.getTime() / 1000)
+  );
+}
+```
+
+Then, in the same transaction that completes the reset:
+
+```typescript
+await tx
+  .update(usersTable)
+  .set({ sessionsValidFrom: now })
+  .where(eq(usersTable.id, user.id));
+```
+
+Four decisions worth keeping:
+
+- **Timestamp over version counter.** `iat` is already in every JWT, so the
+  check works on tokens issued _before_ the feature shipped. A `sv` counter
+  would need a new claim, forcing a choice between logging everyone out on
+  deploy or leaving a gap until old tokens expire.
+- **Enforce in the central evaluators, not in the auth adapter.** Both
+  `evaluateNodeProvisioningAccess` and `createSecurityContext` already fetch
+  the user row every request for the SEC-33 deactivation check, so the
+  comparison costs nothing extra — and putting it anywhere else would mean
+  one of the two evaluators still honouring a revoked session.
+- **Report it as `UNAUTHENTICATED`, not a new status.** "Sign in again" is
+  the true remedy, and every consumer already routes that status to the
+  sign-in page — so zero consumers needed changing. The distinguishing
+  detail lives in the diagnostics (`reason: 'session_revoked'`).
+- **Order it AFTER the deactivation gate.** Both invalidate a valid-looking
+  session, but deactivation is the stronger, more permanent statement and
+  SEC-33's no-masking rule applies here too: a disabled account must hear
+  "your account is disabled", not "sign in again".
+
+### Required Validation
+
+- Direct tests of the comparison itself: before the marker → revoked; after
+  → allowed; **same second → allowed** (`iat` is whole seconds, and the
+  benign direction is the one that does not log out the person who just
+  reset their password); no marker → never revoked; **marker present but no
+  issue time → revoked** (fail closed).
+- The same revocation test in **both** evaluators. One is not evidence for
+  the other — that is the whole lesson of SEC-33.
+- An ordering test proving a user who is both deactivated and revoked still
+  reports `ACCOUNT_DISABLED`.
+- A real-DB test that a completed reset writes the marker, that a pre-reset
+  session is refused against the stored value, and that a post-reset session
+  is not.
+
+### Rule for Agents
+
+**DO NOT** assume changing a credential invalidates anything else. With
+stateless sessions it invalidates nothing — the old token is still
+signed, still unexpired, still accepted. Any event that means "this
+account's existing sessions should stop working" (password reset, forced
+logout, compromise recovery) must raise a server-side marker that the
+request path actually reads. And when you add such an event, add its check
+to **every** central evaluator, not the first one you find.

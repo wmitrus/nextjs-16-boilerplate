@@ -236,6 +236,11 @@ export const authOptions: AuthOptions = {
         session.user.id = (token.id as string | undefined) ?? '';
         session.user.emailVerified =
           (token.emailVerified as boolean | undefined) ?? false;
+        // `iat` is stamped by NextAuth itself, so it is trustworthy in a way
+        // a claim we set here would not be. Surfacing it is what makes a
+        // stateless 30-day JWT revocable at all -- see SEC-36.
+        session.user.sessionIssuedAt =
+          typeof token.iat === 'number' ? token.iat : undefined;
       }
       return session;
     },

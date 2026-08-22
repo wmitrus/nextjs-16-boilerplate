@@ -19,6 +19,7 @@ export class DrizzleUserRepository implements UserRepository {
         locale: usersTable.locale,
         timezone: usersTable.timezone,
         deactivatedAt: usersTable.deactivatedAt,
+        sessionsValidFrom: usersTable.sessionsValidFrom,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -38,6 +39,7 @@ export class DrizzleUserRepository implements UserRepository {
       locale: row.locale ?? undefined,
       timezone: row.timezone ?? undefined,
       deactivatedAt: row.deactivatedAt ?? undefined,
+      sessionsValidFrom: row.sessionsValidFrom ?? null,
       createdAt: row.createdAt,
     };
   }
@@ -114,6 +116,7 @@ export class DrizzleUserRepository implements UserRepository {
           locale: usersTable.locale,
           timezone: usersTable.timezone,
           deactivatedAt: usersTable.deactivatedAt,
+          sessionsValidFrom: usersTable.sessionsValidFrom,
           createdAt: usersTable.createdAt,
         })
         .from(usersTable)
@@ -135,6 +138,7 @@ export class DrizzleUserRepository implements UserRepository {
         locale: row.locale ?? undefined,
         timezone: row.timezone ?? undefined,
         deactivatedAt: row.deactivatedAt ?? undefined,
+        sessionsValidFrom: row.sessionsValidFrom ?? null,
         createdAt: row.createdAt,
       })),
       total,

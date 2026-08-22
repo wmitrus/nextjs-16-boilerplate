@@ -229,3 +229,21 @@ closes, and it has a real UX edge (a user who requests two links in quick
 succession and then clicks the older one gets a rejection that reads as a
 bug). Worth doing deliberately, with the messaging thought through, rather
 than bundled into a concurrency fix.
+
+## PE-08 — User-Facing "Sign Out Everywhere" Control
+
+- **Source**: `.copilot/tasks/2026-08-22-session-revocation-on-password-reset/` (Case 5)
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: Expose a button in account settings that raises
+`users.sessions_valid_from` to NOW(), invalidating every session the user
+holds except the one performing the action. SEC-36 built the whole
+mechanism; this is a route handler, a button, and the messaging around it.
+OWASP recommends offering it alongside automatic revocation on password
+reset.
+
+**Why deferred**: it is a product feature with real UX questions (does the
+current session survive? what does the confirmation say? is there an
+audit-log entry the user can see?), not part of closing the reported
+vulnerability. Worth doing deliberately rather than bundled in.

@@ -120,6 +120,13 @@
       "when": 1787250778482,
       "tag": "0016_wise_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787432465948,
+      "tag": "0017_shiny_starbolt",
+      "breakpoints": true
     }
   ]
 }

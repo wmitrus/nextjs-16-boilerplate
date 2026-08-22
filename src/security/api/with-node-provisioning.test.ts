@@ -117,6 +117,31 @@ describe('withNodeProvisioning', () => {
     expect(body.code).toBe('DEFAULT_TENANT_NOT_FOUND');
   });
 
+  it('returns 403 with ACCOUNT_DISABLED code when the account has been deactivated (SEC-33)', async () => {
+    const handler = withNodeProvisioning(
+      async () => NextResponse.json({ ok: true }),
+      {
+        resolveAccess: async () => ({
+          status: 'FORBIDDEN',
+          code: 'ACCOUNT_DISABLED',
+          message: 'This account has been deactivated.',
+          diagnostics: {
+            ...diagnostics,
+            userRecordExists: true,
+            onboardingStateExists: true,
+            onboardingComplete: true,
+            reason: 'account_disabled',
+          },
+        }),
+      },
+    );
+
+    const response = await handler(createRequest('/api/users'), context);
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.code).toBe('ACCOUNT_DISABLED');
+  });
+
   it('returns 403 when tenant membership is required', async () => {
     const handler = withNodeProvisioning(
       async () => NextResponse.json({ ok: true }),

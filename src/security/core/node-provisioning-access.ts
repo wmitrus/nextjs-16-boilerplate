@@ -28,6 +28,7 @@ export type NodeProvisioningDenyCode =
   | 'UNAUTHENTICATED'
   | 'BOOTSTRAP_REQUIRED'
   | 'ONBOARDING_INCOMPLETE'
+  | 'ACCOUNT_DISABLED'
   | 'TENANT_CONTEXT_REQUIRED'
   | 'DEFAULT_TENANT_NOT_FOUND'
   | 'TENANT_MEMBERSHIP_REQUIRED'
@@ -38,6 +39,7 @@ export type UsersGuardDecisionReason =
   | 'unauthenticated'
   | 'provisioning_required'
   | 'missing_user'
+  | 'account_disabled'
   | 'missing_tenant'
   | 'missing_membership'
   | 'missing_onboarding_state'
@@ -166,6 +168,38 @@ export async function evaluateNodeProvisioningAccess(
         onboardingComplete: null,
         provisioningRequired: true,
         reason: 'missing_user',
+      },
+    };
+  }
+
+  // Lifecycle authorization gate: a deactivated user must be denied access
+  // on every subsequent request, immediately -- checked here, before
+  // onboarding/tenant/membership, so a deactivated-but-incomplete-onboarding
+  // account (or any other later branch) can never reach a more permissive
+  // status. This is the sole enforcement point for `deactivatedAt`: it is
+  // re-evaluated from the database on every call (there is no caching of
+  // this outcome across requests), so it applies uniformly regardless of
+  // auth provider (Clerk or AuthJS) and regardless of whether the caller's
+  // session/JWT itself is still cryptographically valid -- the stale
+  // session simply stops being useful the moment this check runs. See
+  // SEC-33 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+  if (user.deactivatedAt) {
+    return {
+      status: 'FORBIDDEN',
+      code: 'ACCOUNT_DISABLED',
+      message: 'This account has been deactivated.',
+      diagnostics: {
+        externalUserId,
+        externalOrgId,
+        internalIdentityId: identity.id,
+        tenancyMode: deps.tenancyMode,
+        userRecordExists: true,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: true,
+        onboardingComplete: user.onboardingComplete,
+        provisioningRequired: false,
+        reason: 'account_disabled',
       },
     };
   }

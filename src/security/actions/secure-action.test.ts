@@ -203,6 +203,7 @@ describe('Secure Action Wrapper', () => {
   it.each([
     ['BOOTSTRAP_REQUIRED', 'bootstrap_required'],
     ['ONBOARDING_REQUIRED', 'onboarding_required'],
+    ['ACCOUNT_DISABLED', 'account_disabled'],
     ['TENANT_CONTEXT_REQUIRED', 'tenant_context_required'],
     ['TENANT_MEMBERSHIP_REQUIRED', 'tenant_membership_required'],
   ] as const)(

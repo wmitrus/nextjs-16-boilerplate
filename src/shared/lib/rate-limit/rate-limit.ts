@@ -11,7 +11,14 @@ const shouldUseUpstashRateLimit =
   env.NODE_ENV === 'production' &&
   Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
 
-const redis = shouldUseUpstashRateLimit
+/**
+ * Shared Redis client, reused by any module that needs raw Redis commands
+ * (not just the sliding-window `Ratelimit` abstraction below) -- e.g.
+ * `login-abuse-control.ts`'s failure counters. `undefined` outside
+ * production or when Upstash credentials aren't configured; callers must
+ * fall back to an in-memory equivalent in that case, same as `apiRateLimit`.
+ */
+export const redis = shouldUseUpstashRateLimit
   ? new Redis({
       url: env.UPSTASH_REDIS_REST_URL,
       token: env.UPSTASH_REDIS_REST_TOKEN,

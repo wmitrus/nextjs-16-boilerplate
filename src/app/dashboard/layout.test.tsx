@@ -101,6 +101,25 @@ describe('DashboardLayoutGuard', () => {
     );
   });
 
+  it('redirects a deactivated user (FORBIDDEN/ACCOUNT_DISABLED) away from the dashboard (SEC-33)', async () => {
+    resolveNodeProvisioningAccessMock.mockResolvedValue({
+      status: 'FORBIDDEN',
+      code: 'ACCOUNT_DISABLED',
+      message: 'This account has been deactivated.',
+      diagnostics: {
+        ...diagnostics,
+        userRecordExists: true,
+        onboardingStateExists: true,
+        onboardingComplete: true,
+        reason: 'account_disabled',
+      },
+    });
+
+    await expect(
+      DashboardLayoutGuard({ children: <div>content</div> }),
+    ).rejects.toThrow('REDIRECT:/');
+  });
+
   it('renders children for allowed access', async () => {
     resolveNodeProvisioningAccessMock.mockResolvedValue({
       status: 'ALLOWED',

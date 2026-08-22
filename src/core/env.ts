@@ -213,6 +213,40 @@ export const env = createEnv({
     FEATURE_FLAGS_STATIC: z.string().optional(),
     GROWTHBOOK_CLIENT_KEY: z.string().optional(),
     GROWTHBOOK_API_HOST: z.url().optional(),
+    // Login abuse control (SEC-34) -- dedicated IP-bucket rate limit for the
+    // AuthJS Credentials callback, separate from the generic API_RATE_LIMIT_*
+    // used everywhere else. See docs/ai/general/SECURITY_CODING_PATTERNS.md.
+    LOGIN_RATE_LIMIT_IP_REQUESTS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(20),
+    LOGIN_RATE_LIMIT_IP_WINDOW: z.string().default('15 m'),
+    // Account-bucket: consecutive failed attempts against one normalized
+    // email, independent of the IP bucket above. Crossing each threshold
+    // escalates the response (require CAPTCHA, add a progressive delay,
+    // then a temporary lock) rather than a single flat cutoff.
+    LOGIN_ABUSE_WINDOW: z.string().default('30 m'),
+    LOGIN_ABUSE_CAPTCHA_THRESHOLD: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3),
+    LOGIN_ABUSE_DELAY_THRESHOLD: z.coerce.number().int().positive().default(8),
+    LOGIN_ABUSE_LOCK_THRESHOLD: z.coerce.number().int().positive().default(15),
+    // Cloudflare Turnstile -- optional. When either key is unset, the
+    // CAPTCHA gate is skipped (progressive delay/lock still apply); see
+    // `isTurnstileConfigured()` in `src/shared/lib/captcha/turnstile.ts`.
+    TURNSTILE_SECRET_KEY: z.string().optional(),
+    // E2E_ENABLED bypasses the account-bucket abuse control entirely (see
+    // auth.ts) so unrelated specs sharing a stable test account never get
+    // captcha-gated/locked by another spec's deliberate wrong-password
+    // test. The one spec that exists specifically to exercise that control
+    // (e2e/authjs-login-abuse-control.spec.ts) sets this flag to force it
+    // back on for its own run only -- never set outside that scenario.
+    E2E_LOGIN_ABUSE_CONTROL_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -267,6 +301,9 @@ export const env = createEnv({
     NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE: z
       .enum(['cache-compatible', 'nonce-dynamic'])
       .optional(),
+    // Cloudflare Turnstile site key (public by design -- pairs with the
+    // server-only TURNSTILE_SECRET_KEY). See SEC-34.
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1).optional(),
     // Add public variables here
   },
 
@@ -365,6 +402,16 @@ export const env = createEnv({
     FEATURE_FLAGS_STATIC: process.env.FEATURE_FLAGS_STATIC,
     GROWTHBOOK_CLIENT_KEY: process.env.GROWTHBOOK_CLIENT_KEY,
     GROWTHBOOK_API_HOST: process.env.GROWTHBOOK_API_HOST,
+    LOGIN_RATE_LIMIT_IP_REQUESTS: process.env.LOGIN_RATE_LIMIT_IP_REQUESTS,
+    LOGIN_RATE_LIMIT_IP_WINDOW: process.env.LOGIN_RATE_LIMIT_IP_WINDOW,
+    LOGIN_ABUSE_WINDOW: process.env.LOGIN_ABUSE_WINDOW,
+    LOGIN_ABUSE_CAPTCHA_THRESHOLD: process.env.LOGIN_ABUSE_CAPTCHA_THRESHOLD,
+    LOGIN_ABUSE_DELAY_THRESHOLD: process.env.LOGIN_ABUSE_DELAY_THRESHOLD,
+    LOGIN_ABUSE_LOCK_THRESHOLD: process.env.LOGIN_ABUSE_LOCK_THRESHOLD,
+    TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+    E2E_LOGIN_ABUSE_CONTROL_ENABLED:
+      process.env.E2E_LOGIN_ABUSE_CONTROL_ENABLED,
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:

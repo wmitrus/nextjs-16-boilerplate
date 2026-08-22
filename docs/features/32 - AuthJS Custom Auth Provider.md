@@ -249,6 +249,13 @@ src/modules/auth/
 
 src/app/auth/                      # AuthJS-specific UI pages
 src/app/api/auth/                  # AuthJS API route handlers
+
+src/shared/lib/rate-limit/
+  login-abuse-control.ts           # Account-bucket progressive failure counter (SEC-34)
+src/shared/lib/captcha/
+  turnstile.ts                     # Server-side Cloudflare Turnstile verification
+src/shared/components/captcha/
+  TurnstileWidget.tsx               # Client widget (Managed mode)
 ```
 
 ---
@@ -262,6 +269,63 @@ src/app/api/auth/                  # AuthJS API route handlers
 - Invitation tokens: single-use, configurable expiry
 - Registration mode enforced in `src/proxy.ts` (middleware-equivalent)
 - `INTERNAL_API_KEY` guards admin endpoints via `withNodeProvisioning`
+
+### Login Abuse Control (SEC-34)
+
+`/api/auth/callback/credentials` (Credentials `authorize()`) is protected by
+two **independent** rate/abuse buckets — rotating one dimension (IP or
+account) doesn't bypass the other:
+
+1. **IP bucket** — a dedicated sliding-window rate limit
+   (`LOGIN_RATE_LIMIT_IP_REQUESTS` / `LOGIN_RATE_LIMIT_IP_WINDOW`, default
+   20 requests / 15 min), checked in the route handler
+   (`src/app/api/auth/[...nextauth]/route.ts`) before NextAuth even runs.
+   Deliberately separate from the generic `API_RATE_LIMIT_*` used by every
+   other API route — a login endpoint needs a much tighter limit than
+   general API traffic.
+2. **Account bucket** — a progressive failure counter, keyed by a
+   SHA-256 hash of the normalized email (never the raw email), tracked in
+   `src/shared/lib/rate-limit/login-abuse-control.ts` and enforced inside
+   `authorize()` itself (`src/modules/auth/infrastructure/authjs/auth.ts`),
+   **before** any DB query or bcrypt comparison for a locked account.
+   Crossing each threshold escalates the response instead of one flat
+   cutoff:
+   - `LOGIN_ABUSE_CAPTCHA_THRESHOLD` (default 3) — requires a valid
+     Cloudflare Turnstile token on the next attempt.
+   - `LOGIN_ABUSE_DELAY_THRESHOLD` (default 8) — adds an increasing
+     artificial delay (2s, 4s, 8s, capped at 10s) before processing the
+     next attempt.
+   - `LOGIN_ABUSE_LOCK_THRESHOLD` (default 15) — temporarily locks the
+     account for the remainder of `LOGIN_ABUSE_WINDOW` (default 30 min).
+   - A successful login resets the counter. A wrong-password/unknown-email
+     attempt increments it; a correct-password-but-unverified-email attempt
+     does neither (it's not evidence of an attack).
+
+**CAPTCHA**: [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/),
+Managed mode — Cloudflare's own risk engine decides whether the visitor
+sees nothing, a checkbox, or an interactive puzzle; this repo only decides
+_when_ to require a token (the account-bucket threshold above), never _how
+hard_ the challenge is. Configure `TURNSTILE_SECRET_KEY` (server) and
+`NEXT_PUBLIC_TURNSTILE_SITE_KEY` (client) to enable it — when either is
+unset, the CAPTCHA gate is skipped entirely (progressive delay/lock still
+apply); the client (`src/app/auth/signin/sign-in-client.tsx`) only renders
+the widget after the server actually returns `CaptchaRequired`, never
+speculatively. `challenges.cloudflare.com` is already CSP-allowlisted
+(`CLOUDFLARE_DOMAINS` in `src/security/middleware/with-headers.ts`) — no
+CSP changes are needed to use this.
+
+**E2E bypass**: both buckets are skipped entirely when `E2E_ENABLED=true`
+— stable AuthJS test fixtures are reused across many specs, and this
+prevents one spec's deliberate wrong-password test from
+captcha-gating/locking an account that a different, unrelated spec needs a
+moment later. `e2e/authjs-login-abuse-control.spec.ts`
+(`pnpm e2e:authjs:login-abuse`) is the one spec that needs the account
+bucket active — it sets `E2E_LOGIN_ABUSE_CONTROL_ENABLED=true` to override
+the bypass for its own run, drives two wrong-password attempts against a
+freshly provisioned user, and completes sign-in using Cloudflare's official
+"always passes" Turnstile test keypair.
+
+Full writeup: SEC-34 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
 ---
 

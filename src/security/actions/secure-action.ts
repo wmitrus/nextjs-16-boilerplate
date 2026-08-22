@@ -75,6 +75,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
     | { status: 'unauthorized'; error: string }
     | { status: 'bootstrap_required' }
     | { status: 'onboarding_required' }
+    | { status: 'account_disabled' }
     | { status: 'tenant_context_required' }
     | { status: 'tenant_membership_required' }
     | { status: 'error'; error: string }
@@ -108,6 +109,8 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
             return 'bootstrap_required' as const;
           case 'ONBOARDING_REQUIRED':
             return 'onboarding_required' as const;
+          case 'ACCOUNT_DISABLED':
+            return 'account_disabled' as const;
           case 'TENANT_CONTEXT_REQUIRED':
             return 'tenant_context_required' as const;
           case 'TENANT_MEMBERSHIP_REQUIRED':

@@ -846,6 +846,30 @@ Important decisions should capture:
 
 ---
 
+## Possible Enhancements Backlog — Check Every Task
+
+**`docs/ai/general/POSSIBLE_ENHANCEMENTS.md`** is the single holding pen for
+valuable-but-deferred ideas that surface during work — most actively right
+now during the ongoing multi-case security-audit remediation series, but the
+file is not scoped to that series alone.
+
+When a task surfaces an improvement worth doing but not required to close
+that task's own scope (a stronger test, a follow-up hardening step, a
+speculative refactor, anything judged out of blast radius for the task at
+hand), add one entry there instead of only mentioning it in that task's own
+`plan.md` or specialist summaries. If the same idea would otherwise be
+written in both places, keep the full rationale in
+`POSSIBLE_ENHANCEMENTS.md` only and have the task artifact reference it by
+its `PE-XX` ID — never duplicate the same information in two places.
+
+Entries are not authorized work and must never be implemented on an agent's
+own initiative. They sit there until the user reviews the accumulated list
+and decides what to actually pick up, reject, or fold into real task scope.
+Full rules (entry format, ID assignment, triage/status update convention)
+are in the file itself.
+
+---
+
 ## Change Management
 
 Default to incremental, reviewable, low-blast-radius change sets.

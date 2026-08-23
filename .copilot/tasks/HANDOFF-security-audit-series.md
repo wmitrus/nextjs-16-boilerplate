@@ -1,6 +1,41 @@
 # Handoff — Security Audit Remediation Series
 
-**Read this first, then `AGENTS.md`.** Branch: `claude/security-audit-multi-tenant-idor-e1y3yr` (PR #74). Owner: `wmitrus`, pisze po polsku.
+**Ten plik jest pamięcią serii. Przeczytaj go w całości, potem `AGENTS.md`.**
+Właściciel repo: `wmitrus`, pisze po polsku — odpowiadaj po polsku.
+
+## Start nowej sesji — przeczytaj najpierw
+
+To jest **kontynuacja**, nie nowy projekt. Rozmowy, w której powstała faza 1,
+już nie ma i **nie jest potrzebna** — cały kontekst jest w repo. Nie proś
+użytkownika o streszczenie tego, co było.
+
+| Co                    | Wartość                                                                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Faza 1                | PR #74, **zmergowany**, gałąź `claude/security-audit-multi-tenant-idor-e1y3yr`                                                                                                          |
+| Zamknięte             | 16 case'ów. Ostatni wzorzec w katalogu: **SEC-46** (44 wpisy łącznie; numery SEC-XX tej serii nie są ciągłe — część case'ów rozszerzała istniejące wzorce)                              |
+| **Następny case**     | **Case 17**, wzorzec **SEC-47**                                                                                                                                                         |
+| Numeracja użytkownika | liczy findingi po swojemu i **jego numery nie pokrywają się z moimi**; jego ostatni to `15.` = Case 16 = SEC-46. Nie wyprowadzaj wzoru — weź **ostatni `## SEC-` z katalogu i dodaj 1** |
+| Faza 2                | **NOWA gałąź, NOWY PR.** Nie doklejaj do #74 — jest zmergowany i bardzo duży                                                                                                            |
+| Zostało               | użytkownik mówi, że jest **jeszcze drugie tyle znalezisk**                                                                                                                              |
+| Backlog               | `PE-01 … PE-24`, **żaden nietriażowany**                                                                                                                                                |
+
+**Pierwszy commit fazy 2** to nie case użytkownika, tylko **PE-24** —
+zaakceptowany i świadomie odłożony właśnie do osobnego małego PR-a:
+`varchar(128)` dla `audit_events.correlation_id`, a dla `request_id`
+**najpierw audyt istniejących wierszy** (przed SEC-46 klient mógł podać własne
+`x-request-id`, więc `text → uuid` może paść na danych historycznych).
+Potwierdź to z użytkownikiem, zanim zaczniesz — nietriażowane ≠ „rób".
+
+Gdzie leży dowód dla każdego zamkniętego case'a:
+
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md` — SEC-01 … SEC-46, każdy z
+  ryzykiem, regułą, egzekwowaniem i powiązaniami. **To jest źródło prawdy o
+  tym, czego już nie wolno powtórzyć.**
+- `.copilot/tasks/2026-08-2*/plan.md` — przyczyna, decyzje użytkownika,
+  rozwiązanie i falsyfikacja testów, per case.
+- `docs/features/` — dokumentacja docelowa feature'ów (12, 13, 14, 20, 33, 35,
+  ENV-requirements).
+- `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` — PE-01 … PE-24.
 
 ## Jak pracujemy (standing instructions — nie negocjowalne)
 
@@ -9,7 +44,8 @@
 3. **Testy regresyjne obowiązkowe** i muszą być **sfalsyfikowane** — celowo zepsuj kod, potwierdź że test pada, dopiero wtedy jest wart czegokolwiek.
 4. **W każdym punkcie decyzyjnym: wyjaśnij i zapytaj** (`AskUserQuestion`). Decyzje produktowe/vendorowe/progowe/architektoniczne nie są moje.
 5. **Kolejność pushu:** praca gotowa → wszystkie bramki zielone → **napisz użytkownikowi jakie zmienne ustawić na Vercelu** → **czekaj na potwierdzenie** → dopiero push. Naruszyłem to raz; użytkownik powtórzył dosłownie: _"najpierw masz mi napisać zmienne, push dopiero jak je ustawie"_.
-6. **PR merguje wyłącznie użytkownik.**
+6. **PR merguje wyłącznie użytkownik.** Nigdy ja — ani przyciskiem, ani
+   `merge_pull_request`.
 7. Dokumentuj **rozwiązanie każdego taska oraz jego powód i przyczynę** — w `.copilot/tasks/*/plan.md`, jako wzorzec `SEC-XX` w `docs/ai/general/SECURITY_CODING_PATTERNS.md`, **oraz w docelowej dokumentacji feature'a w `docs/features/`**. Ten ostatni punkt był przez pół serii pomijany — nie powtarzać.
 8. Odroczone-ale-wartościowe pomysły → `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` jako PE-XX, odwołuj się po ID. Szczegóły niżej.
 9. **Skanery i CI: raportuj, nie drąż.** Codacy, CodeRabbit i podobne — moim
@@ -24,8 +60,9 @@
 ## POSSIBLE_ENHANCEMENTS.md — plik żyje, trzeba go dalej updatować
 
 `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` jest w repo i **jest aktywnie
-utrzymywany**. Stan: `PE-01` … `PE-21`, **żaden nie striażowany** — użytkownik
-przejrzy backlog na koniec serii.
+utrzymywany**. Stan: `PE-01` … `PE-24`, **żaden nietriażowany** — użytkownik
+przejrzy backlog, gdy zdecyduje. `PE-24` jest jedynym wpisem oznaczonym jako
+**zaakceptowany co do zasady**, tylko zaplanowany po fazie 1.
 
 Obowiązek przy każdym case'ie:
 
@@ -90,10 +127,8 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
 
 ## Otwarte
 
-- CI na PR #74 (head `a289996`) — **12/13 zielonych**, sprawdzone 2026-08-23.
-  Deploy Preview, Verify Preview Runtime, Preview Lighthouse, Quality Checks,
-  DB Integration Tests, Playwright CSP nonce-dynamic E2E, Visual Regression,
-  Secret Scanning, Dependency Audit — wszystkie ✅.
+- **PR #74: wszystkie checki zielone, zmergowany przez użytkownika
+  2026-08-23.** Faza 1 zamknięta.
 - **Codacy — rozwiązane 2026-08-23 konfiguracją, nie kodem.** 11 annotacji
   rozpadło się tak:
   - **5 fałszywych alarmów** → użytkownik zignorował je w UI Codacy.
@@ -153,5 +188,8 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
   w UI, nie oślepiając skanera na całe katalogi. Bez `.semgrep.yaml` — używamy
   domyślnych patternów Codacy.
 
-- Czekamy na kolejne ponumerowane case'y.
-- Na koniec serii: użytkownik przegląda cały PR i triażuje PE-01…PE-21.
+- **Faza 2 zaczyna się od zera gałęziowo.** Nowa gałąź od świeżego `main` (po
+  merge'u #74), nowy PR. Nazwa gałęzi: ta, którą wyznaczy nowa sesja.
+- Czekamy na kolejne ponumerowane findingi — użytkownik podaje je pojedynczo.
+  Jest ich **jeszcze mniej więcej tyle samo, co dotąd**.
+- Triage `PE-01 … PE-24` należy do użytkownika i nie ma terminu.

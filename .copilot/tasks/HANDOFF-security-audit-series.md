@@ -121,14 +121,28 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
   TSQLLint OFF** — jeden linter SQL, nie trzy nakładające się. Świadomie
   **nie** wybieramy pojedynczych reguł SQLFluff: własna dokumentacja narzędzia
   ostrzega, że duży ręczny config to koszt utrzymania przy kolejnych majorach.
-  Uwaga: dziś wszystkie 19 plików `.sql` leży w `generated/`, więc po ignore
+  `.codacy.yml` ma dodatkowo `sqlfluff.exclude_paths` na tę samą ścieżkę —
+  to nie duplikat, tylko dwa różne konsumenty: `.sqlfluffignore` obsługuje
+  lokalny SQLFluff/IDE/CI (natywnie wspierany, jest nawet flaga
+  `--disregard-sqlfluffignores`), a `.codacy.yml` mówi wprost, co ma zrobić
+  Codacy — którego dokumentacja potwierdza czytanie `.sqlfluff`, ale milczy o
+  `.sqlfluffignore`. Uwaga: dziś wszystkie 19 plików `.sql` leży w `generated/`, więc po ignore
   SQLFluff nie lintuje **niczego** — config jest w całości na przyszłość,
   na pierwszy ręcznie pisany PostgreSQL.
 
-  Wniosek na przyszłość: `.codacy.yml` wyklucza `e2e/**` i `**/*.test.ts` dla
-  lizard/eslint/semgrep, ale „hardcoded password" i tak trafiło w te ścieżki —
-  robi to inny silnik, którego w tych listach nie ma. Sama edycja pliku by nie
-  wystarczyła.
+  **Wyjaśnienie zagadki „dlaczego wykluczenia nie zadziałały"**: `.codacy.yml`
+  miał klucz `semgrep`, a Codacy zmigrowało silnik na **Opengrep**. Stary klucz
+  nie pasuje do żadnego silnika, więc **cała lista wykluczeń była martwa** — i
+  dlatego „hardcoded password" trafiło w `e2e/**` i `**/*.test.ts` mimo wpisów.
+  Klucz przemianowany na `opengrep` 2026-08-23.
+
+  **Świadoma decyzja przy tej okazji**: Opengrep **nie** wyklucza już
+  testów/e2e/scripts. Jest też skanerem sekretów, a zacommitowany credential
+  jest credentialem niezależnie od katalogu — fixture'y testowe i skrypty CI to
+  właśnie miejsca, gdzie prawdziwe bywają zostawiane. Wykluczone tylko
+  generated/vendor/build. Findingi na celowych fixture'ach zamykamy pojedynczo
+  w UI, nie oślepiając skanera na całe katalogi. Bez `.semgrep.yaml` — używamy
+  domyślnych patternów Codacy.
 
 - Czekamy na kolejne ponumerowane case'y.
 - Na koniec serii: użytkownik przegląda cały PR i triażuje PE-01…PE-21.

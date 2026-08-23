@@ -6,11 +6,18 @@
 #
 # Docs: https://docs.codacy.com/repositories-configure/codacy-configuration-file/
 #
-# SQL linting is NOT configured here. SQLFluff reads its own version-controlled
-# config from the repository root — `.sqlfluff` (dialect: postgres) and
-# `.sqlfluffignore` (excludes the Drizzle-generated migrations). Keep the SQL
-# policy there rather than duplicating it as exclude_paths below; two rules for
-# one problem is how the two drift apart.
+# SQL rules live in the repository root: `.sqlfluff` (dialect: postgres) holds
+# the linting policy, `.sqlfluffignore` the path exclusions. The sqlfluff
+# exclusion below repeats that ignore on purpose — the two files serve
+# different consumers, not the same one twice:
+#
+#   `.sqlfluffignore` — local SQLFluff runs, the IDE, CI. Natively supported;
+#                       SQLFluff even has `--disregard-sqlfluffignores` for
+#                       deliberately overriding it.
+#   `.codacy.yml`     — Codacy. Its docs confirm it reads `.sqlfluff`, but say
+#                       nothing about `.sqlfluffignore`, so relying on the
+#                       wrapper to pass ignore semantics through would be an
+#                       assumption, not a policy.
 
 engines:
   # ── Lizard — cyclomatic complexity ──────────────────────────────────────────
@@ -43,20 +50,38 @@ engines:
       - '**/*.stories.ts'
       - '**/*.stories.tsx'
 
-  # ── Semgrep — semantic code patterns ────────────────────────────────────────
-  semgrep:
+  # ── Opengrep — semantic code patterns and secret scanning ───────────────────
+  # Successor to Semgrep; the engine key renamed with it, and a stale `semgrep`
+  # key matches no engine, so its exclusions silently stop applying.
+  #
+  # Only generated, vendored and build output is excluded here. Tests, e2e
+  # specs and scripts are deliberately NOT excluded: Opengrep is also a
+  # security and secret scanner, and a committed credential is a committed
+  # credential wherever it lives — test fixtures and CI scripts are exactly
+  # where real ones tend to be left behind. Findings on deliberate fixtures are
+  # handled one by one in the Codacy UI, not by making the scanner blind to
+  # whole directories.
+  #
+  # Uses Codacy's default Opengrep patterns; there is no `.semgrep.yaml` in
+  # this repository and adding one would fork the rule set away from what
+  # Codacy maintains.
+  opengrep:
     exclude_paths:
-      - '.vscode/**'
       - '.next/**'
       - 'node_modules/**'
       - 'coverage/**'
-      - 'tests/**'
-      - 'e2e/**'
-      - 'scripts/**'
-      - '**/*.test.ts'
-      - '**/*.test.tsx'
-      - '**/*.integration.test.ts'
-      - '**/*.spec.ts'
+      - 'storybook-static/**'
+      - 'dist/**'
+      - 'src/core/db/migrations/generated/**'
+
+  # ── SQLFluff — SQL linting ──────────────────────────────────────────────────
+  # Policy and dialect live in `.sqlfluff`; this repeats `.sqlfluffignore`'s
+  # path exclusion so Codacy's behaviour is stated rather than assumed (see the
+  # header comment). Drizzle writes these files — style advice on generated
+  # output has no addressee.
+  sqlfluff:
+    exclude_paths:
+      - 'src/core/db/migrations/generated/**'
 
   # ── Trivy — dependency vulnerability scanning ───────────────────────────────
   trivy:

@@ -11,7 +11,33 @@
 5. **Kolejność pushu:** praca gotowa → wszystkie bramki zielone → **napisz użytkownikowi jakie zmienne ustawić na Vercelu** → **czekaj na potwierdzenie** → dopiero push. Naruszyłem to raz; użytkownik powtórzył dosłownie: _"najpierw masz mi napisać zmienne, push dopiero jak je ustawie"_.
 6. **PR merguje wyłącznie użytkownik.**
 7. Dokumentuj **rozwiązanie każdego taska oraz jego powód i przyczynę** — w `.copilot/tasks/*/plan.md`, jako wzorzec `SEC-XX` w `docs/ai/general/SECURITY_CODING_PATTERNS.md`, **oraz w docelowej dokumentacji feature'a w `docs/features/`**. Ten ostatni punkt był przez pół serii pomijany — nie powtarzać.
-8. Odroczone-ale-wartościowe pomysły → `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` jako PE-XX, odwołuj się po ID. Backlog PE-14…PE-21 czeka na triage użytkownika.
+8. Odroczone-ale-wartościowe pomysły → `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` jako PE-XX, odwołuj się po ID. Szczegóły niżej.
+
+## POSSIBLE_ENHANCEMENTS.md — plik żyje, trzeba go dalej updatować
+
+`docs/ai/general/POSSIBLE_ENHANCEMENTS.md` jest w repo i **jest aktywnie
+utrzymywany**. Stan: `PE-01` … `PE-21`, **żaden nie striażowany** — użytkownik
+przejrzy backlog na koniec serii.
+
+Obowiązek przy każdym case'ie:
+
+- Wypłynął pomysł wartościowy, ale poza zakresem bieżącego case'a? Nowy wpis z
+  kolejnym `PE-XX`, a w artefaktach taska tylko odwołanie po ID. Rationale
+  zapisujemy **raz**, w PE.
+- **Nigdy** nie implementuj wpisu z własnej inicjatywy. Nietriażowane ≠ zgoda.
+- Gdy użytkownik striażuje wpis: zaktualizuj `Status` + krótka nota
+  rozstrzygająca, wpisu **nie kasuj** — backlog jest też dziennikiem decyzji.
+
+Reguła autorytatywna: `AGENTS.md`, sekcja "Possible Enhancements Backlog —
+Check Every Task". Pointer dla Claude Code jest w `CLAUDE.md` (bo `AGENTS.md`
+nie ładuje się automatycznie).
+
+Ostatnie wpisy z tej serii: PE-14 (nullable `waitlist_entries.organization_id`),
+PE-15 (konstruktorowe mocki `vi.fn().mockImplementation()`), PE-16 (strict rate
+limiting w Edge middleware), PE-17 (globalny purge `rate_limit_counters`),
+PE-18 (durable backing dla login account bucket), PE-19 (weryfikacja
+precedencji nagłówków Vercela), PE-20 (zakotwiczenie `trusted-proxy` na socket
+peerze), PE-21 (HMAC + replay window i service identity dla internal API).
 
 ## Stan
 
@@ -39,4 +65,4 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
 
 - CI na PR #74 (head `a0f7608`) — zaplanowany check-in. Kluczowe: Deploy Preview, DB Integration Tests, Secret Scanning.
 - Czekamy na kolejne ponumerowane case'y.
-- Na koniec serii: użytkownik przegląda cały PR i triażuje PE.
+- Na koniec serii: użytkownik przegląda cały PR i triażuje PE-01…PE-21.

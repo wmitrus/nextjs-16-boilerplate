@@ -66,4 +66,84 @@ describe('Internal API Guard', () => {
 
     expect(mockHandler).toHaveBeenCalled();
   });
+
+  describe('SEC-44 hardening', () => {
+    it('accepts the previous key during a rotation', async () => {
+      // The point of the second slot: callers can cut over without a
+      // synchronised flag day.
+      mockEnv.INTERNAL_API_KEY = 'new-key';
+      mockEnv.INTERNAL_API_KEY_PREVIOUS = 'test-secret';
+
+      const req = createMockRequest({
+        headers: { 'x-internal-key': 'test-secret' },
+      });
+      const middleware = withInternalApiGuard(mockHandler);
+      await middleware(req, createMockRouteContext({ isInternalApi: true }));
+
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it('still accepts the current key while a previous one is configured', async () => {
+      mockEnv.INTERNAL_API_KEY = 'new-key';
+      mockEnv.INTERNAL_API_KEY_PREVIOUS = 'old-key';
+
+      const req = createMockRequest({
+        headers: { 'x-internal-key': 'new-key' },
+      });
+      const middleware = withInternalApiGuard(mockHandler);
+      await middleware(req, createMockRouteContext({ isInternalApi: true }));
+
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it('rejects a retired key once it is removed from the previous slot', async () => {
+      mockEnv.INTERNAL_API_KEY = 'new-key';
+      mockEnv.INTERNAL_API_KEY_PREVIOUS = undefined;
+
+      const req = createMockRequest({
+        headers: { 'x-internal-key': 'test-secret' },
+      });
+      const middleware = withInternalApiGuard(mockHandler);
+      const res = await middleware(
+        req,
+        createMockRouteContext({ isInternalApi: true }),
+      );
+
+      expect(res.status).toBe(403);
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('refuses everything when no key is configured at all', async () => {
+      // An unconfigured deployment must be closed, not open -- including
+      // against the empty string a missing header collapses to.
+      mockEnv.INTERNAL_API_KEY = undefined;
+      mockEnv.INTERNAL_API_KEY_PREVIOUS = undefined;
+
+      const middleware = withInternalApiGuard(mockHandler);
+      const ctx = createMockRouteContext({ isInternalApi: true });
+
+      const cases: Record<string, string>[] = [{}, { 'x-internal-key': '' }];
+      for (const headers of cases) {
+        const res = await middleware(createMockRequest({ headers }), ctx);
+        expect(res.status).toBe(403);
+      }
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('rejects a prefix of the real key', async () => {
+      mockEnv.INTERNAL_API_KEY = 'test-secret';
+
+      const req = createMockRequest({
+        headers: { 'x-internal-key': 'test-sec' },
+      });
+      const middleware = withInternalApiGuard(mockHandler);
+      const res = await middleware(
+        req,
+        createMockRouteContext({ isInternalApi: true }),
+      );
+
+      expect(res.status).toBe(403);
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+  });
 });

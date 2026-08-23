@@ -6,6 +6,7 @@ import { Container } from '@/core/container';
 import {
   AUDIT_LOG,
   FEATURE_FLAGS,
+  SECURITY,
   INFRASTRUCTURE,
   PROVISIONING,
 } from '@/core/contracts';
@@ -14,6 +15,8 @@ import {
   env,
   validateAuthProviderConfigValues,
   validateTenancyConfigValues,
+  validateDeploymentProxyConfigValues,
+  validateInternalApiKeyConfigValues,
 } from '@/core/env';
 import {
   recordContainerCreated,
@@ -28,6 +31,7 @@ import { createAuthorizationModule } from '@/modules/authorization';
 import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
 import { createFeatureFlagService } from '@/modules/feature-flags/factory';
 import { DrizzleProvisioningService } from '@/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService';
+import { createOperationalSwitch } from '@/security/core/operational-switch/factory';
 
 export { createEdgeRequestContainer } from './edge';
 
@@ -84,6 +88,22 @@ export function createRequestContainer(config: AppConfig): Container {
     config.auth.defaultTenantId,
     config.auth.tenantContextSource,
   );
+  // SEC-43. Fails the composition root rather than the first request that
+  // needs a client IP -- a trust boundary that is wrong should be loud at
+  // startup, not a per-request surprise.
+  validateDeploymentProxyConfigValues(
+    env.DEPLOYMENT_PROXY,
+    env.TRUSTED_PROXY_CIDRS,
+    env.NODE_ENV,
+    env.VERCEL_ENV,
+  );
+  // SEC-44. A weak or duplicated internal key is a deployment mistake, so it
+  // fails here rather than on the first internal request.
+  validateInternalApiKeyConfigValues(
+    env.INTERNAL_API_KEY,
+    env.INTERNAL_API_KEY_PREVIOUS,
+    env.NODE_ENV,
+  );
 
   const container = new Container();
   const { dbRuntime } = getInfrastructure(config);
@@ -101,14 +121,20 @@ export function createRequestContainer(config: AppConfig): Container {
   );
   container.registerModule(createAuthorizationModule({ db: dbRuntime.db }));
 
-  container.register(
-    FEATURE_FLAGS.SERVICE,
-    createFeatureFlagService(env.FEATURE_FLAG_PROVIDER, {
+  const featureFlagService = createFeatureFlagService(
+    env.FEATURE_FLAG_PROVIDER,
+    {
       staticFlags: env.FEATURE_FLAGS_STATIC,
       db: dbRuntime.db,
       growthbookClientKey: env.GROWTHBOOK_CLIENT_KEY,
       growthbookApiHost: env.GROWTHBOOK_API_HOST,
-    }),
+    },
+  );
+  container.register(FEATURE_FLAGS.SERVICE, featureFlagService);
+
+  container.register(
+    SECURITY.OPERATIONAL_SWITCH,
+    createOperationalSwitch(featureFlagService),
   );
 
   container.register(

@@ -4,7 +4,10 @@ import { z } from 'zod';
 
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
-import type { IdentityProvider } from '@/core/contracts/identity';
+import type {
+  IdentityProvider,
+  RequestIdentitySource,
+} from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import { getAppContainer } from '@/core/runtime/bootstrap';
@@ -30,6 +33,9 @@ function createSecurityDependencies() {
     ),
     userRepository: requestContainer.resolve<UserRepository>(
       AUTH.USER_REPOSITORY,
+    ),
+    requestIdentitySource: requestContainer.resolve<RequestIdentitySource>(
+      AUTH.IDENTITY_SOURCE,
     ),
   };
 

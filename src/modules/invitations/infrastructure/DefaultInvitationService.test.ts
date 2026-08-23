@@ -48,7 +48,7 @@ describe('DefaultInvitationService', () => {
     findPendingByEmailAndOrg: vi.fn(),
     listByOrganization: vi.fn(),
     markAccepted: vi.fn(),
-    markRevoked: vi.fn(),
+    revokePendingScoped: vi.fn(),
     markExpired: vi.fn(),
   };
 
@@ -148,6 +148,76 @@ describe('DefaultInvitationService', () => {
     expect(createdLog).not.toHaveProperty('email');
     expect(acceptedLog).toHaveProperty('emailHash');
     expect(acceptedLog).not.toHaveProperty('email');
+  });
+
+  describe('revokeInvitation (SEC-41)', () => {
+    it('passes the authorized organization into the scoped revoke', async () => {
+      repository.revokePendingScoped.mockResolvedValue(
+        buildInvitation({ status: 'revoked' }),
+      );
+
+      const service = new DefaultInvitationService(repository, emailService, {
+        appUrl: 'http://localhost:3000',
+      });
+
+      await expect(service.revokeInvitation('inv-1', 'org-1')).resolves.toBe(
+        true,
+      );
+      // The scope reaches the repository, where it becomes part of the UPDATE
+      // predicate -- it is not consumed by a separate ownership check here.
+      expect(repository.revokePendingScoped).toHaveBeenCalledWith(
+        'inv-1',
+        'org-1',
+      );
+    });
+
+    it('reports failure without throwing when the scoped update matches no row', async () => {
+      repository.revokePendingScoped.mockResolvedValue(null);
+
+      const service = new DefaultInvitationService(repository, emailService, {
+        appUrl: 'http://localhost:3000',
+      });
+
+      await expect(service.revokeInvitation('inv-1', 'org-1')).resolves.toBe(
+        false,
+      );
+    });
+
+    it('logs a no-match revoke as a warning that records only whether a scope applied', async () => {
+      repository.revokePendingScoped.mockResolvedValue(null);
+
+      const service = new DefaultInvitationService(repository, emailService, {
+        appUrl: 'http://localhost:3000',
+      });
+
+      await service.revokeInvitation('inv-1', 'org-1');
+
+      const warnPayload = vi.mocked(mockChildLogger.warn).mock.calls[0]?.[0];
+      expect(warnPayload).toMatchObject({
+        event: 'invitation:revoke_no_match',
+        invitationId: 'inv-1',
+        scopedToOrganization: true,
+      });
+      // The organization id itself is not logged -- a failed revoke is a
+      // routine 404 and does not need to carry tenant identifiers into logs.
+      expect(warnPayload).not.toHaveProperty('organizationId');
+    });
+
+    it('supports the unscoped platform-admin revoke via a null scope', async () => {
+      repository.revokePendingScoped.mockResolvedValue(
+        buildInvitation({ status: 'revoked' }),
+      );
+
+      const service = new DefaultInvitationService(repository, emailService, {
+        appUrl: 'http://localhost:3000',
+      });
+
+      await expect(service.revokeInvitation('inv-1', null)).resolves.toBe(true);
+      expect(repository.revokePendingScoped).toHaveBeenCalledWith(
+        'inv-1',
+        null,
+      );
+    });
   });
 
   it('logs email send failures without raw recipient addresses', async () => {

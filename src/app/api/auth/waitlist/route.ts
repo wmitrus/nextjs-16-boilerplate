@@ -11,19 +11,21 @@ import {
   createServerErrorResponse,
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
-import { getIP } from '@/shared/lib/network/get-ip';
-import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
+import {
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { DuplicateWaitlistEntryError } from '@/modules/waitlist/domain/errors';
 import { ClerkWaitlistBridge } from '@/modules/waitlist/infrastructure/clerk/ClerkWaitlistBridge';
 import { DefaultWaitlistService } from '@/modules/waitlist/infrastructure/DefaultWaitlistService';
 import { DrizzleWaitlistRepository } from '@/modules/waitlist/infrastructure/drizzle/DrizzleWaitlistRepository';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const bodySchema = z.object({
   email: z.email(),
   name: z.string().min(1).max(200).optional(),
-  organizationId: z.uuid().optional(),
 });
 
 const WAITLIST_PATH = '/api/auth/waitlist';
@@ -37,10 +39,13 @@ const WAITLIST_PATH = '/api/auth/waitlist';
 export const POST = withErrorHandler(async (request) => {
   await connection();
 
-  const ip = await getIP(new Headers(request.headers));
-  const rateLimitResult = await checkRateLimit(`waitlist:${ip}`, {
-    path: WAITLIST_PATH,
-  });
+  const client = await getClientIp(new Headers(request.headers));
+  const rateLimitResult = await checkStrictRateLimit(
+    rateLimitKeyForClient('waitlist', client),
+    {
+      path: WAITLIST_PATH,
+    },
+  );
 
   if (!rateLimitResult.success) {
     return createServerErrorResponse(
@@ -68,7 +73,7 @@ export const POST = withErrorHandler(async (request) => {
     );
   }
 
-  const { email, name, organizationId } = parsed.data;
+  const { email, name } = parsed.data;
 
   const container = getAppContainer();
   const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
@@ -88,7 +93,7 @@ export const POST = withErrorHandler(async (request) => {
   const service = new DefaultWaitlistService(repository, emailService);
 
   try {
-    const entry = await service.joinWaitlist({ email, name, organizationId });
+    const entry = await service.joinWaitlist({ email, name });
 
     if (env.AUTH_PROVIDER === 'clerk') {
       const bridge = new ClerkWaitlistBridge();

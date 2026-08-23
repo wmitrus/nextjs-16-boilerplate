@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { extractApiErrorMessage } from '@/shared/lib/api/extract-error-message';
+
 export function ResendVerificationForm() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,12 +23,17 @@ export function ResendVerificationForm() {
         body: JSON.stringify({ email }),
       });
 
-      const data = (await res.json()) as { message?: string; error?: string };
+      const body = (await res.json()) as { data?: { message?: string } };
 
       if (res.status === 429) {
         setError('Too many requests. Please wait before trying again.');
-      } else if (data.message) {
-        setMessage(data.message);
+      } else if (!res.ok) {
+        setError(
+          extractApiErrorMessage(body) ??
+            'Something went wrong. Please try again.',
+        );
+      } else if (body.data?.message) {
+        setMessage(body.data.message);
       } else {
         setError('Something went wrong. Please try again.');
       }

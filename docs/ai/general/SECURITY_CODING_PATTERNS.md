@@ -11,33 +11,45 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category           | Vulnerability Class                                                                                      | Classification                                                                                                                               | Affected Contexts                                   |
-| ------ | ------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| SEC-01 | Cryptography       | Timing attack — Symbol `===` in DI mocks                                                                 | False positive                                                                                                                               | Unit test files                                     |
-| SEC-02 | Routes             | Open redirect — hardcoded path via `req.url` origin                                                      | False positive                                                                                                                               | Middleware                                          |
-| SEC-03 | Routes             | Open redirect — forwarded `redirect_url` query param                                                     | Latent risk → fixed                                                                                                                          | Middleware                                          |
-| SEC-04 | Command injection  | Dynamic logger dispatch `logger[level]()`                                                                | False positive → hardened                                                                                                                    | API route                                           |
-| SEC-05 | File access        | Dynamic `fs.*` with static literal paths                                                                 | False positive                                                                                                                               | E2E helpers                                         |
-| SEC-06 | Cryptography       | `Math.random()` for test email uniqueness                                                                | False positive                                                                                                                               | E2E specs                                           |
-| SEC-11 | Caching            | SDK client cache key missing differentiating config                                                      | Real risk → fixed                                                                                                                            | Module-level SDK adapters                           |
-| SEC-15 | Object access      | User-controlled key lookup via `key in object`                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Auth/bootstrap UI mapping                           |
-| SEC-16 | File access        | Reusable helper fs paths lack sink confinement                                                           | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Runtime logger helpers                              |
-| SEC-17 | Observability      | Rate-limit WARN missing `path` causes edge-log loop                                                      | Real risk → fixed                                                                                                                            | Rate-limit middleware                               |
-| SEC-18 | Tooling env access | Dynamic `process.env[key]` in scripts/helpers                                                            | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                |
-| SEC-19 | File access        | Shared sink-confined fs helpers for scripts/tooling                                                      | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                |
-| SEC-20 | Object access      | Dynamic object transformation via `result[key] = ...`                                                    | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers                            |
-| SEC-21 | Abuse prevention   | Public email/write endpoints without rate limiting                                                       | Real risk → fixed                                                                                                                            | Public auth route handlers                          |
-| SEC-22 | Observability      | Raw email/token/URL logging in no-op/provider bridges                                                    | Real risk → fixed                                                                                                                            | Email adapters, auth bridges                        |
-| SEC-23 | Routes / DB input  | Raw route params bound to UUID columns                                                                   | Real risk → fixed                                                                                                                            | App Router route handlers                           |
-| SEC-24 | Error-prone TS/JSX | Scanner HIGH error-prone patterns                                                                        | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                       |
-| SEC-25 | Deploy/runtime env | Build-only env fallback masks runtime config drift                                                       | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                           |
-| SEC-26 | Authorization      | ABAC action check without matching resource-scope check                                                  | Real risk → fixed                                                                                                                            | Admin CRUD route handlers/services                  |
-| SEC-27 | Authorization      | Mutating admin route with no authorization check at all                                                  | Real risk → fixed                                                                                                                            | Admin API route handlers                            |
-| SEC-28 | SSRF               | IPv4-only private-IP check + no DNS-rebinding defense                                                    | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                              |
-| SEC-29 | Attack surface     | Public unauthenticated demo/showcase routes                                                              | Real risk → fixed                                                                                                                            | Demo/showcase route policy                          |
-| SEC-30 | CSP hardening      | script-src used unsafe-inline/unsafe-eval unconditionally                                                | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx                         |
-| SEC-31 | CSP architecture   | Same-origin mixed CSP profiles don't survive client-side nav                                             | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide                     |
-| SEC-32 | CSP hardening      | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                | with-headers.ts, csp-violations.ts, secure-fetch.ts |
+| #      | Category                  | Vulnerability Class                                                                                                                                                                                                                   | Classification                                                                                                                               | Affected Contexts                                               |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| SEC-01 | Cryptography              | Timing attack — Symbol `===` in DI mocks                                                                                                                                                                                              | False positive                                                                                                                               | Unit test files                                                 |
+| SEC-02 | Routes                    | Open redirect — hardcoded path via `req.url` origin                                                                                                                                                                                   | False positive                                                                                                                               | Middleware                                                      |
+| SEC-03 | Routes                    | Open redirect — forwarded `redirect_url` query param                                                                                                                                                                                  | Latent risk → fixed                                                                                                                          | Middleware                                                      |
+| SEC-04 | Command injection         | Dynamic logger dispatch `logger[level]()`                                                                                                                                                                                             | False positive → hardened                                                                                                                    | API route                                                       |
+| SEC-05 | File access               | Dynamic `fs.*` with static literal paths                                                                                                                                                                                              | False positive                                                                                                                               | E2E helpers                                                     |
+| SEC-06 | Cryptography              | `Math.random()` for test email uniqueness                                                                                                                                                                                             | False positive                                                                                                                               | E2E specs                                                       |
+| SEC-11 | Caching                   | SDK client cache key missing differentiating config                                                                                                                                                                                   | Real risk → fixed                                                                                                                            | Module-level SDK adapters                                       |
+| SEC-15 | Object access             | User-controlled key lookup via `key in object`                                                                                                                                                                                        | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Auth/bootstrap UI mapping                                       |
+| SEC-16 | File access               | Reusable helper fs paths lack sink confinement                                                                                                                                                                                        | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Runtime logger helpers                                          |
+| SEC-17 | Observability             | Rate-limit WARN missing `path` causes edge-log loop                                                                                                                                                                                   | Real risk → fixed                                                                                                                            | Rate-limit middleware                                           |
+| SEC-18 | Tooling env access        | Dynamic `process.env[key]` in scripts/helpers                                                                                                                                                                                         | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                            |
+| SEC-19 | File access               | Shared sink-confined fs helpers for scripts/tooling                                                                                                                                                                                   | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                            |
+| SEC-20 | Object access             | Dynamic object transformation via `result[key] = ...`                                                                                                                                                                                 | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers                                        |
+| SEC-21 | Abuse prevention          | Public email/write endpoints without rate limiting                                                                                                                                                                                    | Real risk → fixed                                                                                                                            | Public auth route handlers                                      |
+| SEC-22 | Observability             | Raw email/token/URL logging in no-op/provider bridges                                                                                                                                                                                 | Real risk → fixed                                                                                                                            | Email adapters, auth bridges                                    |
+| SEC-23 | Routes / DB input         | Raw route params bound to UUID columns                                                                                                                                                                                                | Real risk → fixed                                                                                                                            | App Router route handlers                                       |
+| SEC-24 | Error-prone TS/JSX        | Scanner HIGH error-prone patterns                                                                                                                                                                                                     | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                                   |
+| SEC-25 | Deploy/runtime env        | Build-only env fallback masks runtime config drift                                                                                                                                                                                    | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                                       |
+| SEC-26 | Authorization             | ABAC action check without matching resource-scope check                                                                                                                                                                               | Real risk → fixed (Update 2026-08-22: second occurrence, `/api/admin/users`; Update 2026-08-23: third and fourth, see SEC-41)                | Admin CRUD route handlers/services                              |
+| SEC-27 | Authorization             | Mutating admin route with no authorization check at all                                                                                                                                                                               | Real risk → fixed                                                                                                                            | Admin API route handlers                                        |
+| SEC-28 | SSRF                      | IPv4-only private-IP check + no DNS-rebinding defense                                                                                                                                                                                 | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                                          |
+| SEC-29 | Attack surface            | Public unauthenticated demo/showcase routes                                                                                                                                                                                           | Real risk → fixed                                                                                                                            | Demo/showcase route policy                                      |
+| SEC-30 | CSP hardening             | script-src used unsafe-inline/unsafe-eval unconditionally                                                                                                                                                                             | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx                                     |
+| SEC-31 | CSP architecture          | Same-origin mixed CSP profiles don't survive client-side nav                                                                                                                                                                          | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide                                 |
+| SEC-32 | CSP hardening             | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout                                                                                                                              | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                | with-headers.ts, csp-violations.ts, secure-fetch.ts             |
+| SEC-33 | Authorization / lifecycle | Central access evaluator(s) never check `user.deactivatedAt`                                                                                                                                                                          | Real risk → fixed                                                                                                                            | `node-provisioning-access.ts`, `security-context.ts`            |
+| SEC-34 | Abuse prevention          | AuthJS Credentials login had no dedicated throttling/lockout beyond a generic reuse of `API_RATE_LIMIT_*`                                                                                                                             | Real risk → fixed                                                                                                                            | Credentials `authorize()`, `/api/auth/[...nextauth]`            |
+| SEC-35 | Race conditions           | Password reset token validated and marked used in two statements with bcrypt between them, so concurrent requests could both redeem it                                                                                                | Real risk → fixed                                                                                                                            | `/api/auth/reset-password`                                      |
+| SEC-36 | Session lifecycle         | Stateless 30-day JWTs had no revocation path, so a password reset left a stolen session working until it expired                                                                                                                      | Real risk → fixed                                                                                                                            | `users.sessions_valid_from`, both central evaluators            |
+| SEC-37 | Information disclosure    | Server Actions returned any unclassified exception's message to the client, filtered only by a `.includes('Failed query:')` substring match                                                                                           | Real risk → fixed                                                                                                                            | `createSecureAction`                                            |
+| SEC-38 | API consistency           | 12 of 36 routes bypassed the mandatory response service; the instruction said "prefer" and nothing enforced it                                                                                                                        | Real drift → fixed                                                                                                                           | all `src/app/api/**` routes                                     |
+| SEC-39 | Outbound transport        | `secureFetch` never checked `url.protocol`, so an allowlisted host was reachable over http:// and a redirect could downgrade https to cleartext                                                                                       | Real risk → fixed                                                                                                                            | `secureFetch`                                                   |
+| SEC-40 | Redirect integrity        | Cross-origin redirects stripped credential headers but still forwarded the 307/308 request body, trusting the global host allowlist as a host-to-host mesh                                                                            | Real risk → fixed                                                                                                                            | `secureFetch`                                                   |
+| SEC-41 | Authorization / tenancy   | Third and fourth instance of SEC-26: an unscoped waitlist served to every tenant owner, and an invitation revoke that checked the organization in a `SELECT` and then wrote without it                                                | Real risk → fixed (whole `/api/admin/**` family audited; static guard added)                                                                 | `/api/admin/waitlist/**`, invitations, `/api/auth/waitlist`     |
+| SEC-42 | Abuse prevention          | Security-critical rate limits fell back to a process-local counter, which on serverless is one allowance per instance; three pre-auth endpoints had no endpoint-level limit at all                                                    | Real risk → fixed (durable Postgres secondary, then fail closed; loosen-only operational switch)                                             | `checkRateLimit`, all pre-auth endpoints                        |
+| SEC-43 | Trust boundaries          | `getIP()` believed whichever forwarding header was present and returned a fictional `127.0.0.1` otherwise; two further sites read raw headers, one of them feeding an ABAC decision                                                   | Real risk → fixed (provider-aware resolver behind an explicit `DEPLOYMENT_PROXY`; typed trusted/untrusted result; static guard)              | `getIP`, rate-limit keys, `audit_log.ip`, ABAC `environment.ip` |
+| SEC-44 | Secret handling           | Internal-API key rejections were never rate limited (the guard returns before the limiter), compared with `!==`, had no rotation path and no length floor; env diagnostics leaked secret fragments to `/env-check` and `/env-summary` | Real risk → fixed (dedicated failed-auth counter, constant-time verify, current+previous rotation, `maskedValue` removed at source)          | `withInternalApiGuard`, `getEnvDiagnostics`                     |
 
 ---
 
@@ -636,12 +648,64 @@ using a malformed value such as `not-a-uuid`. The test must prove:
 This check is required even when happy-path and not-found tests already exist, because
 mocked DB tests do not surface Postgres UUID bind errors.
 
+### Update 2026-08-22 — This Entry Was Marked Fixed While Two Routes Still Regressed
+
+A later audit found `/api/admin/invitations/[id]` and
+`/api/admin/waitlist/[id]` still doing exactly what the Dangerous Pattern
+above forbids:
+
+```typescript
+const id = params['id'];
+if (!id || Array.isArray(id)) {
+  /* 400 */
+} // shape only, never format
+await service.revokeInvitation(id); // invitationsTable.id is uuid
+```
+
+Both had the presence/array check this entry explicitly calls insufficient.
+Note that the Dangerous Pattern example above is _itself_ written against the
+invitations route — the pattern document quoted the vulnerable code while the
+route was never fixed.
+
+**Why it came back, and what changed as a result.** SEC-23 was written as
+advice to follow per route. Advice does not survive the next route: it relies
+on whoever writes it having read this document and remembered it at the right
+moment. So the remediation was not three hand-edits, it was two artefacts:
+
+1. **One helper**, `parseUuidRouteParam(params, name)` in
+   `src/shared/lib/api/uuid-route-param.ts` — a single place the decision is
+   made, returning a discriminated result rather than throwing, so a caller
+   cannot let a rejected value through by ignoring an exception.
+2. **A static guard test**, `uuid-route-param.guard.test.ts` — it walks every
+   `route.ts` under `src/app/api`, extracts each dynamic segment from the
+   path, and fails the suite if the raw value reaches the handler without
+   passing through a validator. Segments that are genuinely not UUID columns
+   (`[token]`, `[...nextauth]`) sit in an allowlist that requires a written
+   reason. The default is "guard it", so a new route nobody thought about
+   fails rather than passes.
+
+The guard's own classifier is unit-tested against the shapes it must tell
+apart — including a route that validates a value but then also uses it raw —
+because a guard that cannot fail proves nothing. It was also verified by
+reverting one of the two fixes and confirming the suite went red.
+
+A useful detail from building it: the guard must ask _"does the raw value
+reach anything other than a validator?"_, not _"is there a schema keyed by
+the segment name?"_. The eight `organizations/**` routes validate
+`params.organizationId` through a schema whose key is `id` — correct code
+that a name-matching guard would have called broken.
+
 ### Rule for Agents
 
-**DO** parse every UUID path param with `z.uuid()` or an equivalent schema before DB use.
+**DO** call `parseUuidRouteParam(params, '<segment>')` for every UUID path
+param. An equivalent `z.uuid()` schema is acceptable in routes that predate
+the helper.
 **DO** add malformed-ID tests for UUID path segments.
 **DO NOT** alias raw `params.*` values as IDs or pass raw route params directly to
 Drizzle `eq(...)` predicates for UUID columns.
+**DO NOT** mark this entry fixed again without the guard test passing — that
+is now the only evidence that counts, precisely because a human reading this
+section was not enough the first time.
 
 ---
 
@@ -1689,6 +1753,97 @@ resource-scope grant.
 server-side" review — that catches missing checks, not checks that are present but too
 coarse. Ask explicitly: "authorized to do X in general, or authorized to do X to
 _this_ tenant/record?"
+
+### Update 2026-08-22 — Second Real-World Occurrence: `/api/admin/users` (cross-tenant IDOR/BOLA)
+
+**Found during**: a repository-wide security audit (not the Admin Feature Flags GUI
+work that produced the original entry above), reported directly as a P1 finding.
+**Classification**: Real risk → fixed, same day.
+
+The exact same defect shape recurred in `/api/admin/users` and
+`/api/admin/users/[id]`, in a more severe form: `checkAdminAccess()` there returned a
+bare `boolean` (not `{ allowed, isPlatformAdmin }`), and every DB call went through
+the DI-registered `UserRepository` / `DrizzleUserRepository` — a repository with
+**no tenant concept at all** (used elsewhere exclusively for self-service lookups,
+where a caller's own verified id needs no additional scoping). Any ABAC-authorized
+(non-platform-admin) tenant owner/admin could therefore list, read, rename, or
+deactivate **any user in any tenant** — a strictly worse blast radius than the
+original SEC-26 finding, where at least a `tenantId` column existed on the row and
+only the authorization check forgot to compare it.
+
+**New technique this occurrence required — membership-join scoping for tables with
+no direct tenant column**: unlike `feature_flags` (which has its own `tenant_id`
+column, so the SEC-26 fix could scope with a plain `eq()`), the `users` table has no
+`tenant_id`/`organization_id` column. A user's tenant membership lives in a separate
+`memberships` table (`user_id`, `organization_id`), owned by a different module
+(`authorization`, not `user`). Scoping therefore requires a cross-table predicate:
+
+```typescript
+// src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.ts
+function membershipScopePredicate(db: DrizzleDb, tenantId: string) {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(membershipsReferenceTable)
+      .where(
+        and(
+          eq(membershipsReferenceTable.userId, usersTable.id),
+          eq(membershipsReferenceTable.organizationId, tenantId),
+        ),
+      ),
+  );
+}
+
+// used directly in the same WHERE as the read/mutation, e.g.:
+await db
+  .update(usersTable)
+  .set(updatePayload)
+  .where(
+    and(eq(usersTable.id, id), membershipScopePredicate(db, scope.tenantId)),
+  )
+  .returning();
+```
+
+`membershipsReferenceTable` is a new core-level join reference
+(`src/core/db/schema/references.ts`), mirroring the existing `usersReferenceTable` /
+`organizationsReferenceTable` pattern: a minimal-column `pgTable` pointing at the
+real `memberships` table, letting the `user` module build this predicate **without
+importing `authorization`'s real Drizzle schema** (would otherwise create a
+`user -> authorization` module dependency the architecture doesn't allow). This
+reference table is deliberately excluded from `drizzle-kit generate`'s schema glob
+(`./src/modules/**/infrastructure/drizzle/schema.ts` only) — it must never be
+migrated, only queried.
+
+**DO** treat "the domain repository has no tenant/scope parameter at all" as the same
+class of defect as "the scope parameter exists but isn't checked" — both let an
+ABAC-authorized caller reach every tenant's data, not just their own.
+
+**DO** build the tenant-membership check as a correlated `EXISTS` (or equivalent
+single-statement join) in the same SQL predicate as the read/mutation, never as a
+preceding `isMember()` check followed by a separate unscoped read/write — the latter
+is a TOCTOU and does not match how every other admin surface in this repo enforces
+scope.
+
+**DO** create a purpose-built admin service (never DI-registered, directly
+constructed at the route-handler call site) when the caller needs a scoping
+capability the DI-registered domain repository was never designed to have — do not
+retrofit a scope parameter onto a repository whose other callers are legitimate
+unscoped self-service lookups, since every one of those call sites would then need
+to remember to keep passing `null`/no-scope correctly forever.
+
+**Required validation for this occurrence**: `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.db.test.ts`
+proves, against a real Postgres-compatible DB, that a tenant-scoped caller cannot
+list, read, rename, or deactivate a real user seeded only into a different tenant —
+and that the unscoped (platform-admin) path is unaffected. Route-handler unit tests
+in `src/app/api/admin/users/route.test.ts` and
+`src/app/api/admin/users/[id]/route.test.ts` prove the route derives and forwards
+the correct scope for both grant paths.
+
+**Update 2026-08-23 — third and fourth occurrences.** The same defect was
+found again in `/api/admin/waitlist/**` and in the invitation revoke path.
+See **SEC-41**, which also records the audit of all 18 `/api/admin/**` routes
+that followed, and the static guard that now enforces the two structural
+halves of this rule.
 
 ---
 
@@ -2842,3 +2997,1795 @@ when the API itself can't be cancelled.
 covering every phase (DNS → connect → every redirect hop → body read) by
 construction — a signal only threaded through the _last_ phase isn't an
 overall deadline, it's a per-phase one with a misleading name.
+
+---
+
+## SEC-33 — Account Lifecycle State Must Be Checked At Every Central Access Evaluator, Not Assumed From One
+
+**ID**: SEC-33
+**Category**: Authorization / account lifecycle
+**Classification**: Real risk → fixed, same day (reported directly as a P1 finding, second case of an ongoing multi-case security-audit remediation series; the first case is SEC-26's `/api/admin/users` occurrence)
+**Affected contexts**: any central request-readiness/access evaluator that resolves a `User` record and decides whether to grant access — this repository has (at least) two such evaluators, and both had this gap
+
+### Risk
+
+The admin panel can deactivate a user (`PATCH /api/admin/users/[id]` with
+`{ "action": "deactivate" }`), which sets `users.deactivated_at`. The feature's own
+docs describe this as revoking the user's access. But the repository's central
+request-readiness evaluator, `evaluateNodeProvisioningAccess()`
+(`src/security/core/node-provisioning-access.ts`), looked up the user
+(`userRepository.findById(identity.id)`), checked `onboardingComplete`, resolved
+tenant context, checked membership, and returned `ALLOWED` — **never reading
+`user.deactivatedAt`, even though the repository call that fetched the row already
+returns it.**
+
+A second, independently-implemented evaluator, `createSecurityContext()`
+(`src/security/core/security-context.ts` — used by every Server Action built on
+`createSecureAction()`), duplicates the same identity → user-lookup →
+onboarding-check → tenant-resolve sequence and had the exact same gap. These two
+functions do not share an implementation or call each other; a fix to one does not
+propagate to the other.
+
+Result: a user who is authenticated, onboarded, and has a still-valid session/JWT
+retains full access to every protected page, API route, and Server Action after an
+admin deactivates them — the deactivation is data-only until the session/JWT
+naturally expires. This is a lifecycle authorization gap: the enforcement point that
+should read a revocation flag never reads it.
+
+### Dangerous Pattern
+
+```typescript
+// src/security/core/node-provisioning-access.ts (before fix)
+const user = await deps.userRepository.findById(identity.id);
+
+if (!user) {
+  return { status: 'BOOTSTRAP_REQUIRED', ... };
+}
+
+if (!user.onboardingComplete) {
+  return { status: 'ONBOARDING_REQUIRED', ... };
+}
+// user.deactivatedAt is available on `user` right here and is never read.
+
+let tenant = await deps.tenantResolver.resolve(identity);
+// ...
+return { status: 'ALLOWED', identity, tenant, user, diagnostics: { ... } };
+```
+
+```typescript
+// src/security/core/security-context.ts (before fix) -- the same gap,
+// independently, in the evaluator Server Actions actually use.
+const user = await userRepository.findById(identity.id);
+if (!user)
+  return {
+    ...baseContext,
+    user: undefined,
+    readinessStatus: 'BOOTSTRAP_REQUIRED',
+  };
+if (!user.onboardingComplete)
+  return {
+    ...baseContext,
+    user: undefined,
+    readinessStatus: 'ONBOARDING_REQUIRED',
+  };
+// deactivatedAt never checked here either.
+```
+
+### Correct Pattern
+
+Check the lifecycle flag immediately after the user row is fetched, **before**
+onboarding/tenant/membership branches, in **every** independent evaluator that grants
+access from a `User` lookup — not just the one the reported exploit path happened to
+name:
+
+```typescript
+const user = await deps.userRepository.findById(identity.id);
+
+if (!user) {
+  return { status: 'BOOTSTRAP_REQUIRED', ... };
+}
+
+// Checked before onboarding/tenant/membership so a deactivated-but-incomplete
+// account can never reach a more permissive status.
+if (user.deactivatedAt) {
+  return {
+    status: 'FORBIDDEN',
+    code: 'ACCOUNT_DISABLED',
+    message: 'This account has been deactivated.',
+    diagnostics: { ...diagnostics, reason: 'account_disabled' },
+  };
+}
+
+if (!user.onboardingComplete) {
+  return { status: 'ONBOARDING_REQUIRED', ... };
+}
+```
+
+The fix deliberately **reuses the existing `FORBIDDEN` status** (adding only a new
+`code: 'ACCOUNT_DISABLED'`) rather than introducing a new top-level status value in
+`evaluateNodeProvisioningAccess()`. Every consumer of this evaluator (`with-node-
+provisioning.ts`'s API route wrapper, and every RSC layout that gates a protected
+route — `dashboard/layout.tsx`, `admin/layout.tsx`, `users/layout.tsx`, and every
+`admin/organizations/**` page) already has a `FORBIDDEN` branch (either explicit or
+via a `status !== 'ALLOWED'` catch-all), so this closes the gap in every one of them
+with zero changes to those files. Introducing a brand-new status would have required
+updating every one of those switch/branch sites individually, and missing even one
+would silently reopen the gap for that specific route. `security-context.ts`'s
+`ReadinessStatus` enum has no equivalent shared "forbidden" bucket, so there a new
+`'ACCOUNT_DISABLED'` value was added directly (only one consumer switch,
+`secure-action.ts`, needed a matching case).
+
+Because this check re-reads `user.deactivatedAt` from the database on every request
+(no caching of the outcome across requests, in either evaluator), it applies
+uniformly regardless of auth provider (Clerk or AuthJS) and regardless of whether the
+caller's session/JWT is itself still cryptographically valid — for a JWT-strategy
+provider (this repo's AuthJS integration uses the default JWT strategy, no database
+session adapter), there is no server-side session record to separately "revoke"; this
+per-request DB-truth check **is** the revocation mechanism. A stale, still-valid JWT
+simply stops being useful the instant this check runs on the next request.
+
+### Required Validation
+
+Any repository with more than one independent access/readiness evaluator (i.e. more
+than one place that turns "an authenticated identity + a `User` row" into an
+allow/deny decision) must have this test both:
+
+- as a direct unit test against **each** evaluator function, proving a deactivated
+  user is denied even when every other condition (onboarding complete, valid tenant,
+  valid membership) would otherwise allow access, and proving the check happens
+  before onboarding/tenant/membership branches (a deactivated-and-incomplete-
+  onboarding user must get the deactivation deny, not the onboarding deny), and
+- at the consumer layer for at least one representative case (an API route wrapper
+  and/or one protected RSC layout), proving the existing generic deny-handling path
+  (not a new one) fires correctly for the new code.
+
+### Rule for Agents
+
+**DO** grep for every function that independently resolves `identityProvider ->
+userRepository.findById -> (some allow/deny decision)` before declaring a lifecycle
+or account-state check "done" — this repository has at least two (`evaluateNode
+ProvisioningAccess` for route handlers/RSC layouts, `createSecurityContext` for
+Server Actions), plus a third, edge-level, non-authoritative gate
+(`src/security/middleware/with-auth.ts`, run from `src/proxy.ts`) that cannot check
+this at all in Edge runtime (no DB access there) and is not required to, because
+every real destination re-verifies via one of the two node-level evaluators before
+granting actual access or performing a mutation — do not assume fixing one evaluator
+closes the gap everywhere; verify each one, and document (rather than silently
+assume) why a non-authoritative layer doesn't need the same fix.
+
+**DO** prefer reusing an existing generic deny status/branch (with a new, more
+specific `code`) over inventing a new top-level status, when every consumer already
+has a correct catch-all for "not `ALLOWED`" — this makes the fix's blast radius the
+evaluator function alone, not every consumer of it.
+
+**DO NOT** treat "the repository field is fetched and available" as equivalent to
+"the field is enforced" — `user.deactivatedAt` was already returned by every
+`findById()` call; the defect was purely that nothing downstream read it for
+authorization purposes.
+
+**DO NOT** assume IdP-side session revocation (calling Clerk's or another provider's
+admin API to kill a session) is required to close this class of finding when the
+app's own per-request DB-truth check already makes the stale session functionally
+useless. IdP-side revocation can still be valuable defense-in-depth (e.g. so a
+provider-hosted account widget stops showing "signed in"), but is a materially larger
+feature (external-id mapping, provider API calls, partial-failure handling, its own
+audit trail) that should be tracked and triaged separately (see
+`docs/ai/general/POSSIBLE_ENHANCEMENTS.md`) rather than bundled into the fix that
+closes the actual access-control gap.
+
+---
+
+## SEC-34 — Login Endpoints Need Dedicated Two-Bucket Abuse Control, Not a Reused Generic Rate Limit
+
+**ID**: SEC-34
+**Category**: Abuse prevention (brute force, credential stuffing, password spraying)
+**Classification**: Real risk → fixed, same day (third case of an ongoing multi-case security-audit remediation series)
+**Affected contexts**: any authentication endpoint that verifies a password/secret server-side (not just AuthJS's Credentials provider)
+
+### Risk
+
+`AUTHJS_PROTOCOL_RATE_LIMIT_BYPASS_PATHS` in `src/security/middleware/with-rate-limit.ts`
+exempts `/api/auth/callback/credentials` (and a few read-only AuthJS protocol
+routes) from the generic per-IP `withRateLimit()` middleware. That exemption is
+correct on its own — but the route handler
+(`src/app/api/auth/[...nextauth]/route.ts`) that's supposed to compensate for
+it only called the _generic_ `checkRateLimit()` helper (`API_RATE_LIMIT_*`,
+the same config used for every other API route) against two identifiers
+(`signin:ip:...`, `signin:identifier:...`). Two problems:
+
+1. **Wrong tool for the job.** `API_RATE_LIMIT_*` is tuned for general API
+   traffic tolerance, not a password-verification endpoint. A flat sliding
+   window sized for "don't annoy normal API users" is far too permissive for
+   brute force / credential stuffing / password spraying, and does nothing to
+   slow down repeated attempts against one specific account beyond the same
+   generic cutoff every other endpoint gets.
+2. **No lifecycle signal, only a request-volume signal.** A flat rate limit
+   only asks "how many requests recently" — it can't distinguish 10 wrong
+   passwords in a row (clearly suspicious) from 10 mixed successful logins
+   from a shared corporate NAT IP (not suspicious at all), and it has no way
+   to escalate its response (CAPTCHA, slow down, lock) as evidence
+   accumulates — it just flips from "allow" to "flat reject" at one threshold,
+   with no signal fed back into how suspicious the account itself currently
+   looks.
+
+Additionally: `Credentials.authorize()` runs a bcrypt comparison (deliberately
+CPU-expensive) on every attempt that gets a real password to compare against —
+an attacker who stays just under the volumetric limit can still force a lot of
+bcrypt work per unit time (a CPU-amplification concern distinct from the
+brute-force concern itself).
+
+### Correct Pattern
+
+Two **independent** buckets, so rotating either dimension alone doesn't bypass
+the control:
+
+```typescript
+// src/app/api/auth/[...nextauth]/route.ts -- IP bucket, dedicated config,
+// checked before NextAuth even runs.
+const allowed = await checkSignInIpRateLimit(ip); // LOGIN_RATE_LIMIT_IP_REQUESTS / _WINDOW
+if (!allowed) return new Response(..., { status: 429 });
+```
+
+```typescript
+// src/modules/auth/infrastructure/authjs/auth.ts -- account bucket, a
+// progressive FAILURE counter (not a flat request counter), checked inside
+// authorize() itself, before any DB/bcrypt work:
+const abuseState = await getLoginAbuseState(accountKey);
+if (abuseState.lockedUntil) throw new Error('AccountTemporarilyLocked'); // never touches the DB
+if (abuseState.requiresCaptcha && isTurnstileConfigured()) {
+  if (!(await verifyTurnstileToken(cfTurnstileToken)))
+    throw new Error('CaptchaRequired');
+}
+if (abuseState.progressiveDelayMs > 0)
+  await delay(abuseState.progressiveDelayMs);
+
+// ... real credential check happens only after the above ...
+
+// On any wrong-password/unknown-email outcome:
+await recordFailedLoginAttempt(accountKey);
+// On success:
+await recordSuccessfulLogin(accountKey); // resets the counter
+```
+
+Three escalating thresholds on the same counter (`src/shared/lib/rate-limit/login-abuse-control.ts`),
+each independently configurable via env (`LOGIN_ABUSE_CAPTCHA_THRESHOLD`,
+`LOGIN_ABUSE_DELAY_THRESHOLD`, `LOGIN_ABUSE_LOCK_THRESHOLD`, defaults `3` /
+`8` / `15`, within a `LOGIN_ABUSE_WINDOW` rolling window, default 30 min):
+
+- **CAPTCHA required** — the cheapest, lowest-friction speed bump. A
+  Cloudflare Turnstile check in Managed mode (Cloudflare's own risk engine
+  decides invisible-pass vs. checkbox vs. interactive puzzle — this repo only
+  decides _when_ to ask, never _how hard_ the challenge is).
+- **Progressive delay** — an artificially increasing response delay (2s, 4s,
+  8s, capped at 10s to stay well under serverless function timeouts),
+  directly countering the bcrypt-CPU-amplification concern by slowing the
+  attacker's achievable request rate regardless of raw rate-limit counters.
+- **Temporary lock** — once clearly past normal user error territory, deny
+  outright (`AccountTemporarilyLocked`) **before any DB query or bcrypt
+  call**, for the remainder of the rolling window.
+
+CAPTCHA verification is optional and self-disabling: `isTurnstileConfigured()`
+returns `false` when either `TURNSTILE_SECRET_KEY` or
+`NEXT_PUBLIC_TURNSTILE_SITE_KEY` is unset, and the gate is skipped entirely in
+that case (the delay/lock tiers still apply) — a login-abuse fix must not
+hard-fail every login in an environment (local dev, most CI) that hasn't
+configured a third-party CAPTCHA provider.
+
+### Required Validation
+
+- Direct unit tests against the failure-counter function itself (not mocked
+  away) proving each threshold's escalation, and proving the check order
+  (deactivation/lock must win over a simultaneously-eligible lesser tier —
+  same "check the strongest signal first" principle as SEC-33).
+- A test proving a locked/captcha-blocked attempt never reaches the
+  credential-comparison code path (assert the DB mock was never called) —
+  this is what actually addresses the CPU-amplification angle, not just the
+  brute-force angle.
+- A test proving the two buckets are independent (a different IP, or a
+  different account, is unaffected by the other's state).
+- An explicit `E2E_ENABLED` bypass test for both buckets: shared/stable test
+  accounts and CI runner IPs are reused across many specs, and a real
+  abuse-control mechanism will otherwise start captcha-gating or locking them
+  out of unrelated specs.
+- A real-browser Playwright spec for the CAPTCHA tier specifically —
+  `e2e/authjs-login-abuse-control.spec.ts` (`pnpm e2e:authjs:login-abuse`),
+  using Cloudflare's official "always passes" test keypair. Since that spec
+  needs the account bucket active, it sets `E2E_LOGIN_ABUSE_CONTROL_ENABLED`
+  to override the `E2E_ENABLED` bypass above for its own run only — never set
+  that flag outside this one scenario. See `PE-05` in
+  `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` for this spec's current
+  execution status.
+
+### Rule for Agents
+
+**DO NOT** treat "this endpoint calls `checkRateLimit()`" as equivalent to
+"this login endpoint is protected against brute force" — check what config
+that call is actually using. Reusing a config tuned for general API tolerance
+on a password-verification endpoint is a materially weaker control even
+though a rate limiter is technically present.
+
+**DO** use two independent identifiers (account + IP) for any login-style
+endpoint, never a single combined key or only one dimension — either alone is
+trivially bypassed by rotating the other (many accounts from one IP, or one
+account from many IPs).
+
+**DO** prefer a progressive response (CAPTCHA → delay → lock) over a single
+flat cutoff for the account-side bucket specifically — it degrades gracefully
+for a real user who mistyped their password twice, while still meaningfully
+slowing down a real attacker.
+
+**DO** check any account-lockout-style gate _before_ the expensive
+credential-comparison work (DB query, password hash comparison) it exists to
+protect — a lock check that runs after the bcrypt call has already defeated
+its own CPU-amplification purpose.
+
+**DO NOT** forget the `E2E_ENABLED` bypass when adding this kind of
+progressive/stateful control to a path exercised by this repository's
+E2E fixtures — see the existing convention in
+`E2E_RATE_LIMIT_BYPASS_API_PREFIXES` (`with-rate-limit.ts`) for the same
+reasoning applied to the generic rate limiter.
+
+## SEC-35 — Single-Use Tokens Must Be Claimed Atomically, Never Checked Then Marked
+
+**ID**: SEC-35
+**Category**: Race conditions / authentication token lifecycle (TOCTOU)
+**Classification**: Real risk → fixed, same day (fourth case of the multi-case security-audit remediation series)
+**Affected contexts**: any token whose security value depends on being redeemable exactly once — password reset, email verification, invitations, magic links, one-time codes
+
+### Risk
+
+`src/app/api/auth/reset-password/route.ts` validated the token and marked it
+used in two separate statements, with a deliberately expensive operation
+between them:
+
+```typescript
+// BROKEN -- do not reintroduce
+const [tokenRecord] = await db
+  .select(...)
+  .where(and(eq(tokenHash, hash), gt(expiresAt, new Date()), isNull(usedAt)));
+if (!tokenRecord) return 410;
+
+const hashedPassword = await hash(password, 12); // ~300ms window
+
+await db.transaction(async (tx) => {
+  await tx
+    .update(passwordResetTokensTable)
+    .set({ usedAt: now })
+    .where(eq(passwordResetTokensTable.id, tokenRecord.id)); // no guard, no RETURNING check
+  // ... set the password ...
+});
+```
+
+The `UPDATE` was keyed on `id` alone: it re-verified neither `usedAt IS
+NULL` nor expiry, and nothing inspected whether it had actually changed a
+still-unused row. So:
+
+```
+R1 SELECT unused ✓        R2 SELECT unused ✓
+R1 hash password A        R2 hash password B
+R1 UPDATE used            R2 UPDATE used      (overwrites R1's usedAt)
+R1 set password A         R2 set password B   (last writer wins)
+```
+
+Both requests succeed from one token. The bcrypt call is what makes this
+practical rather than theoretical — at cost 12 it holds the window open for
+hundreds of milliseconds, wide enough to hit reliably with parallel
+requests. An attacker holding a token can race the legitimate user and land
+the final write.
+
+### Correct Pattern
+
+Let the database decide, in the single statement that also performs the
+mutation. The `UPDATE` that marks the token used must itself re-assert every
+precondition, and `RETURNING` reports whether _this_ caller won:
+
+```typescript
+const [claimedToken] = await tx
+  .update(passwordResetTokensTable)
+  .set({ usedAt: now })
+  .where(
+    and(
+      eq(passwordResetTokensTable.tokenHash, tokenHash),
+      gt(passwordResetTokensTable.expiresAt, sql`NOW()`), // DB clock, not the app's
+      isNull(passwordResetTokensTable.usedAt),
+    ),
+  )
+  .returning();
+
+if (!claimedToken) {
+  // Someone else claimed it. Respond exactly as for an invalid token.
+  return Response.json({ error: INVALID_TOKEN_ERROR }, { status: 410 });
+}
+// Only now is it safe to act on the token's authority.
+```
+
+Exactly one concurrent `UPDATE` can match the row; every other one matches
+nothing and returns an empty array. No advisory lock, no `SELECT FOR
+UPDATE`, no retry loop needed.
+
+Three details that are easy to get wrong:
+
+- **`NOW()`, not `new Date()`**, for the expiry comparison — it must be
+  evaluated by the database, on the row it is locking, not by whichever
+  process happened to build the query.
+- **A losing claim must be indistinguishable from an invalid token** in the
+  response. Anything else tells an attacker their race is live.
+- **A cheap pre-`SELECT` is allowed, but only as a DoS guard.** Rejecting
+  obviously-bad tokens before bcrypt stops an attacker burning CPU with junk
+  tokens. It must decide nothing the claim does not re-verify, and the code
+  must say so, or the next reader will mistake it for the security check.
+
+### Required Validation
+
+- A **real-database** test, not only mocks: the guarantee under test is a
+  SQL-level one, so a mocked query builder can only prove the code calls the
+  functions the test expects. `route.db.test.ts` fires N concurrent claims at
+  one token and asserts exactly one wins.
+- An assertion that a losing claim does **not** overwrite the winner's
+  `usedAt` — the precise thing the old unguarded `WHERE id = ?` did.
+- An assertion that an expired-but-unused token is rejected by the claim
+  itself, not only by the pre-check.
+- A route-level test that a lost claim produces byte-identical output to an
+  invalid token.
+
+### Rule for Agents
+
+**DO NOT** write "check that it is unused → do slow work → mark it used" for
+anything that must happen once. If the same row must not be acted on twice,
+the statement that marks it must also be the statement that checks it, and
+its result must be the branch condition. When adding a new one-time-token
+flow to this repository, mirror
+`src/app/auth/verify-email/page.tsx`'s `consumeVerificationToken` or
+`DrizzleInvitationRepository.markAccepted` — both were already correct when
+this defect was found in password reset, which is exactly why "we have this
+pattern elsewhere" is no substitute for checking the flow in front of you.
+
+## SEC-36 — A Stateless JWT Needs A Server-Side Revocation Marker, Not Hope
+
+**ID**: SEC-36
+**Category**: Session lifecycle / account-takeover recovery
+**Classification**: Real risk → fixed, same day (fifth case of the multi-case security-audit remediation series)
+**Affected contexts**: any deployment using `session.strategy: 'jwt'` with no database session store — i.e. this repository's entire AuthJS path
+
+### Risk
+
+`auth.config.ts` sets a stateless 30-day JWT session:
+
+```typescript
+session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 }
+```
+
+There is no server-side session record, so there was **nothing to delete**
+and no mechanism by which any event could stop an already-issued token from
+being honoured. A completed password reset changed the stored hash and
+nothing else. The account-takeover recovery story therefore did not work:
+
+```
+attacker steals a session cookie
+        ↓
+owner notices, resets their password
+        ↓
+attacker's JWT keeps working for up to 30 more days
+```
+
+The owner performs the one action every product tells them to perform, and
+it does not evict the attacker. This is precisely the case OWASP's
+Forgot-Password guidance is aimed at.
+
+Note the interaction with SEC-33: deactivation was already enforced per
+request against the database, so _disabling_ an account did evict a stale
+session. Password reset had no equivalent, which is exactly the kind of gap
+that survives review — one lifecycle event was covered, so the class looked
+handled.
+
+### Correct Pattern
+
+Add a revocation marker to the user row and refuse any session minted before
+it. This repository uses a **timestamp** (`users.sessions_valid_from`)
+compared against the JWT's own `iat` claim, rather than a version counter
+plus a new claim:
+
+```typescript
+export function isSessionRevoked(
+  sessionsValidFrom: Date | null | undefined,
+  sessionIssuedAtSeconds: number | undefined,
+): boolean {
+  if (!sessionsValidFrom) return false; // nothing ever revoked
+  if (typeof sessionIssuedAtSeconds !== 'number') return true; // fail closed
+  return (
+    sessionIssuedAtSeconds < Math.floor(sessionsValidFrom.getTime() / 1000)
+  );
+}
+```
+
+Then, in the same transaction that completes the reset:
+
+```typescript
+await tx
+  .update(usersTable)
+  .set({ sessionsValidFrom: now })
+  .where(eq(usersTable.id, user.id));
+```
+
+Four decisions worth keeping:
+
+- **Timestamp over version counter.** `iat` is already in every JWT, so the
+  check works on tokens issued _before_ the feature shipped. A `sv` counter
+  would need a new claim, forcing a choice between logging everyone out on
+  deploy or leaving a gap until old tokens expire.
+- **Enforce in the central evaluators, not in the auth adapter.** Both
+  `evaluateNodeProvisioningAccess` and `createSecurityContext` already fetch
+  the user row every request for the SEC-33 deactivation check, so the
+  comparison costs nothing extra — and putting it anywhere else would mean
+  one of the two evaluators still honouring a revoked session.
+- **Report it as `UNAUTHENTICATED`, not a new status.** "Sign in again" is
+  the true remedy, and every consumer already routes that status to the
+  sign-in page — so zero consumers needed changing. The distinguishing
+  detail lives in the diagnostics (`reason: 'session_revoked'`).
+- **Order it AFTER the deactivation gate.** Both invalidate a valid-looking
+  session, but deactivation is the stronger, more permanent statement and
+  SEC-33's no-masking rule applies here too: a disabled account must hear
+  "your account is disabled", not "sign in again".
+
+### Required Validation
+
+- Direct tests of the comparison itself: before the marker → revoked; after
+  → allowed; **same second → allowed** (`iat` is whole seconds, and the
+  benign direction is the one that does not log out the person who just
+  reset their password); no marker → never revoked; **marker present but no
+  issue time → revoked** (fail closed).
+- The same revocation test in **both** evaluators. One is not evidence for
+  the other — that is the whole lesson of SEC-33.
+- An ordering test proving a user who is both deactivated and revoked still
+  reports `ACCOUNT_DISABLED`.
+- A real-DB test that a completed reset writes the marker, that a pre-reset
+  session is refused against the stored value, and that a post-reset session
+  is not.
+
+### Rule for Agents
+
+**DO NOT** assume changing a credential invalidates anything else. With
+stateless sessions it invalidates nothing — the old token is still
+signed, still unexpired, still accepted. Any event that means "this
+account's existing sessions should stop working" (password reset, forced
+logout, compromise recovery) must raise a server-side marker that the
+request path actually reads. And when you add such an event, add its check
+to **every** central evaluator, not the first one you find.
+
+## SEC-37 — Client Exposure Is An Allowlist Of Types, Never A Substring Match On Messages
+
+**ID**: SEC-37
+**Category**: Information disclosure / error handling
+**Classification**: Real risk → fixed, same day (seventh case of the multi-case security-audit remediation series)
+**Affected contexts**: Server Actions via `createSecureAction`, and any boundary that turns a caught exception into a client-visible string
+
+### Risk
+
+`createSecureAction`'s catch block returned the caught exception's own
+message to the client for every error it did not specifically classify,
+filtered by exactly one substring:
+
+```typescript
+// BROKEN -- do not reintroduce
+function toUserFriendlyErrorMessage(message: string): string {
+  if (message.includes('Failed query:')) {
+    return 'Authentication sync is temporarily unavailable. Please try again.';
+  }
+  return message; // everything else goes to the client verbatim
+}
+```
+
+The defect is not the missing cases, it is the **direction of the default**.
+Exposure was opt-out, so anything nobody had thought to filter shipped
+straight to the browser: driver errors carrying table and column names,
+provider SDK errors carrying key prefixes, `ENOENT` messages carrying
+absolute server paths, internal identifiers, any library's unexpected throw.
+The one filter that did exist was also fragile in a specific way — it keys
+on another project's error text, so it silently stops working the day that
+project rewords its message, and nothing fails to tell you.
+
+The same repository's API wrapper (`with-error-handler.ts`) already had this
+right, returning `'Internal Server Error'` in production and logging the
+detail with a correlation id. Two boundaries, opposite defaults.
+
+### Correct Pattern
+
+Make exposure a property of the **type**, decided when the error is written:
+
+```typescript
+export class PublicError extends Error {
+  readonly exposeToClient = true as const;
+  readonly code: string;
+}
+```
+
+Then the boundary has one rule and a safe default:
+
+```typescript
+const correlationId = context?.correlationId ?? crypto.randomUUID();
+
+logger.error(
+  {
+    event: 'action:unhandled_error',
+    actionName,
+    correlationId,
+    errorName,
+    errorMessage,
+    errorStack,
+  },
+  'Secure action failed with an unclassified error',
+);
+
+if (isPublicError(error)) {
+  return { status: 'error', error: error.message, correlationId };
+}
+
+return {
+  status: 'error',
+  error:
+    env.NODE_ENV === 'production'
+      ? `Something went wrong. Reference: ${correlationId}`
+      : rawErrorMessage,
+  correlationId,
+};
+```
+
+Points that matter:
+
+- **The correlation id is returned to the client and logged with the
+  detail.** A generic message alone makes real failures unsupportable; the
+  id lets a user quote one string that leads straight to the full record.
+- **Outside production the real message is still returned.** There is no
+  untrusted client to protect in local development, and a reference id would
+  make debugging worse — the same trade-off `with-error-handler.ts` makes.
+- **`AuthorizationError` remains exposed, deliberately.** Its message is
+  always supplied by the `authorize()` call site in this repository
+  (defaulting to `'Unauthorized'`), never text produced by a library. That
+  is a reasoned exemption, not an oversight.
+- **`isPublicError` also accepts a structural `exposeToClient === true`,**
+  so the guard survives realm and duplicated-module boundaries where
+  `instanceof` quietly fails.
+
+### Required Validation
+
+- A production-mode test per _shape_ of leak the old default allowed —
+  driver message, provider SDK message, filesystem path, non-`Error` throw —
+  each asserting the raw text does not appear in the returned string. Testing
+  only the one case that used to be filtered would re-encode the original
+  mistake.
+- A test that the returned `correlationId` is the same id the server log was
+  written under; a reference the log cannot be searched by is worthless.
+- A test that a `PublicError` message _is_ returned in production, so the
+  safe default cannot be "hide everything" by accident.
+
+### Rule for Agents
+
+**DO NOT** decide client exposure by inspecting an exception's message —
+not `.includes()`, not a regex, not a message allowlist. The message is
+authored by whoever threw, which is usually not this codebase.
+**DO** throw `PublicError` when a message is written for the person reading
+the screen; let everything else be internal by default.
+**DO** return and log a correlation id whenever you hide a message, or you
+have traded a leak for an unsupportable failure.
+
+## SEC-38 — A Convention Nothing Checks Is Not A Convention
+
+**ID**: SEC-38
+**Category**: API consistency / response contract
+**Classification**: Real drift → fixed (eighth case of the multi-case security-audit remediation series)
+**Affected contexts**: every App Router route handler, and every client that reads one
+
+### Risk
+
+`AGENTS.md` has carried an "API Response Discipline" section for a long time,
+naming `response-service.ts` and its helpers. An audit found **12 of 36
+routes bypassing it** with ~56 hand-rolled `Response.json(...)` calls,
+including five live auth endpoints (`signup`, `forgot-password`,
+`reset-password`, `resend-verification`, `active-org`).
+
+This is not primarily a security hole; it is a consistency failure with
+security-adjacent consequences:
+
+- Clients cannot rely on one error shape, so each hand-rolls its own
+  extraction and each gets it slightly differently wrong.
+- Error bodies escape the one place a repository can centrally decide what an
+  error is allowed to say — the exact centralisation SEC-37 depends on.
+- Sibling endpoints answering the same question in different shapes is how a
+  consumer ends up parsing on `message` text (see below).
+
+Two things made it decay:
+
+1. **The instruction said "prefer"**, and offered "unless the endpoint has a
+   deliberate protocol-specific reason" as an unbounded escape hatch.
+2. **Nothing checked.** Exactly as with SEC-23, the rule depended on whoever
+   wrote the next route having read the document and remembered it.
+
+### Correct Pattern
+
+Routes:
+
+```typescript
+return createSuccessResponse({ autoVerified: true }, 201);
+return createValidationErrorResponse(getFieldErrors(parsed.error), 422);
+return createServerErrorResponse(
+  'Registration is currently closed.',
+  403,
+  'REGISTRATION_CLOSED',
+);
+```
+
+Clients — and this is the half that is easy to miss:
+
+```typescript
+// The envelope has TWO error channels. Reading only `.error` means every
+// 422 shows your generic fallback instead of what the user must fix.
+setError(extractApiErrorMessage(body) ?? 'Failed to create account.');
+
+// Success payloads are wrapped.
+const autoVerified = body.data?.autoVerified === true;
+```
+
+**Never branch on a response's human-readable message.** `sign-up-client.tsx`
+did exactly this:
+
+```typescript
+const isAutoVerified =
+  responseData.message === 'Account created. You can now sign in.';
+```
+
+That comparison breaks silently the moment anyone rewords the sentence — no
+error, no failing test, just the wrong branch. The route now returns an
+explicit `autoVerified` boolean and the client reads that.
+
+### Enforcement
+
+`src/shared/lib/api/response-service.guard.test.ts` walks every `route.ts`
+under `src/app/api` and fails on any hand-rolled envelope. Routes that
+genuinely own their wire format sit in `EXEMPT_ROUTES` with a written reason
+naming the consumer — today the NextAuth protocol handler, the uptime-monitor
+health probe, the deploy-script diagnostics endpoint, the log-ingest
+acknowledgement, and Sentry's verbatim example route. The guard also fails if
+an exemption points at a route that no longer exists, so the list cannot rot.
+
+### Required Validation
+
+- The guard test itself, verified by reverting one conversion and confirming
+  the suite goes red.
+- Route tests asserting the _envelope_, not just the status code: a converted
+  route's success test must read `body.data.x`, which is what catches a
+  half-done conversion.
+- A client test for the `form_errors` path specifically — it is the channel a
+  `.error`-only client silently misses.
+
+### Rule for Agents
+
+**DO** use the `response-service.ts` helpers for every JSON route. It is a
+requirement, and the guard test enforces it.
+**DO** read client-side errors with `extractApiErrorMessage()` and success
+data from `body.data`.
+**DO NOT** branch on a message string. Return a field.
+**DO NOT** add to `EXEMPT_ROUTES` without naming the consumer that requires
+the different shape.
+
+## SEC-39 — An Allowlisted Host Reached Over http:// Is Still Cleartext
+
+**ID**: SEC-39
+**Category**: Outbound transport security / SSRF hardening
+**Classification**: Real risk → fixed (ninth case of the multi-case security-audit remediation series)
+**Affected contexts**: `secureFetch` and every outbound call made through it
+
+### Risk
+
+`secure-fetch.ts` had DNS-rebinding protection, address-family pinning,
+private/reserved range classification, per-hop redirect revalidation and
+sensitive-header stripping — and **not one reference to `url.protocol`**.
+
+Every one of those controls answers "who am I talking to". None answers "can
+anyone else read it". So an allowlisted, public, correctly-pinned host was
+reachable as:
+
+```
+http://api.example.com          # allowlisted -- and entirely in clear
+```
+
+and a trusted host could downgrade an established connection mid-chain:
+
+```
+https://trusted  ->  307  ->  http://trusted
+```
+
+The redirect case is the sharper one: the caller asked for HTTPS, the
+allowlist was satisfied at both hops, and the request still ended up on the
+wire in plaintext. Anything the request carries — `Authorization`, an API
+key, a POST body — goes with it.
+
+### Correct Pattern
+
+```typescript
+function assertHttpsProtocol(url: URL, redactedUrl: string): void {
+  if (url.protocol === 'https:') return;
+
+  const isProduction = env.NODE_ENV === 'production';
+  if (env.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP && !isProduction) {
+    logger.warn({ url: redactedUrl, protocol: url.protocol }, '...');
+    return;
+  }
+
+  logger.error(
+    {
+      url: redactedUrl,
+      protocol: url.protocol,
+      insecureFlagSetButIgnored:
+        isProduction && env.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP,
+    },
+    'Outbound request blocked: secureFetch is HTTPS-only',
+  );
+  throw new Error(
+    `SSRF Protection: Outbound requests must use https, received ${url.protocol}`,
+  );
+}
+```
+
+Three placement decisions carry the weight:
+
+- **Called from `resolveAndValidateHost`, which already runs for every hop.**
+  That is what closes the redirect downgrade for free: the second hop goes
+  through the identical pipeline, so `307 -> http://` is rejected before
+  anything is connected to. A check placed only at the entry point would
+  have fixed the direct case and left the more interesting one open.
+- **Checked first — before the allowlist, before any DNS work.** It is the
+  one rule that holds regardless of who the host is, and it costs nothing.
+- **The dev escape hatch is inert in production.**
+  `SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP` is ignored when
+  `NODE_ENV === 'production'`, and the block is logged with
+  `insecureFlagSetButIgnored: true` so the misconfiguration is visible. A
+  flag that production _honours_ is precisely the accident the requirement
+  exists to prevent; the safe design makes the wrong value harmless rather
+  than merely discouraged.
+
+### A Trap When Adding This To An Existing Codebase
+
+Tests that predate the gate often use `http://` as a convenience while
+actually testing something else — this repository had 21 such URLs across
+two files, all exercising private/reserved address classification. Once the
+protocol gate is checked first they still fail, so the suite stays green,
+**but they now fail for the wrong reason and no longer test what they are
+named for.** They were rewritten to `https://`. A green suite after adding a
+new early-exit check is not evidence the older assertions still mean
+anything.
+
+### Required Validation
+
+- A direct `http://` request to an allowlisted host is rejected, and `fetch`
+  is never called.
+- Rejection happens **before DNS** (assert the `lookup` mock was not called),
+  which is what proves the ordering rather than just the outcome.
+- A `307 -> http://` redirect on the same host is rejected and only the first
+  hop reached the network.
+- Non-HTTP schemes (`ftp:`, `file:`, `gopher:`) are refused.
+- The dev flag permits plaintext outside production **and is ignored inside
+  it**, with the ignored-flag log asserted.
+
+### Rule for Agents
+
+**DO NOT** treat host allowlisting, pinning or address classification as
+transport security. They constrain the peer, not the channel.
+**DO** reject non-HTTPS at the earliest point in the pipeline, and re-check
+it on every redirect hop rather than once at entry.
+**DO NOT** add a "allow insecure" switch that production honours. Make it
+inert there and log when it was ignored.
+
+## SEC-40 — Stripping Credentials On A Cross-Origin Redirect Does Not Protect The Body
+
+**ID**: SEC-40
+**Category**: Outbound request integrity / redirect handling
+**Classification**: Real risk → fixed (tenth case of the multi-case security-audit remediation series)
+**Affected contexts**: `secureFetch` and any manual redirect replay
+
+### Risk
+
+`prepareNextHop` correctly stripped `Authorization`, `Cookie` and
+`Proxy-Authorization` when a redirect crossed origins. It then followed the
+hop — and under 307/308 semantics, **method and body are preserved
+verbatim**:
+
+```
+POST https://api-a.example.com
+Authorization: Bearer ...
+body: { "secretData": ... }
+
+  -> 307 Location: https://api-b.example.com
+
+Authorization  stripped   ✓
+body           forwarded  ✗
+```
+
+The header was the smaller half. The body is usually the interesting
+payload, and it went to `api-b` intact.
+
+The deeper problem was the implied trust model: the hop was permitted
+because both hosts sat on the global `SECURITY_ALLOWED_OUTBOUND_HOSTS`
+allowlist. But that list means _"this application may call these services"_.
+It does not mean _"any of these services may redirect a request, with its
+body, to any other"_. Treating a flat allowlist as a mesh of mutual trust is
+what let one allowlisted host hand a request to another.
+
+### Correct Pattern
+
+Redirects are **same-origin by default**. Crossing an origin is a per-call
+decision the caller makes explicitly:
+
+```typescript
+await secureFetch('https://api-a.example.com/upload', {
+  method: 'POST',
+  body: payload,
+  allowedRedirectOrigins: ['https://cdn-a.example.com'],
+});
+```
+
+Without that grant a cross-origin `Location` throws before the hop is made,
+so the body never leaves for an origin the caller did not name.
+
+Two properties worth preserving if this is reimplemented:
+
+- **The grant covers the hop, not the credentials.** Naming an origin does
+  not re-attach `Authorization`; credential stripping still applies to every
+  cross-origin hop. Those are separate decisions and collapsing them would
+  turn a routing permission into a credential grant.
+- **The option is stripped before `fetch` sees it.** `SecureFetchInit`
+  extends `RequestInit`, so callers pass one object, but the helper's own
+  keys are removed so no non-standard property reaches the wire or the
+  redirect replay.
+
+### An Ordering Consequence Worth Knowing
+
+A protocol downgrade is _also_ an origin change — an origin is scheme + host
+
+- port. So `https://x → 307 → http://x` is caught by this gate before
+  SEC-39's HTTPS check. Both rejections are correct, but a test asserting the
+  SEC-39 message specifically will now see this one instead. The composition
+  that matters is proven separately: explicitly allowing `http://x` as a
+  redirect origin **still** fails the HTTPS gate. Permission to reach a host is
+  never permission to reach it in cleartext.
+
+### Required Validation
+
+- A cross-origin redirect between two _allowlisted_ hosts is refused by
+  default — the allowlist must not be the thing that authorises the hop.
+- A 307 with a body is refused cross-origin, and the body is proven to have
+  reached only the origin the caller addressed (assert there is no second
+  hop, not merely that the string is absent — it legitimately appears in the
+  first).
+- With the origin granted, the 307 body and method survive the hop.
+- Credentials are still stripped on a _granted_ cross-origin hop.
+- Origin matching tolerates a trailing slash or path and rejects a different
+  host.
+- The option does not appear in the init handed to `fetch`.
+
+### Rule for Agents
+
+**DO NOT** treat a global host allowlist as a trust relationship between the
+hosts on it. It authorises _your_ calls, not their redirects.
+**DO** make cross-origin redirect following an explicit per-call grant.
+**DO NOT** assume header stripping makes a cross-origin hop safe — 307/308
+carry the body, which is usually the more sensitive half.
+
+---
+
+## SEC-41 — The Scope A Route Checks Must Be The Scope The Statement Carries
+
+**ID**: SEC-41
+**Category**: Multi-tenant authorization / IDOR
+**Classification**: Real risk → fixed (eleventh case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `/api/admin/waitlist/**`, `/api/admin/invitations/[id]`,
+`/api/auth/waitlist`, `InvitationRepository`
+
+### Risk
+
+This is SEC-26 found for the third and fourth time. Read SEC-26 first; this
+entry is about the two shapes the same defect takes once the obvious version
+has been fixed.
+
+**Shape 1 — a global resource with no honest scope to check.**
+
+The waitlist is created by anonymous visitors. `tenant_id` is never written;
+`organization_id` is whatever the joiner claimed. `listPending()` takes no
+argument and returns every applicant on the platform. Both waitlist admin
+routes gated that behind:
+
+```ts
+if (isEnvBasedPlatformAdmin(email)) return true;
+return authzService.can({ action: ACTIONS.SECURITY_MANAGE_POLICIES, ... });
+```
+
+The second line is the bug. `SECURITY_MANAGE_POLICIES` is evaluated against
+the caller's **active tenant**, so every tenant owner holds it — and there was
+no scope to apply it to. One tenant's owner could read, approve and reject
+every other tenant's applicants.
+
+The tempting fix is to start filtering by `organization_id`. That column is
+attacker-supplied: `POST /api/auth/waitlist` is unauthenticated and wrote the
+field verbatim, and the approve path then read it back as the invitation
+target — so a visitor could nominate the organization that approving them
+would invite them into.
+
+**Shape 2 — the check and the write are two different statements.**
+
+The canonical nested revoke looked correct:
+
+```ts
+const rows = await db
+  .select({ id: invitationsTable.id })
+  .from(invitationsTable)
+  .where(
+    and(
+      eq(invitationsTable.id, invitationId),
+      eq(invitationsTable.organizationId, orgId),
+    ),
+  ); // scope checked
+if (rows.length === 0) return notFound();
+await service.revokeInvitation(invitationId); // scope absent
+```
+
+The `UPDATE` behind `revokeInvitation` carried `WHERE id = ?` and nothing
+else. The organization was proven in one statement and then not used in the
+one that wrote. A `SELECT` establishes what was true a moment ago; between it
+and the `UPDATE` the row can change owner, be accepted, or be revoked by
+someone else. Worse, the second statement is reachable from anywhere — and it
+was: a legacy flat `DELETE /api/admin/invitations/[id]` called it directly,
+by global invitation id, with no organization anywhere in the request. That
+route was the real hole; the nested one was one refactor away from being it.
+
+`InvitationsClient` made this concrete. `revokeEndpointBase` defaulted to the
+flat path, so a component that simply forgot the prop silently used the
+unscoped route.
+
+### Fix
+
+Decide what the resource actually is, then make the scope part of the
+statement.
+
+**Waitlist — platform-global.** There is no trustworthy scope, so there is no
+scoped grant that could honestly authorise it. The ABAC path is gone: only an
+env-based platform admin, whose grant genuinely is unscoped, may reach these
+routes. `organizationId` is removed from the anonymous join input, and the
+approve path takes its destination from server configuration only. (The
+nullable column stays for a separate, non-security cleanup — a semantic
+migration does not belong in an incident fix.)
+
+**Invitations — organization-local, with no second path.** The flat route is
+deleted rather than kept for compatibility; `revokeEndpointBase` is now a
+required prop with no default, so the compiler asks the question. And the
+scope moved into the write:
+
+```ts
+async revokePendingScoped(id: string, organizationId: string | null) {
+  const rows = await this.db.update(invitationsTable)
+    .set({ status: 'revoked' })
+    .where(and(
+      eq(invitationsTable.id, id),
+      eq(invitationsTable.status, 'pending'),
+      ...(organizationId === null
+        ? []                                                    // platform admin
+        : [eq(invitationsTable.organizationId, organizationId)]),
+    ))
+    .returning();
+  return rows[0] ? rowToInvitation(rows[0]) : null;
+}
+```
+
+`status = 'pending'` is in the predicate for the same reason as the
+organization: it makes the revoke single-shot instead of re-writing a row
+that was already accepted. `organizationId: null` is the explicit unscoped
+platform-admin path, mirroring `AdminUserScope` in `DrizzleAdminUsersService`.
+The route maps `null` back to the same 404 whether the invitation is absent,
+another organization's, or already revoked.
+
+### Audit Of The Whole Class
+
+Three instances in three separate cases is not a coincidence, so all 18
+`/api/admin/**` routes were audited against one question: _does the caller's
+authorized scope appear in the SQL that reads or writes the row?_
+
+No further instances. Users, feature flags, audit logs, audit-log settings
+and the whole `organizations/**` family already pass a scope down
+(`AdminUserScope`, `MutationScope`, `getDetailInActiveScope`) and carry it in
+the predicate. Worth naming as the reference shape:
+`DrizzleFeatureFlagAdminService.scopePredicate(id, scope)` and
+`DrizzleAdminRolesMutationService`, where the pre-check `SELECT` exists only
+for a business rule (`isSystem`) and the authoritative `UPDATE`/`DELETE`
+still carries `organizationId` itself.
+
+A clean audit is worth exactly as much as the enforcement it leaves behind
+(SEC-38), so `src/security/core/platform-admin.guard.test.ts` walks every
+admin route and asserts the two structural halves that went missing:
+
+1. **The route separates the two grants.** It calls `isEnvBasedPlatformAdmin`
+   itself or delegates to a shared `_lib` access helper. A route that only
+   consults the tenant-scoped ABAC grant fails.
+2. **The route does not mutate the database inline.** Writes go through a
+   module service whose signature makes the scope mandatory. Scoped reads are
+   allowed — forbidding them would only push routes into worse shapes.
+
+Both halves were verified to fail against the pre-fix code, not just to pass
+against the current code.
+
+The docstring on `isEnvBasedPlatformAdmin` was also corrected: it described
+`SECURITY_MANAGE_POLICIES` as granting "platform admin". That sentence, on the
+one function at the centre of this defect class, is a fair share of why the
+bug kept coming back.
+
+### Rule for Agents
+
+**DO NOT** authorise with a `SELECT` and then write with a statement that
+carries no scope. Two statements are two decisions, and only the second one
+touches data.
+**DO** put the authorized scope in the same `WHERE` as the id — including a
+status guard when the mutation should be single-shot.
+**DO NOT** treat a client-supplied `organizationId`/`tenantId` as scope
+authority, and be especially suspicious of one that reached the database
+through an unauthenticated endpoint.
+**DO** decide whether a resource is platform-global or tenant-local, and then
+hold that line — a resource with no trustworthy scope column may only be
+served to a grant that is genuinely unscoped.
+**DO NOT** keep a second, flatter mutation route "for compatibility". It is
+the one that will be called.
+**DO** make the scoped call the only callable one: a required prop beats a
+defaulted prop, and a mandatory parameter beats a documented convention.
+
+---
+
+## SEC-42 — A Fail-Open Fallback Is Not A Rate Limit On Serverless
+
+**ID**: SEC-42
+**Category**: Abuse prevention / availability trade-offs
+**Classification**: Real risk → fixed (twelfth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `checkRateLimit`, every pre-auth endpoint
+
+### Risk
+
+`checkRateLimit` fell back to a process-local `Map` whenever Upstash timed out
+or errored. For ordinary API throttling that is a reasonable availability
+trade. For sign-in, password reset, verification and invitations it is not a
+rate limit at all: on serverless, instances are ephemeral and unshared, so
+"5 attempts per 15 minutes" becomes "5 attempts per 15 minutes **per instance
+the attacker happens to reach**". The control reports healthy while its
+durable half is gone — the same failure mode already recorded in SEC-34's
+"Fail-Open Fallbacks Are Not Free On Serverless".
+
+Auditing the surface turned up something worse than the reported issue. Three
+of the four named paths had **no endpoint-level limit at all**, only the
+generic per-IP window in the Edge proxy — which degrades the same way:
+
+- `/api/auth/reset-password` — redeems a reset token, then runs bcrypt. Both a
+  token-guessing oracle and an expensive one.
+- `/api/auth/signup` — creates rows, sends mail, runs bcrypt on
+  unauthenticated input, and consumes invitation tokens when registration is
+  not open.
+- `/api/auth/invite` — authenticated, and therefore not IP-shaped at all.
+
+### Fix
+
+A `mode` on the existing helper, and a chain rather than an either/or:
+
+```
+Upstash  →  durable secondary (Postgres)  →  fail closed
+```
+
+Failing closed here is cheaper than it looks, and that is the load-bearing
+observation. **Every endpoint that runs in strict mode already needs Postgres
+to do its job** — `authorize()` resolves `DrizzleDb` to fetch the password
+hash; the rest read or write user rows. So the only state in which strict mode
+refuses is one where the endpoint was already dead. Fail-closed costs no
+availability that is not already lost.
+
+Strict mode applies when Upstash is **absent**, not only when it errors: a
+deployment with no Upstash configured must not silently downgrade a
+security-critical limit to a per-instance `Map`.
+
+The secondary is one statement:
+
+```ts
+INSERT INTO rate_limit_counters (identifier, window_start, expires_at, count)
+VALUES (…, 1)
+ON CONFLICT (identifier, window_start) DO UPDATE SET count = count + 1
+RETURNING count;
+```
+
+`SELECT`-then-`UPDATE` loses increments whenever two requests for one
+identifier overlap, and on an abuse-control path a lost increment is a free
+attempt. Fixed window rather than sliding: a sliding window needs the
+individual timestamps, which turns one row per identifier-window into one row
+per request — write amplification a store only used during an outage does not
+need.
+
+Runtime placement matters as much as the SQL. `checkRateLimit` lives in
+`shared/lib` and is reachable from the Edge middleware, so it takes its strict
+dependencies as a structurally-typed parameter and imports nothing from the
+`rate-limit` module. `src/security/api/strict-rate-limit.ts` — Node only — is
+the single file that knows the secondary is Postgres.
+
+### The Kill Switch, And Why It Is Loosen-Only
+
+Degrading a security control needs an operator lever, and an env var on Vercel
+needs a redeploy. The repository already has a runtime-togglable mechanism:
+`DrizzleFeatureFlagService.isEnabled()` issues a fresh `SELECT` per call with
+no cache, and the admin GUI writes the same table, so under
+`FEATURE_FLAG_PROVIDER=db` a toggle lands on the next request — the same
+property GrowthBook has. Only `static` needs a redeploy, because its flags
+_are_ an env var (`FEATURE_FLAGS_STATIC`).
+
+So the switch layers a flag override over an env base. Two rules make that
+sound rather than merely convenient:
+
+**1. A separate port, not `FeatureFlagService` directly.**
+`isEnabled(flag, context: AuthorizationContext)` requires a tenant and a
+subject; every control these switches guard runs _before_ authentication.
+`OperationalSwitch` is tenant-less and subject-less, and the mapping onto the
+tenant-scoped flag contract happens once, inside an adapter. Product flags
+("does this user see the new UI") and operational switches ("is this control
+enforcing") have different lifetimes, audiences and blast radii; conflating
+them is cheap today and expensive later.
+
+**2. The override may only loosen.**
+
+```
+result = (override === true) ? true : base
+```
+
+`isEnabled()` returns a plain `boolean`, and `ResilientFeatureFlagService`
+answers `false` when its delegate throws — so _"the operator set this to
+false"_ and _"the flag store is unreachable"_ are the same value at this seam.
+A symmetric override would let any flag outage silently rewrite the
+deployment's posture. Loosen-only makes the failure direction safe by
+construction: an unreachable override cannot relax a security control, only
+fail to relax one.
+
+The override is wired only for providers that can actually be toggled at
+runtime (`db`, `growthbook`). Under `static` it is not wired at all — layering
+one env var over another adds a moving part and no capability.
+
+### Required Validation
+
+Mocks cannot demonstrate either property that matters here, so both were
+falsified rather than merely observed green:
+
+- `DrizzleRateLimitStore.db.test.ts` fires 25 overlapping increments against a
+  real database and requires exactly `1..25`. **Verified to fail** when the
+  store is rewritten as `SELECT`-then-write.
+- `does NOT fall back to the process-local counter on a double outage` exists
+  because every other strict-mode assertion still passes if that regression
+  returns — a green suite would otherwise say nothing about the one property
+  the case was opened for.
+- `LayeredOperationalSwitch` asserts loosen-only in _both_ directions, plus a
+  throwing override.
+
+### Rule for Agents
+
+**DO NOT** let a security-critical limit fall back to process-local state on
+serverless. Per-instance counters are not a limit; they are a limit divided by
+the number of instances an attacker can reach.
+**DO** ask what a fail-closed path actually costs before rejecting it — if the
+endpoint already depends on the store that is down, it costs nothing.
+**DO NOT** treat "an endpoint has a limit" as settled because a global
+middleware covers it. Check whether that middleware's fallback is durable, and
+whether its window is tuned for this endpoint.
+**DO** key an authenticated abuse control on the actor, not the IP.
+**DO NOT** reuse a tenant-scoped feature-flag contract for a platform-level
+operational switch, and never in a pre-auth path.
+**DO** make any flag-backed override loosen-only whenever the flag contract
+cannot distinguish "off" from "unavailable".
+
+---
+
+## SEC-43 — A Header Is Believed Because Of The Ingress, Never Because It Is There
+
+**ID**: SEC-43
+**Category**: Trust boundaries / request provenance
+**Classification**: Real risk → fixed (thirteenth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `getIP`, every rate-limit key, `audit_log.ip`, ABAC
+`environment.ip`
+
+### Risk
+
+`getIP()` returned the first of `x-forwarded-for`, `x-real-ip`,
+`cf-connecting-ip` that happened to be present, and `'127.0.0.1'` when none
+was:
+
+```ts
+const forwardedFor = headers.get('x-forwarded-for');
+if (forwardedFor) return forwardedFor.split(',')[0]!.trim();
+// … x-real-ip … cf-connecting-ip …
+return '127.0.0.1';
+```
+
+Every one of those lines is a trust decision made by the sender. Four distinct
+problems follow.
+
+**The effective trust model was whatever header the attacker chose.** On any
+ingress that does not overwrite `x-forwarded-for`, a client rotating that
+header gets a fresh rate-limit bucket per request — and after SEC-42 that key
+also decides the durable counter and the fail-closed path, so the strongest
+control in the codebase was keyed on the weakest input.
+
+**The order was wrong even on a supported ingress.** `cf-connecting-ip` was
+checked _last_. Cloudflare appends to whatever the client sent, so XFF's
+leftmost entry is attacker-supplied while `cf-connecting-ip` is the header
+Cloudflare sets and overwrites. The old order preferred the weaker one.
+
+**`127.0.0.1` was a lie the whole system believed.** Every client without a
+recognised header shared one bucket, so one of them could exhaust the
+allowance of all the others; and `audit_log.ip` recorded a loopback address
+for requests that came from anywhere but.
+
+**Nothing was validated.** The raw header became a Redis key, a Postgres
+primary-key component (SEC-42's `rate_limit_counters.identifier`) and a log
+field, at unbounded length.
+
+### What The Audit Found Beyond The Report
+
+The static guard written for this case found two more instances before it was
+even committed. The worse one:
+
+```ts
+// with-auth.ts — feeding an ABAC decision
+environment: {
+  ip: req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined,
+```
+
+`ConditionEvaluator.isFromAllowedIp` reads that value, so anyone could send
+`x-forwarded-for: 10.0.0.1` and satisfy an IP allow-list policy. A rate-limit
+bypass is a nuisance; an authorization bypass is not.
+
+And a **dormant defect this fix would otherwise have activated**:
+`isNotFromBlockedIp` returned `true` when no IP was present, with a test
+calling it a "safe default". It was safe only because the branch was
+unreachable — `getIP()` always produced a string. Making "unknown client" a
+real state turns that `true` into a block-list bypass available to anyone who
+arrives without a trustworthy header. _"I cannot tell whether you are
+blocked" is not "you are not blocked."_ It now returns `false`.
+
+### Fix
+
+**Declare the ingress, then trust exactly its header.**
+
+`DEPLOYMENT_PROXY = vercel | cloudflare | trusted-proxy | none` selects a
+provider-aware resolver. There is deliberately no "try them all" path — that
+was the old behaviour. Required in production; defaults to `none` in
+development and test, where a contributor has no ingress to declare.
+`VERCEL_ENV` improves the error message and **never** selects a model:
+inferring one from a variable nobody set for that purpose is the same mistake
+one level up.
+
+**Return a type that can say "I don't know".**
+
+```ts
+type ClientIp =
+  | { kind: 'trusted'; ip: string }
+  | { kind: 'untrusted'; reason: UntrustedReason };
+```
+
+The old `Promise<string>` had no way to express an unidentifiable client, so
+it invented one. The union forces each call site to decide what unknown means
+for it: `rateLimitKeyForClient()` for anything keyed on the client,
+`auditIpForClient()` (→ `null`) for anything recording provenance.
+
+The untrusted bucket is **one stable key**, not a fresh one per request. A
+per-request key would mean no rate limit at all for exactly the requests whose
+origin cannot be verified — silently undoing SEC-42.
+
+**Validate and canonicalise.** Length and hop caps before parsing; stricter
+than `ipaddr.isValid`, which accepts short-form IPv4 (`1.2.3` → `1.2.0.3`);
+IPv4-mapped IPv6 unwrapped so `::ffff:192.0.2.1` and `192.0.2.1` cannot be two
+buckets for one client.
+
+**`trusted-proxy` walks the chain right to left.** The leftmost entry is
+whatever the client sent; walking from the end discards only hops inside
+`TRUSTED_PROXY_CIDRS` and stops at the first one that is not. A malformed hop
+fails the whole header rather than being skipped — skipping lets an attacker
+insert junk to shift where the walk lands.
+
+**This is Express's `trust proxy` approach. RFC 7239 does not define an
+algorithm for `X-Forwarded-For`** — it standardises the `Forwarded` header,
+and its relevant point here is the general one: forwarding data means
+something only once trust in the proxy is established.
+
+### The Limitation, Stated Rather Than Hidden
+
+Express anchors the chain at the socket peer: it reads `remoteAddress` first
+and consults `X-Forwarded-For` only if that hop is trusted. **Next.js does not
+expose the peer** — `NextRequest` has no `ip` and no socket (`request.ip` was
+removed in Next 15), in either runtime.
+
+So `trusted-proxy` here is _topology-anchored_, not peer-anchored: it is sound
+only where the application is unreachable except through the declared proxy.
+Where the app can also be reached directly, an attacker who does so controls
+the entire header and this mode hands them any client IP they like. That is
+recorded in the resolver's doc comment and in `.env.example`, because a
+limitation an operator cannot see is a limitation they will deploy into.
+
+### Enforcement
+
+`client-ip.guard.test.ts` walks `src/` and fails on any file outside the
+resolver that names a client-IP header. Comments are stripped before scanning
+— the rule is about what the code reads, and a guard that punished explaining
+_why_ a header must not be trusted would train people to write worse comments.
+Verified to fail when a call site is reverted.
+
+### Rule for Agents
+
+**DO NOT** read `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip` or any
+sibling directly. Use `getClientIp()`.
+**DO** treat "which header do I trust" as a deployment declaration, and fail
+startup rather than guess it in production.
+**DO NOT** invent a placeholder for an unidentifiable client. Return a type
+that can say so, and make each caller choose: a shared bucket, or `null`.
+**DO** give unknown clients a _stable_ shared bucket, never a per-request key —
+the second is not a weaker limit, it is no limit.
+**DO** validate and canonicalise before the value becomes a cache key, a
+database column or a log field, and cap length and element count first.
+**DO NOT** take the leftmost `X-Forwarded-For` entry. It is the one the client
+wrote.
+
+---
+
+## SEC-44 — A Guard That Rejects Before The Limiter Is A Guard Nobody Meters
+
+**ID**: SEC-44
+**Category**: Secret handling / brute-force resistance
+**Classification**: Real risk → fixed (fourteenth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `withInternalApiGuard`, `getEnvDiagnostics`,
+`/api/internal/**`, `/env-summary`
+
+### Risk
+
+The internal-API guard authenticated with:
+
+```ts
+const internalKey = req.headers.get('x-internal-key');
+if (!env.INTERNAL_API_KEY || internalKey !== env.INTERNAL_API_KEY) …
+```
+
+**Rejected keys were never rate limited.** `createSecurityPipeline` composes
+`withInternalApiGuard` _before_ `withRateLimit`, so a 403 from the guard
+returned without the limiter ever running. Key guessing was unmetered.
+
+That ordering is not the bug, though — it is correct layering. Turning an
+unauthenticated caller away at the guard is right, and pushing the limiter in
+front of it would charge a legitimate client's ordinary API allowance for
+someone else's guessing. The fix is a **dedicated** counter for rejections,
+not a reorder.
+
+Three further weaknesses: `!==` on a string is not constant-time;
+`z.string().min(1)` made a one-character key a valid production
+configuration; and a single key meant rotation required every caller to cut
+over in the same instant.
+
+### What Made The Unmetered Guessing Worth Something
+
+`/api/internal/env-check` returns `getEnvDiagnostics()`, whose entries carried
+
+```ts
+maskedValue: value.slice(0, 2) + '***' + value.slice(-4);
+```
+
+for `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and
+`INTERNAL_API_KEY`. So a guessed internal key paid out partial Clerk secret
+material — and disclosed the last four characters of the internal key itself,
+shrinking the search space for the next attempt.
+
+**And the guard was not the only door.** `/env-summary` and
+`EnvDiagnosticsExample` render the same field, and `/env-summary` is a
+`DEMO_ROUTE_PREFIXES` entry — reachable by any signed-in user when demo mode
+is on. Fixing only the route's JSON would have left that path serving the same
+fragments, which is why the field was removed at the
+`EnvDiagnosticsEntry` / `getEnvDiagnostics()` source instead.
+
+A masked secret is still a secret in an HTTP response. Diagnosing a broken
+deployment needs to know _whether_ a variable is set; it never needs any part
+of its value.
+
+### Fix
+
+A dedicated failed-auth counter, constant-time verification, and
+`current + previous` key rotation with a length floor in production. The
+diagnostics entry now carries `{ name, present }` and nothing else.
+
+Two runtime constraints shaped the implementation:
+
+**`crypto.timingSafeEqual` is Node-only** and this guard runs in the Edge
+proxy. Both values are digested with `crypto.subtle` and the digests compared
+with an accumulating XOR — no early exit, and fixed-width buffers, so neither
+the position of the first differing byte nor the _length_ of a guess leaks.
+Every configured key is compared even after one matches: returning early would
+make "matched current" and "matched previous" distinguishable by timing, which
+during a rotation tells an attacker which half of the window they are in.
+
+**SEC-42's strict limiter is unreachable from Edge** — it resolves the DI
+container and a TCP Postgres driver. The counter is built on Upstash, which is
+REST over `fetch`.
+
+### The Deliberate Asymmetry With SEC-42
+
+SEC-42 fails **closed** when its durable store is unavailable, because every
+endpoint it guards already needed the database it could not reach — so failing
+closed cost no availability that was not already lost.
+
+Here the opposite holds. `/api/internal/health` and `/api/internal/env-check`
+exist to be called **during** an incident. Denying a _correct_ key because the
+counter store is down would remove the operator's diagnostic exactly when they
+need it. The key check is unaffected either way, so a counter outage weakens
+brute-force protection rather than admitting anyone — and against a key with
+the entropy floor now enforced, an unmetered search is infeasible regardless.
+
+The limiter here is defence in depth; in SEC-42 it was the control itself.
+That difference is why the two fail in opposite directions, and it is written
+into both modules so neither gets "tidied" to match the other.
+
+### What Was Deliberately Not Built
+
+Request signing — `HMAC(timestamp, method, path, SHA256(body), nonce)` with a
+replay window — and service identity / mTLS were both proposed and both
+declined **for now**.
+
+The repository has three internal routes (`health`, `env-check`, and an
+E2E-only user factory that already 404s unless `E2E_ENABLED`), and their only
+callers are the Playwright suite. Building a service-to-service authentication
+protocol — nonce store, clock-skew tolerance, a signing client, a second auth
+path — for zero services is speculative generality, and unexercised security
+code decays into a liability rather than a defence. mTLS is an infrastructure
+capability, not an application one, and is unavailable to the app layer on a
+managed platform.
+
+Recorded as `PE-21` with an explicit trigger: **the first real production
+service-to-service consumer, or the first internal endpoint whose impact
+warrants per-request authentication and replay protection.**
+
+### Rule for Agents
+
+**DO NOT** assume a route is rate limited because a global limiter exists —
+check whether the guard in front of it returns first.
+**DO** give credential rejection its own counter rather than reordering the
+pipeline; an unauthenticated caller must not spend a legitimate client's
+allowance.
+**DO** compare secrets in constant time, and compare every candidate key even
+after one matches.
+**DO NOT** put any part of a secret in a response, masked or otherwise — and
+fix such a leak at the source that builds it, not at one of its consumers.
+**DO** floor secret length in production; a schema that accepts one character
+is not a validation.
+**DO** state which direction a control fails in, and why, when a sibling
+control in the same codebase fails the other way.
+
+---
+
+## SEC-45 — An Error Path That Skips Finalization Is An Unhardened Response
+
+**ID**: SEC-45
+**Category**: Response hardening / error handling
+**Classification**: Real risk → fixed (fifteenth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `src/proxy.ts`, `withSecurity`, every Edge response
+
+### Risk
+
+`runSecurityPipeline` wrapped the whole chain in a catch that built its own
+reply:
+
+```ts
+try {
+  return await securityPipeline(request);
+} catch (error) {
+  console.error('[Proxy Error]', error);
+  return NextResponse.json({ status: 'server_error', … }, { status: 500 });
+}
+```
+
+That response is assembled **outside** `withSecurity`, which is the function
+that applies `withHeaders()` and the correlation metadata. So any throw
+anywhere in the pipeline produced a 500 with:
+
+- **no security headers at all** — no CSP, no `nosniff`, no `X-Frame-Options`,
+  no `Referrer-Policy`, no CORP/COOP. A response body an attacker can induce
+  (throw a middleware, get a JSON document) served with no
+  `X-Content-Type-Options` is a content-sniffing surface, and it is the one
+  response in the application with no framing or CSP protection.
+- **no correlation id**, so the one response an operator most needs to trace
+  is the only one that cannot be joined to a log record.
+- **`console.error`**, bypassing the structured edge logger — unqueryable, and
+  outside whatever redaction the logger applies.
+
+The deeper defect is structural: the hardening chain existed in two places.
+Anyone adding a header to `withSecurity` would harden every response except
+the failure one, and nothing would say so.
+
+### Rule
+
+**A response is finalized in exactly one place, and the error boundary sits
+inside it — at the innermost point that still holds the request context.**
+
+```ts
+let response: NextResponse;
+try {
+  response = await handler(request, ctx);
+} catch (error) {
+  logger.error({ correlationId: ctx.correlationId, … }, '…');
+  response = createServerErrorResponse('Internal Server Error', 500, 'SERVER_ERROR');
+}
+response = withHeaders(request, response, ctx.nonce);
+response.headers.set('x-correlation-id', ctx.correlationId);
+response.headers.set('x-request-id', ctx.requestId);
+return response;
+```
+
+Three properties follow, and each is the reason for the placement:
+
+1. **Inside `withSecurity`, not at the proxy's catch.** This is the last frame
+   that still has `ctx`. A boundary further out has no correlation id, so it
+   either omits one or mints a second that joins to nothing — and it must
+   duplicate the finalization, which is the drift the case is about.
+2. **The body is generic in every environment.** No `NODE_ENV` branch. This
+   boundary runs before any authorization, so the throw can come from any
+   library in the chain and carry file paths, table names, or connection
+   strings. `with-error-handler.ts` returns `error.message` outside
+   production; that is defensible for an API route behind auth, and not here.
+3. **Correlation travels in headers, not the body.** `x-correlation-id` and
+   `x-request-id`, same as every other response. `ServerErrorResponse` is
+   shared by every error in the application; widening it for one path would
+   change a contract the whole API depends on.
+
+The proxy keeps a last-resort catch for a throw that never reaches
+`withSecurity` — `classifyRequest()` failing, or container wiring. It logs and
+returns a hardened generic 500 but **deliberately mints no correlation id**:
+there is no context to take one from, and a fresh id would be a promise the
+logs cannot keep.
+
+### Enforcement
+
+`src/proxy.test.ts` drives a middleware that rejects with a connection string
+in its message and asserts the response is 500, generic-bodied,
+`SERVER_ERROR`, carries `nosniff` / `X-Frame-Options` / `Referrer-Policy` /
+CORP / CSP / `x-correlation-id` / `x-request-id`, and that no fragment of the
+connection string reaches the caller. Verified by falsification: with the
+boundary removed, `X-Content-Type-Options` comes back `null`.
+
+Before this case the proxy suite covered 429, 403 and the happy path — every
+response the pipeline _returned_, and none that it threw.
+
+### Related
+
+- **SEC-38** — the same envelope invariant for route handlers.
+- **SEC-37** — the same generic-body rule at the server-action boundary.
+- **PE-22** — the four hand-built `NextResponse.json()` calls in
+  `with-auth.ts`; convention debt, not this defect (they are returned from
+  inside the pipeline and do reach finalization).
+
+---
+
+## SEC-46 — The Caller Names The Chain, Never The Request
+
+**ID**: SEC-46
+**Category**: Trust boundaries / observability integrity
+**Classification**: Real risk → fixed (sixteenth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `classifyRequest`, `terminalHandler`,
+`getServerRequestLogContext`, `audit_events.correlation_id`
+
+### Risk
+
+Both identifiers were taken verbatim from the caller:
+
+```ts
+const correlationId =
+  req.headers.get('x-correlation-id') ?? crypto.randomUUID();
+const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID();
+```
+
+No length ceiling, no charset, no distinction between the two. Anyone could
+put an arbitrary string into the response headers, the structured logs, and
+the `audit_events.correlation_id` column — which is `text`, so the database
+imposes no bound of its own. Unbounded caller-controlled text reaching log
+storage is a bloat vector; whitespace and control characters in it are how one
+log line becomes two.
+
+The second, quieter defect: the Edge boundary computed `ctx.correlationId` but
+`terminalHandler` forwarded only the CSP request headers downstream. So the
+RSC/Node side kept reading the **raw inbound headers** via `headers()`. The
+caller could be handed one id on the response while the logs and the audit
+trail recorded a different, unvalidated one — the failure mode where an
+incident report cites an id that appears nowhere.
+
+### Rule
+
+**A correlation id may come from the caller if it is syntactically safe. A
+request id may not come from the caller at all.**
+
+The two answer different questions and therefore get different trust:
+
+|               | `correlationId`                | `requestId`               |
+| ------------- | ------------------------------ | ------------------------- |
+| Question      | which chain of operations      | which single request here |
+| Caller value  | accepted if valid, echoed back | ignored outright          |
+| Invalid input | replaced, never truncated      | n/a                       |
+
+```ts
+const correlation = resolveCorrelationId(req.headers.get('x-correlation-id'));
+const requestId = generateRequestId(); // x-request-id is not read at all
+```
+
+**Accepted shape**: `/^[A-Za-z0-9._:-]{1,128}$/`. Bounded ASCII allowlist, not
+UUID/ULID only. A correlation id is interoperability metadata, not a
+credential — requiring a UUID establishes no trust boundary (an attacker can
+send a perfectly good random UUID) while dropping legitimate ids from
+ingresses that use another format, breaking the very chain the header exists
+to preserve. One character class with one bounded quantifier: no backtracking,
+so no ReDoS surface on attacker-controlled input.
+
+**Invalid input is replaced, never truncated.** Truncating an oversized or
+mixed-charset value keeps a caller-chosen prefix and presents it downstream as
+though it had been validated.
+
+**A malformed header is not an error.** No 400. It is observability metadata;
+rejecting the request would turn an auxiliary header into a denial-of-service
+lever that any client — or any proxy that added its own format — could pull.
+
+**The rejected value is never logged.** Reason and length only:
+
+```ts
+{ event: 'correlation_id:rejected', reason: 'too_long', receivedLength: 347 }
+```
+
+Copying a rejected value into a log is the same exposure as having accepted
+it. And reporting is **sampled** — first occurrence, then every hundredth,
+each carrying the running total. A fixed warn per rejection hands any caller a
+log-flooding primitive through a header they fully control.
+
+**The canonical pair is forwarded downstream, unconditionally:**
+
+```ts
+requestHeaders.set('x-correlation-id', ctx.correlationId);
+requestHeaders.set('x-request-id', ctx.requestId);
+requestHeaders.set('x-correlation-source', ctx.correlationSource);
+```
+
+This is what makes the model end-to-end. With it, the id in the response, in
+the Edge log, in the RSC log and in the audit row are the same value — and
+every downstream layer can _stop_ validating, because the boundary already
+did. Five layers each doing their own validation is five implementations that
+drift apart within a year.
+
+`correlationSource: 'external' | 'generated'` rides along as operational
+metadata — during an incident it says whether the chain started here or
+upstream. It is not a third public identifier.
+
+### Enforcement
+
+- `src/shared/lib/observability/correlation-id.test.ts` — the accepted shapes
+  (UUID, ULID, 32-char trace id, dotted/colon ids), replacement rather than
+  truncation, refusal of log-splitting characters, the length-not-content
+  rule, and the sampling curve.
+- `src/proxy.test.ts` — end to end: a valid caller id is echoed; a hostile one
+  is replaced; a caller-chosen `x-request-id` is never issued; the forwarded
+  downstream headers equal the ones the caller was handed.
+- `src/security/middleware/correlation-id.guard.test.ts` — the request id is
+  derived from nothing the caller sent, the raw inbound header is read in the
+  boundary only, the forwarding is not behind the nonce branch, and the
+  accepted pattern stays bounded.
+
+Verified by falsification: with the raw-header behaviour restored, five of the
+six behavioural tests fail; with the forwarding moved inside the nonce branch,
+the guard fails.
+
+Note: a CRLF value never reaches this code — the `Headers` implementation
+refuses to hold it, here and at any conforming ingress. The values that _do_
+arrive are the CRLF-free ones that are still unfit to echo, log and persist.
+
+### Related
+
+- **SEC-43** — same shape one layer down: a header is believed because of the
+  ingress, never because it is there.
+- **PE-23** — persisting `correlationSource` in the audit trail.

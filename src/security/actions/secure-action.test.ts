@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import { MissingTenantContextError } from '@/core/contracts/tenancy';
+import { PublicError } from '@/core/error/public-error';
 
 import { logActionAudit } from './action-audit';
 import { validateReplayToken } from './action-replay';
@@ -15,8 +16,10 @@ import { createSecureAction } from './secure-action';
 import { AuthorizationError } from '@/security/core/authorization-facade';
 import {
   createMockSecurityContext,
+  mockChildLogger,
   resetAllInfrastructureMocks,
 } from '@/testing';
+import { mockEnv } from '@/testing/infrastructure/env';
 
 // Initialize mocks for sub-modules
 vi.mock('./action-audit', () => ({
@@ -159,29 +162,117 @@ describe('Secure Action Wrapper', () => {
     }
   });
 
-  it('should sanitize raw SQL query errors into a user-friendly message', async () => {
-    const handler = vi
-      .fn()
-      .mockRejectedValue(
-        new Error(
-          'Failed query: select "user_id" from "auth_user_identities" where ...',
-        ),
-      );
+  // SEC-37: exposure used to be decided by `message.includes('Failed query:')`,
+  // which inverts the safe default -- every exception nobody thought to
+  // filter was returned verbatim. These tests pin the inverted rule: nothing
+  // is exposed unless it was deliberately authored for a user.
+  describe('error exposure (SEC-37)', () => {
+    const DB_ERROR =
+      'Failed query: select "user_id" from "auth_user_identities" where id = $1';
 
-    const action = createSecureAction({
-      schema,
-      dependencies: getDependencies(),
-      handler,
+    async function runFailing(error: unknown) {
+      const handler = vi.fn().mockRejectedValue(error);
+      const action = createSecureAction({
+        schema,
+        dependencies: getDependencies(),
+        handler,
+      });
+      return action({ name: 'test', _replayToken: 'token123' });
+    }
+
+    it('never returns a raw driver message in production', async () => {
+      mockEnv.NODE_ENV = 'production';
+
+      const result = await runFailing(new Error(DB_ERROR));
+
+      expect(result.status).toBe('error');
+      if (result.status === 'error') {
+        expect(result.error).not.toContain('Failed query');
+        expect(result.error).not.toContain('auth_user_identities');
+        expect(result.error).toContain(result.correlationId);
+      }
     });
 
-    const result = await action({ name: 'test', _replayToken: 'token123' });
+    // The class of bug this replaces: an unrecognised exception shape used to
+    // fall straight through to the client. Any of these would have leaked.
+    it.each([
+      [
+        'filesystem path',
+        new Error("ENOENT: no such file '/var/app/secrets/k'"),
+      ],
+      ['provider SDK', new Error('Clerk: invalid secret key sk_live_abc123')],
+      ['connection', new TypeError('fetch failed')],
+      ['non-Error throw', 'a bare string with /internal/path'],
+    ])('never returns a raw %s error in production', async (_label, thrown) => {
+      mockEnv.NODE_ENV = 'production';
 
-    expect(result.status).toBe('error');
-    if (result.status === 'error') {
-      expect(result.error).toBe(
-        'Authentication sync is temporarily unavailable. Please try again.',
+      const result = await runFailing(thrown);
+
+      expect(result.status).toBe('error');
+      if (result.status === 'error') {
+        expect(result.error).toBe(
+          `Something went wrong. Reference: ${result.correlationId}`,
+        );
+      }
+    });
+
+    it('returns the real message outside production for debuggability', async () => {
+      mockEnv.NODE_ENV = 'development';
+
+      const result = await runFailing(new Error(DB_ERROR));
+
+      expect(result.status).toBe('error');
+      if (result.status === 'error') {
+        expect(result.error).toBe(DB_ERROR);
+        expect(result.correlationId).toBeTruthy();
+      }
+    });
+
+    it('exposes a PublicError message even in production', async () => {
+      mockEnv.NODE_ENV = 'production';
+
+      const result = await runFailing(
+        new PublicError('Your export is still processing. Try again shortly.'),
       );
-    }
+
+      expect(result.status).toBe('error');
+      if (result.status === 'error') {
+        expect(result.error).toBe(
+          'Your export is still processing. Try again shortly.',
+        );
+      }
+    });
+
+    it('logs the full detail server-side under the correlation id it returned', async () => {
+      mockEnv.NODE_ENV = 'production';
+
+      const result = await runFailing(new Error(DB_ERROR));
+
+      expect(result.status).toBe('error');
+      if (result.status !== 'error') return;
+
+      expect(mockChildLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'action:unhandled_error',
+          correlationId: result.correlationId,
+          errorMessage: DB_ERROR,
+        }),
+        expect.any(String),
+      );
+    });
+
+    it('still exposes an AuthorizationError message, which is always ours', async () => {
+      mockEnv.NODE_ENV = 'production';
+
+      const result = await runFailing(
+        new AuthorizationError('You cannot edit this organization.'),
+      );
+
+      expect(result.status).toBe('unauthorized');
+      if (result.status === 'unauthorized') {
+        expect(result.error).toBe('You cannot edit this organization.');
+      }
+    });
   });
 
   it('should return tenant_context_required when tenant is missing', async () => {
@@ -203,6 +294,7 @@ describe('Secure Action Wrapper', () => {
   it.each([
     ['BOOTSTRAP_REQUIRED', 'bootstrap_required'],
     ['ONBOARDING_REQUIRED', 'onboarding_required'],
+    ['ACCOUNT_DISABLED', 'account_disabled'],
     ['TENANT_CONTEXT_REQUIRED', 'tenant_context_required'],
     ['TENANT_MEMBERSHIP_REQUIRED', 'tenant_membership_required'],
   ] as const)(

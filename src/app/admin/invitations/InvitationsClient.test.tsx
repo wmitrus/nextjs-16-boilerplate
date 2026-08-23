@@ -34,6 +34,7 @@ describe('InvitationsClient', () => {
       <InvitationsClient
         invitations={[]}
         roles={[{ id: 'role-1', name: 'Owner' }]}
+        revokeEndpointBase="/api/admin/organizations/org-1/invitations"
       />,
     );
 
@@ -70,6 +71,7 @@ describe('InvitationsClient', () => {
       <InvitationsClient
         invitations={[]}
         roles={[{ id: 'role-1', name: 'Owner' }]}
+        revokeEndpointBase="/api/admin/organizations/org-1/invitations"
       />,
     );
 

@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
+
+import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
 import '@/testing/infrastructure/logger';
@@ -10,11 +13,10 @@ const mocks = vi.hoisted(() => ({
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
   listAll: vi.fn(),
-  userRepo: {
-    listAll: vi.fn(),
-  },
+  db: {},
+  registry: new Map<symbol, unknown>(),
   container: {
-    resolve: vi.fn(),
+    resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
 }));
 
@@ -42,6 +44,13 @@ vi.mock('@/core/env', () => ({
   },
 }));
 
+vi.mock(
+  '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService',
+  () => ({
+    DrizzleAdminUsersService: vi.fn(),
+  }),
+);
+
 function makeRequest(search?: string, limit?: number, offset?: number) {
   const url = new URL('http://localhost/api/admin/users');
   if (search) url.searchParams.set('search', search);
@@ -66,11 +75,14 @@ describe('GET /api/admin/users', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.container.resolve.mockReturnValue(mocks.userRepo);
-    mocks.userRepo.listAll.mockResolvedValue({
-      users: TEST_USERS,
-      total: 1,
+    mocks.registry.clear();
+    mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+    vi.mocked(DrizzleAdminUsersService).mockImplementation(function () {
+      return {
+        listAll: mocks.listAll,
+      } as unknown as DrizzleAdminUsersService;
     });
+    mocks.listAll.mockResolvedValue({ users: TEST_USERS, total: 1 });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -94,7 +106,7 @@ describe('GET /api/admin/users', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
-    mocks.container.resolve.mockReturnValue({
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(false),
     });
 
@@ -110,8 +122,7 @@ describe('GET /api/admin/users', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.container.resolve.mockReturnValue(mocks.userRepo);
-    mocks.userRepo.listAll.mockResolvedValue({ users: TEST_USERS, total: 1 });
+    mocks.listAll.mockResolvedValue({ users: TEST_USERS, total: 1 });
 
     const { GET } = await import('./route');
     const res = await GET(makeRequest(), mockContext);
@@ -131,14 +142,14 @@ describe('GET /api/admin/users', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.container.resolve.mockReturnValue(mocks.userRepo);
-    mocks.userRepo.listAll.mockResolvedValue({ users: [], total: 0 });
+    mocks.listAll.mockResolvedValue({ users: [], total: 0 });
 
     const { GET } = await import('./route');
     await GET(makeRequest(undefined, 999), mockContext);
 
-    expect(mocks.userRepo.listAll).toHaveBeenCalledWith(
+    expect(mocks.listAll).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 100 }),
+      null,
     );
   });
 
@@ -149,14 +160,47 @@ describe('GET /api/admin/users', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.container.resolve.mockReturnValue(mocks.userRepo);
-    mocks.userRepo.listAll.mockResolvedValue({ users: [], total: 0 });
+    mocks.listAll.mockResolvedValue({ users: [], total: 0 });
 
     const { GET } = await import('./route');
     await GET(makeRequest('alice'), mockContext);
 
-    expect(mocks.userRepo.listAll).toHaveBeenCalledWith(
+    expect(mocks.listAll).toHaveBeenCalledWith(
       expect.objectContaining({ search: 'alice' }),
+      null,
     );
+  });
+
+  it('env-based platform admin gets an unscoped (null) listAll scope', async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'admin-1', email: 'admin@test.dev' },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(true);
+
+    const { GET } = await import('./route');
+    await GET(makeRequest(), mockContext);
+
+    expect(mocks.listAll).toHaveBeenCalledWith(expect.anything(), null);
+  });
+
+  it("SEC-26 regression: an ABAC-authorized non-platform-admin only sees their own tenant's users, never a global/cross-tenant list", async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'owner-1', email: 'owner@test.dev' },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+
+    const { GET } = await import('./route');
+    await GET(makeRequest(), mockContext);
+
+    expect(mocks.listAll).toHaveBeenCalledWith(expect.anything(), {
+      tenantId: 'tenant_test_1',
+    });
   });
 });

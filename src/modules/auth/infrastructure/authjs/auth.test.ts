@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { mockEnv, resetEnvMocks } from '@/testing/infrastructure/env';
+
 const mockCompare = vi.fn();
 const mockResolve = vi.fn();
 const mockSelect = vi.fn();
 const mockFrom = vi.fn();
 const mockWhere = vi.fn();
 const mockLimit = vi.fn();
+const mockIsTurnstileConfigured = vi.fn();
+const mockVerifyTurnstileToken = vi.fn();
 
 vi.mock('bcryptjs', () => ({
   compare: mockCompare,
@@ -65,9 +69,21 @@ vi.mock('next-auth/providers/credentials', () => ({
   default: vi.fn((config) => config),
 }));
 
+vi.mock('@/shared/lib/captcha/turnstile', () => ({
+  isTurnstileConfigured: mockIsTurnstileConfigured,
+  verifyTurnstileToken: mockVerifyTurnstileToken,
+}));
+
 describe('authOptions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEnvMocks();
+    // Default: CAPTCHA never configured, so the existing (pre-SEC-34) tests
+    // below exercise credential logic with the abuse-control gates present
+    // but inert (unconfigured captcha; thresholds high enough that a single
+    // call never trips them).
+    mockIsTurnstileConfigured.mockReturnValue(false);
+    mockVerifyTurnstileToken.mockResolvedValue(false);
 
     mockLimit.mockResolvedValue([]);
     mockWhere.mockReturnValue({ limit: mockLimit });
@@ -192,6 +208,198 @@ describe('authOptions', () => {
         password: 'somepass',
       });
       expect(result).toBeNull();
+    });
+
+    describe('login abuse control (SEC-34)', () => {
+      function mockWrongPasswordLookup() {
+        mockCompare.mockResolvedValue(false);
+        mockLimit.mockResolvedValue([
+          {
+            userId: 'uid-1',
+            hashedPassword: '$hashed',
+            emailVerified: true,
+          },
+        ]);
+      }
+
+      it('does not call Turnstile verification before the captcha threshold is reached', async () => {
+        mockEnv.LOGIN_ABUSE_CAPTCHA_THRESHOLD = 3;
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const result = await authorize({
+          email: 'abuse-under-threshold@example.com',
+          password: 'wrong',
+        });
+
+        expect(result).toBeNull();
+        expect(mockVerifyTurnstileToken).not.toHaveBeenCalled();
+      });
+
+      it('throws CaptchaRequired once the threshold is reached and no valid token is supplied', async () => {
+        mockEnv.LOGIN_ABUSE_CAPTCHA_THRESHOLD = 2;
+        mockIsTurnstileConfigured.mockReturnValue(true);
+        mockVerifyTurnstileToken.mockResolvedValue(false);
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-captcha@example.com';
+
+        await authorize({ email, password: 'wrong1' });
+        await authorize({ email, password: 'wrong2' });
+
+        mockSelect.mockClear();
+        await expect(authorize({ email, password: 'wrong3' })).rejects.toThrow(
+          'CaptchaRequired',
+        );
+        // Blocked before the credential-comparison work for this attempt.
+        expect(mockSelect).not.toHaveBeenCalled();
+      });
+
+      it('proceeds past the captcha gate when a valid Turnstile token is supplied', async () => {
+        mockEnv.LOGIN_ABUSE_CAPTCHA_THRESHOLD = 2;
+        mockIsTurnstileConfigured.mockReturnValue(true);
+        mockVerifyTurnstileToken.mockResolvedValue(false);
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-captcha-ok@example.com';
+
+        await authorize({ email, password: 'wrong1' });
+        await authorize({ email, password: 'wrong2' });
+
+        mockVerifyTurnstileToken.mockResolvedValue(true);
+        const result = await authorize({
+          email,
+          password: 'wrong3',
+          cfTurnstileToken: 'valid-token',
+        });
+
+        // Still a wrong password -- the captcha gate let it through to the
+        // real credential check, which correctly still fails.
+        expect(result).toBeNull();
+        expect(mockVerifyTurnstileToken).toHaveBeenCalledWith('valid-token');
+      });
+
+      it('skips the captcha gate entirely when Turnstile is not configured, regardless of failure count', async () => {
+        mockEnv.LOGIN_ABUSE_CAPTCHA_THRESHOLD = 1;
+        mockIsTurnstileConfigured.mockReturnValue(false);
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-no-turnstile@example.com';
+
+        await authorize({ email, password: 'wrong1' });
+        const result = await authorize({ email, password: 'wrong2' });
+
+        expect(result).toBeNull();
+        expect(mockVerifyTurnstileToken).not.toHaveBeenCalled();
+      });
+
+      it('throws AccountTemporarilyLocked once the lock threshold is reached, before touching the DB', async () => {
+        mockEnv.LOGIN_ABUSE_LOCK_THRESHOLD = 2;
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-lock@example.com';
+
+        await authorize({ email, password: 'wrong1' });
+        await authorize({ email, password: 'wrong2' });
+
+        mockSelect.mockClear();
+        await expect(authorize({ email, password: 'wrong3' })).rejects.toThrow(
+          'AccountTemporarilyLocked',
+        );
+        expect(mockSelect).not.toHaveBeenCalled();
+      });
+
+      it('bypasses all abuse control when E2E_ENABLED is true', async () => {
+        mockEnv.E2E_ENABLED = true;
+        mockEnv.LOGIN_ABUSE_LOCK_THRESHOLD = 1;
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-e2e@example.com';
+
+        await authorize({ email, password: 'wrong1' });
+        // Would already be locked after 1 failure if abuse control were
+        // active for this account.
+        const result = await authorize({ email, password: 'wrong2' });
+
+        expect(result).toBeNull();
+      });
+
+      it('E2E_LOGIN_ABUSE_CONTROL_ENABLED forces abuse control back on despite E2E_ENABLED', async () => {
+        mockEnv.E2E_ENABLED = true;
+        mockEnv.E2E_LOGIN_ABUSE_CONTROL_ENABLED = true;
+        mockEnv.LOGIN_ABUSE_LOCK_THRESHOLD = 1;
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-e2e-forced@example.com';
+
+        await authorize({ email, password: 'wrong1' });
+        // Threshold is 1, and the override is active -- this must lock.
+        await expect(authorize({ email, password: 'wrong2' })).rejects.toThrow(
+          'AccountTemporarilyLocked',
+        );
+      });
+
+      it('resets the failure counter on a successful login', async () => {
+        mockEnv.LOGIN_ABUSE_CAPTCHA_THRESHOLD = 1;
+        const authorize = await getAuthorize();
+        const email = 'abuse-reset@example.com';
+
+        mockCompare.mockResolvedValueOnce(false);
+        mockLimit.mockResolvedValueOnce([
+          { userId: 'uid-1', hashedPassword: '$hashed', emailVerified: true },
+        ]);
+        await authorize({ email, password: 'wrong' });
+
+        mockCompare.mockResolvedValueOnce(true);
+        mockLimit
+          .mockResolvedValueOnce([
+            {
+              userId: 'uid-1',
+              hashedPassword: '$hashed',
+              emailVerified: true,
+            },
+          ])
+          .mockResolvedValueOnce([{ id: 'uid-1', email }]);
+        const success = await authorize({ email, password: 'correct' });
+        expect(success).toMatchObject({ email });
+
+        // Next attempt starts fresh: the earlier failure must not still
+        // count toward the (now reset) threshold.
+        mockCompare.mockResolvedValueOnce(false);
+        mockLimit.mockResolvedValueOnce([
+          { userId: 'uid-1', hashedPassword: '$hashed', emailVerified: true },
+        ]);
+        const result = await authorize({ email, password: 'wrong-again' });
+
+        expect(result).toBeNull();
+        expect(mockVerifyTurnstileToken).not.toHaveBeenCalled();
+      });
+
+      it('applies an increasing progressive delay once the delay threshold is reached', async () => {
+        vi.useFakeTimers();
+        mockEnv.LOGIN_ABUSE_DELAY_THRESHOLD = 1;
+        mockWrongPasswordLookup();
+
+        const authorize = await getAuthorize();
+        const email = 'abuse-delay@example.com';
+
+        // failedAttempts starts at 0 -- no delay for this first attempt.
+        await authorize({ email, password: 'wrong1' });
+
+        // Second attempt reads failedAttempts=1, meeting the threshold.
+        const pending = authorize({ email, password: 'wrong2' });
+        await vi.advanceTimersByTimeAsync(2_000);
+        const result = await pending;
+
+        expect(result).toBeNull();
+        vi.useRealTimers();
+      });
     });
   });
 

@@ -121,3 +121,29 @@ When Sentry is integrated for error management, keep Logflare focused on:
 - `docs/features/25 - Per-Request Container Caching.md`
 - `docs/features/26 - New Relic Server & Browser Integration.md`
   These two docs cover the request-scoped DI cache and the split New Relic server/browser integration in detail.
+
+## Correlation And Request Ids Are Established Once (SEC-46)
+
+Every log record carries `correlationId` and `requestId`, and both are decided
+in exactly one place — `classifyRequest()` at the Edge boundary — then
+forwarded to RSC/Node as request headers. `getServerRequestLogContext()` reads
+those forwarded values rather than validating anything itself.
+
+What this buys the logs:
+
+- **The id in a user's report is the id in the logs.** Before SEC-46 the Edge
+  computed a correlation id for the response while RSC code read the caller's
+  raw header, so the two could differ on the same request.
+- **Bounded, greppable values.** A caller-supplied correlation id is accepted
+  only as `/^[A-Za-z0-9._:-]{1,128}$/`; anything else is replaced with a fresh
+  UUID. No whitespace or control characters, so one log line cannot become two.
+- **`requestId` is never caller-supplied**, so it uniquely names one request —
+  a caller cannot make two requests share one.
+- **`correlationSource`** (`external` | `generated`) says whether the chain
+  started here or upstream.
+
+Rejected inbound ids are reported as `event: 'correlation_id:rejected'` with a
+`reason` and `receivedLength` — **never the value itself** — and sampled (first,
+then every hundredth) so the header cannot be used to flood the logs.
+
+Full rationale: SEC-46 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.

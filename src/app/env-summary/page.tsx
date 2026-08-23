@@ -27,8 +27,7 @@ export default function EnvSummaryPage() {
         <ul className="mb-4 space-y-1 text-sm">
           {diagnostics.required.map((entry) => (
             <li key={entry.name}>
-              {entry.name}:{' '}
-              {entry.present ? `set (${entry.maskedValue})` : 'missing'}
+              {entry.name}: {entry.present ? 'set' : 'missing'}
             </li>
           ))}
         </ul>

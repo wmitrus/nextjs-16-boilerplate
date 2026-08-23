@@ -35,7 +35,6 @@ export class DefaultWaitlistService implements WaitlistService {
     const entry = await this.repository.add({
       email: input.email,
       name: input.name,
-      organizationId: input.organizationId,
     });
 
     try {

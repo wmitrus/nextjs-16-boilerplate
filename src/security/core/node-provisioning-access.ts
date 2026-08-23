@@ -13,6 +13,8 @@ import {
 } from '@/core/contracts/tenancy';
 import type { User, UserRepository } from '@/core/contracts/user';
 
+import { isSessionRevoked } from './session-revocation';
+
 export type ProvisioningTenancyMode = 'single' | 'personal' | 'org';
 
 export type NodeProvisioningAccessStatus =
@@ -28,6 +30,7 @@ export type NodeProvisioningDenyCode =
   | 'UNAUTHENTICATED'
   | 'BOOTSTRAP_REQUIRED'
   | 'ONBOARDING_INCOMPLETE'
+  | 'ACCOUNT_DISABLED'
   | 'TENANT_CONTEXT_REQUIRED'
   | 'DEFAULT_TENANT_NOT_FOUND'
   | 'TENANT_MEMBERSHIP_REQUIRED'
@@ -38,6 +41,8 @@ export type UsersGuardDecisionReason =
   | 'unauthenticated'
   | 'provisioning_required'
   | 'missing_user'
+  | 'account_disabled'
+  | 'session_revoked'
   | 'missing_tenant'
   | 'missing_membership'
   | 'missing_onboarding_state'
@@ -166,6 +171,70 @@ export async function evaluateNodeProvisioningAccess(
         onboardingComplete: null,
         provisioningRequired: true,
         reason: 'missing_user',
+      },
+    };
+  }
+
+  // Lifecycle authorization gate: a deactivated user must be denied access
+  // on every subsequent request, immediately -- checked here, before
+  // onboarding/tenant/membership, so a deactivated-but-incomplete-onboarding
+  // account (or any other later branch) can never reach a more permissive
+  // status. This is the sole enforcement point for `deactivatedAt`: it is
+  // re-evaluated from the database on every call (there is no caching of
+  // this outcome across requests), so it applies uniformly regardless of
+  // auth provider (Clerk or AuthJS) and regardless of whether the caller's
+  // session/JWT itself is still cryptographically valid -- the stale
+  // session simply stops being useful the moment this check runs. See
+  // SEC-33 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+  if (user.deactivatedAt) {
+    return {
+      status: 'FORBIDDEN',
+      code: 'ACCOUNT_DISABLED',
+      message: 'This account has been deactivated.',
+      diagnostics: {
+        externalUserId,
+        externalOrgId,
+        internalIdentityId: identity.id,
+        tenancyMode: deps.tenancyMode,
+        userRecordExists: true,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: true,
+        onboardingComplete: user.onboardingComplete,
+        provisioningRequired: false,
+        reason: 'account_disabled',
+      },
+    };
+  }
+
+  // Session-revocation gate. Ordered deliberately AFTER the deactivation
+  // gate: both invalidate a still-cryptographically-valid session, but
+  // deactivation is the stronger, more permanent statement, and SEC-33's
+  // rule that it must never be masked by a lesser branch applies to this one
+  // too. A disabled account must hear "your account is disabled", not
+  // "sign in again". A revoked session is
+  // reported as UNAUTHENTICATED rather than as a new status -- the correct
+  // remedy really is "sign in again", and every existing consumer already
+  // routes that to the sign-in page, so no consumer needed changing. The
+  // distinguishing detail lives in `reason` for the logs. See SEC-36.
+  if (
+    isSessionRevoked(user.sessionsValidFrom, deps.rawIdentity?.sessionIssuedAt)
+  ) {
+    return {
+      status: 'UNAUTHENTICATED',
+      code: 'UNAUTHENTICATED',
+      message: 'Your session is no longer valid. Please sign in again.',
+      diagnostics: {
+        externalUserId,
+        externalOrgId,
+        tenancyMode: deps.tenancyMode,
+        userRecordExists: true,
+        tenantRecordExists: null,
+        membershipExists: null,
+        onboardingStateExists: null,
+        onboardingComplete: user.onboardingComplete,
+        provisioningRequired: false,
+        reason: 'session_revoked',
       },
     };
   }

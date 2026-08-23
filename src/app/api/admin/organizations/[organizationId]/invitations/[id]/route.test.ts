@@ -138,6 +138,7 @@ describe('DELETE /api/admin/organizations/[organizationId]/invitations/[id]', ()
     mocks.db.from.mockReturnValue(mocks.db);
     mocks.db.where.mockReturnValue(mocks.db);
     mocks.db.limit.mockResolvedValue([{ id: INVITATION_ID }]);
+    mocks.revokeInvitation.mockResolvedValue(true);
     vi.mocked(DefaultInvitationService).mockImplementation(function () {
       return {
         revokeInvitation: mocks.revokeInvitation,
@@ -207,8 +208,12 @@ describe('DELETE /api/admin/organizations/[organizationId]/invitations/[id]', ()
     expect(response.status).toBe(409);
   });
 
-  it('returns 404 when the invitation does not belong to the organization', async () => {
-    mocks.db.limit.mockResolvedValue([]);
+  it('returns 404 when the scoped revoke matches no pending invitation', async () => {
+    // SEC-41: the route no longer pre-checks ownership with its own SELECT.
+    // A cross-organization id, a non-existent id and an already-revoked id
+    // all fail the same way -- the scoped UPDATE matches zero rows -- and all
+    // surface as the same indistinguishable 404.
+    mocks.revokeInvitation.mockResolvedValue(false);
 
     const { DELETE } = await import('./route');
     const response = await DELETE(
@@ -219,6 +224,24 @@ describe('DELETE /api/admin/organizations/[organizationId]/invitations/[id]', ()
     );
 
     expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.error).toBe('Invitation not found');
+  });
+
+  it('never authorises the revoke with a preceding SELECT', async () => {
+    // SEC-41 regression guard. The old shape was
+    // `SELECT id WHERE id = ? AND organization_id = ?` followed by an
+    // unscoped `UPDATE ... WHERE id = ?`. If that pair ever comes back, the
+    // route starts issuing its own invitation SELECT again and this fails.
+    const { DELETE } = await import('./route');
+    await DELETE(
+      new NextRequest(
+        'http://localhost/api/admin/organizations/acme/invitations/inv-1',
+      ),
+      makeContext(),
+    );
+
+    expect(mocks.db.select).not.toHaveBeenCalled();
   });
 
   it('returns 400 for malformed invitation ids before querying UUID columns', async () => {
@@ -246,7 +269,10 @@ describe('DELETE /api/admin/organizations/[organizationId]/invitations/[id]', ()
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.revokeInvitation).toHaveBeenCalledWith(INVITATION_ID);
+    // The organization from the path is handed to the service so it lands in
+    // the UPDATE predicate. Never `null` -- that is the unscoped
+    // platform-admin path and this route is not unscoped. See SEC-41.
+    expect(mocks.revokeInvitation).toHaveBeenCalledWith(INVITATION_ID, ORG_ID);
     const body = await response.json();
     expect(body.data.id).toBe(INVITATION_ID);
   });

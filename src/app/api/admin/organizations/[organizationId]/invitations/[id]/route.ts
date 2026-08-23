@@ -1,4 +1,3 @@
-import { and, eq } from 'drizzle-orm';
 import { connection } from 'next/server';
 import { z } from 'zod';
 
@@ -21,7 +20,6 @@ import {
 } from '../../../_lib';
 
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
-import { invitationsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
@@ -109,27 +107,36 @@ export const DELETE = withErrorHandler(
       );
     }
 
-    const invitationRows = await db
-      .select({ id: invitationsTable.id })
-      .from(invitationsTable)
-      .where(
-        and(
-          eq(invitationsTable.id, invitationId),
-          eq(invitationsTable.organizationId, paramsResult.data.id),
-        ),
-      )
-      .limit(1);
+    const service = createInvitationService(db);
 
-    if (invitationRows.length === 0) {
+    // The organization is passed down into the UPDATE predicate itself, not
+    // checked by a preceding SELECT. A `SELECT id + organizationId` followed
+    // by `UPDATE ... WHERE id` authorises on a row as it was a moment ago and
+    // then writes with no scope of its own. Here the scope and the write are
+    // one statement.
+    //
+    // The scope is always the organization from the path -- never `null`,
+    // not even for a platform admin. `null` is the unscoped path in
+    // `revokePendingScoped`, and there is nothing unscoped about this route:
+    // the caller named an organization, and `getDetailInActiveScope` above
+    // already confirmed that organization is reachable from their active
+    // scope. See SEC-41.
+    const revoked = await service.revokeInvitation(
+      invitationId,
+      paramsResult.data.id,
+    );
+
+    if (!revoked) {
+      // Deliberately the same 404 whether the invitation does not exist,
+      // belongs to another organization, or is no longer pending -- an admin
+      // of one organization must not be able to probe another's invitation
+      // ids by the shape of the error.
       return createServerErrorResponse(
         'Invitation not found',
         404,
         'NOT_FOUND',
       );
     }
-
-    const service = createInvitationService(db);
-    await service.revokeInvitation(invitationId);
 
     await recordAdminAuditEvent({
       category: 'membership',

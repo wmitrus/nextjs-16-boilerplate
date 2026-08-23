@@ -51,6 +51,23 @@ vi.mock('@/core/contracts', () => ({
   INFRASTRUCTURE: { DB: Symbol('DB') },
 }));
 
+/**
+ * SEC-42 put strict rate limiting in front of this handler. Stubbing the
+ * entry point rather than the whole container keeps this file about the
+ * handler: `checkStrictRateLimit` resolves the DI container and the Drizzle
+ * store, none of which these assertions are about. The limiter's own
+ * behaviour is covered in `rate-limit-helper.test.ts` and
+ * `DrizzleRateLimitStore.db.test.ts`.
+ */
+vi.mock('@/security/api/strict-rate-limit', () => ({
+  checkStrictRateLimit: vi.fn(async () => ({
+    success: true,
+    limit: 10,
+    remaining: 9,
+    reset: new Date(Date.now() + 60_000),
+  })),
+}));
+
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a: unknown, b: unknown) => ({ a, b })),
   or: vi.fn((...args: unknown[]) => args),
@@ -179,9 +196,14 @@ describe('POST /api/auth/signup', () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { success: boolean; message: string };
-    expect(body.success).toBe(true);
-    expect(body.message).toContain('verification is required');
+    const body = (await res.json()) as {
+      status: string;
+      data: { success: boolean; autoVerified: boolean; message: string };
+    };
+    expect(body.status).toBe('ok');
+    expect(body.data.success).toBe(true);
+    expect(body.data.autoVerified).toBe(false);
+    expect(body.data.message).toContain('verification is required');
   });
 
   it('returns 201 with sign-in message when AUTH_DEV_AUTO_VERIFY is true', async () => {
@@ -193,8 +215,12 @@ describe('POST /api/auth/signup', () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { message: string };
-    expect(body.message).toContain('You can now sign in');
+    const body = (await res.json()) as {
+      data: { autoVerified: boolean; message: string };
+    };
+    // Clients branch on the flag, not the wording -- see SEC-38.
+    expect(body.data.autoVerified).toBe(true);
+    expect(body.data.message).toContain('You can now sign in');
   });
 
   it('exposes devToken when AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV=true in dev', async () => {
@@ -207,11 +233,10 @@ describe('POST /api/auth/signup', () => {
     const res = await POST(req);
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
-      devToken?: string;
-      devVerifyUrl?: string;
+      data: { devToken?: string; devVerifyUrl?: string };
     };
-    expect(body.devToken).toBeDefined();
-    expect(body.devVerifyUrl).toBeDefined();
+    expect(body.data.devToken).toBeDefined();
+    expect(body.data.devVerifyUrl).toBeDefined();
   });
 
   it('returns 400 for malformed request body', async () => {

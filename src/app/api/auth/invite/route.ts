@@ -16,12 +16,22 @@ import { ClerkInvitationBridge } from '@/modules/invitations/infrastructure/cler
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const bodySchema = z.object({
   email: z.email(),
   roleId: z.uuid(),
 });
+
+const INVITE_PATH = '/api/auth/invite';
+/**
+ * Deliberately not the generic `API_RATE_LIMIT_*` window. Inviting colleagues
+ * is a low-frequency human action, so a limit tuned for ordinary API traffic
+ * would be far too generous to be an abuse control here.
+ */
+const INVITE_LIMIT = 20;
+const INVITE_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * POST /api/auth/invite
@@ -31,6 +41,25 @@ const bodySchema = z.object({
 export const POST = withErrorHandler(
   withNodeProvisioning(async (request, _context, access) => {
     await connection();
+
+    // SEC-42. Invitation abuse: this endpoint is authenticated, so the
+    // attacker here is a legitimate member spending the organization's
+    // sending reputation (and the email provider's quota) on addresses that
+    // never asked for mail. The key is therefore the inviting user, not the
+    // IP -- one account behind a rotating IP is the case that matters, and an
+    // IP key would also punish everyone behind a shared NAT.
+    const inviteRateLimit = await checkStrictRateLimit(
+      `invite:${access.user.id}`,
+      { path: INVITE_PATH, limit: INVITE_LIMIT, windowMs: INVITE_WINDOW_MS },
+    );
+
+    if (!inviteRateLimit.success) {
+      return createServerErrorResponse(
+        'Too many invitations sent. Please wait before sending more.',
+        429,
+        'RATE_LIMITED',
+      );
+    }
 
     const body = await request.json();
     const parsed = bodySchema.safeParse(body);

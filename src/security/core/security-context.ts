@@ -8,15 +8,17 @@ import {
 } from '@/core/contracts/tenancy';
 import { env } from '@/core/env';
 
-import { getIP } from '@/shared/lib/network/get-ip';
+import { auditIpForClient, getClientIp } from '@/shared/lib/network/get-ip';
 
 import type { NodeSecurityContextDependencies } from './security-dependencies';
+import { isSessionRevoked } from './session-revocation';
 export type { SecurityContextDependencies } from './security-dependencies';
 
 export type ReadinessStatus =
   | 'ALLOWED'
   | 'BOOTSTRAP_REQUIRED'
   | 'ONBOARDING_REQUIRED'
+  | 'ACCOUNT_DISABLED'
   | 'TENANT_CONTEXT_REQUIRED'
   | 'TENANT_MEMBERSHIP_REQUIRED'
   | 'UNAUTHENTICATED';
@@ -27,7 +29,7 @@ export interface SecurityContext {
     tenantId: string;
     attributes?: Record<string, unknown>;
   };
-  ip: string;
+  ip: string | null;
   userAgent?: string;
   correlationId: string;
   runtime: 'edge' | 'node';
@@ -51,10 +53,19 @@ export interface SecurityContext {
 export async function createSecurityContext(
   dependencies: NodeSecurityContextDependencies,
 ): Promise<SecurityContext> {
-  const { identityProvider, tenantResolver, userRepository } = dependencies;
+  const {
+    identityProvider,
+    tenantResolver,
+    userRepository,
+    requestIdentitySource,
+  } = dependencies;
 
   const headerList = await headers();
-  const ip = await getIP(headerList);
+  // SEC-43. `null` when the client cannot be identified under the declared
+  // trust model. This value reaches `audit_log.ip`, and a row naming an
+  // address the request may never have come from is worse than one that
+  // admits it does not know.
+  const ip = auditIpForClient(await getClientIp(headerList));
   const userAgent = headerList.get('user-agent') ?? undefined;
   const correlationId =
     headerList.get('x-correlation-id') ?? crypto.randomUUID();
@@ -102,6 +113,47 @@ export async function createSecurityContext(
       user: undefined,
       readinessStatus: 'BOOTSTRAP_REQUIRED',
     };
+  }
+
+  // Lifecycle authorization gate, checked before onboarding-completeness so
+  // a deactivated-but-incomplete-onboarding account can never reach a more
+  // permissive status -- same enforcement point and same reasoning as
+  // `evaluateNodeProvisioningAccess`. Server Actions built on
+  // `createSecureAction` build their `SecurityContext` from this function,
+  // not from `evaluateNodeProvisioningAccess`, so this repository has two
+  // independent readiness evaluators and both must check `deactivatedAt`.
+  // See SEC-33 in docs/ai/general/SECURITY_CODING_PATTERNS.md.
+  if (user.deactivatedAt) {
+    return {
+      ...baseContext,
+      user: undefined,
+      readinessStatus: 'ACCOUNT_DISABLED',
+    };
+  }
+
+  // Session-revocation gate. This is the second of this repository's two
+  // independent readiness evaluators, so -- exactly as with `deactivatedAt`
+  // under SEC-33 -- the check has to exist here too or Server Actions would
+  // keep honouring a session the API layer already rejects. Ordered after
+  // the deactivation gate for the same reason as in
+  // node-provisioning-access.ts: a disabled account must not be told merely
+  // to sign in again.
+  //
+  // The identity source is consulted ONLY when this user actually carries a
+  // marker. Almost nobody does (it is set by password reset alone), so the
+  // common path costs nothing, and a provider whose session lookup is
+  // unavailable in this context cannot turn an ordinary request into a
+  // failure. See SEC-36.
+  if (user.sessionsValidFrom) {
+    const { sessionIssuedAt } = await requestIdentitySource.get();
+
+    if (isSessionRevoked(user.sessionsValidFrom, sessionIssuedAt)) {
+      return {
+        ...baseContext,
+        user: undefined,
+        readinessStatus: 'UNAUTHENTICATED',
+      };
+    }
   }
 
   if (!user.onboardingComplete) {

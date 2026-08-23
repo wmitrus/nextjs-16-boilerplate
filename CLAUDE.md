@@ -128,6 +128,30 @@ actually completed or confirmed not applicable).
 
 ---
 
+## Possible Enhancements Backlog — Living File, Check Every Task
+
+`docs/ai/general/POSSIBLE_ENHANCEMENTS.md` **exists, is tracked, and is
+actively maintained** — currently `PE-01` … `PE-21`, none triaged yet. It is
+the single holding pen for valuable-but-deferred ideas.
+
+This pointer exists because `AGENTS.md` (which carries the authoritative rule,
+under "Possible Enhancements Backlog — Check Every Task") is **not**
+auto-loaded by Claude Code, while this file is. A session that starts fresh
+must not have to rediscover the backlog.
+
+Every task obligation, in short:
+
+- Surfaced a worthwhile idea outside the current task's scope? Add one entry
+  there with the next sequential `PE-XX` ID, and reference it by ID from the
+  task artifact — never write the rationale twice.
+- Never implement an entry on your own initiative. Untriaged is not "go".
+- When the user triages one, update its `Status` with a resolution note and
+  keep the entry — the backlog doubles as a decision log.
+
+Full rules and entry format live in the file itself.
+
+---
+
 ## Testing Conventions
 
 - **Co-location**: all unit tests MUST live next to their source file

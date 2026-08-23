@@ -26,7 +26,17 @@ interface InvitationsClientProps {
   invitations: SafeInvitation[];
   roles: Array<{ id: string; name: string }>;
   createEndpoint?: string;
-  revokeEndpointBase?: string;
+  /**
+   * Base path for the revoke call, e.g.
+   * `/api/admin/organizations/<id>/invitations`.
+   *
+   * REQUIRED, and deliberately without a default. It used to default to the
+   * flat `/api/admin/invitations`, which revoked by global invitation id
+   * with no organization in the predicate -- so a component that simply
+   * forgot the prop silently used the unscoped path. That route is gone and
+   * this prop is now a compile-time obligation. See SEC-41.
+   */
+  revokeEndpointBase: string;
 }
 
 type SendState =
@@ -106,7 +116,7 @@ export function InvitationsClient({
   invitations,
   roles,
   createEndpoint = '/api/admin/invitations',
-  revokeEndpointBase = '/api/admin/invitations',
+  revokeEndpointBase,
 }: InvitationsClientProps) {
   const router = useRouter();
   const [email, setEmail] = React.useState('');

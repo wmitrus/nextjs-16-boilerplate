@@ -32,7 +32,20 @@ export const env = createEnv({
     LOGFLARE_EDGE_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(false),
-    UPSTASH_REDIS_REST_URL: z.url().optional(),
+    // Must be the Upstash **REST** endpoint (https://<id>.upstash.io), not
+    // the `rediss://` connection string. A bare z.url() accepts either, and
+    // the @upstash/redis client fetch()es whatever it is given -- so the
+    // wrong one passes validation, passes deploy, and only surfaces at
+    // runtime as an opaque `TypeError: fetch failed` that silently degrades
+    // every Redis-backed control to its in-memory fallback. Reject it here,
+    // where the mistake is obvious, instead.
+    UPSTASH_REDIS_REST_URL: z
+      .url()
+      .refine(
+        (value) => value.startsWith('https://') || value.startsWith('http://'),
+        'UPSTASH_REDIS_REST_URL must be the Upstash REST URL (https://<id>.upstash.io), not a rediss:// connection string',
+      )
+      .optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     API_RATE_LIMIT_REQUESTS: z.coerce.number().default(10),
     API_RATE_LIMIT_WINDOW: z.string().default('60 s'),
@@ -78,7 +91,24 @@ export const env = createEnv({
       z.url().optional(),
     ),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
+    /**
+     * Shared secret for `/api/internal/**`.
+     *
+     * Length is only floored in production (see
+     * `validateInternalApiKeyConfigValues`) so local development and tests
+     * keep working with short fixtures. A one-character key used to be a
+     * valid production configuration. See SEC-44.
+     */
     INTERNAL_API_KEY: z.string().min(1).optional(),
+    /**
+     * The key being rotated out. Accepted alongside `INTERNAL_API_KEY` so a
+     * rotation does not require every caller to cut over in the same instant
+     * -- publish the new key, let callers move, then drop this one.
+     *
+     * Leaving it set indefinitely doubles the material that must stay secret,
+     * so the guard logs whenever it is the one that matched.
+     */
+    INTERNAL_API_KEY_PREVIOUS: z.string().min(1).optional(),
     SECURITY_AUDIT_LOG_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(true),
@@ -91,6 +121,14 @@ export const env = createEnv({
     // redirect hop (not reset per hop -- a chain of redirects must not be
     // able to add up to an unbounded total wait). See A.8.3 in
     // docs/ai/general/SECURITY_CODING_PATTERNS.md (SEC-28).
+    // Escape hatch for local development against a plaintext endpoint.
+    // Deliberately INERT in production: `secureFetch` ignores it when
+    // NODE_ENV === 'production' and logs that it did, so a value that leaks
+    // into a production environment cannot silently downgrade outbound
+    // traffic to cleartext. See SEC-39.
+    SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     SECURITY_OUTBOUND_FETCH_TIMEOUT_MS: z.coerce
       .number()
       .int()
@@ -213,6 +251,78 @@ export const env = createEnv({
     FEATURE_FLAGS_STATIC: z.string().optional(),
     GROWTHBOOK_CLIENT_KEY: z.string().optional(),
     GROWTHBOOK_API_HOST: z.url().optional(),
+    // Login abuse control (SEC-34) -- dedicated IP-bucket rate limit for the
+    // AuthJS Credentials callback, separate from the generic API_RATE_LIMIT_*
+    // used everywhere else. See docs/ai/general/SECURITY_CODING_PATTERNS.md.
+    LOGIN_RATE_LIMIT_IP_REQUESTS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(20),
+    LOGIN_RATE_LIMIT_IP_WINDOW: z.string().default('15 m'),
+    // Account-bucket: consecutive failed attempts against one normalized
+    // email, independent of the IP bucket above. Crossing each threshold
+    // escalates the response (require CAPTCHA, add a progressive delay,
+    // then a temporary lock) rather than a single flat cutoff.
+    /**
+     * Deploy-time base for the `strict_rate_limit_degrade` operational
+     * switch (SEC-42). `true` makes strict rate limiting fall back to the
+     * process-local counter instead of failing closed when neither the
+     * primary nor the durable secondary can be reached.
+     *
+     * Default `false`. Leave it there: the runtime override (a feature flag,
+     * where the provider supports one) is the intended lever, because it can
+     * be turned back off without a redeploy. Setting this to `true` degrades
+     * a security control until someone remembers to change it back.
+     */
+    /**
+     * Which ingress sits in front of this deployment, and therefore which
+     * header may determine the client IP (SEC-43).
+     *
+     * A trust boundary, not a convenience setting -- so it is **required in
+     * production** and defaults to `none` only for local development and
+     * tests, where forcing every contributor to declare an ingress they do
+     * not have would be friction with no security value. The production
+     * requirement is enforced by `validateDeploymentProxyConfigValues`.
+     *
+     * `none` means no header is believed and every request resolves as
+     * untrusted. That is a safe default, not a working one.
+     */
+    DEPLOYMENT_PROXY: z
+      .enum(['vercel', 'cloudflare', 'trusted-proxy', 'none'])
+      .optional(),
+    /**
+     * Comma-separated CIDRs of the operator's own proxies. Required when
+     * `DEPLOYMENT_PROXY=trusted-proxy`, meaningless otherwise.
+     */
+    TRUSTED_PROXY_CIDRS: z.string().optional(),
+    RATE_LIMIT_STRICT_DEGRADE: z
+      .string()
+      .optional()
+      .transform((value) => value === 'true')
+      .pipe(z.boolean())
+      .default(false),
+    LOGIN_ABUSE_WINDOW: z.string().default('30 m'),
+    LOGIN_ABUSE_CAPTCHA_THRESHOLD: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3),
+    LOGIN_ABUSE_DELAY_THRESHOLD: z.coerce.number().int().positive().default(8),
+    LOGIN_ABUSE_LOCK_THRESHOLD: z.coerce.number().int().positive().default(15),
+    // Cloudflare Turnstile -- optional. When either key is unset, the
+    // CAPTCHA gate is skipped (progressive delay/lock still apply); see
+    // `isTurnstileConfigured()` in `src/shared/lib/captcha/turnstile.ts`.
+    TURNSTILE_SECRET_KEY: z.string().optional(),
+    // E2E_ENABLED bypasses the account-bucket abuse control entirely (see
+    // auth.ts) so unrelated specs sharing a stable test account never get
+    // captcha-gated/locked by another spec's deliberate wrong-password
+    // test. The one spec that exists specifically to exercise that control
+    // (e2e/authjs-login-abuse-control.spec.ts) sets this flag to force it
+    // back on for its own run only -- never set outside that scenario.
+    E2E_LOGIN_ABUSE_CONTROL_ENABLED: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     // Add server-only variables here (e.g., DATABASE_URL, API_SECRET)
   },
 
@@ -267,6 +377,9 @@ export const env = createEnv({
     NEXT_PUBLIC_BUILD_CSP_SCRIPT_MODE: z
       .enum(['cache-compatible', 'nonce-dynamic'])
       .optional(),
+    // Cloudflare Turnstile site key (public by design -- pairs with the
+    // server-only TURNSTILE_SECRET_KEY). See SEC-34.
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1).optional(),
     // Add public variables here
   },
 
@@ -320,9 +433,12 @@ export const env = createEnv({
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
+    INTERNAL_API_KEY_PREVIOUS: process.env.INTERNAL_API_KEY_PREVIOUS,
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
+    SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP:
+      process.env.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP,
     SECURITY_OUTBOUND_FETCH_TIMEOUT_MS:
       process.env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS,
     SECURITY_OUTBOUND_FETCH_MAX_BYTES:
@@ -365,6 +481,19 @@ export const env = createEnv({
     FEATURE_FLAGS_STATIC: process.env.FEATURE_FLAGS_STATIC,
     GROWTHBOOK_CLIENT_KEY: process.env.GROWTHBOOK_CLIENT_KEY,
     GROWTHBOOK_API_HOST: process.env.GROWTHBOOK_API_HOST,
+    LOGIN_RATE_LIMIT_IP_REQUESTS: process.env.LOGIN_RATE_LIMIT_IP_REQUESTS,
+    LOGIN_RATE_LIMIT_IP_WINDOW: process.env.LOGIN_RATE_LIMIT_IP_WINDOW,
+    DEPLOYMENT_PROXY: process.env.DEPLOYMENT_PROXY,
+    TRUSTED_PROXY_CIDRS: process.env.TRUSTED_PROXY_CIDRS,
+    RATE_LIMIT_STRICT_DEGRADE: process.env.RATE_LIMIT_STRICT_DEGRADE,
+    LOGIN_ABUSE_WINDOW: process.env.LOGIN_ABUSE_WINDOW,
+    LOGIN_ABUSE_CAPTCHA_THRESHOLD: process.env.LOGIN_ABUSE_CAPTCHA_THRESHOLD,
+    LOGIN_ABUSE_DELAY_THRESHOLD: process.env.LOGIN_ABUSE_DELAY_THRESHOLD,
+    LOGIN_ABUSE_LOCK_THRESHOLD: process.env.LOGIN_ABUSE_LOCK_THRESHOLD,
+    TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+    E2E_LOGIN_ABUSE_CONTROL_ENABLED:
+      process.env.E2E_LOGIN_ABUSE_CONTROL_ENABLED,
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_LOG_LEVEL: process.env.NEXT_PUBLIC_LOG_LEVEL,
     NEXT_PUBLIC_LOGFLARE_BROWSER_ENABLED:
@@ -625,5 +754,153 @@ export function validateVerificationConfig(): void {
     env.REGISTRATION_MODE,
     env.AUTH_DEV_AUTO_VERIFY,
     env.AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV,
+  );
+}
+
+/**
+ * Resolves the effective deployment trust model, enforcing that production
+ * declares one explicitly (SEC-43).
+ *
+ * Deliberately **not** auto-detected. `VERCEL_ENV` is read only to make the
+ * error message useful — inferring `vercel` from its presence would mean a
+ * deployment starts trusting headers because of an environment variable
+ * nobody set for that purpose, which is the same "believe the header because
+ * it is there" mistake one level up.
+ *
+ * Development and test default to `none`: a contributor running the app
+ * locally has no ingress to declare, and making them invent one would be
+ * friction with no security value. `none` trusts nothing, so the default is
+ * safe even though it is not useful.
+ */
+export function resolveDeploymentProxyValue(
+  deploymentProxy: string | undefined,
+  nodeEnv: string | undefined,
+  vercelEnv: string | undefined,
+): 'vercel' | 'cloudflare' | 'trusted-proxy' | 'none' {
+  const declared = deploymentProxy?.trim();
+  if (declared) {
+    return declared as 'vercel' | 'cloudflare' | 'trusted-proxy' | 'none';
+  }
+
+  if (nodeEnv === 'production') {
+    const hint = vercelEnv
+      ? ' Detected a Vercel deployment (VERCEL_ENV is set): set DEPLOYMENT_PROXY=vercel explicitly.'
+      : '';
+    throw new Error(
+      '[env] DEPLOYMENT_PROXY must be set when NODE_ENV=production. It declares which ' +
+        'ingress may determine the client IP, and no safe value can be guessed. ' +
+        'Valid values: vercel | cloudflare | trusted-proxy | none.' +
+        hint,
+    );
+  }
+
+  return 'none';
+}
+
+/**
+ * Cross-field rules for the deployment trust model. Separate from
+ * `resolveDeploymentProxyValue` so the resolver stays a pure lookup and the
+ * rules can be asserted on their own.
+ */
+export function validateDeploymentProxyConfigValues(
+  deploymentProxy: string | undefined,
+  trustedProxyCidrs: string | undefined,
+  nodeEnv: string | undefined,
+  vercelEnv: string | undefined,
+): void {
+  const effective = resolveDeploymentProxyValue(
+    deploymentProxy,
+    nodeEnv,
+    vercelEnv,
+  );
+
+  if (effective !== 'trusted-proxy') return;
+
+  const entries = (trustedProxyCidrs ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (entries.length === 0) {
+    throw new Error(
+      '[env] DEPLOYMENT_PROXY=trusted-proxy requires TRUSTED_PROXY_CIDRS ' +
+        '(comma-separated CIDRs of your own proxies, e.g. "10.0.0.0/8,172.16.0.0/12"). ' +
+        'Without it there is nothing to distinguish your proxies from a client.',
+    );
+  }
+}
+
+/** Convenience wrapper for bootstrap/startup. */
+export function validateDeploymentProxyConfig(): void {
+  validateDeploymentProxyConfigValues(
+    env.DEPLOYMENT_PROXY,
+    env.TRUSTED_PROXY_CIDRS,
+    env.NODE_ENV,
+    env.VERCEL_ENV,
+  );
+}
+
+/**
+ * Minimum length for an internal-API key in production (SEC-44).
+ *
+ * 32 characters is not an entropy measurement -- a schema cannot tell a
+ * 32-character random string from a 32-character sentence. It is a floor that
+ * makes the obviously-guessable configurations impossible while staying
+ * checkable, and the `.env.example` guidance says how to generate a real one.
+ */
+export const MIN_INTERNAL_API_KEY_LENGTH = 32;
+
+/**
+ * Cross-field rules for the internal-API shared secret.
+ *
+ * Only enforced in production: local development and E2E use short fixtures
+ * deliberately, and forcing a 32-character secret there would be friction
+ * with no security value -- those deployments are not reachable from the
+ * internet.
+ */
+export function validateInternalApiKeyConfigValues(
+  internalApiKey: string | undefined,
+  previousInternalApiKey: string | undefined,
+  nodeEnv: string | undefined,
+): void {
+  if (nodeEnv !== 'production') return;
+
+  const entries: Array<[string, string | undefined]> = [
+    ['INTERNAL_API_KEY', internalApiKey],
+    ['INTERNAL_API_KEY_PREVIOUS', previousInternalApiKey],
+  ];
+
+  for (const [name, value] of entries) {
+    // An unset key is a valid configuration -- the guard then refuses every
+    // internal request, which is the safe direction. Only a *set* key has to
+    // be strong.
+    if (value === undefined) continue;
+
+    if (value.trim().length < MIN_INTERNAL_API_KEY_LENGTH) {
+      throw new Error(
+        `[env] ${name} must be at least ${MIN_INTERNAL_API_KEY_LENGTH} characters in production. ` +
+          'Generate one with: openssl rand -base64 32',
+      );
+    }
+  }
+
+  if (
+    internalApiKey !== undefined &&
+    previousInternalApiKey !== undefined &&
+    internalApiKey.trim() === previousInternalApiKey.trim()
+  ) {
+    throw new Error(
+      '[env] INTERNAL_API_KEY_PREVIOUS must differ from INTERNAL_API_KEY. ' +
+        'Setting both to the same value gives the appearance of a rotation without performing one.',
+    );
+  }
+}
+
+/** Convenience wrapper for bootstrap/startup. */
+export function validateInternalApiKeyConfig(): void {
+  validateInternalApiKeyConfigValues(
+    env.INTERNAL_API_KEY,
+    env.INTERNAL_API_KEY_PREVIOUS,
+    env.NODE_ENV,
   );
 }

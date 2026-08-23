@@ -83,11 +83,15 @@ describe('Outbound Security Integration (SSRF)', () => {
   });
 
   it('should block requests to private/local networks', async () => {
+    // https:// deliberately: this test is about the host allowlist and the
+    // private-address classification. Using http:// would now trip the
+    // SEC-39 protocol gate first, and the test would pass for the wrong
+    // reason without ever exercising what it is named for.
     const localUrls = [
-      'http://localhost:3000/api/config',
-      'http://127.0.0.1/admin',
-      'http://192.168.1.1/router-login',
-      'http://10.0.0.1/internal-service',
+      'https://localhost:3000/api/config',
+      'https://127.0.0.1/admin',
+      'https://192.168.1.1/router-login',
+      'https://10.0.0.1/internal-service',
     ];
 
     for (const url of localUrls) {

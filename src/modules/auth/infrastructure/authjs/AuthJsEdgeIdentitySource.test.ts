@@ -52,6 +52,10 @@ describe('AuthJsEdgeIdentitySource', () => {
       userId: 'user@example.com',
       email: 'user@example.com',
       emailVerified: false,
+      // Read verbatim from the token's `iat`, carried for contract parity
+      // with the Node source; the Edge gate has no DB and never decides
+      // revocation itself. See SEC-36.
+      sessionIssuedAt: 0,
     });
   });
 

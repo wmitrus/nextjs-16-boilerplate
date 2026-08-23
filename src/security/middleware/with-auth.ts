@@ -13,6 +13,7 @@ import {
 import type { UserRepository } from '@/core/contracts/user';
 import { env } from '@/core/env';
 
+import { auditIpForClient, getClientIp } from '@/shared/lib/network/get-ip';
 import { getSignInPath } from '@/shared/lib/routing/auth-entry';
 import { sanitizeRedirectUrl } from '@/shared/lib/routing/safe-redirect';
 
@@ -242,10 +243,13 @@ async function authorizeRouteAccess(
       },
       action: createAction('route', 'access'),
       environment: {
-        ip:
-          req.headers.get('x-forwarded-for') ??
-          req.headers.get('x-real-ip') ??
-          undefined,
+        // SEC-43. This fed an ABAC authorization decision from raw headers
+        // with no trust model and no validation -- strictly worse than the
+        // old `getIP()`, because `isFromAllowedIp` reads it: anyone could
+        // send `x-forwarded-for: 10.0.0.1` and satisfy an IP allow-list
+        // policy. Now the declared ingress decides, and an unidentifiable
+        // client is `undefined` rather than an address it chose for itself.
+        ip: auditIpForClient(await getClientIp(req.headers)) ?? undefined,
         time: new Date(),
         path: req.nextUrl.pathname,
         method: req.method,

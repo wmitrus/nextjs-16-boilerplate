@@ -219,6 +219,32 @@ describe('env', () => {
   });
 });
 
+describe('UPSTASH_REDIS_REST_URL', () => {
+  // The Upstash dashboard offers both a REST URL and a `rediss://`
+  // connection string. Pasting the wrong one used to pass a bare z.url(),
+  // deploy cleanly, and only fail at runtime as `TypeError: fetch failed` --
+  // silently degrading every Redis-backed control (notably SEC-34's login
+  // abuse counter) to a process-local fallback that is not durable on
+  // serverless. Reject it at config time instead.
+  it('rejects a rediss:// connection string', async () => {
+    setEnv({
+      UPSTASH_REDIS_REST_URL: 'rediss://default:pw@eu1-x.upstash.io:6379',
+    });
+    vi.resetModules();
+
+    await expect(loadEnv()).rejects.toThrow();
+  });
+
+  it('accepts the https REST endpoint', async () => {
+    setEnv({ UPSTASH_REDIS_REST_URL: 'https://eu1-x.upstash.io' });
+    vi.resetModules();
+
+    const env = await loadEnv();
+
+    expect(env.UPSTASH_REDIS_REST_URL).toBe('https://eu1-x.upstash.io');
+  });
+});
+
 describe('tenancy env vars', () => {
   it('TENANCY_MODE defaults to single', async () => {
     setEnv({ TENANCY_MODE: undefined });
@@ -724,5 +750,140 @@ describe('validateVerificationConfigValues', () => {
     expect(() =>
       validateVerificationConfigValues('development', 'disabled', false, false),
     ).not.toThrow();
+  });
+});
+
+describe('resolveDeploymentProxyValue (SEC-43)', () => {
+  const load = async () => (await import('./env')).resolveDeploymentProxyValue;
+
+  it('returns the declared value verbatim', async () => {
+    const resolve = await load();
+    for (const declared of ['vercel', 'cloudflare', 'trusted-proxy', 'none']) {
+      expect(resolve(declared, 'production', undefined)).toBe(declared);
+    }
+  });
+
+  it('defaults to none outside production', async () => {
+    // A contributor running locally has no ingress to declare; making them
+    // invent one is friction with no security value. `none` trusts nothing,
+    // so the default is safe even though it is not useful.
+    const resolve = await load();
+    expect(resolve(undefined, 'development', undefined)).toBe('none');
+    expect(resolve(undefined, 'test', undefined)).toBe('none');
+  });
+
+  it('refuses to start in production without an explicit declaration', async () => {
+    const resolve = await load();
+    expect(() => resolve(undefined, 'production', undefined)).toThrow(
+      /DEPLOYMENT_PROXY must be set/,
+    );
+  });
+
+  it('uses VERCEL_ENV only to improve the message, never to pick a model', async () => {
+    // Inferring `vercel` from VERCEL_ENV would mean a deployment starts
+    // trusting headers because of a variable nobody set for that purpose --
+    // the same "believe the header because it is there" mistake one level up.
+    const resolve = await load();
+    expect(() => resolve(undefined, 'production', 'preview')).toThrow(
+      /Detected a Vercel deployment/,
+    );
+  });
+
+  it('treats a blank value as undeclared', async () => {
+    const resolve = await load();
+    expect(() => resolve('   ', 'production', undefined)).toThrow(
+      /DEPLOYMENT_PROXY must be set/,
+    );
+  });
+});
+
+describe('validateDeploymentProxyConfigValues (SEC-43)', () => {
+  const load = async () =>
+    (await import('./env')).validateDeploymentProxyConfigValues;
+
+  it('requires CIDRs for trusted-proxy', async () => {
+    const validate = await load();
+    expect(() =>
+      validate('trusted-proxy', undefined, 'production', undefined),
+    ).toThrow(/requires TRUSTED_PROXY_CIDRS/);
+  });
+
+  it('rejects a CIDR list that is only separators', async () => {
+    const validate = await load();
+    expect(() =>
+      validate('trusted-proxy', ' , , ', 'production', undefined),
+    ).toThrow(/requires TRUSTED_PROXY_CIDRS/);
+  });
+
+  it('accepts trusted-proxy with CIDRs', async () => {
+    const validate = await load();
+    expect(() =>
+      validate(
+        'trusted-proxy',
+        '10.0.0.0/8, 172.16.0.0/12',
+        'production',
+        undefined,
+      ),
+    ).not.toThrow();
+  });
+
+  it('does not require CIDRs for the other models', async () => {
+    const validate = await load();
+    for (const model of ['vercel', 'cloudflare', 'none']) {
+      expect(() =>
+        validate(model, undefined, 'production', undefined),
+      ).not.toThrow();
+    }
+  });
+});
+
+describe('validateInternalApiKeyConfigValues (SEC-44)', () => {
+  const load = async () =>
+    (await import('./env')).validateInternalApiKeyConfigValues;
+  const strong = 'a'.repeat(32);
+  const strongOther = 'b'.repeat(32);
+
+  it('rejects a short key in production', async () => {
+    // `z.string().min(1)` meant a one-character key was a valid production
+    // configuration.
+    const validate = await load();
+    expect(() => validate('short', undefined, 'production')).toThrow(
+      /at least 32 characters/,
+    );
+  });
+
+  it('rejects a short previous key too', async () => {
+    const validate = await load();
+    expect(() => validate(strong, 'short', 'production')).toThrow(
+      /INTERNAL_API_KEY_PREVIOUS must be at least/,
+    );
+  });
+
+  it('accepts a strong key', async () => {
+    const validate = await load();
+    expect(() => validate(strong, undefined, 'production')).not.toThrow();
+    expect(() => validate(strong, strongOther, 'production')).not.toThrow();
+  });
+
+  it('treats an unset key as valid — the guard then refuses everything', async () => {
+    const validate = await load();
+    expect(() => validate(undefined, undefined, 'production')).not.toThrow();
+  });
+
+  it('rejects a rotation where both slots hold the same value', async () => {
+    // Looks like a rotation, performs none.
+    const validate = await load();
+    expect(() => validate(strong, strong, 'production')).toThrow(
+      /must differ from INTERNAL_API_KEY/,
+    );
+  });
+
+  it('does not apply the floor outside production', async () => {
+    // E2E and local development use short fixtures on purpose, and those
+    // deployments are not reachable from the internet.
+    const validate = await load();
+    for (const nodeEnv of ['development', 'test']) {
+      expect(() => validate('short', 'shorter', nodeEnv)).not.toThrow();
+    }
   });
 });

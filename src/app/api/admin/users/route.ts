@@ -1,10 +1,10 @@
 import { connection } from 'next/server';
 import { z } from 'zod';
 
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
-import type { UserRepository } from '@/core/contracts/user';
+import type { DrizzleDb } from '@/core/db';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -14,6 +14,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -35,26 +36,38 @@ const querySchema = z.object({
   search: z.string().max(200).optional(),
 });
 
+type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
+
+/**
+ * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
+ * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
+ * authorization to reach users outside their own tenant -- check
+ * `isPlatformAdmin` before allowing anything unscoped. See SEC-26 in
+ * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ */
 async function checkAdminAccess(
   email: string | undefined,
   userId: string,
   tenantId: string,
   container: ReturnType<typeof getAppContainer>,
-): Promise<boolean> {
-  if (isEnvBasedPlatformAdmin(email)) return true;
+): Promise<AdminAccess> {
+  if (isEnvBasedPlatformAdmin(email)) {
+    return { allowed: true, isPlatformAdmin: true };
+  }
 
   try {
     const authzService = container.resolve<AuthorizationService>(
       AUTHORIZATION.SERVICE,
     );
-    return await authzService.can({
+    const allowed = await authzService.can({
       tenant: { tenantId },
       subject: { id: userId },
       resource: { type: RESOURCES.USER, id: 'admin-panel' },
       action: ACTIONS.USER_READ,
     });
+    return { allowed, isPlatformAdmin: false };
   } catch {
-    return false;
+    return { allowed: false, isPlatformAdmin: false };
   }
 }
 
@@ -64,14 +77,14 @@ export const GET = withErrorHandler(
 
     const container = getAppContainer();
 
-    const isAdmin = await checkAdminAccess(
+    const adminAccess = await checkAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
       container,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
@@ -92,8 +105,18 @@ export const GET = withErrorHandler(
 
     const { limit, offset, search } = queryResult.data;
 
-    const userRepo = container.resolve<UserRepository>(AUTH.USER_REPOSITORY);
-    const { users, total } = await userRepo.listAll({ limit, offset, search });
+    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+    const service = new DrizzleAdminUsersService(db);
+    // An ABAC-authorized (non-platform-admin) caller only ever sees users
+    // who hold a membership in their own tenant -- never another tenant's
+    // users (SEC-26).
+    const scope = adminAccess.isPlatformAdmin
+      ? null
+      : { tenantId: access.tenant.tenantId };
+    const { users, total } = await service.listAll(
+      { limit, offset, search },
+      scope,
+    );
 
     logger.info(
       {

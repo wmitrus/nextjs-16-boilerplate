@@ -225,4 +225,194 @@ describe('rate-limit-helper', () => {
       vi.useRealTimers();
     });
   });
+
+  /**
+   * SEC-42. Strict mode exists because the process-local fallback is
+   * per-instance on serverless: an attacker spread across instances gets the
+   * limit once per instance. These assert the chain, and specifically that
+   * nothing which merely *fails* can put the caller back on that fallback.
+   */
+  describe("checkRateLimit mode: 'strict'", () => {
+    type Increment = (
+      identifier: string,
+      windowMs: number,
+    ) => Promise<{ count: number; windowEnd: Date }>;
+
+    function makeDeps(overrides?: {
+      increment?: Increment;
+      isDegradeSwitchOn?: () => Promise<boolean>;
+    }) {
+      const increment = vi.fn<Increment>(
+        overrides?.increment ??
+          (async () => ({
+            count: 1,
+            windowEnd: new Date(Date.now() + 60_000),
+          })),
+      );
+      const isDegradeSwitchOn = vi.fn<() => Promise<boolean>>(
+        overrides?.isDegradeSwitchOn ?? (async () => false),
+      );
+      return { durable: { increment }, isDegradeSwitchOn };
+    }
+
+    async function importHelper(upstash: 'throws' | 'absent') {
+      // A full EdgeLogger stub. Earlier tests in this file register a
+      // `{ warn }`-only logger via `vi.doMock`, and those registrations
+      // outlive `vi.resetModules()` -- so the strict paths, which also log at
+      // `error`, would otherwise fail on the leftover stub rather than on
+      // anything real.
+      vi.doMock('@/core/logger/di-edge', () => ({
+        resolveEdgeLogger: () => ({
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        }),
+      }));
+      vi.doMock('./rate-limit', () => ({
+        apiRateLimit: upstash === 'absent' ? undefined : {},
+        checkUpstashRateLimit: vi
+          .fn()
+          .mockRejectedValue(new Error('upstash down')),
+      }));
+      return import('./rate-limit-helper');
+    }
+
+    it('serves the request from the durable secondary when Upstash is down', async () => {
+      const { checkRateLimit } = await importHelper('throws');
+      const deps = makeDeps();
+
+      const result = await checkRateLimit('ip-1', {
+        mode: 'strict',
+        strict: deps,
+      });
+
+      expect(deps.durable.increment).toHaveBeenCalledWith('ip-1', 60_000);
+      expect(result.success).toBe(true);
+      expect(result.remaining).toBe(9);
+    });
+
+    it('rejects once the durable count passes the limit', async () => {
+      const { checkRateLimit } = await importHelper('throws');
+      const deps = makeDeps({
+        increment: async () => ({
+          count: 11,
+          windowEnd: new Date(Date.now() + 60_000),
+        }),
+      });
+
+      const result = await checkRateLimit('ip-1', {
+        mode: 'strict',
+        strict: deps,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.remaining).toBe(0);
+    });
+
+    it('treats a count exactly at the limit as still allowed', async () => {
+      const { checkRateLimit } = await importHelper('throws');
+      const deps = makeDeps({
+        increment: async () => ({
+          count: 10,
+          windowEnd: new Date(Date.now() + 60_000),
+        }),
+      });
+
+      const result = await checkRateLimit('ip-1', {
+        mode: 'strict',
+        strict: deps,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.remaining).toBe(0);
+    });
+
+    it('fails CLOSED when both stores are unavailable', async () => {
+      const { checkRateLimit } = await importHelper('throws');
+      const deps = makeDeps({
+        increment: async () => {
+          throw new Error('postgres down');
+        },
+      });
+
+      const result = await checkRateLimit('ip-1', {
+        mode: 'strict',
+        strict: deps,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.remaining).toBe(0);
+    });
+
+    it('does NOT fall back to the process-local counter on a double outage', async () => {
+      // The whole point of strict mode. If this ever regresses, the control
+      // silently becomes per-instance again and every other assertion here
+      // still passes.
+      const { checkRateLimit } = await importHelper('throws');
+      const deps = makeDeps({
+        increment: async () => {
+          throw new Error('postgres down');
+        },
+      });
+
+      // Ten calls that would each be allowed by a fresh local bucket.
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          checkRateLimit('ip-shared', { mode: 'strict', strict: deps }),
+        ),
+      );
+
+      expect(results.every((r) => r.success === false)).toBe(true);
+    });
+
+    it('degrades to the local counter only when the switch says so', async () => {
+      const { checkRateLimit } = await importHelper('throws');
+      const deps = makeDeps({
+        increment: async () => {
+          throw new Error('postgres down');
+        },
+        isDegradeSwitchOn: async () => true,
+      });
+
+      const result = await checkRateLimit('ip-2', {
+        mode: 'strict',
+        strict: deps,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('still uses the durable secondary when Upstash is not configured at all', async () => {
+      // A production deployment with no Upstash must not quietly downgrade a
+      // security-critical limit to a per-instance Map.
+      const { checkRateLimit } = await importHelper('absent');
+      const deps = makeDeps();
+
+      const result = await checkRateLimit('ip-3', {
+        mode: 'strict',
+        strict: deps,
+      });
+
+      expect(deps.durable.increment).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
+    it('fails closed when strict is requested with no durable store wired', async () => {
+      const { checkRateLimit } = await importHelper('throws');
+
+      const result = await checkRateLimit('ip-4', { mode: 'strict' });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('leaves standard mode on the local fallback, unchanged', async () => {
+      const { checkRateLimit } = await importHelper('throws');
+
+      const result = await checkRateLimit('ip-5');
+
+      expect(result.success).toBe(true);
+      expect(result.limit).toBe(10);
+    });
+  });
 });

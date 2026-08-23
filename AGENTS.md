@@ -573,6 +573,131 @@ When auth, org, role, permission, policy, or tenant logic is involved, increase 
 - whether claims are trustworthy
 - whether failure paths are explicit and safe
 
+### Admin Route Scope Discipline — Enforced By A Test
+
+**This is a requirement, not a preference.**
+`src/security/core/platform-admin.guard.test.ts` walks every `route.ts` under
+`src/app/api/admin` and fails the suite on either half of the rule below.
+
+The same defect was found four times across this repository's security audit
+(SEC-26 twice, SEC-41 twice), always in the same shape. Two things must hold:
+
+1. **Two grants, never one boolean.** `isEnvBasedPlatformAdmin` is genuinely
+   unscoped; the ABAC `SECURITY_MANAGE_POLICIES` grant is evaluated against
+   the caller's **active tenant**, so every tenant owner holds it inside
+   their own tenant and nobody holds it beyond. Return
+   `{ allowed, isPlatformAdmin }` and turn `isPlatformAdmin` into the scope
+   you pass down (`null` for a platform admin, the caller's own
+   tenant/organization otherwise). A single `isAdmin` boolean in front of an
+   unscoped query serves one tenant's owner every other tenant's rows.
+2. **The scope goes in the statement, not in a check above it.** A route may
+   not issue an inline `insert`/`update`/`delete`; writes go through a module
+   service whose signature makes the scope mandatory. A `SELECT` that proves
+   ownership followed by an `UPDATE ... WHERE id = ?` is two decisions, and
+   only the second one touches data — put the scope (and a status guard, when
+   the mutation should be single-shot) in the same `WHERE` as the id.
+
+Reference implementations: `DrizzleFeatureFlagAdminService.scopePredicate`,
+`DrizzleAdminUsersService` (`AdminUserScope`),
+`DrizzleInvitationRepository.revokePendingScoped`. Full detail: SEC-26 and
+SEC-41 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
+Related and non-negotiable: never treat a client-supplied `tenantId` or
+`organizationId` as scope authority — derive it from the verified session, and
+be especially suspicious of one that reached the database through an
+unauthenticated endpoint (SEC-41's waitlist finding).
+
+### Secrets Never Appear In A Response, Even Masked (SEC-44)
+
+A diagnostics or health payload may report **whether** a variable is set. It
+must never carry any part of the value — no prefix, no suffix, no "masked"
+form. `getEnvDiagnostics()` returned
+`value.slice(0,2) + '***' + value.slice(-4)`, which handed fragments of
+`CLERK_SECRET_KEY` and `INTERNAL_API_KEY` to `/api/internal/env-check` **and**
+to the `/env-summary` demo page.
+
+Fix such a leak at the function that builds the field, not at one consumer:
+the second consumer is the one you will forget.
+
+Related rules for shared-secret guards:
+
+- **Check whether a guard returns before the rate limiter.** A global limiter
+  is not coverage for something rejected upstream of it. Give credential
+  rejection its own counter rather than reordering the pipeline — an
+  unauthenticated caller must not spend a legitimate client's allowance.
+- **Compare secrets in constant time**, and compare every configured key even
+  after one matches (an early exit makes "current" and "previous" separable by
+  timing during a rotation). `crypto.timingSafeEqual` is Node-only; in Edge,
+  digest both sides with `crypto.subtle` and XOR-accumulate.
+- **Support `current + previous` rotation** so a cutover needs no flag day,
+  and log when the previous key is still being used.
+- **Floor secret length in production.** `z.string().min(1)` is not a
+  validation.
+
+### The Client IP Comes From The Declared Ingress (SEC-43)
+
+**Never read `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip` or a sibling
+directly.** Use `getClientIp()` from `@/shared/lib/network/get-ip`. A static
+guard (`client-ip.guard.test.ts`) fails the suite on any direct read outside
+the resolver.
+
+A header is believed because `DEPLOYMENT_PROXY` declares the ingress that sets
+it authoritatively — never because it is present. `DEPLOYMENT_PROXY` is
+**required in production** (`vercel | cloudflare | trusted-proxy | none`) and
+defaults to `none` in development and test. It is deliberately not inferred
+from `VERCEL_ENV`.
+
+`getClientIp()` returns a discriminated result, not a string:
+
+```ts
+{ kind: 'trusted'; ip: string } | { kind: 'untrusted'; reason: … }
+```
+
+Handle `untrusted` deliberately — the type exists because the old code
+returned a fictional `127.0.0.1` and every caller believed it:
+
+- **keyed on the client** (rate limits) → `rateLimitKeyForClient(prefix, client)`,
+  which puts unidentifiable clients in one **stable** shared bucket. Never a
+  per-request key: that is not a weaker limit, it is no limit.
+- **recording provenance** (audit log, ABAC `environment.ip`) →
+  `auditIpForClient(client)`, which yields `null`.
+
+Any security condition reading an IP must fail closed when it is absent.
+"I cannot tell whether you are blocked" is not "you are not blocked".
+
+### Security-Critical Rate Limits Must Be Durable (SEC-42)
+
+Any limit protecting sign-in, sign-up, password reset, email verification or
+invitations goes through `checkStrictRateLimit`
+(`src/security/api/strict-rate-limit.ts`), never bare `checkRateLimit`.
+
+Standard mode falls back to a process-local counter when Upstash is
+unreachable. On serverless that is not a weakened limit, it is a different
+limit: instances are ephemeral and unshared, so the allowance is granted once
+per instance the attacker can reach. Strict mode reaches for a durable
+Postgres secondary first and **fails closed** if neither store answers —
+which costs nothing, because every endpoint that runs in strict mode already
+needs Postgres to do its job at all.
+
+Two rules follow from this:
+
+- **A global middleware is not coverage.** Before concluding an endpoint is
+  rate-limited, check whether the covering middleware's fallback is durable
+  and whether its window is tuned for that endpoint. Three endpoints looked
+  covered by the Edge per-IP window and were not (`reset-password`, `signup`,
+  `invite`).
+- **Key an authenticated abuse control on the actor, not the IP.** An IP key
+  misses one account behind a rotating IP and punishes everyone behind a
+  shared NAT.
+
+Degrading a strict limit is an operator decision, expressed through the
+`strict_rate_limit_degrade` **operational switch** — not by editing the call
+site. Operational switches use `OperationalSwitch`
+(`src/core/contracts/operational-switch.ts`), never `FeatureFlagService`
+directly: that contract requires a tenant and a subject, and these controls
+run before authentication. Any flag-backed override must be **loosen-only**,
+because `isEnabled()` cannot distinguish "off" from "unavailable".
+
 ---
 
 ## Pending Scheduled Security Follow-Ups — Check Every Session
@@ -779,6 +904,25 @@ When persistence is involved, assess:
 - whether idempotency or ordering matters
 - whether tenant-sensitive or auth-sensitive data could leak through caching or overly broad queries
 
+### Adding A Migration — Two Files, Not One
+
+A new Drizzle migration is not finished when the `.sql` file and
+`_journal.json` entry exist. `scripts/validate-migration-journal.ts` resolves
+each journal tag through a **hand-maintained literal-path `switch`**
+(`readMigrationSql`) — deliberately, because SEC-05/SEC-12 forbid the dynamic
+`readFile(join(dir, tag))` form. A tag missing from that switch throws
+`[migration-journal] Unsupported journal entry <tag>`, which fails
+`pnpm db:migrate:prod` and therefore the Vercel build.
+
+**Every local gate passes when you forget this** — typecheck, unit tests, DB
+tests, skott, depcheck, env:check. It went unnoticed for five consecutive
+security cases in the 2026-08 audit series, each of which reported "all gates
+green" while every preview deploy was failing.
+
+So: add the `case` in the same commit as the migration.
+`scripts/validate-migration-journal.test.ts` now walks the real journal and
+fails locally if you don't.
+
 ---
 
 ## Observability And Error Handling
@@ -803,19 +947,36 @@ Prefer:
 
 ## API Response Discipline
 
+**This is a requirement, not a preference, and it is enforced by a test.**
+`src/shared/lib/api/response-service.guard.test.ts` walks every `route.ts`
+under `src/app/api` and fails the suite if one builds a response by hand.
+
+This wording used to say "prefer". Twelve of thirty-six routes did not
+follow it, including five live auth endpoints — advice that nothing checks
+is advice that decays. See SEC-38 in
+`docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
 For App Router route handlers and internal API surfaces in this repository:
 
-- prefer the shared response helpers in `src/shared/lib/api/response-service.ts`
+- **use** the shared response helpers in `src/shared/lib/api/response-service.ts` — never `Response.json(...)` or `NextResponse.json(...)` directly
 - use `createSuccessResponse()` for successful JSON payloads
 - use `createServerErrorResponse()` or `createValidationErrorResponse()` for structured error payloads
+- convert a `ZodError` with `getFieldErrors()` from `@/shared/lib/api/field-errors` rather than flattening issues by hand
 - use `withErrorHandler()` for route-handler exception mapping unless the endpoint has a deliberate protocol-specific reason not to
 - keep response bodies aligned with the repository response envelope types under `src/shared/types/api-response`
 
+On the client side:
+
+- read error text with `extractApiErrorMessage()` from `@/shared/lib/api/extract-error-message` — the envelope has two error channels (`server_error` carries `error`, `form_errors` carries `errors`), and a client that only reads `.error` silently shows its fallback for every validation failure
+- remember that success payloads are wrapped: read `body.data.x`, not `body.x`
+
 Do not:
 
-- open-code ad hoc `NextResponse.json(...)` success/error envelopes in normal application APIs when the shared ResponseService pattern already fits
+- open-code ad hoc `NextResponse.json(...)` success/error envelopes in normal application APIs
+- add a route to the guard's `EXEMPT_ROUTES` without a written reason naming who consumes that wire format and why the envelope does not fit
 - return inconsistent `status` payload shapes across sibling admin or auth APIs without an explicit architectural reason
 - design new admin/API surfaces without stating whether they follow the shared ResponseService contract
+- **branch client logic on a response's human-readable `message` text.** Return an explicit field and read that; a message comparison breaks silently the moment anyone rewords it (this is exactly what `sign-up-client.tsx` did)
 
 Exception rule:
 
@@ -843,6 +1004,30 @@ Important decisions should capture:
 - consequences
 - migration notes or cleanup expectations
 - rollback or containment considerations
+
+---
+
+## Possible Enhancements Backlog — Check Every Task
+
+**`docs/ai/general/POSSIBLE_ENHANCEMENTS.md`** is the single holding pen for
+valuable-but-deferred ideas that surface during work — most actively right
+now during the ongoing multi-case security-audit remediation series, but the
+file is not scoped to that series alone.
+
+When a task surfaces an improvement worth doing but not required to close
+that task's own scope (a stronger test, a follow-up hardening step, a
+speculative refactor, anything judged out of blast radius for the task at
+hand), add one entry there instead of only mentioning it in that task's own
+`plan.md` or specialist summaries. If the same idea would otherwise be
+written in both places, keep the full rationale in
+`POSSIBLE_ENHANCEMENTS.md` only and have the task artifact reference it by
+its `PE-XX` ID — never duplicate the same information in two places.
+
+Entries are not authorized work and must never be implemented on an agent's
+own initiative. They sit there until the user reviews the accumulated list
+and decides what to actually pick up, reject, or fold into real task scope.
+Full rules (entry format, ID assignment, triage/status update convention)
+are in the file itself.
 
 ---
 
@@ -993,32 +1178,40 @@ This document is the living, authoritative catalogue of:
 
 **All agents that write or review code MUST read this document.**
 
-Key rules currently in effect:
+The table below is a **subset**, not the index. It stops at SEC-25 (plus
+SEC-41, added because it is test-enforced) and never tracked SEC-26 through
+SEC-40 — the catalogue's own index table, at the top of
+`SECURITY_CODING_PATTERNS.md`, is the authoritative list. Read that one;
+treat the table below as a quick reference to the older entries only.
 
-| ID     | Rule                                                                                                                                                                                              |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`                                                                               |
-| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                                                                                                  |
-| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                                                                                              |
-| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                                                                                                  |
-| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                                                                                                 |
-| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                                                                                                    |
-| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                                                                                           |
-| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                                                                                                  |
-| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context                                                                             |
-| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields                                                                                        |
-| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset                                                                           |
-| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)                                                                                      |
-| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`                                                                             |
-| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                                                                               |
-| SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map`                                                 |
-| SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                                                                           |
-| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                                                  |
-| SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs                                      |
-| SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access                                |
-| SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns                                      |
-| SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas |
-| SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                      |
+| ID     | Rule                                                                                                                                                                                                                                                                                         |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`                                                                                                                                                                          |
+| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                                                                                                                                                                                             |
+| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                                                                                                                                                                                         |
+| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                                                                                                                                                                                             |
+| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                                                                                                                                                                                            |
+| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                                                                                                                                                                                               |
+| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                                                                                                                                                                                      |
+| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                                                                                                                                                                                             |
+| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context                                                                                                                                                                        |
+| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields                                                                                                                                                                                   |
+| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset                                                                                                                                                                      |
+| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)                                                                                                                                                                                 |
+| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`                                                                                                                                                                        |
+| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                                                                                                                                                                          |
+| SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map`                                                                                                                                            |
+| SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                                                                                                                                                                      |
+| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                                                                                                                                             |
+| SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs                                                                                                                                 |
+| SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access                                                                                                                           |
+| SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns                                                                                                                                 |
+| SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas                                                                                            |
+| SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                                                                                                                 |
+| SEC-41 | Admin routes must separate the unscoped platform-admin grant from the tenant-scoped ABAC grant, and carry the authorized scope in the same `WHERE` as the id — a `SELECT` that proves ownership does not authorise the `UPDATE` that follows it (enforced by `platform-admin.guard.test.ts`) |
+| SEC-42 | Security-critical rate limits (sign-in, sign-up, password reset, verification, invitations) must use `checkStrictRateLimit` — a durable secondary then fail closed, never a process-local fallback, which on serverless is one allowance per instance                                        |
+| SEC-43 | Client IP must come from `getClientIp()` under an explicitly declared `DEPLOYMENT_PROXY`; never read a forwarding header directly, and never invent a placeholder for an unidentifiable client (enforced by `client-ip.guard.test.ts`)                                                       |
+| SEC-44 | Never put any part of a secret in a response (masked included) — fix at the source that builds the field; give credential rejection its own rate-limit counter when the guard returns before the limiter; compare secrets in constant time across all rotated keys                           |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

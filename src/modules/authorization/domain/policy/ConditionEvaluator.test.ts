@@ -149,12 +149,52 @@ describe('ConditionEvaluator', () => {
       expect(isNotFromBlockedIp(ctx, ['10.0.0.1'])).toBe(false);
     });
 
-    it('returns true when no IP is present (safe default)', () => {
+    it('returns FALSE when no IP is present -- inverted by SEC-43', () => {
+      // This asserted `true` and called it "safe default" until SEC-43. It
+      // was safe only because the branch was unreachable: `getIP()` returned
+      // '127.0.0.1' whenever it had nothing, so `environment.ip` was always
+      // set. Once an unidentifiable client became a real state, "not blocked"
+      // as the answer to "I don't know who you are" is a block-list bypass
+      // available to anyone who arrives without a trustworthy header.
       const ctx: AuthorizationContext = {
         ...baseContext,
         environment: { time: new Date() },
       };
-      expect(isNotFromBlockedIp(ctx, ['10.0.0.1'])).toBe(true);
+      expect(isNotFromBlockedIp(ctx, ['10.0.0.1'])).toBe(false);
+    });
+  });
+
+  describe('SEC-43: an unidentifiable client', () => {
+    // Before SEC-43, `getIP()` returned '127.0.0.1' whenever it had nothing,
+    // so `environment.ip` was always set and these branches were unreachable.
+    // Once "unknown client" became a real state they matter, and they must
+    // fail in the safe direction.
+    it('fails an allow-list condition', () => {
+      expect(
+        isFromAllowedIp({ ...baseContext, environment: { ip: undefined } }, [
+          '203.0.113.1',
+        ]),
+      ).toBe(false);
+    });
+
+    it('fails a block-list condition rather than passing it', () => {
+      // "I cannot tell whether you are blocked" is not "you are not blocked".
+      // The old `true` here would have let anyone arriving without a
+      // trustworthy header walk straight past an IP block-list.
+      expect(
+        isNotFromBlockedIp({ ...baseContext, environment: { ip: undefined } }, [
+          '192.168.1.100',
+        ]),
+      ).toBe(false);
+    });
+
+    it('still allows a non-blocked, identified client', () => {
+      expect(
+        isNotFromBlockedIp(
+          { ...baseContext, environment: { ip: '203.0.113.1' } },
+          ['192.168.1.100'],
+        ),
+      ).toBe(true);
     });
   });
 });

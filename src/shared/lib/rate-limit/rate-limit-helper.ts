@@ -74,20 +74,157 @@ export function parseDurationToMs(duration: string): number {
 }
 
 /**
+ * How a rate-limit check behaves when the durable primary is unreachable.
+ *
+ * - `standard` (default): fall back to a process-local counter. On a
+ *   serverless platform that counter is per-instance, so the limit becomes
+ *   approximate -- an acceptable availability trade for ordinary API
+ *   throttling.
+ * - `strict`: try a durable secondary; if that is also unreachable, **fail
+ *   closed**. For sign-in, password reset, verification and invitation paths
+ *   an approximate limit is not a limit: an attacker who can reach several
+ *   instances gets several independent allowances. See SEC-42.
+ */
+export type RateLimitMode = 'standard' | 'strict';
+
+/**
+ * The durable secondary, as this module needs to see it.
+ *
+ * Structurally typed rather than imported from
+ * `@/modules/rate-limit/domain/DurableRateLimitStore` on purpose. This file
+ * lives in `shared/` and is reachable from the Edge middleware; importing the
+ * module's Drizzle-backed implementation -- even transitively through its
+ * domain types -- would drag Node-only database code toward the Edge bundle
+ * and put persistence knowledge in `shared/`, which this repository's
+ * architecture rules forbid.
+ *
+ * The Node-side wiring lives in `@/security/api/strict-rate-limit`, which
+ * resolves the real store from the container and passes it in here.
+ */
+export interface StrictRateLimitDeps {
+  readonly durable: {
+    increment(
+      identifier: string,
+      windowMs: number,
+    ): Promise<{ count: number; windowEnd: Date }>;
+  };
+  /** Resolves the `strict_rate_limit_degrade` operational switch. */
+  readonly isDegradeSwitchOn: () => Promise<boolean>;
+}
+
+export interface CheckRateLimitOptions {
+  /**
+   * Include `path` so the edge-log loop prevention in `edge-utils.ts` can
+   * suppress forwarding this WARN back into the very endpoint being
+   * rate-limited (e.g. /api/logs).
+   */
+  path?: string;
+  /** Defaults to `standard`. */
+  mode?: RateLimitMode;
+  /** Per-endpoint override; defaults to `API_RATE_LIMIT_REQUESTS`. */
+  limit?: number;
+  /** Per-endpoint override; defaults to `API_RATE_LIMIT_WINDOW`. */
+  windowMs?: number;
+  /**
+   * Required for `mode: 'strict'`. Absent, strict mode has no durable
+   * secondary to consult and fails closed immediately -- see
+   * `strictFallback`.
+   */
+  strict?: StrictRateLimitDeps;
+}
+
+/**
+ * Result shape returned when strict mode fails closed. `remaining: 0` and a
+ * reset one window out are what a caller already knows how to render, so a
+ * fail-closed answer needs no special handling at the call site -- it just
+ * refuses.
+ */
+function failClosed(limit: number, windowMs: number): RateLimitResult {
+  return {
+    success: false,
+    limit,
+    remaining: 0,
+    reset: new Date(Date.now() + windowMs),
+  };
+}
+
+/**
+ * The strict-mode path taken once the primary store has not answered.
+ *
+ * Order is: durable secondary, then fail closed. The operational switch can
+ * substitute the process-local counter for the fail-closed step, but only by
+ * saying `true` -- see the loosen-only rule on `OperationalSwitch`.
+ */
+async function strictFallback(
+  identifier: string,
+  limit: number,
+  windowMs: number,
+  logContext: Record<string, unknown>,
+  deps: StrictRateLimitDeps | undefined,
+): Promise<RateLimitResult> {
+  if (deps) {
+    try {
+      const hit = await deps.durable.increment(identifier, windowMs);
+      getLogger().warn(
+        // Deliberately not naming Postgres. This file is runtime-agnostic
+        // and does not know which store was injected; `strict-rate-limit.ts`
+        // is where that belongs.
+        { ...logContext, secondary: 'durable', degraded: true },
+        'Rate limit primary unavailable; strict mode served by the durable secondary',
+      );
+      return {
+        success: hit.count <= limit,
+        limit,
+        remaining: Math.max(0, limit - hit.count),
+        reset: hit.windowEnd,
+      };
+    } catch (error) {
+      logContext = {
+        ...logContext,
+        secondaryErrorMessage:
+          error instanceof Error ? error.message : String(error),
+        secondaryErrorName:
+          error instanceof Error ? error.name : 'UnknownError',
+      };
+    }
+  }
+
+  // Both stores are gone (or strict was requested without wiring one). The
+  // operator can still choose the old behaviour, but nothing that merely
+  // fails to answer may choose it for them.
+  const degrade = deps ? await deps.isDegradeSwitchOn() : false;
+  if (degrade) {
+    getLogger().warn(
+      { ...logContext, degraded: true, switchedOff: true },
+      'Strict rate limiting DEGRADED by operational switch -- counter is process-local and not durable across instances',
+    );
+    return localRateLimit(identifier, limit, windowMs);
+  }
+
+  getLogger().error(
+    { ...logContext, failClosed: true },
+    'Strict rate limiting has no durable store available; failing closed',
+  );
+  return failClosed(limit, windowMs);
+}
+
+/**
  * Unified helper to check rate limits across different environments.
  * Automatically switches between Upstash (production) and In-memory (local).
  *
  * @param identifier - Unique identifier for the client (e.g., IP)
- * @param meta - Optional metadata for logging context. Include `path` so that
- *   the edge-log loop prevention in `edge-utils.ts` can suppress forwarding
- *   this WARN back into the very endpoint being rate-limited (e.g. /api/logs).
+ * @param options - Logging context and mode. See `CheckRateLimitOptions`.
  * @returns RateLimitResult
  */
 export async function checkRateLimit(
   identifier: string,
-  meta?: { path?: string },
+  options?: CheckRateLimitOptions,
 ): Promise<RateLimitResult> {
-  const windowMs = parseDurationToMs(env.API_RATE_LIMIT_WINDOW);
+  const mode = options?.mode ?? 'standard';
+  const windowMs =
+    options?.windowMs ?? parseDurationToMs(env.API_RATE_LIMIT_WINDOW);
+  const limit = options?.limit ?? env.API_RATE_LIMIT_REQUESTS;
+  const path = options?.path;
 
   if (apiRateLimit) {
     try {
@@ -96,20 +233,52 @@ export async function checkRateLimit(
         UPSTASH_RATE_LIMIT_TIMEOUT_MS,
       );
     } catch (error) {
-      getLogger().warn(
-        {
-          provider: 'upstash',
+      const logContext = {
+        provider: 'upstash',
+        identifier,
+        mode,
+        timeoutMs: UPSTASH_RATE_LIMIT_TIMEOUT_MS,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+        ...(path !== undefined ? { path } : {}),
+      };
+
+      if (mode === 'strict') {
+        return strictFallback(
           identifier,
-          timeoutMs: UPSTASH_RATE_LIMIT_TIMEOUT_MS,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          errorName: error instanceof Error ? error.name : 'UnknownError',
-          ...(meta?.path !== undefined ? { path: meta.path } : {}),
-        },
+          limit,
+          windowMs,
+          logContext,
+          options?.strict,
+        );
+      }
+
+      getLogger().warn(
+        logContext,
         'Rate limit provider unavailable, using local fallback',
       );
-      return localRateLimit(identifier, env.API_RATE_LIMIT_REQUESTS, windowMs);
+      return localRateLimit(identifier, limit, windowMs);
     }
   }
 
-  return localRateLimit(identifier, env.API_RATE_LIMIT_REQUESTS, windowMs);
+  // No Upstash configured at all. In strict mode that is a deployment
+  // decision rather than an outage, so the durable secondary is still tried
+  // -- a production deployment without Upstash must not silently downgrade
+  // its security-critical limits to a per-instance Map.
+  if (mode === 'strict') {
+    return strictFallback(
+      identifier,
+      limit,
+      windowMs,
+      {
+        provider: 'none',
+        identifier,
+        mode,
+        ...(path !== undefined ? { path } : {}),
+      },
+      options?.strict,
+    );
+  }
+
+  return localRateLimit(identifier, limit, windowMs);
 }

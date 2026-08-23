@@ -9,6 +9,11 @@ import { env } from '@/core/env';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import {
+  createServerErrorResponse,
+  createSuccessResponse,
+} from '@/shared/lib/api/response-service';
+
+import {
   authUserIdentitiesTable,
   userCredentialsTable,
 } from '@/modules/auth/infrastructure/drizzle/schema';
@@ -31,18 +36,18 @@ export async function POST(request: Request): Promise<Response> {
   await connection();
 
   if (!env.E2E_ENABLED || env.AUTH_PROVIDER !== 'authjs') {
-    return Response.json({ error: 'Not found' }, { status: 404 });
+    return createServerErrorResponse('Not found', 404);
   }
 
   const parsedBody = requestSchema.safeParse(await request.json());
   if (!parsedBody.success) {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    return createServerErrorResponse('Invalid request body', 400);
   }
 
   if (env.TENANCY_MODE !== 'single' || !env.DEFAULT_TENANT_ID) {
-    return Response.json(
-      { error: 'AuthJS E2E provisioning requires single-tenant runtime.' },
-      { status: 409 },
+    return createServerErrorResponse(
+      'AuthJS E2E provisioning requires single-tenant runtime.',
+      409,
     );
   }
 
@@ -56,9 +61,9 @@ export async function POST(request: Request): Promise<Response> {
     .limit(1);
 
   if (!organization) {
-    return Response.json(
-      { error: 'Default tenant organization is missing.' },
-      { status: 409 },
+    return createServerErrorResponse(
+      'Default tenant organization is missing.',
+      409,
     );
   }
 
@@ -74,9 +79,9 @@ export async function POST(request: Request): Promise<Response> {
     .limit(1);
 
   if (!role) {
-    return Response.json(
-      { error: 'Default tenant owner role is missing.' },
-      { status: 409 },
+    return createServerErrorResponse(
+      'Default tenant owner role is missing.',
+      409,
     );
   }
 
@@ -147,5 +152,5 @@ export async function POST(request: Request): Promise<Response> {
       .onConflictDoNothing();
   });
 
-  return Response.json({ success: true }, { status: 201 });
+  return createSuccessResponse({ success: true }, 201);
 }

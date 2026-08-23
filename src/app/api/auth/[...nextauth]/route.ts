@@ -1,17 +1,53 @@
-import { createHash } from 'node:crypto';
-
 import { type NextRequest, connection } from 'next/server';
 import NextAuth from 'next-auth/next';
 
-import { getIP } from '@/shared/lib/network/get-ip';
-import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
+import { env } from '@/core/env';
+
+import type { ClientIp } from '@/shared/lib/network/client-ip';
+import {
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
+import { parseDurationToMs } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { authOptions } from '@/modules/auth/infrastructure/authjs/auth';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
-const SIGN_IN_PATH = '/api/auth/callback/credentials';
+/**
+ * IP bucket for the Credentials sign-in endpoint only -- a dedicated,
+ * deliberately-tighter limit than the generic `API_RATE_LIMIT_*` used
+ * everywhere else (this is a login endpoint, not general API traffic). The
+ * account (email) bucket lives in `authorize()` itself
+ * (`src/modules/auth/infrastructure/authjs/auth.ts`), as a progressive
+ * failure-counter (CAPTCHA / delay / lock) rather than a second flat
+ * sliding window -- see SEC-34 in
+ * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ *
+ * Skipped entirely under `E2E_ENABLED`: this endpoint's fixed IP (the test
+ * runner/CI host) would otherwise trip a tight per-IP window across a full
+ * E2E suite run, unrelated to any real abuse.
+ */
+async function checkSignInIpRateLimit(client: ClientIp): Promise<boolean> {
+  if (env.E2E_ENABLED) {
+    return true;
+  }
 
-function normalizeIdentifierHash(email: string): string {
-  return createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
+  const windowMs = parseDurationToMs(env.LOGIN_RATE_LIMIT_IP_WINDOW);
+
+  // SEC-42. This used to fall back to `localRateLimit` on any Upstash
+  // failure, which on serverless means one allowance per instance -- an
+  // attacker spread across instances got the limit several times over. Strict
+  // mode reaches for the durable secondary first and refuses if neither store
+  // answers.
+  const result = await checkStrictRateLimit(
+    rateLimitKeyForClient('login-ip', client),
+    {
+      path: '/api/auth/callback/credentials',
+      limit: env.LOGIN_RATE_LIMIT_IP_REQUESTS,
+      windowMs,
+    },
+  );
+  return result.success;
 }
 
 async function handler(
@@ -27,32 +63,14 @@ async function handler(
     req.method === 'POST';
 
   if (isCredentialsCallback) {
-    const ip = await getIP(req.headers);
+    const client = await getClientIp(req.headers);
+    const allowed = await checkSignInIpRateLimit(client);
 
-    let identifierHash: string | null = null;
-    try {
-      const cloned = req.clone();
-      const body = await cloned.text();
-      const parsed = new URLSearchParams(body);
-      const email = parsed.get('email');
-      if (email) {
-        identifierHash = normalizeIdentifierHash(email);
-      }
-    } catch {}
-
-    const [ipLimit, identifierLimit] = await Promise.all([
-      checkRateLimit(`signin:ip:${ip}`, { path: SIGN_IN_PATH }),
-      identifierHash
-        ? checkRateLimit(`signin:identifier:${identifierHash}`, {
-            path: SIGN_IN_PATH,
-          })
-        : Promise.resolve({ success: true }),
-    ]);
-
-    if (!ipLimit.success || !identifierLimit.success) {
+    if (!allowed) {
       return new Response(
         JSON.stringify({
-          error: 'Too many sign-in attempts. Please try again later.',
+          error:
+            'Too many sign-in attempts from this network. Please try again later.',
         }),
         { status: 429, headers: { 'Content-Type': 'application/json' } },
       );

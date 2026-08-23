@@ -10,10 +10,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
 import {
-  mockGetIP,
+  mockGetClientIp,
   mockLogger,
   mockChildLogger,
-  mockCheckRateLimit,
+  mockCheckStrictRateLimit,
+  rateLimitResult,
   resetAllInfrastructureMocks,
 } from '@/testing';
 import { mockEnv } from '@/testing/infrastructure/env';
@@ -80,8 +81,8 @@ function makeRequest(body: unknown): NextRequest {
 describe('POST /api/auth/resend-verification', () => {
   beforeEach(() => {
     resetAllInfrastructureMocks();
-    mockGetIP.mockResolvedValue('1.2.3.4');
-    mockCheckRateLimit.mockResolvedValue({ success: true });
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '1.2.3.4' });
+    mockCheckStrictRateLimit.mockResolvedValue(rateLimitResult());
     mockLimit.mockResolvedValue([]);
     mockWhere.mockReturnValue({ limit: mockLimit });
     mockFrom.mockReturnValue({ where: mockWhere });
@@ -108,7 +109,11 @@ describe('POST /api/auth/resend-verification', () => {
   });
 
   it('returns 429 when rate limited', async () => {
-    mockCheckRateLimit.mockResolvedValue({ success: false });
+    // SEC-42: this endpoint is strict now, so a refusal can also mean "no
+    // durable store answered", not only "over the limit".
+    mockCheckStrictRateLimit.mockResolvedValue(
+      rateLimitResult({ success: false, remaining: 0 }),
+    );
     const req = makeRequest({ email: 'user@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(429);
@@ -125,8 +130,8 @@ describe('POST /api/auth/resend-verification', () => {
     const req = makeRequest({ email: 'unknown@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { message: string };
-    expect(body.message).toContain('verification');
+    const body = (await res.json()) as { data: { message: string } };
+    expect(body.data.message).toContain('verification');
   });
 
   it('returns safe 200 when user is already verified', async () => {
@@ -141,8 +146,8 @@ describe('POST /api/auth/resend-verification', () => {
     const req = makeRequest({ email: 'unverified@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { message: string };
-    expect(body.message).toContain('verification');
+    const body = (await res.json()) as { data: { message: string } };
+    expect(body.data.message).toContain('verification');
     expect(mockChildLogger.debug).toHaveBeenCalled();
   });
 
@@ -153,7 +158,7 @@ describe('POST /api/auth/resend-verification', () => {
     const req = makeRequest({ email: 'unverified@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { devToken?: string };
-    expect(body.devToken).toBeDefined();
+    const body = (await res.json()) as { data: { devToken?: string } };
+    expect(body.data.devToken).toBeDefined();
   });
 });

@@ -290,7 +290,8 @@ Preferred pattern:
 Do not:
 
 - hand-roll JSON response envelopes in App Router route handlers when the shared ResponseService already fits
-- mix raw `NextResponse.json(...)` payload shapes with `createSuccessResponse()` / `createServerErrorResponse()` siblings in the same API surface
+- mix raw `NextResponse.json(...)` payload shapes with `createSuccessResponse()` / `createServerErrorResponse()` siblings in the same API surface (the guard test now fails on any hand-rolled envelope outside its documented exemptions)
+- branch client logic on a response's human-readable `message` text instead of an explicit field
 - skip `withErrorHandler()` on normal application APIs and then duplicate exception mapping by hand in each route
 
 Why this is banned:
@@ -301,7 +302,7 @@ Why this is banned:
 
 Preferred pattern:
 
-- use `src/shared/lib/api/response-service.ts` helpers for JSON API success/error responses
+- use `src/shared/lib/api/response-service.ts` helpers for JSON API success/error responses — **required, and enforced by `response-service.guard.test.ts`**; see SEC-38
 - use `src/shared/lib/api/with-error-handler.ts` for normal route-handler exception mapping
 - take raw `Response` / `NextResponse` exceptions only for protocol-specific endpoints such as redirects, streaming, or non-JSON transports
 

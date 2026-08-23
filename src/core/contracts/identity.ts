@@ -74,6 +74,22 @@ export interface RequestIdentitySourceData {
    */
   readonly emailVerified?: boolean;
   /**
+   * When the current session/token was issued, as Unix **seconds** (the
+   * JWT `iat` claim verbatim).
+   *
+   * This is an authentication-freshness fact about the credential in hand,
+   * not authorization data -- it says *when this session was minted*, never
+   * what the principal may do. It is admitted to this deliberately minimal
+   * contract for one reason: revoking a stateless JWT is impossible without
+   * comparing its age against a server-side revocation marker
+   * (`users.sessions_valid_from`), and the comparison belongs in the same
+   * central evaluators that already gate `deactivatedAt`. See SEC-36.
+   *
+   * Undefined when the provider exposes no such claim (e.g. Clerk, which
+   * revokes sessions on its own side).
+   */
+  readonly sessionIssuedAt?: number;
+  /**
    * External organization ID from the auth provider (e.g. Clerk org_xxx).
    * Replaces tenantExternalId — organizations are the canonical operational unit.
    */

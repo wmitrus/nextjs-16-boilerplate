@@ -12,12 +12,35 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: replaceMock }),
 }));
 
+// Real script loading (document.createElement('script')) is exercised by
+// this repository's browser-driven checks, not here -- this stub just
+// verifies SignInClient wires the widget's onVerify callback correctly.
+vi.mock('@/shared/components/captcha/TurnstileWidget', () => ({
+  TurnstileWidget: ({
+    onVerify,
+    resetSignal,
+  }: {
+    onVerify: (token: string) => void;
+    resetSignal?: number;
+  }) => (
+    <>
+      <button type="button" onClick={() => onVerify('mock-turnstile-token')}>
+        Complete security check
+      </button>
+      <span data-testid="captcha-reset-signal">{resetSignal ?? 0}</span>
+    </>
+  ),
+}));
+
 import { SignInClient } from './sign-in-client';
+
+import { mockEnv, resetEnvMocks } from '@/testing/infrastructure/env';
 
 describe('AuthJS SignInClient', () => {
   beforeEach(() => {
     signInMock.mockReset();
     replaceMock.mockReset();
+    resetEnvMocks();
   });
 
   it('sends the default post-auth destination through bootstrap', async () => {
@@ -169,5 +192,178 @@ describe('AuthJS SignInClient', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeEnabled();
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a locked-account message and does not navigate', async () => {
+    signInMock.mockResolvedValue({ error: 'AccountTemporarilyLocked' });
+
+    render(<SignInClient />);
+
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'password123' },
+    });
+    fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+    expect(await screen.findByText(/temporarily locked/i)).toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  describe('CAPTCHA challenge (SEC-34)', () => {
+    beforeEach(() => {
+      mockEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'test-site-key';
+    });
+
+    it('does not render the widget until the server requires it', () => {
+      render(<SignInClient />);
+      expect(
+        screen.queryByRole('button', { name: 'Complete security check' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders the widget and disables submit after a CaptchaRequired response', async () => {
+      signInMock.mockResolvedValue({ error: 'CaptchaRequired' });
+
+      render(<SignInClient />);
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'admin@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Password'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      expect(
+        await screen.findByText(/complete the security check/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Complete security check' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign In' })).toBeDisabled();
+    });
+
+    it('re-enables submit and resubmits with the token once the widget verifies', async () => {
+      signInMock.mockResolvedValueOnce({ error: 'CaptchaRequired' });
+
+      render(<SignInClient />);
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'admin@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Password'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+      await screen.findByRole('button', { name: 'Complete security check' });
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Complete security check' }),
+      );
+      expect(screen.getByRole('button', { name: 'Sign In' })).toBeEnabled();
+
+      signInMock.mockResolvedValueOnce({
+        url: '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      await waitFor(() => {
+        expect(signInMock).toHaveBeenLastCalledWith(
+          'credentials',
+          expect.objectContaining({ cfTurnstileToken: 'mock-turnstile-token' }),
+        );
+      });
+    });
+
+    // A Turnstile token is single-use: the server redeems it via siteverify
+    // even when the login itself then fails, so replaying it on the next
+    // attempt can only fail. The form must therefore drop the spent token and
+    // ask the widget for a fresh one. See SEC-34.
+    it('discards the spent token and resets the widget after a failed submit that used one', async () => {
+      signInMock.mockResolvedValueOnce({ error: 'CaptchaRequired' });
+
+      render(<SignInClient />);
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'admin@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Password'), {
+        target: { value: 'wrong-password' },
+      });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+      await screen.findByRole('button', { name: 'Complete security check' });
+
+      expect(screen.getByTestId('captcha-reset-signal')).toHaveTextContent('0');
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Complete security check' }),
+      );
+      expect(screen.getByRole('button', { name: 'Sign In' })).toBeEnabled();
+
+      // Correct captcha, still-wrong password: the server spends the token
+      // and then rejects the credentials.
+      signInMock.mockResolvedValueOnce({ error: 'CredentialsSignin' });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('captcha-reset-signal')).toHaveTextContent(
+          '1',
+        );
+      });
+      expect(screen.getByRole('button', { name: 'Sign In' })).toBeDisabled();
+    });
+
+    it('never replays an already-spent token on the next attempt', async () => {
+      signInMock.mockResolvedValueOnce({ error: 'CaptchaRequired' });
+
+      render(<SignInClient />);
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'admin@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Password'), {
+        target: { value: 'wrong-password' },
+      });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+      await screen.findByRole('button', { name: 'Complete security check' });
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Complete security check' }),
+      );
+      signInMock.mockResolvedValueOnce({ error: 'CredentialsSignin' });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+      await waitFor(() => expect(signInMock).toHaveBeenCalledTimes(2));
+
+      // Re-solve, then submit again: it must be a NEW token, and the widget
+      // stub always hands out the same string, so the meaningful assertion is
+      // that the form did not carry the old one across on its own.
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Complete security check' }),
+      );
+      signInMock.mockResolvedValueOnce({
+        url: '/auth/bootstrap/start?redirect_url=%2Fdashboard',
+      });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      await waitFor(() => expect(signInMock).toHaveBeenCalledTimes(3));
+      expect(screen.getByTestId('captcha-reset-signal')).toHaveTextContent('1');
+    });
+
+    it('does not render the widget when no site key is configured, even if the server asks for one', async () => {
+      mockEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY = undefined;
+      signInMock.mockResolvedValue({ error: 'CaptchaRequired' });
+
+      render(<SignInClient />);
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'admin@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Password'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      await screen.findByText(/complete the security check/i);
+      expect(
+        screen.queryByRole('button', { name: 'Complete security check' }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

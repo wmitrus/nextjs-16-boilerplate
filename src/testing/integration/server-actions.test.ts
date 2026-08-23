@@ -92,6 +92,12 @@ describe('Server Actions Integration', () => {
       identityProvider,
       tenantResolver,
       userRepository,
+      requestIdentitySource: {
+        get: () =>
+          Promise.resolve({
+            sessionIssuedAt: Math.floor(Date.now() / 1000) + 60,
+          }),
+      },
     });
 
   const getSecureActionDependencies = () => ({

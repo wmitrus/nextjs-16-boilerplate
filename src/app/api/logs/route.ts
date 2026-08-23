@@ -7,7 +7,11 @@ import { z } from 'zod';
 import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 
-import { getIP } from '@/shared/lib/network/get-ip';
+import {
+  auditIpForClient,
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 import { localRateLimit } from '@/shared/lib/rate-limit/rate-limit-local';
 import { sanitizeLogContext } from '@/shared/lib/security/sanitize-log-context';
 
@@ -68,10 +72,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const isEdge =
     !!env.LOG_INGEST_SECRET && ingestSecret === env.LOG_INGEST_SECRET;
 
-  const ip = await getIP(request.headers);
+  const client = await getClientIp(request.headers);
+  // Two different things, and conflating them puts a bucket name in a field
+  // readers take for an address: the rate-limit KEY groups requests, the
+  // logged `ip` records where one came from (SEC-43).
+  const rateLimitKey = rateLimitKeyForClient('log-ingest', client);
+  const ip = auditIpForClient(client);
 
   if (!isEdge) {
-    const rateLimitResult = await checkIngestRateLimit(ip);
+    const rateLimitResult = await checkIngestRateLimit(rateLimitKey);
     if (!rateLimitResult.success) {
       return new NextResponse(null, { status: 429 });
     }

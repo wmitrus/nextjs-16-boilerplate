@@ -4663,3 +4663,129 @@ response the pipeline _returned_, and none that it threw.
 - **PE-22** — the four hand-built `NextResponse.json()` calls in
   `with-auth.ts`; convention debt, not this defect (they are returned from
   inside the pipeline and do reach finalization).
+
+---
+
+## SEC-46 — The Caller Names The Chain, Never The Request
+
+**ID**: SEC-46
+**Category**: Trust boundaries / observability integrity
+**Classification**: Real risk → fixed (sixteenth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `classifyRequest`, `terminalHandler`,
+`getServerRequestLogContext`, `audit_events.correlation_id`
+
+### Risk
+
+Both identifiers were taken verbatim from the caller:
+
+```ts
+const correlationId =
+  req.headers.get('x-correlation-id') ?? crypto.randomUUID();
+const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID();
+```
+
+No length ceiling, no charset, no distinction between the two. Anyone could
+put an arbitrary string into the response headers, the structured logs, and
+the `audit_events.correlation_id` column — which is `text`, so the database
+imposes no bound of its own. Unbounded caller-controlled text reaching log
+storage is a bloat vector; whitespace and control characters in it are how one
+log line becomes two.
+
+The second, quieter defect: the Edge boundary computed `ctx.correlationId` but
+`terminalHandler` forwarded only the CSP request headers downstream. So the
+RSC/Node side kept reading the **raw inbound headers** via `headers()`. The
+caller could be handed one id on the response while the logs and the audit
+trail recorded a different, unvalidated one — the failure mode where an
+incident report cites an id that appears nowhere.
+
+### Rule
+
+**A correlation id may come from the caller if it is syntactically safe. A
+request id may not come from the caller at all.**
+
+The two answer different questions and therefore get different trust:
+
+|               | `correlationId`                | `requestId`               |
+| ------------- | ------------------------------ | ------------------------- |
+| Question      | which chain of operations      | which single request here |
+| Caller value  | accepted if valid, echoed back | ignored outright          |
+| Invalid input | replaced, never truncated      | n/a                       |
+
+```ts
+const correlation = resolveCorrelationId(req.headers.get('x-correlation-id'));
+const requestId = generateRequestId(); // x-request-id is not read at all
+```
+
+**Accepted shape**: `/^[A-Za-z0-9._:-]{1,128}$/`. Bounded ASCII allowlist, not
+UUID/ULID only. A correlation id is interoperability metadata, not a
+credential — requiring a UUID establishes no trust boundary (an attacker can
+send a perfectly good random UUID) while dropping legitimate ids from
+ingresses that use another format, breaking the very chain the header exists
+to preserve. One character class with one bounded quantifier: no backtracking,
+so no ReDoS surface on attacker-controlled input.
+
+**Invalid input is replaced, never truncated.** Truncating an oversized or
+mixed-charset value keeps a caller-chosen prefix and presents it downstream as
+though it had been validated.
+
+**A malformed header is not an error.** No 400. It is observability metadata;
+rejecting the request would turn an auxiliary header into a denial-of-service
+lever that any client — or any proxy that added its own format — could pull.
+
+**The rejected value is never logged.** Reason and length only:
+
+```ts
+{ event: 'correlation_id:rejected', reason: 'too_long', receivedLength: 347 }
+```
+
+Copying a rejected value into a log is the same exposure as having accepted
+it. And reporting is **sampled** — first occurrence, then every hundredth,
+each carrying the running total. A fixed warn per rejection hands any caller a
+log-flooding primitive through a header they fully control.
+
+**The canonical pair is forwarded downstream, unconditionally:**
+
+```ts
+requestHeaders.set('x-correlation-id', ctx.correlationId);
+requestHeaders.set('x-request-id', ctx.requestId);
+requestHeaders.set('x-correlation-source', ctx.correlationSource);
+```
+
+This is what makes the model end-to-end. With it, the id in the response, in
+the Edge log, in the RSC log and in the audit row are the same value — and
+every downstream layer can _stop_ validating, because the boundary already
+did. Five layers each doing their own validation is five implementations that
+drift apart within a year.
+
+`correlationSource: 'external' | 'generated'` rides along as operational
+metadata — during an incident it says whether the chain started here or
+upstream. It is not a third public identifier.
+
+### Enforcement
+
+- `src/shared/lib/observability/correlation-id.test.ts` — the accepted shapes
+  (UUID, ULID, 32-char trace id, dotted/colon ids), replacement rather than
+  truncation, refusal of log-splitting characters, the length-not-content
+  rule, and the sampling curve.
+- `src/proxy.test.ts` — end to end: a valid caller id is echoed; a hostile one
+  is replaced; a caller-chosen `x-request-id` is never issued; the forwarded
+  downstream headers equal the ones the caller was handed.
+- `src/security/middleware/correlation-id.guard.test.ts` — the request id is
+  derived from nothing the caller sent, the raw inbound header is read in the
+  boundary only, the forwarding is not behind the nonce branch, and the
+  accepted pattern stays bounded.
+
+Verified by falsification: with the raw-header behaviour restored, five of the
+six behavioural tests fail; with the forwarding moved inside the nonce branch,
+the guard fails.
+
+Note: a CRLF value never reaches this code — the `Headers` implementation
+refuses to hold it, here and at any conforming ingress. The values that _do_
+arrive are the CRLF-free ones that are still unfit to echo, log and persist.
+
+### Related
+
+- **SEC-43** — same shape one layer down: a header is believed because of the
+  ingress, never because it is there.
+- **PE-23** — persisting `correlationSource` in the audit trail.

@@ -19,6 +19,7 @@ const ctx: RouteContext = {
   nonce: undefined,
   correlationId: 'correlation-1',
   requestId: 'request-1',
+  correlationSource: 'generated',
 };
 
 function createRequest(path: string) {

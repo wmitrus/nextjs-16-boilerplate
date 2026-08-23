@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
+import { recordCorrelationRejection } from '@/shared/lib/observability/correlation-id';
 
 import {
   classifyRequest,
@@ -43,6 +44,26 @@ export function withSecurity(
       { path: request.nextUrl.pathname, correlationId: ctx.correlationId },
       'Security Middleware Processing',
     );
+
+    if (ctx.correlationRejection) {
+      // Sampled, not one line per rejection: the header is caller-controlled,
+      // so an unconditional WARN is a log-flooding primitive. Reason and
+      // length only -- the refused value itself is never copied into a log
+      // (SEC-46).
+      const { report, total } = recordCorrelationRejection();
+      if (report) {
+        getLogger().warn(
+          {
+            event: 'correlation_id:rejected',
+            reason: ctx.correlationRejection,
+            receivedLength: ctx.correlationRejectedLength,
+            rejectedTotal: total,
+            correlationId: ctx.correlationId,
+          },
+          'Rejected an inbound correlation id',
+        );
+      }
+    }
 
     // Skip security logic for static files to optimize performance
     if (ctx.isStaticFile) {

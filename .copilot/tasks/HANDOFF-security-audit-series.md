@@ -40,7 +40,7 @@ Reguła autorytatywna: `AGENTS.md`, sekcja "Possible Enhancements Backlog —
 Check Every Task". Pointer dla Claude Code jest w `CLAUDE.md` (bo `AGENTS.md`
 nie ładuje się automatycznie).
 
-Ostatnie wpisy z tej serii: PE-14 (nullable `waitlist_entries.organization_id`),
+Ostatnie wpisy z tej serii: PE-23 (correlation_source w audycie), PE-22 (spójność odpowiedzi w with-auth.ts), PE-14 (nullable `waitlist_entries.organization_id`),
 PE-15 (konstruktorowe mocki `vi.fn().mockImplementation()`), PE-16 (strict rate
 limiting w Edge middleware), PE-17 (globalny purge `rate_limit_counters`),
 PE-18 (durable backing dla login account bucket), PE-19 (weryfikacja
@@ -49,9 +49,19 @@ peerze), PE-21 (HMAC + replay window i service identity dla internal API).
 
 ## Stan
 
-15 case'ów zamkniętych (SEC-37…SEC-45). HEAD `a1b48db` wypchnięty.
+16 case'ów zamkniętych (SEC-37…SEC-46).
 
-Ostatnie cztery case'y:
+Ostatnie pięć case'ów:
+
+- **SEC-46** — trust model correlation/request ID. `correlationId` może przyjść
+  od klienta, ale tylko jako `[A-Za-z0-9._:-]{1,128}` (**nie** UUID-only —
+  correlation ID to metadana interop, nie credential); niepoprawny jest
+  **zastępowany, nigdy truncate'owany**, bez 400. `requestId` **zawsze**
+  serwerowy, `x-request-id` klienta w ogóle nieczytany. Kluczowa druga połowa:
+  `terminalHandler` **nadpisuje** request headers, więc RSC/Node/audyt widzą tę
+  samą wartość co klient. Odrzucenia logowane z `reason` + `receivedLength`
+  (nigdy wartość) i **samplowane** (1., potem co setne). PE-23 = kolumna
+  `correlation_source` w audycie.
 
 - **SEC-45** — error boundary Edge pipeline'u przeniesiony **do środka**
   `withSecurity` (najgłębsza ramka trzymająca `RouteContext`). Wcześniej `catch`

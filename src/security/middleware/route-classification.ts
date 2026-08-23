@@ -3,6 +3,13 @@ import type { NextRequest } from 'next/server';
 import { env } from '@/core/env';
 
 import {
+  type CorrelationRejectionReason,
+  type CorrelationSource,
+  generateRequestId,
+  resolveCorrelationId,
+} from '@/shared/lib/observability/correlation-id';
+
+import {
   AUTH_ROUTE_PREFIXES,
   DEMO_ROUTE_PREFIXES,
   PUBLIC_ROUTE_PREFIXES,
@@ -19,8 +26,19 @@ export interface RouteContext {
   isPublicRoute: boolean;
   isDemoRoute: boolean;
   isStaticFile: boolean;
+  /**
+   * Canonical for this request: either a caller-supplied id that passed
+   * validation, or one minted here. Never the raw header value (SEC-46).
+   */
   correlationId: string;
+  /** Always server-generated. A caller-supplied `x-request-id` is ignored. */
   requestId: string;
+  /** Whether `correlationId` came from the caller. Operational metadata. */
+  correlationSource: CorrelationSource;
+  /** Set only when a present `x-correlation-id` was refused. */
+  correlationRejection?: CorrelationRejectionReason;
+  /** Length of the refused value; its content is never captured. */
+  correlationRejectedLength?: number;
   /**
    * Per-request CSP script-src nonce, set only when CSP_SCRIPT_MODE is
    * 'nonce-dynamic' (see with-headers.ts). undefined in 'cache-compatible'
@@ -35,9 +53,11 @@ export interface RouteContext {
  */
 export function classifyRequest(req: NextRequest): RouteContext {
   const path = req.nextUrl.pathname;
-  const correlationId =
-    req.headers.get('x-correlation-id') ?? crypto.randomUUID();
-  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID();
+  // The one place an inbound correlation id is trusted -- everything
+  // downstream reads the canonical value this forwards (SEC-46).
+  const correlation = resolveCorrelationId(req.headers.get('x-correlation-id'));
+  // `x-request-id` is deliberately not read at all.
+  const requestId = generateRequestId();
 
   const isStaticFile =
     /\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)$/.test(
@@ -74,8 +94,11 @@ export function classifyRequest(req: NextRequest): RouteContext {
     isPublicRoute,
     isDemoRoute,
     isStaticFile,
-    correlationId,
+    correlationId: correlation.correlationId,
     requestId,
+    correlationSource: correlation.source,
+    correlationRejection: correlation.rejection,
+    correlationRejectedLength: correlation.rejectedLength,
     nonce,
   };
 }

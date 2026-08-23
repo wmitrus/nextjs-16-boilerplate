@@ -156,6 +156,132 @@ describe('Proxy', () => {
     });
   });
 
+  describe('correlation and request ids (SEC-46)', () => {
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    function requestWithHeaders(
+      headers: Record<string, string>,
+      path = '/api/users',
+    ) {
+      vi.mocked(getIp.getClientIp).mockResolvedValue({
+        kind: 'trusted',
+        ip: '127.0.0.1',
+      });
+      return new NextRequest(new URL(`http://localhost${path}`), {
+        headers: new Headers(headers),
+      });
+    }
+
+    it('echoes a syntactically safe caller correlation id', async () => {
+      const response = await proxy(
+        requestWithHeaders({ 'x-correlation-id': 'edge-1:app-2.req-3' }),
+        {} as unknown as NextFetchEvent,
+      );
+
+      // The point of the header: an upstream chain stays joinable.
+      expect(response?.headers.get('x-correlation-id')).toBe(
+        'edge-1:app-2.req-3',
+      );
+    });
+
+    it('replaces a hostile correlation id instead of reflecting it', async () => {
+      // CRLF never gets this far -- the Headers implementation refuses to
+      // hold it, in this runtime and at any conforming ingress. What does
+      // arrive is everything CRLF-free but still unfit to be echoed, logged
+      // and written to `audit_events.correlation_id`: spaces, markup, control
+      // characters below CR.
+      const hostile = `abc${String.fromCharCode(11)} <script>alert(1)</script>`;
+      const response = await proxy(
+        requestWithHeaders({ 'x-correlation-id': hostile }),
+        {} as unknown as NextFetchEvent,
+      );
+
+      const echoed = response?.headers.get('x-correlation-id');
+      expect(echoed).toMatch(UUID_RE);
+      expect(echoed).not.toContain('script');
+      // Not truncated to a safe prefix either -- replaced outright.
+      expect(echoed).not.toContain('abc');
+    });
+
+    it('replaces an oversized correlation id', async () => {
+      const response = await proxy(
+        requestWithHeaders({ 'x-correlation-id': 'a'.repeat(4096) }),
+        {} as unknown as NextFetchEvent,
+      );
+
+      expect(response?.headers.get('x-correlation-id')).toMatch(UUID_RE);
+    });
+
+    it('never lets a caller choose the request id', async () => {
+      // Well-formed on purpose: the request id is refused because of what it
+      // identifies, not because of how it looks. Accepting it would let a
+      // caller collide two distinct requests in the logs.
+      const chosen = '018f3c2a-0e3a-7a1b-9e2a-3c5f6b7d8e9f';
+      const response = await proxy(
+        requestWithHeaders({ 'x-request-id': chosen }),
+        {} as unknown as NextFetchEvent,
+      );
+
+      const issued = response?.headers.get('x-request-id');
+      expect(issued).toMatch(UUID_RE);
+      expect(issued).not.toBe(chosen);
+    });
+
+    it('forwards the canonical pair downstream, not the caller values', async () => {
+      // Without this the RSC/Node side reads the RAW inbound headers via
+      // headers(), so the caller sees one id on the response while the logs
+      // and audit_events.correlation_id record another.
+      // A public page route, so the pipeline runs to the terminal handler --
+      // `/api/**` short-circuits at the auth guard with a 401 and never
+      // forwards anything downstream.
+      const response = await proxy(
+        requestWithHeaders(
+          {
+            'x-correlation-id': 'has a space',
+            'x-request-id': 'caller-chosen',
+          },
+          '/',
+        ),
+        {} as unknown as NextFetchEvent,
+      );
+
+      const forwardedCorrelation = response?.headers.get(
+        'x-middleware-request-x-correlation-id',
+      );
+      const forwardedRequest = response?.headers.get(
+        'x-middleware-request-x-request-id',
+      );
+
+      expect(forwardedCorrelation).toMatch(UUID_RE);
+      expect(forwardedRequest).toMatch(UUID_RE);
+      expect(forwardedRequest).not.toBe('caller-chosen');
+
+      // The id the caller is handed is the id the app will log.
+      expect(forwardedCorrelation).toBe(
+        response?.headers.get('x-correlation-id'),
+      );
+      expect(forwardedRequest).toBe(response?.headers.get('x-request-id'));
+      expect(
+        response?.headers.get('x-middleware-request-x-correlation-source'),
+      ).toBe('generated');
+    });
+
+    it('marks a forwarded caller id as external', async () => {
+      const response = await proxy(
+        requestWithHeaders({ 'x-correlation-id': 'upstream-42' }, '/'),
+        {} as unknown as NextFetchEvent,
+      );
+
+      expect(
+        response?.headers.get('x-middleware-request-x-correlation-id'),
+      ).toBe('upstream-42');
+      expect(
+        response?.headers.get('x-middleware-request-x-correlation-source'),
+      ).toBe('external');
+    });
+  });
+
   describe('thrown pipeline path (SEC-45)', () => {
     // Every other test in this file exercises a response the pipeline
     // *returned* -- 429, 403, happy path. None covered the one path that

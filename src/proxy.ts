@@ -79,16 +79,27 @@ type ProxyMiddleware = (next: ProxyHandler) => ProxyHandler;
  * carry the identical value for the same nonce.
  */
 const terminalHandler: ProxyHandler = async (req, ctx) => {
-  if (!ctx.nonce) {
-    return NextResponse.next();
+  const requestHeaders = new Headers(req.headers);
+
+  // Overwrite unconditionally, whether or not the caller sent these (SEC-46).
+  // Without this the RSC/Node side keeps reading the RAW inbound headers via
+  // headers(), so the caller would see one id in `x-correlation-id` on the
+  // response while the logs and `audit_events.correlation_id` recorded another
+  // -- the caller's unvalidated one. Set here, the canonical pair is what
+  // every downstream layer reads, and those layers no longer have to validate
+  // anything themselves.
+  requestHeaders.set('x-correlation-id', ctx.correlationId);
+  requestHeaders.set('x-request-id', ctx.requestId);
+  requestHeaders.set('x-correlation-source', ctx.correlationSource);
+
+  if (ctx.nonce) {
+    requestHeaders.set('x-nonce', ctx.nonce);
+    requestHeaders.set(
+      'Content-Security-Policy',
+      buildContentSecurityPolicy(ctx.nonce),
+    );
   }
 
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set('x-nonce', ctx.nonce);
-  requestHeaders.set(
-    'Content-Security-Policy',
-    buildContentSecurityPolicy(ctx.nonce),
-  );
   return NextResponse.next({ request: { headers: requestHeaders } });
 };
 

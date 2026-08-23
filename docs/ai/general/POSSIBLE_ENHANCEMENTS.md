@@ -549,3 +549,31 @@ envelope** (`{ status: 'server_error', error, code }`) in
 blanket ban assumes every future `NextResponse.json()` in security middleware
 is an architectural mistake, which is not true — the envelope is the invariant,
 the helper is just how it is produced.
+
+---
+
+## PE-23 — Persist `correlationSource` In The Audit Trail
+
+- **Source**: `.copilot/tasks/2026-08-23-correlation-id-trust/` (Case 16, SEC-46)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: SEC-46 introduced `correlationSource: 'external' | 'generated'`
+— whether the correlation id arrived from the caller or was minted at the Edge
+boundary. It is forwarded downstream as `x-correlation-source` and appears in
+Edge and RSC structured logs, but `audit_events` stores only `correlation_id`
+and `request_id`. Adding a `correlation_source` column would let an incident
+review tell, from the audit trail alone, whether a chain started inside this
+application or upstream.
+
+**Why deferred**: it needs a migration, and a migration in this repository also
+needs its entry in `readMigrationSql()` (SEC-05/SEC-12) — real scope, for a
+field with no consumer yet. The operational value is currently served by the
+logs, which carry the flag today. The audit column becomes worthwhile when
+audit rows are actually being joined to upstream systems during reviews.
+
+**Also worth considering when this is picked up**: `audit_events.correlation_id`
+and `request_id` are `text` with no length constraint. SEC-46 bounds what can
+reach them at the boundary, so the column is no longer the control — but a
+`varchar(128)` would make the invariant true in the schema rather than only in
+the code path that writes it.

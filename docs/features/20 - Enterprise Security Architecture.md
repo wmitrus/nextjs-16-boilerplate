@@ -122,7 +122,56 @@ Enforced by `src/proxy.test.ts`, which throws a connection string from a
 middleware and asserts the 500 carries the full header set and leaks no
 fragment of it.
 
-### 3.3 Global Headers (CSP)
+### 3.3 Correlation And Request Ids (SEC-46)
+
+The two identifiers on every response answer different questions, so they get
+different trust:
+
+|               | `x-correlation-id`                          | `x-request-id`                   |
+| ------------- | ------------------------------------------- | -------------------------------- |
+| Question      | which chain of operations                   | which single request in this app |
+| Caller value  | accepted if syntactically safe, echoed back | **ignored outright**             |
+| Invalid input | replaced with a fresh UUID, never truncated | n/a                              |
+
+**Accepted shape**: `/^[A-Za-z0-9._:-]{1,128}$/` — a bounded ASCII allowlist,
+deliberately not UUID/ULID only. A correlation id is interoperability
+metadata, not a credential: demanding a UUID establishes no trust boundary (an
+attacker can send a valid random UUID) while dropping legitimate ids from
+ingresses that use another format, which breaks the chain the header exists to
+preserve.
+
+**Why it was wrong before.** Both ids were `req.headers.get(...) ??
+crypto.randomUUID()` — no length ceiling, no charset. Unbounded
+caller-controlled text flowed into the response headers, the structured logs
+and `audit_events.correlation_id` (a `text` column, so no bound there either).
+
+**The quieter half of the defect**: `terminalHandler` forwarded only the CSP
+headers downstream, so RSC/Node code kept reading the **raw inbound** values
+via `headers()`. The caller could be handed one id while the logs and audit
+trail recorded another. The terminal handler now overwrites all three request
+headers unconditionally:
+
+```ts
+requestHeaders.set('x-correlation-id', ctx.correlationId);
+requestHeaders.set('x-request-id', ctx.requestId);
+requestHeaders.set('x-correlation-source', ctx.correlationSource);
+```
+
+That is what makes the id in the response, the Edge log, the RSC log and the
+audit row the same value — and lets every downstream layer **stop** validating,
+because the boundary already did.
+
+**Operational behaviour on a bad header**: the request proceeds normally, never
+a 400 — rejecting would turn an auxiliary header into a DoS lever. The rejected
+value itself is never logged (reason and length only), and reporting is sampled
+— first occurrence then every hundredth — because a warn per rejection is a
+log-flooding primitive in the caller's hands.
+
+`correlationSource` (`external` | `generated`) is operational metadata telling
+an incident reviewer whether the chain started here or upstream. Persisting it
+in the audit trail is **PE-23**.
+
+### 3.4 Global Headers (CSP)
 
 A hardened **Content Security Policy** is enforced by default, including specific rules for Clerk integration.
 

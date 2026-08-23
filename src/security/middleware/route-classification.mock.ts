@@ -22,6 +22,7 @@ export function createMockRouteContext(
     isStaticFile: false,
     correlationId: 'test-correlation-id',
     requestId: 'test-request-id',
+    correlationSource: 'generated',
     nonce: undefined,
     ...overrides,
   };

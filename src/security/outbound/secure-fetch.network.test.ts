@@ -129,7 +129,12 @@ describe('secureFetch — connection pinning wiring', () => {
       )
       .mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
-    await secureFetch('https://example.com/start');
+    // This test is about per-hop connection pinning, so the cross-origin hop
+    // has to be permitted for it to reach the second hop at all -- otherwise
+    // SEC-40 rejects first and the pinning assertions never run.
+    await secureFetch('https://example.com/start', {
+      allowedRedirectOrigins: ['https://trusted.org'],
+    });
 
     expect(agentInstances).toHaveLength(2);
     const [hop1, hop2] = await Promise.all(

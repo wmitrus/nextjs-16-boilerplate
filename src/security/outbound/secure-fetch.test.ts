@@ -311,9 +311,11 @@ describe('Secure Fetch (SSRF Protection)', () => {
       },
     );
 
-    // The downgrade the report calls out: a trusted host answering
-    // 307 -> http:// must not be followed in cleartext.
-    it('rejects a redirect that downgrades https to http on the same host', async () => {
+    // A protocol downgrade is also an origin change (an origin includes the
+    // scheme), so the SEC-40 cross-origin gate rejects this first. Both
+    // gates are correct; assert the rejection and that the downgraded hop
+    // never reached the network.
+    it('rejects a redirect that downgrades https to http', async () => {
       const { fn, calls } = mockFetchSequence([
         new Response(null, {
           status: 307,
@@ -323,10 +325,28 @@ describe('Secure Fetch (SSRF Protection)', () => {
       ]);
       global.fetch = fn;
 
-      await expect(secureFetch('https://example.com/start')).rejects.toThrow(
-        /must use https/i,
-      );
-      // The first hop happened; the downgraded one never did.
+      await expect(secureFetch('https://example.com/start')).rejects.toThrow();
+      expect(calls).toHaveLength(1);
+    });
+
+    // The gates must compose: opting into the downgraded origin is a
+    // decision about WHICH host may be reached, never permission to reach it
+    // in cleartext.
+    it('still refuses plaintext even when the downgraded origin is explicitly allowed', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 307,
+          headers: { location: 'http://example.com/downgraded' },
+        }),
+        new Response('{"ok":true}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await expect(
+        secureFetch('https://example.com/start', {
+          allowedRedirectOrigins: ['http://example.com'],
+        }),
+      ).rejects.toThrow(/must use https/i);
       expect(calls).toHaveLength(1);
     });
 
@@ -366,7 +386,7 @@ describe('Secure Fetch (SSRF Protection)', () => {
   });
 
   describe('redirect handling', () => {
-    it('follows a redirect to another allowed host and returns the final response', async () => {
+    it('follows a redirect to another origin when the caller allowed it', async () => {
       const { fn, calls } = mockFetchSequence([
         new Response(null, {
           status: 302,
@@ -376,11 +396,29 @@ describe('Secure Fetch (SSRF Protection)', () => {
       ]);
       global.fetch = fn;
 
-      const response = await secureFetch('https://example.com/start');
+      const response = await secureFetch('https://example.com/start', {
+        allowedRedirectOrigins: ['https://trusted.org'],
+      });
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ ok: true });
       expect(calls).toHaveLength(2);
       expect(calls[1][0]).toBe('https://trusted.org/final');
+    });
+
+    it('follows a same-origin redirect without any opt-in', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://example.com/final' },
+        }),
+        new Response('{"ok":true}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      const response = await secureFetch('https://example.com/start');
+
+      expect(response.status).toBe(200);
+      expect(calls).toHaveLength(2);
     });
 
     it('re-validates the allowlist for a redirect target and rejects an unlisted host', async () => {
@@ -494,7 +532,10 @@ describe('Secure Fetch (SSRF Protection)', () => {
       ]);
       global.fetch = fn;
 
+      // Allowing the origin permits the hop, never the credentials -- that
+      // separation is the point of the test.
       await secureFetch('https://example.com/start', {
+        allowedRedirectOrigins: ['https://trusted.org'],
         headers: {
           Authorization: 'Bearer secret-token',
           Cookie: 'session=abc123',
@@ -513,6 +554,120 @@ describe('Secure Fetch (SSRF Protection)', () => {
       // strip-everything-on-redirect fix.
       expect(secondHopHeaders.get('accept')).toBe('application/json');
       expect(secondHopHeaders.get('x-request-id')).toBe('req-1');
+    });
+  });
+
+  // SEC-40: stripping credential headers was never enough on its own.
+  // Under 307/308 the method and body are preserved verbatim, so a
+  // cross-origin hop hands the request BODY to the new origin.
+  describe('cross-origin redirects are opt-in (SEC-40)', () => {
+    it('refuses a cross-origin redirect by default, even between two allowlisted hosts', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+        new Response('{"ok":true}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await expect(secureFetch('https://example.com/start')).rejects.toThrow(
+        /Cross-origin redirect to https:\/\/trusted\.org/,
+      );
+      expect(calls).toHaveLength(1);
+    });
+
+    // The exact leak the report describes.
+    it('never hands a 307 request body to another origin without opt-in', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 307,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+        new Response('{"ok":true}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await expect(
+        secureFetch('https://example.com/api', {
+          method: 'POST',
+          body: JSON.stringify({ secretData: 'do-not-forward' }),
+        }),
+      ).rejects.toThrow(/Cross-origin redirect/);
+
+      // The body legitimately went to the origin the caller addressed.
+      // What must not exist is a second hop -- that is where it would
+      // have been handed to someone else.
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toBe('https://example.com/api');
+    });
+
+    it('preserves the 307 body when the caller allowed that origin', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 307,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+        new Response('{"ok":true}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await secureFetch('https://example.com/api', {
+        method: 'POST',
+        body: JSON.stringify({ payload: 'intended' }),
+        allowedRedirectOrigins: ['https://trusted.org'],
+      });
+
+      expect(calls).toHaveLength(2);
+      expect(calls[1][1]?.method).toBe('POST');
+      expect(String(calls[1][1]?.body)).toContain('intended');
+    });
+
+    it('does not leak the option into the request sent to fetch', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response('{}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await secureFetch('https://example.com/api', {
+        allowedRedirectOrigins: ['https://trusted.org'],
+      });
+
+      expect(calls[0][1]).not.toHaveProperty('allowedRedirectOrigins');
+    });
+
+    it('matches an allowed origin regardless of trailing slash or path', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+        new Response('{}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await secureFetch('https://example.com/start', {
+        allowedRedirectOrigins: ['https://trusted.org/'],
+      });
+
+      expect(calls).toHaveLength(2);
+    });
+
+    it('does not treat a different host as allowed', async () => {
+      const { fn } = mockFetchSequence([
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://trusted.org/final' },
+        }),
+        new Response('{}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await expect(
+        secureFetch('https://example.com/start', {
+          allowedRedirectOrigins: ['https://other.org'],
+        }),
+      ).rejects.toThrow(/Cross-origin redirect/);
     });
   });
 

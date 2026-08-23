@@ -591,6 +591,64 @@ async function buildFinalResponse(
   });
 }
 
+/**
+ * `RequestInit` plus this helper's own options. The extra keys are stripped
+ * before anything reaches `fetch`, so a caller can pass one object without
+ * a non-standard property leaking onto the wire.
+ */
+export interface SecureFetchInit extends RequestInit {
+  /**
+   * Origins a redirect is permitted to cross to, e.g.
+   * `['https://cdn.example.com']`.
+   *
+   * Redirects are **same-origin by default**. Being on the global
+   * `SECURITY_ALLOWED_OUTBOUND_HOSTS` allowlist means "this service may be
+   * called", not "any other allowlisted service may receive whatever I was
+   * sending to this one" -- and under 307/308 semantics that difference is
+   * the request body. Crossing an origin is therefore a per-call decision
+   * the caller makes explicitly. See SEC-40.
+   *
+   * Granting an origin permits the *hop*. It does not re-attach credentials:
+   * `Authorization`, `Cookie` and `Proxy-Authorization` are still stripped
+   * on every cross-origin hop.
+   */
+  allowedRedirectOrigins?: readonly string[];
+}
+
+/** Splits our own options out of the init handed to `fetch`. */
+function splitSecureFetchInit(init: SecureFetchInit | undefined): {
+  requestInit: RequestInit | undefined;
+  allowedRedirectOrigins: readonly string[];
+} {
+  if (!init) {
+    return { requestInit: undefined, allowedRedirectOrigins: [] };
+  }
+
+  const { allowedRedirectOrigins, ...requestInit } = init;
+  return {
+    requestInit,
+    allowedRedirectOrigins: allowedRedirectOrigins ?? [],
+  };
+}
+
+/**
+ * Normalizes each configured origin through `URL` so that a trailing slash,
+ * an explicit default port, or a case difference in the host cannot make an
+ * intended grant silently fail to match.
+ */
+function isRedirectOriginAllowed(
+  target: URL,
+  allowedRedirectOrigins: readonly string[],
+): boolean {
+  return allowedRedirectOrigins.some((candidate) => {
+    try {
+      return new URL(candidate).origin === target.origin;
+    } catch {
+      return false;
+    }
+  });
+}
+
 interface NextHop {
   url: URL;
   init: RequestInit | undefined;
@@ -609,6 +667,7 @@ function prepareNextHop(
   currentInit: RequestInit | undefined,
   originalUrl: string,
   hopsRemaining: number,
+  allowedRedirectOrigins: readonly string[],
 ): NextHop {
   const location = rawResponse.headers.get('location');
   if (!location) {
@@ -624,12 +683,38 @@ function prepareNextHop(
 
   const nextUrl = new URL(location, currentUrl);
   let nextInit = requestInitForRedirect(currentInit, rawResponse.status);
+
   if (nextUrl.origin !== currentUrl.origin) {
+    // Stripping credentials was never enough on its own. Under 307/308 the
+    // method and body are preserved verbatim, so a cross-origin hop hands
+    // the *request body* to the new origin -- which is the interesting
+    // payload far more often than the header is. Refusing the hop unless
+    // the caller named the origin is the only version of this that does not
+    // rely on the global host allowlist doubling as a trust relationship
+    // between every pair of hosts on it. See SEC-40.
+    if (!isRedirectOriginAllowed(nextUrl, allowedRedirectOrigins)) {
+      logger.error(
+        {
+          from: redactUrlForLogging(currentUrl),
+          to: redactUrlForLogging(nextUrl),
+          status: rawResponse.status,
+          hasBody: nextInit?.body !== undefined && nextInit.body !== null,
+        },
+        'SSRF Protection: Cross-origin redirect blocked (origin not in allowedRedirectOrigins)',
+      );
+      throw new Error(
+        `SSRF Protection: Cross-origin redirect to ${nextUrl.origin} is not allowed. ` +
+          `Pass allowedRedirectOrigins to secureFetch if this hop is intended.`,
+      );
+    }
+
+    // The grant covers the hop, never the credentials.
     nextInit = {
       ...nextInit,
       headers: stripSensitiveHeadersForCrossOriginRedirect(nextInit?.headers),
     };
   }
+
   return { url: nextUrl, init: nextInit };
 }
 
@@ -655,18 +740,19 @@ function prepareNextHop(
  */
 export async function secureFetch(
   url: string | URL,
-  init?: RequestInit,
+  init?: SecureFetchInit,
 ): Promise<Response> {
   const originalUrl = typeof url === 'string' ? url : url.toString();
   let currentUrl =
     typeof url === 'string' ? new URL(url) : new URL(url.toString());
-  let currentInit = init;
+  const { requestInit, allowedRedirectOrigins } = splitSecureFetchInit(init);
+  let currentInit = requestInit;
   let hopsRemaining = MAX_REDIRECTS;
   // One overall budget for the whole call, every hop included -- not reset
   // per hop, so a chain of redirects can't add up to an unbounded total
   // wait.
   const overallSignal = buildOverallSignal(
-    init?.signal,
+    requestInit?.signal,
     env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS,
   );
 
@@ -701,6 +787,7 @@ export async function secureFetch(
         currentInit,
         originalUrl,
         hopsRemaining,
+        allowedRedirectOrigins,
       );
       hopsRemaining -= 1;
       currentInit = nextHop.init;

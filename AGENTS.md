@@ -573,6 +573,40 @@ When auth, org, role, permission, policy, or tenant logic is involved, increase 
 - whether claims are trustworthy
 - whether failure paths are explicit and safe
 
+### Admin Route Scope Discipline — Enforced By A Test
+
+**This is a requirement, not a preference.**
+`src/security/core/platform-admin.guard.test.ts` walks every `route.ts` under
+`src/app/api/admin` and fails the suite on either half of the rule below.
+
+The same defect was found four times across this repository's security audit
+(SEC-26 twice, SEC-41 twice), always in the same shape. Two things must hold:
+
+1. **Two grants, never one boolean.** `isEnvBasedPlatformAdmin` is genuinely
+   unscoped; the ABAC `SECURITY_MANAGE_POLICIES` grant is evaluated against
+   the caller's **active tenant**, so every tenant owner holds it inside
+   their own tenant and nobody holds it beyond. Return
+   `{ allowed, isPlatformAdmin }` and turn `isPlatformAdmin` into the scope
+   you pass down (`null` for a platform admin, the caller's own
+   tenant/organization otherwise). A single `isAdmin` boolean in front of an
+   unscoped query serves one tenant's owner every other tenant's rows.
+2. **The scope goes in the statement, not in a check above it.** A route may
+   not issue an inline `insert`/`update`/`delete`; writes go through a module
+   service whose signature makes the scope mandatory. A `SELECT` that proves
+   ownership followed by an `UPDATE ... WHERE id = ?` is two decisions, and
+   only the second one touches data — put the scope (and a status guard, when
+   the mutation should be single-shot) in the same `WHERE` as the id.
+
+Reference implementations: `DrizzleFeatureFlagAdminService.scopePredicate`,
+`DrizzleAdminUsersService` (`AdminUserScope`),
+`DrizzleInvitationRepository.revokePendingScoped`. Full detail: SEC-26 and
+SEC-41 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
+Related and non-negotiable: never treat a client-supplied `tenantId` or
+`organizationId` as scope authority — derive it from the verified session, and
+be especially suspicious of one that reached the database through an
+unauthenticated endpoint (SEC-41's waitlist finding).
+
 ---
 
 ## Pending Scheduled Security Follow-Ups — Check Every Session
@@ -1034,32 +1068,37 @@ This document is the living, authoritative catalogue of:
 
 **All agents that write or review code MUST read this document.**
 
-Key rules currently in effect:
+The table below is a **subset**, not the index. It stops at SEC-25 (plus
+SEC-41, added because it is test-enforced) and never tracked SEC-26 through
+SEC-40 — the catalogue's own index table, at the top of
+`SECURITY_CODING_PATTERNS.md`, is the authoritative list. Read that one;
+treat the table below as a quick reference to the older entries only.
 
-| ID     | Rule                                                                                                                                                                                              |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`                                                                               |
-| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                                                                                                  |
-| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                                                                                              |
-| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                                                                                                  |
-| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                                                                                                 |
-| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                                                                                                    |
-| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                                                                                           |
-| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                                                                                                  |
-| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context                                                                             |
-| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields                                                                                        |
-| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset                                                                           |
-| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)                                                                                      |
-| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`                                                                             |
-| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                                                                               |
-| SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map`                                                 |
-| SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                                                                           |
-| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                                                  |
-| SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs                                      |
-| SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access                                |
-| SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns                                      |
-| SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas |
-| SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                      |
+| ID     | Rule                                                                                                                                                                                                                                                                                         |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`                                                                                                                                                                          |
+| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                                                                                                                                                                                             |
+| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                                                                                                                                                                                         |
+| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                                                                                                                                                                                             |
+| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                                                                                                                                                                                            |
+| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                                                                                                                                                                                               |
+| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                                                                                                                                                                                      |
+| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                                                                                                                                                                                             |
+| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context                                                                                                                                                                        |
+| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields                                                                                                                                                                                   |
+| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset                                                                                                                                                                      |
+| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)                                                                                                                                                                                 |
+| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`                                                                                                                                                                        |
+| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                                                                                                                                                                          |
+| SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map`                                                                                                                                            |
+| SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                                                                                                                                                                      |
+| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                                                                                                                                             |
+| SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs                                                                                                                                 |
+| SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access                                                                                                                           |
+| SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns                                                                                                                                 |
+| SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas                                                                                            |
+| SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                                                                                                                 |
+| SEC-41 | Admin routes must separate the unscoped platform-admin grant from the tenant-scoped ABAC grant, and carry the authorized scope in the same `WHERE` as the id — a `SELECT` that proves ownership does not authorise the `UPDATE` that follows it (enforced by `platform-admin.guard.test.ts`) |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

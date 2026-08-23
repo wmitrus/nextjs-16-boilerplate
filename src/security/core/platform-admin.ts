@@ -14,8 +14,24 @@ import { env } from '@/core/env';
  *   Remove or scope this env var once DB-based admin roles are properly assigned.
  *
  * Layer 2 — ABAC SECURITY_MANAGE_POLICIES (normal operation)
- *   Users with the `owner` tenant DB role and the SECURITY_MANAGE_POLICIES policy
- *   pass ABAC and are granted platform admin. This is the persistent, DB-governed path.
+ *   Users with the `owner` tenant DB role and the SECURITY_MANAGE_POLICIES
+ *   policy pass ABAC. This is the persistent, DB-governed admin path.
+ *
+ *   **It does NOT make them a platform admin, and this file's own wording
+ *   used to say it did.** `SECURITY_MANAGE_POLICIES` is evaluated against
+ *   the caller's ACTIVE TENANT, so every tenant owner holds it within their
+ *   own tenant and none of them holds anything beyond it. Reading it as
+ *   "platform admin" is what produced SEC-26 (admin users), and then the
+ *   same defect twice more in SEC-41 (waitlist, invitations): a route
+ *   collapses both layers into one `isAdmin` boolean and then runs an
+ *   unscoped query, so a tenant owner reaches every other tenant's rows.
+ *
+ *   A route must therefore keep the two apart -- `{ allowed, isPlatformAdmin }`
+ *   rather than a single boolean -- and turn `isPlatformAdmin` into the scope
+ *   it passes down to the query (`null` for a real platform admin, the
+ *   caller's own tenant/organization otherwise). See SEC-26 and SEC-41 in
+ *   `docs/ai/general/SECURITY_CODING_PATTERNS.md`, and the guard test in
+ *   `platform-admin.guard.test.ts`.
  *
  * Industry precedent: Grafana (GF_SECURITY_ADMIN_USER), Ghost, Gitea, Strapi, Directus
  * all use env-based bootstrap admin as the standard pattern for initial deployment.

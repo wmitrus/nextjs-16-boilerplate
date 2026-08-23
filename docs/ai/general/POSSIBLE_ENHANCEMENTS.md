@@ -337,3 +337,47 @@ enforced rather than assumed.
 bypassed every other control), and getting the exemption list right needs a
 careful pass over client-side and third-party-SDK call sites, which is a
 separate piece of work from closing the transport hole.
+
+## PE-14 — Drop The Nullable `waitlist_entries.organization_id` / `tenant_id`
+
+- **Source**: `.copilot/tasks/2026-08-23-waitlist-invitations-scope-audit/` (Case 11)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: SEC-41 removed `organizationId` from the anonymous join
+input and stopped the approve path from reading it, so nothing writes or
+trusts `waitlist_entries.organization_id` any more. `tenant_id` was never
+written at all. Both columns are now dead weight that still invite a future
+reader to treat them as scope. Dropping them (plus the corresponding fields
+on the repository row type) would close the door structurally.
+
+**Why deferred**: the repo owner's explicit call while scoping Case 11 —
+_"nullable tenantId/organizationId w tabeli można osobno posprzątać po
+zamknięciu luki — nie mieszałbym migracji semantycznej do tego incydentu"_.
+A schema migration has a different blast radius and rollback story than a
+security fix, and the hole is closed without it.
+
+## PE-15 — Replace `vi.fn().mockImplementation()` Constructor Mocks In Route Tests
+
+- **Source**: `.copilot/tasks/2026-08-23-waitlist-invitations-scope-audit/` (Case 11)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: Several route tests stub a Drizzle repository as
+`SomeRepository: vi.fn().mockImplementation(() => ({}))` inside a `vi.mock`
+factory. The factory is evaluated on first import — which happens _inside_ a
+test, i.e. after `beforeEach`'s `vi.resetAllMocks()` has already run — so the
+implementation is cleared before it is ever used, and `new SomeRepository()`
+throws `"() => ({}) is not a constructor"`. It only passes today because the
+first test in each of those files short-circuits (403) before constructing
+anything. This bit Case 11 while adding a new test and cost a debugging
+round. Four files still carry the pattern:
+`src/app/api/admin/waitlist/[id]/route.test.ts`,
+`src/app/api/admin/organizations/[organizationId]/invitations/[id]/route.test.ts`,
+`src/app/api/admin/organizations/[organizationId]/invitations/route.test.ts`,
+`src/app/api/admin/invitations/route.test.ts`. Replacing each with a plain
+`class {}` (as the two new waitlist tests now do) removes the trap.
+
+**Why deferred**: all four files pass today, and rewriting mocks in passing
+tests is churn that does not belong in a security fix's diff. Worth doing as
+a standalone test-hygiene pass.

@@ -51,6 +51,23 @@ vi.mock('@/core/contracts', () => ({
   INFRASTRUCTURE: { DB: Symbol('DB') },
 }));
 
+/**
+ * SEC-42 put strict rate limiting in front of this handler. Stubbing the
+ * entry point rather than the whole container keeps this file about the
+ * handler: `checkStrictRateLimit` resolves the DI container and the Drizzle
+ * store, none of which these assertions are about. The limiter's own
+ * behaviour is covered in `rate-limit-helper.test.ts` and
+ * `DrizzleRateLimitStore.db.test.ts`.
+ */
+vi.mock('@/security/api/strict-rate-limit', () => ({
+  checkStrictRateLimit: vi.fn(async () => ({
+    success: true,
+    limit: 10,
+    remaining: 9,
+    reset: new Date(Date.now() + 60_000),
+  })),
+}));
+
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a: unknown, b: unknown) => ({ a, b })),
   or: vi.fn((...args: unknown[]) => args),

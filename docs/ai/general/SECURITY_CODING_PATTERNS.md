@@ -47,6 +47,7 @@ Update it after every security review group.
 | SEC-39 | Outbound transport        | `secureFetch` never checked `url.protocol`, so an allowlisted host was reachable over http:// and a redirect could downgrade https to cleartext                                        | Real risk → fixed                                                                                                                            | `secureFetch`                                               |
 | SEC-40 | Redirect integrity        | Cross-origin redirects stripped credential headers but still forwarded the 307/308 request body, trusting the global host allowlist as a host-to-host mesh                             | Real risk → fixed                                                                                                                            | `secureFetch`                                               |
 | SEC-41 | Authorization / tenancy   | Third and fourth instance of SEC-26: an unscoped waitlist served to every tenant owner, and an invitation revoke that checked the organization in a `SELECT` and then wrote without it | Real risk → fixed (whole `/api/admin/**` family audited; static guard added)                                                                 | `/api/admin/waitlist/**`, invitations, `/api/auth/waitlist` |
+| SEC-42 | Abuse prevention          | Security-critical rate limits fell back to a process-local counter, which on serverless is one allowance per instance; three pre-auth endpoints had no endpoint-level limit at all     | Real risk → fixed (durable Postgres secondary, then fail closed; loosen-only operational switch)                                             | `checkRateLimit`, all pre-auth endpoints                    |
 
 ---
 
@@ -4130,3 +4131,147 @@ served to a grant that is genuinely unscoped.
 the one that will be called.
 **DO** make the scoped call the only callable one: a required prop beats a
 defaulted prop, and a mandatory parameter beats a documented convention.
+
+---
+
+## SEC-42 — A Fail-Open Fallback Is Not A Rate Limit On Serverless
+
+**ID**: SEC-42
+**Category**: Abuse prevention / availability trade-offs
+**Classification**: Real risk → fixed (twelfth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `checkRateLimit`, every pre-auth endpoint
+
+### Risk
+
+`checkRateLimit` fell back to a process-local `Map` whenever Upstash timed out
+or errored. For ordinary API throttling that is a reasonable availability
+trade. For sign-in, password reset, verification and invitations it is not a
+rate limit at all: on serverless, instances are ephemeral and unshared, so
+"5 attempts per 15 minutes" becomes "5 attempts per 15 minutes **per instance
+the attacker happens to reach**". The control reports healthy while its
+durable half is gone — the same failure mode already recorded in SEC-34's
+"Fail-Open Fallbacks Are Not Free On Serverless".
+
+Auditing the surface turned up something worse than the reported issue. Three
+of the four named paths had **no endpoint-level limit at all**, only the
+generic per-IP window in the Edge proxy — which degrades the same way:
+
+- `/api/auth/reset-password` — redeems a reset token, then runs bcrypt. Both a
+  token-guessing oracle and an expensive one.
+- `/api/auth/signup` — creates rows, sends mail, runs bcrypt on
+  unauthenticated input, and consumes invitation tokens when registration is
+  not open.
+- `/api/auth/invite` — authenticated, and therefore not IP-shaped at all.
+
+### Fix
+
+A `mode` on the existing helper, and a chain rather than an either/or:
+
+```
+Upstash  →  durable secondary (Postgres)  →  fail closed
+```
+
+Failing closed here is cheaper than it looks, and that is the load-bearing
+observation. **Every endpoint that runs in strict mode already needs Postgres
+to do its job** — `authorize()` resolves `DrizzleDb` to fetch the password
+hash; the rest read or write user rows. So the only state in which strict mode
+refuses is one where the endpoint was already dead. Fail-closed costs no
+availability that is not already lost.
+
+Strict mode applies when Upstash is **absent**, not only when it errors: a
+deployment with no Upstash configured must not silently downgrade a
+security-critical limit to a per-instance `Map`.
+
+The secondary is one statement:
+
+```ts
+INSERT INTO rate_limit_counters (identifier, window_start, expires_at, count)
+VALUES (…, 1)
+ON CONFLICT (identifier, window_start) DO UPDATE SET count = count + 1
+RETURNING count;
+```
+
+`SELECT`-then-`UPDATE` loses increments whenever two requests for one
+identifier overlap, and on an abuse-control path a lost increment is a free
+attempt. Fixed window rather than sliding: a sliding window needs the
+individual timestamps, which turns one row per identifier-window into one row
+per request — write amplification a store only used during an outage does not
+need.
+
+Runtime placement matters as much as the SQL. `checkRateLimit` lives in
+`shared/lib` and is reachable from the Edge middleware, so it takes its strict
+dependencies as a structurally-typed parameter and imports nothing from the
+`rate-limit` module. `src/security/api/strict-rate-limit.ts` — Node only — is
+the single file that knows the secondary is Postgres.
+
+### The Kill Switch, And Why It Is Loosen-Only
+
+Degrading a security control needs an operator lever, and an env var on Vercel
+needs a redeploy. The repository already has a runtime-togglable mechanism:
+`DrizzleFeatureFlagService.isEnabled()` issues a fresh `SELECT` per call with
+no cache, and the admin GUI writes the same table, so under
+`FEATURE_FLAG_PROVIDER=db` a toggle lands on the next request — the same
+property GrowthBook has. Only `static` needs a redeploy, because its flags
+_are_ an env var (`FEATURE_FLAGS_STATIC`).
+
+So the switch layers a flag override over an env base. Two rules make that
+sound rather than merely convenient:
+
+**1. A separate port, not `FeatureFlagService` directly.**
+`isEnabled(flag, context: AuthorizationContext)` requires a tenant and a
+subject; every control these switches guard runs _before_ authentication.
+`OperationalSwitch` is tenant-less and subject-less, and the mapping onto the
+tenant-scoped flag contract happens once, inside an adapter. Product flags
+("does this user see the new UI") and operational switches ("is this control
+enforcing") have different lifetimes, audiences and blast radii; conflating
+them is cheap today and expensive later.
+
+**2. The override may only loosen.**
+
+```
+result = (override === true) ? true : base
+```
+
+`isEnabled()` returns a plain `boolean`, and `ResilientFeatureFlagService`
+answers `false` when its delegate throws — so _"the operator set this to
+false"_ and _"the flag store is unreachable"_ are the same value at this seam.
+A symmetric override would let any flag outage silently rewrite the
+deployment's posture. Loosen-only makes the failure direction safe by
+construction: an unreachable override cannot relax a security control, only
+fail to relax one.
+
+The override is wired only for providers that can actually be toggled at
+runtime (`db`, `growthbook`). Under `static` it is not wired at all — layering
+one env var over another adds a moving part and no capability.
+
+### Required Validation
+
+Mocks cannot demonstrate either property that matters here, so both were
+falsified rather than merely observed green:
+
+- `DrizzleRateLimitStore.db.test.ts` fires 25 overlapping increments against a
+  real database and requires exactly `1..25`. **Verified to fail** when the
+  store is rewritten as `SELECT`-then-write.
+- `does NOT fall back to the process-local counter on a double outage` exists
+  because every other strict-mode assertion still passes if that regression
+  returns — a green suite would otherwise say nothing about the one property
+  the case was opened for.
+- `LayeredOperationalSwitch` asserts loosen-only in _both_ directions, plus a
+  throwing override.
+
+### Rule for Agents
+
+**DO NOT** let a security-critical limit fall back to process-local state on
+serverless. Per-instance counters are not a limit; they are a limit divided by
+the number of instances an attacker can reach.
+**DO** ask what a fail-closed path actually costs before rejecting it — if the
+endpoint already depends on the store that is down, it costs nothing.
+**DO NOT** treat "an endpoint has a limit" as settled because a global
+middleware covers it. Check whether that middleware's fallback is durable, and
+whether its window is tuned for this endpoint.
+**DO** key an authenticated abuse control on the actor, not the IP.
+**DO NOT** reuse a tenant-scoped feature-flag contract for a platform-level
+operational switch, and never in a pre-auth path.
+**DO** make any flag-backed override loosen-only whenever the flag contract
+cannot distinguish "off" from "unavailable".

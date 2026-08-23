@@ -17,13 +17,13 @@ import {
   createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
-import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import {
   emailVerificationTokensTable,
   userCredentialsTable,
 } from '@/modules/auth/infrastructure/drizzle/schema';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const resendSchema = z.object({
   email: z.email('Invalid email address'),
@@ -55,9 +55,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const ip = await getIP(new Headers(request.headers));
-  const rateLimitResult = await checkRateLimit(`resend-verification:${ip}`, {
-    path: RESEND_PATH,
-  });
+  const rateLimitResult = await checkStrictRateLimit(
+    `resend-verification:${ip}`,
+    {
+      path: RESEND_PATH,
+    },
+  );
 
   if (!rateLimitResult.success) {
     return createServerErrorResponse(

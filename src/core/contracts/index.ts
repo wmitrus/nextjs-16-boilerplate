@@ -33,3 +33,7 @@ export const LOGGER = {
 export const PROVISIONING = {
   SERVICE: Symbol('ProvisioningService'),
 };
+
+export const SECURITY = {
+  OPERATIONAL_SWITCH: Symbol('OperationalSwitch'),
+};

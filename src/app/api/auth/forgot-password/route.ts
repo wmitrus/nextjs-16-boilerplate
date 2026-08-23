@@ -17,11 +17,11 @@ import {
   createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
-import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { passwordResetTokensTable } from '@/modules/auth/infrastructure/drizzle/schema';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const forgotPasswordSchema = z.object({
   email: z.email('Invalid email address'),
@@ -51,7 +51,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const ip = await getIP(new Headers(request.headers));
-  const rateLimitResult = await checkRateLimit(`forgot-password:${ip}`, {
+  const rateLimitResult = await checkStrictRateLimit(`forgot-password:${ip}`, {
     path: FORGOT_PASSWORD_PATH,
   });
 

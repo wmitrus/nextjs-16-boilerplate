@@ -607,6 +607,39 @@ Related and non-negotiable: never treat a client-supplied `tenantId` or
 be especially suspicious of one that reached the database through an
 unauthenticated endpoint (SEC-41's waitlist finding).
 
+### Security-Critical Rate Limits Must Be Durable (SEC-42)
+
+Any limit protecting sign-in, sign-up, password reset, email verification or
+invitations goes through `checkStrictRateLimit`
+(`src/security/api/strict-rate-limit.ts`), never bare `checkRateLimit`.
+
+Standard mode falls back to a process-local counter when Upstash is
+unreachable. On serverless that is not a weakened limit, it is a different
+limit: instances are ephemeral and unshared, so the allowance is granted once
+per instance the attacker can reach. Strict mode reaches for a durable
+Postgres secondary first and **fails closed** if neither store answers —
+which costs nothing, because every endpoint that runs in strict mode already
+needs Postgres to do its job at all.
+
+Two rules follow from this:
+
+- **A global middleware is not coverage.** Before concluding an endpoint is
+  rate-limited, check whether the covering middleware's fallback is durable
+  and whether its window is tuned for that endpoint. Three endpoints looked
+  covered by the Edge per-IP window and were not (`reset-password`, `signup`,
+  `invite`).
+- **Key an authenticated abuse control on the actor, not the IP.** An IP key
+  misses one account behind a rotating IP and punishes everyone behind a
+  shared NAT.
+
+Degrading a strict limit is an operator decision, expressed through the
+`strict_rate_limit_degrade` **operational switch** — not by editing the call
+site. Operational switches use `OperationalSwitch`
+(`src/core/contracts/operational-switch.ts`), never `FeatureFlagService`
+directly: that contract requires a tenant and a subject, and these controls
+run before authentication. Any flag-backed override must be **loosen-only**,
+because `isEnabled()` cannot distinguish "off" from "unavailable".
+
 ---
 
 ## Pending Scheduled Security Follow-Ups — Check Every Session
@@ -1118,6 +1151,7 @@ treat the table below as a quick reference to the older entries only.
 | SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas                                                                                            |
 | SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                                                                                                                 |
 | SEC-41 | Admin routes must separate the unscoped platform-admin grant from the tenant-scoped ABAC grant, and carry the authorized scope in the same `WHERE` as the id — a `SELECT` that proves ownership does not authorise the `UPDATE` that follows it (enforced by `platform-admin.guard.test.ts`) |
+| SEC-42 | Security-critical rate limits (sign-in, sign-up, password reset, verification, invitations) must use `checkStrictRateLimit` — a durable secondary then fail closed, never a process-local fallback, which on serverless is one allowance per instance                                        |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

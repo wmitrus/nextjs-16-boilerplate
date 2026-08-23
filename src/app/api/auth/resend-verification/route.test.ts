@@ -13,7 +13,8 @@ import {
   mockGetIP,
   mockLogger,
   mockChildLogger,
-  mockCheckRateLimit,
+  mockCheckStrictRateLimit,
+  rateLimitResult,
   resetAllInfrastructureMocks,
 } from '@/testing';
 import { mockEnv } from '@/testing/infrastructure/env';
@@ -81,7 +82,7 @@ describe('POST /api/auth/resend-verification', () => {
   beforeEach(() => {
     resetAllInfrastructureMocks();
     mockGetIP.mockResolvedValue('1.2.3.4');
-    mockCheckRateLimit.mockResolvedValue({ success: true });
+    mockCheckStrictRateLimit.mockResolvedValue(rateLimitResult());
     mockLimit.mockResolvedValue([]);
     mockWhere.mockReturnValue({ limit: mockLimit });
     mockFrom.mockReturnValue({ where: mockWhere });
@@ -108,7 +109,11 @@ describe('POST /api/auth/resend-verification', () => {
   });
 
   it('returns 429 when rate limited', async () => {
-    mockCheckRateLimit.mockResolvedValue({ success: false });
+    // SEC-42: this endpoint is strict now, so a refusal can also mean "no
+    // durable store answered", not only "over the limit".
+    mockCheckStrictRateLimit.mockResolvedValue(
+      rateLimitResult({ success: false, remaining: 0 }),
+    );
     const req = makeRequest({ email: 'user@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(429);

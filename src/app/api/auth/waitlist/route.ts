@@ -12,13 +12,13 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import { getIP } from '@/shared/lib/network/get-ip';
-import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { DuplicateWaitlistEntryError } from '@/modules/waitlist/domain/errors';
 import { ClerkWaitlistBridge } from '@/modules/waitlist/infrastructure/clerk/ClerkWaitlistBridge';
 import { DefaultWaitlistService } from '@/modules/waitlist/infrastructure/DefaultWaitlistService';
 import { DrizzleWaitlistRepository } from '@/modules/waitlist/infrastructure/drizzle/DrizzleWaitlistRepository';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const bodySchema = z.object({
   email: z.email(),
@@ -37,7 +37,7 @@ export const POST = withErrorHandler(async (request) => {
   await connection();
 
   const ip = await getIP(new Headers(request.headers));
-  const rateLimitResult = await checkRateLimit(`waitlist:${ip}`, {
+  const rateLimitResult = await checkStrictRateLimit(`waitlist:${ip}`, {
     path: WAITLIST_PATH,
   });
 

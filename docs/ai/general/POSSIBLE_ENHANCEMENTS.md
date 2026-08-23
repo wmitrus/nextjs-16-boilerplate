@@ -381,3 +381,61 @@ round. Four files still carry the pattern:
 **Why deferred**: all four files pass today, and rewriting mocks in passing
 tests is churn that does not belong in a security fix's diff. Worth doing as
 a standalone test-hygiene pass.
+
+## PE-16 — Strict Rate Limiting For The Edge Middleware
+
+- **Source**: `.copilot/tasks/2026-08-23-strict-rate-limit-mode/` (Case 12)
+- **Date added**: 2026-08-23
+- **Status**: Open — explicitly deferred by the repo owner ("edge dodaj do
+  kolejnego planu do analizy na później")
+
+**Description**: SEC-42 gave the Node-side security-critical endpoints a
+durable secondary and a fail-closed path. `withRateLimit` in `src/proxy.ts`
+still runs the generic per-IP window in standard mode, so an Upstash outage
+degrades it to a per-instance `Map` for every API route.
+
+**Why deferred**: the repo's Postgres driver is `postgres` (postgres.js),
+which is TCP-based and not Edge-compatible, and there is no
+`@neondatabase/serverless`. Raising the Edge path therefore means a new
+dependency plus a database round trip on _every_ API request, not just during
+an outage — a much larger blast radius than the security fix that surfaced it.
+Worth analysing on its own terms: options include an Edge-compatible HTTP
+driver, moving the generic limit into the route handlers, or accepting that a
+generic per-IP window is not a security-critical control.
+
+## PE-17 — Global Purge For `rate_limit_counters`
+
+- **Source**: `.copilot/tasks/2026-08-23-strict-rate-limit-mode/` (Case 12)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: `DrizzleRateLimitStore.purgeExpired()` is identifier-scoped
+and called opportunistically after each increment, which bounds growth for
+identifiers that keep returning. Rows for an identifier never seen again after
+an outage stay until something removes them.
+
+**Why deferred**: the table is written only while the primary rate-limit store
+is unreachable, so it is normally empty and does not justify a scheduled job
+yet. If outages become common enough for the table to matter, the existing
+`scripts/audit-log/purge-expired.ts` is the pattern to copy.
+
+## PE-18 — Durable Backing For The Login Account Bucket
+
+- **Source**: `.copilot/tasks/2026-08-23-strict-rate-limit-mode/` (Case 12)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: SEC-42 made the login **IP** bucket strict. The **account**
+bucket — `login-abuse-control.ts`'s progressive CAPTCHA/delay/lock counter
+from SEC-34 — still degrades to a process-local `Map` on any Redis failure,
+with the consequences documented in that module's own
+`DEGRADED_FALLBACK_NOTE`.
+
+**Why deferred**: it is not a fixed window but a rolling counter with a TTL
+that is refreshed on every failure, so `DurableRateLimitStore` does not fit it
+as-is; it needs its own durable shape (a count plus an expiry the store can
+extend). That is a design piece rather than a call-site swap, and the strict
+IP bucket now sits in front of it. Doing it badly — for instance failing
+closed on the account bucket — would lock real users out of their own
+accounts during a Redis outage, which is a materially worse trade than on the
+IP bucket.

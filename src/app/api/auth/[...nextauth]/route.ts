@@ -4,14 +4,10 @@ import NextAuth from 'next-auth/next';
 import { env } from '@/core/env';
 
 import { getIP } from '@/shared/lib/network/get-ip';
-import {
-  apiRateLimit,
-  checkUpstashRateLimit,
-} from '@/shared/lib/rate-limit/rate-limit';
 import { parseDurationToMs } from '@/shared/lib/rate-limit/rate-limit-helper';
-import { localRateLimit } from '@/shared/lib/rate-limit/rate-limit-local';
 
 import { authOptions } from '@/modules/auth/infrastructure/authjs/auth';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 /**
  * IP bucket for the Credentials sign-in endpoint only -- a dedicated,
@@ -33,23 +29,17 @@ async function checkSignInIpRateLimit(ip: string): Promise<boolean> {
   }
 
   const windowMs = parseDurationToMs(env.LOGIN_RATE_LIMIT_IP_WINDOW);
-  const identifier = `login-ip:${ip}`;
 
-  if (apiRateLimit) {
-    try {
-      const result = await checkUpstashRateLimit(identifier);
-      return result.success;
-    } catch {
-      // Same fail-open-to-local-fallback shape as checkRateLimit() in
-      // rate-limit-helper.ts.
-    }
-  }
-
-  const result = await localRateLimit(
-    identifier,
-    env.LOGIN_RATE_LIMIT_IP_REQUESTS,
+  // SEC-42. This used to fall back to `localRateLimit` on any Upstash
+  // failure, which on serverless means one allowance per instance -- an
+  // attacker spread across instances got the limit several times over. Strict
+  // mode reaches for the durable secondary first and refuses if neither store
+  // answers.
+  const result = await checkStrictRateLimit(`login-ip:${ip}`, {
+    path: '/api/auth/callback/credentials',
+    limit: env.LOGIN_RATE_LIMIT_IP_REQUESTS,
     windowMs,
-  );
+  });
   return result.success;
 }
 

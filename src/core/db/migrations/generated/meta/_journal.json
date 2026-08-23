@@ -127,6 +127,13 @@
       "when": 1787432465948,
       "tag": "0017_shiny_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787475866345,
+      "tag": "0018_busy_mad_thinker",
+      "breakpoints": true
     }
   ]
 }

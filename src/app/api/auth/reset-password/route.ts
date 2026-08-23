@@ -17,6 +17,7 @@ import {
   createSuccessResponse,
   createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
+import { getIP } from '@/shared/lib/network/get-ip';
 
 import {
   authUserIdentitiesTable,
@@ -24,6 +25,7 @@ import {
   userCredentialsTable,
 } from '@/modules/auth/infrastructure/drizzle/schema';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Reset token is required'),
@@ -31,6 +33,7 @@ const resetPasswordSchema = z.object({
 });
 
 const BCRYPT_COST = 12;
+const RESET_PASSWORD_PATH = '/api/auth/reset-password';
 const INVALID_TOKEN_ERROR =
   'This password reset link is invalid or has expired. Please request a new one.';
 
@@ -50,6 +53,24 @@ export async function POST(request: Request): Promise<Response> {
     category: 'auth',
     module: 'authjs-reset-password',
   });
+
+  // SEC-42. This endpoint had no rate limit of its own -- only the generic
+  // per-IP window in the Edge proxy, which degrades to a per-instance counter
+  // whenever Upstash is unreachable. It redeems a reset token and then does
+  // bcrypt work, so it is both a token-guessing oracle and an expensive one.
+  // Strict mode: a durable secondary, then fail closed.
+  const ip = await getIP(new Headers(request.headers));
+  const rateLimitResult = await checkStrictRateLimit(`reset-password:${ip}`, {
+    path: RESET_PASSWORD_PATH,
+  });
+
+  if (!rateLimitResult.success) {
+    return createServerErrorResponse(
+      'Too many requests. Please wait before trying again.',
+      429,
+      'RATE_LIMITED',
+    );
+  }
 
   let body: unknown;
   try {

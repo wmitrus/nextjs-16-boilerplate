@@ -247,6 +247,23 @@ export const env = createEnv({
     // email, independent of the IP bucket above. Crossing each threshold
     // escalates the response (require CAPTCHA, add a progressive delay,
     // then a temporary lock) rather than a single flat cutoff.
+    /**
+     * Deploy-time base for the `strict_rate_limit_degrade` operational
+     * switch (SEC-42). `true` makes strict rate limiting fall back to the
+     * process-local counter instead of failing closed when neither the
+     * primary nor the durable secondary can be reached.
+     *
+     * Default `false`. Leave it there: the runtime override (a feature flag,
+     * where the provider supports one) is the intended lever, because it can
+     * be turned back off without a redeploy. Setting this to `true` degrades
+     * a security control until someone remembers to change it back.
+     */
+    RATE_LIMIT_STRICT_DEGRADE: z
+      .string()
+      .optional()
+      .transform((value) => value === 'true')
+      .pipe(z.boolean())
+      .default(false),
     LOGIN_ABUSE_WINDOW: z.string().default('30 m'),
     LOGIN_ABUSE_CAPTCHA_THRESHOLD: z.coerce
       .number()
@@ -427,6 +444,7 @@ export const env = createEnv({
     GROWTHBOOK_API_HOST: process.env.GROWTHBOOK_API_HOST,
     LOGIN_RATE_LIMIT_IP_REQUESTS: process.env.LOGIN_RATE_LIMIT_IP_REQUESTS,
     LOGIN_RATE_LIMIT_IP_WINDOW: process.env.LOGIN_RATE_LIMIT_IP_WINDOW,
+    RATE_LIMIT_STRICT_DEGRADE: process.env.RATE_LIMIT_STRICT_DEGRADE,
     LOGIN_ABUSE_WINDOW: process.env.LOGIN_ABUSE_WINDOW,
     LOGIN_ABUSE_CAPTCHA_THRESHOLD: process.env.LOGIN_ABUSE_CAPTCHA_THRESHOLD,
     LOGIN_ABUSE_DELAY_THRESHOLD: process.env.LOGIN_ABUSE_DELAY_THRESHOLD,

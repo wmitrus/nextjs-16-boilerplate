@@ -17,6 +17,7 @@ import {
   createSuccessResponse,
   createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
+import { getIP } from '@/shared/lib/network/get-ip';
 
 import {
   authUserIdentitiesTable,
@@ -34,6 +35,7 @@ import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructur
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { NoOpEmailService } from '@/modules/invitations/infrastructure/NoOpEmailService';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const signUpSchema = z.object({
   email: z.email('Invalid email address'),
@@ -42,6 +44,7 @@ const signUpSchema = z.object({
 });
 
 const BCRYPT_COST = 12;
+const SIGNUP_PATH = '/api/auth/signup';
 const VERIFICATION_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 function isUniqueConstraintViolation(err: unknown): boolean {
@@ -84,6 +87,24 @@ export async function POST(request: Request): Promise<Response> {
     category: 'auth',
     module: 'authjs-signup',
   });
+
+  // SEC-42. Sign-up had no rate limit of its own. It creates rows, sends mail
+  // and runs bcrypt on unauthenticated input, and where REGISTRATION_MODE is
+  // not `open` it also consumes invitation tokens -- so an unthrottled
+  // sign-up is both a resource-exhaustion path and an invitation-token
+  // guessing oracle.
+  const ip = await getIP(new Headers(request.headers));
+  const rateLimitResult = await checkStrictRateLimit(`signup:${ip}`, {
+    path: SIGNUP_PATH,
+  });
+
+  if (!rateLimitResult.success) {
+    return createServerErrorResponse(
+      'Too many requests. Please wait before trying again.',
+      429,
+      'RATE_LIMITED',
+    );
+  }
 
   let body: unknown;
   try {

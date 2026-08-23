@@ -49,9 +49,18 @@ peerze), PE-21 (HMAC + replay window i service identity dla internal API).
 
 ## Stan
 
-14 case'ów zamkniętych (SEC-37…SEC-44). HEAD `a0f7608` wypchnięty. Ostatni commit to aktualizacja `docs/features/` dla całej serii.
+15 case'ów zamkniętych (SEC-37…SEC-45). HEAD `a1b48db` wypchnięty.
 
-Ostatnie trzy case'y:
+Ostatnie cztery case'y:
+
+- **SEC-45** — error boundary Edge pipeline'u przeniesiony **do środka**
+  `withSecurity` (najgłębsza ramka trzymająca `RouteContext`). Wcześniej `catch`
+  w proxy budował 500 poza `withHeaders()` → jedyna odpowiedź w aplikacji bez
+  CSP/nosniff/correlation ID, logowana `console.error`. Body **zawsze
+  generyczne**, bez gałęzi `NODE_ENV`; correlation **tylko w nagłówkach**;
+  zewnętrzna siatka w proxy **nie generuje** drugiego correlation ID. PE-22 =
+  cztery ręczne `NextResponse.json()` w `with-auth.ts` (dług konwencji, nie
+  dziura — przechodzą przez finalizację).
 
 - **SEC-42** — strict mode rate limitera: łańcuch Upstash → Postgres → fail closed; `OperationalSwitch` z override **tylko luzującym**; 7 endpointów security-critical (trzy nie miały limitu wcale: reset-password, signup, invite).
 - **SEC-43** — jawny trust model klienckiego IP: `DEPLOYMENT_PROXY` + `TRUSTED_PROXY_CIDRS`, walidacja przez `ipaddr.js`, przejście XFF od prawej, **nigdy fikcyjne `127.0.0.1`**; untrusted → jeden stabilny bucket + WARN, audit log zapisuje `null`.

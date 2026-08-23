@@ -165,7 +165,7 @@ freshly provisioned AuthJS user, asserts the Turnstile widget appears once
 `LOGIN_ABUSE_CAPTCHA_THRESHOLD` is hit, waits for Cloudflare's official
 "always passes" test key (`1x00000000000000000000AA` /
 `1x0000000000000000000000000000000AA`, see
-https://developers.cloudflare.com/turnstile/troubleshooting/testing/) to
+<https://developers.cloudflare.com/turnstile/troubleshooting/testing/>) to
 auto-solve, then completes sign-in with the resulting token. It needs a real
 run against a live Cloudflare endpoint to be considered verified.
 

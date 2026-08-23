@@ -94,16 +94,29 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
   Deploy Preview, Verify Preview Runtime, Preview Lighthouse, Quality Checks,
   DB Integration Tests, Playwright CSP nonce-dynamic E2E, Visual Regression,
   Secret Scanning, Dependency Audit — wszystkie ✅.
-- **Codacy: `action_required`, 10 nowych findingów** (2 × high Security,
-  5 × medium Complexity, 2 × medium Compatibility, 1 × minor BestPractice),
-  gate `≤ 0`. Dotyczy całego PR-a względem `main`, nie ostatnich commitów.
-  **Decyzja użytkownika 2026-08-23: nie ma criticali, nie ruszamy.** Zgodnie
-  z regułą 9 — tylko odnotowane, żadnego drążenia z własnej inicjatywy.
-- **Granica PR-a (decyzja użytkownika 2026-08-23)**: PR #74 jest już bardzo duży
-  i zamyka SEC-37…SEC-46. Użytkownik merguje go sam. **Kolejne case'y idą do
-  NOWEGO PR-a na nowej gałęzi** — nie doklejać ich tutaj. Pierwszy kandydat do
-  nowego PR-a: PE-24 (varchar(128) dla `correlation_id`, a dla `request_id`
-  **najpierw audyt istniejących wierszy**, bo przed SEC-46 klient mógł podać
-  własne `x-request-id` i `text → uuid` mogłoby paść na danych historycznych).
+- **Codacy — rozwiązane 2026-08-23 konfiguracją, nie kodem.** 11 annotacji
+  rozpadło się tak:
+  - **5 fałszywych alarmów** → użytkownik zignorował je w UI Codacy.
+    `RESET_PASSWORD_PATH = '/api/auth/reset-password'` flagowane jako
+    „hardcoded password", bo nazwa stałej zawiera `PASSWORD`; fixture E2E
+    `'e2e-fixture-internal-api-key-not-a-secret'`; `hunter2` w teście
+    SEC-45, który sprawdza właśnie, że ta wartość **nie wycieka**.
+  - **2 × SQL** „Expected SET QUOTED_IDENTIFIER ON" → reguła **T-SQL /
+    SQL Server** puszczona na migracje PostgreSQL. Użytkownik **wyłączył
+    narzędzie tsql**. `.codacy.yml` celowo nietknięty.
+  - **1 × bare URL** w `POSSIBLE_ENHANCEMENTS.md` → naprawione w kodzie.
+  - **5 × złożoność** (`mapUserRow` 9/8, `listAll` 14/8, handler
+    reset-password 65/50 linii, `verifyTurnstileToken` 51/50,
+    `getLoginAbuseState` 10/8) — cała piątka to kod sprzed tego PR-a.
+    Użytkownik **podniósł progi w UI**; efekt widoczny dopiero przy
+    następnym scanie. Kodu nie refaktorowaliśmy — refaktor ścieżek
+    auth/rate-limit/admin tuż przed merge'em to ryzyko regresji przy zerowym
+    zysku bezpieczeństwa.
+
+  Wniosek na przyszłość: `.codacy.yml` wyklucza `e2e/**` i `**/*.test.ts` dla
+  lizard/eslint/semgrep, ale „hardcoded password" i tak trafiło w te ścieżki —
+  robi to inny silnik, którego w tych listach nie ma. Sama edycja pliku by nie
+  wystarczyła.
+
 - Czekamy na kolejne ponumerowane case'y.
 - Na koniec serii: użytkownik przegląda cały PR i triażuje PE-01…PE-21.

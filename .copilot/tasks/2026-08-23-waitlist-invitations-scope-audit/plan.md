@@ -147,3 +147,41 @@ reading of the route handler — the organization was right there in a `SELECT`,
 or in a prop's default, or in a column on the row. What none of them had was
 the scope in the statement that actually touched the data. When auditing this
 class, read the `WHERE` of the write, not the guard above it.
+
+---
+
+## Post-Push CI Finding — Preview Deploy Broken Since Case 6 (SEC-36)
+
+After pushing, `Deploy Preview` on PR #74 was red. It was **not** caused by
+this case, and it was **not** infrastructure:
+
+```
+[db-migrate-prod] Fatal error: [migration-journal]
+  Unsupported journal entry 0017_shiny_starbolt. Add it to readMigrationSql().
+```
+
+Case 6 (SEC-36, commit `04cda8f`) added migration `0017_shiny_starbolt.sql`
+and registered it in `_journal.json`, but not in the literal-path switch in
+`scripts/validate-migration-journal.ts`. Every preview deploy since that
+commit has failed at the migration step, through five subsequent cases.
+
+`readMigrationSql` is a hand-maintained `switch` rather than a dynamic
+`readFile(join(dir, tag))` on purpose — SEC-05/SEC-12 forbid the dynamic
+form. The price of that safety is a list that must be extended by hand, and
+**forgetting was invisible to every local gate**: `pnpm typecheck`,
+`pnpm test`, `pnpm test:db`, `skott`, `depcheck` and `env:check` all passed
+on every one of those five cases. The first thing that noticed was
+`db:migrate:prod` inside the Vercel build.
+
+Fixed by adding the missing case, plus a test in
+`scripts/validate-migration-journal.test.ts` that walks the real
+`_journal.json` and calls the real `resolveExpectedMigrations()`, so the next
+omission fails one command into the local loop instead of at deploy time.
+Verified to reproduce the exact deploy error when the case is removed again.
+
+**Lesson, and it is the same one as SEC-38 and SEC-34's:** a green local
+suite is only evidence about what the suite actually executes. Five cases in
+a row reported "all gates green" while a deploy-time gate none of them ran
+was broken. When a repository has a check that only runs in CI or at deploy,
+either give it a local counterpart or stop describing the local run as
+complete.

@@ -813,6 +813,25 @@ When persistence is involved, assess:
 - whether idempotency or ordering matters
 - whether tenant-sensitive or auth-sensitive data could leak through caching or overly broad queries
 
+### Adding A Migration — Two Files, Not One
+
+A new Drizzle migration is not finished when the `.sql` file and
+`_journal.json` entry exist. `scripts/validate-migration-journal.ts` resolves
+each journal tag through a **hand-maintained literal-path `switch`**
+(`readMigrationSql`) — deliberately, because SEC-05/SEC-12 forbid the dynamic
+`readFile(join(dir, tag))` form. A tag missing from that switch throws
+`[migration-journal] Unsupported journal entry <tag>`, which fails
+`pnpm db:migrate:prod` and therefore the Vercel build.
+
+**Every local gate passes when you forget this** — typecheck, unit tests, DB
+tests, skott, depcheck, env:check. It went unnoticed for five consecutive
+security cases in the 2026-08 audit series, each of which reported "all gates
+green" while every preview deploy was failing.
+
+So: add the `case` in the same commit as the migration.
+`scripts/validate-migration-journal.test.ts` now walks the real journal and
+fails locally if you don't.
+
 ---
 
 ## Observability And Error Handling

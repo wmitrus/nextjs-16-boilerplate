@@ -154,12 +154,32 @@ export class DefaultInvitationService implements InvitationService {
     return acceptedInvitation;
   }
 
-  async revokeInvitation(id: string): Promise<void> {
-    await this.repository.markRevoked(id);
+  async revokeInvitation(
+    id: string,
+    organizationId: string | null,
+  ): Promise<boolean> {
+    const revoked = await this.repository.revokePendingScoped(
+      id,
+      organizationId,
+    );
+
+    if (!revoked) {
+      logger.warn(
+        {
+          event: 'invitation:revoke_no_match',
+          invitationId: id,
+          scopedToOrganization: organizationId !== null,
+        },
+        'Invitation revoke matched no pending invitation in the authorized scope',
+      );
+      return false;
+    }
+
     logger.info(
       { event: 'invitation:revoked', invitationId: id },
       'Invitation revoked',
     );
+    return true;
   }
 
   async listByOrganization(organizationId: string): Promise<Invitation[]> {

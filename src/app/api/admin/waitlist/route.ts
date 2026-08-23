@@ -1,8 +1,6 @@
 import { connection } from 'next/server';
 
-import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
-import type { AuthorizationService } from '@/core/contracts/authorization';
-import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
+import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db/types';
 import { env } from '@/core/env';
 import { getAppContainer } from '@/core/runtime/bootstrap';
@@ -19,27 +17,24 @@ import { DrizzleWaitlistRepository } from '@/modules/waitlist/infrastructure/dri
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
-async function checkAdminAccess(
+/**
+ * The waitlist is **platform-global**, not tenant-local: entries are created
+ * by anonymous visitors before they belong anywhere, `tenant_id` is never
+ * written, and `organization_id` is whatever the joiner claimed. There is
+ * therefore no trustworthy scope to filter by, and no scoped grant that
+ * could be honest about what it authorises.
+ *
+ * So the ABAC path is deliberately absent here. `SECURITY_MANAGE_POLICIES`
+ * is evaluated against the caller's ACTIVE TENANT, so every tenant owner
+ * holds it -- and granting it access to an unscoped `listPending()` let one
+ * tenant's owner read (and act on) every other tenant's applicants. Only an
+ * env-based platform admin, whose grant genuinely is unscoped, may reach
+ * these routes. See SEC-41.
+ */
+async function checkPlatformAdminAccess(
   email: string | undefined,
-  userId: string,
-  tenantId: string,
-  container: ReturnType<typeof getAppContainer>,
 ): Promise<boolean> {
-  if (isEnvBasedPlatformAdmin(email)) return true;
-
-  try {
-    const authzService = container.resolve<AuthorizationService>(
-      AUTHORIZATION.SERVICE,
-    );
-    return await authzService.can({
-      tenant: { tenantId },
-      subject: { id: userId },
-      resource: { type: RESOURCES.SECURITY, id: 'admin-panel' },
-      action: ACTIONS.SECURITY_MANAGE_POLICIES,
-    });
-  } catch {
-    return false;
-  }
+  return isEnvBasedPlatformAdmin(email);
 }
 
 function resolveService(container: ReturnType<typeof getAppContainer>) {
@@ -63,20 +58,19 @@ function resolveService(container: ReturnType<typeof getAppContainer>) {
 
 /**
  * GET /api/admin/waitlist
- * Lists all pending waitlist entries.
- * Requires: authenticated provisioned user (admin role enforced separately).
+ *
+ * Lists all pending waitlist entries across the whole platform -- the query
+ * is unscoped, and there is no tenant column to scope it by.
+ *
+ * Requires: an env-based platform admin. See `checkPlatformAdminAccess`
+ * above and SEC-41 for why a tenant-scoped ABAC grant is not accepted here.
  */
 export const GET = withErrorHandler(
   withNodeProvisioning(async (_request, _context, access) => {
     await connection();
 
     const container = getAppContainer();
-    const isAdmin = await checkAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-    );
+    const isAdmin = await checkPlatformAdminAccess(access.identity.email);
     if (!isAdmin) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }

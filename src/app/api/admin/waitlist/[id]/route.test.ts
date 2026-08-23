@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
-import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
@@ -131,10 +130,9 @@ describe('POST /api/admin/waitlist/[id]', () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
   });
 
-  describe('authorization (security fix, 2026-08-20)', () => {
-    it('returns 403 when the caller is not an admin (env or ABAC)', async () => {
+  describe('authorization (SEC-41: platform admin only)', () => {
+    it('returns 403 when the caller is not a platform admin', async () => {
       mocks.isEnvAdmin.mockReturnValue(false);
-      mocks.authzService.can.mockResolvedValue(false);
 
       const { POST } = await import('./route');
       const res = await POST(makeRequest('approve'), makeContext());
@@ -144,24 +142,25 @@ describe('POST /api/admin/waitlist/[id]', () => {
       expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
     });
 
-    it('checks the SECURITY_MANAGE_POLICIES ABAC grant, same as the sibling GET route', async () => {
+    it('rejects a tenant admin holding SECURITY_MANAGE_POLICIES', async () => {
+      // This test asserted the opposite until SEC-41. The waitlist is
+      // platform-global -- entries carry no trustworthy tenant -- so the
+      // tenant-scoped ABAC grant, which every tenant owner holds, let one
+      // tenant's owner approve or reject another tenant's applicants.
       mocks.isEnvAdmin.mockReturnValue(false);
       mocks.authzService.can.mockResolvedValue(true);
-      mocks.approveEntry.mockResolvedValue(ENTRY);
-      mocks.createInvitation.mockResolvedValue({});
 
       const { POST } = await import('./route');
-      await POST(makeRequest('approve'), makeContext());
+      const res = await POST(makeRequest('approve'), makeContext());
 
-      expect(mocks.authzService.can).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: ACTIONS.SECURITY_MANAGE_POLICIES,
-          resource: expect.objectContaining({ type: RESOURCES.SECURITY }),
-        }),
-      );
+      expect(res.status).toBe(403);
+      // Not merely denied: the grant is never consulted at all, so it cannot
+      // be widened back into this route by a policy change elsewhere.
+      expect(mocks.authzService.can).not.toHaveBeenCalled();
+      expect(mocks.approveEntry).not.toHaveBeenCalled();
     });
 
-    it('allows an env-based platform admin without an ABAC check', async () => {
+    it('allows an env-based platform admin, whose grant is genuinely unscoped', async () => {
       mocks.isEnvAdmin.mockReturnValue(true);
       mocks.approveEntry.mockResolvedValue(ENTRY);
       mocks.createInvitation.mockResolvedValue({});
@@ -171,6 +170,35 @@ describe('POST /api/admin/waitlist/[id]', () => {
 
       expect(res.status).toBe(200);
       expect(mocks.authzService.can).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('invitation target (SEC-41)', () => {
+    beforeEach(() => {
+      mocks.isEnvAdmin.mockReturnValue(true);
+      mocks.createInvitation.mockResolvedValue({});
+    });
+
+    it('ignores the organizationId carried on the waitlist entry', async () => {
+      // `organization_id` on a waitlist row came from an anonymous visitor's
+      // join request. Honouring it would let that visitor choose which
+      // organization approving them creates an invitation into. The
+      // destination is server configuration only.
+      mocks.approveEntry.mockResolvedValue({
+        ...ENTRY,
+        organizationId: 'attacker-chosen-org',
+      });
+
+      const { POST } = await import('./route');
+      const res = await POST(makeRequest('approve'), makeContext());
+
+      expect(res.status).toBe(200);
+      expect(mocks.createInvitation).toHaveBeenCalledWith(
+        expect.objectContaining({ organizationId: 'org-1' }),
+      );
+      expect(mocks.createInvitation).not.toHaveBeenCalledWith(
+        expect.objectContaining({ organizationId: 'attacker-chosen-org' }),
+      );
     });
   });
 

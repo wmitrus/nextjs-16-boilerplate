@@ -20,7 +20,13 @@ export interface InvitationService {
 
   acceptInvitation(input: AcceptInvitationInput): Promise<Invitation>;
 
-  revokeInvitation(id: string): Promise<void>;
+  /**
+   * Revokes a pending invitation within `organizationId` (or unscoped when
+   * `null`, for a platform admin). Returns `false` when nothing matched --
+   * wrong organization, already revoked, or no such invitation -- which the
+   * caller must surface identically so the outcomes stay indistinguishable.
+   */
+  revokeInvitation(id: string, organizationId: string | null): Promise<boolean>;
 
   listByOrganization(organizationId: string): Promise<Invitation[]>;
 }

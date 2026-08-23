@@ -96,11 +96,29 @@ export class DrizzleInvitationRepository implements InvitationRepository {
     return rows[0] ? rowToInvitation(rows[0]) : null;
   }
 
-  async markRevoked(id: string): Promise<void> {
-    await this.db
+  async revokePendingScoped(
+    id: string,
+    organizationId: string | null,
+  ): Promise<Invitation | null> {
+    const rows = await this.db
       .update(invitationsTable)
       .set({ status: 'revoked' })
-      .where(eq(invitationsTable.id, id));
+      .where(
+        and(
+          eq(invitationsTable.id, id),
+          eq(invitationsTable.status, 'pending'),
+          // A null scope is the platform-admin path and adds no predicate;
+          // anything else must match the caller's authorized organization in
+          // this same statement.
+          ...(organizationId === null
+            ? []
+            : [eq(invitationsTable.organizationId, organizationId)]),
+        ),
+      )
+      .returning();
+
+    const row = rows[0];
+    return row ? rowToInvitation(row) : null;
   }
 
   async markExpired(id: string): Promise<void> {

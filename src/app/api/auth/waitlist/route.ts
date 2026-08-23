@@ -23,7 +23,6 @@ import { DrizzleWaitlistRepository } from '@/modules/waitlist/infrastructure/dri
 const bodySchema = z.object({
   email: z.email(),
   name: z.string().min(1).max(200).optional(),
-  organizationId: z.uuid().optional(),
 });
 
 const WAITLIST_PATH = '/api/auth/waitlist';
@@ -68,7 +67,7 @@ export const POST = withErrorHandler(async (request) => {
     );
   }
 
-  const { email, name, organizationId } = parsed.data;
+  const { email, name } = parsed.data;
 
   const container = getAppContainer();
   const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
@@ -88,7 +87,7 @@ export const POST = withErrorHandler(async (request) => {
   const service = new DefaultWaitlistService(repository, emailService);
 
   try {
-    const entry = await service.joinWaitlist({ email, name, organizationId });
+    const entry = await service.joinWaitlist({ email, name });
 
     if (env.AUTH_PROVIDER === 'clerk') {
       const bridge = new ClerkWaitlistBridge();

@@ -42,6 +42,56 @@ repository with no tenant concept at all — so any ABAC-authorized tenant
 owner/admin could read or mutate **any user in any tenant**. See SEC-26 in
 `docs/ai/general/SECURITY_CODING_PATTERNS.md` for the full writeup.
 
+### Sibling Admin Surfaces — Invitations and Waitlist (SEC-41)
+
+SEC-26 fixed the tenant scoping of `/api/admin/users/**`, but the same defect
+class lived on unchanged in the neighbouring admin routes. SEC-41 is that
+follow-through: every route under `src/app/api/admin/**` now has to state, in
+code, whether it is a **platform-admin** surface or a **tenant-scoped ABAC**
+surface — the two must not share one handler that authorises the action and
+then acts on an unscoped id.
+
+**Cause.** Three separate expressions of the same root mistake:
+
+- `DELETE /api/admin/invitations/:id` existed as a _flat_ route — it took an
+  invitation id and revoked it, with no organization anywhere in the
+  statement. An ABAC-authorized admin of organization A could revoke an
+  invitation belonging to organization B by id alone.
+- The nested revoke route did a `SELECT` to check the invitation's
+  organization and then an `UPDATE ... WHERE id` — authorising against the row
+  as it was a moment ago, then writing with no scope of its own.
+- `POST /api/auth/waitlist` accepted `organizationId` in the request body of
+  an **anonymous** endpoint, letting an unauthenticated caller assign their
+  own entry to any tenant.
+
+**Fix.**
+
+- The flat `DELETE /api/admin/invitations/:id` route was **deleted**, not
+  patched. A tenant-scoped mutation reached by an id with no tenant in the
+  path has no safe form; the nested route under
+  `/api/admin/organizations/:organizationId/invitations/:id` is the only
+  revoke surface now.
+- `InvitationRepository.revokePendingScoped(id, organizationId)` carries the
+  organization **and** `status = 'pending'` in the same `UPDATE` predicate, so
+  scope, state check and write are one statement. The nested route always
+  passes the organization from the path — never `null`, not even for a
+  platform admin, because the caller named an organization and
+  `getDetailInActiveScope` already proved it is reachable from their scope.
+  A no-match returns the same `404` whether the invitation does not exist,
+  belongs to another organization, or is no longer pending.
+- The waitlist admin routes (`/api/admin/waitlist`, `/api/admin/waitlist/:id`)
+  are **platform-admin only**: the ABAC branch is deliberately absent, because
+  a waitlist entry is pre-tenant — there is no organization to scope it to, so
+  an ABAC grant could only ever be an unscoped one. `organizationId` was
+  removed from the anonymous waitlist schema entirely.
+- `src/security/core/platform-admin.guard.test.ts` walks `src/app/api/admin/**`
+  and fails the build when a route neither separates the platform-admin path
+  from the tenant-scoped one nor keeps its writes out of the handler (no inline
+  `insert` / `update` / `delete`). The rule is enforced for routes added later,
+  not just the ones audited here.
+
+Full writeup: SEC-41 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
 ## API Routes
 
 ### `GET /api/admin/users`
@@ -151,6 +201,7 @@ correlated `EXISTS` predicate against `memberships` without importing the
 - **IDOR protection**: `GET /api/admin/users/:id` returns 404 (not 403) when user is not found to avoid enumeration.
 - **Cross-tenant IDOR/BOLA (fixed)**: prior to this fix, an ABAC-authorized (non-platform-admin) tenant owner/admin could read, rename, or deactivate any user in any tenant — `checkAdminAccess()` only verified the _action_ was allowed, never _whose_ users the caller could reach, and every DB call went through the globally-scoped `UserRepository`. Fixed by deriving an `AdminUserScope` from `isPlatformAdmin` and enforcing it in the same SQL predicate as each read/mutation via `DrizzleAdminUsersService`. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 - **SEC-23 (UUID validation)**: `:id` is validated with `z.uuid()` before any DB call in both `GET` and `PATCH /api/admin/users/:id` — a malformed id now 400s instead of reaching the DB layer.
+- **SEC-41 (sibling admin surfaces)**: the invitations and waitlist admin routes were audited for the same defect class and fixed — the unscoped flat `DELETE /api/admin/invitations/:id` route was removed, the nested revoke moved its scope into the `UPDATE` predicate, and the waitlist admin routes were made platform-admin only. A static guard now enforces the platform-admin/ABAC split across `src/app/api/admin/**`. See **Sibling Admin Surfaces (SEC-41)** above.
 - **Pagination clamping**: `limit` is silently capped at 100 (not rejected).
 - **PII scope**: Email is displayed in the admin panel. Acceptable for admin-only access.
 - **editValues state**: Uses `Map<string, string>` (not plain object) to comply with SEC-15.

@@ -239,6 +239,38 @@ flowchart TD
 - Already signed-in users are never silently redirected away — the invitation token is preserved
 - If the signup page detects an active session with an invitation token present, it redirects back to the invite page (not to home), preserving the token
 
+## Trust Boundaries (SEC-41)
+
+Two decisions here are load-bearing and easy to undo by accident.
+
+### The waitlist is platform-global, so only a platform admin may administer it
+
+`/api/admin/waitlist` and `/api/admin/waitlist/[id]` accept **only** an
+env-based platform admin (`isEnvBasedPlatformAdmin`). They deliberately do
+_not_ accept the `SECURITY_MANAGE_POLICIES` ABAC grant.
+
+The reason: entries are created by anonymous visitors before they belong
+anywhere — `tenant_id` is never written — so `listPending()` is unscoped and
+there is no trustworthy column to scope it by. `SECURITY_MANAGE_POLICIES` is
+evaluated against the caller's **active tenant**, so every tenant owner holds
+it, and granting it access to an unscoped listing let one tenant's owner read
+and act on every other tenant's applicants.
+
+### The joiner does not choose which organization approves them
+
+`POST /api/auth/waitlist` accepts `email` and `name` only. `organizationId`
+used to be part of that schema and was persisted verbatim from an
+**unauthenticated** request body — and the approve path then read it back as
+the invitation target, letting a visitor nominate the organization they get
+invited into.
+
+The destination is now a platform decision:
+`WAITLIST_INVITE_ORGANIZATION_ID` / `WAITLIST_INVITE_ROLE_ID`, or the
+single-tenancy resolution. The nullable column remains for a separate,
+non-security cleanup (`PE-14`).
+
+Full detail: SEC-41 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
 ## Key Implementation Files
 
 | File                                                                       | Purpose                                                |

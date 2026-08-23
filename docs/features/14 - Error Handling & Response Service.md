@@ -72,6 +72,33 @@ To validate segment boundaries in Playwright, a dedicated test-only segment is i
 
 This route intentionally throws when `?throw=1` is provided. It is gated by `NEXT_PUBLIC_E2E_ENABLED` (set in Playwright config) and is only used for E2E coverage. It can be removed if not needed.
 
+## Security Hardening (SEC-37, SEC-38)
+
+Two properties of this layer are enforced rather than conventional.
+
+### Client exposure is a type decision, not a substring match (SEC-37)
+
+`createSecureAction()` used to return any unclassified exception's message to
+the client, filtered only by `.includes('Failed query:')`. That is an
+allowlist written as a denylist: every message the filter did not happen to
+recognise was disclosed, including driver output and stack context.
+
+Exposure is now a property of the error's **type** — `PublicError` carries
+`exposeToClient = true`; everything else surfaces as a generic message plus a
+correlation id the operator can use to find the real one in the logs.
+
+### The response service is mandatory, and a test enforces it (SEC-38)
+
+`response-service.guard.test.ts` walks every `route.ts` under `src/app/api`
+and fails the suite if one builds a response by hand.
+
+This wording used to say "prefer". Twelve of thirty-six routes did not follow
+it, including five live auth endpoints — **advice that nothing checks is
+advice that decays**. That lesson is why SEC-23, SEC-42, SEC-43 and SEC-44
+each ship with a static guard rather than a paragraph.
+
+Full detail: SEC-37 and SEC-38 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
 ## Tests
 
 ### Unit

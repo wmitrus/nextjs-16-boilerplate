@@ -191,6 +191,50 @@ const safeUser = sanitizeData(rawUser);
 const userDTO = toDTO(rawUser, ['id', 'email', 'name']);
 ```
 
+### 5.3 Internal API Guard (`/api/internal/**`)
+
+Shared-key authentication, hardened in **SEC-44**. Four properties, each
+present for a reason the code states:
+
+| Property                             | Why                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dedicated failed-auth counter**    | `withInternalApiGuard` is composed _before_ `withRateLimit`, so a rejected key returned 403 without the limiter ever running — key guessing was unmetered. The ordering is correct (an unauthenticated caller must not spend a legitimate client's API allowance), so rejections get their own counter instead of a pipeline reorder. |
+| **Constant-time verification**       | `!==` on a string leaks both the position of the first differing byte and the length of a guess. `crypto.timingSafeEqual` is Node-only and this guard runs in **Edge**, so both sides are digested with `crypto.subtle` and compared with an accumulating XOR.                                                                        |
+| **`current + previous` rotation**    | A single key meant every caller had to cut over in the same instant. Both are accepted; the guard logs `internal_api:previous_key_used` so an unretired old key is visible.                                                                                                                                                           |
+| **32-character floor in production** | `z.string().min(1)` made a one-character key a valid production configuration. Enforced by `validateInternalApiKeyConfigValues`, at startup rather than on first request.                                                                                                                                                             |
+
+**The counter deliberately does not fail closed** — unlike SEC-42's strict
+rate limiter. `/api/internal/health` and `/api/internal/env-check` exist to be
+called _during_ an incident, so denying a **correct** key because Redis is
+unreachable would remove the operator's diagnostic exactly when it is needed.
+The key check is unaffected either way, so a counter outage weakens
+brute-force protection rather than admitting anyone. Full reasoning: SEC-44 in
+`docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
+**Request signing (HMAC + replay window) and mTLS are deliberately not
+implemented.** The repository has no production service-to-service consumer of
+these routes; building that protocol now would mean a nonce store, clock-skew
+tolerance and a second auth path that nothing exercises. Tracked as `PE-19`…
+`PE-21` in `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` with an explicit
+trigger: the first real production consumer, or an internal endpoint whose
+impact warrants per-request authentication.
+
+### 5.4 Diagnostics Never Carry Secret Material
+
+`getEnvDiagnostics()` reports `{ name, present }` and nothing else.
+
+It previously included `maskedValue` = `value.slice(0,2) + '***' +
+value.slice(-4)`, which handed fragments of `CLERK_SECRET_KEY` and of
+`INTERNAL_API_KEY` itself to `/api/internal/env-check` **and** to the
+`/env-summary` demo page — the latter reachable by any signed-in user with
+demo mode on. The field was removed at the `EnvDiagnosticsEntry` source rather
+than from one route's JSON, because the second consumer is the one that gets
+forgotten.
+
+A masked secret is still a secret in an HTTP response. Diagnosing a broken
+deployment needs to know _whether_ a variable is set; it never needs any part
+of its value.
+
 ---
 
 ## 6. Observability & Logging
@@ -232,7 +276,11 @@ Manage security settings via [./src/core/env.ts](@/core/env.ts):
 
 | Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `INTERNAL_API_KEY`           | Secret key for `/api/internal` routes.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `INTERNAL_API_KEY`           | Shared secret for `/api/internal` routes. **Minimum 32 characters when `NODE_ENV=production`** (SEC-44); generate with `openssl rand -base64 32` or `pnpm generate:secret`. Leaving it unset is a valid, safe configuration — the guard then refuses every internal request.                                                                                                                                                                                               |
+| `INTERNAL_API_KEY_PREVIOUS`  | The key being rotated out, accepted alongside the current one so a cutover needs no flag day (SEC-44). Must differ from `INTERNAL_API_KEY` and meets the same length floor. Remove it once `internal_api:previous_key_used` stops appearing in the logs.                                                                                                                                                                                                                   |
+| `DEPLOYMENT_PROXY`           | Which ingress may determine the client IP: `vercel \| cloudflare \| trusted-proxy \| none` (SEC-43). **Required when `NODE_ENV=production`**; defaults to `none` in development and test. Deliberately never inferred from `VERCEL_ENV`.                                                                                                                                                                                                                                   |
+| `TRUSTED_PROXY_CIDRS`        | Comma-separated CIDRs of your own proxies. Required only for `DEPLOYMENT_PROXY=trusted-proxy`.                                                                                                                                                                                                                                                                                                                                                                             |
+| `RATE_LIMIT_STRICT_DEGRADE`  | Deploy-time base for the strict-rate-limit degrade switch (SEC-42). Leave `false`; the runtime lever is the `strict_rate_limit_degrade` feature flag.                                                                                                                                                                                                                                                                                                                      |
 | `SECURITY_AUDIT_LOG_ENABLED` | Defined in the env schema; not currently read by `logActionAudit`/`logSecurityEvent`/`recordAdminAuditEvent` or anywhere else in `src/security/` — pre-existing drift between this description and the code, not something the DB-backed audit trail (§6.3) depends on or introduced. Per-category on/off for that trail is controlled by admin-managed DB settings instead — see [36 - Audit Logging & Retention.md](./36%20-%20Audit%20Logging%20%26%20Retention.md) §4. |
 | `LOG_INGEST_SECRET`          | Secret for secure log ingestion endpoints.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 

@@ -35,6 +35,16 @@ The app fails fast at startup when these rules are violated:
 3. `AUTH_PROVIDER=clerk` requires:
    - `CLERK_SECRET_KEY`
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+4. `NODE_ENV=production` requires `DEPLOYMENT_PROXY` (SEC-43). It declares
+   which ingress may determine the client IP, and no safe value can be
+   guessed. Deliberately **not** inferred from `VERCEL_ENV` — picking a trust
+   model from a variable nobody set for that purpose is the same mistake one
+   level up. Dev and test default to `none`.
+5. `DEPLOYMENT_PROXY=trusted-proxy` requires `TRUSTED_PROXY_CIDRS` (SEC-43).
+6. In production, a **set** `INTERNAL_API_KEY` (and `INTERNAL_API_KEY_PREVIOUS`
+   if present) must be at least 32 characters, and the two must differ
+   (SEC-44). Leaving both unset is valid — the internal guard then refuses
+   every request.
 
 ## 4. Auth Provider Vars
 
@@ -148,14 +158,29 @@ Optional observability note:
 
 - If `NEW_RELIC_ENABLED=true`, `NEW_RELIC_LICENSE_KEY` must also be set for deploy validation to pass and for telemetry to start.
 
-Security and ops vars remain optional with defaults unless your deployment policy requires strict values.
+Security and ops vars remain optional with defaults unless your deployment
+policy requires strict values — **except** the trust-boundary ones above,
+which fail the build rather than default to a guess.
+
+Security-critical, deployment-specific:
+
+- `DEPLOYMENT_PROXY` — required in production (see §3).
+- `TRUSTED_PROXY_CIDRS` — only for `DEPLOYMENT_PROXY=trusted-proxy`.
+- `INTERNAL_API_KEY` / `INTERNAL_API_KEY_PREVIOUS` — 32-character floor in
+  production; the second slot exists so a rotation needs no flag day.
+- `RATE_LIMIT_STRICT_DEGRADE` — leave `false`; the runtime lever is the
+  `strict_rate_limit_degrade` feature flag, which can be turned back off
+  without a deploy.
 
 ## 8. Production Notes
 
 1. Keep secrets only in deployment secret stores.
 2. Never commit real keys to `.env.example`.
 3. Validate env before deploy using `pnpm env:check` and CI gates.
-4. For `AUTH_PROVIDER=authjs`, set `NEXTAUTH_URL` in Vercel **Production** to
+4. Set `DEPLOYMENT_PROXY` in Vercel **Production and Preview** before the
+   first deploy that includes SEC-43 — env validation fails the build without
+   it. On Vercel the value is `vercel`.
+5. For `AUTH_PROVIDER=authjs`, set `NEXTAUTH_URL` in Vercel **Production** to
    the canonical production URL. The production workflow fails before build if
    this runtime env is missing, because build-only fallbacks would mask a broken
    runtime configuration.

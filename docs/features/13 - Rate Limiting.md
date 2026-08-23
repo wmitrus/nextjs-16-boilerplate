@@ -22,17 +22,24 @@ The Rate Limiting feature protects the application's APIs from abuse, brute-forc
 | `src/security/middleware/with-rate-limit.ts`     | Rate-limit middleware wrapper used by the proxy             |
 | `src/shared/lib/rate-limit/rate-limit.ts`        | Upstash distributed limiter                                 |
 | `src/shared/lib/rate-limit/rate-limit-local.ts`  | In-memory limiter for local/test environments               |
-| `src/shared/lib/rate-limit/rate-limit-helper.ts` | Unified `checkRateLimit()` helper                           |
-| `src/shared/lib/network/get-ip.ts`               | Robust client IP extraction                                 |
+| `src/shared/lib/rate-limit/rate-limit-helper.ts` | Unified `checkRateLimit()` helper, incl. `mode: 'strict'`   |
+| `src/security/api/strict-rate-limit.ts`          | Node-side entry point for strict mode (SEC-42)              |
+| `src/modules/rate-limit/**`                      | Durable Postgres secondary counter (SEC-42)                 |
+| `src/security/core/operational-switch/**`        | `strict_rate_limit_degrade` operator switch (SEC-42)        |
+| `src/shared/lib/network/client-ip.ts`            | Provider-aware client-IP trust model (SEC-43)               |
+| `src/shared/lib/network/get-ip.ts`               | `getClientIp()` + the policy helpers for an unknown client  |
 
 ### Environment Variables
 
-| Variable                   | Description                                   | Default  |
-| -------------------------- | --------------------------------------------- | -------- |
-| `UPSTASH_REDIS_REST_URL`   | Upstash Redis REST URL                        | —        |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token                      | —        |
-| `API_RATE_LIMIT_REQUESTS`  | Maximum requests per window                   | `10`     |
-| `API_RATE_LIMIT_WINDOW`    | Time window (e.g. `"60 s"`, `"1 m"`, `"1 h"`) | `"60 s"` |
+| Variable                    | Description                                                                     | Default                |
+| --------------------------- | ------------------------------------------------------------------------------- | ---------------------- |
+| `UPSTASH_REDIS_REST_URL`    | Upstash Redis REST URL                                                          | —                      |
+| `UPSTASH_REDIS_REST_TOKEN`  | Upstash Redis REST token                                                        | —                      |
+| `API_RATE_LIMIT_REQUESTS`   | Maximum requests per window                                                     | `10`                   |
+| `API_RATE_LIMIT_WINDOW`     | Time window (e.g. `"60 s"`, `"1 m"`, `"1 h"`)                                   | `"60 s"`               |
+| `RATE_LIMIT_STRICT_DEGRADE` | Deploy-time base for the strict degrade switch (SEC-42)                         | `false`                |
+| `DEPLOYMENT_PROXY`          | Which ingress may determine the client IP (SEC-43) — **required in production** | — (`none` in dev/test) |
+| `TRUSTED_PROXY_CIDRS`       | Your own proxies' CIDRs; only for `DEPLOYMENT_PROXY=trusted-proxy`              | —                      |
 
 ## Usage
 
@@ -155,8 +162,57 @@ All rate-limited responses include standard headers:
 
 ---
 
+## Strict Mode — Security-Critical Endpoints (SEC-42)
+
+Sign-in, sign-up, password reset, verification, waitlist and invitations go
+through `checkStrictRateLimit()`, **never** bare `checkRateLimit()`. A static
+guard (`strict-rate-limit.guard.test.ts`) fails the suite if one drops back.
+
+The reason is specific to serverless: standard mode falls back to a
+process-local `Map` when Upstash is unreachable, and instances are ephemeral
+and unshared — so "5 attempts per 15 minutes" silently becomes "5 attempts per
+15 minutes **per instance the attacker can reach**". Strict mode reaches for a
+durable Postgres secondary first and **fails closed** if neither store
+answers.
+
+Failing closed costs nothing here, which is the load-bearing point: every
+endpoint running in strict mode already needs Postgres to do its job at all
+(`authorize()` resolves `DrizzleDb` to fetch the password hash), so the only
+state in which strict mode refuses is one where the endpoint was already dead.
+
+Three endpoints had **no** endpoint-level limit before SEC-42 — only the
+generic Edge window, which degrades the same way: `reset-password` (a
+token-guessing oracle that then runs bcrypt), `signup`, and `invite`. The
+invite limit is keyed on the **inviting user**, not the IP: there the attacker
+is a legitimate member spending the organization's sending reputation.
+
+Degrading strict mode is an operator decision expressed through the
+`strict_rate_limit_degrade` operational switch, not by editing a call site.
+The switch is **loosen-only** — see SEC-42.
+
+## Client IP Is Not A Header You Trust (SEC-43)
+
+The rate-limit key comes from `getClientIp()`, which returns a discriminated
+result, never a string:
+
+```ts
+{ kind: 'trusted'; ip: string } | { kind: 'untrusted'; reason: … }
+```
+
+A forwarding header is believed because `DEPLOYMENT_PROXY` declares the
+ingress that sets it authoritatively — never because the header is present.
+Unidentifiable clients share **one stable** bucket via
+`rateLimitKeyForClient()`; a per-request key would not be a weaker limit, it
+would be no limit.
+
 ## Guardrails
 
+- **Use `checkStrictRateLimit()` for anything protecting credentials,
+  tokens or invitations.** A global middleware is not coverage — check whether
+  its fallback is durable and whether its window is tuned for that endpoint.
+- **Never read a forwarding header directly.** Use `getClientIp()`; a static
+  guard enforces this.
+- **Never give an unidentifiable client a per-request bucket.**
 - **Do NOT** add a bypass list** (`SELF_RATE_LIMITED_PATHS` or equivalent) for internal API routes** — the correct fix for loop prevention is propagating `path` in the log context, not removing rate limiting.
 - **Always pass `meta.path`** when calling `checkRateLimit()` from a request handler — omitting it re-opens the loop prevention gap.
 - **Do NOT** reduce `UPSTASH_RATE_LIMIT_TIMEOUT_MS` below a value that allows realistic Upstash cold-start latency — too short a timeout causes unnecessary fallbacks in production.

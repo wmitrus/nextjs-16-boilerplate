@@ -12,7 +12,9 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 import {
   createSuccessResponse,
   createServerErrorResponse,
+  createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
+import { parseUuidRouteParam } from '@/shared/lib/api/uuid-route-param';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
 import {
@@ -169,12 +171,14 @@ export const POST = withErrorHandler(
     }
 
     const params = await context.params;
-    const id = params['id'];
-    const action = _request.nextUrl.searchParams.get('action');
-
-    if (!id || Array.isArray(id)) {
-      return createServerErrorResponse('Invalid id', 400, 'INVALID_ID');
+    // SEC-23: the approve/reject path binds this to waitlistEntriesTable.id (uuid), so a shape check alone is not enough -- a malformed
+    // segment would reach the driver and surface as a 500 instead of a 400.
+    const idResult = parseUuidRouteParam(params, 'id');
+    if (!idResult.ok) {
+      return createValidationErrorResponse(idResult.fieldErrors, 400);
     }
+    const id = idResult.value;
+    const action = _request.nextUrl.searchParams.get('action');
 
     if (action !== 'approve' && action !== 'reject') {
       return createServerErrorResponse(

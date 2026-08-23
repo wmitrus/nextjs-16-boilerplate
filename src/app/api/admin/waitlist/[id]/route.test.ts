@@ -184,6 +184,18 @@ describe('POST /api/admin/waitlist/[id]', () => {
       const res = await POST(makeRequest('nonsense'), makeContext());
       expect(res.status).toBe(400);
     });
+
+    // SEC-23 requires this negative test on every route with a UUID segment:
+    // a mocked DB never raises Postgres's 22P02, so only an explicit
+    // assertion proves a malformed id is rejected before reaching the driver.
+    it('returns 400 for a malformed id and never mutates the entry', async () => {
+      const { POST } = await import('./route');
+      const res = await POST(makeRequest('approve'), makeContext('not-a-uuid'));
+
+      expect(res.status).toBe(400);
+      expect(mocks.approveEntry).not.toHaveBeenCalled();
+      expect(mocks.rejectEntry).not.toHaveBeenCalled();
+    });
   });
 
   describe('approve (admin, success)', () => {

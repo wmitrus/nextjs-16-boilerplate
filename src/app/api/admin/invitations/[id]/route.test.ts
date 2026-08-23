@@ -144,6 +144,30 @@ describe('DELETE /api/admin/invitations/[id]', () => {
     expect(res.status).toBe(404);
   });
 
+  // SEC-23 requires this negative test on every route with a UUID segment:
+  // a mocked DB never raises Postgres's 22P02, so only an explicit assertion
+  // proves a malformed id is rejected before it can reach the driver.
+  it('returns 400 for a malformed id and never reaches the service', async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        tenant: {
+          organizationId: TEST_TENANT_ID,
+          tenantId: TEST_TENANT_ID,
+          userId: 'u1',
+        },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(true);
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(makeRequest(), {
+      params: Promise.resolve({ id: 'not-a-uuid' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mocks.revokeInvitation).not.toHaveBeenCalled();
+  });
+
   it('returns 200 on success', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({

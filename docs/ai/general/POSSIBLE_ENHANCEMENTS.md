@@ -247,3 +247,21 @@ reset.
 current session survive? what does the confirmation say? is there an
 audit-log entry the user can see?), not part of closing the reported
 vulnerability. Worth doing deliberately rather than bundled in.
+
+## PE-09 — Extend The SEC-23 Guard To Dynamic Page Routes
+
+- **Source**: `.copilot/tasks/2026-08-22-sec23-route-param-regression/` (Case 6)
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: `uuid-route-param.guard.test.ts` walks `src/app/api/**` and
+fails on any dynamic segment whose raw value reaches a handler unvalidated.
+Dynamic **page** routes (`src/app/**` outside `api`, e.g. a future
+`/admin/organizations/[organizationId]/page.tsx` that queries by that id)
+are not covered by the same sweep.
+
+**Why deferred**: no current page route binds a UUID param to a DB predicate,
+so there is nothing to fix today -- this is about the guard's blast radius,
+not a live gap. Extending it means handling `page.tsx`/`layout.tsx` and their
+different params shape, which is worth doing deliberately rather than
+widening the glob and hoping the classifier still fits.

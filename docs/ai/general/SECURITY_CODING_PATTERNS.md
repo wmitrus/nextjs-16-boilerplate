@@ -640,12 +640,64 @@ using a malformed value such as `not-a-uuid`. The test must prove:
 This check is required even when happy-path and not-found tests already exist, because
 mocked DB tests do not surface Postgres UUID bind errors.
 
+### Update 2026-08-22 — This Entry Was Marked Fixed While Two Routes Still Regressed
+
+A later audit found `/api/admin/invitations/[id]` and
+`/api/admin/waitlist/[id]` still doing exactly what the Dangerous Pattern
+above forbids:
+
+```typescript
+const id = params['id'];
+if (!id || Array.isArray(id)) {
+  /* 400 */
+} // shape only, never format
+await service.revokeInvitation(id); // invitationsTable.id is uuid
+```
+
+Both had the presence/array check this entry explicitly calls insufficient.
+Note that the Dangerous Pattern example above is _itself_ written against the
+invitations route — the pattern document quoted the vulnerable code while the
+route was never fixed.
+
+**Why it came back, and what changed as a result.** SEC-23 was written as
+advice to follow per route. Advice does not survive the next route: it relies
+on whoever writes it having read this document and remembered it at the right
+moment. So the remediation was not three hand-edits, it was two artefacts:
+
+1. **One helper**, `parseUuidRouteParam(params, name)` in
+   `src/shared/lib/api/uuid-route-param.ts` — a single place the decision is
+   made, returning a discriminated result rather than throwing, so a caller
+   cannot let a rejected value through by ignoring an exception.
+2. **A static guard test**, `uuid-route-param.guard.test.ts` — it walks every
+   `route.ts` under `src/app/api`, extracts each dynamic segment from the
+   path, and fails the suite if the raw value reaches the handler without
+   passing through a validator. Segments that are genuinely not UUID columns
+   (`[token]`, `[...nextauth]`) sit in an allowlist that requires a written
+   reason. The default is "guard it", so a new route nobody thought about
+   fails rather than passes.
+
+The guard's own classifier is unit-tested against the shapes it must tell
+apart — including a route that validates a value but then also uses it raw —
+because a guard that cannot fail proves nothing. It was also verified by
+reverting one of the two fixes and confirming the suite went red.
+
+A useful detail from building it: the guard must ask _"does the raw value
+reach anything other than a validator?"_, not _"is there a schema keyed by
+the segment name?"_. The eight `organizations/**` routes validate
+`params.organizationId` through a schema whose key is `id` — correct code
+that a name-matching guard would have called broken.
+
 ### Rule for Agents
 
-**DO** parse every UUID path param with `z.uuid()` or an equivalent schema before DB use.
+**DO** call `parseUuidRouteParam(params, '<segment>')` for every UUID path
+param. An equivalent `z.uuid()` schema is acceptable in routes that predate
+the helper.
 **DO** add malformed-ID tests for UUID path segments.
 **DO NOT** alias raw `params.*` values as IDs or pass raw route params directly to
 Drizzle `eq(...)` predicates for UUID columns.
+**DO NOT** mark this entry fixed again without the guard test passing — that
+is now the only evidence that counts, precisely because a human reading this
+section was not enough the first time.
 
 ---
 

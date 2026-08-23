@@ -12,6 +12,14 @@
 6. **PR merguje wyłącznie użytkownik.**
 7. Dokumentuj **rozwiązanie każdego taska oraz jego powód i przyczynę** — w `.copilot/tasks/*/plan.md`, jako wzorzec `SEC-XX` w `docs/ai/general/SECURITY_CODING_PATTERNS.md`, **oraz w docelowej dokumentacji feature'a w `docs/features/`**. Ten ostatni punkt był przez pół serii pomijany — nie powtarzać.
 8. Odroczone-ale-wartościowe pomysły → `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` jako PE-XX, odwołuj się po ID. Szczegóły niżej.
+9. **Skanery i CI: raportuj, nie drąż.** Codacy, CodeRabbit i podobne — moim
+   zadaniem jest **zakomunikować, że coś jest, i czekać na decyzję użytkownika**.
+   Nie wolno mi z własnej inicjatywy pobierać findingów, kalibrować progów,
+   instalować narzędzi ani odtwarzać analizy lokalnie — to spalanie usage
+   użytkownika. Dosłownie: _"przestań sam marnować moje usage na codacy, ty masz
+   mi tylko zakomunikować że jest i czekać na moje info, nigdy więcej tego nie
+   rób"_. Bez criticali nie ruszamy tematu w ogóle. Wyjątek: nie ma wyjątku —
+   nawet „szybkie sprawdzenie" jest naruszeniem.
 
 ## POSSIBLE_ENHANCEMENTS.md — plik żyje, trzeba go dalej updatować
 
@@ -63,6 +71,14 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
 
 ## Otwarte
 
-- CI na PR #74 (head `a0f7608`) — zaplanowany check-in. Kluczowe: Deploy Preview, DB Integration Tests, Secret Scanning.
+- CI na PR #74 (head `a289996`) — **12/13 zielonych**, sprawdzone 2026-08-23.
+  Deploy Preview, Verify Preview Runtime, Preview Lighthouse, Quality Checks,
+  DB Integration Tests, Playwright CSP nonce-dynamic E2E, Visual Regression,
+  Secret Scanning, Dependency Audit — wszystkie ✅.
+- **Codacy: `action_required`, 10 nowych findingów** (2 × high Security,
+  5 × medium Complexity, 2 × medium Compatibility, 1 × minor BestPractice),
+  gate `≤ 0`. Dotyczy całego PR-a względem `main`, nie ostatnich commitów.
+  **Decyzja użytkownika 2026-08-23: nie ma criticali, nie ruszamy.** Zgodnie
+  z regułą 9 — tylko odnotowane, żadnego drążenia z własnej inicjatywy.
 - Czekamy na kolejne ponumerowane case'y.
 - Na koniec serii: użytkownik przegląda cały PR i triażuje PE-01…PE-21.

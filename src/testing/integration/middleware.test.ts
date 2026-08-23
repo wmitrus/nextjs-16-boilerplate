@@ -61,6 +61,10 @@ describe('Middleware Integration', () => {
     mockEnv.API_RATE_LIMIT_REQUESTS = 100;
     mockEnv.API_RATE_LIMIT_WINDOW = '60 s';
     mockEnv.NODE_ENV = 'production';
+    // SEC-43: production must declare which ingress may determine the client
+    // IP. These tests simulate a production deployment, so they declare one --
+    // without it the resolver correctly refuses to start.
+    mockEnv.DEPLOYMENT_PROXY = 'vercel';
 
     // Default: Authenticated, Onboarding complete, Authorization allowed
     mockIdentityProvider.getCurrentIdentity.mockResolvedValue({ id: 'user_1' });

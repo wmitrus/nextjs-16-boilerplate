@@ -17,7 +17,10 @@ import {
   createSuccessResponse,
   createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
-import { getIP } from '@/shared/lib/network/get-ip';
+import {
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 
 import {
   authUserIdentitiesTable,
@@ -93,10 +96,13 @@ export async function POST(request: Request): Promise<Response> {
   // not `open` it also consumes invitation tokens -- so an unthrottled
   // sign-up is both a resource-exhaustion path and an invitation-token
   // guessing oracle.
-  const ip = await getIP(new Headers(request.headers));
-  const rateLimitResult = await checkStrictRateLimit(`signup:${ip}`, {
-    path: SIGNUP_PATH,
-  });
+  const client = await getClientIp(new Headers(request.headers));
+  const rateLimitResult = await checkStrictRateLimit(
+    rateLimitKeyForClient('signup', client),
+    {
+      path: SIGNUP_PATH,
+    },
+  );
 
   if (!rateLimitResult.success) {
     return createServerErrorResponse(

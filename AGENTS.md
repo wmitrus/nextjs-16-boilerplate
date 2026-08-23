@@ -607,6 +607,37 @@ Related and non-negotiable: never treat a client-supplied `tenantId` or
 be especially suspicious of one that reached the database through an
 unauthenticated endpoint (SEC-41's waitlist finding).
 
+### The Client IP Comes From The Declared Ingress (SEC-43)
+
+**Never read `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip` or a sibling
+directly.** Use `getClientIp()` from `@/shared/lib/network/get-ip`. A static
+guard (`client-ip.guard.test.ts`) fails the suite on any direct read outside
+the resolver.
+
+A header is believed because `DEPLOYMENT_PROXY` declares the ingress that sets
+it authoritatively — never because it is present. `DEPLOYMENT_PROXY` is
+**required in production** (`vercel | cloudflare | trusted-proxy | none`) and
+defaults to `none` in development and test. It is deliberately not inferred
+from `VERCEL_ENV`.
+
+`getClientIp()` returns a discriminated result, not a string:
+
+```ts
+{ kind: 'trusted'; ip: string } | { kind: 'untrusted'; reason: … }
+```
+
+Handle `untrusted` deliberately — the type exists because the old code
+returned a fictional `127.0.0.1` and every caller believed it:
+
+- **keyed on the client** (rate limits) → `rateLimitKeyForClient(prefix, client)`,
+  which puts unidentifiable clients in one **stable** shared bucket. Never a
+  per-request key: that is not a weaker limit, it is no limit.
+- **recording provenance** (audit log, ABAC `environment.ip`) →
+  `auditIpForClient(client)`, which yields `null`.
+
+Any security condition reading an IP must fail closed when it is absent.
+"I cannot tell whether you are blocked" is not "you are not blocked".
+
 ### Security-Critical Rate Limits Must Be Durable (SEC-42)
 
 Any limit protecting sign-in, sign-up, password reset, email verification or
@@ -1152,6 +1183,7 @@ treat the table below as a quick reference to the older entries only.
 | SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                                                                                                                 |
 | SEC-41 | Admin routes must separate the unscoped platform-admin grant from the tenant-scoped ABAC grant, and carry the authorized scope in the same `WHERE` as the id — a `SELECT` that proves ownership does not authorise the `UPDATE` that follows it (enforced by `platform-admin.guard.test.ts`) |
 | SEC-42 | Security-critical rate limits (sign-in, sign-up, password reset, verification, invitations) must use `checkStrictRateLimit` — a durable secondary then fail closed, never a process-local fallback, which on serverless is one allowance per instance                                        |
+| SEC-43 | Client IP must come from `getClientIp()` under an explicitly declared `DEPLOYMENT_PROXY`; never read a forwarding header directly, and never invent a placeholder for an unidentifiable client (enforced by `client-ip.guard.test.ts`)                                                       |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

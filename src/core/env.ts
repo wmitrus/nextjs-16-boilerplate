@@ -258,6 +258,27 @@ export const env = createEnv({
      * be turned back off without a redeploy. Setting this to `true` degrades
      * a security control until someone remembers to change it back.
      */
+    /**
+     * Which ingress sits in front of this deployment, and therefore which
+     * header may determine the client IP (SEC-43).
+     *
+     * A trust boundary, not a convenience setting -- so it is **required in
+     * production** and defaults to `none` only for local development and
+     * tests, where forcing every contributor to declare an ingress they do
+     * not have would be friction with no security value. The production
+     * requirement is enforced by `validateDeploymentProxyConfigValues`.
+     *
+     * `none` means no header is believed and every request resolves as
+     * untrusted. That is a safe default, not a working one.
+     */
+    DEPLOYMENT_PROXY: z
+      .enum(['vercel', 'cloudflare', 'trusted-proxy', 'none'])
+      .optional(),
+    /**
+     * Comma-separated CIDRs of the operator's own proxies. Required when
+     * `DEPLOYMENT_PROXY=trusted-proxy`, meaningless otherwise.
+     */
+    TRUSTED_PROXY_CIDRS: z.string().optional(),
     RATE_LIMIT_STRICT_DEGRADE: z
       .string()
       .optional()
@@ -444,6 +465,8 @@ export const env = createEnv({
     GROWTHBOOK_API_HOST: process.env.GROWTHBOOK_API_HOST,
     LOGIN_RATE_LIMIT_IP_REQUESTS: process.env.LOGIN_RATE_LIMIT_IP_REQUESTS,
     LOGIN_RATE_LIMIT_IP_WINDOW: process.env.LOGIN_RATE_LIMIT_IP_WINDOW,
+    DEPLOYMENT_PROXY: process.env.DEPLOYMENT_PROXY,
+    TRUSTED_PROXY_CIDRS: process.env.TRUSTED_PROXY_CIDRS,
     RATE_LIMIT_STRICT_DEGRADE: process.env.RATE_LIMIT_STRICT_DEGRADE,
     LOGIN_ABUSE_WINDOW: process.env.LOGIN_ABUSE_WINDOW,
     LOGIN_ABUSE_CAPTCHA_THRESHOLD: process.env.LOGIN_ABUSE_CAPTCHA_THRESHOLD,
@@ -713,5 +736,88 @@ export function validateVerificationConfig(): void {
     env.REGISTRATION_MODE,
     env.AUTH_DEV_AUTO_VERIFY,
     env.AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV,
+  );
+}
+
+/**
+ * Resolves the effective deployment trust model, enforcing that production
+ * declares one explicitly (SEC-43).
+ *
+ * Deliberately **not** auto-detected. `VERCEL_ENV` is read only to make the
+ * error message useful — inferring `vercel` from its presence would mean a
+ * deployment starts trusting headers because of an environment variable
+ * nobody set for that purpose, which is the same "believe the header because
+ * it is there" mistake one level up.
+ *
+ * Development and test default to `none`: a contributor running the app
+ * locally has no ingress to declare, and making them invent one would be
+ * friction with no security value. `none` trusts nothing, so the default is
+ * safe even though it is not useful.
+ */
+export function resolveDeploymentProxyValue(
+  deploymentProxy: string | undefined,
+  nodeEnv: string | undefined,
+  vercelEnv: string | undefined,
+): 'vercel' | 'cloudflare' | 'trusted-proxy' | 'none' {
+  const declared = deploymentProxy?.trim();
+  if (declared) {
+    return declared as 'vercel' | 'cloudflare' | 'trusted-proxy' | 'none';
+  }
+
+  if (nodeEnv === 'production') {
+    const hint = vercelEnv
+      ? ' Detected a Vercel deployment (VERCEL_ENV is set): set DEPLOYMENT_PROXY=vercel explicitly.'
+      : '';
+    throw new Error(
+      '[env] DEPLOYMENT_PROXY must be set when NODE_ENV=production. It declares which ' +
+        'ingress may determine the client IP, and no safe value can be guessed. ' +
+        'Valid values: vercel | cloudflare | trusted-proxy | none.' +
+        hint,
+    );
+  }
+
+  return 'none';
+}
+
+/**
+ * Cross-field rules for the deployment trust model. Separate from
+ * `resolveDeploymentProxyValue` so the resolver stays a pure lookup and the
+ * rules can be asserted on their own.
+ */
+export function validateDeploymentProxyConfigValues(
+  deploymentProxy: string | undefined,
+  trustedProxyCidrs: string | undefined,
+  nodeEnv: string | undefined,
+  vercelEnv: string | undefined,
+): void {
+  const effective = resolveDeploymentProxyValue(
+    deploymentProxy,
+    nodeEnv,
+    vercelEnv,
+  );
+
+  if (effective !== 'trusted-proxy') return;
+
+  const entries = (trustedProxyCidrs ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (entries.length === 0) {
+    throw new Error(
+      '[env] DEPLOYMENT_PROXY=trusted-proxy requires TRUSTED_PROXY_CIDRS ' +
+        '(comma-separated CIDRs of your own proxies, e.g. "10.0.0.0/8,172.16.0.0/12"). ' +
+        'Without it there is nothing to distinguish your proxies from a client.',
+    );
+  }
+}
+
+/** Convenience wrapper for bootstrap/startup. */
+export function validateDeploymentProxyConfig(): void {
+  validateDeploymentProxyConfigValues(
+    env.DEPLOYMENT_PROXY,
+    env.TRUSTED_PROXY_CIDRS,
+    env.NODE_ENV,
+    env.VERCEL_ENV,
   );
 }

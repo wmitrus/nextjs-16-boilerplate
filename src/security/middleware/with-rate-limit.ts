@@ -4,7 +4,11 @@ import { env } from '@/core/env';
 import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
-import { getIP } from '@/shared/lib/network/get-ip';
+import {
+  auditIpForClient,
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 import type { RateLimitResult } from '@/shared/lib/rate-limit/rate-limit-local';
 
@@ -71,17 +75,41 @@ export function withRateLimit(
       return handler(req, ctx);
     }
 
-    const ip = await getIP(req.headers);
-    const result: RateLimitResult = await checkRateLimit(ip, {
+    // SEC-43. The client may not be identifiable -- no declared trust model,
+    // or a header that did not survive validation. `rateLimitKeyForClient`
+    // puts those requests in one shared per-path bucket rather than inventing
+    // a loopback address for them, and the WARN below records that the limit
+    // being applied is the shared one.
+    const client = await getClientIp(req.headers);
+    // A fixed prefix, deliberately not `pathname`. This is the generic
+    // per-client API window, so one client gets one allowance across all
+    // routes; keying it per path would silently multiply that allowance by
+    // the number of endpoints they touch.
+    const rateLimitKey = rateLimitKeyForClient('api', client);
+    const result: RateLimitResult = await checkRateLimit(rateLimitKey, {
       path: pathname,
     });
+
+    if (client.kind === 'untrusted') {
+      getLogger().warn(
+        {
+          type: 'SECURITY_AUDIT',
+          category: 'rate-limit',
+          event: 'client_ip:untrusted',
+          reason: client.reason,
+          correlationId: ctx.correlationId,
+          path: pathname,
+        },
+        'Client IP could not be established under the declared trust model; rate limiting this request in the shared untrusted bucket',
+      );
+    }
 
     if (!result.success) {
       getLogger().warn(
         {
           type: 'SECURITY_AUDIT',
           category: 'rate-limit',
-          ip,
+          ip: auditIpForClient(client),
           correlationId: ctx.correlationId,
           path: pathname,
           limit: result.limit,

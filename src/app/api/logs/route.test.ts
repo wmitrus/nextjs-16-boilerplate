@@ -11,7 +11,7 @@ import { localRateLimit } from '@/shared/lib/rate-limit/rate-limit-local';
 import { POST } from './route';
 
 import {
-  mockGetIP,
+  mockGetClientIp,
   mockLogger,
   mockChildLogger,
   resetAllInfrastructureMocks,
@@ -51,7 +51,7 @@ function makeRequest(
 describe('POST /api/logs', () => {
   beforeEach(() => {
     resetAllInfrastructureMocks();
-    mockGetIP.mockResolvedValue('1.2.3.4');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '1.2.3.4' });
     mockLocalRateLimit.mockClear();
     mockLocalRateLimit.mockResolvedValue({
       success: true,

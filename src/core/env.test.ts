@@ -752,3 +752,87 @@ describe('validateVerificationConfigValues', () => {
     ).not.toThrow();
   });
 });
+
+describe('resolveDeploymentProxyValue (SEC-43)', () => {
+  const load = async () => (await import('./env')).resolveDeploymentProxyValue;
+
+  it('returns the declared value verbatim', async () => {
+    const resolve = await load();
+    for (const declared of ['vercel', 'cloudflare', 'trusted-proxy', 'none']) {
+      expect(resolve(declared, 'production', undefined)).toBe(declared);
+    }
+  });
+
+  it('defaults to none outside production', async () => {
+    // A contributor running locally has no ingress to declare; making them
+    // invent one is friction with no security value. `none` trusts nothing,
+    // so the default is safe even though it is not useful.
+    const resolve = await load();
+    expect(resolve(undefined, 'development', undefined)).toBe('none');
+    expect(resolve(undefined, 'test', undefined)).toBe('none');
+  });
+
+  it('refuses to start in production without an explicit declaration', async () => {
+    const resolve = await load();
+    expect(() => resolve(undefined, 'production', undefined)).toThrow(
+      /DEPLOYMENT_PROXY must be set/,
+    );
+  });
+
+  it('uses VERCEL_ENV only to improve the message, never to pick a model', async () => {
+    // Inferring `vercel` from VERCEL_ENV would mean a deployment starts
+    // trusting headers because of a variable nobody set for that purpose --
+    // the same "believe the header because it is there" mistake one level up.
+    const resolve = await load();
+    expect(() => resolve(undefined, 'production', 'preview')).toThrow(
+      /Detected a Vercel deployment/,
+    );
+  });
+
+  it('treats a blank value as undeclared', async () => {
+    const resolve = await load();
+    expect(() => resolve('   ', 'production', undefined)).toThrow(
+      /DEPLOYMENT_PROXY must be set/,
+    );
+  });
+});
+
+describe('validateDeploymentProxyConfigValues (SEC-43)', () => {
+  const load = async () =>
+    (await import('./env')).validateDeploymentProxyConfigValues;
+
+  it('requires CIDRs for trusted-proxy', async () => {
+    const validate = await load();
+    expect(() =>
+      validate('trusted-proxy', undefined, 'production', undefined),
+    ).toThrow(/requires TRUSTED_PROXY_CIDRS/);
+  });
+
+  it('rejects a CIDR list that is only separators', async () => {
+    const validate = await load();
+    expect(() =>
+      validate('trusted-proxy', ' , , ', 'production', undefined),
+    ).toThrow(/requires TRUSTED_PROXY_CIDRS/);
+  });
+
+  it('accepts trusted-proxy with CIDRs', async () => {
+    const validate = await load();
+    expect(() =>
+      validate(
+        'trusted-proxy',
+        '10.0.0.0/8, 172.16.0.0/12',
+        'production',
+        undefined,
+      ),
+    ).not.toThrow();
+  });
+
+  it('does not require CIDRs for the other models', async () => {
+    const validate = await load();
+    for (const model of ['vercel', 'cloudflare', 'none']) {
+      expect(() =>
+        validate(model, undefined, 'production', undefined),
+      ).not.toThrow();
+    }
+  });
+});

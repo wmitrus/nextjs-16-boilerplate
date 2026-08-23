@@ -1,11 +1,13 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type * as GetIpModule from '@/shared/lib/network/get-ip';
+
 import { mockEnv, resetEnvMocks } from '@/testing/infrastructure/env';
 
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
-  getIP: vi.fn().mockResolvedValue('203.0.113.1'),
+  getClientIp: vi.fn(),
   nextAuthHandler: vi.fn(),
   checkStrictRateLimit: vi.fn(),
 }));
@@ -15,9 +17,13 @@ vi.mock('next/server', async () => {
   return { ...actual, connection: mocks.connection };
 });
 
-vi.mock('@/shared/lib/network/get-ip', () => ({
-  getIP: mocks.getIP,
-}));
+vi.mock('@/shared/lib/network/get-ip', async (importOriginal) => {
+  // Partial: `rateLimitKeyForClient` / `auditIpForClient` stay real, because
+  // they encode the policy for an unidentifiable client (SEC-43) and a test
+  // that stubs them stops testing that policy.
+  const actual = await importOriginal<typeof GetIpModule>();
+  return { ...actual, getClientIp: mocks.getClientIp };
+});
 
 vi.mock('next-auth/next', () => ({
   default: mocks.nextAuthHandler,
@@ -67,7 +73,7 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
     resetEnvMocks();
     vi.clearAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.getIP.mockResolvedValue('203.0.113.1');
+    mocks.getClientIp.mockResolvedValue({ kind: 'trusted', ip: '203.0.113.1' });
     mocks.nextAuthHandler.mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 }),
     );
@@ -77,7 +83,10 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
   });
 
   it('delegates non-credentials-callback requests straight to NextAuth, no IP check', async () => {
-    mocks.getIP.mockResolvedValue('203.0.113.10');
+    mocks.getClientIp.mockResolvedValue({
+      kind: 'trusted',
+      ip: '203.0.113.10',
+    });
     const { GET } = await import('./route');
     const res = await GET(
       makeRequest('/api/auth/session', 'GET'),
@@ -89,7 +98,10 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
   });
 
   it('allows the request through when under the IP limit', async () => {
-    mocks.getIP.mockResolvedValue('203.0.113.11');
+    mocks.getClientIp.mockResolvedValue({
+      kind: 'trusted',
+      ip: '203.0.113.11',
+    });
     const { POST } = await import('./route');
     const res = await POST(
       makeRequest('/api/auth/callback/credentials', 'POST'),
@@ -106,7 +118,10 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
   });
 
   it('returns 429 once the per-IP limit is exceeded, without reaching NextAuth', async () => {
-    mocks.getIP.mockResolvedValue('203.0.113.12');
+    mocks.getClientIp.mockResolvedValue({
+      kind: 'trusted',
+      ip: '203.0.113.12',
+    });
     const { POST } = await import('./route');
     const req = () =>
       POST(
@@ -125,7 +140,10 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
   });
 
   it('bypasses the IP limit entirely under E2E_ENABLED', async () => {
-    mocks.getIP.mockResolvedValue('203.0.113.13');
+    mocks.getClientIp.mockResolvedValue({
+      kind: 'trusted',
+      ip: '203.0.113.13',
+    });
     mockEnv.E2E_ENABLED = true;
     mockEnv.LOGIN_RATE_LIMIT_IP_REQUESTS = 1;
     stubLimiterAllowing(1);
@@ -148,7 +166,10 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
   });
 
   it('rate-limits per IP independently -- a different IP is unaffected', async () => {
-    mocks.getIP.mockResolvedValue('203.0.113.14');
+    mocks.getClientIp.mockResolvedValue({
+      kind: 'trusted',
+      ip: '203.0.113.14',
+    });
     const { POST } = await import('./route');
     const req = () =>
       POST(
@@ -162,7 +183,10 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
     // This IP is now at its limit.
     expect((await req()).status).toBe(429);
 
-    mocks.getIP.mockResolvedValue('198.51.100.7');
+    mocks.getClientIp.mockResolvedValue({
+      kind: 'trusted',
+      ip: '198.51.100.7',
+    });
     const otherIpResult = await req();
     expect(otherIpResult.status).toBe(200);
   });
@@ -172,7 +196,10 @@ describe('/api/auth/[...nextauth] -- Credentials sign-in IP rate limit', () => {
     // strict mode refuses rather than handing out a fresh per-instance
     // allowance. The route must surface that as a 429 and keep NextAuth out
     // of it.
-    mocks.getIP.mockResolvedValue('203.0.113.20');
+    mocks.getClientIp.mockResolvedValue({
+      kind: 'trusted',
+      ip: '203.0.113.20',
+    });
     mocks.checkStrictRateLimit.mockResolvedValue({
       success: false,
       limit: 3,

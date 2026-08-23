@@ -5,6 +5,7 @@ import { env } from '@/core/env';
 import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
 import { createServerErrorResponse } from '@/shared/lib/api/response-service';
+import { auditIpForClient, getClientIp } from '@/shared/lib/network/get-ip';
 
 import type { RouteContext } from './route-classification';
 
@@ -39,7 +40,10 @@ export function withInternalApiGuard(
       getLogger().error(
         {
           path: req.nextUrl.pathname,
-          ip: req.headers.get('x-forwarded-for') || 'unknown',
+          // SEC-43: `null` when the client cannot be identified, rather than
+          // a raw unvalidated header or the string 'unknown' -- both of which
+          // read as facts in a security log.
+          ip: auditIpForClient(await getClientIp(req.headers)),
         },
         'Unauthorized Internal API Access Attempt',
       );

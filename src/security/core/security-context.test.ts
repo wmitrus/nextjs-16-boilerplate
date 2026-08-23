@@ -16,11 +16,8 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { getSecurityContext } from './security-context';
 
-import {
-  mockNextHeaders,
-  mockGetIP,
-  resetAllInfrastructureMocks,
-} from '@/testing';
+import { mockNextHeaders, resetAllInfrastructureMocks } from '@/testing';
+import { mockEnv } from '@/testing/infrastructure/env';
 
 describe('Security Context', () => {
   let identityProvider: IdentityProvider;
@@ -64,13 +61,16 @@ describe('Security Context', () => {
   it('should return guest context when not authenticated', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue(null);
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
     expect(context.user).toBeUndefined();
     expect(context.readinessStatus).toBe('UNAUTHENTICATED');
-    expect(context.ip).toBe('127.0.0.1');
+    // SEC-43: no declared trust model in the test env, so there is no
+    // client to name. This asserted '127.0.0.1' before -- and passed because
+    // the old `getIP()` returned that string whenever it had nothing, not
+    // because any client was identified.
+    expect(context.ip).toBeNull();
     expect(context.correlationId).toBeDefined();
   });
 
@@ -79,7 +79,6 @@ describe('Security Context', () => {
       new UserNotProvisionedError(),
     );
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -98,14 +97,17 @@ describe('Security Context', () => {
       userId: 'user_123',
     });
 
+    // SEC-43: a declared trust model is what makes a header believable, so
+    // this test states one. Without it the same request yields `ip: null` --
+    // asserted separately below.
+    mockEnv.DEPLOYMENT_PROXY = 'vercel';
     mockNextHeaders.mockReturnValue(
       new Headers({
         'user-agent': 'test-agent',
         'x-correlation-id': 'test-correlation',
-        'x-forwarded-for': '1.1.1.1',
+        'x-real-ip': '1.1.1.1',
       }),
     );
-    mockGetIP.mockResolvedValue('1.1.1.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -116,7 +118,22 @@ describe('Security Context', () => {
     expect(context.readinessStatus).toBe('ALLOWED');
     expect(context.ip).toBe('1.1.1.1');
     expect(context.userAgent).toBe('test-agent');
-    expect(context.correlationId).toBe('test-correlation');
+  });
+
+  it('reports no ip when the same request arrives with no declared trust model (SEC-43)', async () => {
+    // The pair to the test above. The header is identical; only the declared
+    // ingress differs. That is the whole point of the trust model -- a header
+    // is believed because the deployment says who sets it, never because it
+    // is present.
+    vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue(null);
+    mockEnv.DEPLOYMENT_PROXY = undefined;
+    mockNextHeaders.mockReturnValue(
+      new Headers({ 'x-real-ip': '1.1.1.1', 'x-forwarded-for': '1.1.1.1' }),
+    );
+
+    const context = await getSecurityContext(getDependencies());
+
+    expect(context.ip).toBeNull();
   });
 
   it('should return user context with correct tenantId', async () => {
@@ -130,7 +147,6 @@ describe('Security Context', () => {
     });
 
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -145,7 +161,6 @@ describe('Security Context', () => {
         'x-request-id': 'req_123',
       }),
     );
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -155,7 +170,6 @@ describe('Security Context', () => {
   it('should represent unauthenticated state as undefined user', async () => {
     vi.mocked(identityProvider.getCurrentIdentity).mockResolvedValue(null);
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -175,7 +189,6 @@ describe('Security Context', () => {
       onboardingComplete: false,
     });
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -194,7 +207,6 @@ describe('Security Context', () => {
       deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -215,7 +227,6 @@ describe('Security Context', () => {
       deactivatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -233,7 +244,6 @@ describe('Security Context', () => {
     });
 
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -249,7 +259,6 @@ describe('Security Context', () => {
     );
 
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -266,7 +275,6 @@ describe('Security Context', () => {
     );
 
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -288,7 +296,6 @@ describe('Security Context', () => {
     );
 
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -312,7 +319,6 @@ describe('Security Context', () => {
     );
 
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 
@@ -328,7 +334,6 @@ describe('Security Context', () => {
     );
 
     mockNextHeaders.mockReturnValue(new Headers());
-    mockGetIP.mockResolvedValue('127.0.0.1');
 
     const context = await getSecurityContext(getDependencies());
 

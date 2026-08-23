@@ -15,6 +15,7 @@ import {
   env,
   validateAuthProviderConfigValues,
   validateTenancyConfigValues,
+  validateDeploymentProxyConfigValues,
 } from '@/core/env';
 import {
   recordContainerCreated,
@@ -85,6 +86,15 @@ export function createRequestContainer(config: AppConfig): Container {
     config.auth.tenancyMode,
     config.auth.defaultTenantId,
     config.auth.tenantContextSource,
+  );
+  // SEC-43. Fails the composition root rather than the first request that
+  // needs a client IP -- a trust boundary that is wrong should be loud at
+  // startup, not a per-request surprise.
+  validateDeploymentProxyConfigValues(
+    env.DEPLOYMENT_PROXY,
+    env.TRUSTED_PROXY_CIDRS,
+    env.NODE_ENV,
+    env.VERCEL_ENV,
   );
 
   const container = new Container();

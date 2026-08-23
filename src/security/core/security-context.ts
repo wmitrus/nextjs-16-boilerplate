@@ -8,7 +8,7 @@ import {
 } from '@/core/contracts/tenancy';
 import { env } from '@/core/env';
 
-import { getIP } from '@/shared/lib/network/get-ip';
+import { auditIpForClient, getClientIp } from '@/shared/lib/network/get-ip';
 
 import type { NodeSecurityContextDependencies } from './security-dependencies';
 import { isSessionRevoked } from './session-revocation';
@@ -29,7 +29,7 @@ export interface SecurityContext {
     tenantId: string;
     attributes?: Record<string, unknown>;
   };
-  ip: string;
+  ip: string | null;
   userAgent?: string;
   correlationId: string;
   runtime: 'edge' | 'node';
@@ -61,7 +61,11 @@ export async function createSecurityContext(
   } = dependencies;
 
   const headerList = await headers();
-  const ip = await getIP(headerList);
+  // SEC-43. `null` when the client cannot be identified under the declared
+  // trust model. This value reaches `audit_log.ip`, and a row naming an
+  // address the request may never have come from is worse than one that
+  // admits it does not know.
+  const ip = auditIpForClient(await getClientIp(headerList));
   const userAgent = headerList.get('user-agent') ?? undefined;
   const correlationId =
     headerList.get('x-correlation-id') ?? crypto.randomUUID();

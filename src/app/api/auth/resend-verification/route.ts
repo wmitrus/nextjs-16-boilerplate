@@ -16,7 +16,10 @@ import {
   createSuccessResponse,
   createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
-import { getIP } from '@/shared/lib/network/get-ip';
+import {
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 
 import {
   emailVerificationTokensTable,
@@ -54,9 +57,9 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const ip = await getIP(new Headers(request.headers));
+  const client = await getClientIp(new Headers(request.headers));
   const rateLimitResult = await checkStrictRateLimit(
-    `resend-verification:${ip}`,
+    rateLimitKeyForClient('resend-verification', client),
     {
       path: RESEND_PATH,
     },

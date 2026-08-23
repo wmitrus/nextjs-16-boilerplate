@@ -110,9 +110,13 @@ vi.mock('@/shared/lib/rate-limit/rate-limit-helper', () => ({
   checkRateLimit: vi.fn(),
 }));
 
-vi.mock('@/shared/lib/network/get-ip', () => ({
-  getIP: vi.fn(),
-}));
+vi.mock('@/shared/lib/network/get-ip', async (importOriginal) => {
+  // Partial: `rateLimitKeyForClient` / `auditIpForClient` stay real, because
+  // they encode the policy for an unidentifiable client (SEC-43) and a test
+  // that stubs them stops testing that policy.
+  const actual = await importOriginal<typeof getIp>();
+  return { ...actual, getClientIp: vi.fn() };
+});
 
 import proxy from '@/proxy';
 
@@ -147,7 +151,10 @@ describe('Proxy edge composition root', () => {
       }),
     });
 
-    vi.mocked(getIp.getIP).mockResolvedValue('127.0.0.1');
+    vi.mocked(getIp.getClientIp).mockResolvedValue({
+      kind: 'trusted',
+      ip: '127.0.0.1',
+    });
     vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
       success: true,
       limit: 10,

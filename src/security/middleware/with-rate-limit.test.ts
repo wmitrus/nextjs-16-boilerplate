@@ -12,7 +12,7 @@ import { withRateLimit } from './with-rate-limit';
 
 import {
   createMockRequest,
-  mockGetIP,
+  mockGetClientIp,
   mockCheckRateLimit,
   resetAllInfrastructureMocks,
 } from '@/testing';
@@ -49,7 +49,7 @@ describe('Rate Limit Middleware', () => {
   });
 
   it('should allow request if within rate limit', async () => {
-    mockGetIP.mockResolvedValue('127.0.0.1');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '127.0.0.1' });
     mockCheckRateLimit.mockResolvedValue({
       success: true,
       limit: 100,
@@ -70,7 +70,7 @@ describe('Rate Limit Middleware', () => {
   });
 
   it('should rate-limit /api/logs requests and pass path in meta for loop prevention', async () => {
-    mockGetIP.mockResolvedValue('127.0.0.1');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '127.0.0.1' });
     mockCheckRateLimit.mockResolvedValue({
       success: true,
       limit: 100,
@@ -85,15 +85,15 @@ describe('Rate Limit Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(200);
-    expect(mockGetIP).toHaveBeenCalled();
-    expect(mockCheckRateLimit).toHaveBeenCalledWith('127.0.0.1', {
+    expect(mockGetClientIp).toHaveBeenCalled();
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('api:127.0.0.1', {
       path: '/api/logs',
     });
     expect(mockHandler).toHaveBeenCalled();
   });
 
   it('should pass path in meta so the WARN context can trigger loop prevention', async () => {
-    mockGetIP.mockResolvedValue('10.0.0.1');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '10.0.0.1' });
     mockCheckRateLimit.mockResolvedValue({
       success: true,
       limit: 100,
@@ -107,7 +107,7 @@ describe('Rate Limit Middleware', () => {
     const middleware = withRateLimit(mockHandler);
     await middleware(req, ctx);
 
-    expect(mockCheckRateLimit).toHaveBeenCalledWith('10.0.0.1', {
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('api:10.0.0.1', {
       path: '/api/data',
     });
   });
@@ -122,7 +122,7 @@ describe('Rate Limit Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(200);
-    expect(mockGetIP).not.toHaveBeenCalled();
+    expect(mockGetClientIp).not.toHaveBeenCalled();
     expect(mockCheckRateLimit).not.toHaveBeenCalled();
     expect(mockHandler).toHaveBeenCalled();
   });
@@ -145,7 +145,7 @@ describe('Rate Limit Middleware', () => {
       const res = await middleware(req, ctx);
 
       expect(res.status).toBe(200);
-      expect(mockGetIP).not.toHaveBeenCalled();
+      expect(mockGetClientIp).not.toHaveBeenCalled();
       expect(mockCheckRateLimit).not.toHaveBeenCalled();
       expect(mockHandler).toHaveBeenCalled();
     },
@@ -153,7 +153,7 @@ describe('Rate Limit Middleware', () => {
 
   it('should still rate limit custom AuthJS auth API routes', async () => {
     mockEnv.AUTH_PROVIDER = 'authjs';
-    mockGetIP.mockResolvedValue('127.0.0.1');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '127.0.0.1' });
     mockCheckRateLimit.mockResolvedValue({
       success: true,
       limit: 100,
@@ -168,8 +168,8 @@ describe('Rate Limit Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(200);
-    expect(mockGetIP).toHaveBeenCalled();
-    expect(mockCheckRateLimit).toHaveBeenCalledWith('127.0.0.1', {
+    expect(mockGetClientIp).toHaveBeenCalled();
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('api:127.0.0.1', {
       path: '/api/auth/signup',
     });
     expect(mockHandler).toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe('Rate Limit Middleware', () => {
 
   it('should still rate limit unrelated API routes in E2E mode', async () => {
     mockEnv.E2E_ENABLED = true;
-    mockGetIP.mockResolvedValue('127.0.0.1');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '127.0.0.1' });
     mockCheckRateLimit.mockResolvedValue({
       success: true,
       limit: 100,
@@ -192,13 +192,13 @@ describe('Rate Limit Middleware', () => {
     const res = await middleware(req, ctx);
 
     expect(res.status).toBe(200);
-    expect(mockGetIP).toHaveBeenCalled();
+    expect(mockGetClientIp).toHaveBeenCalled();
     expect(mockCheckRateLimit).toHaveBeenCalled();
     expect(mockHandler).toHaveBeenCalled();
   });
 
   it('should block request if rate limit exceeded', async () => {
-    mockGetIP.mockResolvedValue('127.0.0.1');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '127.0.0.1' });
     mockCheckRateLimit.mockResolvedValue({
       success: false,
       limit: 100,

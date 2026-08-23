@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 
+import type * as GetIpModule from '@/shared/lib/network/get-ip';
+
 import '@/testing/infrastructure/logger';
 
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   checkRateLimit: vi.fn(),
-  getIP: vi.fn(),
+  getClientIp: vi.fn(),
   joinWaitlist: vi.fn(),
   addToWaitlist: vi.fn(),
   db: {},
@@ -37,7 +39,13 @@ vi.mock('@/core/env', () => ({
   },
 }));
 
-vi.mock('@/shared/lib/network/get-ip', () => ({ getIP: mocks.getIP }));
+vi.mock('@/shared/lib/network/get-ip', async (importOriginal) => {
+  // Partial: `rateLimitKeyForClient` / `auditIpForClient` stay real, because
+  // they encode the policy for an unidentifiable client (SEC-43) and a test
+  // that stubs them stops testing that policy.
+  const actual = await importOriginal<typeof GetIpModule>();
+  return { ...actual, getClientIp: mocks.getClientIp };
+});
 
 vi.mock('@/shared/lib/rate-limit/rate-limit-helper', () => ({
   checkRateLimit: mocks.checkRateLimit,
@@ -86,7 +94,7 @@ describe('POST /api/auth/waitlist', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
-    mocks.getIP.mockResolvedValue('203.0.113.1');
+    mocks.getClientIp.mockResolvedValue({ kind: 'trusted', ip: '203.0.113.1' });
     mocks.checkRateLimit.mockResolvedValue({ success: true });
     mocks.registry.clear();
     mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);

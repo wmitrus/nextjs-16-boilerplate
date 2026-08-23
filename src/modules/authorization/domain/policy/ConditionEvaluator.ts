@@ -87,6 +87,9 @@ export function isFromAllowedIp(
 /**
  * Allow only if the request IP is NOT in the provided block-list.
  *
+ * Denies when the request IP cannot be established at all -- see the note in
+ * the body.
+ *
  * @example
  * condition: (ctx) => isNotFromBlockedIp(ctx, ['192.168.1.100'])
  */
@@ -95,6 +98,14 @@ export function isNotFromBlockedIp(
   blockList: string[],
 ): boolean {
   const ip = ctx.environment?.ip;
-  if (!ip) return true;
+  // SEC-43: an unidentifiable client fails this condition rather than passing
+  // it. This branch used to be unreachable -- `getIP()` returned `127.0.0.1`
+  // when it had nothing, so `ip` was always set -- and it returned `true`,
+  // meaning "not blocked". Once an unknown client became a real state, that
+  // reading would have let anyone whose IP cannot be established walk past
+  // an IP block-list simply by arriving without a trustworthy header.
+  //
+  // "I cannot tell whether you are blocked" is not "you are not blocked".
+  if (!ip) return false;
   return !blockList.includes(ip);
 }

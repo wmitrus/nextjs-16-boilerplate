@@ -17,7 +17,10 @@ import {
   createSuccessResponse,
   createValidationErrorResponse,
 } from '@/shared/lib/api/response-service';
-import { getIP } from '@/shared/lib/network/get-ip';
+import {
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 
 import {
   authUserIdentitiesTable,
@@ -59,10 +62,13 @@ export async function POST(request: Request): Promise<Response> {
   // whenever Upstash is unreachable. It redeems a reset token and then does
   // bcrypt work, so it is both a token-guessing oracle and an expensive one.
   // Strict mode: a durable secondary, then fail closed.
-  const ip = await getIP(new Headers(request.headers));
-  const rateLimitResult = await checkStrictRateLimit(`reset-password:${ip}`, {
-    path: RESET_PASSWORD_PATH,
-  });
+  const client = await getClientIp(new Headers(request.headers));
+  const rateLimitResult = await checkStrictRateLimit(
+    rateLimitKeyForClient('reset-password', client),
+    {
+      path: RESET_PASSWORD_PATH,
+    },
+  );
 
   if (!rateLimitResult.success) {
     return createServerErrorResponse(

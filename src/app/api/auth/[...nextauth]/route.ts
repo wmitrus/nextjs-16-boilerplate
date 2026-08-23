@@ -3,7 +3,11 @@ import NextAuth from 'next-auth/next';
 
 import { env } from '@/core/env';
 
-import { getIP } from '@/shared/lib/network/get-ip';
+import type { ClientIp } from '@/shared/lib/network/client-ip';
+import {
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 import { parseDurationToMs } from '@/shared/lib/rate-limit/rate-limit-helper';
 
 import { authOptions } from '@/modules/auth/infrastructure/authjs/auth';
@@ -23,7 +27,7 @@ import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
  * runner/CI host) would otherwise trip a tight per-IP window across a full
  * E2E suite run, unrelated to any real abuse.
  */
-async function checkSignInIpRateLimit(ip: string): Promise<boolean> {
+async function checkSignInIpRateLimit(client: ClientIp): Promise<boolean> {
   if (env.E2E_ENABLED) {
     return true;
   }
@@ -35,11 +39,14 @@ async function checkSignInIpRateLimit(ip: string): Promise<boolean> {
   // attacker spread across instances got the limit several times over. Strict
   // mode reaches for the durable secondary first and refuses if neither store
   // answers.
-  const result = await checkStrictRateLimit(`login-ip:${ip}`, {
-    path: '/api/auth/callback/credentials',
-    limit: env.LOGIN_RATE_LIMIT_IP_REQUESTS,
-    windowMs,
-  });
+  const result = await checkStrictRateLimit(
+    rateLimitKeyForClient('login-ip', client),
+    {
+      path: '/api/auth/callback/credentials',
+      limit: env.LOGIN_RATE_LIMIT_IP_REQUESTS,
+      windowMs,
+    },
+  );
   return result.success;
 }
 
@@ -56,8 +63,8 @@ async function handler(
     req.method === 'POST';
 
   if (isCredentialsCallback) {
-    const ip = await getIP(req.headers);
-    const allowed = await checkSignInIpRateLimit(ip);
+    const client = await getClientIp(req.headers);
+    const allowed = await checkSignInIpRateLimit(client);
 
     if (!allowed) {
       return new Response(

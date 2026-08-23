@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
 import {
-  mockGetIP,
+  mockGetClientIp,
   mockLogger,
   mockChildLogger,
   mockCheckStrictRateLimit,
@@ -81,7 +81,7 @@ function makeRequest(body: unknown): NextRequest {
 describe('POST /api/auth/resend-verification', () => {
   beforeEach(() => {
     resetAllInfrastructureMocks();
-    mockGetIP.mockResolvedValue('1.2.3.4');
+    mockGetClientIp.mockResolvedValue({ kind: 'trusted', ip: '1.2.3.4' });
     mockCheckStrictRateLimit.mockResolvedValue(rateLimitResult());
     mockLimit.mockResolvedValue([]);
     mockWhere.mockReturnValue({ limit: mockLimit });

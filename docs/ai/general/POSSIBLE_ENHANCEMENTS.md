@@ -439,3 +439,44 @@ IP bucket now sits in front of it. Doing it badly — for instance failing
 closed on the account bucket — would lock real users out of their own
 accounts during a Redis outage, which is a materially worse trade than on the
 IP bucket.
+
+## PE-19 — Verify The Vercel Header Precedence Against Vercel's Own Guarantees
+
+- **Source**: `.copilot/tasks/2026-08-23-client-ip-trust-model/` (Case 13)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: The `vercel` resolver (SEC-43) reads
+`x-vercel-forwarded-for`, then `x-real-ip`. Both are set by Vercel's edge and
+neither is client-supplied, so the order is not a security question — but it
+_is_ a judgement made from general knowledge rather than checked against
+Vercel's documented guarantees in that session. Worth confirming which header
+Vercel documents as authoritative, whether both are always present, and
+whether either can carry more than one address.
+
+**Why deferred**: verifying it needs Vercel's live documentation, and the
+current order is safe under either answer — both headers come from the
+platform. A wrong _order_ here would at worst pick a different Vercel-set
+value, not an attacker-set one.
+
+## PE-20 — Anchor `trusted-proxy` At The Socket Peer
+
+- **Source**: `.copilot/tasks/2026-08-23-client-ip-trust-model/` (Case 13)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: SEC-43's `trusted-proxy` mode walks `X-Forwarded-For` right
+to left against `TRUSTED_PROXY_CIDRS`, which is the correct algorithm — but it
+cannot verify that the request actually arrived through one of those proxies.
+Express anchors the same walk at `remoteAddress`; **Next.js does not expose
+the socket peer** (`NextRequest` has no `ip`, and `request.ip` was removed in
+Next 15), so the chain is anchored by the operator's network topology instead.
+The mode is therefore sound only where the app is unreachable except through
+the declared proxy.
+
+**Why deferred**: nothing in the current Next.js API makes the peer reachable.
+Closing this properly would mean either a custom server (giving up
+`next start`), an ingress that stamps a signed header the app can verify, or a
+future Next.js API. Each is a deployment-shape decision, not a code fix. The
+limitation is documented in the resolver, `.env.example` and SEC-43 so that an
+operator choosing this mode can see it.

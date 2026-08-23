@@ -90,9 +90,13 @@ vi.mock('@/shared/lib/rate-limit/rate-limit-helper', () => ({
   checkRateLimit: vi.fn(),
 }));
 
-vi.mock('@/shared/lib/network/get-ip', () => ({
-  getIP: vi.fn(),
-}));
+vi.mock('@/shared/lib/network/get-ip', async (importOriginal) => {
+  // Partial: `rateLimitKeyForClient` / `auditIpForClient` stay real, because
+  // they encode the policy for an unidentifiable client (SEC-43) and a test
+  // that stubs them stops testing that policy.
+  const actual = await importOriginal<typeof getIp>();
+  return { ...actual, getClientIp: vi.fn() };
+});
 
 describe('Proxy', () => {
   beforeEach(() => {
@@ -107,7 +111,10 @@ describe('Proxy', () => {
 
   it('should allow request if rate limit is not exceeded', async () => {
     const request = new NextRequest(new URL('http://localhost/api/users'));
-    vi.mocked(getIp.getIP).mockResolvedValue('127.0.0.1');
+    vi.mocked(getIp.getClientIp).mockResolvedValue({
+      kind: 'trusted',
+      ip: '127.0.0.1',
+    });
     vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
       success: true,
       limit: 10,
@@ -125,7 +132,10 @@ describe('Proxy', () => {
 
   it('should return 429 if rate limit is exceeded', async () => {
     const request = new NextRequest(new URL('http://localhost/api/users'));
-    vi.mocked(getIp.getIP).mockResolvedValue('127.0.0.1');
+    vi.mocked(getIp.getClientIp).mockResolvedValue({
+      kind: 'trusted',
+      ip: '127.0.0.1',
+    });
     const reset = new Date(Date.now() + 60000);
     vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
       success: false,
@@ -179,7 +189,10 @@ describe('Proxy', () => {
         },
       },
     );
-    vi.mocked(getIp.getIP).mockResolvedValue('127.0.0.1');
+    vi.mocked(getIp.getClientIp).mockResolvedValue({
+      kind: 'trusted',
+      ip: '127.0.0.1',
+    });
     vi.mocked(rateLimitHelper.checkRateLimit).mockResolvedValue({
       success: true,
       limit: 10,

@@ -157,7 +157,10 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
           resource: effectiveResource,
           action: actionName,
           environment: {
-            ip: context.ip,
+            // `undefined`, not a placeholder: SEC-43 made an unidentifiable
+            // client a real state, and an IP condition must see "absent"
+            // rather than an address that was never verified.
+            ip: context.ip ?? undefined,
             time: new Date(),
           },
           attributes: {

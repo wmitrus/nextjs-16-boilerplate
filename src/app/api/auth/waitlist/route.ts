@@ -11,7 +11,10 @@ import {
   createServerErrorResponse,
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
-import { getIP } from '@/shared/lib/network/get-ip';
+import {
+  getClientIp,
+  rateLimitKeyForClient,
+} from '@/shared/lib/network/get-ip';
 
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { DuplicateWaitlistEntryError } from '@/modules/waitlist/domain/errors';
@@ -36,10 +39,13 @@ const WAITLIST_PATH = '/api/auth/waitlist';
 export const POST = withErrorHandler(async (request) => {
   await connection();
 
-  const ip = await getIP(new Headers(request.headers));
-  const rateLimitResult = await checkStrictRateLimit(`waitlist:${ip}`, {
-    path: WAITLIST_PATH,
-  });
+  const client = await getClientIp(new Headers(request.headers));
+  const rateLimitResult = await checkStrictRateLimit(
+    rateLimitKeyForClient('waitlist', client),
+    {
+      path: WAITLIST_PATH,
+    },
+  );
 
   if (!rateLimitResult.success) {
     return createServerErrorResponse(

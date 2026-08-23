@@ -108,10 +108,19 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
   - **5 × złożoność** (`mapUserRow` 9/8, `listAll` 14/8, handler
     reset-password 65/50 linii, `verifyTurnstileToken` 51/50,
     `getLoginAbuseState` 10/8) — cała piątka to kod sprzed tego PR-a.
-    Użytkownik **podniósł progi w UI**; efekt widoczny dopiero przy
-    następnym scanie. Kodu nie refaktorowaliśmy — refaktor ścieżek
-    auth/rate-limit/admin tuż przed merge'em to ryzyko regresji przy zerowym
-    zysku bezpieczeństwa.
+    Użytkownik **podniósł progi w UI** (60 linii / złożoność 10) — trzy z
+    pięciu zeszły pod próg. Zostały dwie i te **zrefaktorowane**, nie
+    obchodzone kolejnym podniesieniem progu:
+    - `listAll` 14 → ~6: wydzielony `adminUserListPredicate()`; SQL bez zmian.
+    - callback transakcji reset-password 65 → 31 NLOC: wydzielony
+      `persistResetCredentials(tx, …)` przyjmujący **istniejący** `tx`, więc
+      atomowy claim tokenu, obsługa wyścigu i granica transakcji zostają
+      nietknięte (SEC-35/SEC-36).
+
+    Weryfikacja: baseline zdjęty przed zmianą i identyczny po — unit 242/1905,
+    DB 22/179, w tym izolacja tenantów i test współbieżnego resetu.
+    **Zasada: dwie naturalne ekstrakcje i koniec — nie „upiększamy" kodu pod
+    metrykę.**
 
   **Follow-up 2026-08-23**: polityka SQL przeniesiona z UI do repo — rootowy
   `.sqlfluff` (`dialect = postgres`, `templater = raw`) i `.sqlfluffignore`

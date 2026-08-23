@@ -35,6 +35,70 @@ const resetPasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
+/**
+ * The transaction's own type. Taken from `DrizzleDb['transaction']` rather
+ * than imported from Drizzle's internals so it cannot drift from whatever the
+ * configured driver actually hands the callback.
+ */
+type ResetTransaction = Parameters<Parameters<DrizzleDb['transaction']>[0]>[0];
+
+/**
+ * Writes the new password, creating the credentials row and the AuthJS
+ * identity when this is the user's first one.
+ *
+ * Takes the caller's `tx`, so it runs inside the same transaction as the token
+ * claim above -- the atomicity, the race handling and the transaction boundary
+ * all stay where they were (SEC-35/SEC-36). This is an extraction along the
+ * seam that was already in the handler: claiming the token and persisting the
+ * credentials are two separate steps that happen to share a transaction.
+ */
+async function persistResetCredentials(
+  tx: ResetTransaction,
+  user: { id: string; email: string },
+  hashedPassword: string,
+  now: Date,
+): Promise<void> {
+  const [existingCredentials] = await tx
+    .select({ userId: userCredentialsTable.userId })
+    .from(userCredentialsTable)
+    .where(eq(userCredentialsTable.userId, user.id))
+    .limit(1);
+
+  if (existingCredentials) {
+    await tx
+      .update(userCredentialsTable)
+      .set({ hashedPassword, updatedAt: now })
+      .where(eq(userCredentialsTable.userId, user.id));
+    return;
+  }
+
+  await tx.insert(userCredentialsTable).values({
+    userId: user.id,
+    email: user.email,
+    hashedPassword,
+    emailVerified: true,
+  });
+
+  const [identityExists] = await tx
+    .select({ provider: authUserIdentitiesTable.provider })
+    .from(authUserIdentitiesTable)
+    .where(
+      and(
+        eq(authUserIdentitiesTable.userId, user.id),
+        eq(authUserIdentitiesTable.provider, 'authjs'),
+      ),
+    )
+    .limit(1);
+
+  if (!identityExists) {
+    await tx.insert(authUserIdentitiesTable).values({
+      provider: 'authjs',
+      externalUserId: user.email,
+      userId: user.id,
+    });
+  }
+}
+
 const BCRYPT_COST = 12;
 const RESET_PASSWORD_PATH = '/api/auth/reset-password';
 const INVALID_TOKEN_ERROR =
@@ -171,44 +235,7 @@ export async function POST(request: Request): Promise<Response> {
         return { claimed: false as const };
       }
 
-      const [existingCredentials] = await tx
-        .select({ userId: userCredentialsTable.userId })
-        .from(userCredentialsTable)
-        .where(eq(userCredentialsTable.userId, user.id))
-        .limit(1);
-
-      if (existingCredentials) {
-        await tx
-          .update(userCredentialsTable)
-          .set({ hashedPassword, updatedAt: now })
-          .where(eq(userCredentialsTable.userId, user.id));
-      } else {
-        await tx.insert(userCredentialsTable).values({
-          userId: user.id,
-          email: user.email,
-          hashedPassword,
-          emailVerified: true,
-        });
-
-        const [identityExists] = await tx
-          .select({ provider: authUserIdentitiesTable.provider })
-          .from(authUserIdentitiesTable)
-          .where(
-            and(
-              eq(authUserIdentitiesTable.userId, user.id),
-              eq(authUserIdentitiesTable.provider, 'authjs'),
-            ),
-          )
-          .limit(1);
-
-        if (!identityExists) {
-          await tx.insert(authUserIdentitiesTable).values({
-            provider: 'authjs',
-            externalUserId: user.email,
-            userId: user.id,
-          });
-        }
-      }
+      await persistResetCredentials(tx, user, hashedPassword, now);
 
       // Revoke every session minted before this moment. A password reset is
       // the canonical account-takeover recovery step, so it must not leave

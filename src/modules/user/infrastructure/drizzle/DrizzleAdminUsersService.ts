@@ -93,6 +93,39 @@ function membershipScopePredicate(db: DrizzleDb, tenantId: string) {
 }
 
 /**
+ * The WHERE clause for an admin user listing: an optional case-insensitive
+ * search over email and display name, intersected with the caller's tenant
+ * scope.
+ *
+ * Separated from `listAll` because assembling the predicate and running the
+ * query are different concerns -- and because the scope half is the SEC-26
+ * invariant, which is easier to review on its own than interleaved with
+ * pagination arithmetic. `undefined` means no WHERE clause at all, which is
+ * only reachable for an unscoped platform admin searching for nothing.
+ */
+function adminUserListPredicate(
+  db: DrizzleDb,
+  search: string | undefined,
+  scope: AdminUserScope,
+) {
+  const searchPredicate = search
+    ? or(
+        ilike(usersTable.email, `%${search}%`),
+        ilike(usersTable.displayName, `%${search}%`),
+      )
+    : undefined;
+
+  const scopePredicate =
+    scope === null ? undefined : membershipScopePredicate(db, scope.tenantId);
+
+  if (searchPredicate && scopePredicate) {
+    return and(searchPredicate, scopePredicate);
+  }
+
+  return searchPredicate ?? scopePredicate;
+}
+
+/**
  * Admin-only surface for `/api/admin/users`.
  *
  * Deliberately NOT `UserRepository` / `DrizzleUserRepository` -- that
@@ -126,23 +159,11 @@ export class DrizzleAdminUsersService {
   ): Promise<{ users: AdminUserDto[]; total: number }> {
     const limit = Math.min(options.limit ?? 50, 100);
     const offset = Math.max(options.offset ?? 0, 0);
-    const search = options.search?.trim();
-
-    const searchPredicate = search
-      ? or(
-          ilike(usersTable.email, `%${search}%`),
-          ilike(usersTable.displayName, `%${search}%`),
-        )
-      : undefined;
-    const scopePredicate =
-      scope === null
-        ? undefined
-        : membershipScopePredicate(this.db, scope.tenantId);
-
-    const whereClause =
-      searchPredicate && scopePredicate
-        ? and(searchPredicate, scopePredicate)
-        : (searchPredicate ?? scopePredicate);
+    const whereClause = adminUserListPredicate(
+      this.db,
+      options.search?.trim(),
+      scope,
+    );
 
     const [rows, countRows] = await Promise.all([
       this.db

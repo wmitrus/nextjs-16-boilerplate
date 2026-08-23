@@ -40,7 +40,7 @@ Reguła autorytatywna: `AGENTS.md`, sekcja "Possible Enhancements Backlog —
 Check Every Task". Pointer dla Claude Code jest w `CLAUDE.md` (bo `AGENTS.md`
 nie ładuje się automatycznie).
 
-Ostatnie wpisy z tej serii: PE-23 (correlation_source w audycie), PE-22 (spójność odpowiedzi w with-auth.ts), PE-14 (nullable `waitlist_entries.organization_id`),
+Ostatnie wpisy z tej serii: PE-24 (**zaakceptowany**, DB-level length constraints dla correlation_id/request_id — osobny mały PR **po** zmergowaniu obecnego), PE-23 (correlation_source w audycie), PE-22 (spójność odpowiedzi w with-auth.ts), PE-14 (nullable `waitlist_entries.organization_id`),
 PE-15 (konstruktorowe mocki `vi.fn().mockImplementation()`), PE-16 (strict rate
 limiting w Edge middleware), PE-17 (globalny purge `rate_limit_counters`),
 PE-18 (durable backing dla login account bucket), PE-19 (weryfikacja
@@ -99,5 +99,11 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
   gate `≤ 0`. Dotyczy całego PR-a względem `main`, nie ostatnich commitów.
   **Decyzja użytkownika 2026-08-23: nie ma criticali, nie ruszamy.** Zgodnie
   z regułą 9 — tylko odnotowane, żadnego drążenia z własnej inicjatywy.
+- **Granica PR-a (decyzja użytkownika 2026-08-23)**: PR #74 jest już bardzo duży
+  i zamyka SEC-37…SEC-46. Użytkownik merguje go sam. **Kolejne case'y idą do
+  NOWEGO PR-a na nowej gałęzi** — nie doklejać ich tutaj. Pierwszy kandydat do
+  nowego PR-a: PE-24 (varchar(128) dla `correlation_id`, a dla `request_id`
+  **najpierw audyt istniejących wierszy**, bo przed SEC-46 klient mógł podać
+  własne `x-request-id` i `text → uuid` mogłoby paść na danych historycznych).
 - Czekamy na kolejne ponumerowane case'y.
 - Na koniec serii: użytkownik przegląda cały PR i triażuje PE-01…PE-21.

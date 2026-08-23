@@ -572,8 +572,45 @@ field with no consumer yet. The operational value is currently served by the
 logs, which carry the flag today. The audit column becomes worthwhile when
 audit rows are actually being joined to upstream systems during reviews.
 
-**Also worth considering when this is picked up**: `audit_events.correlation_id`
-and `request_id` are `text` with no length constraint. SEC-46 bounds what can
-reach them at the boundary, so the column is no longer the control — but a
-`varchar(128)` would make the invariant true in the schema rather than only in
-the code path that writes it.
+**Schema-level bounds on those columns are tracked separately** as `PE-24` —
+if both are picked up together they share one migration.
+
+---
+
+## PE-24 — DB-Level Length Constraints For The Observability Ids
+
+- **Source**: Case 16 follow-up (SEC-46), user decision 2026-08-23
+- **Date added**: 2026-08-23
+- **Status**: Open — **accepted as worth doing, deliberately scheduled after
+  the current security PR** rather than deferred on merit
+
+**Description**: `audit_events.correlation_id` and `audit_events.request_id`
+are `text`, so the schema imposes no bound of its own. Add defense in depth
+beneath SEC-46:
+
+- **`correlation_id` → `varchar(128)`.** In PostgreSQL this is not a storage
+  optimisation — `varchar(n)` and `text` are stored identically — it is an
+  _enforced_ limit. The point is that the invariant SEC-46 establishes in the
+  application becomes true of the column regardless of which code path writes
+  it.
+- **`request_id` → bounded storage, chosen after auditing the existing data.**
+  Do **not** migrate straight to `uuid`. Before SEC-46 a caller could supply
+  its own `x-request-id`, so historical rows may hold values that are not
+  UUIDs at all, and `text → uuid` would fail on them mid-migration. Audit the
+  existing rows first; then either `uuid` if the data allows, or a bounded
+  `varchar` if it does not.
+
+**The migration must verify the existing rows before altering the type** — a
+`SELECT` for over-length or non-conforming values, run and reviewed, not an
+`ALTER` issued hopefully.
+
+**Why deferred**: not on merit — the user accepted it as worth doing. It is
+scheduled after the current PR because that PR is already very large and
+carries its own migrations, and this change adds nothing to the exploit SEC-46
+closed. The application-level fix is complete on its own; the schema layer is
+a second, independent line of defence and belongs in a small PR of its own,
+where the data audit can be reviewed on its own evidence.
+
+**Note for whoever picks this up**: a new migration in this repository must be
+registered in `readMigrationSql()` in the same commit (SEC-05/SEC-12) — a
+missing entry passes every local gate and only fails in the Vercel build.

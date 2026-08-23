@@ -107,10 +107,10 @@ describe('Secure Fetch (SSRF Protection)', () => {
   });
 
   it('should block requests to private IPs', async () => {
-    await expect(secureFetch('http://192.168.1.1')).rejects.toThrow(
+    await expect(secureFetch('https://192.168.1.1')).rejects.toThrow(
       'SSRF Protection',
     );
-    await expect(secureFetch('http://localhost:3000')).rejects.toThrow(
+    await expect(secureFetch('https://localhost:3000')).rejects.toThrow(
       'SSRF Protection',
     );
   });
@@ -148,7 +148,7 @@ describe('Secure Fetch (SSRF Protection)', () => {
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS =
       '::1, fe80::1, 169.254.169.254, 0.0.0.0';
 
-    await expect(secureFetch('http://[::1]')).rejects.toThrow(
+    await expect(secureFetch('https://[::1]')).rejects.toThrow(
       'SSRF Protection',
     );
     expect(mockChildLogger.error).toHaveBeenCalledWith(
@@ -157,7 +157,7 @@ describe('Secure Fetch (SSRF Protection)', () => {
     );
 
     mockChildLogger.error.mockClear();
-    await expect(secureFetch('http://[fe80::1]')).rejects.toThrow(
+    await expect(secureFetch('https://[fe80::1]')).rejects.toThrow(
       'SSRF Protection',
     );
     expect(mockChildLogger.error).toHaveBeenCalledWith(
@@ -165,10 +165,10 @@ describe('Secure Fetch (SSRF Protection)', () => {
       expect.stringContaining('private/reserved literal address'),
     );
 
-    await expect(secureFetch('http://169.254.169.254')).rejects.toThrow(
+    await expect(secureFetch('https://169.254.169.254')).rejects.toThrow(
       'SSRF Protection',
     );
-    await expect(secureFetch('http://0.0.0.0')).rejects.toThrow(
+    await expect(secureFetch('https://0.0.0.0')).rejects.toThrow(
       'SSRF Protection',
     );
   });
@@ -180,13 +180,13 @@ describe('Secure Fetch (SSRF Protection)', () => {
     // reachable once the hostname's brackets are stripped for comparison.
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '2001:4860:4860::8888';
     await expect(
-      secureFetch('http://[2001:4860:4860::8888]'),
+      secureFetch('https://[2001:4860:4860::8888]'),
     ).resolves.toBeDefined();
   });
 
   it('should block an IPv4-mapped IPv6 address pointing at a private range', async () => {
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '::ffff:10.0.0.5';
-    await expect(secureFetch('http://[::ffff:10.0.0.5]')).rejects.toThrow(
+    await expect(secureFetch('https://[::ffff:10.0.0.5]')).rejects.toThrow(
       'SSRF Protection',
     );
   });
@@ -199,22 +199,22 @@ describe('Secure Fetch (SSRF Protection)', () => {
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS =
       '100.64.0.1, 192.0.2.1, 198.18.0.1, 224.0.0.1, 240.0.0.1, 255.255.255.255';
 
-    await expect(secureFetch('http://100.64.0.1')).rejects.toThrow(
+    await expect(secureFetch('https://100.64.0.1')).rejects.toThrow(
       'SSRF Protection',
     ); // CGNAT (100.64.0.0/10)
-    await expect(secureFetch('http://192.0.2.1')).rejects.toThrow(
+    await expect(secureFetch('https://192.0.2.1')).rejects.toThrow(
       'SSRF Protection',
     ); // TEST-NET-1
-    await expect(secureFetch('http://198.18.0.1')).rejects.toThrow(
+    await expect(secureFetch('https://198.18.0.1')).rejects.toThrow(
       'SSRF Protection',
     ); // benchmarking (198.18.0.0/15)
-    await expect(secureFetch('http://224.0.0.1')).rejects.toThrow(
+    await expect(secureFetch('https://224.0.0.1')).rejects.toThrow(
       'SSRF Protection',
     ); // multicast
-    await expect(secureFetch('http://240.0.0.1')).rejects.toThrow(
+    await expect(secureFetch('https://240.0.0.1')).rejects.toThrow(
       'SSRF Protection',
     ); // reserved
-    await expect(secureFetch('http://255.255.255.255')).rejects.toThrow(
+    await expect(secureFetch('https://255.255.255.255')).rejects.toThrow(
       'SSRF Protection',
     ); // broadcast
   });
@@ -228,10 +228,10 @@ describe('Secure Fetch (SSRF Protection)', () => {
     // dial either IPv6 transition mechanism directly.
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '2002:7f00:1::, 64:ff9b::a00:1';
 
-    await expect(secureFetch('http://[2002:7f00:1::]')).rejects.toThrow(
+    await expect(secureFetch('https://[2002:7f00:1::]')).rejects.toThrow(
       'SSRF Protection',
     );
-    await expect(secureFetch('http://[64:ff9b::a00:1]')).rejects.toThrow(
+    await expect(secureFetch('https://[64:ff9b::a00:1]')).rejects.toThrow(
       'SSRF Protection',
     );
   });
@@ -261,7 +261,7 @@ describe('Secure Fetch (SSRF Protection)', () => {
     // this test fail for an unrelated reason once that range gained
     // coverage.
     mockEnv.SECURITY_ALLOWED_OUTBOUND_HOSTS = '93.184.216.34';
-    await expect(secureFetch('http://93.184.216.34')).resolves.toBeDefined();
+    await expect(secureFetch('https://93.184.216.34')).resolves.toBeDefined();
     expect(lookup).not.toHaveBeenCalled();
   });
 
@@ -273,6 +273,96 @@ describe('Secure Fetch (SSRF Protection)', () => {
     ];
     expect(init?.dispatcher).toBeDefined();
     expect(init?.redirect).toBe('manual');
+  });
+
+  // SEC-39: an allowlisted, public, correctly-pinned host reached over
+  // http:// still puts every Authorization header, API key and request body
+  // on the wire in clear. The protocol gate is checked before the allowlist
+  // and before any DNS work, because it holds regardless of who the host is.
+  describe('HTTPS-only transport (SEC-39)', () => {
+    it('rejects a plaintext http:// request to an otherwise allowed host', async () => {
+      const { fn } = mockFetchSequence([new Response('{}', { status: 200 })]);
+      global.fetch = fn;
+
+      await expect(secureFetch('http://example.com/api')).rejects.toThrow(
+        /must use https/i,
+      );
+      expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('rejects before doing any DNS work', async () => {
+      const { fn } = mockFetchSequence([new Response('{}', { status: 200 })]);
+      global.fetch = fn;
+
+      await expect(secureFetch('http://example.com/api')).rejects.toThrow();
+      expect(vi.mocked(lookup)).not.toHaveBeenCalled();
+    });
+
+    it.each(['ftp:', 'file:', 'gopher:'])(
+      'rejects the %s scheme outright',
+      async (scheme) => {
+        const { fn } = mockFetchSequence([new Response('{}', { status: 200 })]);
+        global.fetch = fn;
+
+        await expect(secureFetch(`${scheme}//example.com/x`)).rejects.toThrow(
+          /must use https/i,
+        );
+        expect(fn).not.toHaveBeenCalled();
+      },
+    );
+
+    // The downgrade the report calls out: a trusted host answering
+    // 307 -> http:// must not be followed in cleartext.
+    it('rejects a redirect that downgrades https to http on the same host', async () => {
+      const { fn, calls } = mockFetchSequence([
+        new Response(null, {
+          status: 307,
+          headers: { location: 'http://example.com/downgraded' },
+        }),
+        new Response('{"ok":true}', { status: 200 }),
+      ]);
+      global.fetch = fn;
+
+      await expect(secureFetch('https://example.com/start')).rejects.toThrow(
+        /must use https/i,
+      );
+      // The first hop happened; the downgraded one never did.
+      expect(calls).toHaveLength(1);
+    });
+
+    it('allows plaintext outside production when the flag is set', async () => {
+      mockEnv.NODE_ENV = 'development';
+      mockEnv.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP = true;
+      const { fn } = mockFetchSequence([new Response('{}', { status: 200 })]);
+      global.fetch = fn;
+
+      const response = await secureFetch('http://example.com/api');
+
+      expect(response.status).toBe(200);
+      expect(mockChildLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ protocol: 'http:' }),
+        expect.stringContaining('never honoured in production'),
+      );
+    });
+
+    // The point of the flag's design: production must be safe even when the
+    // value is wrong, because a stray `true` in a deployed environment is
+    // exactly the accident this must not permit.
+    it('ignores the flag in production and says that it did', async () => {
+      mockEnv.NODE_ENV = 'production';
+      mockEnv.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP = true;
+      const { fn } = mockFetchSequence([new Response('{}', { status: 200 })]);
+      global.fetch = fn;
+
+      await expect(secureFetch('http://example.com/api')).rejects.toThrow(
+        /must use https/i,
+      );
+      expect(fn).not.toHaveBeenCalled();
+      expect(mockChildLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ insecureFlagSetButIgnored: true }),
+        expect.stringContaining('HTTPS-only'),
+      );
+    });
   });
 
   describe('redirect handling', () => {

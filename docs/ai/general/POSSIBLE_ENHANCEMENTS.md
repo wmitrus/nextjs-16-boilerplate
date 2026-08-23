@@ -318,3 +318,22 @@ the HTTP status code, so the gain is naming. Options if picked up: (a) leave
 it; (b) add `client_error` and migrate all readers; (c) rename the single
 channel to a neutral `error` — a breaking envelope change best done once,
 alongside any other envelope revision.
+
+## PE-13 — Guard That Outbound Calls Go Through `secureFetch`
+
+- **Source**: `.copilot/tasks/2026-08-22-secure-fetch-https-only/` (Case 9)
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: SEC-39's HTTPS-only gate, the host allowlist, DNS pinning
+and address classification all live inside `secureFetch`. A module that calls
+global `fetch` directly gets none of them. A guard test in the spirit of
+SEC-23's and SEC-38's — walking `src/` and failing on bare `fetch(` outside
+an allowlist of legitimate call sites (the secure-fetch implementation
+itself, client components, test harnesses) — would make that boundary
+enforced rather than assumed.
+
+**Why deferred**: it widens no existing gap (a direct `fetch` already
+bypassed every other control), and getting the exemption list right needs a
+careful pass over client-side and third-party-SDK call sites, which is a
+separate piece of work from closing the transport hole.

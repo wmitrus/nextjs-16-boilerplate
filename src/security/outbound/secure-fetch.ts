@@ -271,6 +271,57 @@ async function resolveViaDns(
   return { address: chosen.address, family: toPinnedFamily(chosen) };
 }
 
+/**
+ * Refuses any hop that is not HTTPS.
+ *
+ * Checked FIRST, before the allowlist and before any DNS work, because it is
+ * the one rule that holds regardless of who the host is: an allowlisted,
+ * public, correctly-pinned host reached over `http://` still puts every
+ * `Authorization` header, API key and request body on the wire in clear.
+ *
+ * Because `resolveAndValidateHost` runs for every hop, this also closes the
+ * downgrade a redirect could otherwise perform -- `https://trusted` answering
+ * `307 -> http://trusted` is rejected on the next iteration rather than
+ * followed in cleartext.
+ *
+ * The dev escape hatch is deliberately inert in production. Making it a
+ * config value that production simply ignores (and says so) means a stray
+ * `SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP=true` in a deployed environment
+ * cannot quietly downgrade live traffic -- the failure mode of a flag that
+ * production honours is exactly the accident this must not permit.
+ *
+ * See SEC-39 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ */
+function assertHttpsProtocol(url: URL, redactedUrl: string): void {
+  if (url.protocol === 'https:') {
+    return;
+  }
+
+  const isProduction = env.NODE_ENV === 'production';
+
+  if (env.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP && !isProduction) {
+    logger.warn(
+      { url: redactedUrl, protocol: url.protocol },
+      'Outbound plaintext request allowed by SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP (never honoured in production)',
+    );
+    return;
+  }
+
+  logger.error(
+    {
+      url: redactedUrl,
+      protocol: url.protocol,
+      insecureFlagSetButIgnored:
+        isProduction && env.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP,
+    },
+    'Outbound request blocked: secureFetch is HTTPS-only',
+  );
+
+  throw new Error(
+    `SSRF Protection: Outbound requests must use https, received ${url.protocol}`,
+  );
+}
+
 async function resolveAndValidateHost(
   hostname: string,
   urlForLogging: URL,
@@ -288,6 +339,8 @@ async function resolveAndValidateHost(
   // established "never log a full one-time URL or token" for other call
   // sites in this repo, this file just never had it applied (A.8.3).
   const redactedUrl = redactUrlForLogging(urlForLogging);
+
+  assertHttpsProtocol(urlForLogging, redactedUrl);
 
   if (!isHostAllowlisted(normalizedHostname)) {
     logger.error(

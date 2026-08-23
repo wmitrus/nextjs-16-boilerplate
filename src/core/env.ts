@@ -104,6 +104,14 @@ export const env = createEnv({
     // redirect hop (not reset per hop -- a chain of redirects must not be
     // able to add up to an unbounded total wait). See A.8.3 in
     // docs/ai/general/SECURITY_CODING_PATTERNS.md (SEC-28).
+    // Escape hatch for local development against a plaintext endpoint.
+    // Deliberately INERT in production: `secureFetch` ignores it when
+    // NODE_ENV === 'production' and logs that it did, so a value that leaks
+    // into a production environment cannot silently downgrade outbound
+    // traffic to cleartext. See SEC-39.
+    SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP: z
+      .preprocess((val) => val === 'true' || val === true, z.boolean())
+      .default(false),
     SECURITY_OUTBOUND_FETCH_TIMEOUT_MS: z.coerce
       .number()
       .int()
@@ -373,6 +381,8 @@ export const env = createEnv({
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
+    SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP:
+      process.env.SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP,
     SECURITY_OUTBOUND_FETCH_TIMEOUT_MS:
       process.env.SECURITY_OUTBOUND_FETCH_TIMEOUT_MS,
     SECURITY_OUTBOUND_FETCH_MAX_BYTES:

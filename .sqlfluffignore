@@ -1,0 +1,13 @@
+# Paths SQLFluff must not lint. Gitignore-style syntax.
+#
+# Drizzle writes these files; nobody edits them by hand. Style and formatting
+# advice on generated output has no addressee — the only way to "fix" a finding
+# there would be to hand-edit a file the next `drizzle-kit generate` overwrites,
+# which is worse than the finding. Left in, they would also drown any real
+# result under hundreds of formatting notes.
+#
+# Note that this exclusion currently covers every `.sql` file in the
+# repository: there is no hand-written SQL yet. The configuration is here so
+# that the first hand-written PostgreSQL file is linted from the moment it
+# lands, rather than prompting a tooling discussion at that point.
+src/core/db/migrations/generated/**

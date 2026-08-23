@@ -113,6 +113,18 @@ Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param, 
     auth/rate-limit/admin tuż przed merge'em to ryzyko regresji przy zerowym
     zysku bezpieczeństwa.
 
+  **Follow-up 2026-08-23**: polityka SQL przeniesiona z UI do repo — rootowy
+  `.sqlfluff` (`dialect = postgres`, `templater = raw`) i `.sqlfluffignore`
+  wykluczający `src/core/db/migrations/generated/**`. Codacy czyta `.sqlfluff`,
+  więc config jest version-controlled i jedzie z każdym forkiem, zamiast
+  siedzieć w panelu. Użytkownik przestawia w UI: **SQLFluff ON, SQLint OFF,
+  TSQLLint OFF** — jeden linter SQL, nie trzy nakładające się. Świadomie
+  **nie** wybieramy pojedynczych reguł SQLFluff: własna dokumentacja narzędzia
+  ostrzega, że duży ręczny config to koszt utrzymania przy kolejnych majorach.
+  Uwaga: dziś wszystkie 19 plików `.sql` leży w `generated/`, więc po ignore
+  SQLFluff nie lintuje **niczego** — config jest w całości na przyszłość,
+  na pierwszy ręcznie pisany PostgreSQL.
+
   Wniosek na przyszłość: `.codacy.yml` wyklucza `e2e/**` i `**/*.test.ts` dla
   lizard/eslint/semgrep, ale „hardcoded password" i tak trafiło w te ścieżki —
   robi to inny silnik, którego w tych listach nie ma. Sama edycja pliku by nie

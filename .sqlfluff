@@ -1,0 +1,30 @@
+# SQLFluff — SQL linting policy for this repository.
+#
+# Version-controlled on purpose. Codacy reads this file (it recognises
+# `.sqlfluff`, `pyproject.toml`, `setup.cfg`, `tox.ini` and `pep8.ini`), so the
+# policy travels with the repository instead of living only in the Codacy
+# panel: every fork, every CI run and every reviewer gets the same rules, and a
+# change to them shows up in a diff.
+#
+# Companion file: `.sqlfluffignore` excludes the Drizzle-generated migrations.
+#
+# Deliberately small. SQLFluff's own guidance is that a large hand-tuned
+# configuration becomes a maintenance burden across major versions — start from
+# the defaults and add rules only when a real disagreement appears.
+
+[sqlfluff]
+
+# Required, and not a detail: SQLFluff parses against a named dialect, and the
+# wrong one produces confident nonsense. This repository is PostgreSQL
+# throughout — PGlite locally, Postgres via Testcontainers in CI, Postgres in
+# production. The two SQL findings that prompted this file were a T-SQL
+# (SQL Server) rule demanding `SET QUOTED_IDENTIFIER ON` at the top of a
+# PostgreSQL migration.
+dialect = postgres
+
+# These are plain `.sql` files, not Jinja or dbt templates, so there is nothing
+# to render before parsing. `raw` says exactly that; any other templater would
+# have SQLFluff looking for placeholders that do not exist.
+templater = raw
+
+encoding = utf-8

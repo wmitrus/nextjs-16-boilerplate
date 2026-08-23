@@ -5,6 +5,12 @@
 # is done in the Codacy UI (Code patterns page) — not here.
 #
 # Docs: https://docs.codacy.com/repositories-configure/codacy-configuration-file/
+#
+# SQL linting is NOT configured here. SQLFluff reads its own version-controlled
+# config from the repository root — `.sqlfluff` (dialect: postgres) and
+# `.sqlfluffignore` (excludes the Drizzle-generated migrations). Keep the SQL
+# policy there rather than duplicating it as exclude_paths below; two rules for
+# one problem is how the two drift apart.
 
 engines:
   # ── Lizard — cyclomatic complexity ──────────────────────────────────────────

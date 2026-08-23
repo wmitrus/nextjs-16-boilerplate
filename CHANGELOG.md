@@ -1,3 +1,52 @@
+# [2.0.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.36.1...v2.0.0) (2026-08-23)
+
+
+### Bug Fixes
+
+* **api:** enforce the response-service contract and convert the 12 routes that bypassed it (SEC-38) ([dfde2c8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dfde2c814ef6097bd2048960fde0630306460c11))
+* **db:** register migration 0017 in the journal validator switch ([401f824](https://github.com/wmitrus/nextjs-16-boilerplate/commit/401f8244f1628b2b65063db4df0625bb8dc6c80b)), closes [#74](https://github.com/wmitrus/nextjs-16-boilerplate/issues/74)
+* **security:** claim password reset tokens atomically (SEC-35) ([a64c227](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a64c227e826d561b93b67fd2cd3db7a695287e4a))
+* **security:** close cross-tenant IDOR/BOLA in /api/admin/users (SEC-26) ([99254e5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/99254e5ae6e94f8dafa07065f47569c7d5d1865b))
+* **security:** dedicated dual-bucket login abuse control for AuthJS Credentials (SEC-34) ([842eac4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/842eac4df6dc7510dfb8ad1e0b3f07e78301bd36))
+* **security:** deny access for deactivated users at every central evaluator (SEC-33) ([85e1973](https://github.com/wmitrus/nextjs-16-boilerplate/commit/85e1973afc8ba3ec24e62e050408693930d77029))
+* **security:** enforce SEC-23 with a helper and a static guard, not advice ([46853f6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/46853f6406df04f00a2c9cc8493a44b43aa0d69a))
+* **security:** make client error exposure a type decision, not a substring match (SEC-37) ([ec0739f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ec0739f6c80725c5b4d5e188a2b4bee6a44bf012))
+* **security:** make cross-origin redirects opt-in so 307/308 bodies cannot leak (SEC-40) ([a4d0304](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a4d0304a0c8ea67b16d75e86d814d177cffd9d1c))
+* **security:** make secureFetch HTTPS-only, on every hop (SEC-39) ([ca2fe67](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ca2fe6781137547aa0fb6f9d435f85cfeca4b21b))
+* **security:** reject non-REST Upstash URLs and make Redis degradation visible ([9e1c87b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9e1c87b3b12e3cf660d2cd5956e7b1e608c90a06))
+* **security:** repair Turnstile widget lifecycle, token reuse and diagnostics ([466aada](https://github.com/wmitrus/nextjs-16-boilerplate/commit/466aada865a309662aa7271c33769e9fce3e74f1))
+* **security:** revoke existing sessions on password reset (SEC-36) ([04cda8f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/04cda8ff2b252a46344dfb8e29b974c55ff69023))
+* **security:** scope waitlist + invitation admin routes to real authority (SEC-41) ([9f2aef2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9f2aef2dd5416121ecb5b6a2a16f93a02dfa4a63))
+
+
+### Features
+
+* **security:** add strict mode to the rate limiter and close three gaps (SEC-42) ([47f111a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/47f111aaafb521f71e8049816eea868b7de49d1e))
+* **security:** give correlation and request ids an explicit trust model (SEC-46) ([83ca912](https://github.com/wmitrus/nextjs-16-boilerplate/commit/83ca912c85df3e3e7b4a7bfc7ecc87aabb8b44e8))
+* **security:** give the client IP an explicit deployment trust model (SEC-43) ([2f1830d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2f1830d04c56e4a4249e2bc323cc5056b1367d9f))
+* **security:** harden the internal-API shared key and stop leaking secret fragments (SEC-44) ([52b16bf](https://github.com/wmitrus/nextjs-16-boilerplate/commit/52b16bf63780ee8e8c4be65488a2cfe2d6796f07))
+* **security:** keep the Edge error path inside response finalization (SEC-45) ([a1b48db](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a1b48dbe1d4769b29514e24b58780d51e9e5363d))
+
+
+### BREAKING CHANGES
+
+* **security:** for any caller relying on cross-origin redirects. Only the
+SSRF showcase route calls secureFetch today and it does not, so nothing
+in-repo breaks -- but a consumer of this boilerplate upgrading would need the
+grant. Recorded in the task plan rather than softened, since the safe default
+is the point.
+
+Docs: SEC-40 added.
+
+Gates: typecheck, lint --fix (0 errors), test (229 files / 1716 tests),
+test:db (167 tests), skott, depcheck.
+
+Tenth case of the multi-case security-audit remediation series. See
+.copilot/tasks/2026-08-22-cross-origin-redirect-body/.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TU1y6wJF99ybs38tptW14y
+
 ## [1.36.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.36.0...v1.36.1) (2026-08-22)
 
 

@@ -265,3 +265,36 @@ so there is nothing to fix today -- this is about the guard's blast radius,
 not a live gap. Extending it means handling `page.tsx`/`layout.tsx` and their
 different params shape, which is worth doing deliberately rather than
 widening the glob and hoping the classifier still fits.
+
+## PE-10 — Surface The Correlation Id In The Server-Action Error UI
+
+- **Source**: `.copilot/tasks/2026-08-22-secure-action-error-exposure/` (Case 7)
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: `createSecureAction` now returns a `correlationId` alongside
+the generic production error message, and logs the full failure under that
+id. No UI reads it yet. Showing it in the error state (copyable) would make
+a user's report actionable in one step instead of a log hunt by timestamp.
+
+**Why deferred**: it is a UI/UX change with its own questions (where it goes,
+how it reads to a non-technical user, whether it belongs in a toast or an
+error panel), and the security fix is complete without it.
+
+## PE-11 — Converge The API Wrapper And Server Actions On One Exposure Mechanism
+
+- **Source**: `.copilot/tasks/2026-08-22-secure-action-error-exposure/` (Case 7)
+- **Date added**: 2026-08-22
+- **Status**: Open
+
+**Description**: `with-error-handler.ts` handles API-route error exposure
+correctly but independently: it reads `process.env.NODE_ENV` directly
+(which this repository forbids outside the T3-Env schema) and does not know
+about `PublicError`, so an action and a route handler throwing the same
+error produce different client output. Move it onto `env.NODE_ENV` and
+`isPublicError`.
+
+**Why deferred**: it is a refactor of a currently-correct path. Case 7 fixed
+the boundary that was actually leaking; changing the one that was not, in the
+same commit, would have mixed a fix with a cleanup and widened the blast
+radius for no security gain.

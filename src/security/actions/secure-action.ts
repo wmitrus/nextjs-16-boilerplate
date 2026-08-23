@@ -11,6 +11,9 @@ import {
   TenantMembershipRequiredError,
   TenantNotProvisionedError,
 } from '@/core/contracts/tenancy';
+import { env } from '@/core/env';
+import { isPublicError } from '@/core/error/public-error';
+import { resolveServerLogger } from '@/core/logger/di';
 
 import { logActionAudit } from '@/security/actions/action-audit';
 import { validateReplayToken } from '@/security/actions/action-replay';
@@ -49,14 +52,6 @@ export interface TreeifiedError {
   properties: Record<string, { errors: string[] }>;
 }
 
-function toUserFriendlyErrorMessage(message: string): string {
-  if (message.includes('Failed query:')) {
-    return 'Authentication sync is temporarily unavailable. Please try again.';
-  }
-
-  return message;
-}
-
 export function createSecureAction<TSchema extends z.ZodType, TResult>({
   schema,
   resource,
@@ -78,7 +73,7 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
     | { status: 'account_disabled' }
     | { status: 'tenant_context_required' }
     | { status: 'tenant_membership_required' }
-    | { status: 'error'; error: string }
+    | { status: 'error'; error: string; correlationId: string }
   > => {
     let context: SecurityContext | undefined;
     const effectiveResource: ResourceContext =
@@ -200,8 +195,6 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
     } catch (error) {
       const rawErrorMessage =
         error instanceof Error ? error.message : 'Internal Server Error';
-      const userFriendlyErrorMessage =
-        toUserFriendlyErrorMessage(rawErrorMessage);
 
       // 6. Audit Log (Failure)
       if (context) {
@@ -222,9 +215,12 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
       }
 
       if (error instanceof AuthorizationError) {
+        // Safe to expose: an AuthorizationError's message is always supplied
+        // by the `authorize()` call site in this repository (defaulting to
+        // 'Unauthorized'), never text produced by a library or driver.
         return {
           status: 'unauthorized' as const,
-          error: userFriendlyErrorMessage,
+          error: error.message,
         };
       }
 
@@ -239,9 +235,51 @@ export function createSecureAction<TSchema extends z.ZodType, TResult>({
         return { status: 'tenant_membership_required' as const };
       }
 
+      // Everything that reaches here is an exception nobody classified: a
+      // driver error, a provider SDK failure, a filesystem path, an
+      // unexpected library throw. Its text is not a message for a user, and
+      // may carry internal identifiers, queries or paths -- so it never
+      // crosses the boundary. The client gets a correlation id; the log
+      // above holds the detail under that same id. See SEC-37.
+      const correlationId = context?.correlationId ?? crypto.randomUUID();
+
+      resolveServerLogger()
+        .child({
+          type: 'ACTION',
+          category: 'security',
+          module: 'secure-action',
+        })
+        .error(
+          {
+            event: 'action:unhandled_error',
+            actionName,
+            correlationId,
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorMessage: rawErrorMessage,
+            errorStack: error instanceof Error ? error.stack : undefined,
+          },
+          'Secure action failed with an unclassified error',
+        );
+
+      if (isPublicError(error)) {
+        return {
+          status: 'error' as const,
+          error: error.message,
+          correlationId,
+        };
+      }
+
       return {
         status: 'error' as const,
-        error: userFriendlyErrorMessage,
+        // Outside production the real message is far more useful than a
+        // reference id, and there is no untrusted client to protect from it
+        // -- the same trade-off `with-error-handler.ts` already makes for
+        // API routes.
+        error:
+          env.NODE_ENV === 'production'
+            ? `Something went wrong. Reference: ${correlationId}`
+            : rawErrorMessage,
+        correlationId,
       };
     }
   };

@@ -125,8 +125,8 @@ describe('POST /api/auth/resend-verification', () => {
     const req = makeRequest({ email: 'unknown@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { message: string };
-    expect(body.message).toContain('verification');
+    const body = (await res.json()) as { data: { message: string } };
+    expect(body.data.message).toContain('verification');
   });
 
   it('returns safe 200 when user is already verified', async () => {
@@ -141,8 +141,8 @@ describe('POST /api/auth/resend-verification', () => {
     const req = makeRequest({ email: 'unverified@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { message: string };
-    expect(body.message).toContain('verification');
+    const body = (await res.json()) as { data: { message: string } };
+    expect(body.data.message).toContain('verification');
     expect(mockChildLogger.debug).toHaveBeenCalled();
   });
 
@@ -153,7 +153,7 @@ describe('POST /api/auth/resend-verification', () => {
     const req = makeRequest({ email: 'unverified@example.com' });
     const res = await POST(req);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { devToken?: string };
-    expect(body.devToken).toBeDefined();
+    const body = (await res.json()) as { data: { devToken?: string } };
+    expect(body.data.devToken).toBeDefined();
   });
 });

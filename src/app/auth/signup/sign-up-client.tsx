@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { extractApiErrorMessage } from '@/shared/lib/api/extract-error-message';
+
 import { buildBootstrapRedirectUrl } from '../post-auth-redirect';
 
 interface SignUpClientProps {
@@ -50,18 +52,19 @@ export function SignUpClient({
         }),
       });
 
-      const data = (await response.json()) as { error?: string };
+      const body: unknown = await response.json();
 
       if (!response.ok) {
-        setError(data.error ?? 'Failed to create account.');
+        setError(extractApiErrorMessage(body) ?? 'Failed to create account.');
         setErrorStatus(response.status);
         setIsLoading(false);
         return;
       }
 
-      const responseData = data as { message?: string };
-      const isAutoVerified =
-        responseData.message === 'Account created. You can now sign in.';
+      // Read the explicit flag, never the display message: comparing the
+      // wording verbatim broke silently the moment anyone reworded it.
+      const responseData = body as { data?: { autoVerified?: boolean } };
+      const isAutoVerified = responseData.data?.autoVerified === true;
 
       setSuccess(true);
       setTimeout(() => {

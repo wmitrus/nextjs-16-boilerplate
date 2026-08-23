@@ -29,22 +29,6 @@ export const organizationIdSchema = z.object({
   id: z.uuid(),
 });
 
-export function getFieldErrors(error: z.ZodError): Record<string, string[]> {
-  const fieldErrors = new Map<string, string[]>();
-
-  for (const issue of error.issues) {
-    const [firstPathSegment] = issue.path;
-    if (typeof firstPathSegment !== 'string') {
-      continue;
-    }
-
-    const currentErrors = fieldErrors.get(firstPathSegment) ?? [];
-    fieldErrors.set(firstPathSegment, [...currentErrors, issue.message]);
-  }
-
-  return Object.fromEntries(fieldErrors);
-}
-
 export async function checkOrganizationsActionAccess(
   email: string | undefined,
   userId: string,
@@ -83,3 +67,6 @@ export async function checkOrganizationsAdminAccess(
     ACTIONS.SECURITY_MANAGE_POLICIES,
   );
 }
+
+// Moved to shared/lib/api so non-admin API families can use it too.
+export { getFieldErrors } from '@/shared/lib/api/field-errors';

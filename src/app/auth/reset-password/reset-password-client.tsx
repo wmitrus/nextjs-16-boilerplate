@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { extractApiErrorMessage } from '@/shared/lib/api/extract-error-message';
+
 interface ResetPasswordClientProps {
   token: string;
   maskedEmail: string;
@@ -38,11 +40,11 @@ export function ResetPasswordClient({
         body: JSON.stringify({ token, password }),
       });
 
-      const data = (await response.json()) as { error?: string };
+      const body: unknown = await response.json();
 
       if (!response.ok) {
         setError(
-          data.error ??
+          extractApiErrorMessage(body) ??
             'This password reset link is invalid or has expired. Please request a new one.',
         );
         setIsLoading(false);

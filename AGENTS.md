@@ -803,19 +803,36 @@ Prefer:
 
 ## API Response Discipline
 
+**This is a requirement, not a preference, and it is enforced by a test.**
+`src/shared/lib/api/response-service.guard.test.ts` walks every `route.ts`
+under `src/app/api` and fails the suite if one builds a response by hand.
+
+This wording used to say "prefer". Twelve of thirty-six routes did not
+follow it, including five live auth endpoints — advice that nothing checks
+is advice that decays. See SEC-38 in
+`docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
 For App Router route handlers and internal API surfaces in this repository:
 
-- prefer the shared response helpers in `src/shared/lib/api/response-service.ts`
+- **use** the shared response helpers in `src/shared/lib/api/response-service.ts` — never `Response.json(...)` or `NextResponse.json(...)` directly
 - use `createSuccessResponse()` for successful JSON payloads
 - use `createServerErrorResponse()` or `createValidationErrorResponse()` for structured error payloads
+- convert a `ZodError` with `getFieldErrors()` from `@/shared/lib/api/field-errors` rather than flattening issues by hand
 - use `withErrorHandler()` for route-handler exception mapping unless the endpoint has a deliberate protocol-specific reason not to
 - keep response bodies aligned with the repository response envelope types under `src/shared/types/api-response`
 
+On the client side:
+
+- read error text with `extractApiErrorMessage()` from `@/shared/lib/api/extract-error-message` — the envelope has two error channels (`server_error` carries `error`, `form_errors` carries `errors`), and a client that only reads `.error` silently shows its fallback for every validation failure
+- remember that success payloads are wrapped: read `body.data.x`, not `body.x`
+
 Do not:
 
-- open-code ad hoc `NextResponse.json(...)` success/error envelopes in normal application APIs when the shared ResponseService pattern already fits
+- open-code ad hoc `NextResponse.json(...)` success/error envelopes in normal application APIs
+- add a route to the guard's `EXEMPT_ROUTES` without a written reason naming who consumes that wire format and why the envelope does not fit
 - return inconsistent `status` payload shapes across sibling admin or auth APIs without an explicit architectural reason
 - design new admin/API surfaces without stating whether they follow the shared ResponseService contract
+- **branch client logic on a response's human-readable `message` text.** Return an explicit field and read that; a message comparison breaks silently the moment anyone rewords it (this is exactly what `sign-up-client.tsx` did)
 
 Exception rule:
 

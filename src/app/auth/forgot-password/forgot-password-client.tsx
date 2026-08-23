@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { extractApiErrorMessage } from '@/shared/lib/api/extract-error-message';
+
 export function ForgotPasswordClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -25,21 +27,23 @@ export function ForgotPasswordClient() {
       });
 
       if (response.status === 429) {
-        const data = (await response.json()) as { error?: string };
+        const body: unknown = await response.json();
         alert(
-          data.error ?? 'Too many requests. Please wait before trying again.',
+          extractApiErrorMessage(body) ??
+            'Too many requests. Please wait before trying again.',
         );
         setIsLoading(false);
         return;
       }
 
-      const data = (await response.json()) as {
-        devToken?: string;
-        devResetUrl?: string;
+      const body = (await response.json()) as {
+        data?: { devToken?: string; devResetUrl?: string };
       };
+      const devToken = body.data?.devToken;
+      const devResetUrl = body.data?.devResetUrl;
 
-      if (data.devToken && data.devResetUrl) {
-        setDevInfo({ devToken: data.devToken, devResetUrl: data.devResetUrl });
+      if (devToken && devResetUrl) {
+        setDevInfo({ devToken, devResetUrl });
       }
 
       setSubmitted(true);

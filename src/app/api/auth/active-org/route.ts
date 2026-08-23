@@ -11,6 +11,12 @@ import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import {
+  createServerErrorResponse,
+  createSuccessResponse,
+  createValidationErrorResponse,
+} from '@/shared/lib/api/response-service';
+
 import { authOptions } from '@/modules/auth/infrastructure/authjs/auth';
 import { organizationsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
 
@@ -30,25 +36,32 @@ export async function POST(request: Request): Promise<Response> {
   await connection();
 
   if (env.AUTH_PROVIDER !== 'authjs') {
-    return Response.json({ error: 'Not available' }, { status: 404 });
+    return createServerErrorResponse('Not available', 404, 'NOT_AVAILABLE');
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    return createServerErrorResponse(
+      'Invalid request body',
+      400,
+      'INVALID_BODY',
+    );
   }
 
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: 'Invalid organization ID' }, { status: 422 });
+    return createValidationErrorResponse(
+      { organizationId: ['Invalid organization ID'] },
+      422,
+    );
   }
 
   const session = await getServerSession(authOptions);
   const userId = session?.user?.id;
   if (!userId) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    return createServerErrorResponse('Unauthorized', 401, 'UNAUTHORIZED');
   }
 
   try {
@@ -62,9 +75,10 @@ export async function POST(request: Request): Promise<Response> {
     );
 
     if (!isMember) {
-      return Response.json(
-        { error: 'Organization membership required' },
-        { status: 403 },
+      return createServerErrorResponse(
+        'Organization membership required',
+        403,
+        'MEMBERSHIP_REQUIRED',
       );
     }
 
@@ -76,9 +90,10 @@ export async function POST(request: Request): Promise<Response> {
       .limit(1);
 
     if (organizationRows[0]?.status === 'archived') {
-      return Response.json(
-        { error: 'Archived organizations cannot be set as active' },
-        { status: 409 },
+      return createServerErrorResponse(
+        'Archived organizations cannot be set as active',
+        409,
+        'ORGANIZATION_ARCHIVED',
       );
     }
   } catch (err) {
@@ -91,10 +106,7 @@ export async function POST(request: Request): Promise<Response> {
       },
       'Failed to validate organization switch request',
     );
-    return Response.json(
-      { error: 'Unable to switch organization' },
-      { status: 500 },
-    );
+    return createServerErrorResponse('Unable to switch organization', 500);
   }
 
   const cookieStore = await cookies();
@@ -114,5 +126,5 @@ export async function POST(request: Request): Promise<Response> {
     'Switched active organization for AuthJS session',
   );
 
-  return Response.json({ success: true });
+  return createSuccessResponse({ success: true });
 }

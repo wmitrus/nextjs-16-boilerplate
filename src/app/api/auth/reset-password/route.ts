@@ -11,6 +11,13 @@ import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import { getFieldErrors } from '@/shared/lib/api/field-errors';
+import {
+  createServerErrorResponse,
+  createSuccessResponse,
+  createValidationErrorResponse,
+} from '@/shared/lib/api/response-service';
+
 import {
   authUserIdentitiesTable,
   passwordResetTokensTable,
@@ -31,9 +38,10 @@ export async function POST(request: Request): Promise<Response> {
   await connection();
 
   if (env.AUTH_PROVIDER !== 'authjs') {
-    return Response.json(
-      { error: 'Not available for the current auth provider' },
-      { status: 404 },
+    return createServerErrorResponse(
+      'Not available for the current auth provider',
+      404,
+      'PROVIDER_UNAVAILABLE',
     );
   }
 
@@ -47,18 +55,16 @@ export async function POST(request: Request): Promise<Response> {
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    return createServerErrorResponse(
+      'Invalid request body',
+      400,
+      'INVALID_BODY',
+    );
   }
 
   const parsed = resetPasswordSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json(
-      {
-        error: 'Validation failed',
-        details: parsed.error.issues.map((i) => i.message),
-      },
-      { status: 422 },
-    );
+    return createValidationErrorResponse(getFieldErrors(parsed.error), 422);
   }
 
   const { token, password } = parsed.data;
@@ -87,7 +93,11 @@ export async function POST(request: Request): Promise<Response> {
       .limit(1);
 
     if (!candidateToken) {
-      return Response.json({ error: INVALID_TOKEN_ERROR }, { status: 410 });
+      return createServerErrorResponse(
+        INVALID_TOKEN_ERROR,
+        410,
+        'INVALID_TOKEN',
+      );
     }
 
     const hashedPassword = await hash(password, BCRYPT_COST);
@@ -196,7 +206,11 @@ export async function POST(request: Request): Promise<Response> {
         { event: 'auth:password_reset_token_claim_lost' },
         'Password reset token was already claimed by a concurrent request',
       );
-      return Response.json({ error: INVALID_TOKEN_ERROR }, { status: 410 });
+      return createServerErrorResponse(
+        INVALID_TOKEN_ERROR,
+        410,
+        'INVALID_TOKEN',
+      );
     }
 
     logger.debug(
@@ -204,7 +218,7 @@ export async function POST(request: Request): Promise<Response> {
       'Password reset successful',
     );
 
-    return Response.json({ success: true }, { status: 200 });
+    return createSuccessResponse({ success: true });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     logger.error(
@@ -216,9 +230,6 @@ export async function POST(request: Request): Promise<Response> {
       'Password reset error',
     );
 
-    return Response.json(
-      { error: 'Failed to reset password.' },
-      { status: 500 },
-    );
+    return createServerErrorResponse('Failed to reset password.', 500);
   }
 }

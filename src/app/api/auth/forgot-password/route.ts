@@ -10,6 +10,12 @@ import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import { getFieldErrors } from '@/shared/lib/api/field-errors';
+import {
+  createServerErrorResponse,
+  createSuccessResponse,
+  createValidationErrorResponse,
+} from '@/shared/lib/api/response-service';
 import { getIP } from '@/shared/lib/network/get-ip';
 import { checkRateLimit } from '@/shared/lib/rate-limit/rate-limit-helper';
 
@@ -37,9 +43,10 @@ export async function POST(request: Request): Promise<Response> {
   await connection();
 
   if (env.AUTH_PROVIDER !== 'authjs') {
-    return Response.json(
-      { error: 'Not available for the current auth provider' },
-      { status: 404 },
+    return createServerErrorResponse(
+      'Not available for the current auth provider',
+      404,
+      'PROVIDER_UNAVAILABLE',
     );
   }
 
@@ -49,9 +56,10 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   if (!rateLimitResult.success) {
-    return Response.json(
-      { error: 'Too many requests. Please wait before trying again.' },
-      { status: 429 },
+    return createServerErrorResponse(
+      'Too many requests. Please wait before trying again.',
+      429,
+      'RATE_LIMITED',
     );
   }
 
@@ -65,18 +73,16 @@ export async function POST(request: Request): Promise<Response> {
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    return createServerErrorResponse(
+      'Invalid request body',
+      400,
+      'INVALID_BODY',
+    );
   }
 
   const parsed = forgotPasswordSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json(
-      {
-        error: 'Validation failed',
-        details: parsed.error.issues.map((i) => i.message),
-      },
-      { status: 422 },
-    );
+    return createValidationErrorResponse(getFieldErrors(parsed.error), 422);
   }
 
   const { email } = parsed.data;
@@ -91,7 +97,7 @@ export async function POST(request: Request): Promise<Response> {
       .limit(1);
 
     if (!user) {
-      return Response.json(SAFE_RESPONSE, { status: 200 });
+      return createSuccessResponse(SAFE_RESPONSE);
     }
 
     const { rawToken, tokenHash } = generateResetToken();
@@ -129,10 +135,11 @@ export async function POST(request: Request): Promise<Response> {
         { event: 'auth:reset_token_dev_exposed', devResetUrl },
         '[DEV ONLY] Password reset token exposed — never enable AUTH_EXPOSE_RESET_TOKEN_IN_DEV in production',
       );
-      return Response.json(
-        { ...SAFE_RESPONSE, devToken: rawToken, devResetUrl },
-        { status: 200 },
-      );
+      return createSuccessResponse({
+        ...SAFE_RESPONSE,
+        devToken: rawToken,
+        devResetUrl,
+      });
     }
 
     const resetUrl = `${env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/auth/reset-password?token=${rawToken}`;
@@ -163,7 +170,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    return Response.json(SAFE_RESPONSE, { status: 200 });
+    return createSuccessResponse(SAFE_RESPONSE);
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     const cause = error.cause instanceof Error ? error.cause : undefined;
@@ -183,6 +190,6 @@ export async function POST(request: Request): Promise<Response> {
         'Password reset token generation error',
       );
 
-    return Response.json(SAFE_RESPONSE, { status: 200 });
+    return createSuccessResponse(SAFE_RESPONSE);
   }
 }

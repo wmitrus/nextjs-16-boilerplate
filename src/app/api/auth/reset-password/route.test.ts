@@ -184,7 +184,10 @@ describe('POST /api/auth/reset-password', () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ success: true });
+    await expect(response.json()).resolves.toEqual({
+      status: 'ok',
+      data: { success: true },
+    });
   });
 
   // The core of SEC-35: the pre-check passing is NOT permission to proceed.
@@ -201,7 +204,9 @@ describe('POST /api/auth/reset-password', () => {
 
     expect(response.status).toBe(410);
     await expect(response.json()).resolves.toEqual({
+      status: 'server_error',
       error: expect.stringContaining('invalid or has expired'),
+      code: 'INVALID_TOKEN',
     });
   });
 

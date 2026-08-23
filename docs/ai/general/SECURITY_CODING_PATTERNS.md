@@ -43,6 +43,7 @@ Update it after every security review group.
 | SEC-35 | Race conditions           | Password reset token validated and marked used in two statements with bcrypt between them, so concurrent requests could both redeem it      | Real risk → fixed                                                                                                                            | `/api/auth/reset-password`                           |
 | SEC-36 | Session lifecycle         | Stateless 30-day JWTs had no revocation path, so a password reset left a stolen session working until it expired                            | Real risk → fixed                                                                                                                            | `users.sessions_valid_from`, both central evaluators |
 | SEC-37 | Information disclosure    | Server Actions returned any unclassified exception's message to the client, filtered only by a `.includes('Failed query:')` substring match | Real risk → fixed                                                                                                                            | `createSecureAction`                                 |
+| SEC-38 | API consistency           | 12 of 36 routes bypassed the mandatory response service; the instruction said "prefer" and nothing enforced it                              | Real drift → fixed                                                                                                                           | all `src/app/api/**` routes                          |
 
 ---
 
@@ -3654,3 +3655,102 @@ authored by whoever threw, which is usually not this codebase.
 the screen; let everything else be internal by default.
 **DO** return and log a correlation id whenever you hide a message, or you
 have traded a leak for an unsupportable failure.
+
+## SEC-38 — A Convention Nothing Checks Is Not A Convention
+
+**ID**: SEC-38
+**Category**: API consistency / response contract
+**Classification**: Real drift → fixed (eighth case of the multi-case security-audit remediation series)
+**Affected contexts**: every App Router route handler, and every client that reads one
+
+### Risk
+
+`AGENTS.md` has carried an "API Response Discipline" section for a long time,
+naming `response-service.ts` and its helpers. An audit found **12 of 36
+routes bypassing it** with ~56 hand-rolled `Response.json(...)` calls,
+including five live auth endpoints (`signup`, `forgot-password`,
+`reset-password`, `resend-verification`, `active-org`).
+
+This is not primarily a security hole; it is a consistency failure with
+security-adjacent consequences:
+
+- Clients cannot rely on one error shape, so each hand-rolls its own
+  extraction and each gets it slightly differently wrong.
+- Error bodies escape the one place a repository can centrally decide what an
+  error is allowed to say — the exact centralisation SEC-37 depends on.
+- Sibling endpoints answering the same question in different shapes is how a
+  consumer ends up parsing on `message` text (see below).
+
+Two things made it decay:
+
+1. **The instruction said "prefer"**, and offered "unless the endpoint has a
+   deliberate protocol-specific reason" as an unbounded escape hatch.
+2. **Nothing checked.** Exactly as with SEC-23, the rule depended on whoever
+   wrote the next route having read the document and remembered it.
+
+### Correct Pattern
+
+Routes:
+
+```typescript
+return createSuccessResponse({ autoVerified: true }, 201);
+return createValidationErrorResponse(getFieldErrors(parsed.error), 422);
+return createServerErrorResponse(
+  'Registration is currently closed.',
+  403,
+  'REGISTRATION_CLOSED',
+);
+```
+
+Clients — and this is the half that is easy to miss:
+
+```typescript
+// The envelope has TWO error channels. Reading only `.error` means every
+// 422 shows your generic fallback instead of what the user must fix.
+setError(extractApiErrorMessage(body) ?? 'Failed to create account.');
+
+// Success payloads are wrapped.
+const autoVerified = body.data?.autoVerified === true;
+```
+
+**Never branch on a response's human-readable message.** `sign-up-client.tsx`
+did exactly this:
+
+```typescript
+const isAutoVerified =
+  responseData.message === 'Account created. You can now sign in.';
+```
+
+That comparison breaks silently the moment anyone rewords the sentence — no
+error, no failing test, just the wrong branch. The route now returns an
+explicit `autoVerified` boolean and the client reads that.
+
+### Enforcement
+
+`src/shared/lib/api/response-service.guard.test.ts` walks every `route.ts`
+under `src/app/api` and fails on any hand-rolled envelope. Routes that
+genuinely own their wire format sit in `EXEMPT_ROUTES` with a written reason
+naming the consumer — today the NextAuth protocol handler, the uptime-monitor
+health probe, the deploy-script diagnostics endpoint, the log-ingest
+acknowledgement, and Sentry's verbatim example route. The guard also fails if
+an exemption points at a route that no longer exists, so the list cannot rot.
+
+### Required Validation
+
+- The guard test itself, verified by reverting one conversion and confirming
+  the suite goes red.
+- Route tests asserting the _envelope_, not just the status code: a converted
+  route's success test must read `body.data.x`, which is what catches a
+  half-done conversion.
+- A client test for the `form_errors` path specifically — it is the channel a
+  `.error`-only client silently misses.
+
+### Rule for Agents
+
+**DO** use the `response-service.ts` helpers for every JSON route. It is a
+requirement, and the guard test enforces it.
+**DO** read client-side errors with `extractApiErrorMessage()` and success
+data from `body.data`.
+**DO NOT** branch on a message string. Return a field.
+**DO NOT** add to `EXEMPT_ROUTES` without naming the consumer that requires
+the different shape.

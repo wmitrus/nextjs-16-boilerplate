@@ -11,6 +11,13 @@ import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import { getFieldErrors } from '@/shared/lib/api/field-errors';
+import {
+  createServerErrorResponse,
+  createSuccessResponse,
+  createValidationErrorResponse,
+} from '@/shared/lib/api/response-service';
+
 import {
   authUserIdentitiesTable,
   emailVerificationTokensTable,
@@ -65,9 +72,10 @@ export async function POST(request: Request): Promise<Response> {
   await connection();
 
   if (env.AUTH_PROVIDER !== 'authjs') {
-    return Response.json(
-      { error: 'Not available for the current auth provider' },
-      { status: 404 },
+    return createServerErrorResponse(
+      'Not available for the current auth provider',
+      404,
+      'PROVIDER_UNAVAILABLE',
     );
   }
 
@@ -81,26 +89,25 @@ export async function POST(request: Request): Promise<Response> {
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    return createServerErrorResponse(
+      'Invalid request body',
+      400,
+      'INVALID_BODY',
+    );
   }
 
   const parsed = signUpSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json(
-      {
-        error: 'Validation failed',
-        details: parsed.error.issues.map((i) => i.message),
-      },
-      { status: 422 },
-    );
+    return createValidationErrorResponse(getFieldErrors(parsed.error), 422);
   }
 
   const { email: bodyEmail, password, invitationToken } = parsed.data;
 
   if (env.REGISTRATION_MODE !== 'open' && !invitationToken) {
-    return Response.json(
-      { error: 'Registration is currently closed.' },
-      { status: 403 },
+    return createServerErrorResponse(
+      'Registration is currently closed.',
+      403,
+      'REGISTRATION_CLOSED',
     );
   }
 
@@ -132,9 +139,10 @@ export async function POST(request: Request): Promise<Response> {
           },
           'Signup rejected — invitation token invalid or expired',
         );
-        return Response.json(
-          { error: 'This invitation link is invalid or has expired.' },
-          { status: 410 },
+        return createServerErrorResponse(
+          'This invitation link is invalid or has expired.',
+          410,
+          'INVITATION_INVALID',
         );
       }
 
@@ -147,9 +155,10 @@ export async function POST(request: Request): Promise<Response> {
           },
           'Signup rejected — provided email does not match invitation email',
         );
-        return Response.json(
-          { error: 'Invitation email does not match provided email.' },
-          { status: 400 },
+        return createServerErrorResponse(
+          'Invitation email does not match provided email.',
+          400,
+          'INVITATION_EMAIL_MISMATCH',
         );
       }
 
@@ -169,9 +178,10 @@ export async function POST(request: Request): Promise<Response> {
       .limit(1);
 
     if (existing) {
-      return Response.json(
-        { error: 'An account with this email already exists.' },
-        { status: 409 },
+      return createServerErrorResponse(
+        'An account with this email already exists.',
+        409,
+        'EMAIL_TAKEN',
       );
     }
 
@@ -257,9 +267,16 @@ export async function POST(request: Request): Promise<Response> {
     );
 
     if (emailVerified) {
-      return Response.json(
-        { success: true, message: 'Account created. You can now sign in.' },
-        { status: 201 },
+      // `autoVerified` is the field clients branch on. The message stays for
+      // display only -- the sign-up client used to compare it verbatim, which
+      // silently breaks the moment the wording changes.
+      return createSuccessResponse(
+        {
+          success: true,
+          autoVerified: true,
+          message: 'Account created. You can now sign in.',
+        },
+        201,
       );
     }
 
@@ -273,25 +290,27 @@ export async function POST(request: Request): Promise<Response> {
         { event: 'auth:verification_token_dev_exposed', devVerifyUrl },
         '[DEV ONLY] Verification token exposed — never enable AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV in production',
       );
-      return Response.json(
+      return createSuccessResponse(
         {
           success: true,
+          autoVerified: false,
           message:
             'Account created. Email verification is required before sign-in.',
           devToken: rawVerificationToken,
           devVerifyUrl,
         },
-        { status: 201 },
+        201,
       );
     }
 
-    return Response.json(
+    return createSuccessResponse(
       {
         success: true,
+        autoVerified: false,
         message:
           'Account created. Email verification is required before sign-in.',
       },
-      { status: 201 },
+      201,
     );
   } catch (err) {
     if (
@@ -300,16 +319,18 @@ export async function POST(request: Request): Promise<Response> {
       err instanceof InvitationAlreadyUsedError ||
       err instanceof InvitationRevokedError
     ) {
-      return Response.json(
-        { error: 'This invitation link is invalid or has expired.' },
-        { status: 410 },
+      return createServerErrorResponse(
+        'This invitation link is invalid or has expired.',
+        410,
+        'INVITATION_INVALID',
       );
     }
 
     if (isUniqueConstraintViolation(err)) {
-      return Response.json(
-        { error: 'An account with this email already exists.' },
-        { status: 409 },
+      return createServerErrorResponse(
+        'An account with this email already exists.',
+        409,
+        'EMAIL_TAKEN',
       );
     }
 
@@ -323,9 +344,6 @@ export async function POST(request: Request): Promise<Response> {
       'AuthJS sign-up error',
     );
 
-    return Response.json(
-      { error: 'Failed to create account.' },
-      { status: 500 },
-    );
+    return createServerErrorResponse('Failed to create account.', 500);
   }
 }

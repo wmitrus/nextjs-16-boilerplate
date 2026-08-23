@@ -298,3 +298,23 @@ error produce different client output. Move it onto `env.NODE_ENV` and
 the boundary that was actually leaking; changing the one that was not, in the
 same commit, would have mixed a fix with a cleanup and widened the blast
 radius for no security gain.
+
+## PE-12 — Decide Whether 4xx Should Stop Being `status: 'server_error'`
+
+- **Source**: `.copilot/tasks/2026-08-22-api-response-discipline/` (Case 8)
+- **Date added**: 2026-08-22
+- **Status**: Open — needs an owner decision, deliberately not taken during Case 8
+
+**Description**: The response envelope has one error status, `server_error`,
+used for every non-2xx: 401, 403, 404, 409, 410, 429 and 500 all return
+`status: 'server_error'`. For a boilerplate meant as a reference that reads
+loosely — those are client errors.
+
+**Why deferred**: it was considered during Case 8 and rejected on cost, not
+overlooked. `status === 'server_error'` is read by 5 admin client components
+and 10 test files, and introducing a second error status forces every future
+client to branch twice. The client/server distinction is already carried by
+the HTTP status code, so the gain is naming. Options if picked up: (a) leave
+it; (b) add `client_error` and migrate all readers; (c) rename the single
+channel to a neutral `error` — a breaking envelope change best done once,
+alongside any other envelope revision.

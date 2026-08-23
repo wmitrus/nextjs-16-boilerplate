@@ -4560,3 +4560,106 @@ fix such a leak at the source that builds it, not at one of its consumers.
 is not a validation.
 **DO** state which direction a control fails in, and why, when a sibling
 control in the same codebase fails the other way.
+
+---
+
+## SEC-45 — An Error Path That Skips Finalization Is An Unhardened Response
+
+**ID**: SEC-45
+**Category**: Response hardening / error handling
+**Classification**: Real risk → fixed (fifteenth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `src/proxy.ts`, `withSecurity`, every Edge response
+
+### Risk
+
+`runSecurityPipeline` wrapped the whole chain in a catch that built its own
+reply:
+
+```ts
+try {
+  return await securityPipeline(request);
+} catch (error) {
+  console.error('[Proxy Error]', error);
+  return NextResponse.json({ status: 'server_error', … }, { status: 500 });
+}
+```
+
+That response is assembled **outside** `withSecurity`, which is the function
+that applies `withHeaders()` and the correlation metadata. So any throw
+anywhere in the pipeline produced a 500 with:
+
+- **no security headers at all** — no CSP, no `nosniff`, no `X-Frame-Options`,
+  no `Referrer-Policy`, no CORP/COOP. A response body an attacker can induce
+  (throw a middleware, get a JSON document) served with no
+  `X-Content-Type-Options` is a content-sniffing surface, and it is the one
+  response in the application with no framing or CSP protection.
+- **no correlation id**, so the one response an operator most needs to trace
+  is the only one that cannot be joined to a log record.
+- **`console.error`**, bypassing the structured edge logger — unqueryable, and
+  outside whatever redaction the logger applies.
+
+The deeper defect is structural: the hardening chain existed in two places.
+Anyone adding a header to `withSecurity` would harden every response except
+the failure one, and nothing would say so.
+
+### Rule
+
+**A response is finalized in exactly one place, and the error boundary sits
+inside it — at the innermost point that still holds the request context.**
+
+```ts
+let response: NextResponse;
+try {
+  response = await handler(request, ctx);
+} catch (error) {
+  logger.error({ correlationId: ctx.correlationId, … }, '…');
+  response = createServerErrorResponse('Internal Server Error', 500, 'SERVER_ERROR');
+}
+response = withHeaders(request, response, ctx.nonce);
+response.headers.set('x-correlation-id', ctx.correlationId);
+response.headers.set('x-request-id', ctx.requestId);
+return response;
+```
+
+Three properties follow, and each is the reason for the placement:
+
+1. **Inside `withSecurity`, not at the proxy's catch.** This is the last frame
+   that still has `ctx`. A boundary further out has no correlation id, so it
+   either omits one or mints a second that joins to nothing — and it must
+   duplicate the finalization, which is the drift the case is about.
+2. **The body is generic in every environment.** No `NODE_ENV` branch. This
+   boundary runs before any authorization, so the throw can come from any
+   library in the chain and carry file paths, table names, or connection
+   strings. `with-error-handler.ts` returns `error.message` outside
+   production; that is defensible for an API route behind auth, and not here.
+3. **Correlation travels in headers, not the body.** `x-correlation-id` and
+   `x-request-id`, same as every other response. `ServerErrorResponse` is
+   shared by every error in the application; widening it for one path would
+   change a contract the whole API depends on.
+
+The proxy keeps a last-resort catch for a throw that never reaches
+`withSecurity` — `classifyRequest()` failing, or container wiring. It logs and
+returns a hardened generic 500 but **deliberately mints no correlation id**:
+there is no context to take one from, and a fresh id would be a promise the
+logs cannot keep.
+
+### Enforcement
+
+`src/proxy.test.ts` drives a middleware that rejects with a connection string
+in its message and asserts the response is 500, generic-bodied,
+`SERVER_ERROR`, carries `nosniff` / `X-Frame-Options` / `Referrer-Policy` /
+CORP / CSP / `x-correlation-id` / `x-request-id`, and that no fragment of the
+connection string reaches the caller. Verified by falsification: with the
+boundary removed, `X-Content-Type-Options` comes back `null`.
+
+Before this case the proxy suite covered 429, 403 and the happy path — every
+response the pipeline _returned_, and none that it threw.
+
+### Related
+
+- **SEC-38** — the same envelope invariant for route handlers.
+- **SEC-37** — the same generic-body rule at the server-action boundary.
+- **PE-22** — the four hand-built `NextResponse.json()` calls in
+  `with-auth.ts`; convention debt, not this defect (they are returned from
+  inside the pipeline and do reach finalization).

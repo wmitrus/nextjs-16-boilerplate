@@ -79,7 +79,50 @@ The application uses a modular pipeline in `src/proxy.ts` (Next.js 16 Middleware
 - **Rate Limiting**: Integrated Upstash/In-memory protection via `withRateLimit`.
 - **Auth Guard**: Orchestrates Clerk authentication and onboarding redirects.
 
-### 3.2 Global Headers (CSP)
+### 3.2 Error Boundary — A Thrown Request Is Still A Hardened Response (SEC-45)
+
+The pipeline's error boundary lives **inside `withSecurity`**, wrapping the
+composed handler, not at the proxy's outer `catch`:
+
+```ts
+let response: NextResponse;
+try {
+  response = await handler(request, ctx);
+} catch (error) {
+  logger.error({ correlationId: ctx.correlationId, ... }, 'Security pipeline threw');
+  response = createServerErrorResponse('Internal Server Error', 500, 'SERVER_ERROR');
+}
+response = withHeaders(request, response, ctx.nonce);   // one path for every response
+response.headers.set('x-correlation-id', ctx.correlationId);
+response.headers.set('x-request-id', ctx.requestId);
+```
+
+**Why it was wrong before.** The 500 was built in the proxy's catch, _outside_
+the function that applies `withHeaders()` — so a throw anywhere in the chain
+produced the one response in the application with no CSP, no `nosniff`, no
+framing protection and no correlation id, logged through `console.error`
+instead of the structured edge logger. Worse, the hardening chain then existed
+in two places: adding a header to `withSecurity` would have hardened every
+response except the failure one.
+
+**Three rules that follow:**
+
+| Rule                                                         | Why                                                                                                                                              |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Boundary at the innermost frame holding `RouteContext`       | It is the last place with `ctx.correlationId`; a catch further out must invent a second id that joins to nothing, and duplicate the finalization |
+| Body generic in **every** environment — no `NODE_ENV` branch | The boundary runs before any authorization, so the throw can come from any library and carry paths, table names or connection strings            |
+| Correlation in headers, never in the body                    | `ServerErrorResponse` is shared by every error in the app; widening it for one path changes a contract the whole API depends on                  |
+
+The proxy keeps a last-resort catch for throws that never reach `withSecurity`
+(`classifyRequest()` failing, container wiring). It returns a hardened generic
+500 and **deliberately mints no correlation id** — there is no context to take
+one from, and a fresh id would be a promise the logs cannot keep.
+
+Enforced by `src/proxy.test.ts`, which throws a connection string from a
+middleware and asserts the 500 carries the full header set and leaks no
+fragment of it.
+
+### 3.3 Global Headers (CSP)
 
 A hardened **Content Security Policy** is enforced by default, including specific rules for Clerk integration.
 

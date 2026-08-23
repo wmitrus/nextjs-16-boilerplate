@@ -515,3 +515,37 @@ app layer on a managed platform.
   data that is not already public to a signed-in user).
 
 Until then the shared key plus SEC-44's controls is the proportionate answer.
+
+---
+
+## PE-22 — Security Middleware Response Consistency (`with-auth.ts`)
+
+- **Source**: `.copilot/tasks/2026-08-23-proxy-error-boundary/` (Case 15, SEC-45)
+- **Date added**: 2026-08-23
+- **Status**: Open
+
+**Description**: `src/security/middleware/with-auth.ts` builds four API error
+responses by hand with `NextResponse.json()` — `401 UNAUTHORIZED`, `409
+TENANT_CONTEXT_REQUIRED`, `403 TENANT_MEMBERSHIP_REQUIRED`, `403 FORBIDDEN` —
+rather than through `createServerErrorResponse()`. Migrate them, keep the
+redirects as `NextResponse.redirect()`, and verify the status/code contract is
+unchanged. No behavioural change intended.
+
+**Why deferred**: these four are **not** the SEC-45 defect and must not be
+confused with it. They are returned from _inside_ the pipeline, so
+`withSecurity()` receives them from `await handler(...)` and still runs the
+common finalization — `withHeaders()`, `x-correlation-id`, `x-request-id`. They
+carry the full CSP and security-header set today. This is convention debt
+against SEC-38's direction, not a live gap. SEC-45 closed one specific failure
+class (a throw escaping response finalization); folding a repo-wide consistency
+cleanup into that fix would widen the diff, drag the auth/tenant/authorization
+test suite into a security patch, and mix a vulnerability fix with tidying —
+against the Architecture Guard's minimum-safe-change rule.
+
+**Note on enforcement — do not extend the SEC-38 guard mechanically**: the
+guard for this should forbid **hand-assembling the standard API error
+envelope** (`{ status: 'server_error', error, code }`) in
+`src/security/middleware/**`, not ban `NextResponse.json()` outright there. A
+blanket ban assumes every future `NextResponse.json()` in security middleware
+is an architectural mistake, which is not true — the envelope is the invariant,
+the helper is just how it is produced.

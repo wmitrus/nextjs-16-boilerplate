@@ -156,6 +156,70 @@ describe('Proxy', () => {
     });
   });
 
+  describe('thrown pipeline path (SEC-45)', () => {
+    // Every other test in this file exercises a response the pipeline
+    // *returned* -- 429, 403, happy path. None covered the one path that
+    // bypassed response finalization entirely: a middleware that throws.
+    const secretish =
+      'connect ECONNREFUSED postgres://app:hunter2@10.0.0.4:5432/prod';
+
+    it('answers a thrown middleware with a hardened, generic 500', async () => {
+      const request = new NextRequest(new URL('http://localhost/api/users'));
+      vi.mocked(getIp.getClientIp).mockResolvedValue({
+        kind: 'trusted',
+        ip: '127.0.0.1',
+      });
+      vi.mocked(rateLimitHelper.checkRateLimit).mockRejectedValue(
+        new Error(secretish),
+      );
+
+      const response = await proxy(request, {} as unknown as NextFetchEvent);
+
+      expect(response?.status).toBe(500);
+      await expect(response?.json()).resolves.toEqual({
+        status: 'server_error',
+        error: 'Internal Server Error',
+        code: 'SERVER_ERROR',
+      });
+
+      // The point of the case: the failure path goes through the same
+      // finalization as every other response.
+      expect(response?.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(response?.headers.get('X-Frame-Options')).toBe('DENY');
+      expect(response?.headers.get('Referrer-Policy')).toBe(
+        'strict-origin-when-cross-origin',
+      );
+      expect(response?.headers.get('Cross-Origin-Resource-Policy')).toBe(
+        'same-origin',
+      );
+      expect(response?.headers.get('Content-Security-Policy')).toBeTruthy();
+      expect(response?.headers.get('x-correlation-id')).toBeTruthy();
+      expect(response?.headers.get('x-request-id')).toBeTruthy();
+    });
+
+    it('keeps the exception text out of the response body', async () => {
+      const request = new NextRequest(new URL('http://localhost/api/users'));
+      vi.mocked(getIp.getClientIp).mockResolvedValue({
+        kind: 'trusted',
+        ip: '127.0.0.1',
+      });
+      vi.mocked(rateLimitHelper.checkRateLimit).mockRejectedValue(
+        new Error(secretish),
+      );
+
+      const response = await proxy(request, {} as unknown as NextFetchEvent);
+      const body = await response?.text();
+
+      // Not just "the message is absent" -- no fragment of the connection
+      // string reaches the caller. The detail belongs in the edge log, joined
+      // to this response by the correlation id asserted above.
+      expect(body).not.toContain(secretish);
+      expect(body).not.toContain('hunter2');
+      expect(body).not.toContain('10.0.0.4');
+      expect(body).not.toContain('postgres');
+    });
+  });
+
   it('should ignore non-api routes', async () => {
     const request = new NextRequest(new URL('http://localhost/about'));
     await proxy(request, {} as unknown as NextFetchEvent);

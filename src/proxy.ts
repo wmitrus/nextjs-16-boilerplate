@@ -10,7 +10,10 @@ import type {
 } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import { env } from '@/core/env';
+import { resolveEdgeLogger } from '@/core/logger/di-edge';
 import { createEdgeRequestContainer } from '@/core/runtime/edge';
+
+import { createServerErrorResponse } from '@/shared/lib/api/response-service';
 
 import { AuthJsEdgeIdentitySource } from '@/modules/auth/infrastructure/authjs/AuthJsEdgeIdentitySource';
 import { RequestScopedIdentityProvider } from '@/modules/auth/infrastructure/RequestScopedIdentityProvider';
@@ -23,11 +26,28 @@ import {
   withDemoAllowlistGuard,
   withDemoGuard,
 } from '@/security/middleware/with-demo-guard';
-import { buildContentSecurityPolicy } from '@/security/middleware/with-headers';
+import {
+  buildContentSecurityPolicy,
+  withHeaders,
+} from '@/security/middleware/with-headers';
 import { withInternalApiGuard } from '@/security/middleware/with-internal-api-guard';
 import { withRateLimit } from '@/security/middleware/with-rate-limit';
 import { withRegistrationMode } from '@/security/middleware/with-registration-mode';
 import { withSecurity } from '@/security/middleware/with-security';
+
+let _proxyLogger:
+  | ReturnType<ReturnType<typeof resolveEdgeLogger>['child']>
+  | undefined;
+
+function getProxyLogger() {
+  if (_proxyLogger) return _proxyLogger;
+  _proxyLogger = resolveEdgeLogger().child({
+    type: 'Security',
+    category: 'middleware',
+    module: 'proxy',
+  });
+  return _proxyLogger;
+}
 
 type ProxyHandler = (
   req: NextRequest,
@@ -190,15 +210,35 @@ async function runSecurityPipeline(
   try {
     return await securityPipeline(request);
   } catch (error) {
-    console.error('[Proxy Error]', error);
-    return NextResponse.json(
+    // Last-resort net for a throw that never reached withSecurity's own
+    // boundary -- classifyRequest() itself failing, or the container wiring
+    // above. Everything thrown *inside* the pipeline is handled one layer in,
+    // where the RouteContext still exists (SEC-45).
+    //
+    // Deliberately no correlation id here: there is no ctx to take one from,
+    // and minting a fresh one would hand the caller an id that joins to
+    // nothing in the logs. The log record below is the only trace, and it says
+    // so.
+    getProxyLogger().error(
       {
-        status: 'server_error',
-        error: 'Internal Server Error',
-        code: 'SERVER_ERROR',
+        event: 'proxy:pre_context_error',
+        path: request.nextUrl.pathname,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       },
-      { status: 500 },
+      'Proxy threw before a request context existed',
     );
+
+    const response = createServerErrorResponse(
+      'Internal Server Error',
+      500,
+      'SERVER_ERROR',
+    );
+
+    // No nonce is available on this path -- withHeaders falls back to the
+    // non-nonce CSP, which is still better than a bare JSON response with no
+    // security headers at all.
+    return withHeaders(request, response);
   }
 }
 

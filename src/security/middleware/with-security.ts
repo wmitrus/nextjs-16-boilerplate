@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { resolveEdgeLogger } from '@/core/logger/di-edge';
 
+import { createServerErrorResponse } from '@/shared/lib/api/response-service';
+
 import {
   classifyRequest,
   type RouteContext,
@@ -50,10 +52,47 @@ export function withSecurity(
       return response;
     }
 
-    // Execute the composed middleware pipeline
-    let response = await handler(request, ctx);
+    // Execute the composed middleware pipeline.
+    //
+    // The boundary sits HERE, not at the proxy's outer catch, because this is
+    // the last place that still holds the RouteContext. A catch further out
+    // has no `ctx`, so it either ships a 500 with no correlation id at all or
+    // invents a second one that matches nothing in the logs -- and it has to
+    // re-implement the header finalization below, which is exactly the
+    // duplication that lets the two paths drift apart. See SEC-45.
+    let response: NextResponse;
 
-    // Apply Security Headers & Metadata
+    try {
+      response = await handler(request, ctx);
+    } catch (error) {
+      // Structured edge log, not console.error: the correlation id the caller
+      // gets back in `x-correlation-id` is the same one written here, so an
+      // operator can join a user's report to this record.
+      getLogger().error(
+        {
+          event: 'security:pipeline_error',
+          path: request.nextUrl.pathname,
+          correlationId: ctx.correlationId,
+          requestId: ctx.requestId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        'Security pipeline threw',
+      );
+
+      // Always generic, in every environment. This boundary runs before any
+      // authorization has happened, so the throw can come from any library in
+      // the chain and carry file paths, table names or key prefixes with it.
+      // The detail is in the log above, reachable by correlation id.
+      response = createServerErrorResponse(
+        'Internal Server Error',
+        500,
+        'SERVER_ERROR',
+      );
+    }
+
+    // Apply Security Headers & Metadata -- one path for every response,
+    // thrown or returned.
     response = withHeaders(request, response, ctx.nonce);
     response.headers.set('x-correlation-id', ctx.correlationId);
     response.headers.set('x-request-id', ctx.requestId);

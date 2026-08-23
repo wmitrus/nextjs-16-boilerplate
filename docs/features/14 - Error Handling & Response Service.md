@@ -72,9 +72,9 @@ To validate segment boundaries in Playwright, a dedicated test-only segment is i
 
 This route intentionally throws when `?throw=1` is provided. It is gated by `NEXT_PUBLIC_E2E_ENABLED` (set in Playwright config) and is only used for E2E coverage. It can be removed if not needed.
 
-## Security Hardening (SEC-37, SEC-38)
+## Security Hardening (SEC-37, SEC-38, SEC-45)
 
-Two properties of this layer are enforced rather than conventional.
+Three properties of this layer are enforced rather than conventional.
 
 ### Client exposure is a type decision, not a substring match (SEC-37)
 
@@ -122,3 +122,23 @@ Full detail: SEC-37 and SEC-38 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 - Unit: `pnpm test`
 - Integration: `pnpm test:integration`
 - E2E: `pnpm e2e`
+
+### The Edge error boundary uses this service too (SEC-45)
+
+`createServerErrorResponse('Internal Server Error', 500, 'SERVER_ERROR')` is
+what `withSecurity` returns when the Edge pipeline throws — the failure path in
+`src/proxy.ts` no longer hand-assembles its own `NextResponse.json()`.
+
+Two consequences worth knowing when changing this module:
+
+- **`ServerErrorResponse` is now also the Edge contract.** Adding a field to
+  the type widens every error response in the application _and_ the middleware
+  boundary. This is why the correlation id for a thrown request travels in
+  `x-correlation-id` / `x-request-id` headers rather than in the JSON body.
+- **The Edge boundary is generic in every environment**, unlike
+  `with-error-handler.ts`, which returns `error.message` outside production.
+  That asymmetry is deliberate: the route wrapper runs behind auth on a known
+  handler, while the middleware boundary runs before any authorization and can
+  catch a throw from any library in the chain.
+
+Full rationale: SEC-45 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.

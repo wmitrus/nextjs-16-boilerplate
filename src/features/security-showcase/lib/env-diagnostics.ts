@@ -1,9 +1,17 @@
 type EnvValue = string | undefined;
 
+/**
+ * Presence only, never any part of the value.
+ *
+ * This carried a `maskedValue` (`value.slice(0,2) + '***' + value.slice(-4)`)
+ * until SEC-44, which meant `/api/internal/env-check` and the `/env-summary`
+ * demo page both handed out fragments of `CLERK_SECRET_KEY` and of
+ * `INTERNAL_API_KEY` itself. Diagnosing a broken deployment needs to know
+ * *whether* a variable is set; it never needs to see any of it.
+ */
 export interface EnvDiagnosticsEntry {
   name: string;
   present: boolean;
-  maskedValue: string | null;
 }
 
 export interface EnvPairIssue {
@@ -43,25 +51,12 @@ function getEnv(name: string): EnvValue {
   return undefined;
 }
 
-function maskValue(value: EnvValue): string | null {
-  if (!value) {
-    return null;
-  }
-
-  if (value.length <= 8) {
-    return `${'*'.repeat(Math.max(0, value.length - 2))}${value.slice(-2)}`;
-  }
-
-  return `${value.slice(0, 2)}***${value.slice(-4)}`;
-}
-
 function summarize(name: string): EnvDiagnosticsEntry {
   const value = getEnv(name);
 
   return {
     name,
     present: Boolean(value),
-    maskedValue: maskValue(value),
   };
 }
 

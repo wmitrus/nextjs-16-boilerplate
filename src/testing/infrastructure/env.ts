@@ -12,6 +12,7 @@ const defaultEnv: MutableEnv = {
   NODE_OPTIONS: undefined,
   LOG_LEVEL: 'info',
   INTERNAL_API_KEY: 'test-secret',
+  INTERNAL_API_KEY_PREVIOUS: undefined,
   SECURITY_ALLOWED_OUTBOUND_HOSTS:
     'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
   SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP: false,

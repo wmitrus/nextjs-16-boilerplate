@@ -20,8 +20,7 @@ export function EnvDiagnosticsExample() {
       <ul className="mb-3 space-y-1 text-sm">
         {diagnostics.required.map((entry) => (
           <li key={entry.name}>
-            {entry.name}:{' '}
-            {entry.present ? `set (${entry.maskedValue})` : 'missing'}
+            {entry.name}: {entry.present ? 'set' : 'missing'}
           </li>
         ))}
       </ul>

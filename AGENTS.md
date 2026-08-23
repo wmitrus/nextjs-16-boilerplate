@@ -607,6 +607,33 @@ Related and non-negotiable: never treat a client-supplied `tenantId` or
 be especially suspicious of one that reached the database through an
 unauthenticated endpoint (SEC-41's waitlist finding).
 
+### Secrets Never Appear In A Response, Even Masked (SEC-44)
+
+A diagnostics or health payload may report **whether** a variable is set. It
+must never carry any part of the value — no prefix, no suffix, no "masked"
+form. `getEnvDiagnostics()` returned
+`value.slice(0,2) + '***' + value.slice(-4)`, which handed fragments of
+`CLERK_SECRET_KEY` and `INTERNAL_API_KEY` to `/api/internal/env-check` **and**
+to the `/env-summary` demo page.
+
+Fix such a leak at the function that builds the field, not at one consumer:
+the second consumer is the one you will forget.
+
+Related rules for shared-secret guards:
+
+- **Check whether a guard returns before the rate limiter.** A global limiter
+  is not coverage for something rejected upstream of it. Give credential
+  rejection its own counter rather than reordering the pipeline — an
+  unauthenticated caller must not spend a legitimate client's allowance.
+- **Compare secrets in constant time**, and compare every configured key even
+  after one matches (an early exit makes "current" and "previous" separable by
+  timing during a rotation). `crypto.timingSafeEqual` is Node-only; in Edge,
+  digest both sides with `crypto.subtle` and XOR-accumulate.
+- **Support `current + previous` rotation** so a cutover needs no flag day,
+  and log when the previous key is still being used.
+- **Floor secret length in production.** `z.string().min(1)` is not a
+  validation.
+
 ### The Client IP Comes From The Declared Ingress (SEC-43)
 
 **Never read `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip` or a sibling
@@ -1184,6 +1211,7 @@ treat the table below as a quick reference to the older entries only.
 | SEC-41 | Admin routes must separate the unscoped platform-admin grant from the tenant-scoped ABAC grant, and carry the authorized scope in the same `WHERE` as the id — a `SELECT` that proves ownership does not authorise the `UPDATE` that follows it (enforced by `platform-admin.guard.test.ts`) |
 | SEC-42 | Security-critical rate limits (sign-in, sign-up, password reset, verification, invitations) must use `checkStrictRateLimit` — a durable secondary then fail closed, never a process-local fallback, which on serverless is one allowance per instance                                        |
 | SEC-43 | Client IP must come from `getClientIp()` under an explicitly declared `DEPLOYMENT_PROXY`; never read a forwarding header directly, and never invent a placeholder for an unidentifiable client (enforced by `client-ip.guard.test.ts`)                                                       |
+| SEC-44 | Never put any part of a secret in a response (masked included) — fix at the source that builds the field; give credential rejection its own rate-limit counter when the guard returns before the limiter; compare secrets in constant time across all rotated keys                           |
 
 **`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
 

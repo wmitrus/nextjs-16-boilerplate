@@ -480,3 +480,38 @@ Closing this properly would mean either a custom server (giving up
 future Next.js API. Each is a deployment-shape decision, not a code fix. The
 limitation is documented in the resolver, `.env.example` and SEC-43 so that an
 operator choosing this mode can see it.
+
+## PE-21 — Signed Internal Requests (HMAC + Replay Window), And Service Identity
+
+- **Source**: `.copilot/tasks/2026-08-23-internal-api-key-hardening/` (Case 14)
+- **Date added**: 2026-08-23
+- **Status**: Open — **deferred with an explicit trigger**, not rejected
+
+**Description**: SEC-44 hardened the shared-key model (dedicated failed-auth
+counter, constant-time verification, current+previous rotation, entropy
+floor) but kept the model itself. The stronger tiers proposed and declined:
+
+1. **Request signing** — `HMAC(timestamp, method, path, SHA256(body), nonce)`
+   with a replay window. Binds a credential to one request instead of letting
+   a captured header be replayed against any endpoint.
+2. **Service identity / mTLS** — removes the shared secret entirely.
+
+**Why deferred**: the repository has three internal routes — `health`,
+`env-check`, and an E2E-only user factory that already 404s unless
+`E2E_ENABLED` — and their only callers are the Playwright suite. There is **no
+production service-to-service consumer**. Building a signing protocol for zero
+services means a nonce store, clock-skew tolerance, a signing client and a
+second authentication path, none of which any caller exercises; unexercised
+security code decays into a liability rather than a defence. mTLS is an
+infrastructure capability, not an application one, and is unavailable to the
+app layer on a managed platform.
+
+**Trigger — build this when either becomes true**:
+
+- the first real production service-to-service consumer of `/api/internal/**`
+  appears, **or**
+- an internal endpoint gains an impact that warrants per-request
+  authentication and replay protection (anything mutating, anything returning
+  data that is not already public to a signed-in user).
+
+Until then the shared key plus SEC-44's controls is the proportionate answer.

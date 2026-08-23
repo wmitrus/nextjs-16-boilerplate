@@ -836,3 +836,54 @@ describe('validateDeploymentProxyConfigValues (SEC-43)', () => {
     }
   });
 });
+
+describe('validateInternalApiKeyConfigValues (SEC-44)', () => {
+  const load = async () =>
+    (await import('./env')).validateInternalApiKeyConfigValues;
+  const strong = 'a'.repeat(32);
+  const strongOther = 'b'.repeat(32);
+
+  it('rejects a short key in production', async () => {
+    // `z.string().min(1)` meant a one-character key was a valid production
+    // configuration.
+    const validate = await load();
+    expect(() => validate('short', undefined, 'production')).toThrow(
+      /at least 32 characters/,
+    );
+  });
+
+  it('rejects a short previous key too', async () => {
+    const validate = await load();
+    expect(() => validate(strong, 'short', 'production')).toThrow(
+      /INTERNAL_API_KEY_PREVIOUS must be at least/,
+    );
+  });
+
+  it('accepts a strong key', async () => {
+    const validate = await load();
+    expect(() => validate(strong, undefined, 'production')).not.toThrow();
+    expect(() => validate(strong, strongOther, 'production')).not.toThrow();
+  });
+
+  it('treats an unset key as valid — the guard then refuses everything', async () => {
+    const validate = await load();
+    expect(() => validate(undefined, undefined, 'production')).not.toThrow();
+  });
+
+  it('rejects a rotation where both slots hold the same value', async () => {
+    // Looks like a rotation, performs none.
+    const validate = await load();
+    expect(() => validate(strong, strong, 'production')).toThrow(
+      /must differ from INTERNAL_API_KEY/,
+    );
+  });
+
+  it('does not apply the floor outside production', async () => {
+    // E2E and local development use short fixtures on purpose, and those
+    // deployments are not reachable from the internet.
+    const validate = await load();
+    for (const nodeEnv of ['development', 'test']) {
+      expect(() => validate('short', 'shorter', nodeEnv)).not.toThrow();
+    }
+  });
+});

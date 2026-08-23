@@ -91,7 +91,24 @@ export const env = createEnv({
       z.url().optional(),
     ),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
+    /**
+     * Shared secret for `/api/internal/**`.
+     *
+     * Length is only floored in production (see
+     * `validateInternalApiKeyConfigValues`) so local development and tests
+     * keep working with short fixtures. A one-character key used to be a
+     * valid production configuration. See SEC-44.
+     */
     INTERNAL_API_KEY: z.string().min(1).optional(),
+    /**
+     * The key being rotated out. Accepted alongside `INTERNAL_API_KEY` so a
+     * rotation does not require every caller to cut over in the same instant
+     * -- publish the new key, let callers move, then drop this one.
+     *
+     * Leaving it set indefinitely doubles the material that must stay secret,
+     * so the guard logs whenever it is the one that matched.
+     */
+    INTERNAL_API_KEY_PREVIOUS: z.string().min(1).optional(),
     SECURITY_AUDIT_LOG_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(true),
@@ -416,6 +433,7 @@ export const env = createEnv({
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
+    INTERNAL_API_KEY_PREVIOUS: process.env.INTERNAL_API_KEY_PREVIOUS,
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
@@ -819,5 +837,70 @@ export function validateDeploymentProxyConfig(): void {
     env.TRUSTED_PROXY_CIDRS,
     env.NODE_ENV,
     env.VERCEL_ENV,
+  );
+}
+
+/**
+ * Minimum length for an internal-API key in production (SEC-44).
+ *
+ * 32 characters is not an entropy measurement -- a schema cannot tell a
+ * 32-character random string from a 32-character sentence. It is a floor that
+ * makes the obviously-guessable configurations impossible while staying
+ * checkable, and the `.env.example` guidance says how to generate a real one.
+ */
+export const MIN_INTERNAL_API_KEY_LENGTH = 32;
+
+/**
+ * Cross-field rules for the internal-API shared secret.
+ *
+ * Only enforced in production: local development and E2E use short fixtures
+ * deliberately, and forcing a 32-character secret there would be friction
+ * with no security value -- those deployments are not reachable from the
+ * internet.
+ */
+export function validateInternalApiKeyConfigValues(
+  internalApiKey: string | undefined,
+  previousInternalApiKey: string | undefined,
+  nodeEnv: string | undefined,
+): void {
+  if (nodeEnv !== 'production') return;
+
+  const entries: Array<[string, string | undefined]> = [
+    ['INTERNAL_API_KEY', internalApiKey],
+    ['INTERNAL_API_KEY_PREVIOUS', previousInternalApiKey],
+  ];
+
+  for (const [name, value] of entries) {
+    // An unset key is a valid configuration -- the guard then refuses every
+    // internal request, which is the safe direction. Only a *set* key has to
+    // be strong.
+    if (value === undefined) continue;
+
+    if (value.trim().length < MIN_INTERNAL_API_KEY_LENGTH) {
+      throw new Error(
+        `[env] ${name} must be at least ${MIN_INTERNAL_API_KEY_LENGTH} characters in production. ` +
+          'Generate one with: openssl rand -base64 32',
+      );
+    }
+  }
+
+  if (
+    internalApiKey !== undefined &&
+    previousInternalApiKey !== undefined &&
+    internalApiKey.trim() === previousInternalApiKey.trim()
+  ) {
+    throw new Error(
+      '[env] INTERNAL_API_KEY_PREVIOUS must differ from INTERNAL_API_KEY. ' +
+        'Setting both to the same value gives the appearance of a rotation without performing one.',
+    );
+  }
+}
+
+/** Convenience wrapper for bootstrap/startup. */
+export function validateInternalApiKeyConfig(): void {
+  validateInternalApiKeyConfigValues(
+    env.INTERNAL_API_KEY,
+    env.INTERNAL_API_KEY_PREVIOUS,
+    env.NODE_ENV,
   );
 }

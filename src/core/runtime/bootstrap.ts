@@ -16,6 +16,7 @@ import {
   validateAuthProviderConfigValues,
   validateTenancyConfigValues,
   validateDeploymentProxyConfigValues,
+  validateInternalApiKeyConfigValues,
 } from '@/core/env';
 import {
   recordContainerCreated,
@@ -95,6 +96,13 @@ export function createRequestContainer(config: AppConfig): Container {
     env.TRUSTED_PROXY_CIDRS,
     env.NODE_ENV,
     env.VERCEL_ENV,
+  );
+  // SEC-44. A weak or duplicated internal key is a deployment mistake, so it
+  // fails here rather than on the first internal request.
+  validateInternalApiKeyConfigValues(
+    env.INTERNAL_API_KEY,
+    env.INTERNAL_API_KEY_PREVIOUS,
+    env.NODE_ENV,
   );
 
   const container = new Container();

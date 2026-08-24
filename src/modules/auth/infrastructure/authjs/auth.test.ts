@@ -12,6 +12,7 @@ const mockLimit = vi.fn();
 const mockUpdate = vi.fn();
 const mockUpdateSet = vi.fn();
 const mockUpdateWhere = vi.fn();
+const mockUpdateReturning = vi.fn();
 const mockIsTurnstileConfigured = vi.fn();
 const mockVerifyTurnstileToken = vi.fn();
 
@@ -88,6 +89,7 @@ vi.mock('@/modules/user/infrastructure/drizzle/schema', () => ({
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a, b) => ({ a, b })),
+  and: vi.fn((...conditions) => ({ and: conditions })),
 }));
 
 vi.mock('next-auth/next', () => ({
@@ -119,7 +121,8 @@ describe('authOptions', () => {
     mockFrom.mockReturnValue({ where: mockWhere });
     mockSelect.mockReturnValue({ from: mockFrom });
 
-    mockUpdateWhere.mockResolvedValue(undefined);
+    mockUpdateReturning.mockResolvedValue([{ userId: 'uid-1' }]);
+    mockUpdateWhere.mockReturnValue({ returning: mockUpdateReturning });
     mockUpdateSet.mockReturnValue({ where: mockUpdateWhere });
     mockUpdate.mockReturnValue({ set: mockUpdateSet });
 
@@ -481,6 +484,44 @@ describe('authOptions', () => {
             hashedPassword: '$argon2id$v=19$m=19456,t=2,p=1$upgraded',
           }),
         );
+        // Compare-and-set: the WHERE must pin the exact hash that was just
+        // verified, not just the userId (see the concurrent-reset test
+        // below for why).
+        expect(mockUpdateWhere).toHaveBeenCalledWith(
+          expect.objectContaining({
+            and: expect.arrayContaining([
+              { a: 'userId', b: 'uid-1' },
+              { a: 'hashedPassword', b: '$stored-hash' },
+            ]),
+          }),
+        );
+      });
+
+      it('skips persisting the rehash when the credential changed concurrently (e.g. a password reset)', async () => {
+        mockCredentialLookup();
+        mockVerifyPassword.mockResolvedValueOnce(
+          validVerification({ rehash: 'legacy-bcrypt' }),
+        );
+        mockHashPassword.mockResolvedValueOnce(
+          '$argon2id$v=19$m=19456,t=2,p=1$upgraded',
+        );
+        // The compare-and-set matched zero rows -- something else already
+        // changed `hashedPassword` between the SELECT and this write.
+        mockUpdateReturning.mockResolvedValueOnce([]);
+
+        const authorize = await getAuthorize();
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'correct horse battery staple',
+        });
+
+        // The login itself is still valid -- only the stale rehash write
+        // is skipped.
+        expect(result).toMatchObject({ email: 'user@example.com' });
+        expect(mockLoggerDebug).toHaveBeenCalledWith(
+          { event: 'auth:password_rehash_skipped_concurrent_change' },
+          expect.any(String),
+        );
       });
 
       it('does not persist a rehash when verifyPassword reports none is needed', async () => {
@@ -530,7 +571,7 @@ describe('authOptions', () => {
         mockHashPassword.mockResolvedValueOnce(
           '$argon2id$v=19$m=19456,t=2,p=1$upgraded',
         );
-        mockUpdateWhere.mockRejectedValueOnce(new Error('DB unavailable'));
+        mockUpdateReturning.mockRejectedValueOnce(new Error('DB unavailable'));
 
         const authorize = await getAuthorize();
         const result = await authorize({

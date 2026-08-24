@@ -85,6 +85,29 @@ describe('hashPassword / verifyPassword (Argon2id)', () => {
     expect(result.valid).toBe(true);
     expect(result.rehash).toBe('argon2-params-outdated');
   });
+
+  it('flags a same-header Argon2 hash with a different digest length for rehash', async () => {
+    // Same v=/m=/t=/p= header as the current policy, but a shorter digest
+    // (e.g. imported from elsewhere, or minted under a since-changed
+    // outputLen). The header alone would say "current" -- only decoding
+    // the digest catches this.
+    const shorterDigest = await argon2HashRaw('correct horse battery staple', {
+      algorithm: 2,
+      version: 1,
+      memoryCost: 19456,
+      timeCost: 2,
+      parallelism: 1,
+      outputLen: 16,
+    });
+    expect(shorterDigest).toContain('$m=19456,t=2,p=1$');
+
+    const result = await verifyPassword(
+      'correct horse battery staple',
+      shorterDigest,
+    );
+    expect(result.valid).toBe(true);
+    expect(result.rehash).toBe('argon2-params-outdated');
+  });
 });
 
 describe('verifyPassword (legacy bcrypt compatibility path)', () => {

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { AuthOptions, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
@@ -182,18 +182,40 @@ export const authOptions: AuthOptions = {
             // sign-in.
             try {
               const upgradedHash = await hashPassword(password);
-              await db
+              // Compare-and-set on the exact hash just verified, not just
+              // the userId: a password reset can complete between the
+              // SELECT above and this write. Without the hash in the WHERE,
+              // an unconditional update here would overwrite the reset's
+              // brand-new credential with an Argon2 hash of the *old*
+              // password, silently reviving it.
+              const rehashed = await db
                 .update(userCredentialsTable)
                 .set({ hashedPassword: upgradedHash, updatedAt: new Date() })
-                .where(eq(userCredentialsTable.userId, credRecord.userId));
+                .where(
+                  and(
+                    eq(userCredentialsTable.userId, credRecord.userId),
+                    eq(
+                      userCredentialsTable.hashedPassword,
+                      credRecord.hashedPassword,
+                    ),
+                  ),
+                )
+                .returning();
 
-              getLogger().debug(
-                {
-                  event: 'auth:password_rehashed',
-                  reason: verification.rehash,
-                },
-                'Credential hash upgraded on successful sign-in',
-              );
+              if (rehashed.length === 0) {
+                getLogger().debug(
+                  { event: 'auth:password_rehash_skipped_concurrent_change' },
+                  'Credential changed concurrently (e.g. a password reset) -- skipped a now-stale rehash write',
+                );
+              } else {
+                getLogger().debug(
+                  {
+                    event: 'auth:password_rehashed',
+                    reason: verification.rehash,
+                  },
+                  'Credential hash upgraded on successful sign-in',
+                );
+              }
             } catch (rehashErr) {
               const rehashError =
                 rehashErr instanceof Error

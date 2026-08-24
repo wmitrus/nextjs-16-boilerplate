@@ -42,7 +42,8 @@ const ARGON2_OPTIONS = {
 
 const ARGON2_TARGET_VERSION = 19;
 
-const ARGON2_HASH_PATTERN = /^\$argon2id\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$/;
+const ARGON2_HASH_PATTERN =
+  /^\$argon2id\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$[^$]+\$([^$]+)$/;
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$/;
 
 type HashFormat = 'argon2id' | 'bcrypt-legacy';
@@ -89,12 +90,20 @@ const INVALID_RESULT: PasswordVerificationResult = {
 function argon2HashMatchesCurrentParams(storedHash: string): boolean {
   const match = ARGON2_HASH_PATTERN.exec(storedHash);
   if (!match) return false;
-  const [, version, memoryCost, timeCost, parallelism] = match;
+  const [, version, memoryCost, timeCost, parallelism, digestB64] = match;
+  // The PHC header (v=/m=/t=/p=) says nothing about digest length -- two
+  // hashes with an identical header can still carry different-length
+  // digests (e.g. one imported from elsewhere, or minted under a since-
+  // changed `outputLen`). Decode the digest segment itself rather than
+  // trusting the header alone, or a future `outputLen` policy change would
+  // silently leave every existing hash looking "current".
+  const digestLength = Buffer.from(digestB64 ?? '', 'base64').length;
   return (
     Number(version) === ARGON2_TARGET_VERSION &&
     Number(memoryCost) === ARGON2_OPTIONS.memoryCost &&
     Number(timeCost) === ARGON2_OPTIONS.timeCost &&
-    Number(parallelism) === ARGON2_OPTIONS.parallelism
+    Number(parallelism) === ARGON2_OPTIONS.parallelism &&
+    digestLength === ARGON2_OPTIONS.outputLen
   );
 }
 

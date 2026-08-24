@@ -6,6 +6,11 @@ import { extractApiErrorMessage } from '@/shared/lib/api/extract-error-message';
 
 import { buildBootstrapRedirectUrl } from '../post-auth-redirect';
 
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '@/modules/auth/infrastructure/credentials/password-policy';
+
 interface SignUpClientProps {
   invitationToken?: string;
   invitedEmail?: string;
@@ -165,9 +170,13 @@ export function SignUpClient({
           type="password"
           autoComplete="new-password"
           required
-          minLength={8}
+          minLength={PASSWORD_MIN_LENGTH}
+          maxLength={PASSWORD_MAX_LENGTH}
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
         />
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          {PASSWORD_MIN_LENGTH}–{PASSWORD_MAX_LENGTH} characters.
+        </p>
       </div>
       <div>
         <label

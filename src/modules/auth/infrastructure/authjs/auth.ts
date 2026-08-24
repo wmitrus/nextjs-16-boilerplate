@@ -299,6 +299,14 @@ export const authOptions: AuthOptions = {
       if (typedUser) {
         token.id = typedUser.id;
         token.emailVerified = typedUser.emailVerified ?? false;
+        // Minted once, at sign-in, and carried unchanged through every
+        // token rotation: this is the logical session reference step-up
+        // proofs are bound to (SEC-48). `iat` cannot serve that purpose --
+        // NextAuth re-stamps it whenever it re-issues the token, so it
+        // answers "when was this session last refreshed", not "which
+        // sign-in is this". A fresh sign-in gets a fresh `sid`, which is
+        // what makes a proof die with its session.
+        token.sid = crypto.randomUUID();
       }
       return token;
     },
@@ -312,6 +320,8 @@ export const authOptions: AuthOptions = {
         // stateless 30-day JWT revocable at all -- see SEC-36.
         session.user.sessionIssuedAt =
           typeof token.iat === 'number' ? token.iat : undefined;
+        session.user.logicalSessionId =
+          typeof token.sid === 'string' ? token.sid : undefined;
       }
       return session;
     },

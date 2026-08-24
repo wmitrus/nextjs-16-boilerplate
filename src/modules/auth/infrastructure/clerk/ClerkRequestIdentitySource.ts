@@ -49,64 +49,70 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
 
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
-      this.cached = auth().then(({ userId, orgId, orgRole, sessionClaims }) => {
-        const email = extractClerkEmailClaim(sessionClaims);
-        const emailClaimSource = resolveEmailClaimSource(sessionClaims);
-        const sessionClaimKeys =
-          sessionClaims && typeof sessionClaims === 'object'
-            ? Object.keys(sessionClaims).sort()
-            : [];
+      this.cached = auth().then(
+        ({ userId, orgId, orgRole, sessionId, sessionClaims }) => {
+          const email = extractClerkEmailClaim(sessionClaims);
+          const emailClaimSource = resolveEmailClaimSource(sessionClaims);
+          const sessionClaimKeys =
+            sessionClaims && typeof sessionClaims === 'object'
+              ? Object.keys(sessionClaims).sort()
+              : [];
 
-        if (!email) {
-          logger.warn(
+          if (!email) {
+            logger.warn(
+              {
+                event: 'auth:identity_claims_missing_email',
+                provider: 'clerk',
+                userId: userId ?? undefined,
+                sessionClaimKeys,
+                sessionTokenVersion:
+                  typeof sessionClaims?.v === 'number'
+                    ? sessionClaims.v
+                    : undefined,
+                activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
+                emailVerified:
+                  sessionClaims?.email_verified === true ? true : undefined,
+              },
+              'Clerk auth() sessionClaims did not contain a supported email claim',
+            );
+          }
+
+          logger.debug(
             {
-              event: 'auth:identity_claims_missing_email',
+              event: 'auth:identity_claims_resolved',
               provider: 'clerk',
               userId: userId ?? undefined,
+              hasEmailClaim: email !== undefined,
+              emailClaimSource,
+              emailPreview: email ? maskEmail(email) : undefined,
+              emailVerified:
+                sessionClaims?.email_verified === true ? true : undefined,
               sessionClaimKeys,
               sessionTokenVersion:
                 typeof sessionClaims?.v === 'number'
                   ? sessionClaims.v
                   : undefined,
               activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
-              emailVerified:
-                sessionClaims?.email_verified === true ? true : undefined,
+              orgExternalIdPresent: Boolean(orgId),
+              tenantRole: orgRole ?? undefined,
             },
-            'Clerk auth() sessionClaims did not contain a supported email claim',
+            'Resolved Clerk identity claims from auth()',
           );
-        }
 
-        logger.debug(
-          {
-            event: 'auth:identity_claims_resolved',
-            provider: 'clerk',
+          return {
             userId: userId ?? undefined,
-            hasEmailClaim: email !== undefined,
-            emailClaimSource,
-            emailPreview: email ? maskEmail(email) : undefined,
+            email,
             emailVerified:
               sessionClaims?.email_verified === true ? true : undefined,
-            sessionClaimKeys,
-            sessionTokenVersion:
-              typeof sessionClaims?.v === 'number'
-                ? sessionClaims.v
-                : undefined,
-            activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
-            orgExternalIdPresent: Boolean(orgId),
+            // Clerk's own session id, used as the provider-neutral logical
+            // session reference for step-up proofs (SEC-48). Clerk rotates
+            // it per sign-in, which is exactly the lifetime a proof may have.
+            logicalSessionId: sessionId ?? undefined,
+            orgExternalId: orgId ?? undefined,
             tenantRole: orgRole ?? undefined,
-          },
-          'Resolved Clerk identity claims from auth()',
-        );
-
-        return {
-          userId: userId ?? undefined,
-          email,
-          emailVerified:
-            sessionClaims?.email_verified === true ? true : undefined,
-          orgExternalId: orgId ?? undefined,
-          tenantRole: orgRole ?? undefined,
-        };
-      });
+          };
+        },
+      );
     }
 
     return this.cached;

@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { hash } from 'bcryptjs';
 import { eq, or } from 'drizzle-orm';
 import { connection } from 'next/server';
 import { z } from 'zod';
@@ -22,6 +21,8 @@ import {
   rateLimitKeyForClient,
 } from '@/shared/lib/network/get-ip';
 
+import { hashPassword } from '@/modules/auth/infrastructure/credentials/password-hasher';
+import { passwordSchema } from '@/modules/auth/infrastructure/credentials/password-policy';
 import {
   authUserIdentitiesTable,
   emailVerificationTokensTable,
@@ -42,11 +43,10 @@ import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const signUpSchema = z.object({
   email: z.email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: passwordSchema,
   invitationToken: z.string().optional(),
 });
 
-const BCRYPT_COST = 12;
 const SIGNUP_PATH = '/api/auth/signup';
 const VERIFICATION_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
@@ -92,7 +92,7 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   // SEC-42. Sign-up had no rate limit of its own. It creates rows, sends mail
-  // and runs bcrypt on unauthenticated input, and where REGISTRATION_MODE is
+  // and runs Argon2id on unauthenticated input, and where REGISTRATION_MODE is
   // not `open` it also consumes invitation tokens -- so an unthrottled
   // sign-up is both a resource-exhaustion path and an invitation-token
   // guessing oracle.
@@ -212,7 +212,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const hashedPassword = await hash(password, BCRYPT_COST);
+    const hashedPassword = await hashPassword(password);
     const userId = crypto.randomUUID();
 
     let rawVerificationToken: string | null = null;

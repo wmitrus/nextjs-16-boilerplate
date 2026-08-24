@@ -50,6 +50,9 @@ Update it after every security review group.
 | SEC-42 | Abuse prevention          | Security-critical rate limits fell back to a process-local counter, which on serverless is one allowance per instance; three pre-auth endpoints had no endpoint-level limit at all                                                    | Real risk → fixed (durable Postgres secondary, then fail closed; loosen-only operational switch)                                             | `checkRateLimit`, all pre-auth endpoints                        |
 | SEC-43 | Trust boundaries          | `getIP()` believed whichever forwarding header was present and returned a fictional `127.0.0.1` otherwise; two further sites read raw headers, one of them feeding an ABAC decision                                                   | Real risk → fixed (provider-aware resolver behind an explicit `DEPLOYMENT_PROXY`; typed trusted/untrusted result; static guard)              | `getIP`, rate-limit keys, `audit_log.ip`, ABAC `environment.ip` |
 | SEC-44 | Secret handling           | Internal-API key rejections were never rate limited (the guard returns before the limiter), compared with `!==`, had no rotation path and no length floor; env diagnostics leaked secret fragments to `/env-check` and `/env-summary` | Real risk → fixed (dedicated failed-auth counter, constant-time verify, current+previous rotation, `maskedValue` removed at source)          | `withInternalApiGuard`, `getEnvDiagnostics`                     |
+| SEC-45 | Response hardening        | Edge pipeline's own catch built a 500 outside `withSecurity`, so it shipped with no security headers and no correlation id                                                                                                             | Real risk → fixed (error boundary moved inside `withSecurity`, generic body always)                                                          | `src/proxy.ts`, `withSecurity`                                  |
+| SEC-46 | Trust boundaries          | `correlationId`/`requestId` were both taken verbatim from caller headers, unbounded and unvalidated; the Edge boundary and the RSC/Node side could disagree on which value was "the" id                                               | Real risk → fixed (bounded allowlist for correlation id, requestId never caller-supplied, `terminalHandler` overwrites downstream headers)   | `classifyRequest`, `terminalHandler`, `audit_events.correlation_id` |
+| SEC-47 | Credential storage        | Signup/reset-password used bcrypt cost 12 with `min(8)`, no max length, no Unicode normalization, and no upgrade path — bcrypt's 72-byte input limit was never surfaced, and a stronger algorithm couldn't be adopted without a flag day | Real risk (not yet critical) → fixed (Argon2id default, bcrypt legacy-verify-only, explicit rehash-on-login, NIST-aligned length policy)     | `password-policy.ts`, `password-hasher.ts`, `authorize()`, signup, reset-password |
 
 ---
 
@@ -4789,3 +4792,226 @@ arrive are the CRLF-free ones that are still unfit to echo, log and persist.
 - **SEC-43** — same shape one layer down: a header is believed because of the
   ingress, never because it is there.
 - **PE-23** — persisting `correlationSource` in the audit trail.
+
+---
+
+## SEC-47 — A Credential Hash Is Not Just A Cost Factor
+
+**ID**: SEC-47
+**Category**: Credential storage / cryptography
+**Classification**: Real risk, not yet critical → fixed (seventeenth case of
+the multi-case security-audit remediation series, first of phase 2)
+**Affected contexts**: `src/app/api/auth/signup/route.ts`,
+`src/app/api/auth/reset-password/route.ts`,
+`src/modules/auth/infrastructure/authjs/auth.ts`,
+`src/app/api/internal/e2e/authjs-user/route.ts`, `scripts/bootstrap-admin.ts`
+
+### Risk
+
+Every password-accepting entry point defined its own ad hoc schema and
+called `bcryptjs` directly:
+
+```ts
+const signUpSchema = z.object({
+  email: z.email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  invitationToken: z.string().optional(),
+});
+const BCRYPT_COST = 12;
+// ...
+const hashedPassword = await hash(password, BCRYPT_COST);
+```
+
+bcrypt cost 12 is not, by itself, weak — OWASP's current guidance still
+lists 10 as an acceptable floor for legacy bcrypt. The actual defects were
+structural, and duplicated across five call sites (signup, reset-password,
+the AuthJS `authorize()` verify path, the E2E provisioning fixture route,
+and `bootstrap-admin.ts`, which additionally hand-rolled its own
+`password.length < 8` check):
+
+- **No upper bound.** `z.string().min(8)` accepts arbitrary-length input
+  straight into an intentionally expensive KDF on an unauthenticated route
+  — a resource-exhaustion knob nothing capped.
+- **bcrypt's 72-byte input limit was invisible.** `bcryptjs` silently
+  ignores anything past 72 UTF-8 bytes (`bcrypt.truncates()` exists
+  specifically to detect this) and nothing in this codebase ever checked
+  it — two different passwords sharing a 72-byte prefix were
+  indistinguishable to the stored hash.
+- **No Unicode normalization.** A passphrase typed on two keyboards/IMEs
+  that produce different combining-character sequences for the same
+  visible text would hash to two different values.
+- **No upgrade path.** Every hash in the database was bcrypt, with no
+  mechanism to move to a stronger algorithm without a coordinated
+  flag day (forcing every user to reset at once).
+- **Below NIST's current single-factor floor.** SP 800-63B-4 sets a
+  15-character minimum for a password used as the sole authentication
+  factor (8 is only acceptable when it is one of at least two factors);
+  this Credentials provider has no second factor.
+
+None of this was independently exploitable today — the finding is a
+hardening gap for a boilerplate meant to be a template for new projects,
+not an active vulnerability in this deployment.
+
+### Rule
+
+**Password policy and password hashing each live in exactly one module,
+and every entry point imports from it — nothing defines its own schema or
+calls a hashing library directly.**
+
+`src/modules/auth/infrastructure/credentials/`:
+
+- `password-policy.ts` — `passwordSchema`: 15–128 Unicode code points
+  (counted with `Array.from(value).length`, never `.length` — UTF-16 code
+  units mismeasure anything outside the BMP), NFC-normalized via
+  `.transform()` before the parsed value is used anywhere. No composition
+  rules.
+- `password-hasher.ts` — `hashPassword()` always produces Argon2id
+  (`@node-rs/argon2`), with parameters pinned explicitly in code rather
+  than left to the library's defaults:
+
+  ```ts
+  const ARGON2_OPTIONS = {
+    algorithm: ARGON2ID_ALGORITHM, // 2 -- see file for why not the enum import
+    version: ARGON2_VERSION_0X13, // 19
+    memoryCost: 19456, // 19 MiB, OWASP's current baseline
+    timeCost: 2,
+    parallelism: 1,
+    outputLen: 32,
+  } as const;
+  ```
+
+  Explicit pinning matters: a future `@node-rs/argon2` upgrade changing its
+  own defaults must never silently change this repo's cryptographic policy.
+
+`verifyPassword(password, storedHash)` detects the stored hash's format
+from its own self-describing prefix (`$argon2id$` vs `$2a$`/`$2b$`/`$2y$`)
+and dispatches to the matching verifier via an explicit `Map` (SEC-01/
+SEC-04 pattern — see "Implementation notes" below for why a `Map` and not
+a `Record`). **An unrecognized format fails closed** — it is never guessed
+at or handed to a "best-effort" comparator:
+
+```ts
+export async function verifyPassword(
+  password: string,
+  storedHash: string,
+): Promise<PasswordVerificationResult> {
+  const format = detectHashFormat(storedHash);
+  const verifier = format ? verifiers.get(format) : undefined;
+  if (!verifier) return INVALID_RESULT;
+  return verifier(password, storedHash);
+}
+```
+
+bcrypt is kept strictly as a **read-only compatibility path**. Nothing in
+this repository calls `bcryptjs.hash()` any more — `verifyBcryptLegacy()`
+only ever calls `compare()`.
+
+**Normalization asymmetry is deliberate, not an oversight.** New Argon2
+credentials normalize (hash and verify both call `normalizePassword()`
+first); the legacy bcrypt path verifies the **raw, unnormalized**
+candidate:
+
+```ts
+/**
+ * Deliberately verifies against the RAW, non-normalized candidate: every
+ * bcrypt hash in this database was created before this policy existed,
+ * from whatever the user originally typed. Normalizing the login-time
+ * candidate now, while the stored hash was made from the unnormalized
+ * original, would fail verification for any account whose original
+ * password contained decomposable Unicode -- exactly the accounts this
+ * repo cannot afford to silently lock out.
+ */
+async function verifyBcryptLegacy(...)
+```
+
+**Rehash-on-login, with one deliberate exception.** A successful sign-in
+through a legacy bcrypt hash triggers a best-effort upgrade, persisted in
+`authorize()` in the same request:
+
+```ts
+if (verification.legacyBcryptTruncated) {
+  // Leave it on bcrypt; only a real reset can safely migrate this account.
+  getLogger().warn({ event: 'auth:legacy_bcrypt_truncated_skip_rehash' }, ...);
+} else if (verification.rehash) {
+  try {
+    const upgradedHash = await hashPassword(password);
+    await db.update(userCredentialsTable)
+      .set({ hashedPassword: upgradedHash, updatedAt: new Date() })
+      .where(eq(userCredentialsTable.userId, credRecord.userId));
+  } catch (rehashErr) {
+    // Never fail an otherwise-valid login over a rehash failure.
+    getLogger().warn({ event: 'auth:password_rehash_failed', ... }, ...);
+  }
+}
+```
+
+The exception: if the candidate that just verified is one bcrypt would
+have truncated (`bcrypt.truncates(password)`), it is **not** auto-migrated.
+That stored hash may accept other, different passwords sharing only the
+first 72 bytes — rehashing *this* one candidate into Argon2id would, in
+effect, narrow the account's real password down to this specific
+truncated-length guess under a stronger algorithm. That looks like a fix
+but silently changes what "the password" means for the account. The only
+safe migration for such an account is a real password reset, which always
+hashes the full password — so the account stays on bcrypt, logged
+distinctly (`auth:legacy_bcrypt_truncated_skip_rehash`) so it doesn't read
+as "nothing happened."
+
+A rehash failure (e.g. a DB write error) must never fail a login that was
+otherwise valid — the account simply stays on its current hash and the
+upgrade is retried on the next successful sign-in.
+
+### Implementation notes
+
+- **Why a `Map`, not a `Record`, for the two-verifier dispatch.** SEC-04
+  calls for "explicit `Record<AllowedKeys, fn>` dispatch maps" — but the
+  repo's static `security/detect-object-injection` guard still flags
+  `obj[key]()` bracket-call syntax regardless of how narrow `key`'s type
+  is. `Map#get()` is the SEC-01 pattern for exactly this reason: it keeps
+  the dispatch explicit and type-safe without tripping the linter on
+  syntax it can't statically distinguish from unconstrained bracket access.
+- **Why raw numeric literals instead of `Algorithm.Argon2id` /
+  `Version.V0x13`.** `@node-rs/argon2` exposes both as an ambient
+  `declare const enum`. This repo's `isolatedModules` TypeScript setting
+  raises `TS2748` on any cross-module reference to a const enum, since
+  per-file transpilation can't safely inline a value defined in another
+  module. `ARGON2ID_ALGORITHM = 2` / `ARGON2_VERSION_0X13 = 1` are
+  napi-rs's own public numeric API (documented in the package's
+  `index.d.ts`) — part of its stable ABI, not an implementation detail
+  being relied on.
+- **Length is counted in Unicode code points**, not `.length` (UTF-16 code
+  units) or UTF-8 byte length. A `.length`-based check accepts or rejects
+  passwords at the wrong visible length for anything outside the BMP (many
+  emoji, some scripts) — falsified in `password-policy.test.ts` with an
+  8-emoji string that is 16 UTF-16 units but only 8 code points.
+
+### Regression coverage
+
+- `password-policy.test.ts` — boundary tests at 15/128 code points either
+  side, the code-point-vs-UTF-16 distinction above, and that normalization
+  actually runs on the parsed value.
+- `password-hasher.test.ts` — real bcrypt/Argon2 calls (not mocked away —
+  this is exactly the algorithm-detection logic under test): round trip,
+  wrong password, normalization asymmetry between the two paths, the
+  outdated-Argon2-params rehash flag (minted with a genuinely different
+  hash, not string surgery on a current one), the 72-byte truncation skip,
+  and — via `vi.mock` pass-through spies wrapping the real
+  `bcryptjs.compare`/`@node-rs/argon2.verify` — a positive assertion that
+  neither verifier is invoked for an unrecognized hash format.
+- `auth.test.ts` — `authorize()`'s rehash-on-login branch: persists an
+  upgrade for a legacy-bcrypt result, does nothing for an already-current
+  Argon2 result, skips *and logs distinctly* for the truncated-bcrypt
+  case (falsified: removing the truncation branch collapses it into the
+  same observable outcome as "no rehash needed" unless the WARN call is
+  also asserted), and a rehash persistence failure never fails the login.
+
+All of the above were falsified during review: each assertion was
+confirmed to fail when the guarding code was deliberately removed.
+
+### Related
+
+- **SEC-42** — the strict-rate-limit chain in front of signup/reset-password
+  is unaffected by this change; Argon2id's own cost is the abuse-resistance
+  layer this rule is about, not a replacement for it.
+- **PE-25** — breached/common-password blocklist check (e.g. HIBP
+  k-anonymity), deferred pending a vendor/outbound-trust-boundary decision.

@@ -57,7 +57,7 @@ These are consumed ONLY by `scripts/bootstrap-admin.ts`. They are NOT loaded int
 | Variable                   | Required     | Description                                             |
 | -------------------------- | ------------ | ------------------------------------------------------- |
 | `BOOTSTRAP_ADMIN_EMAIL`    | ✅           | Email address for the admin account                     |
-| `BOOTSTRAP_ADMIN_PASSWORD` | ✅           | Password (min 8 chars — use a strong random secret)     |
+| `BOOTSTRAP_ADMIN_PASSWORD` | ✅           | Password (15–128 characters — use a strong random secret) |
 | `DEFAULT_TENANT_ID`        | ✅           | UUID for the single tenant (must match the app config)  |
 | `DATABASE_URL`             | For postgres | Postgres connection string                              |
 | `DB_DRIVER`                | No           | `postgres` (default) or `pglite`                        |
@@ -281,7 +281,9 @@ All inserts use `ON CONFLICT DO NOTHING` — safe to run multiple times.
 
 ## Security Notes
 
-- `BOOTSTRAP_ADMIN_PASSWORD` is bcrypt-hashed (cost 12) before storage — the plaintext is never written to the DB
+- `BOOTSTRAP_ADMIN_PASSWORD` is Argon2id-hashed before storage (SEC-47, see
+  `docs/features/32 - AuthJS Custom Auth Provider.md`) — the plaintext is
+  never written to the DB
 - The script reads env vars directly — the password is never transmitted over HTTP
 - After bootstrap, the admin account is protected only by the password — use a strong, unique secret
 - `ADMIN_USER_EMAILS` is a secondary safeguard — it bypasses ABAC but NOT authentication; the admin must still sign in with their real credentials

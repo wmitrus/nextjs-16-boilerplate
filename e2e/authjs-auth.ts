@@ -13,7 +13,9 @@ import { getRuntimeProfile } from './runtime-profile';
 const profile = getRuntimeProfile();
 const authjsCredentialsSchema = z.object({
   email: z.email(),
-  password: z.string().min(8),
+  // Mirrors the server-side minimum in
+  // src/modules/auth/infrastructure/credentials/password-policy.ts (SEC-47).
+  password: z.string().min(15),
 });
 
 const authjsProvisioningSchema = authjsCredentialsSchema.extend({

@@ -262,7 +262,8 @@ src/shared/components/captcha/
 
 ## Security Notes
 
-- Password hashing: bcrypt (via `bcryptjs`)
+- Password hashing: Argon2id for every new/changed credential; legacy
+  bcrypt hashes are still verified (never created) — see SEC-47 below
 - Password reset tokens: cryptographically random (`node:crypto`), 1-hour expiry
 - Email verification tokens: cryptographically random, 24-hour expiry
 - User enumeration protection: forgot-password returns `200` regardless of email existence
@@ -287,7 +288,7 @@ account) doesn't bypass the other:
    SHA-256 hash of the normalized email (never the raw email), tracked in
    `src/shared/lib/rate-limit/login-abuse-control.ts` and enforced inside
    `authorize()` itself (`src/modules/auth/infrastructure/authjs/auth.ts`),
-   **before** any DB query or bcrypt comparison for a locked account.
+   **before** any DB query or password verification for a locked account.
    Crossing each threshold escalates the response instead of one flat
    cutoff:
    - `LOGIN_ABUSE_CAPTCHA_THRESHOLD` (default 3) — requires a valid
@@ -348,6 +349,59 @@ correct remedy and every consumer already routes that to the sign-in page.
 Users who have never reset carry `NULL` and are never age-checked at all.
 
 Full writeup: SEC-36 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+
+### Password Policy & Hashing (SEC-47)
+
+`src/modules/auth/infrastructure/credentials/` is the single place
+password policy and hashing live; signup, reset-password, the AuthJS
+credentials `authorize()` verify path, `bootstrap-admin.ts`, and the E2E
+provisioning fixture route all import from it rather than each defining
+their own schema or calling a hashing library directly.
+
+**Policy** (`password-policy.ts`): 15–128 Unicode code points (counted with
+`Array.from`, not `.length` — a `.length`/UTF-16 or UTF-8-byte check
+mismeasures anything outside the BMP), NFC-normalized before it is ever
+hashed or compared. No composition rules ("1 uppercase + 1 digit + 1
+symbol"). Follows NIST SP 800-63B-4 for a password used as the sole
+authentication factor (this provider has no second factor): the 15-
+character floor is NIST's single-factor minimum, not the 8-character floor
+that only applies when a password is one of at least two factors.
+
+**Hashing** (`password-hasher.ts`): Argon2id (`@node-rs/argon2`) is the
+only algorithm used to create a hash — `hashPassword()` is called by
+signup, reset-password, `bootstrap-admin.ts`, and the E2E provisioning
+route, and nothing else ever calls a hashing function directly. Parameters
+are pinned explicitly in code (memoryCost=19456, timeCost=2, parallelism=1,
+OWASP's current baseline) rather than left to the library's defaults, so a
+future dependency upgrade can't silently change this repo's cryptographic
+policy.
+
+bcrypt (`bcryptjs`) is kept as a **read-only compatibility path** for
+hashes created before this change. `verifyPassword()` detects which format
+a stored hash is (from its own self-describing `$argon2id$` / `$2a$`-`$2y$`
+prefix) and dispatches accordingly; an unrecognized format fails closed
+rather than being guessed at.
+
+**Rehash-on-login**: a successful sign-in through a legacy bcrypt hash
+triggers a best-effort upgrade to Argon2id, persisted in the same request
+(`auth.ts`'s `authorize()`). A rehash failure never fails the login that
+was otherwise valid — the account simply stays on its current hash and the
+upgrade is retried on the next successful sign-in. One case is
+deliberately **not** auto-migrated: bcrypt silently ignores anything past
+72 UTF-8 bytes, so a candidate that verified only because it was truncated
+to that limit could be one of several different passwords the stored hash
+would accept. Rehashing that specific candidate would narrow the account's
+real password down to one guess under a stronger algorithm — the account
+stays on bcrypt (logged distinctly:
+`auth:legacy_bcrypt_truncated_skip_rehash`) until the user goes through an
+actual password reset, which always hashes the full password.
+
+**Explicitly deferred** (not implemented here): a breached/common-password
+blocklist check (e.g. Have I Been Pwned's k-anonymity API) — tracked as
+PE-25 in `docs/ai/general/POSSIBLE_ENHANCEMENTS.md`, pending a vendor/
+outbound-trust-boundary decision.
+
+Full writeup: SEC-47 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
 ---
 

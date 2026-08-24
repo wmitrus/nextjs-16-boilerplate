@@ -23,8 +23,10 @@ vi.mock('next/server', async () => {
   };
 });
 
-vi.mock('bcryptjs', () => ({
-  hash: vi.fn().mockResolvedValue('$hashed'),
+vi.mock('@/modules/auth/infrastructure/credentials/password-hasher', () => ({
+  hashPassword: vi
+    .fn()
+    .mockResolvedValue('$argon2id$v=19$m=19456,t=2,p=1$hashed'),
 }));
 
 vi.mock('@/core/logger/di', () => ({
@@ -151,7 +153,7 @@ describe('POST /api/auth/signup', () => {
     mockEnv.AUTH_PROVIDER = 'clerk';
     const req = makeRequest({
       email: 'user@example.com',
-      password: 'Pass1234!',
+      password: 'correct horse battery staple',
     });
     const res = await POST(req);
     expect(res.status).toBe(404);
@@ -161,14 +163,17 @@ describe('POST /api/auth/signup', () => {
     mockEnv.REGISTRATION_MODE = 'disabled';
     const req = makeRequest({
       email: 'user@example.com',
-      password: 'Pass1234!',
+      password: 'correct horse battery staple',
     });
     const res = await POST(req);
     expect(res.status).toBe(403);
   });
 
   it('returns 422 for invalid email', async () => {
-    const req = makeRequest({ email: 'not-email', password: 'Pass1234!' });
+    const req = makeRequest({
+      email: 'not-email',
+      password: 'correct horse battery staple',
+    });
     const res = await POST(req);
     expect(res.status).toBe(422);
   });
@@ -183,7 +188,7 @@ describe('POST /api/auth/signup', () => {
     mockLimit.mockResolvedValueOnce([{ id: 'existing-uid' }]);
     const req = makeRequest({
       email: 'existing@example.com',
-      password: 'Pass1234!',
+      password: 'correct horse battery staple',
     });
     const res = await POST(req);
     expect(res.status).toBe(409);
@@ -192,7 +197,7 @@ describe('POST /api/auth/signup', () => {
   it('returns 201 with verification-required message when not auto-verified', async () => {
     const req = makeRequest({
       email: 'new@example.com',
-      password: 'Pass1234!',
+      password: 'correct horse battery staple',
     });
     const res = await POST(req);
     expect(res.status).toBe(201);
@@ -211,7 +216,7 @@ describe('POST /api/auth/signup', () => {
     mockEnv.AUTH_DEV_AUTO_VERIFY = true;
     const req = makeRequest({
       email: 'new@example.com',
-      password: 'Pass1234!',
+      password: 'correct horse battery staple',
     });
     const res = await POST(req);
     expect(res.status).toBe(201);
@@ -228,7 +233,7 @@ describe('POST /api/auth/signup', () => {
     mockEnv.AUTH_EXPOSE_VERIFICATION_TOKEN_IN_DEV = true;
     const req = makeRequest({
       email: 'new@example.com',
-      password: 'Pass1234!',
+      password: 'correct horse battery staple',
     });
     const res = await POST(req);
     expect(res.status).toBe(201);
@@ -252,7 +257,7 @@ describe('POST /api/auth/signup', () => {
   it('logs success on account creation', async () => {
     const req = makeRequest({
       email: 'new@example.com',
-      password: 'Pass1234!',
+      password: 'correct horse battery staple',
     });
     await POST(req);
     expect(mockChildLogger.debug).toHaveBeenCalledWith(

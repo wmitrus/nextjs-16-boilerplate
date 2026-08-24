@@ -1,4 +1,3 @@
-import { hash } from 'bcryptjs';
 import { and, eq } from 'drizzle-orm';
 import { connection } from 'next/server';
 import { z } from 'zod';
@@ -13,6 +12,8 @@ import {
   createSuccessResponse,
 } from '@/shared/lib/api/response-service';
 
+import { hashPassword } from '@/modules/auth/infrastructure/credentials/password-hasher';
+import { passwordSchema } from '@/modules/auth/infrastructure/credentials/password-policy';
 import {
   authUserIdentitiesTable,
   userCredentialsTable,
@@ -26,11 +27,9 @@ import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 
 const requestSchema = z.object({
   email: z.email(),
-  password: z.string().min(8),
+  password: passwordSchema,
   onboardingComplete: z.boolean().default(true),
 });
-
-const BCRYPT_COST = 12;
 
 export async function POST(request: Request): Promise<Response> {
   await connection();
@@ -85,7 +84,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const hashedPassword = await hash(password, BCRYPT_COST);
+  const hashedPassword = await hashPassword(password);
 
   await db.transaction(async (tx) => {
     const [existingUser] = await tx

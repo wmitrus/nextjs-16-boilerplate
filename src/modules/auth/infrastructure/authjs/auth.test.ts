@@ -2,17 +2,43 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mockEnv, resetEnvMocks } from '@/testing/infrastructure/env';
 
-const mockCompare = vi.fn();
+const mockVerifyPassword = vi.fn();
+const mockHashPassword = vi.fn();
 const mockResolve = vi.fn();
 const mockSelect = vi.fn();
 const mockFrom = vi.fn();
 const mockWhere = vi.fn();
 const mockLimit = vi.fn();
+const mockUpdate = vi.fn();
+const mockUpdateSet = vi.fn();
+const mockUpdateWhere = vi.fn();
 const mockIsTurnstileConfigured = vi.fn();
 const mockVerifyTurnstileToken = vi.fn();
 
-vi.mock('bcryptjs', () => ({
-  compare: mockCompare,
+/** A successful `verifyPassword()` result with no rehash pending. */
+function validVerification(
+  overrides: Partial<{
+    rehash: 'legacy-bcrypt' | 'argon2-params-outdated' | null;
+    legacyBcryptTruncated: boolean;
+  }> = {},
+) {
+  return {
+    valid: true,
+    rehash: null,
+    legacyBcryptTruncated: false,
+    ...overrides,
+  };
+}
+
+const INVALID_VERIFICATION = {
+  valid: false,
+  rehash: null,
+  legacyBcryptTruncated: false,
+};
+
+vi.mock('../credentials/password-hasher', () => ({
+  verifyPassword: mockVerifyPassword,
+  hashPassword: mockHashPassword,
 }));
 
 vi.mock('@/core/runtime/bootstrap', () => ({
@@ -21,12 +47,15 @@ vi.mock('@/core/runtime/bootstrap', () => ({
   }),
 }));
 
+const mockLoggerDebug = vi.fn();
+const mockLoggerWarn = vi.fn();
+
 vi.mock('@/core/logger/di', () => ({
   resolveServerLogger: () => ({
     child: () => ({
-      debug: vi.fn(),
+      debug: mockLoggerDebug,
       error: vi.fn(),
-      warn: vi.fn(),
+      warn: mockLoggerWarn,
     }),
   }),
 }));
@@ -89,7 +118,19 @@ describe('authOptions', () => {
     mockWhere.mockReturnValue({ limit: mockLimit });
     mockFrom.mockReturnValue({ where: mockWhere });
     mockSelect.mockReturnValue({ from: mockFrom });
-    mockResolve.mockReturnValue({ select: mockSelect });
+
+    mockUpdateWhere.mockResolvedValue(undefined);
+    mockUpdateSet.mockReturnValue({ where: mockUpdateWhere });
+    mockUpdate.mockReturnValue({ set: mockUpdateSet });
+
+    mockResolve.mockReturnValue({ select: mockSelect, update: mockUpdate });
+
+    // Default: no credential match, so most tests that don't care about
+    // rehash never touch the rehash branch at all.
+    mockVerifyPassword.mockResolvedValue(INVALID_VERIFICATION);
+    mockHashPassword.mockResolvedValue(
+      '$argon2id$v=19$m=19456,t=2,p=1$upgraded',
+    );
   });
 
   it('resolves the module without errors', async () => {
@@ -130,7 +171,7 @@ describe('authOptions', () => {
           emailVerified: false,
         },
       ]);
-      mockCompare.mockResolvedValueOnce(false);
+      mockVerifyPassword.mockResolvedValueOnce(INVALID_VERIFICATION);
       const authorize = await getAuthorize();
       const result = await authorize({
         email: 'user@example.com',
@@ -149,7 +190,7 @@ describe('authOptions', () => {
           },
         ])
         .mockResolvedValueOnce([]);
-      mockCompare.mockResolvedValueOnce(true);
+      mockVerifyPassword.mockResolvedValueOnce(validVerification());
       const authorize = await getAuthorize();
       const result = await authorize({
         email: 'user@example.com',
@@ -168,7 +209,7 @@ describe('authOptions', () => {
           },
         ])
         .mockResolvedValueOnce([{ id: 'uid-1', email: 'user@example.com' }]);
-      mockCompare.mockResolvedValueOnce(true);
+      mockVerifyPassword.mockResolvedValueOnce(validVerification());
       const authorize = await getAuthorize();
       const result = await authorize({
         email: 'user@example.com',
@@ -191,7 +232,7 @@ describe('authOptions', () => {
           },
         ])
         .mockResolvedValueOnce([{ id: 'uid-1', email: 'user@example.com' }]);
-      mockCompare.mockResolvedValueOnce(true);
+      mockVerifyPassword.mockResolvedValueOnce(validVerification());
       const authorize = await getAuthorize();
       await expect(
         authorize({ email: 'user@example.com', password: 'correctpass' }),
@@ -212,7 +253,7 @@ describe('authOptions', () => {
 
     describe('login abuse control (SEC-34)', () => {
       function mockWrongPasswordLookup() {
-        mockCompare.mockResolvedValue(false);
+        mockVerifyPassword.mockResolvedValue(INVALID_VERIFICATION);
         mockLimit.mockResolvedValue([
           {
             userId: 'uid-1',
@@ -350,13 +391,13 @@ describe('authOptions', () => {
         const authorize = await getAuthorize();
         const email = 'abuse-reset@example.com';
 
-        mockCompare.mockResolvedValueOnce(false);
+        mockVerifyPassword.mockResolvedValueOnce(INVALID_VERIFICATION);
         mockLimit.mockResolvedValueOnce([
           { userId: 'uid-1', hashedPassword: '$hashed', emailVerified: true },
         ]);
         await authorize({ email, password: 'wrong' });
 
-        mockCompare.mockResolvedValueOnce(true);
+        mockVerifyPassword.mockResolvedValueOnce(validVerification());
         mockLimit
           .mockResolvedValueOnce([
             {
@@ -371,7 +412,7 @@ describe('authOptions', () => {
 
         // Next attempt starts fresh: the earlier failure must not still
         // count toward the (now reset) threshold.
-        mockCompare.mockResolvedValueOnce(false);
+        mockVerifyPassword.mockResolvedValueOnce(INVALID_VERIFICATION);
         mockLimit.mockResolvedValueOnce([
           { userId: 'uid-1', hashedPassword: '$hashed', emailVerified: true },
         ]);
@@ -399,6 +440,105 @@ describe('authOptions', () => {
 
         expect(result).toBeNull();
         vi.useRealTimers();
+      });
+    });
+
+    describe('rehash-on-login (SEC-47)', () => {
+      function mockCredentialLookup() {
+        mockLimit
+          .mockResolvedValueOnce([
+            {
+              userId: 'uid-1',
+              hashedPassword: '$stored-hash',
+              emailVerified: true,
+            },
+          ])
+          .mockResolvedValueOnce([{ id: 'uid-1', email: 'user@example.com' }]);
+      }
+
+      it('persists an upgraded hash when verifyPassword reports a legacy bcrypt credential', async () => {
+        mockCredentialLookup();
+        mockVerifyPassword.mockResolvedValueOnce(
+          validVerification({ rehash: 'legacy-bcrypt' }),
+        );
+        mockHashPassword.mockResolvedValueOnce(
+          '$argon2id$v=19$m=19456,t=2,p=1$upgraded',
+        );
+
+        const authorize = await getAuthorize();
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'correct horse battery staple',
+        });
+
+        expect(result).toMatchObject({ email: 'user@example.com' });
+        expect(mockHashPassword).toHaveBeenCalledWith(
+          'correct horse battery staple',
+        );
+        expect(mockUpdate).toHaveBeenCalledWith(expect.anything());
+        expect(mockUpdateSet).toHaveBeenCalledWith(
+          expect.objectContaining({
+            hashedPassword: '$argon2id$v=19$m=19456,t=2,p=1$upgraded',
+          }),
+        );
+      });
+
+      it('does not persist a rehash when verifyPassword reports none is needed', async () => {
+        mockCredentialLookup();
+        mockVerifyPassword.mockResolvedValueOnce(validVerification());
+
+        const authorize = await getAuthorize();
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'correct horse battery staple',
+        });
+
+        expect(result).toMatchObject({ email: 'user@example.com' });
+        expect(mockHashPassword).not.toHaveBeenCalled();
+        expect(mockUpdate).not.toHaveBeenCalled();
+      });
+
+      it('skips the rehash, without failing sign-in, for a truncated legacy bcrypt candidate, and logs it distinctly', async () => {
+        mockCredentialLookup();
+        mockVerifyPassword.mockResolvedValueOnce(
+          validVerification({ legacyBcryptTruncated: true }),
+        );
+
+        const authorize = await getAuthorize();
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'a'.repeat(80),
+        });
+
+        expect(result).toMatchObject({ email: 'user@example.com' });
+        expect(mockHashPassword).not.toHaveBeenCalled();
+        expect(mockUpdate).not.toHaveBeenCalled();
+        // Not just "nothing happened" -- the truncated case must be
+        // distinguishable in the logs from the ordinary "no rehash needed"
+        // case (an already-current Argon2 hash) covered by the test above.
+        expect(mockLoggerWarn).toHaveBeenCalledWith(
+          { event: 'auth:legacy_bcrypt_truncated_skip_rehash' },
+          expect.any(String),
+        );
+      });
+
+      it('does not fail an otherwise-valid sign-in when persisting the rehash throws', async () => {
+        mockCredentialLookup();
+        mockVerifyPassword.mockResolvedValueOnce(
+          validVerification({ rehash: 'legacy-bcrypt' }),
+        );
+        mockHashPassword.mockResolvedValueOnce(
+          '$argon2id$v=19$m=19456,t=2,p=1$upgraded',
+        );
+        mockUpdateWhere.mockRejectedValueOnce(new Error('DB unavailable'));
+
+        const authorize = await getAuthorize();
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'correct horse battery staple',
+        });
+
+        expect(result).toMatchObject({ email: 'user@example.com' });
       });
     });
   });

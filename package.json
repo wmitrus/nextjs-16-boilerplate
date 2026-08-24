@@ -155,6 +155,7 @@
     "@growthbook/growthbook": "^1.6.5",
     "@logtail/next": "^0.3.1",
     "@logtail/pino": "^0.5.8",
+    "@node-rs/argon2": "^2.1.0",
     "@sentry/nextjs": "^10.40.0",
     "@t3-oss/env-nextjs": "^0.13.10",
     "@tanstack/react-table": "^8.21.3",

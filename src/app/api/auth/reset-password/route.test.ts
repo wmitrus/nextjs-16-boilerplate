@@ -21,8 +21,10 @@ vi.mock('next/server', async () => {
   };
 });
 
-vi.mock('bcryptjs', () => ({
-  hash: vi.fn().mockResolvedValue('$hashed'),
+vi.mock('@/modules/auth/infrastructure/credentials/password-hasher', () => ({
+  hashPassword: vi
+    .fn()
+    .mockResolvedValue('$argon2id$v=19$m=19456,t=2,p=1$hashed'),
 }));
 
 vi.mock('@/core/logger/di', () => ({
@@ -175,7 +177,7 @@ describe('POST /api/auth/reset-password', () => {
     mockEnv.AUTH_PROVIDER = 'clerk';
 
     const response = await POST(
-      makeRequest({ token: 't', password: 'password123' }),
+      makeRequest({ token: 't', password: 'correct horse battery staple' }),
     );
 
     expect(response.status).toBe(404);
@@ -185,7 +187,7 @@ describe('POST /api/auth/reset-password', () => {
     mockPreCheckFinds(false);
 
     const response = await POST(
-      makeRequest({ token: 'nope', password: 'password123' }),
+      makeRequest({ token: 'nope', password: 'correct horse battery staple' }),
     );
 
     expect(response.status).toBe(410);
@@ -197,7 +199,7 @@ describe('POST /api/auth/reset-password', () => {
     mockTransactionWithClaim([{ userId: 'user-1' }]);
 
     const response = await POST(
-      makeRequest({ token: 'good', password: 'password123' }),
+      makeRequest({ token: 'good', password: 'correct horse battery staple' }),
     );
 
     expect(response.status).toBe(200);
@@ -216,7 +218,10 @@ describe('POST /api/auth/reset-password', () => {
     mockTransactionWithClaim([]);
 
     const response = await POST(
-      makeRequest({ token: 'contested', password: 'password123' }),
+      makeRequest({
+        token: 'contested',
+        password: 'correct horse battery staple',
+      }),
     );
 
     expect(response.status).toBe(410);
@@ -230,14 +235,17 @@ describe('POST /api/auth/reset-password', () => {
   it('reports a lost race identically to an invalid token', async () => {
     mockPreCheckFinds(false);
     const invalid = await POST(
-      makeRequest({ token: 'bad', password: 'password123' }),
+      makeRequest({ token: 'bad', password: 'correct horse battery staple' }),
     );
     const invalidBody = await invalid.json();
 
     mockPreCheckFinds(true);
     mockTransactionWithClaim([]);
     const contested = await POST(
-      makeRequest({ token: 'contested', password: 'password123' }),
+      makeRequest({
+        token: 'contested',
+        password: 'correct horse battery staple',
+      }),
     );
     const contestedBody = await contested.json();
 
@@ -249,7 +257,12 @@ describe('POST /api/auth/reset-password', () => {
     mockPreCheckFinds(true);
     mockTransactionWithClaim([]);
 
-    await POST(makeRequest({ token: 'contested', password: 'password123' }));
+    await POST(
+      makeRequest({
+        token: 'contested',
+        password: 'correct horse battery staple',
+      }),
+    );
 
     expect(mockChildLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -268,7 +281,7 @@ describe('POST /api/auth/reset-password', () => {
     const { setCalls } = mockTransactionWithClaim([{ userId: 'user-1' }]);
 
     const response = await POST(
-      makeRequest({ token: 'good', password: 'password123' }),
+      makeRequest({ token: 'good', password: 'correct horse battery staple' }),
     );
 
     expect(response.status).toBe(200);
@@ -281,7 +294,12 @@ describe('POST /api/auth/reset-password', () => {
     mockPreCheckFinds(true);
     const { setCalls } = mockTransactionWithClaim([]);
 
-    await POST(makeRequest({ token: 'contested', password: 'password123' }));
+    await POST(
+      makeRequest({
+        token: 'contested',
+        password: 'correct horse battery staple',
+      }),
+    );
 
     expect(setCalls).not.toContainEqual(
       expect.objectContaining({ sessionsValidFrom: expect.any(Date) }),

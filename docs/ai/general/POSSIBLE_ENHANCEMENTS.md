@@ -614,3 +614,37 @@ where the data audit can be reviewed on its own evidence.
 **Note for whoever picks this up**: a new migration in this repository must be
 registered in `readMigrationSql()` in the same commit (SEC-05/SEC-12) — a
 missing entry passes every local gate and only fails in the Vercel build.
+
+---
+
+## PE-25 — Breached/Common-Password Blocklist Check
+
+- **Source**: Case 17 (SEC-47), user decision 2026-08-24
+- **Date added**: 2026-08-24
+- **Status**: Open — not triaged
+
+**Description**: SEC-47 (Argon2id default, bcrypt legacy-verify-only,
+rehash-on-login, NIST-aligned length policy) deliberately left out a
+breached/common-password blocklist check at signup and reset-password. NIST
+SP 800-63B-4 calls for verifiers to check a newly-established password
+against a corpus of previously breached or commonly-used values; this repo
+does not do that today.
+
+**Candidate approaches** (not evaluated here — this is a scope note, not a
+design):
+
+- **Have I Been Pwned Pwned Passwords API**, k-anonymity mode (send only the
+  first 5 hex characters of the SHA-1 hash; `Add-Padding: true` for response-
+  size privacy). No API key required, but it is still an outbound call to a
+  third-party service on the signup/reset-password path.
+- **A local/bundled common-password corpus** — no outbound trust boundary,
+  but a static list to source, license-check, and keep updated, and it only
+  catches "commonly used", not "actually breached."
+
+**Why deferred**: this is a genuinely new trust boundary (an outbound call
+from an unauthenticated route, or a bundled dataset with its own maintenance
+cost), not a small extension of SEC-47's scope. It needs its own
+vendor/approach decision — HIBP vs. local corpus vs. something else — and,
+if HIBP, `SECURITY_ALLOWED_OUTBOUND_HOSTS` treatment and a fail-open/
+fail-closed decision for when the check itself is unreachable. Untriaged;
+do not implement without the user picking an approach.

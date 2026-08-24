@@ -1,4 +1,3 @@
-import { compare } from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { AuthOptions, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
@@ -22,6 +21,7 @@ import {
   recordSuccessfulLogin,
 } from '@/shared/lib/rate-limit/login-abuse-control';
 
+import { hashPassword, verifyPassword } from '../credentials/password-hasher';
 import { userCredentialsTable } from '../drizzle/schema';
 
 import { authConfig } from './auth.config';
@@ -152,13 +152,62 @@ export const authOptions: AuthOptions = {
             return null;
           }
 
-          const passwordValid = await compare(
+          const verification = await verifyPassword(
             password,
             credRecord.hashedPassword,
           );
-          if (!passwordValid) {
+          if (!verification.valid) {
             await recordFailure();
             return null;
+          }
+
+          if (verification.legacyBcryptTruncated) {
+            // SEC-47. This candidate authenticated correctly, but it is
+            // >=72 UTF-8 bytes -- bcrypt silently ignores anything past
+            // that, so this stored hash may also accept other candidates
+            // sharing only the first 72 bytes. Rehashing this one
+            // candidate into Argon2id would (in effect) narrow the
+            // account's real password down to this truncated-length
+            // sibling under a stronger algorithm. Leave it on bcrypt; only
+            // a real reset (which always hashes the full password) can
+            // safely migrate this account.
+            getLogger().warn(
+              { event: 'auth:legacy_bcrypt_truncated_skip_rehash' },
+              'Legacy bcrypt credential exceeds the 72-byte input limit -- skipping automatic rehash; migrate via password reset',
+            );
+          } else if (verification.rehash) {
+            // Best-effort upgrade -- never let a rehash failure fail a
+            // login that was otherwise valid. The account simply stays on
+            // its current hash and this is retried on the next successful
+            // sign-in.
+            try {
+              const upgradedHash = await hashPassword(password);
+              await db
+                .update(userCredentialsTable)
+                .set({ hashedPassword: upgradedHash, updatedAt: new Date() })
+                .where(eq(userCredentialsTable.userId, credRecord.userId));
+
+              getLogger().debug(
+                {
+                  event: 'auth:password_rehashed',
+                  reason: verification.rehash,
+                },
+                'Credential hash upgraded on successful sign-in',
+              );
+            } catch (rehashErr) {
+              const rehashError =
+                rehashErr instanceof Error
+                  ? rehashErr
+                  : new Error(String(rehashErr));
+              getLogger().warn(
+                {
+                  event: 'auth:password_rehash_failed',
+                  errorMessage: rehashError.message,
+                  errorName: rehashError.name,
+                },
+                'Failed to persist an upgraded credential hash after sign-in',
+              );
+            }
           }
 
           const [user] = await db

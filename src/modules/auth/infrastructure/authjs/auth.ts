@@ -23,6 +23,7 @@ import {
 
 import { hashPassword, verifyPassword } from '../credentials/password-hasher';
 import { userCredentialsTable } from '../drizzle/schema';
+import { DrizzleAuthJsMfaService } from '../mfa/DrizzleAuthJsMfaService';
 
 import { authConfig } from './auth.config';
 
@@ -39,6 +40,14 @@ function getLogger() {
 const credentialsSchema = z.object({
   email: z.email(),
   password: z.string().min(1),
+  /**
+   * Second factor, present only on the second leg of an MFA sign-in
+   * (SEC-48). The client learns it is needed from the `MfaRequired` error the
+   * first attempt throws, then resubmits the same credentials with a code.
+   *
+   * Bounded: a TOTP code is six digits and a recovery code 23 characters.
+   */
+  totpCode: z.string().min(6).max(64).optional(),
   // Present only once the account-bucket abuse control (see
   // login-abuse-control.ts) requires it. Verified server-side in
   // authorize() -- never trusted just because it's present.
@@ -68,7 +77,7 @@ export const authOptions: AuthOptions = {
           return null;
         }
 
-        const { email, password, cfTurnstileToken } = parsed.data;
+        const { email, password, cfTurnstileToken, totpCode } = parsed.data;
         const accountKey = normalizeLoginAccountKey(email);
         // E2E fixtures reuse a small number of stable accounts across many
         // parallel/sequential specs -- exempting them here (mirrors the
@@ -250,6 +259,56 @@ export const authOptions: AuthOptions = {
             throw new Error('EmailNotVerified');
           }
 
+          // Second factor (SEC-48). Asked only of accounts that have one
+          // enrolled, and asked *after* the password has already been proven
+          // correct -- so an attacker cannot use this branch to discover
+          // which accounts exist or which have MFA without first holding a
+          // valid password.
+          //
+          // Deliberately the only question this module asks about the
+          // account: "does it have a second factor?". Whether the account is
+          // an administrator is an authorization question, resolved in the
+          // admin gate long after a session exists. Reaching for ABAC here
+          // would put role knowledge inside the credentials provider and
+          // invert the order this codebase establishes identity in.
+          const mfaService = new DrizzleAuthJsMfaService(db);
+          const mfaStatus = await mfaService.getStatus({
+            userId: credRecord.userId,
+          });
+
+          if (mfaStatus.enrolled) {
+            if (!totpCode) {
+              // Not a failed attempt: the password was right. Counting it
+              // would let a correct-password-plus-missing-code sequence lock
+              // out the legitimate owner.
+              throw new Error('MfaRequired');
+            }
+
+            const mfaResult = await mfaService.verifyChallenge(
+              { userId: credRecord.userId },
+              totpCode,
+            );
+
+            if (!mfaResult.ok) {
+              if (mfaResult.reason === 'unavailable') {
+                // An operator problem (missing key material, undecryptable
+                // seed). Never a sign-in, and never counted against the user.
+                throw new Error('MfaUnavailable');
+              }
+              await recordFailure();
+              throw new Error('MfaInvalidCode');
+            }
+
+            getLogger().debug(
+              {
+                event: 'auth:credentials_mfa_verified',
+                provider: 'authjs',
+                factor: mfaResult.factor,
+              },
+              'Second factor verified during AuthJS credentials sign-in',
+            );
+          }
+
           if (abuseControlActive) {
             await recordSuccessfulLogin(accountKey);
           }
@@ -273,7 +332,14 @@ export const authOptions: AuthOptions = {
 
           if (
             error.message === 'NoCredentials' ||
-            error.message === 'EmailNotVerified'
+            error.message === 'EmailNotVerified' ||
+            // SEC-48. These three are protocol answers for the sign-in
+            // client, not internal failures: swallowing them into `null`
+            // would show "invalid credentials" to a user whose password was
+            // in fact correct and who simply has not typed their code yet.
+            error.message === 'MfaRequired' ||
+            error.message === 'MfaInvalidCode' ||
+            error.message === 'MfaUnavailable'
           ) {
             throw error;
           }

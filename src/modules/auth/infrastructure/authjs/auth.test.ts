@@ -42,6 +42,27 @@ vi.mock('../credentials/password-hasher', () => ({
   hashPassword: mockHashPassword,
 }));
 
+/**
+ * The MFA adapter is stubbed rather than driven through the mocked db chain:
+ * its own behaviour (seed decryption, replay marker, recovery-code consume)
+ * is covered against a real database in
+ * `DrizzleAuthJsMfaService.db.test.ts`. What matters here is only how
+ * `authorize()` reacts to its two answers -- see SEC-48.
+ *
+ * `class {}` rather than `vi.fn().mockImplementation(() => ({}))`: the
+ * factory runs after `vi.resetAllMocks()`, so a mock-returned object leaves
+ * `new X()` throwing (a trap this repository has hit before).
+ */
+const mockMfaGetStatus = vi.fn();
+const mockMfaVerifyChallenge = vi.fn();
+
+vi.mock('../mfa/DrizzleAuthJsMfaService', () => ({
+  DrizzleAuthJsMfaService: class {
+    getStatus = mockMfaGetStatus;
+    verifyChallenge = mockMfaVerifyChallenge;
+  },
+}));
+
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => ({
     resolve: mockResolve,
@@ -100,6 +121,34 @@ vi.mock('next-auth/providers/credentials', () => ({
   default: vi.fn((config) => config),
 }));
 
+/**
+ * Account-bucket abuse control (SEC-34) keeps its real behaviour -- the tests
+ * in this file drive its thresholds directly -- with one exception: the
+ * SEC-48 tests need to assert *whether* a failed attempt was counted, so
+ * `recordFailedLoginAttempt` is wrapped in a spy that still calls through.
+ */
+const mockRecordFailedLoginAttempt = vi.fn();
+const realAbuseControl = vi.hoisted(() => ({
+  recordFailedLoginAttempt: undefined as
+    | ((accountKey: string) => Promise<void>)
+    | undefined,
+}));
+
+vi.mock(
+  '@/shared/lib/rate-limit/login-abuse-control',
+  async (importOriginal) => {
+    const actual = (await importOriginal()) as {
+      recordFailedLoginAttempt: (accountKey: string) => Promise<void>;
+    };
+    realAbuseControl.recordFailedLoginAttempt = actual.recordFailedLoginAttempt;
+    return {
+      ...actual,
+      recordFailedLoginAttempt: (accountKey: string) =>
+        mockRecordFailedLoginAttempt(accountKey),
+    };
+  },
+);
+
 vi.mock('@/shared/lib/captcha/turnstile', () => ({
   isTurnstileConfigured: mockIsTurnstileConfigured,
   verifyTurnstileToken: mockVerifyTurnstileToken,
@@ -127,6 +176,23 @@ describe('authOptions', () => {
     mockUpdate.mockReturnValue({ set: mockUpdateSet });
 
     mockResolve.mockReturnValue({ select: mockSelect, update: mockUpdate });
+
+    // Default: the account has no second factor, so the pre-SEC-48 tests
+    // below exercise the password path unchanged.
+    mockMfaGetStatus.mockResolvedValue({
+      enrolled: false,
+      enrollmentSurface: 'application',
+      enrollmentUrl: '/account/security/mfa',
+    });
+    mockMfaVerifyChallenge.mockResolvedValue({ ok: true, factor: 'otp' });
+
+    // Calls through by default: the SEC-34 tests below depend on the real
+    // counter actually incrementing, and only the SEC-48 tests care that the
+    // call happened at all.
+    mockRecordFailedLoginAttempt.mockImplementation(
+      async (accountKey: string) =>
+        realAbuseControl.recordFailedLoginAttempt?.(accountKey),
+    );
 
     // Default: no credential match, so most tests that don't care about
     // rehash never touch the rehash branch at all.
@@ -222,6 +288,153 @@ describe('authOptions', () => {
         id: 'user@example.com',
         email: 'user@example.com',
         emailVerified: true,
+      });
+    });
+
+    describe('second factor (SEC-48)', () => {
+      function credentialMatch() {
+        mockLimit
+          .mockResolvedValueOnce([
+            {
+              userId: 'uid-1',
+              hashedPassword: '$hashed',
+              emailVerified: true,
+            },
+          ])
+          .mockResolvedValueOnce([{ id: 'uid-1', email: 'user@example.com' }]);
+        mockVerifyPassword.mockResolvedValueOnce(validVerification());
+      }
+
+      function enrolled() {
+        mockMfaGetStatus.mockResolvedValue({
+          enrolled: true,
+          enrollmentSurface: 'application',
+          enrollmentUrl: '/account/security/mfa',
+        });
+      }
+
+      it('asks only whether the account has a factor, never who it is', async () => {
+        // The credentials provider must not resolve roles or ABAC: identity
+        // is established here, authorization long afterwards in the admin
+        // gate. This asserts the shape of the only question asked.
+        credentialMatch();
+        const authorize = await getAuthorize();
+
+        await authorize({ email: 'user@example.com', password: 'correctpass' });
+
+        expect(mockMfaGetStatus).toHaveBeenCalledWith({ userId: 'uid-1' });
+      });
+
+      it('demands a code from an enrolled account instead of issuing a session', async () => {
+        credentialMatch();
+        enrolled();
+        const authorize = await getAuthorize();
+
+        await expect(
+          authorize({ email: 'user@example.com', password: 'correctpass' }),
+        ).rejects.toThrow('MfaRequired');
+      });
+
+      it('does not count a missing code as a failed attempt', async () => {
+        // The password was correct. Counting this would let the second leg of
+        // every MFA sign-in walk the owner towards their own lockout.
+        credentialMatch();
+        enrolled();
+        const authorize = await getAuthorize();
+
+        await expect(
+          authorize({ email: 'user@example.com', password: 'correctpass' }),
+        ).rejects.toThrow('MfaRequired');
+        expect(mockRecordFailedLoginAttempt).not.toHaveBeenCalled();
+      });
+
+      it('issues a session when the code verifies', async () => {
+        credentialMatch();
+        enrolled();
+        const authorize = await getAuthorize();
+
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'correctpass',
+          totpCode: '123456',
+        });
+
+        expect(result).toMatchObject({ email: 'user@example.com' });
+        expect(mockMfaVerifyChallenge).toHaveBeenCalledWith(
+          { userId: 'uid-1' },
+          '123456',
+        );
+      });
+
+      it('counts a wrong code as a failed attempt and refuses the session', async () => {
+        credentialMatch();
+        enrolled();
+        mockMfaVerifyChallenge.mockResolvedValue({
+          ok: false,
+          reason: 'invalid_code',
+        });
+        const authorize = await getAuthorize();
+
+        await expect(
+          authorize({
+            email: 'user@example.com',
+            password: 'correctpass',
+            totpCode: '000000',
+          }),
+        ).rejects.toThrow('MfaInvalidCode');
+        expect(mockRecordFailedLoginAttempt).toHaveBeenCalled();
+      });
+
+      it('refuses the session, without blaming the user, when MFA is unavailable', async () => {
+        // Missing key material or an undecryptable seed is an operator
+        // problem: no session, and no failure counted against the account.
+        credentialMatch();
+        enrolled();
+        mockMfaVerifyChallenge.mockResolvedValue({
+          ok: false,
+          reason: 'unavailable',
+        });
+        const authorize = await getAuthorize();
+
+        await expect(
+          authorize({
+            email: 'user@example.com',
+            password: 'correctpass',
+            totpCode: '123456',
+          }),
+        ).rejects.toThrow('MfaUnavailable');
+        expect(mockRecordFailedLoginAttempt).not.toHaveBeenCalled();
+      });
+
+      it('never asks an un-enrolled account for a code', async () => {
+        credentialMatch();
+        const authorize = await getAuthorize();
+
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'correctpass',
+        });
+
+        expect(result).toMatchObject({ email: 'user@example.com' });
+        expect(mockMfaVerifyChallenge).not.toHaveBeenCalled();
+      });
+
+      it('rejects a code that could not be a TOTP or recovery code', async () => {
+        // No credential fixtures queued on purpose: the schema rejects the
+        // whole submission before any lookup happens, which is the point.
+        enrolled();
+        const authorize = await getAuthorize();
+
+        // Too short to be either: refused by the schema before any
+        // verification runs.
+        const result = await authorize({
+          email: 'user@example.com',
+          password: 'correctpass',
+          totpCode: '12',
+        });
+
+        expect(result).toBeNull();
+        expect(mockMfaVerifyChallenge).not.toHaveBeenCalled();
       });
     });
 

@@ -76,7 +76,7 @@ Use risk-based validation appropriate to the change.
 - Do not weaken, skip, delete, or rewrite tests merely to make a change pass.
 - Treat failing validation as evidence to investigate.
 - For security-, auth-, tenancy-, persistence-, runtime-, caching-, deployment-, or cross-layer changes, validate the actual affected boundary rather than relying only on isolated unit tests.
-- When repository-wide phase-close validation applies, run `pnpm lint --fix` (never plain `pnpm lint`) and `pnpm typecheck`; use the validation skill to determine additional gates.
+- When repository-wide phase-close validation applies and the active workflow does not define an exact lint command, run `pnpm lint --fix` (never plain `pnpm lint`) and `pnpm typecheck`; use the validation skill to determine additional gates.
 - Report exactly what was validated, what was not, and any remaining uncertainty.
 
 A task is complete only when requested behavior is implemented, intended scope is verified, relevant validation passes, and no unrelated changes were introduced.

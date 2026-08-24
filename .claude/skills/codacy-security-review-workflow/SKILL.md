@@ -406,7 +406,9 @@ patterns-propagation-report.md
 
 For `.copilot/tasks/{task_id}/`:
 
-- when `workflow-orchestrator` owns the parent task, it owns the top-level plan/lifecycle;
+- when `workflow-orchestrator` owns the parent task, it owns the top-level lifecycle/control artifacts;
+- when `workflow-orchestrator` owns the parent task, Workflow 10 updates the existing `intake.md` only with its Codacy-specific grouped finding inventory; it must not replace or recreate the parent control artifact;
+- when Workflow 10 runs standalone, it may create and own `intake.md` as defined by its workflow contract;
 - this workflow owns its Workflow 10 phase artifacts;
 - standalone runs create/update the normal task control artifacts required by repository artifact authority;
 - retrieve targeted artifact guidance if a destination/format is unclear rather than inventing parallel conventions.

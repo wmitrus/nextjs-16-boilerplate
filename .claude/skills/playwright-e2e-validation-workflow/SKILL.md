@@ -319,7 +319,7 @@ Precondition result is exactly:
 If Blocked:
 
 - do not execute browser scenarios;
-- record each affected required scenario as Blocked in evidence/gap reporting;
+- record each affected required scenario as Blocked in `preconditions.md` and the current workflow response/control state;
 - state the unmet precondition and smallest unblock action.
 
 ### 4. Playwright Execution

@@ -512,8 +512,7 @@ For substantial output, use exactly:
    - Not Required
 7. Validation Commands or Checks
 8. Result per Check
-9. Overall Status
-10. Recommended Next Action
+9. Recommended Next Action
 
 Lead with failed/blocked checks when the result is not Pass.
 

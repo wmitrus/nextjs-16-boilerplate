@@ -545,6 +545,8 @@ Do not claim “new finding” vs “historical noise” without an actual basel
 For `.copilot/tasks/{task_id}/`:
 
 - when `workflow-orchestrator` owns the task, it owns top-level task lifecycle/control artifacts;
+- when `workflow-orchestrator` owns the task, Workflow 11 updates the existing `intake.md` only with its Codacy-specific intake section; it must not replace or recreate the parent control artifact;
+- when Workflow 11 runs standalone, it may create and own `intake.md` as defined by its workflow contract;
 - this workflow owns Workflow 11 phase artifacts;
 - standalone runs create/update the normal task controls required by repository artifact authority;
 - retrieve targeted artifact guidance only if exact destination/format is unclear.

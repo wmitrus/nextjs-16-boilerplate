@@ -25,7 +25,7 @@ Do not preload full copies of:
 Before editing:
 
 1. Inspect the live affected code and identify the owning module/layer and changed runtime or trust boundaries.
-2. Confirm that required architecture, security, runtime, and validation decisions are already established.
+2. Confirm that required architecture, security, and runtime decisions are established. Reuse any validation constraints already defined by the parent workflow; do not require a separate Validation Strategy pass when the minimum validation scope is intentionally determined after implementation.
 3. Retrieve only the `AGENTS.md` sections and role/pattern sections relevant to the actual change.
 4. Classify each changed surface before loading detailed implementation/security guidance.
 5. If applicability of a mandatory rule is uncertain, search the relevant catalogue by concept/rule ID and expand context until the uncertainty is resolved. Do not guess.
@@ -166,4 +166,11 @@ If shared role semantics or mandatory patterns change, propagate the semantic ch
 
 ## Leantime
 
-This skill participates in the mandatory Leantime lifecycle. Use the `leantime-integration` skill at task open and task close; do not preload the full Leantime automation guide here.
+This skill participates in the mandatory Leantime lifecycle.
+
+- when `workflow-orchestrator` or another parent workflow owns the task, do not duplicate its logical open/close calls;
+- when Implementation runs standalone as a fresh non-trivial task, use `leantime-integration` for one logical open;
+- on resumed standalone work, reuse the existing tracked state;
+- close once after implementation-task closure conditions are satisfied;
+- do not duplicate time logging;
+- do not preload the full Leantime automation guide.

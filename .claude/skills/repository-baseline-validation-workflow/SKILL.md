@@ -668,8 +668,7 @@ For substantial output use exactly:
    - MAJOR
    - MINOR
 7. Recommendations per Gap
-8. Audit Limitations / Evidence Gaps
-9. Recommended Next Action
+8. Recommended Next Action
 
 Lead with CRITICAL findings when any exist.
 

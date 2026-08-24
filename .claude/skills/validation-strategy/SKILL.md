@@ -259,4 +259,11 @@ If shared validation semantics or mandatory patterns change, propagate the seman
 
 ## Leantime
 
-This skill participates in the mandatory Leantime lifecycle. Use `leantime-integration` at task open and task close; do not preload the full Leantime automation guide here.
+This skill participates in the mandatory Leantime lifecycle.
+
+- when `workflow-orchestrator` or another parent workflow owns the task, do not duplicate its logical open/close calls;
+- when Validation Strategy runs standalone as a fresh non-trivial task, use `leantime-integration` for one logical open;
+- on resumed standalone work, reuse the existing tracked state;
+- close once after validation-strategy task closure conditions are satisfied;
+- do not duplicate time logging;
+- do not preload the full Leantime automation guide.

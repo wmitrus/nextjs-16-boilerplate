@@ -47,7 +47,7 @@ Examples:
 - security incident / trust-boundary failure → the relevant security-incident workflow;
 - auth-flow change requiring matrix sign-off → the auth-flow review workflow;
 - browser-evidence-only task → the Playwright validation workflow or specialist;
-- repository validation audit → `validation-strategy` in baseline mode;
+- repository validation audit → `repository-baseline-validation-workflow`;
 - generic multi-step task without a more specific workflow → orchestrate as `workflow-task`.
 
 A preflight investigation/briefing step may precede execution-path selection and may cause one explicit reclassification. That is not workflow nesting.

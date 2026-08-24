@@ -430,60 +430,26 @@ If a requested solution conflicts with sound architecture, security, or runtime 
 
 ---
 
-## Leantime Integration — Mandatory Agent Protocol
+## Leantime Integration
 
-Every non-trivial AI agent task MUST include Leantime steps at task open and task close.
+Every non-trivial AI task participates in the repository Leantime lifecycle.
 
-**Governing reference**: `docs/ai/general/LEANTIME_AUTOMATION.md`
+Use the applicable `leantime-integration` agent/skill as the operational
+authority for task open, resume, close, time logging, diagnostics, and CLI use.
 
-**Responsible agents**:
+Repository-wide invariants:
 
-- `10 - Leantime Integration Agent` (`docs/ai/general/10 - Leantime Integration Agent.md`) — task lifecycle (open/close)
-- `11 - Leantime Strategy Agent` (`docs/ai/general/11 - Leantime Strategy Agent.md`) — project structure for large multi-phase tasks
+- reuse existing task/milestone state; do not create duplicates;
+- record the active Leantime task ID in the workflow control artifact;
+- close and log time only when the logical task is actually complete;
+- parent workflows own lifecycle when they invoke child specialists;
+- resumed work reuses the existing lifecycle state;
+- do not infer that `.env.leantime` or `.env.leantime-dev` is absent from
+  default search results alone.
 
-### When Leantime steps are required
+Detailed automation rules live in:
 
-- Every feature implementation, bug fix, refactor, documentation, security
-  incident, baseline validation, and E2E verification task.
-- Every workflow run in `.zenflow/workflows/`, `.github/prompts/`, and
-  `.agents/skills/` that uses the agent system.
-
-### Task Open (at workflow start)
-
-1. Check existing milestones and tasks in the project (no duplicates).
-2. Create or locate milestone.
-3. Create main task with HTML description (see Task Description Template in
-   `LEANTIME_AUTOMATION.md`).
-4. Patch status to `W toku` (4).
-5. Record task ID in `intake.md` or `plan.md`.
-
-### Task Close (at workflow end)
-
-1. Patch status to `Zrobione` (0).
-2. Log time with `pnpm lt -- run time.log` (see Time Tracking Policy in
-   `LEANTIME_AUTOMATION.md`).
-3. Update wiki article if implementation notes should persist.
-
-### CLI Entrypoint
-
-```shell
-pnpm lt -- run <operation-id> --input '{"...": "..."}' --format=json
-```
-
-For Retrospective boards: use `retrospectives.*` operations.
-For Blueprint/Canvas boards: use `blueprints.*` operations.
-
-### Leantime Diagnostic Rule
-
-When an agent diagnoses Leantime setup or claims that Leantime is blocked:
-
-1. verify the CLI entrypoint exists in `package.json`
-2. verify `.env.leantime` or `.env.leantime-dev` by exact path, not only by default search results
-3. verify required env values for the intended command, especially `LEANTIME_URL` and `LEANTIME_API_KEY`
-4. run the smallest falsifying command available when command execution exists
-5. if the current session cannot execute commands, record that as a session tooling limitation instead of misreporting the repository integration as broken
-
-Default workspace search may omit gitignored env files. Agents must not infer that `.env.leantime` is missing from default search results alone.
+`docs/ai/general/LEANTIME_AUTOMATION.md`
 
 ---
 
@@ -502,17 +468,20 @@ If documentation and code disagree:
 
 ---
 
-## Required Reading Sequence
+## Context Loading Protocol
 
 For any non-trivial task:
 
-1. Read this file (`AGENTS.md`).
-2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` for feature, fix, refactor, script, or tooling work.
-5. Read the relevant specialist prompt or workflow file for the task.
-6. Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` when the task touches redirects, logging, file access, auth, route handlers, scripts, or any security-sensitive path.
-7. Read `docs/ai/general/NEXTJS_IMPLEMENTATION_PLAYBOOK.md` when building a new API route, page/route segment, or test — it's the concrete "how", cross-linked to the SEC-XX entries and anti-patterns above rather than duplicating them.
+1. start from the active root instructions and the narrowest applicable skill/workflow;
+2. inspect live code/config relevant to the task;
+3. load only the AGENTS.md sections and supporting docs needed for the current risk or decision;
+4. expand context only when current evidence is insufficient;
+5. use targeted Security Coding Patterns sections for applicable SEC rules rather than loading the full catalogue;
+6. use `NEXTJS_IMPLEMENTATION_PLAYBOOK.md` only when its implementation guidance is relevant.
+
+Do not preload the full Agent Interaction Protocol, Repository AI Context,
+Implementation Anti-Patterns, Security Coding Patterns catalogue, or unrelated
+specialist documentation merely because the task is non-trivial.
 
 For middleware-style behavior, inspect `src/proxy.ts` first.
 
@@ -746,14 +715,15 @@ because `isEnabled()` cannot distinguish "off" from "unavailable".
 
 ---
 
-## Pending Scheduled Security Follow-Ups — Check Every Session
+## Pending Scheduled Security Follow-Ups
 
-**Any AI agent working in this repository on or after the date below must
-check this section before finishing a security-adjacent task.** This is a
-standing instruction, independent of which session or conversation created
-it — not a one-time note to the session that wrote it. `CLAUDE.md` carries
-a pointer to this section per this repo's own propagation convention; this
-is the authoritative copy.
+Load this section only when:
+
+- the current task touches the repository security surface; or
+- the user explicitly asks to check pending security work.
+
+Apply only follow-ups whose trigger date has been reached. `CLAUDE.md`
+carries the lightweight pointer; this section is the authoritative detail.
 
 ### Next.js Critical security release — check on/after 2026-08-26
 
@@ -901,33 +871,24 @@ Prefer:
 
 ### Playwright E2E Execution Rules
 
-- Before adding, moving, or refactoring Playwright specs, read `docs/usage/05 - Playwright E2E Architecture.md`. It is the repository source of truth for suite placement, helper ownership, runtime-profile mapping, and fixture-model selection.
-- The authoritative local E2E entrypoint is `node scripts/e2e/run-scenario.mjs ...` or a package script built on top of it (`pnpm e2e`, `pnpm e2e:auth`, `pnpm e2e:auth-matrix:*`, `pnpm e2e:scenario:*`).
-- The default local Playwright E2E origin is `http://localhost:3100`. It is intentionally separate from the normal developer app on `http://localhost:3000` so browser test runs do not contend with `pnpm dev`.
-- `scripts/e2e/run-scenario.mjs` is the source of truth for the E2E origin and must align `PLAYWRIGHT_TEST_BASE_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `NEXTAUTH_URL` to the same browser-test origin.
-- Scenario runs must use a fresh Next.js server process by default because `AUTH_PROVIDER`, `TENANCY_MODE`, `TENANT_CONTEXT_SOURCE`, DB settings, and related runtime env are read at server startup. Reusing a reachable dev server across `single`, `personal`, `org-provider`, or `org-db` can execute tests against the previous scenario's runtime.
-- Do not treat raw `playwright test` or `pnpm e2e:raw` as authoritative for auth, bootstrap, onboarding, AuthJS admin, or container-backed investigations. Raw Playwright bypasses scenario DB setup and will use the current app runtime env, which can point at `.env.local` / the dev database.
-- When `E2E_BACKEND_MODE=container`, the expected isolated database is always `postgres://postgres:postgres@127.0.0.1:5433/app_test`. If E2E-created users appear in the dev DB, suspect a raw Playwright run or another non-scenario entrypoint first.
-- For interactive terminal runs, always pass `--reporter=line`. Do not use the HTML reporter for agent-driven E2E runs because it hides the console evidence needed for debugging.
-- For longer local container-backed AuthJS admin investigations, prefer `PLAYWRIGHT_REUSE_EXISTING_SERVER=false` together with the scenario runner.
-- For focused AuthJS auth-flow regressions, prefer `pnpm e2e:authjs:core` before broader suites.
-- Do not sign off an AuthJS onboarding fix with only completed-user browser coverage; the run must include an incomplete-user onboarding path that proves `/auth/signin -> /onboarding -> /dashboard` (or the current ready route) still settles correctly.
-- Session-reuse decision rule: shared `storageState` or captured authenticated sessions are allowed only for steady-state scenarios whose assertion target is behavior after auth/bootstrap/onboarding has already settled.
-- Fresh interactive auth flow is mandatory for scenarios that validate sign-in, sign-up, bootstrap, onboarding, sign-out, session re-entry, tenant/org selection, or auth-driven redirects as part of the behavior under test.
-- Public, demo, or E2E-only routes explicitly allowed without auth must stay unauthenticated in Playwright unless the scenario itself is about authenticated behavior. Do not add Clerk/AuthJS setup just because adjacent suites are authenticated.
-- Mixed suites must be split by scenario semantics before optimization. Do not force one fixture model across a whole file when some cases are flow-based and others are steady-state. `e2e/provisioning-runtime.spec.ts` is the canonical example.
-- When the correct fixture model is unclear, inspect route policy, proxy behavior, and route/layout guards first. If semantics are still ambiguous, preserve the interactive flow rather than introducing shared-session coupling.
+For Playwright/E2E work, use the repository E2E specialist and current architecture sources rather than duplicating their runtime and fixture policy here.
 
-#### Clerk E2E Fixture Contract
+Authoritative sources:
 
-- For Clerk auth/bootstrap/provisioning E2E work, read `scripts/e2e-clerk-fixtures.md`, `e2e/clerk-auth.ts`, and `e2e/runtime-profile.ts` before changing fixtures.
-- `@clerk/backend` is a direct dependency when repository scripts or E2E helpers import Clerk Backend API clients. Do not treat it as an optional transitive dependency of `@clerk/nextjs`.
-- Do not create per-test stable Clerk organizations or password users. Stable password fixtures are env-driven and reconciled by `e2e/clerk-auth.ts`; generated hosted sign-up users are only `e2e+clerk_test-*@example.com` and must be cleaned after use.
-- Hosted sign-up can create generated users and empty default Clerk organizations. Cleanup must stay guarded by strict generated-email/default-org predicates and must protect configured stable slugs such as `E2E_CLERK_ORG_PROVIDER_OWNER_SLUG` and `E2E_CLERK_ORG_PROVIDER_MEMBER_SLUG`.
-- In `org-provider`, the stable Clerk organization slug is the source of truth. The helper must reconcile the owner/member users, organizations, and membership roles (`org:admin` / `org:member`) before browser sign-in.
-- In `org-db`, Clerk organization membership is not app tenant truth. Active-context cookies must use seeded application organization IDs from `SEEDED_ORGANIZATION_IDS`, not seeded tenant IDs.
-- Worker-scoped authenticated storage fixtures must guard runtime compatibility before creating browser or session state because `test.skip()` inside a test body runs too late.
-- Keep bounded retries and actionable error formatting around Clerk Backend and Clerk testing-token calls. Blank or transient Clerk API failures should be reported as fixture/provider setup failures, not confused with app regressions.
+- the applicable `playwright-e2e` agent/skill for the active consumer;
+- `docs/usage/05 - Playwright E2E Architecture.md`;
+- `scripts/e2e/run-scenario.mjs` for scenario runtime/origin semantics;
+- Clerk fixture sources only when Clerk auth/bootstrap/provisioning is involved.
+
+Repository-wide invariants:
+
+- use repository-owned scenario/package runners when they own environment setup;
+- do not treat raw Playwright as authoritative sign-off when it bypasses scenario setup;
+- keep public, interactive-auth, steady-auth, and mixed scenarios in the fixture model selected for their semantics;
+- do not reuse authenticated state for flows whose subject is authentication/bootstrap/onboarding itself;
+- do not modify production behavior merely to make E2E validation pass.
+
+Load detailed E2E architecture, provider fixtures, and auth-specific rules only when the task actually touches those surfaces.
 
 ---
 
@@ -1053,27 +1014,20 @@ Important decisions should capture:
 
 ---
 
-## Possible Enhancements Backlog — Check Every Task
+## Possible Enhancements Backlog
 
-**`docs/ai/general/POSSIBLE_ENHANCEMENTS.md`** is the single holding pen for
-valuable-but-deferred ideas that surface during work — most actively right
-now during the ongoing multi-case security-audit remediation series, but the
-file is not scoped to that series alone.
+`docs/ai/general/POSSIBLE_ENHANCEMENTS.md` is the single holding pen for
+valuable-but-deferred ideas that surface during work.
 
-When a task surfaces an improvement worth doing but not required to close
-that task's own scope (a stronger test, a follow-up hardening step, a
-speculative refactor, anything judged out of blast radius for the task at
-hand), add one entry there instead of only mentioning it in that task's own
-`plan.md` or specialist summaries. If the same idea would otherwise be
-written in both places, keep the full rationale in
-`POSSIBLE_ENHANCEMENTS.md` only and have the task artifact reference it by
-its `PE-XX` ID — never duplicate the same information in two places.
+Do not load or inspect the backlog merely because a task started.
 
-Entries are not authorized work and must never be implemented on an agent's
-own initiative. They sit there until the user reviews the accumulated list
-and decides what to actually pick up, reject, or fold into real task scope.
-Full rules (entry format, ID assignment, triage/status update convention)
-are in the file itself.
+When the current task actually surfaces an improvement worth preserving but
+outside its required scope, read the backlog rules, add or reference the
+appropriate `PE-XX` entry, and avoid duplicating its full rationale in task
+artifacts.
+
+Entries are not authorized work and must never be implemented without explicit
+scope or user approval.
 
 ---
 
@@ -1159,7 +1113,7 @@ Reference guides:
 
 | Location                                            | Consumer            | Notes                                                                                                                         |
 | --------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **`AGENTS.md`** (this file)                         | All AI agents       | **Primary always-applied context — update here first**                                                                        |
+| **`AGENTS.md`** (this file)                         | All AI agents       | Shared repository knowledge base — load relevant sections on demand; update applicable repository-wide rules here             |
 | `docs/ai/general/0[1-9] - *.md`                     | Zencoder extension  | Plain markdown prompt files                                                                                                   |
 | `.github/agents/*.agent.md`                         | GitHub Copilot      | YAML frontmatter + markdown                                                                                                   |
 | `.github/prompts/*.prompt.md`                       | GitHub Copilot      | YAML frontmatter + markdown                                                                                                   |
@@ -1212,55 +1166,24 @@ Full correspondence table and process ownership rules: `docs/ai/general/REPOSITO
 
 ## Security Coding Patterns
 
-Repository-specific security coding rules are maintained in:
+Repository-specific security rules are maintained in:
 
-**`docs/ai/general/SECURITY_CODING_PATTERNS.md`**
+`docs/ai/general/SECURITY_CODING_PATTERNS.md`
 
-This document is the living, authoritative catalogue of:
+The catalogue is authoritative for SEC rules and confirmed scanner patterns.
 
-- security patterns to avoid and their correct alternatives
-- confirmed false-positive scanner signals and why they are safe
-- mandatory coding rules produced from structured security reviews
+For code writing or review:
 
-**All agents that write or review code MUST read this document.**
+1. consult the catalogue Pattern Index when the task has a plausible security or SEC-pattern concern;
+2. load only the applicable SEC sections;
+3. expand security context only when targeted evidence is insufficient;
+4. use `security-auth` when a security/trust decision requires specialist authority.
 
-The table below is a **subset**, not the index. It stops at SEC-25 (plus
-SEC-41, added because it is test-enforced) and never tracked SEC-26 through
-SEC-40 — the catalogue's own index table, at the top of
-`SECURITY_CODING_PATTERNS.md`, is the authoritative list. Read that one;
-treat the table below as a quick reference to the older entries only.
+Do not preload the full Security Coding Patterns catalogue for unrelated work.
 
-| ID     | Rule                                                                                                                                                                                                                                                                                                                                                                           |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SEC-01 | Use `Map<symbol, unknown>` with `Map.get(token)` in DI mock containers — never if/else chains of `token === SYMBOL`                                                                                                                                                                                                                                                            |
-| SEC-02 | `new URL('/literal-path', req.url)` is safe — `req.url` supplies only the origin                                                                                                                                                                                                                                                                                               |
-| SEC-03 | Always call `sanitizeRedirectUrl()` before forwarding any `redirect_url` query param                                                                                                                                                                                                                                                                                           |
-| SEC-04 | Use explicit `Record<AllowedKeys, fn>` dispatch maps — never `obj[dynamicKey]()`                                                                                                                                                                                                                                                                                               |
-| SEC-05 | `fs.*` with `path.resolve(cwd, '<literal>')` is safe; `fs.*` with user input requires confinement                                                                                                                                                                                                                                                                              |
-| SEC-06 | `Math.random()` is only acceptable for non-security test uniqueness — use `crypto` for secrets                                                                                                                                                                                                                                                                                 |
-| SEC-07 | `uuid` column type only for DB-generated PKs and FK refs — use `text` for external/app-level string IDs                                                                                                                                                                                                                                                                        |
-| SEC-08 | Use `unique().nullsNotDistinct()` not `uniqueIndex()` for unique constraints on nullable columns                                                                                                                                                                                                                                                                               |
-| SEC-09 | Never share mutable SDK instances across requests — cache only feature definitions, evaluate with per-request context                                                                                                                                                                                                                                                          |
-| SEC-10 | Never log raw `error` objects — extract `errorMessage` and `errorName` as separate sanitized string fields                                                                                                                                                                                                                                                                     |
-| SEC-11 | SDK client module-level caches must key by ALL differentiating config (e.g., `clientKey + apiHost`) — never by a subset                                                                                                                                                                                                                                                        |
-| SEC-12 | Use `path.resolve(cwd, '<literal>')` for all `fs.*` paths in scripts — never `path.join` (SEC-05 refinement)                                                                                                                                                                                                                                                                   |
-| SEC-13 | `pnpm env:validate` is a deploy gate — run only in deploy workflows after `vercel pull`; never in `pr-validation.yml`                                                                                                                                                                                                                                                          |
-| SEC-14 | UUID test fixtures for `z.uuid()`-validated fields must be valid RFC 4122 v4 format                                                                                                                                                                                                                                                                                            |
-| SEC-15 | Never use `key in plainObject` to guard a user-controlled lookup before `plainObject[key]`; use `Object.hasOwn`, null-prototype records, or `Map`                                                                                                                                                                                                                              |
-| SEC-16 | Reusable `fs.*` helpers must resolve and confine path arguments at the helper sink; caller assumptions are insufficient                                                                                                                                                                                                                                                        |
-| SEC-17 | Always pass `meta.path` to `checkRateLimit()`; never bypass rate limiting via `SELF_RATE_LIMITED_PATHS` — propagate path in WARN context instead                                                                                                                                                                                                                               |
-| SEC-18 | In `scripts/**` and `e2e/**`, prefer typed or allowlisted env helpers over raw `process.env[key]`; measure local ESLint coverage against Codacy on later PRs                                                                                                                                                                                                                   |
-| SEC-19 | In `scripts/**` and `e2e/**`, prefer shared fs helper wrappers with sink confinement; local lint flags bare identifier paths and helpers centralize safe fs access                                                                                                                                                                                                             |
-| SEC-23 | Dynamic App Router params must be schema-validated before UUID DB predicates; never pass raw `params.*` or aliases derived from `params.*` into UUID columns                                                                                                                                                                                                                   |
-| SEC-24 | Codacy HIGH error-prone TS/JSX findings are reliability findings unless a concrete security path exists; fix sparse state typing, async JSX handlers, typed test mocks, and finite-option schemas                                                                                                                                                                              |
-| SEC-25 | Build/deploy fixes must preserve the downstream runtime env contract; never mask missing runtime config with a build-only export or fallback                                                                                                                                                                                                                                   |
-| SEC-41 | Admin routes must separate the unscoped platform-admin grant from the tenant-scoped ABAC grant, and carry the authorized scope in the same `WHERE` as the id — a `SELECT` that proves ownership does not authorise the `UPDATE` that follows it (enforced by `platform-admin.guard.test.ts`)                                                                                   |
-| SEC-42 | Security-critical rate limits (sign-in, sign-up, password reset, verification, invitations) must use `checkStrictRateLimit` — a durable secondary then fail closed, never a process-local fallback, which on serverless is one allowance per instance                                                                                                                          |
-| SEC-43 | Client IP must come from `getClientIp()` under an explicitly declared `DEPLOYMENT_PROXY`; never read a forwarding header directly, and never invent a placeholder for an unidentifiable client (enforced by `client-ip.guard.test.ts`)                                                                                                                                         |
-| SEC-44 | Never put any part of a secret in a response (masked included) — fix at the source that builds the field; give credential rejection its own rate-limit counter when the guard returns before the limiter; compare secrets in constant time across all rotated keys                                                                                                             |
-| SEC-48 | An admin mutation requires a second factor verified within 15 minutes **in the current session** — deny-by-default across `/api/admin/**` with an empty, statically-asserted exemption list; password-only never satisfies it, missing key material fails closed, and the local bypass is refused on any deployed environment (enforced by `with-admin-step-up.guard.test.ts`) |
-
-**`02 - Security & Auth` owns this document.** After any security review or fix, that agent must update it and propagate changes to all locations in the table above.
+`02 - Security & Auth` owns the catalogue. After a durable security pattern changes,
+propagate it only to the applicable agent surfaces defined by the repository
+agent-infrastructure rules.
 
 ---
 

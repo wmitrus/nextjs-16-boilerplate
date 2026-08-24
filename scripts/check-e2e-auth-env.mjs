@@ -394,6 +394,24 @@ export function validateClerkRedirectEnv(
   );
 }
 
+/**
+ * Everything this script validates is a Clerk fixture: test identities, Clerk
+ * redirect URLs, Clerk API keys. A run whose app is configured for a different
+ * auth provider never touches any of it -- the Clerk-specific specs gate
+ * themselves on `runtime-profile.ts`'s `authProvider === 'clerk'` -- so
+ * demanding live Clerk credentials there is a false requirement.
+ *
+ * It was a real blocker rather than a cosmetic one: it made every
+ * `AUTH_PROVIDER=authjs` suite (`e2e:authjs:core`, `e2e:admin:audit-logs`,
+ * `e2e:demo-showcase`, `e2e:admin:step-up`) unrunnable in CI without Clerk
+ * test-account secrets they never use. `e2e-audit-log.yml` already carried a
+ * comment naming this as a pre-existing gap.
+ */
+export function requiresClerkFixtures(authProvider) {
+  // Unset means the app's own default, which is Clerk.
+  return (authProvider ?? 'clerk').trim() === 'clerk';
+}
+
 export async function main() {
   const { scenario, variant, withOauth } = parseArgs(process.argv.slice(2));
 
@@ -406,6 +424,14 @@ export async function main() {
     ...loadedEnv,
     ...process.env,
   });
+
+  if (!requiresClerkFixtures(process.env.AUTH_PROVIDER)) {
+    console.log(
+      `✅ Skipping Clerk E2E fixture validation: AUTH_PROVIDER=${process.env.AUTH_PROVIDER} ` +
+        'does not use Clerk identities.',
+    );
+    return;
+  }
 
   const missing = [];
   const aliasWarnings = [];

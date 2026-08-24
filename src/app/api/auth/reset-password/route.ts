@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 
-import { hash } from 'bcryptjs';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { connection } from 'next/server';
 import { z } from 'zod';
@@ -22,6 +21,8 @@ import {
   rateLimitKeyForClient,
 } from '@/shared/lib/network/get-ip';
 
+import { hashPassword } from '@/modules/auth/infrastructure/credentials/password-hasher';
+import { passwordSchema } from '@/modules/auth/infrastructure/credentials/password-policy';
 import {
   authUserIdentitiesTable,
   passwordResetTokensTable,
@@ -32,7 +33,7 @@ import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Reset token is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: passwordSchema,
 });
 
 /**
@@ -99,7 +100,6 @@ async function persistResetCredentials(
   }
 }
 
-const BCRYPT_COST = 12;
 const RESET_PASSWORD_PATH = '/api/auth/reset-password';
 const INVALID_TOKEN_ERROR =
   'This password reset link is invalid or has expired. Please request a new one.';
@@ -124,7 +124,7 @@ export async function POST(request: Request): Promise<Response> {
   // SEC-42. This endpoint had no rate limit of its own -- only the generic
   // per-IP window in the Edge proxy, which degrades to a per-instance counter
   // whenever Upstash is unreachable. It redeems a reset token and then does
-  // bcrypt work, so it is both a token-guessing oracle and an expensive one.
+  // Argon2id work, so it is both a token-guessing oracle and an expensive one.
   // Strict mode: a durable secondary, then fail closed.
   const client = await getClientIp(new Headers(request.headers));
   const rateLimitResult = await checkStrictRateLimit(
@@ -166,7 +166,7 @@ export async function POST(request: Request): Promise<Response> {
 
     // Cheap pre-check ONLY -- this is a DoS guard, not the security check.
     // It lets an obviously invalid/expired/already-used token short-circuit
-    // before the deliberately expensive bcrypt hash below, so an attacker
+    // before the deliberately expensive Argon2id hash below, so an attacker
     // cannot burn CPU by spraying junk tokens. It deliberately decides
     // nothing: the authoritative single-use decision is the atomic claim
     // inside the transaction further down. Never add logic here that the
@@ -191,7 +191,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const hashedPassword = await hash(password, BCRYPT_COST);
+    const hashedPassword = await hashPassword(password);
     const now = new Date();
 
     const outcome = await db.transaction(async (tx) => {
@@ -202,8 +202,9 @@ export async function POST(request: Request): Promise<Response> {
       // exactly one UPDATE matches a row, the other returns nothing.
       //
       // Splitting this into "SELECT unused -> hash -> UPDATE used" is the
-      // bug this replaces (SEC-35): bcrypt sits between the check and the
-      // act, holding the race window open for hundreds of milliseconds.
+      // bug this replaces (SEC-35): the password hash sits between the
+      // check and the act, holding the race window open for hundreds of
+      // milliseconds.
       // `NOW()` is the database clock, not this process's, so the expiry
       // comparison is evaluated where the row is locked.
       const [claimedToken] = await tx

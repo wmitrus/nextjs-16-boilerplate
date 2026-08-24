@@ -114,6 +114,8 @@ async function readMigrationSql(tag: string): Promise<Buffer> {
       return readFile(resolve(MIGRATIONS_DIR, '0017_shiny_starbolt.sql'));
     case '0018_busy_mad_thinker':
       return readFile(resolve(MIGRATIONS_DIR, '0018_busy_mad_thinker.sql'));
+    case '0019_rare_outlaw_kid':
+      return readFile(resolve(MIGRATIONS_DIR, '0019_rare_outlaw_kid.sql'));
     default:
       throw new Error(
         `[migration-journal] Unsupported journal entry ${tag}. Add it to readMigrationSql().`,

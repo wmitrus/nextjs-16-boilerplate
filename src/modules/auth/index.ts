@@ -8,14 +8,18 @@ import type {
   InternalIdentityLookup,
   RequestIdentitySource,
 } from '@/core/contracts/identity';
+import type { MfaService } from '@/core/contracts/mfa';
 import type { MembershipRepository } from '@/core/contracts/repositories';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
 import type { DrizzleDb } from '@/core/db';
 
 import { AuthJsRequestIdentitySource } from './infrastructure/authjs/AuthJsRequestIdentitySource';
+import { ClerkMfaService } from './infrastructure/clerk/ClerkMfaService';
 import { ClerkRequestIdentitySource } from './infrastructure/clerk/ClerkRequestIdentitySource';
 import { DrizzleInternalIdentityLookup } from './infrastructure/drizzle/DrizzleInternalIdentityLookup';
+import { DrizzleAuthJsMfaService } from './infrastructure/mfa/DrizzleAuthJsMfaService';
+import { UnsupportedMfaService } from './infrastructure/mfa/UnsupportedMfaService';
 import { NeonRequestIdentitySource } from './infrastructure/neon/NeonRequestIdentitySource';
 import { RequestScopedIdentityProvider } from './infrastructure/RequestScopedIdentityProvider';
 import { SupabaseRequestIdentitySource } from './infrastructure/supabase/SupabaseRequestIdentitySource';
@@ -59,6 +63,27 @@ function buildIdentitySource(
       return new NeonRequestIdentitySource();
     default:
       throw new Error(`[authModule] Unknown AUTH_PROVIDER: ${authProvider}`);
+  }
+}
+
+/**
+ * The second-factor adapter for this provider (SEC-48).
+ *
+ * Every provider gets one, including the placeholders: an unregistered
+ * service would turn a policy gap into a container error at the step-up
+ * guard, while `UnsupportedMfaService` refuses the challenge with a reason.
+ */
+function buildMfaService(
+  authProvider: AuthProvider,
+  db: DrizzleDb,
+): MfaService {
+  switch (authProvider) {
+    case 'clerk':
+      return new ClerkMfaService();
+    case 'authjs':
+      return new DrizzleAuthJsMfaService(db);
+    default:
+      return new UnsupportedMfaService(authProvider);
   }
 }
 
@@ -179,6 +204,10 @@ export function createAuthModule(config: AuthModuleConfig): Module {
       );
       container.register(AUTH.TENANT_RESOLVER, tenantResolver);
       container.register(AUTH.USER_REPOSITORY, userRepository);
+      container.register(
+        AUTH.MFA_SERVICE,
+        buildMfaService(config.authProvider, db),
+      );
     },
   };
 }

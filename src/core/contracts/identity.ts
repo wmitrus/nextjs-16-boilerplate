@@ -90,6 +90,24 @@ export interface RequestIdentitySourceData {
    */
   readonly sessionIssuedAt?: number;
   /**
+   * Provider-neutral reference to the *logical session* this request belongs
+   * to: stable for the life of one sign-in, different after the next one.
+   *
+   * Like `sessionIssuedAt` this is an authentication fact about the
+   * credential in hand, never authorization data. It is admitted to this
+   * deliberately minimal contract because the step-up proof (SEC-48) must be
+   * bound to the session that earned it -- otherwise a proof would survive a
+   * sign-out, a re-login, or a session revocation, and "verified 3 minutes
+   * ago" would stop meaning "verified in this session".
+   *
+   * Populated as the provider's own session identifier where one exists
+   * (Clerk `sessionId`, the AuthJS `sid` claim minted at sign-in). Undefined
+   * when the provider exposes none -- and an undefined value must fail
+   * closed at the consumer, never fall back to the user id, which would make
+   * one proof valid across every session that user ever opens.
+   */
+  readonly logicalSessionId?: string;
+  /**
    * External organization ID from the auth provider (e.g. Clerk org_xxx).
    * Replaces tenantExternalId — organizations are the canonical operational unit.
    */

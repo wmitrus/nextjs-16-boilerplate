@@ -7,6 +7,7 @@ export const AUTH = {
   IDENTITY_PROVIDER: Symbol('IdentityProvider'),
   TENANT_RESOLVER: Symbol('TenantResolver'),
   USER_REPOSITORY: Symbol('UserRepository'),
+  MFA_SERVICE: Symbol('MfaService'),
 };
 
 export const AUTHORIZATION = {

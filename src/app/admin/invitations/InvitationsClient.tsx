@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
 import type {
   FormErrorsResponse,
   ServerErrorResponse,
@@ -118,6 +119,7 @@ export function InvitationsClient({
   createEndpoint = '/api/admin/invitations',
   revokeEndpointBase,
 }: InvitationsClientProps) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const [email, setEmail] = React.useState('');
   const [roleId, setRoleId] = React.useState(roles[0]?.id ?? '');
@@ -131,7 +133,7 @@ export function InvitationsClient({
     setSendState({ status: 'submitting' });
 
     try {
-      const res = await fetch(createEndpoint, {
+      const res = await stepUpFetch(createEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, roleId }),
@@ -161,7 +163,7 @@ export function InvitationsClient({
     setRevokeState((s) => ({ ...s, [id]: 'revoking' }));
 
     try {
-      const res = await fetch(`${revokeEndpointBase}/${id}`, {
+      const res = await stepUpFetch(`${revokeEndpointBase}/${id}`, {
         method: 'DELETE',
       });
 

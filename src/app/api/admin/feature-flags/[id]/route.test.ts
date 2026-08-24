@@ -7,6 +7,7 @@ import { FeatureFlagNotFoundError } from '@/modules/feature-flags/domain/errors'
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
+import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const FLAG_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

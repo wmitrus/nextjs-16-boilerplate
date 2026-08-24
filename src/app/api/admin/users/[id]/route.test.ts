@@ -6,6 +6,7 @@ import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
+import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const USER_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

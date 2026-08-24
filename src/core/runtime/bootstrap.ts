@@ -15,6 +15,7 @@ import {
   env,
   validateAuthProviderConfigValues,
   validateTenancyConfigValues,
+  validateAppSecurityConfigValues,
   validateDeploymentProxyConfigValues,
   validateInternalApiKeyConfigValues,
 } from '@/core/env';
@@ -103,6 +104,16 @@ export function createRequestContainer(config: AppConfig): Container {
     env.INTERNAL_API_KEY,
     env.INTERNAL_API_KEY_PREVIOUS,
     env.NODE_ENV,
+  );
+  // SEC-48. A deployment that ships with step-up bypassed, or without the
+  // key material its proofs are signed with, has no authentication-assurance
+  // boundary -- and nothing at runtime would announce that. Fail here.
+  validateAppSecurityConfigValues(
+    env.APP_SECURITY_MASTER_KEY,
+    env.APP_SECURITY_MASTER_KEY_PREVIOUS,
+    env.ADMIN_STEP_UP_MODE,
+    env.NODE_ENV,
+    env.VERCEL_ENV,
   );
 
   const container = new Container();

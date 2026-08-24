@@ -196,6 +196,18 @@ correlated `EXISTS` predicate against `memberships` without importing the
 - Provides deactivation per row (for active users only)
 - Shows loading skeleton and error state
 
+## Step-Up Required For Mutations (SEC-48)
+
+Deactivating a user and renaming one are state-changing admin operations, so
+both go through `withAdminStepUp`: the caller needs a second factor verified
+within the last 15 minutes, in the current session. Reads are unaffected.
+
+The requirement does not depend on whether the caller is a platform admin or
+a tenant admin — that distinction is authorization (SEC-26/SEC-41) and is
+still enforced separately, in the same `WHERE` clause as the mutation.
+
+Details: `docs/features/37 - MFA & Step-Up Authentication.md`.
+
 ## Security Notes
 
 - **IDOR protection**: `GET /api/admin/users/:id` returns 404 (not 403) when user is not found to avoid enumeration.

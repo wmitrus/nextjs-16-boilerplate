@@ -18,6 +18,7 @@ import {
   type Resource,
 } from '@/core/contracts/resources-actions';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
 import { SortableHeaderButton } from '@/shared/components/table/SortableHeaderButton';
 import type {
   FormErrorsResponse,
@@ -98,6 +99,7 @@ export function PoliciesTableClient({
   organizationId: string;
   policies: PolicyRow[];
 }) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
@@ -149,7 +151,7 @@ export function PoliciesTableClient({
     }));
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}/policies/${policyId}`,
         {
           method: 'PATCH',
@@ -201,7 +203,7 @@ export function PoliciesTableClient({
     }));
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}/policies/${policyId}`,
         { method: 'DELETE' },
       );

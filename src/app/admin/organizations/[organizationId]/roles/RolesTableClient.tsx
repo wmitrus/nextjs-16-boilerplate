@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
 import { SortableHeaderButton } from '@/shared/components/table/SortableHeaderButton';
 import type {
   FormErrorsResponse,
@@ -70,6 +71,7 @@ export function RolesTableClient({
   organizationId: string;
   roles: RoleRow[];
 }) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
@@ -97,7 +99,7 @@ export function RolesTableClient({
     }));
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}/roles/${roleId}`,
         {
           method: 'PATCH',
@@ -144,7 +146,7 @@ export function RolesTableClient({
     }));
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}/roles/${roleId}`,
         {
           method: 'DELETE',

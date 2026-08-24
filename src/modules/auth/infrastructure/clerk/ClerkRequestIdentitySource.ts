@@ -49,64 +49,77 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
 
   async get(): Promise<RequestIdentitySourceData> {
     if (!this.cached) {
-      this.cached = auth().then(({ userId, orgId, orgRole, sessionClaims }) => {
-        const email = extractClerkEmailClaim(sessionClaims);
-        const emailClaimSource = resolveEmailClaimSource(sessionClaims);
-        const sessionClaimKeys =
-          sessionClaims && typeof sessionClaims === 'object'
-            ? Object.keys(sessionClaims).sort()
-            : [];
+      this.cached = auth().then(
+        ({ userId, orgId, orgRole, sessionId, sessionClaims }) => {
+          // Every optional provider value is normalised once, here, and then
+          // reused by both log lines and the returned identity. Clerk may omit
+          // any of these, and `undefined` (not `null`, not `false`) is the one
+          // shape the rest of the security layer and the logger both read
+          // correctly -- so the decision is made once instead of being
+          // repeated at each of the three places that need it.
+          const externalUserId = userId ?? undefined;
+          const orgExternalId = orgId ?? undefined;
+          const tenantRole = orgRole ?? undefined;
+          // Clerk's own session id, used as the provider-neutral logical
+          // session reference for step-up proofs (SEC-48). Clerk rotates it
+          // per sign-in, which is exactly the lifetime a proof may have.
+          const logicalSessionId = sessionId ?? undefined;
 
-        if (!email) {
-          logger.warn(
+          const email = extractClerkEmailClaim(sessionClaims);
+          const emailClaimSource = resolveEmailClaimSource(sessionClaims);
+          const emailVerified =
+            sessionClaims?.email_verified === true ? true : undefined;
+          const sessionTokenVersion =
+            typeof sessionClaims?.v === 'number' ? sessionClaims.v : undefined;
+          const activeOrganizationClaimPresent = Boolean(sessionClaims?.o);
+          const sessionClaimKeys =
+            sessionClaims && typeof sessionClaims === 'object'
+              ? Object.keys(sessionClaims).sort()
+              : [];
+
+          if (!email) {
+            logger.warn(
+              {
+                event: 'auth:identity_claims_missing_email',
+                provider: 'clerk',
+                userId: externalUserId,
+                sessionClaimKeys,
+                sessionTokenVersion,
+                activeOrganizationClaimPresent,
+                emailVerified,
+              },
+              'Clerk auth() sessionClaims did not contain a supported email claim',
+            );
+          }
+
+          logger.debug(
             {
-              event: 'auth:identity_claims_missing_email',
+              event: 'auth:identity_claims_resolved',
               provider: 'clerk',
-              userId: userId ?? undefined,
+              userId: externalUserId,
+              hasEmailClaim: email !== undefined,
+              emailClaimSource,
+              emailPreview: email ? maskEmail(email) : undefined,
+              emailVerified,
               sessionClaimKeys,
-              sessionTokenVersion:
-                typeof sessionClaims?.v === 'number'
-                  ? sessionClaims.v
-                  : undefined,
-              activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
-              emailVerified:
-                sessionClaims?.email_verified === true ? true : undefined,
+              sessionTokenVersion,
+              activeOrganizationClaimPresent,
+              orgExternalIdPresent: Boolean(orgExternalId),
+              tenantRole,
             },
-            'Clerk auth() sessionClaims did not contain a supported email claim',
+            'Resolved Clerk identity claims from auth()',
           );
-        }
 
-        logger.debug(
-          {
-            event: 'auth:identity_claims_resolved',
-            provider: 'clerk',
-            userId: userId ?? undefined,
-            hasEmailClaim: email !== undefined,
-            emailClaimSource,
-            emailPreview: email ? maskEmail(email) : undefined,
-            emailVerified:
-              sessionClaims?.email_verified === true ? true : undefined,
-            sessionClaimKeys,
-            sessionTokenVersion:
-              typeof sessionClaims?.v === 'number'
-                ? sessionClaims.v
-                : undefined,
-            activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
-            orgExternalIdPresent: Boolean(orgId),
-            tenantRole: orgRole ?? undefined,
-          },
-          'Resolved Clerk identity claims from auth()',
-        );
-
-        return {
-          userId: userId ?? undefined,
-          email,
-          emailVerified:
-            sessionClaims?.email_verified === true ? true : undefined,
-          orgExternalId: orgId ?? undefined,
-          tenantRole: orgRole ?? undefined,
-        };
-      });
+          return {
+            userId: externalUserId,
+            email,
+            emailVerified,
+            logicalSessionId,
+            orgExternalId,
+            tenantRole,
+          };
+        },
+      );
     }
 
     return this.cached;

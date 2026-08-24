@@ -10,6 +10,7 @@ import {
   type Resource,
 } from '@/core/contracts/resources-actions';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
 import type {
   FormErrorsResponse,
   ServerErrorResponse,
@@ -78,6 +79,7 @@ export function CreatePolicyForm({
   organizationId: string;
   roles: PolicyRole[];
 }) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const initialResource = RESOURCE_OPTIONS[0] ?? RESOURCES.ROUTE;
   const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
@@ -103,7 +105,7 @@ export function CreatePolicyForm({
     setState({ status: 'submitting' });
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}/policies`,
         {
           method: 'POST',

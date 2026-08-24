@@ -3,24 +3,85 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 
-import { AUTHORIZATION } from '@/core/contracts';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
+import type { RequestIdentitySource } from '@/core/contracts/identity';
+import type { MfaService } from '@/core/contracts/mfa';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
+import { StepUpProvider } from '@/shared/components/step-up/StepUpProvider';
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
 
 import { buildBootstrapRedirectUrl } from '@/app/auth/post-auth-redirect';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
+import { resolveStepUpEnforcement } from '@/security/core/step-up/policy';
 
 const logger = resolveServerLogger().child({
   type: 'API',
   category: 'auth',
   module: 'admin-guard',
 });
+
+/**
+ * Where an administrator without a second factor is sent (SEC-48).
+ *
+ * Administrative access requires MFA enrollment. This is checked *after* the
+ * admin grant is established, not before and not instead: enrollment is an
+ * authentication-assurance requirement placed on people who hold
+ * administrative authority, so the authority has to be known first. It is
+ * also deliberately not asked at sign-in -- the credentials provider must
+ * never resolve roles (see `authorize()` and SEC-48).
+ *
+ * The same requirement is enforced independently at every admin API mutation
+ * (`withAdminStepUp`), because a layout guard protects pages, not endpoints.
+ */
+const MFA_ENROLLMENT_REDIRECT = '/account/security/mfa?reason=admin';
+
+async function requireMfaEnrollment(
+  container: ReturnType<typeof getAppContainer>,
+  userId: string,
+  correlationId: string | undefined,
+): Promise<void> {
+  // The same controlled bypass the mutation guard honours, and for the same
+  // reason: an admin E2E run whose subject is something other than MFA must
+  // be able to reach the panel. It is rejected at startup and again at
+  // runtime on any deployed environment, so it cannot travel to production
+  // (see `resolveStepUpEnforcement`).
+  if (resolveStepUpEnforcement().mode === 'bypassed') {
+    logger.warn(
+      { event: 'admin_guard:mfa_requirement_bypassed', correlationId, userId },
+      'Admin MFA enrollment requirement bypassed by local-only configuration',
+    );
+    return;
+  }
+
+  const rawIdentity = await container
+    .resolve<RequestIdentitySource>(AUTH.IDENTITY_SOURCE)
+    .get();
+  const mfaService = container.resolve<MfaService>(AUTH.MFA_SERVICE);
+
+  const status = await mfaService.getStatus({
+    userId,
+    externalUserId: rawIdentity.userId,
+  });
+
+  if (status.enrolled) return;
+
+  logger.warn(
+    {
+      event: 'admin_guard:mfa_enrollment_required',
+      correlationId,
+      userId,
+      enrollmentSurface: status.enrollmentSurface,
+    },
+    'Admin access deferred — administrator has no second factor enrolled',
+  );
+  redirect(MFA_ENROLLMENT_REDIRECT);
+}
 
 export default function AdminLayout({
   children,
@@ -101,6 +162,11 @@ export async function AdminLayoutGuard({
       targetId: 'admin-panel',
       metadata: { source: 'env' },
     });
+    await requireMfaEnrollment(
+      container,
+      access.user.id,
+      requestContext.correlationId,
+    );
     return <AdminLayoutShell>{children}</AdminLayoutShell>;
   }
 
@@ -171,31 +237,42 @@ export async function AdminLayoutGuard({
     metadata: { source: 'abac' },
   });
 
+  await requireMfaEnrollment(
+    container,
+    access.user.id,
+    requestContext.correlationId,
+  );
+
   return <AdminLayoutShell>{children}</AdminLayoutShell>;
 }
 
 function AdminLayoutShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-            <Link
-              href="/"
-              className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              Home
-            </Link>
-            <span>/</span>
-            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-              Administration
-            </span>
+    // Every admin mutation can come back asking for a fresh step-up
+    // (SEC-48); the provider turns that refusal into one prompt and one
+    // retry, in one place, instead of nine clients each inventing a flow.
+    <StepUpProvider>
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+        <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+              <Link
+                href="/"
+                className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+              >
+                Home
+              </Link>
+              <span>/</span>
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                Administration
+              </span>
+            </div>
           </div>
         </div>
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          {children}
+        </main>
       </div>
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {children}
-      </main>
-    </div>
+    </StepUpProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { clerkSetup } from '@clerk/testing/playwright';
 
 import { readEnvFileRecord, resolveProjectPath } from './env-files';
+import { getRuntimeProfile } from './runtime-profile';
 
 const CLERK_SETUP_MAX_ATTEMPTS = 3;
 const CLERK_SETUP_RETRY_DELAY_MS = 1_000;
@@ -112,6 +113,19 @@ function ensureClerkTestingEnv(): void {
 }
 
 async function globalSetup() {
+  // Clerk's testing token is only meaningful when the app under test is
+  // actually running on Clerk. Under any other provider this would demand a
+  // live Clerk secret key and a network round trip for a run in which every
+  // Clerk-specific spec skips itself anyway -- see the same reasoning in
+  // `scripts/check-e2e-auth-env.mjs`.
+  const { authProvider } = getRuntimeProfile();
+  if (authProvider !== 'clerk') {
+    console.log(
+      `[global-setup] AUTH_PROVIDER=${authProvider} — skipping Clerk testing-token setup.`,
+    );
+    return;
+  }
+
   ensureClerkTestingEnv();
   await setupClerkTestingTokenWithRetry();
 }

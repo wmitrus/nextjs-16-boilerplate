@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
+
 interface AdminUser {
   id: string;
   email?: string;
@@ -54,6 +56,7 @@ function buildAdminUsersRequestUrl(offset: number, search: string): string {
 }
 
 export function UsersClient() {
+  const stepUpFetch = useStepUpFetch();
   const [state, setState] = React.useState<FetchState>({ status: 'idle' });
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(0);
@@ -111,7 +114,7 @@ export function UsersClient() {
   async function handleDeactivate(userId: string) {
     setDeactivateState((prev) => ({ ...prev, [userId]: 'pending' }));
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
+      const res = await stepUpFetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deactivate' }),
@@ -134,7 +137,7 @@ export function UsersClient() {
     if (!name) return;
     setEditState((prev) => ({ ...prev, [userId]: 'pending' }));
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
+      const res = await stepUpFetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ displayName: name }),

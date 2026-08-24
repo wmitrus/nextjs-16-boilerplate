@@ -24,6 +24,7 @@ import { DefaultInvitationService } from '@/modules/invitations/infrastructure/D
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const invitationIdSchema = z.object({
@@ -51,103 +52,107 @@ function createInvitationService(db: DrizzleDb): DefaultInvitationService {
 }
 
 export const DELETE = withErrorHandler(
-  withNodeProvisioning(async (_request, context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (_request, context, access) => {
+      await connection();
 
-    const container = getAppContainer();
-    const isAdmin = await checkOrganizationsAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-    );
-
-    if (!isAdmin) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    const params = await context.params;
-    const paramsResult = organizationIdSchema.safeParse({
-      id: params.organizationId,
-    });
-    const invitationResult = invitationIdSchema.safeParse({ id: params.id });
-
-    if (!paramsResult.success) {
-      return createValidationErrorResponse(getFieldErrors(paramsResult.error));
-    }
-
-    if (!invitationResult.success) {
-      return createValidationErrorResponse(
-        getFieldErrors(invitationResult.error),
+      const container = getAppContainer();
+      const isAdmin = await checkOrganizationsAdminAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
       );
-    }
 
-    const invitationId = invitationResult.data.id;
+      if (!isAdmin) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
 
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const readService = new DrizzleAdminOrganizationsReadService(db);
-    const organization = await readService.getDetailInActiveScope({
-      activeOrganizationId: access.tenant.organizationId,
-      organizationId: paramsResult.data.id,
-    });
+      const params = await context.params;
+      const paramsResult = organizationIdSchema.safeParse({
+        id: params.organizationId,
+      });
+      const invitationResult = invitationIdSchema.safeParse({ id: params.id });
 
-    if (!organization) {
-      return createServerErrorResponse(
-        'Organization not found',
-        404,
-        'NOT_FOUND',
+      if (!paramsResult.success) {
+        return createValidationErrorResponse(
+          getFieldErrors(paramsResult.error),
+        );
+      }
+
+      if (!invitationResult.success) {
+        return createValidationErrorResponse(
+          getFieldErrors(invitationResult.error),
+        );
+      }
+
+      const invitationId = invitationResult.data.id;
+
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const readService = new DrizzleAdminOrganizationsReadService(db);
+      const organization = await readService.getDetailInActiveScope({
+        activeOrganizationId: access.tenant.organizationId,
+        organizationId: paramsResult.data.id,
+      });
+
+      if (!organization) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
+      if (organization.organization.status === 'archived') {
+        return createServerErrorResponse(
+          'Archived organizations cannot revoke invitations',
+          409,
+          'ARCHIVED_ORGANIZATION',
+        );
+      }
+
+      const service = createInvitationService(db);
+
+      // The organization is passed down into the UPDATE predicate itself, not
+      // checked by a preceding SELECT. A `SELECT id + organizationId` followed
+      // by `UPDATE ... WHERE id` authorises on a row as it was a moment ago and
+      // then writes with no scope of its own. Here the scope and the write are
+      // one statement.
+      //
+      // The scope is always the organization from the path -- never `null`,
+      // not even for a platform admin. `null` is the unscoped path in
+      // `revokePendingScoped`, and there is nothing unscoped about this route:
+      // the caller named an organization, and `getDetailInActiveScope` above
+      // already confirmed that organization is reachable from their active
+      // scope. See SEC-41.
+      const revoked = await service.revokeInvitation(
+        invitationId,
+        paramsResult.data.id,
       );
-    }
 
-    if (organization.organization.status === 'archived') {
-      return createServerErrorResponse(
-        'Archived organizations cannot revoke invitations',
-        409,
-        'ARCHIVED_ORGANIZATION',
-      );
-    }
+      if (!revoked) {
+        // Deliberately the same 404 whether the invitation does not exist,
+        // belongs to another organization, or is no longer pending -- an admin
+        // of one organization must not be able to probe another's invitation
+        // ids by the shape of the error.
+        return createServerErrorResponse(
+          'Invitation not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
 
-    const service = createInvitationService(db);
+      await recordAdminAuditEvent({
+        category: 'membership',
+        action: 'invitation.revoke',
+        outcome: 'success',
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+        targetType: 'invitation',
+        targetId: invitationId,
+      });
 
-    // The organization is passed down into the UPDATE predicate itself, not
-    // checked by a preceding SELECT. A `SELECT id + organizationId` followed
-    // by `UPDATE ... WHERE id` authorises on a row as it was a moment ago and
-    // then writes with no scope of its own. Here the scope and the write are
-    // one statement.
-    //
-    // The scope is always the organization from the path -- never `null`,
-    // not even for a platform admin. `null` is the unscoped path in
-    // `revokePendingScoped`, and there is nothing unscoped about this route:
-    // the caller named an organization, and `getDetailInActiveScope` above
-    // already confirmed that organization is reachable from their active
-    // scope. See SEC-41.
-    const revoked = await service.revokeInvitation(
-      invitationId,
-      paramsResult.data.id,
-    );
-
-    if (!revoked) {
-      // Deliberately the same 404 whether the invitation does not exist,
-      // belongs to another organization, or is no longer pending -- an admin
-      // of one organization must not be able to probe another's invitation
-      // ids by the shape of the error.
-      return createServerErrorResponse(
-        'Invitation not found',
-        404,
-        'NOT_FOUND',
-      );
-    }
-
-    await recordAdminAuditEvent({
-      category: 'membership',
-      action: 'invitation.revoke',
-      outcome: 'success',
-      tenantId: access.tenant.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'invitation',
-      targetId: invitationId,
-    });
-
-    return createSuccessResponse({ id: invitationId });
-  }),
+      return createSuccessResponse({ id: invitationId });
+    }),
+  ),
 );

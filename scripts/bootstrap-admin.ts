@@ -22,7 +22,7 @@
  *
  * Required env vars:
  *   BOOTSTRAP_ADMIN_EMAIL    — email address for the admin account
- *   BOOTSTRAP_ADMIN_PASSWORD — password (min 8 chars, use a strong secret in production)
+ *   BOOTSTRAP_ADMIN_PASSWORD — password (min 15 characters, use a strong secret in production)
  *   DEFAULT_TENANT_ID        — UUID for the single tenant (must match app config)
  *
  * Optional env vars:
@@ -44,12 +44,13 @@ import './load-env';
 
 import { randomUUID } from 'node:crypto';
 
-import { hash } from 'bcryptjs';
 import { and, count, eq } from 'drizzle-orm';
 
 import { createDb } from '@/core/db/create-db';
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
+import { hashPassword } from '@/modules/auth/infrastructure/credentials/password-hasher';
+import { passwordSchema } from '@/modules/auth/infrastructure/credentials/password-policy';
 import {
   authUserIdentitiesTable,
   userCredentialsTable,
@@ -69,7 +70,6 @@ import {
 } from '@/modules/provisioning/policy/templates';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 
-const BCRYPT_COST = 12;
 const DEFAULT_PGLITE_URL = 'file:./data/pglite';
 
 export function buildAuthJsBootstrapIdentityValues({
@@ -173,12 +173,13 @@ export async function run(): Promise<void> {
     );
     process.exit(1);
   }
-  if (password.length < 8) {
-    console.error(
-      '[bootstrap-admin] ❌  BOOTSTRAP_ADMIN_PASSWORD must be at least 8 characters',
-    );
+  const passwordValidation = passwordSchema.safeParse(password);
+  if (!passwordValidation.success) {
+    const reason = passwordValidation.error.issues[0]?.message ?? 'is invalid';
+    console.error(`[bootstrap-admin] ❌  BOOTSTRAP_ADMIN_PASSWORD ${reason}`);
     process.exit(1);
   }
+  const normalizedPassword = passwordValidation.data;
 
   const provider = resolveProvider();
   const driver = resolveDriver();
@@ -237,7 +238,7 @@ export async function run(): Promise<void> {
 
     console.log(`[bootstrap-admin] Creating admin account for: ${email}`);
 
-    const hashedPassword = await hash(password, BCRYPT_COST);
+    const hashedPassword = await hashPassword(normalizedPassword);
     const userId = randomUUID();
     const orgId = randomUUID();
     const ownerRoleId = randomUUID();

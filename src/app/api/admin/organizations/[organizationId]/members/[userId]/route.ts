@@ -27,6 +27,7 @@ import {
 import { DrizzleAdminMembershipsMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminMembershipsMutationService';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const userIdSchema = z.object({
@@ -38,110 +39,112 @@ const bodySchema = z.object({
 });
 
 export const PATCH = withErrorHandler(
-  withNodeProvisioning(async (request, context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (request, context, access) => {
+      await connection();
 
-    const container = getAppContainer();
-    const canManageMembers = await checkOrganizationsActionAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-      ACTIONS.TENANT_MANAGE_MEMBERS,
-    );
-
-    if (!canManageMembers) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    const params = await context.params;
-    const organizationResult = organizationIdSchema.safeParse({
-      id: params.organizationId,
-    });
-    const userResult = userIdSchema.safeParse({ userId: params.userId });
-
-    if (!organizationResult.success) {
-      return createValidationErrorResponse(
-        getFieldErrors(organizationResult.error),
+      const container = getAppContainer();
+      const canManageMembers = await checkOrganizationsActionAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
+        ACTIONS.TENANT_MANAGE_MEMBERS,
       );
-    }
 
-    if (!userResult.success) {
-      return createValidationErrorResponse(getFieldErrors(userResult.error));
-    }
+      if (!canManageMembers) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return createServerErrorResponse(
-        'Invalid member payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
+      const params = await context.params;
+      const organizationResult = organizationIdSchema.safeParse({
+        id: params.organizationId,
+      });
+      const userResult = userIdSchema.safeParse({ userId: params.userId });
 
-    const bodyResult = bodySchema.safeParse(body);
-    if (!bodyResult.success) {
-      return createValidationErrorResponse(getFieldErrors(bodyResult.error));
-    }
+      if (!organizationResult.success) {
+        return createValidationErrorResponse(
+          getFieldErrors(organizationResult.error),
+        );
+      }
 
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const readService = new DrizzleAdminOrganizationsReadService(db);
-    const organization = await readService.getDetailInActiveScope({
-      activeOrganizationId: access.tenant.organizationId,
-      organizationId: organizationResult.data.id,
-    });
+      if (!userResult.success) {
+        return createValidationErrorResponse(getFieldErrors(userResult.error));
+      }
 
-    if (!organization) {
-      return createServerErrorResponse(
-        'Organization not found',
-        404,
-        'NOT_FOUND',
-      );
-    }
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return createServerErrorResponse(
+          'Invalid member payload',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
 
-    if (organization.organization.status === 'archived') {
-      return createServerErrorResponse(
-        'Archived organizations cannot change member roles',
-        409,
-        'ARCHIVED_ORGANIZATION',
-      );
-    }
+      const bodyResult = bodySchema.safeParse(body);
+      if (!bodyResult.success) {
+        return createValidationErrorResponse(getFieldErrors(bodyResult.error));
+      }
 
-    const mutationService = new DrizzleAdminMembershipsMutationService(db);
-
-    try {
-      const membership = await mutationService.updateMemberRole({
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const readService = new DrizzleAdminOrganizationsReadService(db);
+      const organization = await readService.getDetailInActiveScope({
+        activeOrganizationId: access.tenant.organizationId,
         organizationId: organizationResult.data.id,
-        userId: userResult.data.userId,
-        roleId: bodyResult.data.roleId,
       });
 
-      await recordAdminAuditEvent({
-        category: 'membership',
-        action: 'membership.update_role',
-        outcome: 'success',
-        tenantId: access.tenant.tenantId,
-        actorUserId: access.user.id,
-        targetType: 'user',
-        targetId: userResult.data.userId,
-      });
-
-      return createSuccessResponse({ membership });
-    } catch (error) {
-      if (
-        error instanceof MembershipNotFoundError ||
-        error instanceof RoleNotFoundError
-      ) {
-        return createServerErrorResponse(error.message, 404, error.code);
+      if (!organization) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
       }
 
-      if (error instanceof ProtectedMembershipMutationError) {
-        return createServerErrorResponse(error.message, 400, error.code);
+      if (organization.organization.status === 'archived') {
+        return createServerErrorResponse(
+          'Archived organizations cannot change member roles',
+          409,
+          'ARCHIVED_ORGANIZATION',
+        );
       }
 
-      throw error;
-    }
-  }),
+      const mutationService = new DrizzleAdminMembershipsMutationService(db);
+
+      try {
+        const membership = await mutationService.updateMemberRole({
+          organizationId: organizationResult.data.id,
+          userId: userResult.data.userId,
+          roleId: bodyResult.data.roleId,
+        });
+
+        await recordAdminAuditEvent({
+          category: 'membership',
+          action: 'membership.update_role',
+          outcome: 'success',
+          tenantId: access.tenant.tenantId,
+          actorUserId: access.user.id,
+          targetType: 'user',
+          targetId: userResult.data.userId,
+        });
+
+        return createSuccessResponse({ membership });
+      } catch (error) {
+        if (
+          error instanceof MembershipNotFoundError ||
+          error instanceof RoleNotFoundError
+        ) {
+          return createServerErrorResponse(error.message, 404, error.code);
+        }
+
+        if (error instanceof ProtectedMembershipMutationError) {
+          return createServerErrorResponse(error.message, 400, error.code);
+        }
+
+        throw error;
+      }
+    }),
+  ),
 );

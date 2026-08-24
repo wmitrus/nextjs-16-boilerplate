@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
+
 interface WaitlistActionsProps {
   entryId: string;
   entryEmail: string;
@@ -17,6 +19,7 @@ type ActionState =
   | 'error';
 
 export function WaitlistActions({ entryId, entryEmail }: WaitlistActionsProps) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const [state, setState] = React.useState<ActionState>('idle');
   const [errorMessage, setErrorMessage] = React.useState<string>('');
@@ -26,7 +29,7 @@ export function WaitlistActions({ entryId, entryEmail }: WaitlistActionsProps) {
     setErrorMessage('');
 
     try {
-      const res = await fetch(
+      const res = await stepUpFetch(
         `/api/admin/waitlist/${entryId}?action=${action}`,
         { method: 'POST' },
       );

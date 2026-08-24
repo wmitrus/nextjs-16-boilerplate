@@ -211,6 +211,113 @@ describe('AuthJS SignInClient', () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
+  describe('second factor (SEC-48)', () => {
+    function fillCredentials() {
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'admin@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Password'), {
+        target: { value: 'password123' },
+      });
+    }
+
+    it('does not reveal that an account has MFA before the server says so', () => {
+      // Rendering the field on a guess would let anyone enumerate which
+      // accounts have a second factor without holding a valid password.
+      render(<SignInClient />);
+
+      expect(screen.queryByLabelText('Authentication code')).toBeNull();
+    });
+
+    it('asks for a code after the server answers MfaRequired', async () => {
+      signInMock.mockResolvedValue({ error: 'MfaRequired' });
+
+      render(<SignInClient />);
+      fillCredentials();
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      expect(
+        await screen.findByLabelText('Authentication code'),
+      ).toBeInTheDocument();
+      expect(replaceMock).not.toHaveBeenCalled();
+    });
+
+    it('resubmits the credentials together with the code', async () => {
+      signInMock.mockResolvedValueOnce({ error: 'MfaRequired' });
+      signInMock.mockResolvedValueOnce({ url: '/auth/bootstrap/start' });
+
+      render(<SignInClient />);
+      fillCredentials();
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      const codeField = await screen.findByLabelText('Authentication code');
+      fireEvent.change(codeField, { target: { value: '123456' } });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      await waitFor(() => {
+        expect(signInMock).toHaveBeenLastCalledWith(
+          'credentials',
+          expect.objectContaining({
+            email: 'admin@example.com',
+            password: 'password123',
+            totpCode: '123456',
+          }),
+        );
+      });
+    });
+
+    it('keeps the field visible and explains a rejected code', async () => {
+      signInMock.mockResolvedValueOnce({ error: 'MfaRequired' });
+      signInMock.mockResolvedValueOnce({ error: 'MfaInvalidCode' });
+
+      render(<SignInClient />);
+      fillCredentials();
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      const codeField = await screen.findByLabelText('Authentication code');
+      fireEvent.change(codeField, { target: { value: '000000' } });
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      expect(
+        await screen.findByText(/that code is not valid/i),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText('Authentication code')).toBeInTheDocument();
+      expect(replaceMock).not.toHaveBeenCalled();
+    });
+
+    it('does not send an empty code field', async () => {
+      // An empty string would look like "a code was supplied and it was
+      // wrong" to the server, which counts a failed attempt.
+      signInMock.mockResolvedValue({ error: 'MfaRequired' });
+
+      render(<SignInClient />);
+      fillCredentials();
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+      await screen.findByLabelText('Authentication code');
+
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      await waitFor(() => {
+        expect(signInMock).toHaveBeenLastCalledWith(
+          'credentials',
+          expect.not.objectContaining({ totpCode: expect.anything() }),
+        );
+      });
+    });
+
+    it('surfaces an unavailable second factor as an operator problem', async () => {
+      signInMock.mockResolvedValue({ error: 'MfaUnavailable' });
+
+      render(<SignInClient />);
+      fillCredentials();
+      fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }));
+
+      expect(
+        await screen.findByText(/temporarily unavailable/i),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe('CAPTCHA challenge (SEC-34)', () => {
     beforeEach(() => {
       mockEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'test-site-key';

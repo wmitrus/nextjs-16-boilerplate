@@ -18,6 +18,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import { DuplicateFeatureFlagError } from '@/modules/feature-flags/domain/errors';
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -122,103 +123,105 @@ export const GET = withErrorHandler(
 );
 
 export const POST = withErrorHandler(
-  withNodeProvisioning(async (request, _context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (request, _context, access) => {
+      await connection();
 
-    const container = getAppContainer();
+      const container = getAppContainer();
 
-    const adminAccess = await checkAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-      ACTIONS.FEATURE_FLAG_MANAGE,
-    );
-
-    if (!adminAccess.allowed) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return createServerErrorResponse(
-        'Invalid feature flag payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const parseResult = createBodySchema.safeParse(body);
-    if (!parseResult.success) {
-      return createServerErrorResponse(
-        'Invalid feature flag payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    // An ABAC-authorized (non-platform-admin) caller may only ever create
-    // rows scoped to their own verified tenant -- derive the scope from
-    // `access.tenant.tenantId` rather than trusting (or rejecting) the
-    // client-supplied `tenantId`. Rejecting on mismatch instead of deriving
-    // would 403 the normal "Create flag" form for these callers, since the
-    // client has no way to know its own internal tenant id ahead of time
-    // (SEC-26 follow-up: PR #71 review). Platform admins keep full control,
-    // including creating global (`null`) rows.
-    const requestedTenantId = adminAccess.isPlatformAdmin
-      ? (parseResult.data.tenantId ?? null)
-      : access.tenant.tenantId;
-
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const service = new DrizzleFeatureFlagAdminService(db);
-
-    try {
-      const flag = await service.create({
-        key: parseResult.data.key,
-        tenantId: requestedTenantId,
-        enabled: parseResult.data.enabled,
-        description: parseResult.data.description ?? null,
-      });
-
-      logger.info(
-        {
-          event: 'admin:feature_flag_create',
-          adminId: access.user.id,
-          tenantId: access.tenant.tenantId,
-          flagKey: flag.key,
-          flagTenantId: flag.tenantId,
-        },
-        'Feature flag created by admin',
+      const adminAccess = await checkAdminAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
+        ACTIONS.FEATURE_FLAG_MANAGE,
       );
 
-      await recordAdminAuditEvent({
-        category: 'feature_flag',
-        action: 'feature_flag.create',
-        outcome: 'success',
-        // The flag's own scope, not the acting admin's active tenant -- a
-        // platform admin can create a flag for a different tenant (or
-        // global, tenantId: null); attributing the event to the admin's
-        // own tenant would hide it from the flag's real tenant and
-        // mislabel it into an unrelated one (Codex review, PR #72).
-        tenantId: flag.tenantId,
-        actorUserId: access.user.id,
-        targetType: 'feature_flag',
-        targetId: flag.id,
-      });
+      if (!adminAccess.allowed) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
 
-      return createSuccessResponse({ flag }, 201);
-    } catch (error) {
-      if (error instanceof DuplicateFeatureFlagError) {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
         return createServerErrorResponse(
-          error.message,
-          409,
-          'DUPLICATE_FEATURE_FLAG',
+          'Invalid feature flag payload',
+          400,
+          'VALIDATION_ERROR',
         );
       }
 
-      throw error;
-    }
-  }),
+      const parseResult = createBodySchema.safeParse(body);
+      if (!parseResult.success) {
+        return createServerErrorResponse(
+          'Invalid feature flag payload',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
+      // An ABAC-authorized (non-platform-admin) caller may only ever create
+      // rows scoped to their own verified tenant -- derive the scope from
+      // `access.tenant.tenantId` rather than trusting (or rejecting) the
+      // client-supplied `tenantId`. Rejecting on mismatch instead of deriving
+      // would 403 the normal "Create flag" form for these callers, since the
+      // client has no way to know its own internal tenant id ahead of time
+      // (SEC-26 follow-up: PR #71 review). Platform admins keep full control,
+      // including creating global (`null`) rows.
+      const requestedTenantId = adminAccess.isPlatformAdmin
+        ? (parseResult.data.tenantId ?? null)
+        : access.tenant.tenantId;
+
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const service = new DrizzleFeatureFlagAdminService(db);
+
+      try {
+        const flag = await service.create({
+          key: parseResult.data.key,
+          tenantId: requestedTenantId,
+          enabled: parseResult.data.enabled,
+          description: parseResult.data.description ?? null,
+        });
+
+        logger.info(
+          {
+            event: 'admin:feature_flag_create',
+            adminId: access.user.id,
+            tenantId: access.tenant.tenantId,
+            flagKey: flag.key,
+            flagTenantId: flag.tenantId,
+          },
+          'Feature flag created by admin',
+        );
+
+        await recordAdminAuditEvent({
+          category: 'feature_flag',
+          action: 'feature_flag.create',
+          outcome: 'success',
+          // The flag's own scope, not the acting admin's active tenant -- a
+          // platform admin can create a flag for a different tenant (or
+          // global, tenantId: null); attributing the event to the admin's
+          // own tenant would hide it from the flag's real tenant and
+          // mislabel it into an unrelated one (Codex review, PR #72).
+          tenantId: flag.tenantId,
+          actorUserId: access.user.id,
+          targetType: 'feature_flag',
+          targetId: flag.id,
+        });
+
+        return createSuccessResponse({ flag }, 201);
+      } catch (error) {
+        if (error instanceof DuplicateFeatureFlagError) {
+          return createServerErrorResponse(
+            error.message,
+            409,
+            'DUPLICATE_FEATURE_FLAG',
+          );
+        }
+
+        throw error;
+      }
+    }),
+  ),
 );

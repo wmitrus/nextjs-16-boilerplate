@@ -12,6 +12,12 @@ declare module 'next-auth' {
        * and reject sessions minted before a password reset. See SEC-36.
        */
       sessionIssuedAt?: number;
+      /**
+       * The `sid` claim: a per-sign-in identifier that survives token
+       * rotation, used as the provider-neutral logical session reference
+       * step-up proofs are bound to. See SEC-48.
+       */
+      logicalSessionId?: string;
     };
   }
 
@@ -24,5 +30,7 @@ declare module 'next-auth/jwt' {
   interface JWT extends DefaultJWT {
     id?: string;
     emailVerified?: boolean;
+    /** Per-sign-in session id, minted in the `jwt` callback. See SEC-48. */
+    sid?: string;
   }
 }

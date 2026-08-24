@@ -7,6 +7,7 @@ import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
+import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const ORG_ID = '15000000-0000-4000-8000-000000000001';

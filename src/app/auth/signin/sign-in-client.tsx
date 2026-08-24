@@ -22,6 +22,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   EmailNotVerified:
     'Your email address has not been verified. Please check your inbox or request a new verification link.',
   CaptchaRequired: 'Please complete the security check below and try again.',
+  MfaRequired: 'Enter the 6-digit code from your authenticator app.',
+  MfaInvalidCode:
+    'That code is not valid. Enter the current code from your authenticator app, or one of your recovery codes.',
+  MfaUnavailable:
+    'Two-factor authentication is temporarily unavailable. Please contact an administrator.',
   AccountTemporarilyLocked:
     'Too many failed attempts. This account is temporarily locked — please try again later.',
   Default: 'Something went wrong. Please try again.',
@@ -60,6 +65,11 @@ export function SignInClient({
   // it on the next attempt always fails, so any submit that actually spent
   // one must discard it and re-run the challenge. See SEC-34.
   const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
+  // Same rule as the CAPTCHA above: the server decides when a second factor
+  // is needed (a prior attempt returned MfaRequired). The client never
+  // renders this field on a guess, because doing so would tell an attacker
+  // which accounts have MFA before they hold a valid password. See SEC-48.
+  const [showMfaCode, setShowMfaCode] = useState(false);
 
   const discardSpentCaptchaToken = useCallback(() => {
     setCaptchaToken(null);
@@ -79,6 +89,7 @@ export function SignInClient({
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     const submittedCaptchaToken = captchaToken;
+    const totpCode = (formData.get('totpCode') as string | null)?.trim();
 
     try {
       const result = await signIn('credentials', {
@@ -89,6 +100,7 @@ export function SignInClient({
         ...(submittedCaptchaToken
           ? { cfTurnstileToken: submittedCaptchaToken }
           : {}),
+        ...(totpCode ? { totpCode } : {}),
       });
 
       if (result?.error) {
@@ -99,6 +111,15 @@ export function SignInClient({
         }
         if (result.error === 'CaptchaRequired') {
           setShowCaptcha(true);
+        }
+        // The password was accepted; only the second factor is outstanding.
+        // The email and password fields keep their values, so the next
+        // submit re-sends them alongside the code.
+        if (
+          result.error === 'MfaRequired' ||
+          result.error === 'MfaInvalidCode'
+        ) {
+          setShowMfaCode(true);
         }
         // The server consumed this token (successfully or not) -- it can
         // never be replayed, so always ask the widget for a new one.
@@ -188,6 +209,34 @@ export function SignInClient({
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
         />
       </div>
+      {showMfaCode && (
+        <div>
+          <label
+            htmlFor="totpCode"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Authentication code
+          </label>
+          <input
+            id="totpCode"
+            name="totpCode"
+            type="text"
+            inputMode="text"
+            autoComplete="one-time-code"
+            autoFocus
+            required
+            aria-describedby="totpCode-hint"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+          />
+          <p
+            id="totpCode-hint"
+            className="mt-1 text-xs text-gray-500 dark:text-gray-400"
+          >
+            Enter the 6-digit code from your authenticator app, or one of your
+            recovery codes.
+          </p>
+        </div>
+      )}
       {showCaptcha && env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
         <TurnstileWidget
           siteKey={env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}

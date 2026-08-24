@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findMissingClerkFixtureAccounts,
+  requiresClerkFixtures,
   validateClerkRedirectEnv,
 } from './check-e2e-auth-env.mjs';
 
@@ -125,4 +126,25 @@ describe('findMissingClerkFixtureAccounts', () => {
     expect(result).toEqual({ missing: [], warnings: [] });
     expect(lookupCount).toBe(0);
   });
+});
+
+describe('requiresClerkFixtures', () => {
+  it('requires Clerk fixtures when the app runs on Clerk', () => {
+    expect(requiresClerkFixtures('clerk')).toBe(true);
+  });
+
+  it('treats an unset provider as Clerk, matching the app default', () => {
+    expect(requiresClerkFixtures(undefined)).toBe(true);
+    expect(requiresClerkFixtures('  clerk  ')).toBe(true);
+  });
+
+  it.each([['authjs'], ['supabase'], ['neon']])(
+    'does not require Clerk identities for AUTH_PROVIDER=%s',
+    (provider) => {
+      // Every Clerk-specific spec gates itself on the runtime profile's
+      // provider, so demanding live Clerk test accounts for these runs is a
+      // false requirement -- and it made every AuthJS suite unrunnable in CI.
+      expect(requiresClerkFixtures(provider)).toBe(false);
+    },
+  );
 });

@@ -11,45 +11,49 @@ Update it after every security review group.
 
 ## Pattern Index
 
-| #      | Category                  | Vulnerability Class                                                                                                                                                                                                                   | Classification                                                                                                                               | Affected Contexts                                               |
-| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| SEC-01 | Cryptography              | Timing attack — Symbol `===` in DI mocks                                                                                                                                                                                              | False positive                                                                                                                               | Unit test files                                                 |
-| SEC-02 | Routes                    | Open redirect — hardcoded path via `req.url` origin                                                                                                                                                                                   | False positive                                                                                                                               | Middleware                                                      |
-| SEC-03 | Routes                    | Open redirect — forwarded `redirect_url` query param                                                                                                                                                                                  | Latent risk → fixed                                                                                                                          | Middleware                                                      |
-| SEC-04 | Command injection         | Dynamic logger dispatch `logger[level]()`                                                                                                                                                                                             | False positive → hardened                                                                                                                    | API route                                                       |
-| SEC-05 | File access               | Dynamic `fs.*` with static literal paths                                                                                                                                                                                              | False positive                                                                                                                               | E2E helpers                                                     |
-| SEC-06 | Cryptography              | `Math.random()` for test email uniqueness                                                                                                                                                                                             | False positive                                                                                                                               | E2E specs                                                       |
-| SEC-11 | Caching                   | SDK client cache key missing differentiating config                                                                                                                                                                                   | Real risk → fixed                                                                                                                            | Module-level SDK adapters                                       |
-| SEC-15 | Object access             | User-controlled key lookup via `key in object`                                                                                                                                                                                        | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Auth/bootstrap UI mapping                                       |
-| SEC-16 | File access               | Reusable helper fs paths lack sink confinement                                                                                                                                                                                        | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                  | Runtime logger helpers                                          |
-| SEC-17 | Observability             | Rate-limit WARN missing `path` causes edge-log loop                                                                                                                                                                                   | Real risk → fixed                                                                                                                            | Rate-limit middleware                                           |
-| SEC-18 | Tooling env access        | Dynamic `process.env[key]` in scripts/helpers                                                                                                                                                                                         | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                            |
-| SEC-19 | File access               | Shared sink-confined fs helpers for scripts/tooling                                                                                                                                                                                   | Local lint-backed workflow                                                                                                                   | Scripts, E2E helpers                                            |
-| SEC-20 | Object access             | Dynamic object transformation via `result[key] = ...`                                                                                                                                                                                 | AI-pattern backed workflow                                                                                                                   | `src/**` runtime helpers                                        |
-| SEC-21 | Abuse prevention          | Public email/write endpoints without rate limiting                                                                                                                                                                                    | Real risk → fixed                                                                                                                            | Public auth route handlers                                      |
-| SEC-22 | Observability             | Raw email/token/URL logging in no-op/provider bridges                                                                                                                                                                                 | Real risk → fixed                                                                                                                            | Email adapters, auth bridges                                    |
-| SEC-23 | Routes / DB input         | Raw route params bound to UUID columns                                                                                                                                                                                                | Real risk → fixed                                                                                                                            | App Router route handlers                                       |
-| SEC-24 | Error-prone TS/JSX        | Scanner HIGH error-prone patterns                                                                                                                                                                                                     | Not security by itself                                                                                                                       | UI state, JSX handlers, tests                                   |
-| SEC-25 | Deploy/runtime env        | Build-only env fallback masks runtime config drift                                                                                                                                                                                    | Real risk → fixed                                                                                                                            | CI/CD, Vercel, AuthJS env                                       |
-| SEC-26 | Authorization             | ABAC action check without matching resource-scope check                                                                                                                                                                               | Real risk → fixed (Update 2026-08-22: second occurrence, `/api/admin/users`; Update 2026-08-23: third and fourth, see SEC-41)                | Admin CRUD route handlers/services                              |
-| SEC-27 | Authorization             | Mutating admin route with no authorization check at all                                                                                                                                                                               | Real risk → fixed                                                                                                                            | Admin API route handlers                                        |
-| SEC-28 | SSRF                      | IPv4-only private-IP check + no DNS-rebinding defense                                                                                                                                                                                 | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps) | Outbound fetch helpers                                          |
-| SEC-29 | Attack surface            | Public unauthenticated demo/showcase routes                                                                                                                                                                                           | Real risk → fixed                                                                                                                            | Demo/showcase route policy                                      |
-| SEC-30 | CSP hardening             | script-src used unsafe-inline/unsafe-eval unconditionally                                                                                                                                                                             | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                | with-headers.ts, layout.tsx                                     |
-| SEC-31 | CSP architecture          | Same-origin mixed CSP profiles don't survive client-side nav                                                                                                                                                                          | Architectural guidance, not a bug fix                                                                                                        | CSP profile decisions repo-wide                                 |
-| SEC-32 | CSP hardening             | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout                                                                                                                              | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                | with-headers.ts, csp-violations.ts, secure-fetch.ts             |
-| SEC-33 | Authorization / lifecycle | Central access evaluator(s) never check `user.deactivatedAt`                                                                                                                                                                          | Real risk → fixed                                                                                                                            | `node-provisioning-access.ts`, `security-context.ts`            |
-| SEC-34 | Abuse prevention          | AuthJS Credentials login had no dedicated throttling/lockout beyond a generic reuse of `API_RATE_LIMIT_*`                                                                                                                             | Real risk → fixed                                                                                                                            | Credentials `authorize()`, `/api/auth/[...nextauth]`            |
-| SEC-35 | Race conditions           | Password reset token validated and marked used in two statements with bcrypt between them, so concurrent requests could both redeem it                                                                                                | Real risk → fixed                                                                                                                            | `/api/auth/reset-password`                                      |
-| SEC-36 | Session lifecycle         | Stateless 30-day JWTs had no revocation path, so a password reset left a stolen session working until it expired                                                                                                                      | Real risk → fixed                                                                                                                            | `users.sessions_valid_from`, both central evaluators            |
-| SEC-37 | Information disclosure    | Server Actions returned any unclassified exception's message to the client, filtered only by a `.includes('Failed query:')` substring match                                                                                           | Real risk → fixed                                                                                                                            | `createSecureAction`                                            |
-| SEC-38 | API consistency           | 12 of 36 routes bypassed the mandatory response service; the instruction said "prefer" and nothing enforced it                                                                                                                        | Real drift → fixed                                                                                                                           | all `src/app/api/**` routes                                     |
-| SEC-39 | Outbound transport        | `secureFetch` never checked `url.protocol`, so an allowlisted host was reachable over http:// and a redirect could downgrade https to cleartext                                                                                       | Real risk → fixed                                                                                                                            | `secureFetch`                                                   |
-| SEC-40 | Redirect integrity        | Cross-origin redirects stripped credential headers but still forwarded the 307/308 request body, trusting the global host allowlist as a host-to-host mesh                                                                            | Real risk → fixed                                                                                                                            | `secureFetch`                                                   |
-| SEC-41 | Authorization / tenancy   | Third and fourth instance of SEC-26: an unscoped waitlist served to every tenant owner, and an invitation revoke that checked the organization in a `SELECT` and then wrote without it                                                | Real risk → fixed (whole `/api/admin/**` family audited; static guard added)                                                                 | `/api/admin/waitlist/**`, invitations, `/api/auth/waitlist`     |
-| SEC-42 | Abuse prevention          | Security-critical rate limits fell back to a process-local counter, which on serverless is one allowance per instance; three pre-auth endpoints had no endpoint-level limit at all                                                    | Real risk → fixed (durable Postgres secondary, then fail closed; loosen-only operational switch)                                             | `checkRateLimit`, all pre-auth endpoints                        |
-| SEC-43 | Trust boundaries          | `getIP()` believed whichever forwarding header was present and returned a fictional `127.0.0.1` otherwise; two further sites read raw headers, one of them feeding an ABAC decision                                                   | Real risk → fixed (provider-aware resolver behind an explicit `DEPLOYMENT_PROXY`; typed trusted/untrusted result; static guard)              | `getIP`, rate-limit keys, `audit_log.ip`, ABAC `environment.ip` |
-| SEC-44 | Secret handling           | Internal-API key rejections were never rate limited (the guard returns before the limiter), compared with `!==`, had no rotation path and no length floor; env diagnostics leaked secret fragments to `/env-check` and `/env-summary` | Real risk → fixed (dedicated failed-auth counter, constant-time verify, current+previous rotation, `maskedValue` removed at source)          | `withInternalApiGuard`, `getEnvDiagnostics`                     |
+| #      | Category                  | Vulnerability Class                                                                                                                                                                                                                                       | Classification                                                                                                                                          | Affected Contexts                                                                                |
+| ------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| SEC-01 | Cryptography              | Timing attack — Symbol `===` in DI mocks                                                                                                                                                                                                                  | False positive                                                                                                                                          | Unit test files                                                                                  |
+| SEC-02 | Routes                    | Open redirect — hardcoded path via `req.url` origin                                                                                                                                                                                                       | False positive                                                                                                                                          | Middleware                                                                                       |
+| SEC-03 | Routes                    | Open redirect — forwarded `redirect_url` query param                                                                                                                                                                                                      | Latent risk → fixed                                                                                                                                     | Middleware                                                                                       |
+| SEC-04 | Command injection         | Dynamic logger dispatch `logger[level]()`                                                                                                                                                                                                                 | False positive → hardened                                                                                                                               | API route                                                                                        |
+| SEC-05 | File access               | Dynamic `fs.*` with static literal paths                                                                                                                                                                                                                  | False positive                                                                                                                                          | E2E helpers                                                                                      |
+| SEC-06 | Cryptography              | `Math.random()` for test email uniqueness                                                                                                                                                                                                                 | False positive                                                                                                                                          | E2E specs                                                                                        |
+| SEC-11 | Caching                   | SDK client cache key missing differentiating config                                                                                                                                                                                                       | Real risk → fixed                                                                                                                                       | Module-level SDK adapters                                                                        |
+| SEC-15 | Object access             | User-controlled key lookup via `key in object`                                                                                                                                                                                                            | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                             | Auth/bootstrap UI mapping                                                                        |
+| SEC-16 | File access               | Reusable helper fs paths lack sink confinement                                                                                                                                                                                                            | Fixed — verified 2026-08-22 (A.8 follow-up)                                                                                                             | Runtime logger helpers                                                                           |
+| SEC-17 | Observability             | Rate-limit WARN missing `path` causes edge-log loop                                                                                                                                                                                                       | Real risk → fixed                                                                                                                                       | Rate-limit middleware                                                                            |
+| SEC-18 | Tooling env access        | Dynamic `process.env[key]` in scripts/helpers                                                                                                                                                                                                             | Local lint-backed workflow                                                                                                                              | Scripts, E2E helpers                                                                             |
+| SEC-19 | File access               | Shared sink-confined fs helpers for scripts/tooling                                                                                                                                                                                                       | Local lint-backed workflow                                                                                                                              | Scripts, E2E helpers                                                                             |
+| SEC-20 | Object access             | Dynamic object transformation via `result[key] = ...`                                                                                                                                                                                                     | AI-pattern backed workflow                                                                                                                              | `src/**` runtime helpers                                                                         |
+| SEC-21 | Abuse prevention          | Public email/write endpoints without rate limiting                                                                                                                                                                                                        | Real risk → fixed                                                                                                                                       | Public auth route handlers                                                                       |
+| SEC-22 | Observability             | Raw email/token/URL logging in no-op/provider bridges                                                                                                                                                                                                     | Real risk → fixed                                                                                                                                       | Email adapters, auth bridges                                                                     |
+| SEC-23 | Routes / DB input         | Raw route params bound to UUID columns                                                                                                                                                                                                                    | Real risk → fixed                                                                                                                                       | App Router route handlers                                                                        |
+| SEC-24 | Error-prone TS/JSX        | Scanner HIGH error-prone patterns                                                                                                                                                                                                                         | Not security by itself                                                                                                                                  | UI state, JSX handlers, tests                                                                    |
+| SEC-25 | Deploy/runtime env        | Build-only env fallback masks runtime config drift                                                                                                                                                                                                        | Real risk → fixed                                                                                                                                       | CI/CD, Vercel, AuthJS env                                                                        |
+| SEC-26 | Authorization             | ABAC action check without matching resource-scope check                                                                                                                                                                                                   | Real risk → fixed (Update 2026-08-22: second occurrence, `/api/admin/users`; Update 2026-08-23: third and fourth, see SEC-41)                           | Admin CRUD route handlers/services                                                               |
+| SEC-27 | Authorization             | Mutating admin route with no authorization check at all                                                                                                                                                                                                   | Real risk → fixed                                                                                                                                       | Admin API route handlers                                                                         |
+| SEC-28 | SSRF                      | IPv4-only private-IP check + no DNS-rebinding defense                                                                                                                                                                                                     | Real risk → fixed (Update 2026-08-21: first fix was a TOCTOU; Update 2026-08-22: A.8 hardened credential/timeout/size/IP-normalization gaps)            | Outbound fetch helpers                                                                           |
+| SEC-29 | Attack surface            | Public unauthenticated demo/showcase routes                                                                                                                                                                                                               | Real risk → fixed                                                                                                                                       | Demo/showcase route policy                                                                       |
+| SEC-30 | CSP hardening             | script-src used unsafe-inline/unsafe-eval unconditionally                                                                                                                                                                                                 | Real risk → partially fixed, deferred (see Update 2026-08-21)                                                                                           | with-headers.ts, layout.tsx                                                                      |
+| SEC-31 | CSP architecture          | Same-origin mixed CSP profiles don't survive client-side nav                                                                                                                                                                                              | Architectural guidance, not a bug fix                                                                                                                   | CSP profile decisions repo-wide                                                                  |
+| SEC-32 | CSP hardening             | `speculationrules` misclassified inert; `*_EXTRA` env accepted raw CSP syntax; DNS lookup had no timeout                                                                                                                                                  | Real risk → fixed (2026-08-22, A.8 follow-up)                                                                                                           | with-headers.ts, csp-violations.ts, secure-fetch.ts                                              |
+| SEC-33 | Authorization / lifecycle | Central access evaluator(s) never check `user.deactivatedAt`                                                                                                                                                                                              | Real risk → fixed                                                                                                                                       | `node-provisioning-access.ts`, `security-context.ts`                                             |
+| SEC-34 | Abuse prevention          | AuthJS Credentials login had no dedicated throttling/lockout beyond a generic reuse of `API_RATE_LIMIT_*`                                                                                                                                                 | Real risk → fixed                                                                                                                                       | Credentials `authorize()`, `/api/auth/[...nextauth]`                                             |
+| SEC-35 | Race conditions           | Password reset token validated and marked used in two statements with bcrypt between them, so concurrent requests could both redeem it                                                                                                                    | Real risk → fixed                                                                                                                                       | `/api/auth/reset-password`                                                                       |
+| SEC-36 | Session lifecycle         | Stateless 30-day JWTs had no revocation path, so a password reset left a stolen session working until it expired                                                                                                                                          | Real risk → fixed                                                                                                                                       | `users.sessions_valid_from`, both central evaluators                                             |
+| SEC-37 | Information disclosure    | Server Actions returned any unclassified exception's message to the client, filtered only by a `.includes('Failed query:')` substring match                                                                                                               | Real risk → fixed                                                                                                                                       | `createSecureAction`                                                                             |
+| SEC-38 | API consistency           | 12 of 36 routes bypassed the mandatory response service; the instruction said "prefer" and nothing enforced it                                                                                                                                            | Real drift → fixed                                                                                                                                      | all `src/app/api/**` routes                                                                      |
+| SEC-39 | Outbound transport        | `secureFetch` never checked `url.protocol`, so an allowlisted host was reachable over http:// and a redirect could downgrade https to cleartext                                                                                                           | Real risk → fixed                                                                                                                                       | `secureFetch`                                                                                    |
+| SEC-40 | Redirect integrity        | Cross-origin redirects stripped credential headers but still forwarded the 307/308 request body, trusting the global host allowlist as a host-to-host mesh                                                                                                | Real risk → fixed                                                                                                                                       | `secureFetch`                                                                                    |
+| SEC-41 | Authorization / tenancy   | Third and fourth instance of SEC-26: an unscoped waitlist served to every tenant owner, and an invitation revoke that checked the organization in a `SELECT` and then wrote without it                                                                    | Real risk → fixed (whole `/api/admin/**` family audited; static guard added)                                                                            | `/api/admin/waitlist/**`, invitations, `/api/auth/waitlist`                                      |
+| SEC-42 | Abuse prevention          | Security-critical rate limits fell back to a process-local counter, which on serverless is one allowance per instance; three pre-auth endpoints had no endpoint-level limit at all                                                                        | Real risk → fixed (durable Postgres secondary, then fail closed; loosen-only operational switch)                                                        | `checkRateLimit`, all pre-auth endpoints                                                         |
+| SEC-43 | Trust boundaries          | `getIP()` believed whichever forwarding header was present and returned a fictional `127.0.0.1` otherwise; two further sites read raw headers, one of them feeding an ABAC decision                                                                       | Real risk → fixed (provider-aware resolver behind an explicit `DEPLOYMENT_PROXY`; typed trusted/untrusted result; static guard)                         | `getIP`, rate-limit keys, `audit_log.ip`, ABAC `environment.ip`                                  |
+| SEC-44 | Secret handling           | Internal-API key rejections were never rate limited (the guard returns before the limiter), compared with `!==`, had no rotation path and no length floor; env diagnostics leaked secret fragments to `/env-check` and `/env-summary`                     | Real risk → fixed (dedicated failed-auth counter, constant-time verify, current+previous rotation, `maskedValue` removed at source)                     | `withInternalApiGuard`, `getEnvDiagnostics`                                                      |
+| SEC-45 | Response hardening        | Edge pipeline's own catch built a 500 outside `withSecurity`, so it shipped with no security headers and no correlation id                                                                                                                                | Real risk → fixed (error boundary moved inside `withSecurity`, generic body always)                                                                     | `src/proxy.ts`, `withSecurity`                                                                   |
+| SEC-46 | Trust boundaries          | `correlationId`/`requestId` were both taken verbatim from caller headers, unbounded and unvalidated; the Edge boundary and the RSC/Node side could disagree on which value was "the" id                                                                   | Real risk → fixed (bounded allowlist for correlation id, requestId never caller-supplied, `terminalHandler` overwrites downstream headers)              | `classifyRequest`, `terminalHandler`, `audit_events.correlation_id`                              |
+| SEC-47 | Credential storage        | Signup/reset-password used bcrypt cost 12 with `min(8)`, no max length, no Unicode normalization, and no upgrade path — bcrypt's 72-byte input limit was never surfaced, and a stronger algorithm couldn't be adopted without a flag day                  | Real risk (not yet critical) → fixed (Argon2id default, bcrypt legacy-verify-only, explicit rehash-on-login, NIST-aligned length policy)                | `password-policy.ts`, `password-hasher.ts`, `authorize()`, signup, reset-password                |
+| SEC-48 | Authentication assurance  | Admin mutations trusted a session, not a person: any still-valid session could deactivate users, rewrite policies, issue invitations and change audit retention for the full 30-day JWT lifetime, and neither provider was ever asked for a second factor | Real risk → fixed (MFA on both providers, deny-by-default step-up on every `/api/admin/**` mutation with a static guard, 15-minute session-bound proof) | `withAdminStepUp`, `authorize()`, `AdminLayoutGuard`, `user_mfa_totp`, `user_mfa_recovery_codes` |
 
 ---
 
@@ -4789,3 +4793,512 @@ arrive are the CRLF-free ones that are still unfit to echo, log and persist.
 - **SEC-43** — same shape one layer down: a header is believed because of the
   ingress, never because it is there.
 - **PE-23** — persisting `correlationSource` in the audit trail.
+
+---
+
+## SEC-47 — A Credential Hash Is Not Just A Cost Factor
+
+**ID**: SEC-47
+**Category**: Credential storage / cryptography
+**Classification**: Real risk, not yet critical → fixed (seventeenth case of
+the multi-case security-audit remediation series, first of phase 2)
+**Affected contexts**: `src/app/api/auth/signup/route.ts`,
+`src/app/api/auth/reset-password/route.ts`,
+`src/modules/auth/infrastructure/authjs/auth.ts`,
+`src/app/api/internal/e2e/authjs-user/route.ts`, `scripts/bootstrap-admin.ts`
+
+### Risk
+
+Every password-accepting entry point defined its own ad hoc schema and
+called `bcryptjs` directly:
+
+```ts
+const signUpSchema = z.object({
+  email: z.email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  invitationToken: z.string().optional(),
+});
+const BCRYPT_COST = 12;
+// ...
+const hashedPassword = await hash(password, BCRYPT_COST);
+```
+
+bcrypt cost 12 is not, by itself, weak — OWASP's current guidance still
+lists 10 as an acceptable floor for legacy bcrypt. The actual defects were
+structural, and duplicated across five call sites (signup, reset-password,
+the AuthJS `authorize()` verify path, the E2E provisioning fixture route,
+and `bootstrap-admin.ts`, which additionally hand-rolled its own
+`password.length < 8` check):
+
+- **No upper bound.** `z.string().min(8)` accepts arbitrary-length input
+  straight into an intentionally expensive KDF on an unauthenticated route
+  — a resource-exhaustion knob nothing capped.
+- **bcrypt's 72-byte input limit was invisible.** `bcryptjs` silently
+  ignores anything past 72 UTF-8 bytes (`bcrypt.truncates()` exists
+  specifically to detect this) and nothing in this codebase ever checked
+  it — two different passwords sharing a 72-byte prefix were
+  indistinguishable to the stored hash.
+- **No Unicode normalization.** A passphrase typed on two keyboards/IMEs
+  that produce different combining-character sequences for the same
+  visible text would hash to two different values.
+- **No upgrade path.** Every hash in the database was bcrypt, with no
+  mechanism to move to a stronger algorithm without a coordinated
+  flag day (forcing every user to reset at once).
+- **Below NIST's current single-factor floor.** SP 800-63B-4 sets a
+  15-character minimum for a password used as the sole authentication
+  factor (8 is only acceptable when it is one of at least two factors);
+  this Credentials provider has no second factor.
+
+None of this was independently exploitable today — the finding is a
+hardening gap for a boilerplate meant to be a template for new projects,
+not an active vulnerability in this deployment.
+
+### Rule
+
+**Password policy and password hashing each live in exactly one module,
+and every entry point imports from it — nothing defines its own schema or
+calls a hashing library directly.**
+
+`src/modules/auth/infrastructure/credentials/`:
+
+- `password-policy.ts` — `passwordSchema`: 15–128 Unicode code points
+  (counted with `Array.from(value).length`, never `.length` — UTF-16 code
+  units mismeasure anything outside the BMP), NFC-normalized via
+  `.transform()` before the parsed value is used anywhere. No composition
+  rules.
+- `password-hasher.ts` — `hashPassword()` always produces Argon2id
+  (`@node-rs/argon2`), with parameters pinned explicitly in code rather
+  than left to the library's defaults:
+
+  ```ts
+  const ARGON2_OPTIONS = {
+    algorithm: ARGON2ID_ALGORITHM, // 2 -- see file for why not the enum import
+    version: ARGON2_VERSION_0X13, // 19
+    memoryCost: 19456, // 19 MiB, OWASP's current baseline
+    timeCost: 2,
+    parallelism: 1,
+    outputLen: 32,
+  } as const;
+  ```
+
+  Explicit pinning matters: a future `@node-rs/argon2` upgrade changing its
+  own defaults must never silently change this repo's cryptographic policy.
+
+`verifyPassword(password, storedHash)` detects the stored hash's format
+from its own self-describing prefix (`$argon2id$` vs `$2a$`/`$2b$`/`$2y$`)
+and dispatches to the matching verifier via an explicit `Map` (SEC-01/
+SEC-04 pattern — see "Implementation notes" below for why a `Map` and not
+a `Record`). **An unrecognized format fails closed** — it is never guessed
+at or handed to a "best-effort" comparator:
+
+```ts
+export async function verifyPassword(
+  password: string,
+  storedHash: string,
+): Promise<PasswordVerificationResult> {
+  const format = detectHashFormat(storedHash);
+  const verifier = format ? verifiers.get(format) : undefined;
+  if (!verifier) return INVALID_RESULT;
+  return verifier(password, storedHash);
+}
+```
+
+bcrypt is kept strictly as a **read-only compatibility path**. Nothing in
+this repository calls `bcryptjs.hash()` any more — `verifyBcryptLegacy()`
+only ever calls `compare()`.
+
+**Normalization asymmetry is deliberate, not an oversight.** New Argon2
+credentials normalize (hash and verify both call `normalizePassword()`
+first); the legacy bcrypt path verifies the **raw, unnormalized**
+candidate:
+
+```ts
+/**
+ * Deliberately verifies against the RAW, non-normalized candidate: every
+ * bcrypt hash in this database was created before this policy existed,
+ * from whatever the user originally typed. Normalizing the login-time
+ * candidate now, while the stored hash was made from the unnormalized
+ * original, would fail verification for any account whose original
+ * password contained decomposable Unicode -- exactly the accounts this
+ * repo cannot afford to silently lock out.
+ */
+async function verifyBcryptLegacy(...)
+```
+
+**Rehash-on-login, with one deliberate exception.** A successful sign-in
+through a legacy bcrypt hash triggers a best-effort upgrade, persisted in
+`authorize()` in the same request:
+
+```ts
+if (verification.legacyBcryptTruncated) {
+  // Leave it on bcrypt; only a real reset can safely migrate this account.
+  getLogger().warn({ event: 'auth:legacy_bcrypt_truncated_skip_rehash' }, ...);
+} else if (verification.rehash) {
+  try {
+    const upgradedHash = await hashPassword(password);
+    await db.update(userCredentialsTable)
+      .set({ hashedPassword: upgradedHash, updatedAt: new Date() })
+      .where(eq(userCredentialsTable.userId, credRecord.userId));
+  } catch (rehashErr) {
+    // Never fail an otherwise-valid login over a rehash failure.
+    getLogger().warn({ event: 'auth:password_rehash_failed', ... }, ...);
+  }
+}
+```
+
+The exception: if the candidate that just verified is one bcrypt would
+have truncated (`bcrypt.truncates(password)`), it is **not** auto-migrated.
+That stored hash may accept other, different passwords sharing only the
+first 72 bytes — rehashing _this_ one candidate into Argon2id would, in
+effect, narrow the account's real password down to this specific
+truncated-length guess under a stronger algorithm. That looks like a fix
+but silently changes what "the password" means for the account. The only
+safe migration for such an account is a real password reset, which always
+hashes the full password — so the account stays on bcrypt, logged
+distinctly (`auth:legacy_bcrypt_truncated_skip_rehash`) so it doesn't read
+as "nothing happened."
+
+A rehash failure (e.g. a DB write error) must never fail a login that was
+otherwise valid — the account simply stays on its current hash and the
+upgrade is retried on the next successful sign-in.
+
+### Implementation notes
+
+- **Why a `Map`, not a `Record`, for the two-verifier dispatch.** SEC-04
+  calls for "explicit `Record<AllowedKeys, fn>` dispatch maps" — but the
+  repo's static `security/detect-object-injection` guard still flags
+  `obj[key]()` bracket-call syntax regardless of how narrow `key`'s type
+  is. `Map#get()` is the SEC-01 pattern for exactly this reason: it keeps
+  the dispatch explicit and type-safe without tripping the linter on
+  syntax it can't statically distinguish from unconstrained bracket access.
+- **Why raw numeric literals instead of `Algorithm.Argon2id` /
+  `Version.V0x13`.** `@node-rs/argon2` exposes both as an ambient
+  `declare const enum`. This repo's `isolatedModules` TypeScript setting
+  raises `TS2748` on any cross-module reference to a const enum, since
+  per-file transpilation can't safely inline a value defined in another
+  module. `ARGON2ID_ALGORITHM = 2` / `ARGON2_VERSION_0X13 = 1` are
+  napi-rs's own public numeric API (documented in the package's
+  `index.d.ts`) — part of its stable ABI, not an implementation detail
+  being relied on.
+- **Length is counted in Unicode code points**, not `.length` (UTF-16 code
+  units) or UTF-8 byte length. A `.length`-based check accepts or rejects
+  passwords at the wrong visible length for anything outside the BMP (many
+  emoji, some scripts) — falsified in `password-policy.test.ts` with an
+  8-emoji string that is 16 UTF-16 units but only 8 code points.
+
+### Regression coverage
+
+- `password-policy.test.ts` — boundary tests at 15/128 code points either
+  side, the code-point-vs-UTF-16 distinction above, and that normalization
+  actually runs on the parsed value.
+- `password-hasher.test.ts` — real bcrypt/Argon2 calls (not mocked away —
+  this is exactly the algorithm-detection logic under test): round trip,
+  wrong password, normalization asymmetry between the two paths, the
+  outdated-Argon2-params rehash flag (minted with a genuinely different
+  hash, not string surgery on a current one), the 72-byte truncation skip,
+  and — via `vi.mock` pass-through spies wrapping the real
+  `bcryptjs.compare`/`@node-rs/argon2.verify` — a positive assertion that
+  neither verifier is invoked for an unrecognized hash format.
+- `auth.test.ts` — `authorize()`'s rehash-on-login branch: persists an
+  upgrade for a legacy-bcrypt result, does nothing for an already-current
+  Argon2 result, skips _and logs distinctly_ for the truncated-bcrypt
+  case (falsified: removing the truncation branch collapses it into the
+  same observable outcome as "no rehash needed" unless the WARN call is
+  also asserted), and a rehash persistence failure never fails the login.
+
+All of the above were falsified during review: each assertion was
+confirmed to fail when the guarding code was deliberately removed.
+
+### Related
+
+- **SEC-42** — the strict-rate-limit chain in front of signup/reset-password
+  is unaffected by this change; Argon2id's own cost is the abuse-resistance
+  layer this rule is about, not a replacement for it.
+- **PE-25** — breached/common-password blocklist check (e.g. HIBP
+  k-anonymity), deferred pending a vendor/outbound-trust-boundary decision.
+
+## SEC-48 — A Session Is Not A Person
+
+**ID**: SEC-48
+**Category**: Authentication assurance / MFA
+**Classification**: Real risk → fixed (eighteenth case of the multi-case
+security-audit remediation series)
+**Affected contexts**: `src/security/api/with-admin-step-up.ts`,
+every `src/app/api/admin/**/route.ts`, `src/app/admin/layout.tsx`,
+`src/modules/auth/infrastructure/authjs/auth.ts`,
+`src/modules/auth/infrastructure/mfa/**`,
+`src/modules/auth/infrastructure/clerk/ClerkMfaService.ts`,
+`src/core/security/**`
+
+### Risk
+
+`evaluateNodeProvisioningAccess` is the single gate every Node and RSC access
+decision passes through. It checks, in order: authentication →
+`deactivatedAt` (SEC-33) → session revocation (SEC-36) → onboarding → tenant
+→ ABAC. Every one of those answers _who the caller is_ and _what they may
+do_. Nothing answered **how strongly, and how recently, they proved it**.
+
+The consequences were structural, not hypothetical:
+
+- A stolen, borrowed or left-open admin session could deactivate users,
+  rewrite ABAC policies, issue and revoke invitations and change audit-log
+  retention — for the full 30-day lifetime of the JWT, with no further proof
+  of identity at any point.
+- `AUTH_PROVIDER=authjs` had exactly one factor (a password). SEC-47 had
+  already noted this when it set NIST SP 800-63B-4's **15-character**
+  single-factor floor rather than the 8-character two-factor one.
+- `AUTH_PROVIDER=clerk` supports MFA in the provider, but nothing in this
+  application required it, read it, or noticed its absence.
+- `sessionIssuedAt` (SEC-36) looks like a freshness fact and is not one:
+  NextAuth v4 re-stamps `iat` when it re-issues the token (`updateAge`,
+  default 24h), so it says _when the session was last refreshed_, never _when
+  the human last authenticated_.
+
+### Rule
+
+**An admin mutation requires a second factor, verified within the last 15
+minutes, in this session.** Three separate obligations, and each one is
+enforced in a different place because each answers a different question:
+
+| Obligation                                       | Where              | Question                                       |
+| ------------------------------------------------ | ------------------ | ---------------------------------------------- |
+| MFA at sign-in for any account that has a factor | `authorize()`      | may this session exist at all?                 |
+| MFA enrollment for administrators                | `AdminLayoutGuard` | may this person hold administrative authority? |
+| A fresh step-up proof per mutation               | `withAdminStepUp`  | is the human still here, right now?            |
+
+**Step-up is an authentication-assurance boundary, never an authorization
+one.** It does not care whether the caller is a platform admin or a tenant
+admin — those are authorization levels, decided per route (SEC-26/SEC-41).
+If the operation is an admin mutation, both kinds of administrator pass the
+same challenge.
+
+**Password-only never satisfies it.** Re-typing a password is
+re-authentication, not multi-factor authentication, however recent it is. An
+account with no second factor is refused and sent to enrollment — never
+downgraded to a password prompt.
+
+#### Deny-by-default, enforced statically
+
+Every state-changing export under `src/app/api/admin/**` is wrapped:
+
+```ts
+export const PATCH = withErrorHandler(
+  withNodeProvisioning(withAdminStepUp(async (request, context, access) => { ... })),
+);
+```
+
+`with-admin-step-up.guard.test.ts` walks the whole family and fails the suite
+when a mutating export is not wrapped. **The exemption list starts empty, and
+the guard asserts that it is empty** — adding an entry is a decision someone
+argues for in review, not a quiet edit. This is the same lesson as SEC-38
+(twelve of thirty-six routes had silently diverged from advice nothing
+checked) and SEC-41 (the same missing-scope defect found four times): a rule
+that is not mechanically checked decays.
+
+#### Order of checks is part of the rule
+
+1. `withNodeProvisioning` runs **first**, so deactivation (SEC-33) and
+   session revocation (SEC-36) apply before a proof is even read. A
+   cryptographically valid proof belonging to a killed session never gets the
+   chance to matter.
+2. **Enrollment before freshness.** "You have no second factor" and "your
+   proof is stale" have different remedies; collapsing them sends an
+   un-enrolled admin into a challenge they cannot pass.
+3. **A missing logical session id fails closed.** Falling back to the user id
+   would make one proof valid across every session that user ever opens.
+
+#### The proof
+
+Stateless, application-signed, short-lived — not a credential:
+
+```text
+v1.<keyId>.<payload_b64url>.<signature_b64url>
+payload = { sub, sid, acr: 'mfa', amr: ['pwd','otp'], iat, exp }
+```
+
+- `sub` is the **internal** user id, never a provider id.
+- `sid` is a provider-neutral logical session reference: Clerk's `sessionId`,
+  and for AuthJS a `sid` claim minted once at sign-in and carried through
+  token rotation. A new sign-in produces a new one, so a proof dies with its
+  session.
+- `exp` is 15 minutes, **fixed in code**. A configurable TTL is one more
+  security knob that can be set wrong, and this repository has no use case
+  that needs a different value.
+- `amr` records which factors produced it, for the audit trail; `acr` is what
+  the guard compares. Nothing downstream branches on which provider or
+  library did the verifying.
+
+The proof is not a bearer token: possession without a valid base session
+grants nothing, because the session is validated first.
+
+#### Key material: HKDF, never the provider's secret
+
+`APP_SECURITY_MASTER_KEY` is **HKDF input only** and is never used directly.
+Each consumer derives its own subkey under a distinct label
+(`step-up-proof-signing/v1`, `authjs-totp-encryption/v1`), so two mechanisms
+can never share key material.
+
+Deliberately **not** `NEXTAUTH_SECRET` or `CLERK_SECRET_KEY`: step-up and MFA
+storage span both auth providers. Signing a provider-neutral mechanism with
+one provider's secret leaks that provider back into the shared mechanism, and
+lets a provider-side rotation silently invalidate an unrelated security
+control. Both the AES-GCM envelope and the proof carry a key id, so rotation
+is a cutover (`current` + `previous`) rather than a flag day.
+
+#### A TOTP seed is encrypted, not hashed
+
+A verifier must regenerate codes from the seed, so unlike a password it
+cannot be stored as a hash. It is stored AES-256-GCM encrypted with a
+record-bound AAD (`user_mfa_totp:<userId>`), so a database dump alone —
+backup disclosure, a read-only credential, a mis-scoped snapshot, SQL
+injection — does not clone every administrator's authenticator, and a
+ciphertext moved between rows fails to authenticate instead of transplanting
+a factor.
+
+#### Recovery codes: public id, one KDF call, atomic consume
+
+`<codeId>-<secret>`: the id is a public lookup handle, the secret is the
+credential. That split is what keeps verification at **exactly one Argon2id
+call** — storing ten opaque hashes and trying each would cost ten, roughly a
+second of CPU per attempt, which is a denial-of-service knob handed to the
+attacker. Argon2id rather than a fast hash because NIST SP 800-63B requires
+look-up secrets below 112 bits of entropy to be stored under a password
+hashing scheme, and these are deliberately short enough to transcribe.
+
+Consumption carries `used_at IS NULL` in the same statement that claims the
+code (SEC-35's rule), a regeneration replaces the whole previous set, and
+neither a generated code nor a submitted one is ever logged.
+
+#### Replay
+
+A TOTP code is valid for its whole 30-second step. The highest accepted step
+is stored per account and the freshness predicate lives **in the WHERE clause
+of the statement that stores it**, so two requests presenting the same code
+concurrently cannot both win. otplib's own `afterTimeStep` option is
+deliberately unused: it can only compare against the marker the request
+already read (so it cannot decide the concurrent case), and it collapses
+"replayed" into the same answer as a mistyped digit — a distinction the audit
+trail needs, because a correct code presented twice is evidence of
+interception rather than a typo.
+
+To the caller, a replayed code and a wrong one get the same 401.
+
+#### Enforcement is required by default; the bypass cannot be deployed
+
+`ADMIN_STEP_UP_MODE` defaults to `required`, and **missing configuration
+means required, never bypass**. `bypass-local-only` exists for local
+development and for admin E2E runs whose subject is something else. It is
+rejected twice: by the env schema at startup, and again at runtime by
+`resolveStepUpEnforcement`, on any deployed environment (`NODE_ENV=production`
+or `VERCEL_ENV` of production/preview). Two independent checks on purpose — a
+bypass that depends on exactly one check being right is one mistake away from
+production.
+
+Missing key material is **not** a bypass: it resolves to `unavailable`, the
+mutation is refused with `STEP_UP_UNAVAILABLE`, and production fails at
+startup instead (`validateAppSecurityConfigValues`).
+
+#### Enrolling is not challenged; un-enrolling is
+
+Raising assurance cannot demand a factor that does not exist yet, so
+enrollment needs only a valid session. Removing a factor and reissuing
+recovery codes both require a step-up — those are exactly the moves a
+hijacked session would make to swap a factor it cannot pass for one it
+controls.
+
+#### `authorize()` asks about credentials, never about roles
+
+MFA at sign-in is required for any AuthJS account that has a factor enrolled.
+The credentials provider asks exactly one question — _does this account have
+a second factor?_ — and never _is this account an administrator_. Reaching
+for ABAC there would put authorization knowledge inside the credentials
+provider and invert the order this codebase establishes identity in: identity
+and provisioning first, authorization afterwards, in the admin gate.
+
+The failure accounting follows from that: a correct password with no code yet
+is **not** a failed attempt (counting it would walk the owner toward their own
+lockout on every MFA sign-in), a wrong code is, and an unavailable factor is
+an operator problem that neither signs anyone in nor counts against them.
+
+### Implementation notes
+
+- **`otplib` v13, not `@oslojs/otp` and not a hand-rolled RFC 6238.**
+  `@oslojs/otp` is marked deprecated on npm ("Package no longer supported"),
+  and otplib is actively maintained (13.5.0, published 2026-08-21), TypeScript
+  -first, and built on `@noble/hashes` + `@scure/base`. Writing our own would
+  mean owning dynamic truncation, Base32, time-step handling, tolerance
+  windows, token normalization, replay semantics, authenticator
+  interoperability and test vectors — security-critical code this repository
+  has no reason to own. The library stays inside the AuthJS adapter; the core
+  contract does not mention time steps.
+- **TOTP parameters are pinned in code** (SHA-1, 6 digits, 30-second period,
+  160-bit seed, ±1 step of drift), never inherited from library defaults —
+  the same reasoning as SEC-47's Argon2 parameters. SHA-1 is RFC 6238's
+  default and the only algorithm every mainstream authenticator reliably
+  imports; the security rests on the seed's secrecy and the window, not on
+  the HMAC hash.
+- **otplib v13 rejects seeds below 16 bytes**, so the classic
+  `JBSWY3DPEHPK3PXP` example from older documentation no longer validates —
+  worth knowing when writing fixtures.
+- **Clerk's own reverification is deliberately not used.**
+  `has({ reverification })` is documented as public beta and "not recommended
+  for production use", and the `fva` session claim it reads is marked
+  experimental. `users.verifyTOTP` and `twoFactorEnabled` are stable Backend
+  API operations, and using them keeps one policy behind one contract instead
+  of giving Clerk sessions a different step-up mechanism than AuthJS ones.
+- **The QR is rendered server-side** into an SVG data URI. An `<img>` with an
+  SVG data URI is inert (images cannot execute script) and already permitted
+  by this repository's `img-src 'self' data:` policy. The seed, the
+  `otpauth://` URI and the QR are never logged.
+- **The proof cookie is one stable name**, not a `__Host-`-prefixed variant in
+  production only. The prefix stops a sibling subdomain from _planting_ a
+  cookie the app would trust — and this cookie is not trusted on possession:
+  it carries an HMAC this application signed, bound to the caller's internal
+  user id and session. `sameSite: 'strict'` is the attribute that matters
+  here.
+
+### Regression coverage
+
+- `app-keys.test.ts` / `envelope-encryption.test.ts` — domain separation
+  between purposes (falsified by making both derivations share one label),
+  AAD binding, tampering, unknown key ids, and decryption across a rotation.
+- `proof.test.ts` — expiry at exactly the TTL, subject and session mismatch,
+  a rewritten payload, a proof signed under unrelated key material, and two
+  authentically-signed-but-wrong proofs (a lower `acr`, an over-long
+  lifetime) that must still be refused.
+- `policy.test.ts` / `env.test.ts` — the bypass is honoured only off a
+  deployed environment, missing key material is `unavailable` rather than
+  permitted, and the env validator rejects both a deployed bypass and a
+  missing production key.
+- `with-admin-step-up.test.ts` — enrollment demanded before freshness, a
+  missing session reference failing closed, every refusal audited with its
+  reason, and the bypass ignored on production/preview.
+- `with-admin-step-up.guard.test.ts` — the static deny-by-default rule, plus
+  tests for the classifier itself (a guard whose classifier is untested is a
+  green checkmark).
+- `DrizzleAuthJsMfaService.db.test.ts` (real database) — a pending enrollment
+  is not a factor, the confirming code cannot also satisfy the first
+  challenge, replay, cross-account codes, single-use recovery codes,
+  regeneration invalidating the previous set, and an undecryptable seed
+  failing closed.
+- `auth.test.ts` — the sign-in second factor, including which outcomes count
+  as failed attempts and which do not.
+- `StepUpProvider.test.tsx` / `sign-in-client.test.tsx` — the client prompts
+  only when the server says so, replays the unchanged request exactly once,
+  and never reveals that an account has MFA before a valid password.
+- `e2e/admin-step-up.spec.ts` — the real round trip with enforcement
+  required: enroll, be refused, pass the challenge, be allowed.
+
+All of the above were falsified during review: each assertion was confirmed
+to fail when the guarding code was deliberately removed.
+
+### Related
+
+- **SEC-33 / SEC-36** — deactivation and session revocation run before this
+  gate, which is what makes a valid proof harmless once a session is killed.
+- **SEC-41** — the scope discipline this sits beside: SEC-41 decides _what a
+  caller may touch_, SEC-48 decides _how recently they proved they are still
+  there_.
+- **SEC-42** — the step-up challenge and the enrollment endpoints go through
+  `checkStrictRateLimit`, keyed on the actor rather than the IP.
+- **SEC-47** — the Argon2id hasher this reuses for recovery-code secrets.

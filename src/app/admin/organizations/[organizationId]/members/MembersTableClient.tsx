@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
 import type {
   FormErrorsResponse,
   ServerErrorResponse,
@@ -65,6 +66,7 @@ export function MembersTableClient({
   roles: OrganizationMembersPageDto['roles'];
   initialMembers: OrganizationMemberSummaryDto[];
 }) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const [members, setMembers] = useState(initialMembers);
   const [selectedRoleIds, setSelectedRoleIds] = useState<
@@ -89,7 +91,7 @@ export function MembersTableClient({
     setRowError((prev) => ({ ...prev, [member.userId]: '' }));
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}/members/${member.userId}`,
         {
           method: 'PATCH',

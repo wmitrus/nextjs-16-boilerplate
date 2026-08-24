@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
+
 export interface OrganizationSummary {
   id: string;
   name: string;
@@ -35,6 +37,7 @@ export function OrganizationsClient({
   authProvider,
   organizations,
 }: OrganizationsClientProps) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const canSwitchActiveOrganization = authProvider === 'authjs';
   const [filter, setFilter] = useState<OrganizationFilter>('active');
@@ -52,7 +55,7 @@ export function OrganizationsClient({
     setPendingOrganizationId(organizationId);
 
     try {
-      const response = await fetch('/api/auth/active-org', {
+      const response = await stepUpFetch('/api/auth/active-org', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationId }),

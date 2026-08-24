@@ -45,6 +45,16 @@ The app fails fast at startup when these rules are violated:
    if present) must be at least 32 characters, and the two must differ
    (SEC-44). Leaving both unset is valid — the internal guard then refuses
    every request.
+7. A deployed environment (`NODE_ENV=production`, or `VERCEL_ENV` of
+   production/preview) requires `APP_SECURITY_MASTER_KEY`, at least 32
+   characters, and differing from `APP_SECURITY_MASTER_KEY_PREVIOUS` when
+   both are set (SEC-48). Admin step-up proofs are signed with a subkey
+   derived from it and AuthJS TOTP seeds are encrypted with another; without
+   it every admin mutation fails closed at runtime, which is a far worse
+   place to discover the gap than deploy time.
+8. `ADMIN_STEP_UP_MODE=bypass-local-only` is rejected on any deployed
+   environment (SEC-48). An unset variable means `required` — missing
+   configuration never means bypass.
 
 ## 4. Auth Provider Vars
 
@@ -171,6 +181,16 @@ Security-critical, deployment-specific:
 - `RATE_LIMIT_STRICT_DEGRADE` — leave `false`; the runtime lever is the
   `strict_rate_limit_degrade` feature flag, which can be turned back off
   without a deploy.
+- `APP_SECURITY_MASTER_KEY` / `APP_SECURITY_MASTER_KEY_PREVIOUS` — required in
+  a deployed environment, 32-character floor, **separate value per
+  environment** (Production and Preview must not share one). HKDF input only:
+  step-up proof signing and TOTP seed encryption derive independent subkeys
+  from it. Deliberately not `NEXTAUTH_SECRET` or `CLERK_SECRET_KEY` — the
+  mechanism spans both auth providers. Losing it means every enrolled user
+  must re-enroll their authenticator (recovery codes still work).
+- `ADMIN_STEP_UP_MODE` — leave unset in every deployed environment.
+  `bypass-local-only` exists for a developer machine and for admin E2E runs
+  whose subject is not step-up itself.
 
 ## 8. Production Notes
 
@@ -180,7 +200,11 @@ Security-critical, deployment-specific:
 4. Set `DEPLOYMENT_PROXY` in Vercel **Production and Preview** before the
    first deploy that includes SEC-43 — env validation fails the build without
    it. On Vercel the value is `vercel`.
-5. For `AUTH_PROVIDER=authjs`, set `NEXTAUTH_URL` in Vercel **Production** to
+5. Set `APP_SECURITY_MASTER_KEY` in Vercel **Production and Preview
+   separately** (never "All Environments") before the first deploy that
+   includes SEC-48 — env validation fails the build without it. Generate with
+   `openssl rand -base64 48`.
+6. For `AUTH_PROVIDER=authjs`, set `NEXTAUTH_URL` in Vercel **Production** to
    the canonical production URL. The production workflow fails before build if
    this runtime env is missing, because build-only fallbacks would mask a broken
    runtime configuration.

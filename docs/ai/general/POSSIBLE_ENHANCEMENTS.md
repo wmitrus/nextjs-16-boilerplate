@@ -614,3 +614,118 @@ where the data audit can be reviewed on its own evidence.
 **Note for whoever picks this up**: a new migration in this repository must be
 registered in `readMigrationSql()` in the same commit (SEC-05/SEC-12) — a
 missing entry passes every local gate and only fails in the Vercel build.
+
+---
+
+## PE-25 — Breached/Common-Password Blocklist Check
+
+- **Source**: Case 17 (SEC-47), user decision 2026-08-24
+- **Date added**: 2026-08-24
+- **Status**: Open — not triaged
+
+**Description**: SEC-47 (Argon2id default, bcrypt legacy-verify-only,
+rehash-on-login, NIST-aligned length policy) deliberately left out a
+breached/common-password blocklist check at signup and reset-password. NIST
+SP 800-63B-4 calls for verifiers to check a newly-established password
+against a corpus of previously breached or commonly-used values; this repo
+does not do that today.
+
+**Candidate approaches** (not evaluated here — this is a scope note, not a
+design):
+
+- **Have I Been Pwned Pwned Passwords API**, k-anonymity mode (send only the
+  first 5 hex characters of the SHA-1 hash; `Add-Padding: true` for response-
+  size privacy). No API key required, but it is still an outbound call to a
+  third-party service on the signup/reset-password path.
+- **A local/bundled common-password corpus** — no outbound trust boundary,
+  but a static list to source, license-check, and keep updated, and it only
+  catches "commonly used", not "actually breached."
+
+**Why deferred**: this is a genuinely new trust boundary (an outbound call
+from an unauthenticated route, or a bundled dataset with its own maintenance
+cost), not a small extension of SEC-47's scope. It needs its own
+vendor/approach decision — HIBP vs. local corpus vs. something else — and,
+if HIBP, `SECURITY_ALLOWED_OUTBOUND_HOSTS` treatment and a fail-open/
+fail-closed decision for when the check itself is unreachable. Untriaged;
+do not implement without the user picking an approach.
+
+---
+
+## PE-26 — WebAuthn / passkeys as a second factor
+
+- **Source**: Case 18 (SEC-48)
+- **Date added**: 2026-08-24
+- **Status**: Open — not triaged
+
+**Description**: SEC-48 implements TOTP (plus recovery codes) as the
+application-owned second factor. TOTP is phishable: a code typed into a
+convincing proxy works for the attacker inside its 30-second window. WebAuthn
+/ passkeys are origin-bound and therefore not, which is why NIST rates them
+higher and why an admin-facing boilerplate might eventually want them.
+
+**Why deferred**: it is a second factor _type_, not a change to the
+assurance model — `MfaService` already abstracts "does this account have a
+factor" and "did they just prove it", so adding one is additive. But it
+brings credential storage (public keys, sign counters, AAGUIDs), a
+registration ceremony, browser-capability handling, and a library decision
+(`@simplewebauthn/*` or equivalent) that is its own vendor call.
+
+---
+
+## PE-27 — Per-operation step-up levels
+
+- **Source**: Case 18 (SEC-48)
+- **Date added**: 2026-08-24
+- **Status**: Open — not triaged
+
+**Description**: today every admin mutation carries the same requirement:
+`acr: 'mfa'`, 15 minutes. A finer model would let a subset of operations
+(deleting a tenant, rotating a shared secret, a future billing change) demand
+a _shorter_ window or a specific factor type, while routine changes keep the
+current one.
+
+**Why deferred**: the mechanism already carries `acr` in the proof, so this
+is a policy layer rather than a rebuild. It was deliberately not built now:
+the user's explicit decision for SEC-48 was one policy expressed once, in
+code, precisely because a per-operation matrix is another security knob to
+get wrong. Revisit only when a real operation needs a different answer.
+
+---
+
+## PE-28 — Step-up for Server Actions
+
+- **Source**: Case 18 (SEC-48)
+- **Date added**: 2026-08-24
+- **Status**: Open — not triaged
+
+**Description**: SEC-48's static guard covers `src/app/api/admin/**` route
+handlers. Server Actions (`createSecureAction`) are a second mutation surface
+— today only `onboarding/actions.ts`, `verify-email` and the security
+showcase, none of them administrative, which is why the case scoped to route
+handlers. If an admin-grade Server Action is ever added, it needs the same
+assurance boundary and its own static guard, or the deny-by-default rule
+quietly has a second door.
+
+**Trigger**: the first state-changing Server Action that requires
+administrative authority.
+
+---
+
+## PE-29 — Re-encrypt TOTP seeds on key rotation
+
+- **Source**: Case 18 (SEC-48)
+- **Date added**: 2026-08-24
+- **Status**: Open — not triaged
+
+**Description**: `needsReEncryption()` exists and reports whether a stored
+envelope was written under an older master-key generation, but nothing calls
+it: after a rotation, seeds keep decrypting under
+`APP_SECURITY_MASTER_KEY_PREVIOUS` indefinitely, which means the old key can
+never actually be retired. The obvious shape is opportunistic re-encryption
+on successful verification (the same pattern as SEC-47's rehash-on-login),
+optionally with a backfill script for accounts that do not sign in.
+
+**Why deferred**: the rotation path is correct and safe as it stands; this is
+about _finishing_ a rotation rather than performing one, and it needs a
+decision about whether a background backfill belongs in this boilerplate at
+all.

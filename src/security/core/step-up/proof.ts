@@ -202,22 +202,46 @@ export async function verifyStepUpProof(
   // this application minted under different rules. Fail closed either way.
   if (!claims) return { valid: false, reason: 'insufficient_assurance' };
 
-  const now = input.nowSeconds ?? nowInSeconds();
-  if (claims.exp <= now) return { valid: false, reason: 'expired' };
-  if (claims.iat > now + MAX_CLOCK_SKEW_SECONDS) {
-    return { valid: false, reason: 'not_yet_valid' };
-  }
+  const rejection = checkClaimsAcceptable(
+    claims,
+    input,
+    input.nowSeconds ?? nowInSeconds(),
+  );
+  if (rejection) return { valid: false, reason: rejection };
+
+  return { valid: true, claims };
+}
+
+/**
+ * The second of the two questions this module answers.
+ *
+ * `verifyStepUpProof` above establishes **authenticity** -- did this
+ * application, with a key generation it still recognises, sign these exact
+ * bytes? Everything below assumes that is already settled and asks the
+ * separate question: is an authentic proof *acceptable for this request*?
+ *
+ * The split is deliberate. Cryptography and policy fail for different reasons
+ * and change for different reasons: freshness windows and binding rules are
+ * expected to be read and adjusted, while the signature path is not. Keeping
+ * them apart means neither can be edited by accident while looking at the
+ * other.
+ *
+ * Returns the reason to refuse, or `undefined` when the proof is acceptable.
+ */
+function checkClaimsAcceptable(
+  claims: StepUpProofClaims,
+  input: VerifyStepUpProofInput,
+  now: number,
+): StepUpProofFailureReason | undefined {
+  if (claims.exp <= now) return 'expired';
+  if (claims.iat > now + MAX_CLOCK_SKEW_SECONDS) return 'not_yet_valid';
   // A proof whose own lifetime exceeds the policy TTL was minted under a
   // longer window than this code allows; refuse it rather than honour it.
   if (claims.exp - claims.iat > STEP_UP_TTL_SECONDS) {
-    return { valid: false, reason: 'insufficient_assurance' };
+    return 'insufficient_assurance';
   }
-  if (claims.sub !== input.userId) {
-    return { valid: false, reason: 'subject_mismatch' };
-  }
-  if (claims.sid !== input.logicalSessionId) {
-    return { valid: false, reason: 'session_mismatch' };
-  }
+  if (claims.sub !== input.userId) return 'subject_mismatch';
+  if (claims.sid !== input.logicalSessionId) return 'session_mismatch';
 
-  return { valid: true, claims };
+  return undefined;
 }

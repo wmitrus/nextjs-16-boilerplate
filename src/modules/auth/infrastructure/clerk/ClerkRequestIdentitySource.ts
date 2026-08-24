@@ -44,6 +44,25 @@ function maskEmail(email: string): string {
   return `${localPart.slice(0, 1)}***@${domain}`;
 }
 
+/**
+ * Lizard scores `get()` at CC 24, and that finding is **accepted and ignored
+ * in the Codacy UI** rather than refactored away.
+ *
+ * Almost all of that score comes from normalising optional provider fields
+ * for one object and one log line -- `userId ?? undefined`,
+ * `email ? ... : undefined`, `sessionClaims?.email_verified === true ? true :
+ * undefined`, and similar. Those are not twenty-four decisions about
+ * behaviour; they are one decision (never let a provider's absent field
+ * become a falsy value downstream) repeated over the fields Clerk may or may
+ * not send. Splitting the telemetry assembly into helpers to satisfy the
+ * metric would scatter one readable mapping across several functions and make
+ * the code harder to follow, not easier.
+ *
+ * Recorded here because it is the single case in this repository where the
+ * complexity metric misrepresents the code -- which is also why the thresholds
+ * stay where they are (120 / 15 / 10 / 500) instead of being raised until this
+ * one site goes quiet.
+ */
 export class ClerkRequestIdentitySource implements RequestIdentitySource {
   private cached?: Promise<RequestIdentitySourceData>;
 

@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { connection } from 'next/server';
+import type { NextResponse } from 'next/server';
 
 import { INFRASTRUCTURE } from '@/core/contracts';
 import type { DrizzleDb } from '@/core/db/types';
@@ -130,6 +131,163 @@ function isWaitlistError(
   );
 }
 
+type WaitlistServices = ReturnType<typeof resolveServices>;
+
+type WaitlistActor = {
+  readonly tenantId: string;
+  readonly actorUserId: string;
+};
+
+/**
+ * Approving and rejecting are two complete workflows that happen to share a
+ * route, an authorization check and an error mapping -- not two branches of
+ * one operation. Each owns its own side effects (invitation vs. rejection
+ * email) and its own audit event; the handler below stays responsible for
+ * what is genuinely common: who may call, which entry, and which action.
+ */
+async function handleWaitlistApproval(
+  id: string,
+  actor: WaitlistActor,
+  services: WaitlistServices,
+): Promise<NextResponse> {
+  const { waitlistService, db } = services;
+  const entry = await waitlistService.approveEntry(id);
+
+  const destination = await resolveInvitationDestination(db);
+
+  if (destination) {
+    await createApprovalInvitation(id, entry.email, destination, services);
+  } else {
+    logger.warn(
+      {
+        event: 'waitlist:approval_no_invite_config',
+        waitlistEntryId: id,
+        tenancyMode: env.TENANCY_MODE,
+      },
+      'Waitlist approved but could not resolve org/role for invitation — no invitation email sent',
+    );
+  }
+
+  await recordAdminAuditEvent({
+    category: 'waitlist',
+    action: 'waitlist.approve',
+    outcome: 'success',
+    tenantId: actor.tenantId,
+    actorUserId: actor.actorUserId,
+    targetType: 'waitlist_entry',
+    targetId: id,
+  });
+
+  return createSuccessResponse({ entry });
+}
+
+/**
+ * Deliberately NOT `entry.organizationId`. That column is populated from the
+ * anonymous join request, so honouring it would let a visitor choose which
+ * organization approving them creates an invitation into. The destination is
+ * a platform decision: server configuration, or the single-tenant resolution
+ * below. See SEC-41.
+ */
+async function resolveInvitationDestination(
+  db: DrizzleDb,
+): Promise<{ orgId: string; roleId: string } | null> {
+  let orgId = env.WAITLIST_INVITE_ORGANIZATION_ID;
+  let roleId = env.WAITLIST_INVITE_ROLE_ID;
+
+  if ((!orgId || !roleId) && env.TENANCY_MODE === 'single') {
+    const resolved = await resolveSingleTenancyInviteTarget(db);
+    if (resolved) {
+      orgId = orgId ?? resolved.orgId;
+      roleId = roleId ?? resolved.roleId;
+    }
+  }
+
+  return orgId && roleId ? { orgId, roleId } : null;
+}
+
+/**
+ * A failed invitation does not un-approve the entry: the approval decision is
+ * already recorded and is the administrator's, while delivery is best-effort
+ * and recoverable by re-inviting. It is logged rather than swallowed.
+ */
+async function createApprovalInvitation(
+  id: string,
+  email: string,
+  destination: { orgId: string; roleId: string },
+  services: WaitlistServices,
+): Promise<void> {
+  try {
+    await services.invitationService.createInvitation({
+      organizationId: destination.orgId,
+      invitedByUserId: null,
+      email,
+      roleId: destination.roleId,
+    });
+  } catch (inviteErr) {
+    const err =
+      inviteErr instanceof Error ? inviteErr : new Error(String(inviteErr));
+    logger.error(
+      {
+        event: 'waitlist:approval_invite_failed',
+        waitlistEntryId: id,
+        errorMessage: err.message,
+        errorName: err.name,
+      },
+      'Waitlist approved but invitation creation failed',
+    );
+  }
+}
+
+async function handleWaitlistRejection(
+  id: string,
+  actor: WaitlistActor,
+  services: WaitlistServices,
+): Promise<NextResponse> {
+  const entry = await services.waitlistService.rejectEntry(id);
+
+  if (env.WAITLIST_SEND_REJECTION_EMAIL) {
+    await sendRejectionEmail(id, entry, services);
+  }
+
+  await recordAdminAuditEvent({
+    category: 'waitlist',
+    action: 'waitlist.reject',
+    outcome: 'success',
+    tenantId: actor.tenantId,
+    actorUserId: actor.actorUserId,
+    targetType: 'waitlist_entry',
+    targetId: id,
+  });
+
+  return createSuccessResponse({ entry });
+}
+
+/** Same posture as the invitation above: the decision stands, delivery does not gate it. */
+async function sendRejectionEmail(
+  id: string,
+  entry: { email: string; name: string | null },
+  services: WaitlistServices,
+): Promise<void> {
+  try {
+    await services.emailService.sendWaitlistRejectionEmail({
+      to: entry.email,
+      name: entry.name,
+    });
+  } catch (emailErr) {
+    const err =
+      emailErr instanceof Error ? emailErr : new Error(String(emailErr));
+    logger.error(
+      {
+        event: 'waitlist:rejection_email_failed',
+        waitlistEntryId: id,
+        errorMessage: err.message,
+        errorName: err.name,
+      },
+      'Failed to send waitlist rejection email',
+    );
+  }
+}
+
 /**
  * POST /api/admin/waitlist/[id]?action=approve|reject
  *
@@ -170,114 +328,16 @@ export const POST = withErrorHandler(
         );
       }
 
-      const { waitlistService, invitationService, emailService, db } =
-        resolveServices();
+      const services = resolveServices();
+      const actor = {
+        tenantId: access.tenant.tenantId,
+        actorUserId: access.user.id,
+      };
 
       try {
-        if (action === 'approve') {
-          const entry = await waitlistService.approveEntry(id);
-
-          // Deliberately NOT `entry.organizationId`. That column is populated
-          // from the anonymous join request, so honouring it would let a
-          // visitor choose which organization approving them creates an
-          // invitation into. The destination is a platform decision: server
-          // configuration, or the single-tenant resolution below. See SEC-41.
-          let orgId = env.WAITLIST_INVITE_ORGANIZATION_ID;
-          let roleId = env.WAITLIST_INVITE_ROLE_ID;
-
-          if (!orgId || !roleId) {
-            if (env.TENANCY_MODE === 'single') {
-              const resolved = await resolveSingleTenancyInviteTarget(db);
-              if (resolved) {
-                orgId = orgId ?? resolved.orgId;
-                roleId = roleId ?? resolved.roleId;
-              }
-            }
-          }
-
-          if (orgId && roleId) {
-            try {
-              await invitationService.createInvitation({
-                organizationId: orgId,
-                invitedByUserId: null,
-                email: entry.email,
-                roleId,
-              });
-            } catch (inviteErr) {
-              const err =
-                inviteErr instanceof Error
-                  ? inviteErr
-                  : new Error(String(inviteErr));
-              logger.error(
-                {
-                  event: 'waitlist:approval_invite_failed',
-                  waitlistEntryId: id,
-                  errorMessage: err.message,
-                  errorName: err.name,
-                },
-                'Waitlist approved but invitation creation failed',
-              );
-            }
-          } else {
-            logger.warn(
-              {
-                event: 'waitlist:approval_no_invite_config',
-                waitlistEntryId: id,
-                tenancyMode: env.TENANCY_MODE,
-              },
-              'Waitlist approved but could not resolve org/role for invitation — no invitation email sent',
-            );
-          }
-
-          await recordAdminAuditEvent({
-            category: 'waitlist',
-            action: 'waitlist.approve',
-            outcome: 'success',
-            tenantId: access.tenant.tenantId,
-            actorUserId: access.user.id,
-            targetType: 'waitlist_entry',
-            targetId: id,
-          });
-
-          return createSuccessResponse({ entry });
-        }
-
-        const entry = await waitlistService.rejectEntry(id);
-
-        if (env.WAITLIST_SEND_REJECTION_EMAIL) {
-          try {
-            await emailService.sendWaitlistRejectionEmail({
-              to: entry.email,
-              name: entry.name,
-            });
-          } catch (emailErr) {
-            const err =
-              emailErr instanceof Error
-                ? emailErr
-                : new Error(String(emailErr));
-            logger.error(
-              {
-                event: 'waitlist:rejection_email_failed',
-                waitlistEntryId: id,
-                errorMessage: err.message,
-                errorName: err.name,
-              },
-              'Failed to send waitlist rejection email',
-            );
-          }
-        }
-
-        await recordAdminAuditEvent({
-          category: 'waitlist',
-          action: 'waitlist.reject',
-          outcome: 'success',
-          tenantId: access.tenant.tenantId,
-          actorUserId: access.user.id,
-          targetType: 'waitlist_entry',
-          targetId: id,
-        });
-
-        return createSuccessResponse({ entry });
+        return action === 'approve'
+          ? await handleWaitlistApproval(id, actor, services)
+          : await handleWaitlistRejection(id, actor, services);
       } catch (error) {
         if (isWaitlistError(error)) {
           const status =

@@ -1,9 +1,10 @@
 import { connection } from 'next/server';
+import type { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { AUTH } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
-import type { MfaService } from '@/core/contracts/mfa';
+import type { MfaService, MfaVerificationFailure } from '@/core/contracts/mfa';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -57,6 +58,63 @@ const logger = resolveServerLogger().child({
   category: 'auth',
   module: 'step-up',
 });
+
+/**
+ * The whole answer to a rejected code: the log line, the audit event, and the
+ * HTTP shape. Extracted as one piece because those three belong together --
+ * a failed challenge that is answered without being recorded is exactly the
+ * gap this endpoint exists to close -- and because keeping it out of `POST`
+ * leaves the security-relevant sequence there readable end to end:
+ * rate limit -> parse -> availability -> session binding -> verify -> mint.
+ */
+async function respondToFailedChallenge(
+  reason: MfaVerificationFailure,
+  actor: { readonly userId: string; readonly tenantId: string },
+): Promise<NextResponse> {
+  logger.warn(
+    {
+      event: 'auth:step_up_challenge_failed',
+      userId: actor.userId,
+      // The reason, never the submitted code.
+      reason,
+    },
+    'Step-up challenge failed',
+  );
+  await recordAdminAuditEvent({
+    category: 'auth',
+    action: 'mfa.challenge.failed',
+    outcome: 'denied',
+    tenantId: actor.tenantId,
+    actorUserId: actor.userId,
+    targetType: 'step_up',
+    targetId: STEP_UP_PATH,
+    metadata: { reason },
+  });
+
+  if (reason === 'not_enrolled') {
+    return createServerErrorResponse(
+      'Multi-factor authentication must be enrolled first',
+      403,
+      'MFA_ENROLLMENT_REQUIRED',
+    );
+  }
+
+  if (reason === 'unavailable') {
+    return createServerErrorResponse(
+      'Step-up authentication is not available',
+      503,
+      'STEP_UP_UNAVAILABLE',
+    );
+  }
+
+  // A replayed code and a wrong one are one answer to the caller; the
+  // distinction lives in the audit trail, where it belongs.
+  return createServerErrorResponse(
+    'That code is not valid',
+    401,
+    'MFA_CODE_INVALID',
+  );
+}
 
 export const GET = withErrorHandler(
   withNodeProvisioning(async (request, _context, access) => {
@@ -180,49 +238,10 @@ export const POST = withErrorHandler(
     );
 
     if (!verification.ok) {
-      logger.warn(
-        {
-          event: 'auth:step_up_challenge_failed',
-          userId: access.user.id,
-          // The reason, never the submitted code.
-          reason: verification.reason,
-        },
-        'Step-up challenge failed',
-      );
-      await recordAdminAuditEvent({
-        category: 'auth',
-        action: 'mfa.challenge.failed',
-        outcome: 'denied',
+      return await respondToFailedChallenge(verification.reason, {
+        userId: access.user.id,
         tenantId: access.tenant.tenantId,
-        actorUserId: access.user.id,
-        targetType: 'step_up',
-        targetId: STEP_UP_PATH,
-        metadata: { reason: verification.reason },
       });
-
-      if (verification.reason === 'not_enrolled') {
-        return createServerErrorResponse(
-          'Multi-factor authentication must be enrolled first',
-          403,
-          'MFA_ENROLLMENT_REQUIRED',
-        );
-      }
-
-      if (verification.reason === 'unavailable') {
-        return createServerErrorResponse(
-          'Step-up authentication is not available',
-          503,
-          'STEP_UP_UNAVAILABLE',
-        );
-      }
-
-      // A replayed code and a wrong one are one answer to the caller; the
-      // distinction lives in the audit trail, where it belongs.
-      return createServerErrorResponse(
-        'That code is not valid',
-        401,
-        'MFA_CODE_INVALID',
-      );
     }
 
     const { token, claims } = await mintStepUpProof({

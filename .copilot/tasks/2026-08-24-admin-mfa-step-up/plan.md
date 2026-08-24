@@ -197,6 +197,46 @@ recovery code consumed exactly once, and sign-in demanding the second factor.
 `[global-setup] AUTH_PROVIDER=authjs — skipping Clerk testing-token setup.`
 in the same log confirms the provider-aware gating from (1) doing its job.
 
+## Codacy triage (user decision, 2026-08-24)
+
+After the user re-calibrated the thresholds, the scan came back with a small
+set of findings. **The thresholds are now frozen** -- Function Length 120,
+Cyclomatic Complexity 15, Parameter Count 10, File Length 500 -- deliberately
+not raised further: at 130/20 the two real findings below would vanish along
+with the noise, which is tuning the analyser to the code rather than the other
+way round.
+
+| Finding                               | Decision            | Done                                                                                                    |
+| ------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| Policies `PATCH` -- 127 lines / CC 17 | refactor            | request parsing and the resource/action vocabulary check extracted; the shared domain-error mapping too |
+| Waitlist `POST` -- 126 lines / CC 24  | refactor            | `handleWaitlistApproval` / `handleWaitlistRejection`; the router keeps auth, uuid and action selection  |
+| Step-up `POST` -- 131 lines           | one extraction      | `respondToFailedChallenge` (log + audit + HTTP shape)                                                   |
+| `ClerkRequestIdentitySource` -- CC 24 | **not** refactored  | accepted exception, ignored in the Codacy UI; rationale recorded in the class doc comment               |
+| `verifyStepUpProof` -- CC 19          | controlled refactor | `checkClaimsAcceptable` splits semantic acceptance from cryptographic authenticity                      |
+| TOTP "hardcoded password"             | false positive      | test fixture seed; ignored in the Codacy UI, rationale recorded next to the constant                    |
+
+Two of these are structural improvements independent of any metric. Waitlist
+`POST` held two complete workflows -- approve (approve entry, resolve
+destination, invite, handle invite failure, audit) and reject (reject entry,
+optional email, handle email failure, audit) -- sharing only a route,
+an authorization check and an error mapping. `verifyStepUpProof` answered two
+different questions in one body: _is this proof authentic?_ (cryptography,
+which is not expected to be edited) and _is an authentic proof acceptable for
+this request?_ (freshness and binding policy, which is). They now sit on
+either side of a named boundary.
+
+The two accepted exceptions are recorded in the code itself, not only in the
+Codacy UI, so a later agent does not "fix" them: the Clerk class carries the
+reason its CC score misrepresents it (optional-field normalisation for one log
+line, not twenty-four behavioural decisions), and the TOTP fixture carries the
+reason it must stay a constant (deterministic RFC 6238 vectors).
+
+**Coverage gap found while falsifying.** Deleting the resource/action
+vocabulary check from the policies `PATCH` broke no test -- it had none before
+this refactor moved it. Three regression tests now cover it (unknown
+resource, action from another resource, action outside the vocabulary), and
+they were falsified: removing the check fails all three.
+
 ## Session limitations
 
 - **E2E not executed locally, but wired into CI.** After the first push the

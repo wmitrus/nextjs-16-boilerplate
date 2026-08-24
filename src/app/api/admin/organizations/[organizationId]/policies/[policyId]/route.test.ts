@@ -269,6 +269,57 @@ describe('PATCH /api/admin/organizations/[organizationId]/policies/[policyId]', 
     );
   });
 
+  // The resource/action vocabulary check had no test before this refactor
+  // moved it into `checkPolicyVocabulary`. It is the guard that stops a policy
+  // being written against a resource or action no code path evaluates, or one
+  // whose actions belong to a different resource than the one it names --
+  // either of which reads as a grant while granting nothing, or as a scoped
+  // grant while carrying another resource's actions.
+  it('rejects a resource this application does not define', async () => {
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest({
+        effect: 'allow',
+        resource: 'not_a_real_resource',
+        actions: ['security:manage_policies'],
+      }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.updateRolePolicy).not.toHaveBeenCalled();
+  });
+
+  it('rejects an action that does not belong to the named resource', async () => {
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest({
+        effect: 'allow',
+        resource: 'security',
+        actions: ['user:read'],
+      }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.updateRolePolicy).not.toHaveBeenCalled();
+  });
+
+  it('rejects an action outside the action vocabulary', async () => {
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest({
+        effect: 'allow',
+        resource: 'security',
+        actions: ['security:take_over_everything'],
+      }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.updateRolePolicy).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when the policy does not exist', async () => {
     const { PolicyNotFoundError } =
       await import('@/modules/authorization/domain/errors');

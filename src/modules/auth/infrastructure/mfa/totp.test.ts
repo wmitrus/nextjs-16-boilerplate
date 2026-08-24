@@ -23,6 +23,13 @@ const EPOCH = 1_800_000_000; // fixed instant, so time steps are deterministic
  * anything below 16 bytes outright -- the classic 10-byte `JBSWY3DPEHPK3PXP`
  * example from older docs no longer validates, which is one of the v13
  * hardening changes this policy relies on.
+ *
+ * Static analysis flags this as a hardcoded credential; the finding is
+ * accepted as a false positive and ignored in the Codacy UI. It is a
+ * published RFC 6238 example value repeated to reach the length floor, it
+ * belongs to no account in any environment, and the vectors below are only
+ * deterministic because it never changes. Do not "fix" it by generating one
+ * at runtime -- that would delete the property the tests verify.
  */
 const FIXTURE_SEED = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 

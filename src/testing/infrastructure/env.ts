@@ -13,6 +13,11 @@ const defaultEnv: MutableEnv = {
   LOG_LEVEL: 'info',
   INTERNAL_API_KEY: 'test-secret',
   INTERNAL_API_KEY_PREVIOUS: undefined,
+  APP_SECURITY_MASTER_KEY: undefined,
+  APP_SECURITY_MASTER_KEY_PREVIOUS: undefined,
+  // Step-up defaults to required in tests exactly as it does in production:
+  // a suite that silently ran with the bypass would prove nothing (SEC-48).
+  ADMIN_STEP_UP_MODE: 'required',
   SECURITY_ALLOWED_OUTBOUND_HOSTS:
     'api.clerk.com,clerk.com,clerk.services,clerk-telemetry.com,api.github.com',
   SECURITY_OUTBOUND_ALLOW_INSECURE_HTTP: false,

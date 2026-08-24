@@ -109,6 +109,41 @@ export const env = createEnv({
      * so the guard logs whenever it is the one that matched.
      */
     INTERNAL_API_KEY_PREVIOUS: z.string().min(1).optional(),
+    /**
+     * Root secret for application-level cryptography (SEC-48).
+     *
+     * Never used directly: it is HKDF input only, and every consumer derives
+     * its own subkey under a distinct context label (step-up proof signing,
+     * AuthJS TOTP seed encryption). Deliberately separate from
+     * `NEXTAUTH_SECRET` and `CLERK_SECRET_KEY` -- step-up and MFA storage
+     * span both auth providers, so binding them to one provider's secret
+     * would leak that provider into a shared mechanism and let a
+     * provider-side rotation silently invalidate an unrelated control.
+     *
+     * Generate with `openssl rand -base64 48`, set per environment
+     * (Production and Preview separately), keep it out of the database.
+     */
+    APP_SECURITY_MASTER_KEY: z.string().min(1).optional(),
+    /**
+     * The master key being rotated out. Accepted for *verification and
+     * decryption only* -- new proofs and new ciphertexts are always written
+     * under `APP_SECURITY_MASTER_KEY`. Same rotation shape as
+     * `INTERNAL_API_KEY_PREVIOUS` (SEC-44).
+     */
+    APP_SECURITY_MASTER_KEY_PREVIOUS: z.string().min(1).optional(),
+    /**
+     * Step-up enforcement for admin mutations (SEC-48).
+     *
+     * `required` is the default and the only value a deployed environment may
+     * hold: an unset variable means required, never bypass.
+     * `bypass-local-only` exists for local development and for admin E2E runs
+     * whose subject is something other than the step-up flow itself, and is
+     * rejected at startup in production or on a Vercel Production/Preview
+     * deployment (see `validateAppSecurityConfigValues`).
+     */
+    ADMIN_STEP_UP_MODE: z
+      .enum(['required', 'bypass-local-only'])
+      .default('required'),
     SECURITY_AUDIT_LOG_ENABLED: z
       .preprocess((val) => val === 'true' || val === true, z.boolean())
       .default(true),
@@ -434,6 +469,10 @@ export const env = createEnv({
     VERCEL_ENV: process.env.VERCEL_ENV,
     INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
     INTERNAL_API_KEY_PREVIOUS: process.env.INTERNAL_API_KEY_PREVIOUS,
+    APP_SECURITY_MASTER_KEY: process.env.APP_SECURITY_MASTER_KEY,
+    APP_SECURITY_MASTER_KEY_PREVIOUS:
+      process.env.APP_SECURITY_MASTER_KEY_PREVIOUS,
+    ADMIN_STEP_UP_MODE: process.env.ADMIN_STEP_UP_MODE,
     SECURITY_AUDIT_LOG_ENABLED: process.env.SECURITY_AUDIT_LOG_ENABLED,
     SECURITY_ALLOWED_OUTBOUND_HOSTS:
       process.env.SECURITY_ALLOWED_OUTBOUND_HOSTS,
@@ -902,5 +941,122 @@ export function validateInternalApiKeyConfig(): void {
     env.INTERNAL_API_KEY,
     env.INTERNAL_API_KEY_PREVIOUS,
     env.NODE_ENV,
+  );
+}
+
+/**
+ * Minimum length for the application security master key in production
+ * (SEC-48).
+ *
+ * A floor, not an entropy measurement -- same reasoning as
+ * `MIN_INTERNAL_API_KEY_LENGTH`. 32 characters of base64 is ~24 bytes; the
+ * documented generator (`openssl rand -base64 48`) produces 64.
+ */
+export const MIN_APP_SECURITY_MASTER_KEY_LENGTH = 32;
+
+/**
+ * Is this configuration a *deployed* environment, as opposed to a developer
+ * machine or a CI/E2E run?
+ *
+ * Deliberately conservative: any Vercel Production or Preview deployment
+ * counts, and so does `NODE_ENV=production` anywhere else, because a
+ * self-hosted production build has exactly the same exposure. `VERCEL_ENV`
+ * is *additional* evidence, never a replacement -- SEC-43 established that
+ * this repository does not infer a security posture from `VERCEL_ENV` alone.
+ */
+export function isDeployedEnvironmentValues(
+  nodeEnv: string | undefined,
+  vercelEnv: string | undefined,
+): boolean {
+  return (
+    nodeEnv === 'production' ||
+    vercelEnv === 'production' ||
+    vercelEnv === 'preview'
+  );
+}
+
+/**
+ * Cross-field rules for application security key material and step-up
+ * enforcement (SEC-48).
+ *
+ * Two invariants, both of which exist because the failure mode is silent:
+ *
+ * 1. A deployed environment may not run with step-up bypassed. The bypass is
+ *    for a developer machine and for admin E2E runs that are about something
+ *    else; a deployment that ships with it set has no authentication
+ *    assurance boundary at all, and nothing at runtime would say so.
+ * 2. A deployed environment must actually have the master key. Without it,
+ *    every admin mutation fails closed -- correct, but a deploy-time error is
+ *    a far better place to learn that than the first attempted mutation.
+ */
+export function validateAppSecurityConfigValues(
+  masterKey: string | undefined,
+  previousMasterKey: string | undefined,
+  stepUpMode: string | undefined,
+  nodeEnv: string | undefined,
+  vercelEnv: string | undefined,
+): void {
+  const deployed = isDeployedEnvironmentValues(nodeEnv, vercelEnv);
+
+  if (stepUpMode === 'bypass-local-only' && deployed) {
+    throw new Error(
+      '[env] ADMIN_STEP_UP_MODE=bypass-local-only is not permitted in a ' +
+        'deployed environment (NODE_ENV=production, or VERCEL_ENV of ' +
+        'production/preview). Step-up enforcement is required by default; ' +
+        'unset the variable rather than setting it to a bypass.',
+    );
+  }
+
+  if (!deployed) return;
+
+  const entries: Array<[string, string | undefined]> = [
+    ['APP_SECURITY_MASTER_KEY', masterKey],
+    ['APP_SECURITY_MASTER_KEY_PREVIOUS', previousMasterKey],
+  ];
+
+  for (const [name, value] of entries) {
+    if (value === undefined) {
+      // Only the current key is mandatory; the previous one exists solely
+      // for a rotation window.
+      if (name === 'APP_SECURITY_MASTER_KEY') {
+        throw new Error(
+          '[env] APP_SECURITY_MASTER_KEY is required in production: admin ' +
+            'step-up proofs are signed with a subkey derived from it, and ' +
+            'AuthJS TOTP seeds are encrypted with another. Generate one ' +
+            'with: openssl rand -base64 48',
+        );
+      }
+      continue;
+    }
+
+    if (value.trim().length < MIN_APP_SECURITY_MASTER_KEY_LENGTH) {
+      throw new Error(
+        `[env] ${name} must be at least ${MIN_APP_SECURITY_MASTER_KEY_LENGTH} characters in production. ` +
+          'Generate one with: openssl rand -base64 48',
+      );
+    }
+  }
+
+  if (
+    masterKey !== undefined &&
+    previousMasterKey !== undefined &&
+    masterKey.trim() === previousMasterKey.trim()
+  ) {
+    throw new Error(
+      '[env] APP_SECURITY_MASTER_KEY_PREVIOUS must differ from ' +
+        'APP_SECURITY_MASTER_KEY. Setting both to the same value gives the ' +
+        'appearance of a rotation without performing one.',
+    );
+  }
+}
+
+/** Convenience wrapper for bootstrap/startup. */
+export function validateAppSecurityConfig(): void {
+  validateAppSecurityConfigValues(
+    env.APP_SECURITY_MASTER_KEY,
+    env.APP_SECURITY_MASTER_KEY_PREVIOUS,
+    env.ADMIN_STEP_UP_MODE,
+    env.NODE_ENV,
+    env.VERCEL_ENV,
   );
 }

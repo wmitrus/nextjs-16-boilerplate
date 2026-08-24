@@ -887,3 +887,102 @@ describe('validateInternalApiKeyConfigValues (SEC-44)', () => {
     }
   });
 });
+
+describe('validateAppSecurityConfigValues (SEC-48)', () => {
+  const load = async () =>
+    (await import('./env')).validateAppSecurityConfigValues;
+  const strong = 'k'.repeat(32);
+  const strongOther = 'm'.repeat(32);
+
+  it('rejects the step-up bypass in a production build', async () => {
+    const validate = await load();
+    expect(() =>
+      validate(strong, undefined, 'bypass-local-only', 'production', undefined),
+    ).toThrow(/not permitted in a deployed environment/);
+  });
+
+  it.each([['production'], ['preview']])(
+    'rejects the step-up bypass on a Vercel %s deployment',
+    async (vercelEnv) => {
+      const validate = await load();
+      expect(() =>
+        validate(strong, undefined, 'bypass-local-only', 'test', vercelEnv),
+      ).toThrow(/not permitted in a deployed environment/);
+    },
+  );
+
+  it('allows the bypass on a developer machine and in CI', async () => {
+    const validate = await load();
+    expect(() =>
+      validate(
+        undefined,
+        undefined,
+        'bypass-local-only',
+        'development',
+        undefined,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validate(undefined, undefined, 'bypass-local-only', 'test', undefined),
+    ).not.toThrow();
+  });
+
+  it('requires the master key in production', async () => {
+    // Without it every admin mutation fails closed at runtime. Correct, but
+    // deploy time is a much better place to find out.
+    const validate = await load();
+    expect(() =>
+      validate(undefined, undefined, 'required', 'production', undefined),
+    ).toThrow(/APP_SECURITY_MASTER_KEY is required in production/);
+  });
+
+  it('does not require the master key outside a deployed environment', async () => {
+    const validate = await load();
+    expect(() =>
+      validate(undefined, undefined, 'required', 'development', undefined),
+    ).not.toThrow();
+  });
+
+  it('rejects a short master key in production', async () => {
+    const validate = await load();
+    expect(() =>
+      validate('short', undefined, 'required', 'production', undefined),
+    ).toThrow(/at least 32 characters/);
+    expect(() =>
+      validate(strong, 'short', 'required', 'production', undefined),
+    ).toThrow(/APP_SECURITY_MASTER_KEY_PREVIOUS must be at least/);
+  });
+
+  it('rejects a rotation where both slots hold the same value', async () => {
+    const validate = await load();
+    expect(() =>
+      validate(strong, strong, 'required', 'production', undefined),
+    ).toThrow(/must differ from APP_SECURITY_MASTER_KEY/);
+  });
+
+  it('accepts a well-formed production configuration', async () => {
+    const validate = await load();
+    expect(() =>
+      validate(strong, undefined, 'required', 'production', 'production'),
+    ).not.toThrow();
+    expect(() =>
+      validate(strong, strongOther, undefined, 'production', 'production'),
+    ).not.toThrow();
+  });
+});
+
+describe('isDeployedEnvironmentValues (SEC-48)', () => {
+  const load = async () => (await import('./env')).isDeployedEnvironmentValues;
+
+  it.each([
+    ['production build', 'production', undefined, true],
+    ['vercel production', 'test', 'production', true],
+    ['vercel preview', 'test', 'preview', true],
+    ['vercel dev', 'development', 'development', false],
+    ['local dev', 'development', undefined, false],
+    ['CI', 'test', undefined, false],
+  ])('%s', async (_label, nodeEnv, vercelEnv, expected) => {
+    const isDeployed = await load();
+    expect(isDeployed(nodeEnv, vercelEnv)).toBe(expected);
+  });
+});

@@ -36,26 +36,26 @@ streszczenie** — wszystko potrzebne jest tutaj albo pod wskazanymi ścieżkami
 
 To jest **kontynuacja**, nie nowy projekt.
 
-| Co                    | Wartość                                                                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Faza 1                | PR #74, **zmergowany**, gałąź `claude/security-audit-multi-tenant-idor-e1y3yr`                                                                                                          |
-| Faza 2                | **NOWA gałąź, NOWY PR** — nie doklejaj do #74. Bieżąca: gałąź `claude/password-policy-audit-miz994`, **PR #75, otwarty, wszystkie checki zielone**, czeka na merge przez użytkownika    |
-| Zamknięte             | 17 case'ów łącznie. Ostatni wzorzec w katalogu: **SEC-47** (numery SEC-XX tej serii nie są ciągłe — część case'ów rozszerzała istniejące wzorce)                                        |
-| **Następny case**     | **Case 18**, wzorzec **SEC-48**                                                                                                                                                         |
-| Numeracja użytkownika | liczy findingi po swojemu i **jego numery nie pokrywają się z moimi**; jego ostatni to `16.` = Case 17 = SEC-47. Nie wyprowadzaj wzoru — weź **ostatni `## SEC-` z katalogu i dodaj 1** |
-| Zostało               | użytkownik mówi, że jest **jeszcze drugie tyle znalezisk** (stan z początku fazy 2)                                                                                                     |
-| Backlog               | `PE-01 … PE-25`, **żaden nietriażowany** poza `PE-24` (zaakceptowany, zaplanowany osobno)                                                                                               |
+| Co                    | Wartość                                                                                                                                                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Faza 1                | PR #74, **zmergowany**, gałąź `claude/security-audit-multi-tenant-idor-e1y3yr`                                                                                                                                                                                                                                    |
+| Faza 2                | **NOWA gałąź, NOWY PR** — nie doklejaj do #74. Bieżąca: gałąź `claude/password-policy-audit-miz994`, **PR #75, otwarty**. Case 18 (SEC-48) doszedł do tego samego PR-a **na wyraźne polecenie użytkownika** ("robimy na obecnym PR i jego branchu") — to odstępstwo od reguły "case = nowy PR", nie zmiana reguły |
+| Zamknięte             | 18 case'ów łącznie. Ostatni wzorzec w katalogu: **SEC-48** (numery SEC-XX tej serii nie są ciągłe — część case'ów rozszerzała istniejące wzorce)                                                                                                                                                                  |
+| **Następny case**     | **Case 19**, wzorzec **SEC-49**                                                                                                                                                                                                                                                                                   |
+| Numeracja użytkownika | liczy findingi po swojemu i **jego numery nie pokrywają się z moimi**; jego ostatni to `17.` = Case 18 = SEC-48. Nie wyprowadzaj wzoru — weź **ostatni `## SEC-` z katalogu i dodaj 1**                                                                                                                           |
+| Zostało               | użytkownik mówi, że jest **jeszcze drugie tyle znalezisk** (stan z początku fazy 2)                                                                                                                                                                                                                               |
+| Backlog               | `PE-01 … PE-29`, **żaden nietriażowany** poza `PE-24` (zaakceptowany, zaplanowany osobno)                                                                                                                                                                                                                         |
 
 Gdzie leży dowód dla każdego zamkniętego case'a:
 
-- `docs/ai/general/SECURITY_CODING_PATTERNS.md` — SEC-01 … SEC-47, każdy z
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md` — SEC-01 … SEC-48, każdy z
   ryzykiem, regułą, egzekwowaniem i powiązaniami. **To jest źródło prawdy o
   tym, czego już nie wolno powtórzyć.**
 - `.copilot/tasks/2026-08-2*/plan.md` — przyczyna, decyzje użytkownika,
   rozwiązanie i falsyfikacja testów, per case.
 - `docs/features/` — dokumentacja docelowa feature'ów (12, 13, 14, 20, 32, 33,
-  34, 35, ENV-requirements).
-- `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` — PE-01 … PE-25.
+  34, 35, 37, ENV-requirements).
+- `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` — PE-01 … PE-29.
 
 ## Jak pracujemy (standing instructions — nie negocjowalne)
 
@@ -85,7 +85,7 @@ Gdzie leży dowód dla każdego zamkniętego case'a:
 ## POSSIBLE_ENHANCEMENTS.md — plik żyje, trzeba go dalej updatować
 
 `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` jest w repo i **jest aktywnie
-utrzymywany**. Stan: `PE-01` … `PE-25`. `PE-24` jest zaakceptowany co do
+utrzymywany**. Stan: `PE-01` … `PE-29`. `PE-24` jest zaakceptowany co do
 zasady (zaplanowany po fazie 1, osobny mały PR). Reszta czeka na przegląd
 użytkownika.
 
@@ -102,17 +102,57 @@ Reguła autorytatywna: `AGENTS.md`, sekcja "Possible Enhancements Backlog —
 Check Every Task". Pointer dla Claude Code jest w `CLAUDE.md` (bo `AGENTS.md`
 nie ładuje się automatycznie).
 
-Ostatni wpis: **PE-25** — breached/common-password blocklist check (HIBP
-k-anonymity albo lokalny korpus), odłożony przy SEC-47 jako nowa granica
-zaufania na ruch wychodzący / decyzja vendorowa. Starsze wpisy (PE-01…PE-24):
-pełne rationale w samym pliku, nie duplikowane tutaj.
+Ostatnie wpisy: **PE-26** (WebAuthn/passkeys jako drugi czynnik), **PE-27**
+(per-operation poziomy step-upu), **PE-28** (step-up dla Server Actions —
+trigger: pierwsza adminowa server action), **PE-29** (re-encrypt seedów TOTP
+przy rotacji klucza — `needsReEncryption()` istnieje, nikt go nie woła, więc
+stary klucz nigdy się nie wycofa) — wszystkie z SEC-48. Wcześniej **PE-25**
+(breached-password blocklist, z SEC-47). Starsze wpisy: pełne rationale w
+samym pliku, nie duplikowane tutaj.
 
 ## Stan
 
-17 case'ów zamkniętych łącznie. Poniżej **tylko ostatnie trzy** w pełnym
+18 case'ów zamkniętych łącznie. Poniżej **tylko ostatnie trzy** w pełnym
 opisie (reguła przycinania — patrz "Model sesji" na górze); starsze mają
 kompletny wzorzec w `SECURITY_CODING_PATTERNS.md` i własny `plan.md`.
 
+- **SEC-48** (Case 18, faza 2, PR #75) — MFA + step-up dla mutacji admina.
+  Trzy osobne wymagania, każde egzekwowane gdzie indziej, bo każde odpowiada
+  na inne pytanie: **MFA przy logowaniu** (`authorize()`, dla kont z
+  enrollmentem — czy ta sesja w ogóle ma powstać), **MFA enrollment dla
+  admina** (`AdminLayoutGuard` — czy ta osoba może mieć władzę adminową),
+  **świeży proof step-upu na każdą mutację** (`withAdminStepUp` — czy człowiek
+  nadal tu jest). Step-up to granica _authentication assurance_, nie
+  authorization: platform admin i tenant admin przechodzą ten sam challenge.
+  Deny-by-default na **wszystkich 18** mutacjach `/api/admin/**`, statyczny
+  guard (`with-admin-step-up.guard.test.ts`) wywala suite przy niezawiniętym
+  handlerze, **lista wyjątków pusta i test tego pilnuje**. Proof: stateless
+  HMAC `v1.<keyId>.<payload>.<sig>`, związany z **wewnętrznym** userId i
+  provider-neutralnym `logicalSessionId` (Clerk `sessionId`; AuthJS nowy claim
+  `sid` bity raz przy logowaniu — `iat` **nie nadaje się**, NextAuth go
+  odświeża przy rotacji tokenu), TTL **15 min na sztywno w kodzie** (decyzja
+  użytkownika: konfigurowalny TTL to kolejna gałka do złego ustawienia).
+  Klucz: `APP_SECURITY_MASTER_KEY` **wyłącznie jako wejście HKDF**, osobne
+  subklucze per cel (`step-up-proof-signing/v1`, `authjs-totp-encryption/v1`),
+  świadomie **nie** `NEXTAUTH_SECRET`/`CLERK_SECRET_KEY` (mechanizm obejmuje
+  oba providery). Seed TOTP **szyfrowany** AES-256-GCM z AAD związanym z
+  wierszem (dump bazy nie klonuje authenticatora; ciphertext przeklejony do
+  innego konta nie odszyfruje się). Kody odzyskiwania: `<publiczne id>-<sekret>`,
+  Argon2id (NIST: look-up secret < 112 bitów wymaga password hashing scheme),
+  id daje **jedno** wywołanie KDF zamiast dziesięciu, zużycie atomowe z
+  `used_at IS NULL` w tym samym UPDATE. Replay TOTP: marker czasu w predykacie
+  compare-and-set (opcja `afterTimeStep` z otplib **świadomie nieużywana** —
+  nie rozstrzyga wyścigu i zlewa replay z literówką, a audyt potrzebuje tej
+  różnicy). Bypass `ADMIN_STEP_UP_MODE=bypass-local-only` odrzucany dwa razy
+  (schema env przy starcie + runtime) na czymkolwiek zdeployowanym; brak
+  klucza to `unavailable`, **nie** przepustka. Enrollment nie wymaga step-upu
+  (nie ma jeszcze czym), _wyłączenie_ MFA i regeneracja kodów — wymagają.
+  Vendorowo: `otplib` v13 (użytkownik sprostował dwa moje fakty — `@oslojs/otp`
+  jest **deprecated** na npm, a otplib **nie** jest w maintenance mode:
+  13.5.0 z 2026-08-21; oba zweryfikowane w sesji), parametry RFC 6238 przypięte
+  jawnie w kodzie, biblioteka zamknięta w adapterze AuthJS. Clerk: stabilne
+  `users.verifyTOTP`/`twoFactorEnabled`; jego własne `has({reverification})` i
+  claim `fva` **odrzucone** jako public beta / experimental. PE-26…PE-29.
 - **SEC-47** (Case 17, faza 2, PR #75) — password policy: Argon2id domyślny
   dla nowych/zmienianych credentials (`@node-rs/argon2`, parametry jawne w
   kodzie: memoryCost=19456, timeCost=2, parallelism=1, outputLen=32), bcrypt
@@ -142,19 +182,12 @@ kompletny wzorzec w `SECURITY_CODING_PATTERNS.md` i własny `plan.md`.
   samą wartość co klient. Odrzucenia logowane z `reason` + `receivedLength`
   (nigdy wartość) i **samplowane** (1., potem co setne). PE-23 = kolumna
   `correlation_source` w audycie.
-- **SEC-45** — error boundary Edge pipeline'u przeniesiony **do środka**
-  `withSecurity` (najgłębsza ramka trzymająca `RouteContext`). Wcześniej `catch`
-  w proxy budował 500 poza `withHeaders()` → jedyna odpowiedź w aplikacji bez
-  CSP/nosniff/correlation ID, logowana `console.error`. Body **zawsze
-  generyczne**, bez gałęzi `NODE_ENV`; correlation **tylko w nagłówkach**;
-  zewnętrzna siatka w proxy **nie generuje** drugiego correlation ID. PE-22 =
-  cztery ręczne `NextResponse.json()` w `with-auth.ts` (dług konwencji, nie
-  dziura — przechodzą przez finalizację).
-
-Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param,
-SEC-38 response-service, SEC-41 platform-admin, SEC-42 strict-rate-limit,
-SEC-43 client-ip. SEC-47 nie dodał nowego guardu (nie ma wzorca do złapania
-statycznie — logika jest w jednym module, nie rozproszona).
+  Guardy statyczne (chodzą po `src/`, wywalają build): SEC-23 uuid-route-param,
+  SEC-38 response-service, SEC-41 platform-admin, SEC-42 strict-rate-limit,
+  SEC-43 client-ip, **SEC-48 admin-step-up** (`with-admin-step-up.guard.test.ts`
+  — każda mutacja pod `/api/admin/**` musi być zawinięta, lista wyjątków pusta).
+  SEC-47 nie dodał nowego guardu (nie ma wzorca do złapania statycznie — logika
+  jest w jednym module, nie rozproszona).
 
 ## Pułapki, które już mnie kosztowały
 
@@ -170,14 +203,27 @@ statycznie — logika jest w jednym module, nie rozproszona).
 
 ## Otwarte
 
-- **PR #75 (faza 2, case 17/SEC-47): otwarty, wszystkie checki zielone
-  (`mergeable_state: clean`), 3 wątki review od Codexa naprawione i
-  rozwiązane, czeka na merge przez użytkownika.** Subskrypcja PR aktywna w
-  ostatniej sesji — nowa sesja powinna sama zasubskrybować ponownie
-  (`subscribe_pr_activity`) jeśli ma dalej babysitować ten PR.
+- **PR #75 (faza 2): otwarty, zawiera teraz DWA case'y** — 17 (SEC-47,
+  password policy) i 18 (SEC-48, MFA + step-up). Case 18 trafił tutaj na
+  wyraźne polecenie użytkownika, wbrew domyślnej regule "case = nowy PR".
+- **Do zrobienia PRZED merge, po stronie użytkownika:**
+  1. **Vercel — nowa zmienna wymagana**: `APP_SECURITY_MASTER_KEY`
+     (`openssl rand -base64 48`), **osobno dla Production i Preview**, nigdy
+     "All Environments". Bez niej walidacja env **wywali build** (SEC-48).
+     `APP_SECURITY_MASTER_KEY_PREVIOUS` i `ADMIN_STEP_UP_MODE` zostawić
+     nieustawione.
+  2. **Uruchomić E2E step-upu lokalnie**: `pnpm e2e:admin:step-up`. Ta sesja
+     nie mogła — `scripts/check-e2e-auth-env.mjs` wymaga fixture'ów Clerka
+     (`.env.e2e.local`, gitignored) przy **każdym** scenariuszu, niezależnie
+     od `AUTH_PROVIDER`, a tryb container potrzebuje demona Dockera/Podmana,
+     którego w kontenerze tej sesji nie ma.
+  3. Reszta admin-owych E2E jedzie dalej na kontrolowanym bypassie
+     (`ADMIN_STEP_UP_MODE=bypass-local-only` ustawia `run-scenario.mjs`) — ich
+     tematem nie jest step-up.
+- **Migracja `0019_rare_outlaw_kid`** (tabele `user_mfa_totp`,
+  `user_mfa_recovery_codes`) jest w `readMigrationSql()` w tym samym commicie
+  — pułapka z pięciu case'ów fazy 1 nie powtórzona.
 - `vercel.json` (`git.deploymentEnabled: false`) dodany na gałęzi PR #75 —
   po zmergowaniu do `main` obowiązuje globalnie, nowe gałęzie dziedziczą.
 - Czekamy na kolejne ponumerowane findingi — użytkownik podaje je pojedynczo.
-  Stan na początek fazy 2: **jeszcze mniej więcej tyle samo, co dotąd**
-  (aktualna liczba pozostałych nieznana tej sesji).
-- Triage `PE-01 … PE-25` należy do użytkownika i nie ma terminu.
+- Triage `PE-01 … PE-29` należy do użytkownika i nie ma terminu.

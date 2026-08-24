@@ -348,6 +348,19 @@ function applySharedRuntimeEnv(env, scenario, variant) {
   env.E2E_ENABLED = 'true';
   env.NEXT_PUBLIC_E2E_ENABLED = 'true';
   env.API_RATE_LIMIT_REQUESTS = process.env.API_RATE_LIMIT_REQUESTS ?? '1000';
+  // SEC-48. Admin step-up is required everywhere by default, including here;
+  // scenario runs whose subject is something else opt into the controlled
+  // local bypass, and the dedicated step-up suite sets
+  // ADMIN_STEP_UP_MODE=required to exercise the real challenge. The bypass is
+  // refused at startup and again at runtime on any deployed environment, so
+  // it cannot travel beyond a developer machine or CI.
+  env.ADMIN_STEP_UP_MODE =
+    process.env.ADMIN_STEP_UP_MODE ?? 'bypass-local-only';
+  // Fixture key material, deliberately shaped so it cannot be mistaken for a
+  // real secret. Needed whenever a scenario runs with step-up required.
+  env.APP_SECURITY_MASTER_KEY =
+    process.env.APP_SECURITY_MASTER_KEY ??
+    'e2e-fixture-app-security-master-key-not-a-secret';
   // Scenario env is process-startup state for Next.js. Reusing an already
   // running dev server across matrix scenarios can execute a personal/org run
   // against the previous scenario's TENANCY_MODE or tenant-source settings.

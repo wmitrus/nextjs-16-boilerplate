@@ -18,6 +18,7 @@ import { buildBootstrapRedirectUrl } from '@/app/auth/post-auth-redirect';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
+import { resolveStepUpEnforcement } from '@/security/core/step-up/policy';
 
 const logger = resolveServerLogger().child({
   type: 'API',
@@ -45,6 +46,19 @@ async function requireMfaEnrollment(
   userId: string,
   correlationId: string | undefined,
 ): Promise<void> {
+  // The same controlled bypass the mutation guard honours, and for the same
+  // reason: an admin E2E run whose subject is something other than MFA must
+  // be able to reach the panel. It is rejected at startup and again at
+  // runtime on any deployed environment, so it cannot travel to production
+  // (see `resolveStepUpEnforcement`).
+  if (resolveStepUpEnforcement().mode === 'bypassed') {
+    logger.warn(
+      { event: 'admin_guard:mfa_requirement_bypassed', correlationId, userId },
+      'Admin MFA enrollment requirement bypassed by local-only configuration',
+    );
+    return;
+  }
+
   const rawIdentity = await container
     .resolve<RequestIdentitySource>(AUTH.IDENTITY_SOURCE)
     .get();

@@ -131,7 +131,7 @@ actually completed or confirmed not applicable).
 ## Possible Enhancements Backlog — Living File, Check Every Task
 
 `docs/ai/general/POSSIBLE_ENHANCEMENTS.md` **exists, is tracked, and is
-actively maintained** — currently `PE-01` … `PE-25`. Most are untriaged;
+actively maintained** — currently `PE-01` … `PE-29`. Most are untriaged;
 `PE-24` is accepted (deferred to its own small PR), the rest await the
 user's review. It is the single holding pen for valuable-but-deferred
 ideas.

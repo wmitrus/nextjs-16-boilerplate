@@ -77,24 +77,94 @@ Four layers, provider-neutral at the top, provider-specific only at the edge.
 
 ## Phases (live checklist)
 
-- [ ] P1 — app key material: env, HKDF subkeys, AES-GCM envelope, proof sign/verify
-- [ ] P2 — DB: `user_mfa_totp`, `user_mfa_recovery_codes`, migration + journal + `readMigrationSql` case
-- [ ] P3 — AuthJS MFA service: otplib policy, recovery codes, atomic consume
-- [ ] P4 — Clerk MFA adapter + DI wiring + logical session reference on both identity sources
-- [ ] P5 — step-up guard + static `/api/admin/**` guard + all admin mutation routes wired
-- [ ] P6 — AuthJS sign-in MFA (`authorize()` + sign-in client)
-- [ ] P7 — admin gate requires enrollment (layout + API)
-- [ ] P8 — UI: enrollment page, step-up dialog, admin client wiring
-- [ ] P9 — E2E, docs (SEC-48, `docs/features`, handoff, PE), full gates
+- [x] P1 — app key material: env, HKDF subkeys, AES-GCM envelope, proof sign/verify
+- [x] P2 — DB: `user_mfa_totp`, `user_mfa_recovery_codes`, migration + journal + `readMigrationSql` case
+- [x] P3 — AuthJS MFA service: otplib policy, recovery codes, atomic consume
+- [x] P4 — Clerk MFA adapter + DI wiring + logical session reference on both identity sources
+- [x] P5 — step-up guard + static `/api/admin/**` guard + all 18 admin mutations wired
+- [x] P6 — AuthJS sign-in MFA (`authorize()` + sign-in client)
+- [x] P7 — admin gate requires enrollment (layout + API)
+- [x] P8 — UI: enrollment page, step-up dialog, 12 admin clients wired
+- [x] P9 — docs (SEC-48, `docs/features/37`, ENV-requirements, handoff, PE-26…29), gates.
+      E2E spec written (`e2e/admin-step-up.spec.ts`) but **not executed in this
+      session** — see "Session limitations" below.
+
+## Solution — what actually shipped
+
+| Layer          | Files                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Key material   | `src/core/security/app-keys.ts` (HKDF subkeys, key ids, rotation), `envelope-encryption.ts` (AES-256-GCM, record-bound AAD), `base64url.ts` |
+| Policy + proof | `src/security/core/step-up/{policy,proof,cookie}.ts`                                                                                        |
+| Contract       | `src/core/contracts/mfa.ts` (`MfaService`, `MfaEnrollmentService`), `identity.ts` (`logicalSessionId`)                                      |
+| AuthJS factor  | `src/modules/auth/infrastructure/mfa/{totp,recovery-codes,DrizzleAuthJsMfaService,UnsupportedMfaService}.ts`                                |
+| Clerk factor   | `src/modules/auth/infrastructure/clerk/ClerkMfaService.ts`                                                                                  |
+| Enforcement    | `src/security/api/with-admin-step-up.ts` + `.guard.test.ts`, all 18 admin mutations                                                         |
+| Endpoints      | `/api/auth/step-up` (GET/POST), `/api/auth/mfa/totp` (POST/PUT/DELETE), `/api/auth/mfa/recovery-codes` (POST)                               |
+| Sign-in        | `authorize()` second factor + `sign-in-client.tsx` two-step form                                                                            |
+| Admin gate     | `AdminLayoutGuard.requireMfaEnrollment`                                                                                                     |
+| UI             | `/account/security/mfa` (page + client), `StepUpProvider` + dialog, 12 admin clients mutating through `stepUpFetch`                         |
+| DB             | migration `0019_rare_outlaw_kid` + its `readMigrationSql()` case in the same commit                                                         |
 
 ## Falsification
 
-(filled in per phase — every new assertion must be confirmed to fail with the
-guarded code deliberately broken, then restored)
+Every new assertion was confirmed to fail when the code it guards was
+deliberately broken, then restored:
+
+- **HKDF domain separation** — making both purposes derive under one `info`
+  label makes the two subkeys sign identically; the test fails.
+- **`getStatus` counting a pending enrollment** — returning `Boolean(row)`
+  instead of `Boolean(row.confirmedAt)` breaks four DB tests.
+- **Recovery-code single use** — dropping `used_at IS NULL` from the
+  candidate lookup breaks the reuse test.
+- **TOTP replay** — removing the freshness predicate from the compare-and-set
+  breaks two DB tests. (Notably, an _earlier_ draft also had a redundant
+  in-code comparison; removing that changed nothing, which is how it was
+  found to be dead weight and deleted — the CAS is the single enforcement
+  point.)
+- **Static guard** — un-wrapping one admin mutation fails the guard with the
+  route named.
+- **Step-up guard** — skipping the enrollment check, falling back to the user
+  id when the provider exposes no session id, and treating `unavailable` as
+  `required` each break exactly the test written for them.
+- **Sign-in MFA** — removing the missing-code branch (2 failures), not
+  counting a wrong code as a failed attempt (1), skipping the MFA gate
+  entirely (5).
+- **Client** — rendering the code field unconditionally, sending an empty
+  code, prompting on any 403, and replaying after cancel each break their
+  test.
+
+Two bugs were found _by_ falsification rather than review: a flaky
+tamper-detection test (flipping the trailing base64 character can decode to
+identical bytes — it now flips a leading one), and a `mockLimit` "once" queue
+leaking between tests after a schema-rejection path consumed none of it.
 
 ## Validation
 
-(filled in at close)
+Run in this session, all green:
+
+| Gate                    | Result                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm typecheck`        | clean                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `pnpm lint --fix`       | 0 errors, 12 warnings — the pre-existing baseline, none in new code                                                                                                                                                                                                                                                                                                                                       |
+| `pnpm test`             | 256 files / 2118 tests; coverage 82% statements, 78.7% branches (threshold 70)                                                                                                                                                                                                                                                                                                                            |
+| `pnpm test:db`          | 23 files / 193 tests (pglite), incl. the new MFA adapter suite                                                                                                                                                                                                                                                                                                                                            |
+| `pnpm skott:check:only` | no circular dependencies                                                                                                                                                                                                                                                                                                                                                                                  |
+| `pnpm depcheck`         | clean (`otplib`, `qr` both used)                                                                                                                                                                                                                                                                                                                                                                          |
+| `pnpm env:check`        | `.env.example` in sync                                                                                                                                                                                                                                                                                                                                                                                    |
+| `pnpm madge`            | no circular dependency                                                                                                                                                                                                                                                                                                                                                                                    |
+| `pnpm build`            | passes with `AUTH_PROVIDER=authjs`; `/account/security/mfa`, `/api/auth/step-up` and `/api/auth/mfa/**` all compile. Under the default `AUTH_PROVIDER=clerk` the build fails in this sandbox at prerender with "`@clerk/clerk-react`: The publishableKey passed to Clerk is invalid" — this container only has the `.env.example` placeholder key, so it is an environment fact, unrelated to this change |
+
+## Session limitations
+
+- **E2E not executed.** `e2e/admin-step-up.spec.ts` and the
+  `pnpm e2e:admin:step-up` script are written, but this session cannot run
+  them: `scripts/check-e2e-auth-env.mjs` requires Clerk fixture credentials
+  (`E2E_CLERK_*`, kept in the gitignored `.env.e2e.local`) for _every_
+  scenario run regardless of `AUTH_PROVIDER`, and container mode additionally
+  needs a Docker/Podman daemon, which this container does not have. Both are
+  environment facts, not repository defects. **The user must run
+  `pnpm e2e:admin:step-up` locally before merge.**
+- **Leantime not reachable** — see the note at the end of this file.
 
 ## Session limitation — Leantime
 

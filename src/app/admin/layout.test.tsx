@@ -8,6 +8,9 @@ const redirectMock = vi.hoisted(() =>
 const resolveNodeProvisioningAccessMock = vi.hoisted(() => vi.fn());
 const connectionMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const isEnvAdminMock = vi.hoisted(() => vi.fn(() => false));
+const resolveStepUpEnforcementMock = vi.hoisted(() =>
+  vi.fn<() => { mode: string; reason?: string }>(() => ({ mode: 'required' })),
+);
 const recordAdminAuditEventMock = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
 );
@@ -64,6 +67,10 @@ vi.mock('@/security/core/platform-admin', () => ({
   isEnvBasedPlatformAdmin: isEnvAdminMock,
 }));
 
+vi.mock('@/security/core/step-up/policy', () => ({
+  resolveStepUpEnforcement: resolveStepUpEnforcementMock,
+}));
+
 import { AUTH, AUTHORIZATION } from '@/core/contracts';
 
 import { AdminLayoutGuard } from './layout';
@@ -76,6 +83,7 @@ describe('AdminLayoutGuard', () => {
     resolveNodeProvisioningAccessMock.mockReset();
     isEnvAdminMock.mockReset();
     isEnvAdminMock.mockReturnValue(false);
+    resolveStepUpEnforcementMock.mockReturnValue({ mode: 'required' });
     recordAdminAuditEventMock.mockClear();
 
     containerMocks.identity.get.mockClear();
@@ -154,6 +162,26 @@ describe('AdminLayoutGuard', () => {
 
     it('lets an enrolled admin through', async () => {
       isEnvAdminMock.mockReturnValue(true);
+
+      await expect(
+        AdminLayoutGuard({ children: <div>admin</div> }),
+      ).resolves.toBeDefined();
+      expect(redirectMock).not.toHaveBeenCalled();
+    });
+
+    it('honours the local-only bypass so admin E2E can reach the panel', async () => {
+      // The bypass is refused at startup and again at runtime on anything
+      // deployed, so this cannot be how production behaves.
+      resolveStepUpEnforcementMock.mockReturnValue({
+        mode: 'bypassed',
+        reason: 'local-only-bypass',
+      });
+      isEnvAdminMock.mockReturnValue(true);
+      containerMocks.mfa.getStatus.mockResolvedValue({
+        enrolled: false,
+        enrollmentSurface: 'application',
+        enrollmentUrl: '/account/security/mfa',
+      });
 
       await expect(
         AdminLayoutGuard({ children: <div>admin</div> }),

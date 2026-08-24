@@ -54,14 +54,14 @@ bootstrap from an existing database whose `DEFAULT_TENANT_ID` is misconfigured.
 
 These are consumed ONLY by `scripts/bootstrap-admin.ts`. They are NOT loaded into the Next.js application runtime.
 
-| Variable                   | Required     | Description                                             |
-| -------------------------- | ------------ | ------------------------------------------------------- |
-| `BOOTSTRAP_ADMIN_EMAIL`    | ✅           | Email address for the admin account                     |
+| Variable                   | Required     | Description                                               |
+| -------------------------- | ------------ | --------------------------------------------------------- |
+| `BOOTSTRAP_ADMIN_EMAIL`    | ✅           | Email address for the admin account                       |
 | `BOOTSTRAP_ADMIN_PASSWORD` | ✅           | Password (15–128 characters — use a strong random secret) |
-| `DEFAULT_TENANT_ID`        | ✅           | UUID for the single tenant (must match the app config)  |
-| `DATABASE_URL`             | For postgres | Postgres connection string                              |
-| `DB_DRIVER`                | No           | `postgres` (default) or `pglite`                        |
-| `BOOTSTRAP_ORG_NAME`       | No           | Display name for the org (default: `Main Organization`) |
+| `DEFAULT_TENANT_ID`        | ✅           | UUID for the single tenant (must match the app config)    |
+| `DATABASE_URL`             | For postgres | Postgres connection string                                |
+| `DB_DRIVER`                | No           | `postgres` (default) or `pglite`                          |
+| `BOOTSTRAP_ORG_NAME`       | No           | Display name for the org (default: `Main Organization`)   |
 
 ---
 
@@ -278,6 +278,25 @@ membershipsTable          { userId, orgId, ownerRoleId }
 All inserts use `ON CONFLICT DO NOTHING` — safe to run multiple times.
 
 ---
+
+## MFA Is Required For Admin Access (SEC-48)
+
+Bootstrapping an admin account via `ADMIN_USER_EMAILS` grants _authority_, not
+_assurance_. Since SEC-48 the admin gate additionally requires that the
+account have a second factor enrolled: an administrator without one is
+redirected to `/account/security/mfa` and cannot reach the panel, and every
+admin API mutation independently refuses with `MFA_ENROLLMENT_REQUIRED`.
+
+This applies to the env-bootstrapped admin exactly as it does to an
+ABAC-granted one — the emergency-access path is the account most worth
+protecting and the one most likely never to have enrolled.
+
+The order is deliberate: the admin grant is established first, then
+enrollment is checked. Enrollment is a requirement placed on administrators,
+so the authority has to be known before it can be applied — and it is never
+asked at sign-in, where the credentials provider must not resolve roles.
+
+Details: `docs/features/37 - MFA & Step-Up Authentication.md`.
 
 ## Security Notes
 

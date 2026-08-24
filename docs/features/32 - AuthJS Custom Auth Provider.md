@@ -260,6 +260,33 @@ src/shared/components/captcha/
 
 ---
 
+## Second Factor at Sign-In (SEC-48)
+
+An AuthJS account that has a TOTP factor enrolled cannot get a session with a
+password alone. `authorize()` verifies the password first, then — only for
+enrolled accounts — asks for a 6-digit code or a recovery code. The sign-in
+form reveals the code field only after the server has asked for it, so nobody
+can learn which accounts have MFA before holding a valid password.
+
+`authorize()` asks exactly one question about the account: _does it have a
+second factor?_ It never asks whether the account is an administrator.
+Resolving roles or ABAC inside the credentials provider would put
+authorization knowledge in the identity layer and invert the order this
+codebase establishes identity in — the admin gate remains where "is this an
+administrator" is answered, and where MFA **enrollment** is required.
+
+Failure accounting, which is easy to get wrong:
+
+| Outcome                                                                          | Counts as a failed attempt?                                                                                     |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Wrong password                                                                   | yes (as before)                                                                                                 |
+| Correct password, no code supplied yet (`MfaRequired`)                           | **no** — the password was right; counting it would walk the owner toward their own lockout on every MFA sign-in |
+| Wrong code (`MfaInvalidCode`)                                                    | yes                                                                                                             |
+| Factor unavailable — missing key material, undecryptable seed (`MfaUnavailable`) | **no** — an operator problem, and no session either way                                                         |
+
+Enrollment, recovery codes and step-up for admin mutations are documented in
+`docs/features/37 - MFA & Step-Up Authentication.md`.
+
 ## Security Notes
 
 - Password hashing: Argon2id for every new/changed credential; legacy

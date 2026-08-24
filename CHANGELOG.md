@@ -1,3 +1,23 @@
+# [2.1.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.0.0...v2.1.0) (2026-08-24)
+
+
+### Bug Fixes
+
+* **auth:** address Codex review findings on SEC-47 (PR [#75](https://github.com/wmitrus/nextjs-16-boilerplate/issues/75)) ([54aed82](https://github.com/wmitrus/nextjs-16-boilerplate/commit/54aed823055b30c7b4b99f51617a9c295f704cad))
+* **e2e:** give scenario runs the env a production build validates ([55ebcd3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/55ebcd3d58aa637de64e15a23219e4062f86ea76))
+* **e2e:** stop demanding Clerk fixtures for runs on another provider ([4a7d9b4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4a7d9b4b44071138b81547484a58446bff82d6c3))
+
+
+### Features
+
+* **auth:** application-owned MFA for AuthJS credentials (SEC-48, phase 2-3) ([07526ac](https://github.com/wmitrus/nextjs-16-boilerplate/commit/07526acb155e6308325db50467495ba7b12a2c9a))
+* **auth:** Argon2id password hashing with bcrypt legacy compat (SEC-47) ([5ae775e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5ae775efeebf545999b331cb2bdb5b5b29c680c5))
+* **auth:** enrollment surface and admin MFA requirement (SEC-48, phase 7-8) ([2ae0370](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2ae03705b951e4bd524bbfbf69cbfdc4467ae456))
+* **auth:** provider-neutral session reference and Clerk MFA adapter (SEC-48, phase 4) ([f15f750](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f15f750c3d73787ee98dba022385ace344971198))
+* **auth:** require the second factor at AuthJS sign-in (SEC-48, phase 6) ([e73f724](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e73f724a4830066cec159252855ae6f259c08a5b))
+* **security:** application key material for step-up and MFA (SEC-48, phase 1) ([cf604f7](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cf604f7f0b1566ead6f829adb357c371648a273d))
+* **security:** deny-by-default step-up for every admin mutation (SEC-48, phase 5) ([b475e06](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b475e069413a025bfbd751016f1572e59758617b))
+
 # [2.0.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v1.36.1...v2.0.0) (2026-08-23)
 
 

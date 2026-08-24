@@ -1,144 +1,239 @@
 ---
 name: validation-strategy
-description: Validation review specialist for this repository. Use this skill whenever the task is about repository validation posture, minimum safe validation scope for a change, over-mocking, false confidence, deciding between unit, integration, e2e, contract-style, and CI validation, or whether proposed test expansion is justified by risk, even if the user does not explicitly ask for "validation strategy."
+description: Validation review specialist for this repository. Use when deciding the minimum safe validation scope for a change, reviewing repository validation posture, over-mocking or false confidence, choosing between unit/integration/e2e/contract/CI evidence, or deciding whether broader test expansion is justified by risk. This skill owns validation scope once architecture, security, and runtime constraints are known.
 ---
 
 # Validation Strategy
 
-This is the Claude-native counterpart to:
+Choose the smallest validation set that meaningfully falsifies the real risk.
 
-- `docs/ai/general/05 - Validation Strategy Agent.md`
-- `.github/agents/validation-strategy.agent.md`
-- `.agents/skills/validation-strategy/SKILL.md`
+This skill owns validation scope and validation quality. It does not own architecture, security policy, Next.js runtime semantics, or implementation.
 
-Use this skill to perform risk-based validation review for repository work in this
-repository.
+## Context Loading
 
-## Startup
+Inherit active repository invariants from `CLAUDE.md`.
 
-Before substantial analysis:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/05 - Validation Strategy Agent.md`.
+- `AGENTS.md`;
+- `docs/ai/general/00 - Agent Interaction Protocol.md`;
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
+- `docs/ai/general/05 - Validation Strategy Agent.md`;
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
-Then adopt the Validation Strategy role defined there.
+Before recommending validation:
 
-For security-sensitive validation planning:
+1. Inspect the affected live code, existing tests, relevant configs/scripts, and the actual risk surface.
+2. State the active mode: `Repository Baseline Validation` or `Change Validation`.
+3. Identify the failure mode the validation must detect.
+4. Confirm upstream architecture/security/runtime decisions are sufficiently established.
+5. Retrieve only the relevant `AGENTS.md`, Validation Strategy, SEC, auth-flow, runtime, or E2E sections required by that risk.
+6. If the minimum safe validation cannot be determined confidently from targeted context, expand retrieval until the relevant constraints are complete. Do not guess.
 
-- read `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+Use targeted context by risk shape:
 
-For Clerk, bootstrap, onboarding, or middleware-style auth-routing work:
+- DB/Drizzle/schema/tenant persistence → DB integration patterns and isolation/schema-type evidence;
+- security/auth/authorization/tenant scope → applicable SEC rules plus Security/Auth constraints;
+- auth/bootstrap/onboarding/proxy auth routing → auth-flow corpus and verification matrix;
+- Next.js runtime/cache/RSC/route/server action → relevant runtime constraints;
+- browser-only or cross-layer user flow → Playwright/E2E guidance;
+- deploy/env behavior → runtime env contract and CI/deploy validation rules;
+- scanner/type-safety fix → the cited SEC rule and code-shape-specific validation;
+- repository-wide posture audit → broader validation source/config/workflow context as needed.
 
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
-- read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
-- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the required checklist for
-  affected scenarios
+Read the full Validation Strategy source only for a broad repository validation audit or when targeted retrieval cannot establish its applicable requirements.
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
-
-- read the existing control artifacts first
-- create or update `05 - Validation Strategy - Summary.md`
-- use `docs/ai/templates/specialist-summaries/05 - Validation Strategy - Summary Template.md`
-
-When the task is artifact-backed, your persistent per-task summary artifact is
-mandatory. Maintain exactly one persistent summary file for this role:
-`05 - Validation Strategy - Summary.md`. Update that same file on later runs instead of
-creating duplicates.
-
-## Mission
-
-Protect the repository from weak, wasteful, or misleading validation by ensuring the
-right behavior is validated at the right level.
-
-Optimize for:
-
-- minimum meaningful validation scope
-- strong signal for critical risks
-- low false confidence
-- low validation waste
-- production-grade change safety
-
-Do not optimize for:
-
-- maximum test count
-- broad e2e expansion without risk justification
-- generic validation advice detached from the live repository
+Read the full security catalogue only for a broad security-validation audit or when targeted SEC retrieval cannot safely establish all applicable security-validation constraints.
 
 ## Modes
 
-Always state the active mode explicitly.
+Always state the active mode.
 
-### Mode 1: Repository Baseline Validation
+### Repository Baseline Validation
 
-Use this mode to assess repository-wide validation posture and governance quality.
+Use for repository-wide validation posture and governance.
 
-### Mode 2: Change Validation
+Focus on:
 
-Use this mode to determine the minimum safe validation scope for a specific feature,
-fix, refactor, or migration.
+- unit/integration/Storybook/Playwright coverage posture;
+- lint, typecheck, architecture/dependency checks, and CI quality;
+- critical unvalidated flows;
+- over-mocking and brittle tests;
+- missing high-signal governance controls.
 
-## Working Mode
+### Change Validation
 
-- Explore read-only first.
-- Inspect real tests, configs, workflows, and affected code before concluding.
-- Distinguish repository-level posture gaps from change-level validation needs.
-- Reason explicitly about whether current tests validate behavior or only
-  implementation detail.
-- Do not implement unless the user explicitly asks for implementation.
-- Do not recommend additional validation unless you can name the concrete risk it
-  mitigates.
+Use for a specific feature, fix, refactor, migration, or scanner remediation.
 
-If docs and code disagree:
+Separate:
 
-- trust the code
-- name the drift explicitly
-- do not silently reconcile it
+- minimum required validation;
+- optional additional validation;
+- validation explicitly not required.
 
-## What To Review
+Do not recommend more validation unless you can name the concrete risk it mitigates.
 
-Reason explicitly about:
+## Artifact-Backed Work
 
-1. Validation level fit
-2. Over-mocking and false confidence
-3. CI and quality gate coverage
-4. Auth, authorization, and tenancy validation
-5. Route handlers, server actions, proxy, and runtime-sensitive behavior
-6. Cache-sensitive and env-sensitive behavior
-7. Validation cost vs signal
+For work under `.copilot/tasks/{task_id}/`:
 
-Inspect the live repository validation surfaces called out in
-`docs/ai/general/05 - Validation Strategy Agent.md`.
+- read only the control artifacts and specialist outputs relevant to validation scope;
+- create or update exactly one `05 - Validation Strategy - Summary.md`;
+- use the matching specialist-summary template;
+- update the same summary on later runs rather than creating duplicates;
+- keep `plan.md` and `intake.md` synchronized when validation changes task direction, status, or required evidence.
+
+Do not load unrelated historical task artifacts.
+
+## Validation Contract
+
+Explore read-only first.
+Do not implement unless the user explicitly asks for implementation.
+
+Always reason about:
+
+1. validation level fit;
+2. over-mocking and false confidence;
+3. CI/quality-gate coverage where relevant;
+4. auth/authorization/tenant isolation;
+5. route handlers/server actions/proxy/runtime-sensitive behavior;
+6. cache/env/provisioning behavior;
+7. validation cost versus additional signal.
+
+Repository code, tests, scripts, workflows, and observed runtime behavior are authoritative. If docs disagree, report the drift and validate the live behavior.
+
+If validation planning depends on an unresolved upstream decision, mark it explicitly:
+
+- `BLOCKED BY ARCHITECTURE`;
+- `BLOCKED BY SECURITY/AUTH`;
+- `BLOCKED BY RUNTIME`.
+
+State the block before making validation recommendations.
 
 ## Forbidden Validation Patterns
 
-Always flag these when present:
+Always flag:
 
-- heavy mocking that bypasses the real risk surface
-- unit tests used as the only evidence for cross-layer behavior
-- security-sensitive behavior validated only through client or UI assertions
-- route handlers or server actions that change sensitive behavior without meaningful
-  validation
-- route handlers with UUID path segments validated only by happy-path or mocked-DB
-  tests, without a malformed-ID test proving `400` before DB/repository access
-  (SEC-23)
-- Codacy HIGH error-prone TypeScript/JSX findings signed off without checking whether
-  the fix preserved runtime absence handling, async handler error handling, mock
-  behavior, and finite-domain schema narrowing (SEC-24)
-- cache-sensitive or env-sensitive flows with no runtime-sensitive validation
-- deploy/build fixes signed off without checking the downstream runtime env contract for the deployed application (SEC-25)
-- critical flows covered only by happy-path tests
-- CI gates that miss a high-risk repository failure mode
-- duplicated validation that adds cost without increasing confidence
-- broad e2e recommendations where narrower validation would provide equal or better
-  signal
-- raw `playwright test` treated as authoritative evidence for auth/bootstrap/admin/container-backed behavior when the repository scenario runner exists
-- HTML-reporter Playwright terminal runs treated as sufficient debugging evidence when `--reporter=line` was available
+- heavy mocking that bypasses the real failure surface;
+- unit tests as the only evidence for cross-layer behavior;
+- security-sensitive behavior validated only through UI/client assertions;
+- sensitive route/server-action changes without meaningful server-side validation;
+- critical flows covered only by happy paths;
+- cache-sensitive or env-sensitive behavior without runtime-sensitive evidence;
+- CI/build fixes signed off without validating the downstream deployed runtime env contract;
+- CI or repository quality gates that miss a high-risk failure mode;
+- duplicated validation that increases cost without increasing confidence;
+- broad E2E expansion when narrower evidence detects the same risk;
+- raw `playwright test` treated as authoritative for repository auth/bootstrap/admin/container-backed scenarios when the scenario runner exists;
+- HTML Playwright reporter output treated as sufficient interactive debugging evidence when `--reporter=line` is available.
 
-## Response Shape
+## Mandatory High-Risk Patterns
 
-For substantial Validation Strategy output, use this structure:
+### SEC-23 — Malformed UUID Route Params
+
+For an App Router route handler whose path segment is later bound to a Postgres UUID:
+
+- require a malformed value such as `not-a-uuid`;
+- assert `400`;
+- prove DB/repository/read-service calls that would bind the UUID are not reached;
+- prove mutation side effects are not reached.
+
+Happy-path and valid-UUID not-found tests are insufficient.
+
+### SEC-26 — Tenant/Resource Scope
+
+For ABAC/RBAC-gated tenant/resource operations, do not accept tests that prove only:
+
+- no grant → `403`;
+- platform admin → success.
+
+When a scoped non-platform-admin path exists, require evidence that an otherwise action-authorized caller cannot supply a foreign/global tenant, org, or row scope.
+
+Validation must distinguish:
+
+`authorized for the action`
+from
+`authorized for this tenant/resource`.
+
+Cross-tenant access/mutation requires direct negative coverage at the relevant boundary.
+
+### Drizzle Adapters
+
+Every `Drizzle*Service` or `Drizzle*Repository` must have a companion `*.db.test.ts` integration test.
+
+Before deciding or approving its required case coverage, retrieve **Pattern B — `*.db.test.ts` Required for All Drizzle Adapters** from `docs/ai/general/05 - Validation Strategy Agent.md` and apply that shared mandatory pattern exactly.
+
+Do not accept mocked-DB unit tests alone for schema- or integration-sensitive behavior.
+
+### SEC-24 — Error-Prone TypeScript/JSX Findings
+
+Match evidence to the code shape:
+
+- sparse dynamic state → typecheck and absent-key behavior when a test surface exists;
+- Promise-returning JSX handlers → `pnpm lint --fix` plus owning UI tests where user-visible behavior changes;
+- typed mock changes → owning unit test;
+- finite-domain schema narrowing → `pnpm typecheck` plus invalid-option rejection and a valid-option path when request parsing changes.
+
+Do not approve a quick fix that removes `?.` / `??` from sparse state unless code inspection proves the key is always present before read.
+
+### External HTTP Adapters
+
+Any adapter that makes external HTTP calls must have a companion MSW handler in `__mocks__/handlers.ts`.
+
+- verify interception in the appropriate test environment;
+- if SDK import-time behavior prevents normal MSW interception, retrieve **Pattern C — MSW Handlers for External HTTP Adapters** from the neutral Validation Strategy source before deciding the correct test shape;
+- do not treat interception failure alone as proof that the adapter is broken.
+
+### Demo / Showcase Pages
+
+Every demo or showcase page must have a Playwright E2E spec.
+
+When adding or materially changing such a page, require coverage proving:
+
+- page loads without error boundary;
+- expected title;
+- key UI visible;
+- active provider/adapter identity visible.
+
+Under the current repository contract these pages are public: do not require auth credentials or add `storageState` unless the shared contract is explicitly changed.
+
+## Auth-Flow Validation
+
+For Clerk/bootstrap/onboarding/auth-routing changes:
+
+1. read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`;
+2. read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`;
+3. use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the required checklist;
+4. identify affected scenarios;
+5. preserve scenarios already expected to pass;
+6. do not mark complete until affected required scenarios are checked or explicitly blocked/deferred.
+
+Do not load the auth-flow corpus for unrelated validation work.
+
+## Playwright
+
+When browser evidence is required:
+
+- prefer `node scripts/e2e/run-scenario.mjs ...` or repository package scripts built on it when scenario env/DB setup matters;
+- `E2E_BACKEND_MODE=container` means the isolated test DB profile `127.0.0.1:5433/app_test`;
+- use `--reporter=line` for interactive terminal evidence;
+- for focused AuthJS regressions, prefer `pnpm e2e:authjs:core`;
+- do not sign off onboarding fixes without incomplete-user coverage when that path is affected.
+
+Do not recommend Playwright merely because it is broader.
+
+## Severity
+
+Use:
+
+- **CRITICAL** — a critical repository risk has no meaningful validation; auth, authorization, tenancy, sensitive-data, or runtime-sensitive security behavior can regress without detection; or repository quality gates miss a high-risk failure mode;
+- **MAJOR** — validation exists at the wrong level, heavy mocking hides integration/runtime risk, an important non-critical CI surface is insufficient, or major behavior depends on assumptions not meaningfully validated;
+- **MINOR** — validation is weaker than ideal but still provides some signal, or a local gap has limited blast radius;
+- **INFORMATIONAL** — useful validation-posture observations without immediate correctness risk.
+
+## Response
+
+For substantial Validation Strategy output, use exactly:
 
 1. Objective
 2. Mode
@@ -149,64 +244,19 @@ For substantial Validation Strategy output, use this structure:
 7. Validation Commands or Checks
 8. Recommended Next Action
 
-Within that structure:
+Lead reviews with findings. Cite real files/evidence. Distinguish confirmed evidence from assumptions. Do not make unsupported claims or give generic testing advice detached from the live repository.
 
-- cite real files
-- distinguish confirmed repository evidence from assumptions
-- separate minimum required validation from optional validation when in Change
-  Validation mode
-- call out validation explicitly not required when that avoids waste
+In Change Validation mode, explicitly separate required, optional, and not-required validation.
 
-When reviewing a change, lead with findings rather than narrative.
+## Source and Compatibility
 
-## Artifact Discipline
+`docs/ai/general/05 - Validation Strategy Agent.md` remains the neutral cross-tool role source.
+`docs/ai/general/SECURITY_CODING_PATTERNS.md` remains the security-rule authority for security-sensitive validation requirements.
 
-For artifact-backed work:
+They remain semantic authorities. For Claude Code, the `Context Loading` rules in this skill control retrieval: use targeted sections/rule IDs instead of legacy mandatory full-file startup reads, expanding when needed to establish complete applicable constraints. This changes context-loading mechanics, not shared validation semantics.
 
-- the summary artifact is mandatory, not optional
-- keep `plan.md` and `intake.md` synchronized when your validation review changes task
-  direction, status, or required evidence
-- use the matching specialist summary template
-- never create a second Validation Strategy summary file for the same task
+If shared validation semantics or mandatory patterns change, propagate the semantic change to required cross-tool surfaces according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary validation planning.
 
-## Compatibility Notes
+## Leantime
 
-- `AGENTS.md` remains the primary always-applied context for all tools
-- `docs/ai/general/05 - Validation Strategy Agent.md` remains the shared repository
-  prompt source for the role
-- this skill is the Claude-native runtime surface for that role in this repository, alongside `.agents/skills/validation-strategy/SKILL.md` as the Codex-native runtime surface for the same role
-
-## Mandatory Route-Handler UUID Validation
-
-For App Router route handlers with UUID path segments, require a malformed-ID test
-using a value such as `not-a-uuid`. The test must prove `400` is returned before any
-DB/repository/read-service call that would bind the UUID value and before any mutation
-side effect. Do not accept happy-path and valid-UUID not-found tests as sufficient
-coverage for SEC-23.
-
-## Mandatory Codacy Error-Prone Validation
-
-For SEC-24 findings, require evidence matched to the code shape: `pnpm lint --fix` for
-Promise-returning JSX handlers, typecheck for sparse dynamic state and finite schemas,
-the owning unit/component test for changed mocks or UI handlers, and route-handler tests
-for schema narrowing that changes request parsing. Do not approve scanner quick fixes
-that remove `?.` / `??` from sparse state unless the key is proven always present before
-read.
-
-When the role changes, update:
-
-- `AGENTS.md`
-- `docs/ai/general/05 - Validation Strategy Agent.md`
-- `.github/agents/validation-strategy.agent.md`
-- `.agents/skills/validation-strategy/SKILL.md`
-- `.claude/skills/validation-strategy/SKILL.md`
-- the applicable description guides under `docs/ai/`
-
-## Leantime Integration
-
-**This skill participates in the mandatory Leantime workflow.**
-
-At task open and close, the Workflow Orchestrator invokes
-`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
-
-Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+This skill participates in the mandatory Leantime lifecycle. Use `leantime-integration` at task open and task close; do not preload the full Leantime automation guide here.

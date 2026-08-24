@@ -89,7 +89,11 @@ describe('envelope encryption', () => {
     const envelope = await encryptSecret(SEED, context);
     const parts = envelope.split('.');
     const body = parts[3]!;
-    const flipped = `${body.slice(0, -1)}${body.at(-1) === 'A' ? 'B' : 'A'}`;
+    // Flip a leading character, never the trailing one: base64 pads the last
+    // character with bits that decode to nothing, so two different trailing
+    // characters can yield identical bytes -- a "tampered" input that is not
+    // actually tampered, and a test that passes or fails by luck.
+    const flipped = `${body[0] === 'A' ? 'B' : 'A'}${body.slice(1)}`;
 
     await expect(
       decryptSecret([...parts.slice(0, 3), flipped].join('.'), context),

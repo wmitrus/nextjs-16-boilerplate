@@ -44,6 +44,16 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
 
+      # The scenario runner brings the test database up itself via
+      # `pnpm db:test:up`, but that returns as soon as the container is
+      # *created*, and the reset that follows would then race a Postgres
+      # still replaying its own startup. `--wait` blocks on the compose
+      # healthcheck instead, so the race cannot happen on a cold runner
+      # where the image is pulled first. The runner's own `up` call is then
+      # a no-op against an already-running service.
+      - name: Start the test database
+        run: docker compose -f podman-compose.yml up -d --wait test-db
+
       - name: Build and run Admin Step-Up E2E Tests
         # Build and test in one step for the same reason as
         # e2e-audit-log.yml: the production build prerenders pages that need
@@ -59,6 +69,11 @@ jobs:
           # authjs + required, which in *this* job would mean a green check
           # proving nothing. With this set, the spec throws instead.
           E2E_REQUIRE_STEP_UP_SUITE: 'true'
+          # `scripts/compose-db-local.mjs` defaults to Podman, which is what a
+          # developer machine in this project uses. GitHub runners ship Docker
+          # with no Podman socket running, so the default fails there with
+          # "Cannot connect to the Docker daemon at .../podman.sock".
+          DB_COMPOSE_ENGINE: docker
           # Only the build needs these: the production build prerenders pages
           # that read the publishable key. The test run itself is
           # AUTH_PROVIDER=authjs, and since this change neither

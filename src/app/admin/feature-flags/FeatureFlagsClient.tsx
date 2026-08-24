@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
+
 interface AdminFeatureFlag {
   id: string;
   key: string;
@@ -50,6 +52,7 @@ function formatDate(d: string): string {
 }
 
 export function FeatureFlagsClient() {
+  const stepUpFetch = useStepUpFetch();
   const [state, setState] = React.useState<FetchState>({ status: 'idle' });
   const [toggleState, setToggleState] = React.useState<
     Map<string, RowActionStatus>
@@ -133,7 +136,7 @@ export function FeatureFlagsClient() {
     setCreateState('pending');
     setCreateError(null);
     try {
-      const res = await fetch('/api/admin/feature-flags', {
+      const res = await stepUpFetch('/api/admin/feature-flags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -167,7 +170,7 @@ export function FeatureFlagsClient() {
     if (!mutationsAllowed) return;
     setToggleState((prev) => new Map(prev).set(flag.id, 'pending'));
     try {
-      const res = await fetch(`/api/admin/feature-flags/${flag.id}`, {
+      const res = await stepUpFetch(`/api/admin/feature-flags/${flag.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: !flag.enabled }),
@@ -188,7 +191,7 @@ export function FeatureFlagsClient() {
     const description = descEditValues.get(flagId) ?? '';
     setDescEditState((prev) => new Map(prev).set(flagId, 'pending'));
     try {
-      const res = await fetch(`/api/admin/feature-flags/${flagId}`, {
+      const res = await stepUpFetch(`/api/admin/feature-flags/${flagId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: description.trim() || null }),
@@ -209,7 +212,7 @@ export function FeatureFlagsClient() {
     if (!mutationsAllowed) return;
     setDeleteState((prev) => new Map(prev).set(flagId, 'pending'));
     try {
-      const res = await fetch(`/api/admin/feature-flags/${flagId}`, {
+      const res = await stepUpFetch(`/api/admin/feature-flags/${flagId}`, {
         method: 'DELETE',
       });
       if (!res.ok) {

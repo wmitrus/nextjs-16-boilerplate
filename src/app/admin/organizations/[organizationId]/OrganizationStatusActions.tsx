@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
+
 export function OrganizationStatusActions({
   organizationId,
   status,
@@ -10,6 +12,7 @@ export function OrganizationStatusActions({
   organizationId: string;
   status: 'active' | 'archived';
 }) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +26,7 @@ export function OrganizationStatusActions({
     setError(null);
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}`,
         {
           method: 'PATCH',

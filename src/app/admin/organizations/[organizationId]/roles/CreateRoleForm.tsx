@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
 import type {
   FormErrorsResponse,
   ServerErrorResponse,
@@ -46,6 +47,7 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 }
 
 export function CreateRoleForm({ organizationId }: { organizationId: string }) {
+  const stepUpFetch = useStepUpFetch();
   const router = useRouter();
   const [roleName, setRoleName] = useState('');
   const [state, setState] = useState<CreateRoleState>({ status: 'idle' });
@@ -55,7 +57,7 @@ export function CreateRoleForm({ organizationId }: { organizationId: string }) {
     setState({ status: 'submitting' });
 
     try {
-      const response = await fetch(
+      const response = await stepUpFetch(
         `/api/admin/organizations/${organizationId}/roles`,
         {
           method: 'POST',

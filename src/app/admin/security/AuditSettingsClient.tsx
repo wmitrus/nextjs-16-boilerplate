@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 
+import { useStepUpFetch } from '@/shared/components/step-up/StepUpProvider';
+
 type AuditSettingSource = 'tenant-override' | 'global' | 'taxonomy-default';
 
 interface AdminAuditSetting {
@@ -77,6 +79,7 @@ function draftFromSetting(setting: AdminAuditSetting): DraftFields {
 }
 
 export function AuditSettingsClient() {
+  const stepUpFetch = useStepUpFetch();
   const [state, setState] = React.useState<FetchState>({ status: 'idle' });
   const [toggleState, setToggleState] = React.useState<
     Map<string, RowActionStatus>
@@ -138,7 +141,7 @@ export function AuditSettingsClient() {
       captureInputOnSuccess: boolean;
     }>,
   ): Promise<boolean> {
-    const res = await fetch('/api/admin/audit-log-settings', {
+    const res = await stepUpFetch('/api/admin/audit-log-settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -220,7 +223,7 @@ export function AuditSettingsClient() {
   async function handleReset(setting: AdminAuditSetting) {
     setResetState((prev) => new Map(prev).set(setting.category, 'pending'));
     try {
-      const res = await fetch('/api/admin/audit-log-settings', {
+      const res = await stepUpFetch('/api/admin/audit-log-settings', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category: setting.category }),

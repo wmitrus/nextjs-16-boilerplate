@@ -245,12 +245,14 @@ kompletny wzorzec w `SECURITY_CODING_PATTERNS.md` i własny `plan.md`.
 - **Codacy: triage zrobiony przez użytkownika (2026-08-24), progi ZAMROŻONE**
   — Function Length 120, Cyclomatic Complexity 15, Parameter Count 10, File
   Length 500. Nie podnosić ich dalej: przy 130/20 zniknęłyby dwa realne
-  findingi razem z szumem. Zrefaktorowane cztery funkcje (policies `PATCH`,
-  waitlist `POST`, step-up `POST`, `verifyStepUpProof`), dwa findingi
-  **świadomie zaakceptowane** i ignorowane w UI Codacy
-  (`ClerkRequestIdentitySource` CC24 — metryka źle reprezentuje kod;
-  TOTP „hardcoded password" — fixture testowy). Powód każdego wyjątku jest
-  zapisany w samym kodzie, żeby kolejny agent tego nie „naprawił".
+  findingi razem z szumem. Zrefaktorowane pięć funkcji (policies `PATCH`,
+  waitlist `POST`, step-up `POST`, `verifyStepUpProof` oraz
+  `ClerkRequestIdentitySource` — ta ostatnia bez zmiany zachowania:
+  opcjonalne wartości Clerka normalizowane raz, na początku callbacku
+  `auth().then()`, i reużywane w obu logach i zwracanej tożsamości;
+  CC 24 → 15). Jeden finding **świadomie zaakceptowany** i ignorowany w UI
+  Codacy: TOTP „hardcoded password" — fixture testowy; powód zapisany w samym
+  kodzie, żeby kolejny agent tego nie „naprawił".
   Szczegóły: `plan.md`, sekcja „Codacy triage".
 - **Migracja `0019_rare_outlaw_kid`** (tabele `user_mfa_totp`,
   `user_mfa_recovery_codes`) jest w `readMigrationSql()` w tym samym commicie

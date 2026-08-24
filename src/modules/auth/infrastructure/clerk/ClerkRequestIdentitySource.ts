@@ -44,25 +44,6 @@ function maskEmail(email: string): string {
   return `${localPart.slice(0, 1)}***@${domain}`;
 }
 
-/**
- * Lizard scores `get()` at CC 24, and that finding is **accepted and ignored
- * in the Codacy UI** rather than refactored away.
- *
- * Almost all of that score comes from normalising optional provider fields
- * for one object and one log line -- `userId ?? undefined`,
- * `email ? ... : undefined`, `sessionClaims?.email_verified === true ? true :
- * undefined`, and similar. Those are not twenty-four decisions about
- * behaviour; they are one decision (never let a provider's absent field
- * become a falsy value downstream) repeated over the fields Clerk may or may
- * not send. Splitting the telemetry assembly into helpers to satisfy the
- * metric would scatter one readable mapping across several functions and make
- * the code harder to follow, not easier.
- *
- * Recorded here because it is the single case in this repository where the
- * complexity metric misrepresents the code -- which is also why the thresholds
- * stay where they are (120 / 15 / 10 / 500) instead of being raised until this
- * one site goes quiet.
- */
 export class ClerkRequestIdentitySource implements RequestIdentitySource {
   private cached?: Promise<RequestIdentitySourceData>;
 
@@ -70,8 +51,27 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
     if (!this.cached) {
       this.cached = auth().then(
         ({ userId, orgId, orgRole, sessionId, sessionClaims }) => {
+          // Every optional provider value is normalised once, here, and then
+          // reused by both log lines and the returned identity. Clerk may omit
+          // any of these, and `undefined` (not `null`, not `false`) is the one
+          // shape the rest of the security layer and the logger both read
+          // correctly -- so the decision is made once instead of being
+          // repeated at each of the three places that need it.
+          const externalUserId = userId ?? undefined;
+          const orgExternalId = orgId ?? undefined;
+          const tenantRole = orgRole ?? undefined;
+          // Clerk's own session id, used as the provider-neutral logical
+          // session reference for step-up proofs (SEC-48). Clerk rotates it
+          // per sign-in, which is exactly the lifetime a proof may have.
+          const logicalSessionId = sessionId ?? undefined;
+
           const email = extractClerkEmailClaim(sessionClaims);
           const emailClaimSource = resolveEmailClaimSource(sessionClaims);
+          const emailVerified =
+            sessionClaims?.email_verified === true ? true : undefined;
+          const sessionTokenVersion =
+            typeof sessionClaims?.v === 'number' ? sessionClaims.v : undefined;
+          const activeOrganizationClaimPresent = Boolean(sessionClaims?.o);
           const sessionClaimKeys =
             sessionClaims && typeof sessionClaims === 'object'
               ? Object.keys(sessionClaims).sort()
@@ -82,15 +82,11 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
               {
                 event: 'auth:identity_claims_missing_email',
                 provider: 'clerk',
-                userId: userId ?? undefined,
+                userId: externalUserId,
                 sessionClaimKeys,
-                sessionTokenVersion:
-                  typeof sessionClaims?.v === 'number'
-                    ? sessionClaims.v
-                    : undefined,
-                activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
-                emailVerified:
-                  sessionClaims?.email_verified === true ? true : undefined,
+                sessionTokenVersion,
+                activeOrganizationClaimPresent,
+                emailVerified,
               },
               'Clerk auth() sessionClaims did not contain a supported email claim',
             );
@@ -100,35 +96,27 @@ export class ClerkRequestIdentitySource implements RequestIdentitySource {
             {
               event: 'auth:identity_claims_resolved',
               provider: 'clerk',
-              userId: userId ?? undefined,
+              userId: externalUserId,
               hasEmailClaim: email !== undefined,
               emailClaimSource,
               emailPreview: email ? maskEmail(email) : undefined,
-              emailVerified:
-                sessionClaims?.email_verified === true ? true : undefined,
+              emailVerified,
               sessionClaimKeys,
-              sessionTokenVersion:
-                typeof sessionClaims?.v === 'number'
-                  ? sessionClaims.v
-                  : undefined,
-              activeOrganizationClaimPresent: Boolean(sessionClaims?.o),
-              orgExternalIdPresent: Boolean(orgId),
-              tenantRole: orgRole ?? undefined,
+              sessionTokenVersion,
+              activeOrganizationClaimPresent,
+              orgExternalIdPresent: Boolean(orgExternalId),
+              tenantRole,
             },
             'Resolved Clerk identity claims from auth()',
           );
 
           return {
-            userId: userId ?? undefined,
+            userId: externalUserId,
             email,
-            emailVerified:
-              sessionClaims?.email_verified === true ? true : undefined,
-            // Clerk's own session id, used as the provider-neutral logical
-            // session reference for step-up proofs (SEC-48). Clerk rotates
-            // it per sign-in, which is exactly the lifetime a proof may have.
-            logicalSessionId: sessionId ?? undefined,
-            orgExternalId: orgId ?? undefined,
-            tenantRole: orgRole ?? undefined,
+            emailVerified,
+            logicalSessionId,
+            orgExternalId,
+            tenantRole,
           };
         },
       );

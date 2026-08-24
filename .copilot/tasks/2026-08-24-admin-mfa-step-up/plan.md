@@ -206,14 +206,14 @@ not raised further: at 130/20 the two real findings below would vanish along
 with the noise, which is tuning the analyser to the code rather than the other
 way round.
 
-| Finding                               | Decision            | Done                                                                                                    |
-| ------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
-| Policies `PATCH` -- 127 lines / CC 17 | refactor            | request parsing and the resource/action vocabulary check extracted; the shared domain-error mapping too |
-| Waitlist `POST` -- 126 lines / CC 24  | refactor            | `handleWaitlistApproval` / `handleWaitlistRejection`; the router keeps auth, uuid and action selection  |
-| Step-up `POST` -- 131 lines           | one extraction      | `respondToFailedChallenge` (log + audit + HTTP shape)                                                   |
-| `ClerkRequestIdentitySource` -- CC 24 | **not** refactored  | accepted exception, ignored in the Codacy UI; rationale recorded in the class doc comment               |
-| `verifyStepUpProof` -- CC 19          | controlled refactor | `checkClaimsAcceptable` splits semantic acceptance from cryptographic authenticity                      |
-| TOTP "hardcoded password"             | false positive      | test fixture seed; ignored in the Codacy UI, rationale recorded next to the constant                    |
+| Finding                               | Decision                      | Done                                                                                                                                                      |
+| ------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Policies `PATCH` -- 127 lines / CC 17 | refactor                      | request parsing and the resource/action vocabulary check extracted; the shared domain-error mapping too                                                   |
+| Waitlist `POST` -- 126 lines / CC 24  | refactor                      | `handleWaitlistApproval` / `handleWaitlistRejection`; the router keeps auth, uuid and action selection                                                    |
+| Step-up `POST` -- 131 lines           | one extraction                | `respondToFailedChallenge` (log + audit + HTTP shape)                                                                                                     |
+| `ClerkRequestIdentitySource` -- CC 24 | refactor, behaviour unchanged | every optional Clerk value normalised once at the top of the `auth().then()` callback and reused by both log lines and the returned identity; CC 24 -> 15 |
+| `verifyStepUpProof` -- CC 19          | controlled refactor           | `checkClaimsAcceptable` splits semantic acceptance from cryptographic authenticity                                                                        |
+| TOTP "hardcoded password"             | false positive                | test fixture seed; ignored in the Codacy UI, rationale recorded next to the constant                                                                      |
 
 Two of these are structural improvements independent of any metric. Waitlist
 `POST` held two complete workflows -- approve (approve entry, resolve
@@ -225,11 +225,34 @@ which is not expected to be edited) and _is an authentic proof acceptable for
 this request?_ (freshness and binding policy, which is). They now sit on
 either side of a named boundary.
 
-The two accepted exceptions are recorded in the code itself, not only in the
-Codacy UI, so a later agent does not "fix" them: the Clerk class carries the
-reason its CC score misrepresents it (optional-field normalisation for one log
-line, not twenty-four behavioural decisions), and the TOTP fixture carries the
-reason it must stay a constant (deterministic RFC 6238 vectors).
+`ClerkRequestIdentitySource` was first left alone, with its CC score written
+down as an accepted exception; the user then asked for it to be fixed properly
+instead, and it was. The score genuinely came from normalising the same
+optional provider values three times over -- `userId ?? undefined`,
+`sessionClaims?.email_verified === true ? true : undefined` and the rest, once
+for the warning telemetry, once for the debug telemetry, once for the returned
+identity. So the fix is to make each of those decisions once, at the top of the
+`auth().then()` callback, and reuse them. No helper was invented to satisfy the
+metric, `logicalSessionId = sessionId ?? undefined` is preserved exactly, and
+the accepted-exception comment is gone.
+
+The one remaining accepted exception is recorded in the code itself, not only
+in the Codacy UI, so a later agent does not "fix" it: the TOTP fixture carries
+the reason it must stay a constant (deterministic RFC 6238 vectors).
+
+Measured with Lizard directly -- the same engine Codacy runs, and its reported
+numbers are Lizard's NLOC and CCN (confirmed by reproducing 127 / 126 / 131 /
+24 exactly on the pre-refactor files):
+
+| Function                       | NLOC before -> after | CCN before -> after |
+| ------------------------------ | -------------------- | ------------------- |
+| policies `PATCH`               | 127 -> 72            | 17 -> 8             |
+| waitlist `POST`                | 126 -> 42            | 24 -> 9             |
+| step-up `POST`                 | 131 -> 98            | 9 -> 7              |
+| `verifyStepUpProof`            | 36 -> 36             | 19 -> 15            |
+| Clerk `auth().then()` callback | 56 -> 56             | 24 -> 15            |
+
+Nothing in the five touched files exceeds the frozen thresholds any more.
 
 **Coverage gap found while falsifying.** Deleting the resource/action
 vocabulary check from the policies `PATCH` broke no test -- it had none before

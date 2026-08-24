@@ -115,6 +115,11 @@ step-up mechanism than AuthJS ones.
   `E2E_REQUIRE_STEP_UP_SUITE=true`, which makes the spec **throw** instead of
   self-skipping if the runtime is misconfigured — a security suite that skips
   silently is worse than none, because CI goes green having proven nothing.
+- The suite runs under `AUTH_PROVIDER=authjs`, and since SEC-48 neither
+  `scripts/check-e2e-auth-env.mjs` nor the Playwright global setup demands
+  Clerk **fixture identities** for a run on another provider — they now gate
+  on the active provider. Before that, every AuthJS suite in this repository
+  was unrunnable in CI without Clerk test accounts it never touches.
 
 ## Adding a new admin mutation
 

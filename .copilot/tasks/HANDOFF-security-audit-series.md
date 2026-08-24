@@ -221,10 +221,18 @@ kompletny wzorzec w `SECURITY_CODING_PATTERNS.md` i własny `plan.md`.
      (`.env.e2e.local`, gitignored) przy **każdym** scenariuszu, niezależnie
      od `AUTH_PROVIDER`, a tryb container potrzebuje demona Dockera/Podmana,
      którego w kontenerze tej sesji nie ma. CI ma jedno i drugie.
-     Job korzysta z sekretów `E2E_CLERK_SINGLE_*` i `CLERK_*` (te same, co
-     `e2e-audit-log.yml`) — jeśli którego brakuje w repo, job padnie na
-     walidacji env, nie na kodzie. Rozważ dodanie go do required checks w
-     branch protection.
+     Pierwszy przebieg jobu **padł** i odsłonił realny defekt infrastruktury
+     E2E (nie kodu SEC-48): `scripts/check-e2e-auth-env.mjs` **oraz**
+     `e2e/global.setup.ts` żądały fixture'ów/tokenu Clerka przy **każdym**
+     scenariuszu, także gdy aplikacja jedzie na `AUTH_PROVIDER=authjs` i
+     wszystkie clerkowe spece i tak same się pomijają. To czyniło **każdy**
+     authjs-owy suite (`e2e:authjs:core`, `e2e:admin:audit-logs`,
+     `e2e:demo-showcase`, `e2e:admin:step-up`) nieuruchamialnym na CI bez
+     sekretów Clerka, których nie używa — `e2e-audit-log.yml` miał nawet
+     komentarz nazywający to „pre-existing gap". Naprawione: obie warstwy są
+     teraz provider-aware (`requiresClerkFixtures()` + skip `clerkSetup()`),
+     więc job potrzebuje tylko `CLERK_*` do samego builda. Rozważ dodanie
+     jobu do required checks w branch protection.
   3. Reszta admin-owych E2E jedzie dalej na kontrolowanym bypassie
      (`ADMIN_STEP_UP_MODE=bypass-local-only` ustawia `run-scenario.mjs`) — ich
      tematem nie jest step-up.

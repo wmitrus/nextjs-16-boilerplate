@@ -59,15 +59,13 @@ jobs:
           # authjs + required, which in *this* job would mean a green check
           # proving nothing. With this set, the spec throws instead.
           E2E_REQUIRE_STEP_UP_SUITE: 'true'
+          # Only the build needs these: the production build prerenders pages
+          # that read the publishable key. The test run itself is
+          # AUTH_PROVIDER=authjs, and since this change neither
+          # `check-e2e-auth-env.mjs` nor the Playwright global setup demands
+          # Clerk *fixture identities* for a run that never touches Clerk.
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          # scripts/check-e2e-auth-env.mjs validates these Clerk identities for
-          # every scenario run regardless of the app's active AUTH_PROVIDER --
-          # see the same note in e2e-audit-log.yml.
-          E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME }}
-          E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD }}
-          E2E_CLERK_SINGLE_NEW_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_USERNAME }}
-          E2E_CLERK_SINGLE_NEW_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_PASSWORD }}
           # Left unset on purpose: scripts/e2e/run-scenario.mjs supplies a
           # fixture APP_SECURITY_MASTER_KEY for scenario runs. A real secret
           # here would add a rotation obligation to CI and prove nothing extra

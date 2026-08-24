@@ -155,6 +155,39 @@ Run in this session, all green:
 | `pnpm madge`            | no circular dependency                                                                                                                                                                                                                                                                                                                                                                                    |
 | `pnpm build`            | passes with `AUTH_PROVIDER=authjs`; `/account/security/mfa`, `/api/auth/step-up` and `/api/auth/mfa/**` all compile. Under the default `AUTH_PROVIDER=clerk` the build fails in this sandbox at prerender with "`@clerk/clerk-react`: The publishableKey passed to Clerk is invalid" — this container only has the `.env.example` placeholder key, so it is an environment fact, unrelated to this change |
 
+## CI blockers found by making the E2E mandatory
+
+Wiring the step-up suite into CI surfaced three failures in a row, none of
+them in the feature and all of them pre-existing gaps that had never been hit
+because no AuthJS scenario suite had ever run in CI at all:
+
+1. **Clerk fixtures demanded for a non-Clerk run.**
+   `check-e2e-auth-env.mjs` validated Clerk test identities for _every_
+   scenario, and `global.setup.ts` fetched a Clerk testing token
+   unconditionally. Both now gate on the active provider; Clerk runs are
+   unchanged (`requiresClerkFixtures(undefined)` is `true`, because unset
+   means the app's own default).
+2. **Podman on a Docker runner.** `scripts/compose-db-local.mjs` defaults to
+   `DB_COMPOSE_ENGINE=podman` -- right for this project's local workflow,
+   wrong on a GitHub runner where Podman has no socket. Fixed in the workflow
+   (`DB_COMPOSE_ENGINE=docker`), which also starts the database with `--wait`
+   so the reset cannot race a Postgres that is still starting.
+3. **A production build with no `.env.local`.** The suite finally ran, and
+   every test failed on the provisioning route returning `500` -- the SEC-45
+   error boundary, i.e. a throw _before_ the handler. Root cause: CI runs
+   `next start` (`NODE_ENV=production`), where `DEPLOYMENT_PROXY` (SEC-43) and
+   `NEXTAUTH_SECRET` are cross-field-required, and locally both had always
+   come from a developer's `.env.local`. A fresh clone has none, so the
+   composition root threw on every request. Both are now pinned in
+   `scripts/e2e/env/base.env` -- the versioned scenario baseline, so a fresh
+   clone is runnable without anyone's private env file.
+
+Verified locally for (3) under CI-equivalent conditions -- `.env.local` moved
+aside, production server, scenario env: the provisioning route answers
+`400 Invalid request body` (the readiness probe's success condition) instead
+of `500`, and an unauthenticated admin mutation answers `401` rather than
+failing in the pipeline.
+
 ## Session limitations
 
 - **E2E not executed locally, but wired into CI.** After the first push the
@@ -168,6 +201,12 @@ Run in this session, all green:
   needs a Docker/Podman daemon, which this container does not have. Both are
   environment facts, not repository defects — CI has both.
 - **Leantime not reachable** — see the note at the end of this file.
+- **Playwright cannot launch a browser in this session.** The sandbox ships
+  Chromium build 1194; this Playwright version wants
+  `chromium_headless_shell-1208`, and the environment forbids
+  `playwright install`. So the browser legs of the suite are verified on CI,
+  not here; the server-side legs were verified with a real production server
+  and direct HTTP probes as described above.
 
 ## Session limitation — Leantime
 

@@ -212,11 +212,19 @@ kompletny wzorzec w `SECURITY_CODING_PATTERNS.md` i własny `plan.md`.
      "All Environments". Bez niej walidacja env **wywali build** (SEC-48).
      `APP_SECURITY_MASTER_KEY_PREVIOUS` i `ADMIN_STEP_UP_MODE` zostawić
      nieustawione.
-  2. **Uruchomić E2E step-upu lokalnie**: `pnpm e2e:admin:step-up`. Ta sesja
-     nie mogła — `scripts/check-e2e-auth-env.mjs` wymaga fixture'ów Clerka
+  2. **E2E step-upu jedzie na CI, obowiązkowo** —
+     `.github/workflows/e2e-admin-step-up.yml`, na **każdym** PR-ze (bez
+     labelki, bez filtra `paths:`), z tripwire'em
+     `E2E_REQUIRE_STEP_UP_SUITE=true`, który zamienia ciche pominięcie suite'a
+     w twardy błąd. Ta sesja nie mogła go odpalić lokalnie:
+     `scripts/check-e2e-auth-env.mjs` wymaga fixture'ów Clerka
      (`.env.e2e.local`, gitignored) przy **każdym** scenariuszu, niezależnie
      od `AUTH_PROVIDER`, a tryb container potrzebuje demona Dockera/Podmana,
-     którego w kontenerze tej sesji nie ma.
+     którego w kontenerze tej sesji nie ma. CI ma jedno i drugie.
+     Job korzysta z sekretów `E2E_CLERK_SINGLE_*` i `CLERK_*` (te same, co
+     `e2e-audit-log.yml`) — jeśli którego brakuje w repo, job padnie na
+     walidacji env, nie na kodzie. Rozważ dodanie go do required checks w
+     branch protection.
   3. Reszta admin-owych E2E jedzie dalej na kontrolowanym bypassie
      (`ADMIN_STEP_UP_MODE=bypass-local-only` ustawia `run-scenario.mjs`) — ich
      tematem nie jest step-up.

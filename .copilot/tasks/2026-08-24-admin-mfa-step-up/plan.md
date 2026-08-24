@@ -86,8 +86,9 @@ Four layers, provider-neutral at the top, provider-specific only at the edge.
 - [x] P7 — admin gate requires enrollment (layout + API)
 - [x] P8 — UI: enrollment page, step-up dialog, 12 admin clients wired
 - [x] P9 — docs (SEC-48, `docs/features/37`, ENV-requirements, handoff, PE-26…29), gates.
-      E2E spec written (`e2e/admin-step-up.spec.ts`) but **not executed in this
-      session** — see "Session limitations" below.
+      E2E spec written (`e2e/admin-step-up.spec.ts`) and wired into CI as a
+      per-PR job; **not executed in this session** — see "Session
+      limitations" below.
 
 ## Solution — what actually shipped
 
@@ -156,14 +157,16 @@ Run in this session, all green:
 
 ## Session limitations
 
-- **E2E not executed.** `e2e/admin-step-up.spec.ts` and the
-  `pnpm e2e:admin:step-up` script are written, but this session cannot run
-  them: `scripts/check-e2e-auth-env.mjs` requires Clerk fixture credentials
+- **E2E not executed locally, but wired into CI.** After the first push the
+  user required this suite to run on CI rather than being a local command:
+  `.github/workflows/e2e-admin-step-up.yml` now runs it on every pull
+  request (no label, no `paths:` filter) with a tripwire
+  (`E2E_REQUIRE_STEP_UP_SUITE=true`) that turns a silent skip into a failure.
+  This session still could not execute it here: `scripts/check-e2e-auth-env.mjs` requires Clerk fixture credentials
   (`E2E_CLERK_*`, kept in the gitignored `.env.e2e.local`) for _every_
   scenario run regardless of `AUTH_PROVIDER`, and container mode additionally
   needs a Docker/Podman daemon, which this container does not have. Both are
-  environment facts, not repository defects. **The user must run
-  `pnpm e2e:admin:step-up` locally before merge.**
+  environment facts, not repository defects — CI has both.
 - **Leantime not reachable** — see the note at the end of this file.
 
 ## Session limitation — Leantime

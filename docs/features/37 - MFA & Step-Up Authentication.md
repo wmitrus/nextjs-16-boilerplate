@@ -106,6 +106,15 @@ step-up mechanism than AuthJS ones.
   **required**: enroll a TOTP factor, be refused without a proof, pass the
   challenge, be allowed. Other admin E2E suites run with the controlled
   local bypass because their subject is something else.
+- **On CI this suite is not optional.** `.github/workflows/e2e-admin-step-up.yml`
+  runs it on every pull request — no label, no `paths:` filter. Step-up is
+  what stands between a stolen session and every destructive admin
+  operation, and the regression it guards against is exactly "a change
+  somewhere else quietly removed the challenge"; a suite that runs only when
+  someone remembers a label would not catch that. The workflow also sets
+  `E2E_REQUIRE_STEP_UP_SUITE=true`, which makes the spec **throw** instead of
+  self-skipping if the runtime is misconfigured — a security suite that skips
+  silently is worse than none, because CI goes green having proven nothing.
 
 ## Adding a new admin mutation
 

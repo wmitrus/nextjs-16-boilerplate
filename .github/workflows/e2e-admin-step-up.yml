@@ -1,0 +1,86 @@
+name: Admin Step-Up E2E
+
+# The SEC-48 assurance boundary, verified in a real browser against a real
+# database on every pull request.
+#
+# Deliberately NOT label-gated (unlike e2e-audit-log.yml) and deliberately
+# without a `paths:` filter: step-up is the control that stands between a
+# stolen session and every destructive admin operation, and the failure mode
+# it guards against is precisely "a change somewhere else quietly removed the
+# challenge". A suite that only runs when someone remembers a label, or when
+# the diff happens to touch a path we predicted, does not protect against
+# that.
+#
+# It is also the one suite that must run with enforcement REQUIRED. Every
+# other admin E2E run uses the controlled local bypass
+# (`ADMIN_STEP_UP_MODE=bypass-local-only`, set by scripts/e2e/run-scenario.mjs)
+# because their subject is something else -- so if this job stops running,
+# nothing anywhere exercises the real challenge-and-proof flow.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  e2e-admin-step-up:
+    name: Playwright Admin Step-Up E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Build and run Admin Step-Up E2E Tests
+        # Build and test in one step for the same reason as
+        # e2e-audit-log.yml: the production build prerenders pages that need
+        # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY at build time, so a separate build
+        # step without this env block fails on /_not-found.
+        #
+        # `pnpm e2e:admin:step-up` pins AUTH_PROVIDER=authjs (the provider
+        # whose second factor this repository owns) and
+        # ADMIN_STEP_UP_MODE=required.
+        run: pnpm build && pnpm e2e:admin:step-up
+        env:
+          # Tripwire: the spec self-skips when the runtime is not
+          # authjs + required, which in *this* job would mean a green check
+          # proving nothing. With this set, the spec throws instead.
+          E2E_REQUIRE_STEP_UP_SUITE: 'true'
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # scripts/check-e2e-auth-env.mjs validates these Clerk identities for
+          # every scenario run regardless of the app's active AUTH_PROVIDER --
+          # see the same note in e2e-audit-log.yml.
+          E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_USERNAME }}
+          E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_PROVISIONED_USER_PASSWORD }}
+          E2E_CLERK_SINGLE_NEW_USER_USERNAME: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_USERNAME }}
+          E2E_CLERK_SINGLE_NEW_USER_PASSWORD: ${{ secrets.E2E_CLERK_SINGLE_NEW_USER_PASSWORD }}
+          # Left unset on purpose: scripts/e2e/run-scenario.mjs supplies a
+          # fixture APP_SECURITY_MASTER_KEY for scenario runs. A real secret
+          # here would add a rotation obligation to CI and prove nothing extra
+          # -- the key's production requirement is enforced by env validation
+          # at deploy time (SEC-48), which is a different gate.
+
+      - name: Upload Admin Step-Up Playwright Artifacts
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # actions/upload-artifact@v7
+        with:
+          name: playwright-admin-step-up-e2e-artifacts
+          path: |
+            logs/playwright/
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

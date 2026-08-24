@@ -24,6 +24,25 @@ import {
 const isAuthjs = isAuthjsRuntime();
 const stepUpRequired = process.env.ADMIN_STEP_UP_MODE === 'required';
 
+/**
+ * Set by the CI workflow that exists solely to run this suite.
+ *
+ * A security suite that silently skips is worse than no suite: CI goes green
+ * and nothing has been proven. When the run is *supposed* to be this one, a
+ * misconfigured runtime must fail loudly rather than skip quietly.
+ */
+if (
+  process.env.E2E_REQUIRE_STEP_UP_SUITE === 'true' &&
+  (!isAuthjs || !stepUpRequired)
+) {
+  throw new Error(
+    '[admin-step-up] This run must exercise the real step-up flow, but the ' +
+      `runtime is misconfigured: AUTH_PROVIDER=authjs? ${String(isAuthjs)}, ` +
+      `ADMIN_STEP_UP_MODE=required? ${String(stepUpRequired)}. ` +
+      'Run it through `pnpm e2e:admin:step-up`.',
+  );
+}
+
 /** RFC 6238 code for the enrolled seed, matching the app's pinned policy. */
 async function codeFor(secret: string, epochSeconds?: number): Promise<string> {
   return generate({
@@ -34,6 +53,18 @@ async function codeFor(secret: string, epochSeconds?: number): Promise<string> {
     period: 30,
     ...(epochSeconds === undefined ? {} : { epoch: epochSeconds }),
   });
+}
+
+/**
+ * A code from the *next* time step.
+ *
+ * Confirming an enrollment spends the current step (that is the replay guard
+ * working as designed), so any later challenge in the same test must present
+ * a different one. One step ahead is inside the app's ±1-step tolerance, so
+ * the server accepts it without the test having to sleep for 30 seconds.
+ */
+async function nextStepCode(secret: string): Promise<string> {
+  return codeFor(secret, Math.floor(Date.now() / 1000) + 30);
 }
 
 /** Enrolls a TOTP factor through the real endpoints and returns its secret. */
@@ -142,7 +173,7 @@ test.describe('Admin step-up (SEC-48)', () => {
     // The real code does.
     const verified = await page.request.fetch('/api/auth/step-up', {
       method: 'POST',
-      data: { code: await codeFor(secret) },
+      data: { code: await nextStepCode(secret) },
     });
     expect(verified.status()).toBe(200);
 
@@ -196,7 +227,7 @@ test.describe('Admin step-up (SEC-48)', () => {
       const codeField = freshPage.getByLabel('Authentication code');
       await expect(codeField).toBeVisible();
 
-      await codeField.fill(await codeFor(secret));
+      await codeField.fill(await nextStepCode(secret));
       await Promise.all([
         freshPage.waitForURL((url) => !url.pathname.startsWith('/auth/'), {
           waitUntil: 'domcontentloaded',

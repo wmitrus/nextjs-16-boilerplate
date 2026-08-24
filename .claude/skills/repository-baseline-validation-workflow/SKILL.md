@@ -137,88 +137,33 @@ Never:
 
 ## Validation Infrastructure Inventory
 
-Do not use a stale hard-coded config list as the complete repository inventory.
+Discover the current stack from live `package.json` scripts, then follow the configs/runners and CI workflows they actually use.
 
-Start from live `package.json` scripts and follow the configs/runner files they reference.
+Inventory, when present/relevant:
 
-At minimum inspect, when present/relevant:
+- static/build/architecture gates: typecheck, lint, architecture checks, build, env/deploy validators;
+- unit, integration, DB-backed, and test-infrastructure layers;
+- Storybook/component validation;
+- Playwright/E2E scenario runners, auth/matrix/smoke suites, and runtime/deploy smoke checks;
+- coverage provider, thresholds, exclusions, reporting, and enforcement;
+- CI/CD jobs, triggers, path/event conditions, blocking behavior, security/static-analysis gates, and deployment validation.
 
-### Static / build / architecture gates
-
-- typecheck;
-- lint;
-- architecture lint;
-- build;
-- environment/deploy/static validators that act as production quality gates.
-
-### Unit / integration / database tests
-
-- unit Vitest config/scripts;
-- integration Vitest config/scripts;
-- combined/all-test config;
-- DB-backed test configs/scripts;
-- test DB/container orchestration where it materially affects confidence.
-
-### UI/component validation
-
-- Storybook test project/config/scripts;
-- component/browser-like test setup when used as a quality layer.
-
-### Browser/E2E validation
-
-- Playwright config(s);
-- scenario runner and package commands;
-- targeted auth/matrix/smoke suites;
-- deployment/runtime smoke configurations when they are part of production validation.
-
-### Coverage
-
-- provider/tooling;
-- thresholds;
-- exclusions;
-- where coverage is enforced;
-- whether the reported metric corresponds to the risk surface.
-
-### CI/CD
-
-Inspect relevant `.github/workflows/*` jobs/triggers/conditions for:
-
-- typecheck;
-- lint;
-- unit/integration/DB tests;
-- architecture validation;
-- build;
-- E2E;
-- coverage enforcement;
-- security/static analysis where it acts as a gate;
-- deploy/runtime smoke validation;
-- branch/path/event conditions that may create blind spots.
-
-Do not infer CI enforcement from local scripts alone.
+Do not use a stale hard-coded config list or infer CI enforcement from local scripts alone.
 
 ## Evidence Sampling
 
-Workflow 08 is an audit, not a mandatory full-suite execution workflow.
+This is a posture audit, not a mandatory full-suite execution workflow.
 
-Default evidence sources:
+Prefer evidence from:
 
-1. live scripts/configs/workflows;
-2. representative tests for important layers;
-3. representative production seams/enforcement points;
-4. existing current CI/test artifacts when supplied or already available;
-5. focused read-only commands only when they materially resolve an audit uncertainty.
+1. live scripts, configs, and CI workflows;
+2. representative tests and production enforcement seams;
+3. current CI/test artifacts already available;
+4. focused read-only commands only when they resolve a concrete audit uncertainty.
 
-Do not run `pnpm test:all`, the full E2E matrix, or another expensive suite merely to say the baseline audit was "executed."
+Do not run broad suites such as `pnpm test:all` or the full E2E matrix merely to prove the audit was executed.
 
-A targeted command may be useful when it answers a specific posture question, for example:
-
-- confirming a configured test project is discoverable;
-- confirming an architecture-lint command exists/works;
-- checking a coverage/config relationship that cannot be established statically.
-
-Record such execution as supporting evidence, not as a requirement for every baseline audit.
-
-If the user's actual goal is to prove the repository currently passes its full validation baseline, that is a different execution task and must be scoped explicitly rather than silently added to Workflow 08.
+If the user's goal is instead to prove the repository currently passes its full validation baseline, treat that as a separate explicitly scoped execution task.
 
 ## Workflow Sequence
 

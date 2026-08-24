@@ -17,6 +17,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
 import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -120,41 +121,96 @@ export const GET = withErrorHandler(
 );
 
 export const PATCH = withErrorHandler(
-  withNodeProvisioning(async (request, context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (request, context, access) => {
+      await connection();
 
-    const rawParams = await context.params;
-    const idResult = idSchema.safeParse(rawParams);
-    if (!idResult.success) {
-      return createValidationErrorResponse({ id: ['Invalid user id'] }, 400);
-    }
-    const { id } = idResult.data;
+      const rawParams = await context.params;
+      const idResult = idSchema.safeParse(rawParams);
+      if (!idResult.success) {
+        return createValidationErrorResponse({ id: ['Invalid user id'] }, 400);
+      }
+      const { id } = idResult.data;
 
-    const container = getAppContainer();
+      const container = getAppContainer();
 
-    const bodyText = await request.text();
-    let parsedBody: unknown;
-    try {
-      parsedBody = JSON.parse(bodyText);
-    } catch {
-      return createServerErrorResponse(
-        'Invalid JSON body',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
+      const bodyText = await request.text();
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(bodyText);
+      } catch {
+        return createServerErrorResponse(
+          'Invalid JSON body',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
 
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const service = new DrizzleAdminUsersService(db);
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const service = new DrizzleAdminUsersService(db);
 
-    const deactivateResult = deactivateBodySchema.safeParse(parsedBody);
-    if (deactivateResult.success) {
+      const deactivateResult = deactivateBodySchema.safeParse(parsedBody);
+      if (deactivateResult.success) {
+        const adminAccess = await checkAdminAccess(
+          access.identity.email,
+          access.user.id,
+          access.tenant.tenantId,
+          container,
+          ACTIONS.USER_DEACTIVATE,
+        );
+
+        if (!adminAccess.allowed) {
+          return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+        }
+
+        const scope = adminAccess.isPlatformAdmin
+          ? null
+          : { tenantId: access.tenant.tenantId };
+        const deactivatedAt = new Date();
+        const deactivated = await service.deactivate(id, deactivatedAt, scope);
+
+        if (!deactivated) {
+          return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
+        }
+
+        logger.info(
+          {
+            event: 'admin:user_deactivate',
+            userId: id,
+            adminId: access.user.id,
+            tenantId: access.tenant.tenantId,
+          },
+          'User deactivated by admin',
+        );
+
+        await recordAdminAuditEvent({
+          category: 'admin_access',
+          action: 'user.deactivate',
+          outcome: 'success',
+          tenantId: access.tenant.tenantId,
+          actorUserId: access.user.id,
+          targetType: 'user',
+          targetId: id,
+        });
+
+        return createSuccessResponse({ deactivatedAt });
+      }
+
+      const patchResult = patchBodySchema.safeParse(parsedBody);
+      if (!patchResult.success) {
+        return createServerErrorResponse(
+          'Invalid request body',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
       const adminAccess = await checkAdminAccess(
         access.identity.email,
         access.user.id,
         access.tenant.tenantId,
         container,
-        ACTIONS.USER_DEACTIVATE,
+        ACTIONS.USER_UPDATE,
       );
 
       if (!adminAccess.allowed) {
@@ -164,26 +220,29 @@ export const PATCH = withErrorHandler(
       const scope = adminAccess.isPlatformAdmin
         ? null
         : { tenantId: access.tenant.tenantId };
-      const deactivatedAt = new Date();
-      const deactivated = await service.deactivate(id, deactivatedAt, scope);
+      const updated = await service.updateProfile(
+        id,
+        { displayName: patchResult.data.displayName },
+        scope,
+      );
 
-      if (!deactivated) {
+      if (!updated) {
         return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
       }
 
       logger.info(
         {
-          event: 'admin:user_deactivate',
+          event: 'admin:user_update',
           userId: id,
           adminId: access.user.id,
           tenantId: access.tenant.tenantId,
         },
-        'User deactivated by admin',
+        'User profile updated by admin',
       );
 
       await recordAdminAuditEvent({
         category: 'admin_access',
-        action: 'user.deactivate',
+        action: 'user.update',
         outcome: 'success',
         tenantId: access.tenant.tenantId,
         actorUserId: access.user.id,
@@ -191,63 +250,7 @@ export const PATCH = withErrorHandler(
         targetId: id,
       });
 
-      return createSuccessResponse({ deactivatedAt });
-    }
-
-    const patchResult = patchBodySchema.safeParse(parsedBody);
-    if (!patchResult.success) {
-      return createServerErrorResponse(
-        'Invalid request body',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const adminAccess = await checkAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-      ACTIONS.USER_UPDATE,
-    );
-
-    if (!adminAccess.allowed) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    const scope = adminAccess.isPlatformAdmin
-      ? null
-      : { tenantId: access.tenant.tenantId };
-    const updated = await service.updateProfile(
-      id,
-      { displayName: patchResult.data.displayName },
-      scope,
-    );
-
-    if (!updated) {
-      return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
-    }
-
-    logger.info(
-      {
-        event: 'admin:user_update',
-        userId: id,
-        adminId: access.user.id,
-        tenantId: access.tenant.tenantId,
-      },
-      'User profile updated by admin',
-    );
-
-    await recordAdminAuditEvent({
-      category: 'admin_access',
-      action: 'user.update',
-      outcome: 'success',
-      tenantId: access.tenant.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'user',
-      targetId: id,
-    });
-
-    return createSuccessResponse({ updated: true });
-  }),
+      return createSuccessResponse({ updated: true });
+    }),
+  ),
 );

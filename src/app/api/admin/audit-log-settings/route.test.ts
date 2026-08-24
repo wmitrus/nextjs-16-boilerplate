@@ -7,6 +7,7 @@ import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
 import { DrizzleAuditLogSettingsAdminService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
+import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const mocks = vi.hoisted(() => ({

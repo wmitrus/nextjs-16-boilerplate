@@ -24,6 +24,7 @@ import {
 import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
 import { DrizzleAuditLogSettingsAdminService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -141,195 +142,199 @@ export const GET = withErrorHandler(
 );
 
 export const PATCH = withErrorHandler(
-  withNodeProvisioning(async (request, _context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (request, _context, access) => {
+      await connection();
 
-    const container = getAppContainer();
+      const container = getAppContainer();
 
-    const adminAccess = await checkAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-      ACTIONS.SECURITY_MANAGE_AUDIT_SETTINGS,
-    );
-
-    if (!adminAccess.allowed) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return createServerErrorResponse(
-        'Invalid audit log setting payload',
-        400,
-        'VALIDATION_ERROR',
+      const adminAccess = await checkAdminAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
+        ACTIONS.SECURITY_MANAGE_AUDIT_SETTINGS,
       );
-    }
 
-    const parseResult = patchBodySchema.safeParse(body);
-    if (!parseResult.success) {
-      return createServerErrorResponse(
-        'Invalid audit log setting payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
+      if (!adminAccess.allowed) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
 
-    // An ABAC-authorized (non-platform-admin) caller may only ever target
-    // their own verified tenant -- derive the scope from
-    // `access.tenant.tenantId` rather than trusting (or rejecting) the
-    // client-supplied `tenantId`, same derive-don't-reject shape as
-    // `/api/admin/feature-flags` (SEC-26).
-    const requestedTenantId = adminAccess.isPlatformAdmin
-      ? (parseResult.data.tenantId ?? null)
-      : access.tenant.tenantId;
-    const scope = adminAccess.isPlatformAdmin
-      ? null
-      : { tenantId: access.tenant.tenantId };
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return createServerErrorResponse(
+          'Invalid audit log setting payload',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
 
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const service = new DrizzleAuditLogSettingsAdminService(db);
+      const parseResult = patchBodySchema.safeParse(body);
+      if (!parseResult.success) {
+        return createServerErrorResponse(
+          'Invalid audit log setting payload',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
 
-    const setting = await service.upsert(
-      {
-        category: parseResult.data.category,
-        tenantId: requestedTenantId,
-        enabled: parseResult.data.enabled,
-        retentionDays: parseResult.data.retentionDays,
-        sampleRate: parseResult.data.sampleRate ?? null,
-        captureInputOnSuccess: parseResult.data.captureInputOnSuccess,
-        updatedByUserId: access.user.id,
-      },
-      scope,
-    );
+      // An ABAC-authorized (non-platform-admin) caller may only ever target
+      // their own verified tenant -- derive the scope from
+      // `access.tenant.tenantId` rather than trusting (or rejecting) the
+      // client-supplied `tenantId`, same derive-don't-reject shape as
+      // `/api/admin/feature-flags` (SEC-26).
+      const requestedTenantId = adminAccess.isPlatformAdmin
+        ? (parseResult.data.tenantId ?? null)
+        : access.tenant.tenantId;
+      const scope = adminAccess.isPlatformAdmin
+        ? null
+        : { tenantId: access.tenant.tenantId };
 
-    logger.info(
-      {
-        event: 'admin:audit_log_setting_update',
-        adminId: access.user.id,
-        tenantId: access.tenant.tenantId,
-        category: setting.category,
-        settingTenantId: setting.tenantId,
-      },
-      'Audit log setting updated by admin',
-    );
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const service = new DrizzleAuditLogSettingsAdminService(db);
 
-    // Recorded under 'rbac_policy' (governance/policy config), never under
-    // the category being changed -- an admin disabling category X must not
-    // also erase the record of having disabled it (Codex review, PR #72).
-    await recordAdminAuditEvent({
-      category: 'rbac_policy',
-      action: 'audit_log_setting.update',
-      outcome: 'success',
-      tenantId: setting.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'audit_log_setting',
-      targetId: setting.category,
-      metadata: {
-        enabled: setting.enabled,
-        retentionDays: setting.retentionDays,
-        sampleRate: setting.sampleRate,
-        captureInputOnSuccess: setting.captureInputOnSuccess,
-      },
-    });
-
-    return createSuccessResponse({ setting });
-  }),
-);
-
-export const DELETE = withErrorHandler(
-  withNodeProvisioning(async (request, _context, access) => {
-    await connection();
-
-    const container = getAppContainer();
-
-    const adminAccess = await checkAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-      ACTIONS.SECURITY_MANAGE_AUDIT_SETTINGS,
-    );
-
-    if (!adminAccess.allowed) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return createServerErrorResponse(
-        'Invalid audit log setting payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const parseResult = deleteBodySchema.safeParse(body);
-    if (!parseResult.success) {
-      return createServerErrorResponse(
-        'Invalid audit log setting payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const requestedTenantId = adminAccess.isPlatformAdmin
-      ? (parseResult.data.tenantId ?? null)
-      : access.tenant.tenantId;
-    const scope = adminAccess.isPlatformAdmin
-      ? null
-      : { tenantId: access.tenant.tenantId };
-
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const service = new DrizzleAuditLogSettingsAdminService(db);
-
-    try {
-      await service.resetToDefault(
-        parseResult.data.category,
-        requestedTenantId,
+      const setting = await service.upsert(
+        {
+          category: parseResult.data.category,
+          tenantId: requestedTenantId,
+          enabled: parseResult.data.enabled,
+          retentionDays: parseResult.data.retentionDays,
+          sampleRate: parseResult.data.sampleRate ?? null,
+          captureInputOnSuccess: parseResult.data.captureInputOnSuccess,
+          updatedByUserId: access.user.id,
+        },
         scope,
       );
 
       logger.info(
         {
-          event: 'admin:audit_log_setting_reset',
+          event: 'admin:audit_log_setting_update',
           adminId: access.user.id,
           tenantId: access.tenant.tenantId,
-          category: parseResult.data.category,
-          settingTenantId: requestedTenantId,
+          category: setting.category,
+          settingTenantId: setting.tenantId,
         },
-        'Audit log setting reset to default by admin',
+        'Audit log setting updated by admin',
       );
 
-      // See the identical note on the PATCH handler above (Codex review,
-      // PR #72): recorded under 'rbac_policy', never under the category
-      // whose override was just removed.
+      // Recorded under 'rbac_policy' (governance/policy config), never under
+      // the category being changed -- an admin disabling category X must not
+      // also erase the record of having disabled it (Codex review, PR #72).
       await recordAdminAuditEvent({
         category: 'rbac_policy',
-        action: 'audit_log_setting.reset',
+        action: 'audit_log_setting.update',
         outcome: 'success',
-        tenantId: requestedTenantId,
+        tenantId: setting.tenantId,
         actorUserId: access.user.id,
         targetType: 'audit_log_setting',
-        targetId: parseResult.data.category,
+        targetId: setting.category,
+        metadata: {
+          enabled: setting.enabled,
+          retentionDays: setting.retentionDays,
+          sampleRate: setting.sampleRate,
+          captureInputOnSuccess: setting.captureInputOnSuccess,
+        },
       });
 
-      return createSuccessResponse({ deleted: true });
-    } catch (error) {
-      if (error instanceof AuditSettingNotFoundError) {
+      return createSuccessResponse({ setting });
+    }),
+  ),
+);
+
+export const DELETE = withErrorHandler(
+  withNodeProvisioning(
+    withAdminStepUp(async (request, _context, access) => {
+      await connection();
+
+      const container = getAppContainer();
+
+      const adminAccess = await checkAdminAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
+        ACTIONS.SECURITY_MANAGE_AUDIT_SETTINGS,
+      );
+
+      if (!adminAccess.allowed) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
+
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
         return createServerErrorResponse(
-          'Audit log setting not found',
-          404,
-          'NOT_FOUND',
+          'Invalid audit log setting payload',
+          400,
+          'VALIDATION_ERROR',
         );
       }
 
-      throw error;
-    }
-  }),
+      const parseResult = deleteBodySchema.safeParse(body);
+      if (!parseResult.success) {
+        return createServerErrorResponse(
+          'Invalid audit log setting payload',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
+      const requestedTenantId = adminAccess.isPlatformAdmin
+        ? (parseResult.data.tenantId ?? null)
+        : access.tenant.tenantId;
+      const scope = adminAccess.isPlatformAdmin
+        ? null
+        : { tenantId: access.tenant.tenantId };
+
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const service = new DrizzleAuditLogSettingsAdminService(db);
+
+      try {
+        await service.resetToDefault(
+          parseResult.data.category,
+          requestedTenantId,
+          scope,
+        );
+
+        logger.info(
+          {
+            event: 'admin:audit_log_setting_reset',
+            adminId: access.user.id,
+            tenantId: access.tenant.tenantId,
+            category: parseResult.data.category,
+            settingTenantId: requestedTenantId,
+          },
+          'Audit log setting reset to default by admin',
+        );
+
+        // See the identical note on the PATCH handler above (Codex review,
+        // PR #72): recorded under 'rbac_policy', never under the category
+        // whose override was just removed.
+        await recordAdminAuditEvent({
+          category: 'rbac_policy',
+          action: 'audit_log_setting.reset',
+          outcome: 'success',
+          tenantId: requestedTenantId,
+          actorUserId: access.user.id,
+          targetType: 'audit_log_setting',
+          targetId: parseResult.data.category,
+        });
+
+        return createSuccessResponse({ deleted: true });
+      } catch (error) {
+        if (error instanceof AuditSettingNotFoundError) {
+          return createServerErrorResponse(
+            'Audit log setting not found',
+            404,
+            'NOT_FOUND',
+          );
+        }
+
+        throw error;
+      }
+    }),
+  ),
 );

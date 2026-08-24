@@ -7,6 +7,7 @@ import { DuplicateInvitationError } from '@/modules/invitations/domain/errors';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
+import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const mocks = vi.hoisted(() => ({

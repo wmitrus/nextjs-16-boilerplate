@@ -7,6 +7,7 @@ import { DuplicateFeatureFlagError } from '@/modules/feature-flags/domain/errors
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
+import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const mocks = vi.hoisted(() => ({

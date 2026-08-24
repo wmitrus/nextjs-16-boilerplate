@@ -21,6 +21,7 @@ import { DefaultInvitationService } from '@/modules/invitations/infrastructure/D
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -69,101 +70,103 @@ function createInvitationService(db: DrizzleDb): DefaultInvitationService {
 }
 
 export const POST = withErrorHandler(
-  withNodeProvisioning(async (request, _context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (request, _context, access) => {
+      await connection();
 
-    const container = getAppContainer();
-    const isAdmin = await checkAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-    );
-    if (!isAdmin) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return createServerErrorResponse(
-        'Invalid invitation payload',
-        400,
-        'VALIDATION_ERROR',
+      const container = getAppContainer();
+      const isAdmin = await checkAdminAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
       );
-    }
+      if (!isAdmin) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
 
-    const parseResult = bodySchema.safeParse(body);
-    if (!parseResult.success) {
-      return createServerErrorResponse(
-        'Invalid invitation payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const roleRows = await db
-      .select({ id: rolesTable.id })
-      .from(rolesTable)
-      .where(
-        and(
-          eq(rolesTable.id, parseResult.data.roleId),
-          eq(rolesTable.organizationId, access.tenant.organizationId),
-        ),
-      )
-      .limit(1);
-
-    if (roleRows.length === 0) {
-      return createServerErrorResponse(
-        'Role does not belong to this organization',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const service = createInvitationService(db);
-
-    try {
-      const invitation = await service.createInvitation({
-        email: parseResult.data.email,
-        roleId: parseResult.data.roleId,
-        organizationId: access.tenant.organizationId,
-        invitedByUserId: access.user.id,
-        expiresInHours: 72,
-      });
-
-      await recordAdminAuditEvent({
-        category: 'membership',
-        action: 'invitation.create',
-        outcome: 'success',
-        tenantId: access.tenant.tenantId,
-        actorUserId: access.user.id,
-        targetType: 'invitation',
-        targetId: invitation.id,
-      });
-
-      return createSuccessResponse(
-        {
-          invitationId: invitation.id,
-          email: invitation.email,
-          expiresAt: invitation.expiresAt.toISOString(),
-        },
-        201,
-      );
-    } catch (error) {
-      if (error instanceof DuplicateInvitationError) {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
         return createServerErrorResponse(
-          'A pending invitation already exists for this email',
-          409,
-          'DUPLICATE_INVITATION',
+          'Invalid invitation payload',
+          400,
+          'VALIDATION_ERROR',
         );
       }
 
-      throw error;
-    }
-  }),
+      const parseResult = bodySchema.safeParse(body);
+      if (!parseResult.success) {
+        return createServerErrorResponse(
+          'Invalid invitation payload',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const roleRows = await db
+        .select({ id: rolesTable.id })
+        .from(rolesTable)
+        .where(
+          and(
+            eq(rolesTable.id, parseResult.data.roleId),
+            eq(rolesTable.organizationId, access.tenant.organizationId),
+          ),
+        )
+        .limit(1);
+
+      if (roleRows.length === 0) {
+        return createServerErrorResponse(
+          'Role does not belong to this organization',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
+      const service = createInvitationService(db);
+
+      try {
+        const invitation = await service.createInvitation({
+          email: parseResult.data.email,
+          roleId: parseResult.data.roleId,
+          organizationId: access.tenant.organizationId,
+          invitedByUserId: access.user.id,
+          expiresInHours: 72,
+        });
+
+        await recordAdminAuditEvent({
+          category: 'membership',
+          action: 'invitation.create',
+          outcome: 'success',
+          tenantId: access.tenant.tenantId,
+          actorUserId: access.user.id,
+          targetType: 'invitation',
+          targetId: invitation.id,
+        });
+
+        return createSuccessResponse(
+          {
+            invitationId: invitation.id,
+            email: invitation.email,
+            expiresAt: invitation.expiresAt.toISOString(),
+          },
+          201,
+        );
+      } catch (error) {
+        if (error instanceof DuplicateInvitationError) {
+          return createServerErrorResponse(
+            'A pending invitation already exists for this email',
+            409,
+            'DUPLICATE_INVITATION',
+          );
+        }
+
+        throw error;
+      }
+    }),
+  ),
 );
 
 export const GET = withErrorHandler(

@@ -30,6 +30,7 @@ import {
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { DrizzleAdminPoliciesMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminPoliciesMutationService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
 const allowedResources = new Set<string>(Object.values(RESOURCES));
@@ -46,258 +47,266 @@ const bodySchema = z.object({
 });
 
 export const PATCH = withErrorHandler(
-  withNodeProvisioning(async (request, context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (request, context, access) => {
+      await connection();
 
-    const container = getAppContainer();
-    const isAdmin = await checkOrganizationsAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-    );
-
-    if (!isAdmin) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    const params = await context.params;
-    const organizationResult = organizationIdSchema.safeParse({
-      id: params.organizationId,
-    });
-    const policyResult = policyIdSchema.safeParse({
-      policyId: params.policyId,
-    });
-
-    if (!organizationResult.success) {
-      return createValidationErrorResponse(
-        getFieldErrors(organizationResult.error),
+      const container = getAppContainer();
+      const isAdmin = await checkOrganizationsAdminAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
       );
-    }
 
-    if (!policyResult.success) {
-      return createValidationErrorResponse(getFieldErrors(policyResult.error));
-    }
+      if (!isAdmin) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return createServerErrorResponse(
-        'Invalid policy payload',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const bodyResult = bodySchema.safeParse(body);
-    if (!bodyResult.success) {
-      return createValidationErrorResponse(getFieldErrors(bodyResult.error));
-    }
-
-    if (!allowedResources.has(bodyResult.data.resource)) {
-      return createServerErrorResponse(
-        'Unknown resource',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const invalidAction = bodyResult.data.actions.find(
-      (action) => !isAction(action) || !allowedActions.has(action),
-    );
-
-    if (invalidAction) {
-      return createServerErrorResponse(
-        `Unknown action: ${invalidAction}`,
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    if (
-      bodyResult.data.actions.some(
-        (action) => !action.startsWith(`${bodyResult.data.resource}:`),
-      )
-    ) {
-      return createServerErrorResponse(
-        'All actions must belong to the selected resource',
-        400,
-        'VALIDATION_ERROR',
-      );
-    }
-
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const readService = new DrizzleAdminOrganizationsReadService(db);
-    const organization = await readService.getDetailInActiveScope({
-      activeOrganizationId: access.tenant.organizationId,
-      organizationId: organizationResult.data.id,
-    });
-
-    if (!organization) {
-      return createServerErrorResponse(
-        'Organization not found',
-        404,
-        'NOT_FOUND',
-      );
-    }
-
-    if (organization.organization.status === 'archived') {
-      return createServerErrorResponse(
-        'Archived organizations cannot update policies',
-        409,
-        'ARCHIVED_ORGANIZATION',
-      );
-    }
-
-    const mutationService = new DrizzleAdminPoliciesMutationService(db);
-
-    try {
-      const policy = await mutationService.updateRolePolicy({
-        organizationId: organizationResult.data.id,
-        policyId: policyResult.data.policyId,
-        effect: bodyResult.data.effect,
-        resource: bodyResult.data.resource,
-        actions: bodyResult.data.actions,
+      const params = await context.params;
+      const organizationResult = organizationIdSchema.safeParse({
+        id: params.organizationId,
+      });
+      const policyResult = policyIdSchema.safeParse({
+        policyId: params.policyId,
       });
 
-      await recordAdminAuditEvent({
-        category: 'rbac_policy',
-        action: 'rbac_policy.update',
-        outcome: 'success',
-        tenantId: access.tenant.tenantId,
-        actorUserId: access.user.id,
-        targetType: 'policy',
-        targetId: policyResult.data.policyId,
-      });
-
-      return createSuccessResponse({ policy });
-    } catch (error) {
-      if (
-        error instanceof PolicyNotFoundError ||
-        error instanceof RoleNotFoundError
-      ) {
-        return createServerErrorResponse(error.message, 404, error.code);
+      if (!organizationResult.success) {
+        return createValidationErrorResponse(
+          getFieldErrors(organizationResult.error),
+        );
       }
 
-      if (error instanceof DuplicatePolicyError) {
-        return createServerErrorResponse(error.message, 409, error.code);
+      if (!policyResult.success) {
+        return createValidationErrorResponse(
+          getFieldErrors(policyResult.error),
+        );
       }
 
-      if (error instanceof ProtectedPolicyMutationError) {
-        return createServerErrorResponse(error.message, 400, error.code);
-      }
-
-      if (error instanceof Error) {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
         return createServerErrorResponse(
-          error.message,
+          'Invalid policy payload',
           400,
           'VALIDATION_ERROR',
         );
       }
 
-      throw error;
-    }
-  }),
+      const bodyResult = bodySchema.safeParse(body);
+      if (!bodyResult.success) {
+        return createValidationErrorResponse(getFieldErrors(bodyResult.error));
+      }
+
+      if (!allowedResources.has(bodyResult.data.resource)) {
+        return createServerErrorResponse(
+          'Unknown resource',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
+      const invalidAction = bodyResult.data.actions.find(
+        (action) => !isAction(action) || !allowedActions.has(action),
+      );
+
+      if (invalidAction) {
+        return createServerErrorResponse(
+          `Unknown action: ${invalidAction}`,
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
+      if (
+        bodyResult.data.actions.some(
+          (action) => !action.startsWith(`${bodyResult.data.resource}:`),
+        )
+      ) {
+        return createServerErrorResponse(
+          'All actions must belong to the selected resource',
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const readService = new DrizzleAdminOrganizationsReadService(db);
+      const organization = await readService.getDetailInActiveScope({
+        activeOrganizationId: access.tenant.organizationId,
+        organizationId: organizationResult.data.id,
+      });
+
+      if (!organization) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
+      if (organization.organization.status === 'archived') {
+        return createServerErrorResponse(
+          'Archived organizations cannot update policies',
+          409,
+          'ARCHIVED_ORGANIZATION',
+        );
+      }
+
+      const mutationService = new DrizzleAdminPoliciesMutationService(db);
+
+      try {
+        const policy = await mutationService.updateRolePolicy({
+          organizationId: organizationResult.data.id,
+          policyId: policyResult.data.policyId,
+          effect: bodyResult.data.effect,
+          resource: bodyResult.data.resource,
+          actions: bodyResult.data.actions,
+        });
+
+        await recordAdminAuditEvent({
+          category: 'rbac_policy',
+          action: 'rbac_policy.update',
+          outcome: 'success',
+          tenantId: access.tenant.tenantId,
+          actorUserId: access.user.id,
+          targetType: 'policy',
+          targetId: policyResult.data.policyId,
+        });
+
+        return createSuccessResponse({ policy });
+      } catch (error) {
+        if (
+          error instanceof PolicyNotFoundError ||
+          error instanceof RoleNotFoundError
+        ) {
+          return createServerErrorResponse(error.message, 404, error.code);
+        }
+
+        if (error instanceof DuplicatePolicyError) {
+          return createServerErrorResponse(error.message, 409, error.code);
+        }
+
+        if (error instanceof ProtectedPolicyMutationError) {
+          return createServerErrorResponse(error.message, 400, error.code);
+        }
+
+        if (error instanceof Error) {
+          return createServerErrorResponse(
+            error.message,
+            400,
+            'VALIDATION_ERROR',
+          );
+        }
+
+        throw error;
+      }
+    }),
+  ),
 );
 
 export const DELETE = withErrorHandler(
-  withNodeProvisioning(async (_request, context, access) => {
-    await connection();
+  withNodeProvisioning(
+    withAdminStepUp(async (_request, context, access) => {
+      await connection();
 
-    const container = getAppContainer();
-    const isAdmin = await checkOrganizationsAdminAccess(
-      access.identity.email,
-      access.user.id,
-      access.tenant.tenantId,
-      container,
-    );
-
-    if (!isAdmin) {
-      return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    const params = await context.params;
-    const organizationResult = organizationIdSchema.safeParse({
-      id: params.organizationId,
-    });
-    const policyResult = policyIdSchema.safeParse({
-      policyId: params.policyId,
-    });
-
-    if (!organizationResult.success) {
-      return createValidationErrorResponse(
-        getFieldErrors(organizationResult.error),
+      const container = getAppContainer();
+      const isAdmin = await checkOrganizationsAdminAccess(
+        access.identity.email,
+        access.user.id,
+        access.tenant.tenantId,
+        container,
       );
-    }
 
-    if (!policyResult.success) {
-      return createValidationErrorResponse(getFieldErrors(policyResult.error));
-    }
+      if (!isAdmin) {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
 
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    const readService = new DrizzleAdminOrganizationsReadService(db);
-    const organization = await readService.getDetailInActiveScope({
-      activeOrganizationId: access.tenant.organizationId,
-      organizationId: organizationResult.data.id,
-    });
+      const params = await context.params;
+      const organizationResult = organizationIdSchema.safeParse({
+        id: params.organizationId,
+      });
+      const policyResult = policyIdSchema.safeParse({
+        policyId: params.policyId,
+      });
 
-    if (!organization) {
-      return createServerErrorResponse(
-        'Organization not found',
-        404,
-        'NOT_FOUND',
-      );
-    }
+      if (!organizationResult.success) {
+        return createValidationErrorResponse(
+          getFieldErrors(organizationResult.error),
+        );
+      }
 
-    if (organization.organization.status === 'archived') {
-      return createServerErrorResponse(
-        'Archived organizations cannot delete policies',
-        409,
-        'ARCHIVED_ORGANIZATION',
-      );
-    }
+      if (!policyResult.success) {
+        return createValidationErrorResponse(
+          getFieldErrors(policyResult.error),
+        );
+      }
 
-    const mutationService = new DrizzleAdminPoliciesMutationService(db);
-
-    try {
-      await mutationService.deleteRolePolicy({
+      const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const readService = new DrizzleAdminOrganizationsReadService(db);
+      const organization = await readService.getDetailInActiveScope({
+        activeOrganizationId: access.tenant.organizationId,
         organizationId: organizationResult.data.id,
-        policyId: policyResult.data.policyId,
       });
 
-      await recordAdminAuditEvent({
-        category: 'rbac_policy',
-        action: 'rbac_policy.delete',
-        outcome: 'success',
-        tenantId: access.tenant.tenantId,
-        actorUserId: access.user.id,
-        targetType: 'policy',
-        targetId: policyResult.data.policyId,
-      });
-
-      return createSuccessResponse({ policyId: policyResult.data.policyId });
-    } catch (error) {
-      if (
-        error instanceof PolicyNotFoundError ||
-        error instanceof RoleNotFoundError
-      ) {
-        return createServerErrorResponse(error.message, 404, error.code);
+      if (!organization) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
       }
 
-      if (error instanceof DuplicatePolicyError) {
-        return createServerErrorResponse(error.message, 409, error.code);
+      if (organization.organization.status === 'archived') {
+        return createServerErrorResponse(
+          'Archived organizations cannot delete policies',
+          409,
+          'ARCHIVED_ORGANIZATION',
+        );
       }
 
-      if (error instanceof ProtectedPolicyDeletionError) {
-        return createServerErrorResponse(error.message, 400, error.code);
-      }
+      const mutationService = new DrizzleAdminPoliciesMutationService(db);
 
-      if (error instanceof ProtectedPolicyMutationError) {
-        return createServerErrorResponse(error.message, 400, error.code);
-      }
+      try {
+        await mutationService.deleteRolePolicy({
+          organizationId: organizationResult.data.id,
+          policyId: policyResult.data.policyId,
+        });
 
-      throw error;
-    }
-  }),
+        await recordAdminAuditEvent({
+          category: 'rbac_policy',
+          action: 'rbac_policy.delete',
+          outcome: 'success',
+          tenantId: access.tenant.tenantId,
+          actorUserId: access.user.id,
+          targetType: 'policy',
+          targetId: policyResult.data.policyId,
+        });
+
+        return createSuccessResponse({ policyId: policyResult.data.policyId });
+      } catch (error) {
+        if (
+          error instanceof PolicyNotFoundError ||
+          error instanceof RoleNotFoundError
+        ) {
+          return createServerErrorResponse(error.message, 404, error.code);
+        }
+
+        if (error instanceof DuplicatePolicyError) {
+          return createServerErrorResponse(error.message, 409, error.code);
+        }
+
+        if (error instanceof ProtectedPolicyDeletionError) {
+          return createServerErrorResponse(error.message, 400, error.code);
+        }
+
+        if (error instanceof ProtectedPolicyMutationError) {
+          return createServerErrorResponse(error.message, 400, error.code);
+        }
+
+        throw error;
+      }
+    }),
+  ),
 );

@@ -233,6 +233,12 @@ kompletny wzorzec w `SECURITY_CODING_PATTERNS.md` i własny `plan.md`.
      teraz provider-aware (`requiresClerkFixtures()` + skip `clerkSetup()`),
      więc job potrzebuje tylko `CLERK_*` do samego builda. Rozważ dodanie
      jobu do required checks w branch protection.
+     **Wynik: zielono na `55ebcd3`** (przebieg 4, 2026-08-24 17:51:43Z) —
+     log pokazuje `Running 4 tests using 1 worker` i `4 passed (9.3s)`, czyli
+     suite naprawdę się wykonał, a nie po cichu pominął. Trzy wcześniejsze
+     przebiegi padały na trzech różnych, **preegzystujących** lukach
+     infrastruktury E2E (fixture'y Clerka przy authjs, Podman na runnerze
+     Dockerowym, produkcyjny build bez `.env.local`) — nigdy na kodzie SEC-48.
   3. Reszta admin-owych E2E jedzie dalej na kontrolowanym bypassie
      (`ADMIN_STEP_UP_MODE=bypass-local-only` ustawia `run-scenario.mjs`) — ich
      tematem nie jest step-up.

@@ -188,6 +188,15 @@ aside, production server, scenario env: the provisioning route answers
 of `500`, and an unauthenticated admin mutation answers `401` rather than
 failing in the pipeline.
 
+**Fourth run: green.** On head `55ebcd3` the job
+("Playwright Admin Step-Up E2E", run 4, 2026-08-24 17:51:43Z) passed, and the
+log proves the suite actually executed rather than skipping itself:
+`Running 4 tests using 1 worker` followed by all four named specs and
+`4 passed (9.3s)` -- enrollment redirect, mutation refused-then-allowed,
+recovery code consumed exactly once, and sign-in demanding the second factor.
+`[global-setup] AUTH_PROVIDER=authjs — skipping Clerk testing-token setup.`
+in the same log confirms the provider-aware gating from (1) doing its job.
+
 ## Session limitations
 
 - **E2E not executed locally, but wired into CI.** After the first push the

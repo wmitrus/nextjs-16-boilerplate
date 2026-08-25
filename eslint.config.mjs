@@ -262,6 +262,7 @@ const eslintConfig = defineConfig([
   globalIgnores([
     '.git/**',
     '.next/**',
+    '.vercel/**',
     'out/**',
     'build/**',
     'coverage/**',

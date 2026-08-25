@@ -96,3 +96,6 @@ next-env.d.ts
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
 docs/newrelic-agent-snippet.js
+
+# CodeGraph local index
+.codegraph/

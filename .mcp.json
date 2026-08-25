@@ -3,6 +3,15 @@
     "next-devtools": {
       "command": "npx",
       "args": ["-y", "next-devtools-mcp@latest"]
+    },
+    "codegraph": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["exec", "codegraph", "serve", "--mcp"],
+      "env": {
+        "CODEGRAPH_TELEMETRY": "0",
+        "CODEGRAPH_NO_UPDATE_CHECK": "1"
+      }
     }
   }
 }

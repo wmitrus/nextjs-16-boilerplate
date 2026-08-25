@@ -125,7 +125,15 @@ Minimize context consumption without reducing correctness.
 - Prefer targeted sections, exact files, focused searches, and the narrowest applicable skill.
 - Avoid re-reading information already available and still reliable in the current session.
 - When a skill references shared docs, read only the portions required for the task unless the skill explicitly depends on the whole document.
-- Prefer repository search/structural discovery before opening many files individually.
+- For source-code discovery, topology, callers/callees, and impact analysis,
+  prefer project CodeGraph first when available.
+- Use targeted search/find for exact text, documentation, instructions, task
+  artifacts, and content not represented well by the code graph.
+- Treat CodeGraph as discovery evidence; live source remains authoritative.
+  If CodeGraph reports stale/pending files or conflicts with live evidence,
+  read the affected source directly.
+- Rely on CodeGraph auto-sync during normal work. Do not run `codegraph sync`
+  before every task or edit; use manual sync only as a recovery fallback.
 - For large logs/command output, inspect the smallest relevant slice first and escalate to raw/full output only when needed.
 - Start a fresh session for a materially different task instead of carrying unrelated context forward.
 - Do not save usage by omitting evidence required for correctness, security, or validation.

@@ -388,6 +388,131 @@ pnpm release          # Semantic release
 - **`security-scan.yml`**: Security scanning.
 - **`e2e-label.yml`**: E2E test label automation.
 
+## GitHub Actions / CI Log Retrieval Discipline
+
+Applies whenever an agent checks CI/PR status, GitHub Actions workflow runs, or
+Vercel deployment diagnostics for this repository — during `debug-investigation`,
+`incident-investigation-workflow`, `change-validation-workflow`, or an ad-hoc
+status check. Goal: full diagnostic correctness with minimal context spend, and
+an always-available escalation path to raw logs.
+
+1. **Metadata first.** After a push/PR, use the GitHub connector/API only for
+   runs/checks, jobs, conclusions, steps, job/step IDs, and artifacts
+   metadata. If every required check/job is successful, stop — do not fetch
+   any job logs merely to confirm success.
+2. **Scope: non-success terminal states, not just `failure`.** By default,
+   fetch logs only for jobs/checks in a materially non-success terminal state
+   — `failure`, `timed_out`, `cancelled`, `action_required`,
+   `startup_failure`, `stale`, or any other state that fails a required
+   check/workflow. Never pull logs of a genuinely successful job just to
+   double-check it, except the narrow exception in rule 7.
+3. **Job-log content never goes through the model context via the
+   connector/API directly.** The GitHub connector/API log-fetch path
+   available in this repo (e.g. a `fetch_workflow_job_logs`-style call) has
+   been observed to return the entire, multi-thousand-line job log with no
+   partial/offset option — "metadata-first" (rule 1) does not extend to log
+   content. For any non-success job, pull the raw log to a local file outside
+   model context first — e.g. `gh run view --log` or `gh api` against the
+   GitHub Actions job-logs/raw-download endpoint, redirected to a temp file —
+   then use targeted grep/search/read against that file to extract the
+   failed step and primary error before anything reaches the model. Do not
+   assume `gh run view --log` itself is reliable — it has returned empty
+   output in this repo against a job log that existed; if it fails or returns
+   nothing, fall back to `gh api` against the direct job-logs/raw-download
+   endpoint. The full log may exist locally as evidence/fallback; it must not
+   automatically enter model context in full — load it in full only when
+   targeted extraction is impossible or the result is inconclusive (rule 8).
+4. **First-pass budget ≈100 relevant lines of log content.** The budget
+   covers log content that enters model context during first-pass diagnosis —
+   not metadata/status calls, not local scan volume, and not solely the size
+   of the excerpt reported back to the user. Targeted commands (grep/awk/sed)
+   may scan the whole local file; keep their stdout minimal — line numbers
+   plus a short signature — and pull one real excerpt only once the location
+   is known. ~100 is an orientation budget, not a hard security limit: a
+   modest overrun is acceptable when needed to correctly locate the failure,
+   but avoid repeated, overlapping reads of the same log content.
+
+   Do not anchor the first excerpt solely on the terminal
+   `##[error]Process completed with exit code ...` marker or the job's last
+   lines — that is usually only the terminal symptom. Locate, in order: the
+   failed-step boundary; the first material error/exception/assertion/fatal
+   signature inside that step; the causal stack/server error tied to that
+   signature; the exit code/`##[error]` marker only as a secondary anchor. If
+   more than one error signature exists, classify them into distinct failure
+   clusters before choosing the excerpt. Target shape once anchored: ~20
+   lines of causal context before the signature, the full relevant
+   error/stack block (commonly ~60 lines), ~20 lines after.
+
+5. **Retries/duplication.** When a test runner (e.g. Playwright) repeats an
+   identical failure across retries, keep one representative stack trace plus
+   the retry count, and keep every materially different failure cluster —
+   don't paste duplicate traces.
+6. **Selective expansion.** If the first ~100 relevant lines don't establish
+   root cause, are ambiguous, show only a symptom, are missing earlier causal
+   context, or span multiple distinct failure clusters, expand by ~100–200
+   more lines around the right location, read from the local raw-log file
+   (rule 3) rather than by re-fetching through the connector. Don't jump
+   straight to the full log.
+7. **Successful-job exception.** If a non-success job's root cause depends on
+   an artifact, state, or output produced by an earlier successful job, and
+   that evidence isn't available otherwise, selectively read the specific
+   relevant fragment of that successful job's log using the same local-file/
+   targeted-extraction approach as rule 3. Do not fetch that successful job's
+   full log automatically.
+8. **Raw log fallback.** Treat the full raw job log (retrieved locally per
+   rule 3) as the authoritative source, and escalate to it fully when:
+   failure location is uncertain; the excerpt is contradictory or
+   incomplete; an exact stack/timestamp/request ID/path/test name is needed;
+   the cause may sit well before the final error; or the agent is about to
+   sign off on a final root cause and truncation could change the conclusion.
+9. **High-risk evidence.** For security, auth/authorization, production
+   deployment, Vercel production failures, migrations/SQL/persistence, tenant
+   isolation, or secrets/environment configuration: a truncated excerpt may
+   route and start diagnosis, but must not be the sole basis for the final
+   conclusion if omitted context could matter — fetch the needed raw evidence
+   block or full raw log before concluding.
+10. **Truncation must be explicit.** When working from a truncated excerpt,
+    say so: name the workflow/job/step it came from and that the full raw log
+    is available as fallback. Never present an excerpt as a complete log.
+11. **GitHub connector/API vs RTK — don't mix them.** Use the GitHub
+    connector/API only for metadata (rule 1). Route all job-log retrieval —
+    partial or full — through the local-file/targeted-extraction path in
+    rule 3, never through RTK. RTK remains first-pass compression for local
+    shell output (git, tests, package manager, build, lint, and supported
+    `gh` summaries); it is not the primary layer for GitHub Actions job logs,
+    and raw output remains RTK's fallback too. Do not install a global RTK
+    hook and do not run `rtk init -g`.
+12. **Evidence escalation ladder.** Use the lightest evidence layer that can
+    answer the question correctly, and apply the same metadata-first /
+    targeted-extraction discipline at every layer. The default escalation path
+    is:
+    1. failed/non-success job metadata + targeted log excerpt;
+    2. run/job artifact metadata, then targeted extraction from relevant
+       artifact content;
+    3. observability evidence (for example Sentry, Logflare, runtime/provider
+       logs) correlated narrowly by timestamp, route, request, deployment,
+       trace, or other available identifier;
+    4. full/raw evidence from the relevant layer only when narrower evidence is
+       insufficient, contradictory, or truncation could affect the conclusion.
+
+    Do not load whole archives, reports, traces, dashboards, or log streams when
+    a targeted read is sufficient.
+
+    This is a default escalation order, not a mandatory sequence. A layer may
+    be skipped when available metadata/evidence shows it is irrelevant or when
+    a more direct authoritative source is already known. Preserve the reason
+    for the skip in the investigation notes.
+
+    For high-risk conclusions covered by rule 9, targeted evidence may start
+    the investigation, but fetch the raw evidence needed to support the final
+    conclusion whenever omitted context could materially change it.
+
+Baseline: many confirmed root causes in this repo fit in ~8–12 lines; more
+complex Playwright failures needed ~40–80 lines; full job logs ran to
+thousands of lines of setup/install/build noise. Treat 100 lines as a
+deliberately conservative first-pass budget, not a hard cap or a security
+control.
+
 ## Environment Variables (Key Groups)
 
 Managed via `src/core/env.ts` (T3-Env + Zod). Groups:

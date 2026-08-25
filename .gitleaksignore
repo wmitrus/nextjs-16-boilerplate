@@ -1,3 +1,5 @@
 eddc394dd8840b855ee30e675c4ccb36315430f7:.copilot/tasks/2026-04-05-nr-browser-spa/02 - Security & Auth - Summary.md:generic-api-key:30
 7de9ad9d34501bb4bfd40cc57ca994408556c80c:.copilot/tasks/2026-04-05-nr-browser-spa/06 - Debug Investigation - Summary.md:generic-api-key:225
 4edbc6b78087c98ada44d52e7729dd902cd42ee9:docs/ai/general/SECURITY_CODING_PATTERNS.md:generic-api-key:212
+98a6c81a7215350e346937b64ca023256521c257:scripts/ai-tooling/lib/security.test.ts:aws-access-token:8
+98a6c81a7215350e346937b64ca023256521c257:scripts/ai-tooling/lib/security.test.ts:jwt:21

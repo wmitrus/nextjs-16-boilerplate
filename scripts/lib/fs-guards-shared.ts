@@ -2,8 +2,10 @@ import {
   createReadStream,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import type { Dirent, Stats } from 'node:fs';
@@ -129,4 +131,24 @@ export function createReadStreamWithinBase(
 ): ReturnType<typeof createReadStream> {
   const safePath = assertPathWithinBase(filePath, baseDir, label);
   return createReadStream(safePath);
+}
+
+export function unlinkSyncWithinBase(
+  filePath: string,
+  baseDir: string,
+  label = 'path',
+): void {
+  const safePath = assertPathWithinBase(filePath, baseDir, label);
+  unlinkSync(safePath);
+}
+
+/** For sinks that need the raw fd (e.g. an exclusive `O_CREAT|O_EXCL` create-lock). */
+export function openSyncWithinBase(
+  filePath: string,
+  baseDir: string,
+  flags: Parameters<typeof openSync>[1],
+  label = 'path',
+): number {
+  const safePath = assertPathWithinBase(filePath, baseDir, label);
+  return openSync(safePath, flags);
 }

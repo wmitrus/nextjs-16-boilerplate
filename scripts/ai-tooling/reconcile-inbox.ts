@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const lock = acquireLock(config.lockPath);
+  const lock = acquireLock(config.lockPath, config.ledgerDir);
   try {
     const normalization = runNormalization(config);
     if (normalization.changed) {

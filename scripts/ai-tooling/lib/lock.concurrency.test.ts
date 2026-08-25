@@ -26,11 +26,17 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function runContender(lockPath: string, holdMs: number): Promise<string> {
+function runContender(
+  lockPath: string,
+  ledgerDir: string,
+  holdMs: number,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('npx', ['tsx', FIXTURE, lockPath, String(holdMs)], {
-      cwd: REPO_ROOT,
-    });
+    const child = spawn(
+      'npx',
+      ['tsx', FIXTURE, lockPath, ledgerDir, String(holdMs)],
+      { cwd: REPO_ROOT },
+    );
     let out = '';
     child.stdout.on('data', (d) => (out += d.toString()));
     child.stderr.on('data', (d) => (out += d.toString()));
@@ -44,8 +50,8 @@ describe('acquireLock — real two-process contention', () => {
     const lockPath = path.join(dir, 'reconcile.lock');
 
     const [resultA, resultB] = await Promise.all([
-      runContender(lockPath, 300),
-      runContender(lockPath, 300),
+      runContender(lockPath, dir, 300),
+      runContender(lockPath, dir, 300),
     ]);
 
     const results = [resultA, resultB];
@@ -62,11 +68,11 @@ describe('acquireLock — real two-process contention', () => {
 
   it('a third process started after the first releases can acquire cleanly', async () => {
     const lockPath = path.join(dir, 'reconcile.lock');
-    const first = await runContender(lockPath, 50);
+    const first = await runContender(lockPath, dir, 50);
     expect(first).toBe('ACQUIRED');
     expect(existsSync(lockPath)).toBe(false);
 
-    const second = await runContender(lockPath, 50);
+    const second = await runContender(lockPath, dir, 50);
     expect(second).toBe('ACQUIRED');
   }, 15000);
 });

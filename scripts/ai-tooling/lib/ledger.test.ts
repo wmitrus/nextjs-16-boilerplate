@@ -25,12 +25,12 @@ afterEach(() => {
 
 describe('readLedger', () => {
   it('returns an empty ledger when the file is missing', () => {
-    expect(readLedger(ledgerPath)).toEqual({});
+    expect(readLedger(ledgerPath, dir)).toEqual({});
   });
 
   it('returns an empty ledger when the file is corrupted (Tier-2 fallback applies)', () => {
     writeFileSync(ledgerPath, '{not valid json');
-    expect(readLedger(ledgerPath)).toEqual({});
+    expect(readLedger(ledgerPath, dir)).toEqual({});
   });
 
   it('parses a valid ledger file', () => {
@@ -40,8 +40,17 @@ describe('readLedger', () => {
         'INBOX-1': { linearId: 'OZI-1', action: 'create', confirmedAt: 'x' },
       }),
     );
-    const ledger = readLedger(ledgerPath);
+    const ledger = readLedger(ledgerPath, dir);
     expect(lookupLedger(ledger, 'INBOX-1')?.linearId).toBe('OZI-1');
+  });
+
+  it('rejects a ledgerPath outside ledgerDir before any filesystem access — path.resolve() alone does not confine', () => {
+    // Confinement must throw before any existsSync/readFileSync is even
+    // attempted, so the target need not exist for this to prove rejection.
+    const outside = path.join(tmpdir(), 'ledger-test-outside-secret.json');
+    expect(() => readLedger(outside, dir)).toThrow(
+      /escapes the allowed directory/,
+    );
   });
 });
 
@@ -53,7 +62,7 @@ describe('recordConfirmedMapping', () => {
       confirmedAt: '2026-08-25T14:35:10.000Z',
     });
     expect(ledger['INBOX-1'].linearId).toBe('OZI-40');
-    expect(readLedger(ledgerPath)['INBOX-1'].linearId).toBe('OZI-40');
+    expect(readLedger(ledgerPath, dir)['INBOX-1'].linearId).toBe('OZI-40');
   });
 
   it('is idempotent for an identical repeated confirmed mapping', () => {

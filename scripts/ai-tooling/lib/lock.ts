@@ -32,16 +32,17 @@
  *   `config.ts` places it under `~/.local/state/...`, which is native.
  */
 
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  unlinkSync,
-  writeSync,
-} from 'node:fs';
+import { closeSync, readFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
+
+import {
+  assertPathWithinBase,
+  ensureDirectorySyncWithinBase,
+  openSyncWithinBase,
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+  unlinkSyncWithinBase,
+} from '../../lib/fs-guards-shared';
 
 export class LockHeldError extends Error {
   constructor(lockPath: string, holderPid: string) {
@@ -114,33 +115,53 @@ function holderStillValid(content: string): boolean {
   return currentStartTime === null || currentStartTime === decoded.startTime;
 }
 
-/** Acquire the lock or throw `LockHeldError`. Caller must call the returned `release()`. */
-export function acquireLock(lockPath: string): { release: () => void } {
-  const resolved = path.resolve(lockPath);
+/**
+ * Acquire the lock or throw `LockHeldError`. Caller must call the returned
+ * `release()`. `lockPath` is confined to `ledgerDir` at every filesystem
+ * sink — `path.resolve()` alone normalizes but does not confine, and
+ * `ledgerDir` is fully operator-configurable (`AI_INBOX_LEDGER_DIR`).
+ */
+export function acquireLock(
+  lockPath: string,
+  ledgerDir: string,
+): { release: () => void } {
+  const resolved = assertPathWithinBase(
+    path.resolve(lockPath),
+    ledgerDir,
+    'lock file',
+  );
 
-  if (existsSync(resolved)) {
-    const holder = readFileSync(resolved, 'utf8').trim();
+  if (pathExistsWithinBase(resolved, ledgerDir, 'lock file')) {
+    const holder = readTextFileWithinBase(
+      resolved,
+      ledgerDir,
+      'lock file',
+    ).trim();
     if (holderStillValid(holder)) {
       throw new LockHeldError(resolved, holder || 'unknown');
     }
     // Stale lock: owning process is gone (or confirmed to be a different
     // process via start-time mismatch). Clear it and retry once.
-    unlinkSync(resolved);
+    unlinkSyncWithinBase(resolved, ledgerDir, 'lock file');
   }
 
   // First run against the documented default ledger dir (or any new
   // AI_INBOX_LEDGER_DIR) has no parent directory yet — create it before the
   // exclusive open, or that open throws ENOENT instead of the intended
   // EEXIST/success outcomes below.
-  mkdirSync(path.dirname(resolved), { recursive: true });
+  ensureDirectorySyncWithinBase(
+    path.dirname(resolved),
+    ledgerDir,
+    'lock directory',
+  );
 
   let fd: number;
   try {
-    fd = openSync(resolved, 'wx');
+    fd = openSyncWithinBase(resolved, ledgerDir, 'wx', 'lock file');
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-      const holder = existsSync(resolved)
-        ? readFileSync(resolved, 'utf8').trim()
+      const holder = pathExistsWithinBase(resolved, ledgerDir, 'lock file')
+        ? readTextFileWithinBase(resolved, ledgerDir, 'lock file').trim()
         : 'unknown';
       throw new LockHeldError(resolved, holder);
     }
@@ -151,7 +172,9 @@ export function acquireLock(lockPath: string): { release: () => void } {
 
   return {
     release: () => {
-      if (existsSync(resolved)) unlinkSync(resolved);
+      if (pathExistsWithinBase(resolved, ledgerDir, 'lock file')) {
+        unlinkSyncWithinBase(resolved, ledgerDir, 'lock file');
+      }
     },
   };
 }

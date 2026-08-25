@@ -19,9 +19,10 @@ export function sourceMarker(inboxId: string): string {
 export async function resolveDuplicate(
   inboxId: string,
   ledgerPath: string,
+  ledgerDir: string,
   adapter: LinearAdapter,
 ): Promise<DuplicateResolution> {
-  const ledger = readLedger(ledgerPath);
+  const ledger = readLedger(ledgerPath, ledgerDir);
   const ledgerEntry = lookupLedger(ledger, inboxId);
   if (ledgerEntry) {
     return { kind: 'ONE', linearId: ledgerEntry.linearId, source: 'LEDGER' };

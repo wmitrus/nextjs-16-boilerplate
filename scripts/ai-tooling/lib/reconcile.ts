@@ -5,7 +5,11 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+
+import {
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+} from '../../lib/fs-guards-shared';
 
 import { atomicWriteWithinBase, hashContent } from './atomic-fs';
 import type { ReconcileConfig } from './config';
@@ -44,8 +48,10 @@ export class ApprovalInvalidatedError extends Error {
 }
 
 function readInbox(config: ReconcileConfig): string {
-  if (!existsSync(config.inboxPath)) return '';
-  return readFileSync(config.inboxPath, 'utf8');
+  if (!pathExistsWithinBase(config.inboxPath, config.inboxDir, 'inbox')) {
+    return '';
+  }
+  return readTextFileWithinBase(config.inboxPath, config.inboxDir, 'inbox');
 }
 
 /**
@@ -139,6 +145,7 @@ export async function buildPlan(
     const duplicate = await resolveDuplicate(
       block.heading,
       config.ledgerPath,
+      config.ledgerDir,
       adapter,
     );
     const { action, reason } = actionForDuplicate(duplicate);
@@ -302,7 +309,12 @@ async function applyRow(
   // create with a missing write-back resolves here with zero Linear calls),
   // falling back to a fresh Tier-2 verified search only when the ledger has
   // no entry.
-  const fresh = await resolveDuplicate(row.inboxId, config.ledgerPath, adapter);
+  const fresh = await resolveDuplicate(
+    row.inboxId,
+    config.ledgerPath,
+    config.ledgerDir,
+    adapter,
+  );
   if (fresh.kind === 'AMBIGUOUS') {
     throw new Error(
       `Ambiguous match at apply time for ${row.inboxId}; stopped for manual review.`,

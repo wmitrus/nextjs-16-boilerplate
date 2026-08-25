@@ -8,8 +8,10 @@
  * Stored local-only: outside git, outside the synced inbox storage.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
+import {
+  pathExistsWithinBase,
+  readTextFileWithinBase,
+} from '../../lib/fs-guards-shared';
 
 import { atomicWriteWithinBase } from './atomic-fs';
 import type { Ledger, LedgerEntry } from './types';
@@ -24,12 +26,15 @@ export class LedgerConflictError extends Error {
   }
 }
 
-/** Reads the ledger; missing or corrupted file is treated as an empty ledger (Tier-2 fallback applies). */
-export function readLedger(ledgerPath: string): Ledger {
-  const resolved = path.resolve(ledgerPath);
-  if (!existsSync(resolved)) return {};
+/**
+ * Reads the ledger; missing or corrupted file is treated as an empty ledger
+ * (Tier-2 fallback applies). `ledgerPath` is confined to `ledgerDir` at the
+ * read sink itself — a bare `path.resolve()` normalizes but does not confine.
+ */
+export function readLedger(ledgerPath: string, ledgerDir: string): Ledger {
+  if (!pathExistsWithinBase(ledgerPath, ledgerDir, 'ledger')) return {};
   try {
-    const raw = readFileSync(resolved, 'utf8');
+    const raw = readTextFileWithinBase(ledgerPath, ledgerDir, 'ledger');
     const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as Ledger;
@@ -59,7 +64,7 @@ export function recordConfirmedMapping(
   inboxId: string,
   entry: LedgerEntry,
 ): Ledger {
-  const current = readLedger(ledgerPath);
+  const current = readLedger(ledgerPath, ledgerDir);
   const existing = current[inboxId];
   if (existing && existing.linearId !== entry.linearId) {
     throw new LedgerConflictError(inboxId, existing.linearId, entry.linearId);

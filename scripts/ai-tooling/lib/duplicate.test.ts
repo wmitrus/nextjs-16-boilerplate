@@ -108,6 +108,7 @@ describe('resolveDuplicate', () => {
     const resolution = await resolveDuplicate(
       'INBOX-1',
       ledgerPath,
+      dir,
       spyAdapter,
     );
     expect(resolution).toEqual({
@@ -124,7 +125,12 @@ describe('resolveDuplicate', () => {
       title: 'x',
       description: `## Source\n${sourceMarker('INBOX-2')}`,
     });
-    const resolution = await resolveDuplicate('INBOX-2', ledgerPath, adapter);
+    const resolution = await resolveDuplicate(
+      'INBOX-2',
+      ledgerPath,
+      dir,
+      adapter,
+    );
     expect(resolution).toEqual({
       kind: 'ONE',
       linearId: 'OZI-30',

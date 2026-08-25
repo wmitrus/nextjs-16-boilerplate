@@ -155,6 +155,7 @@ describe('B. sanitized why propagation — 1:1 with the approved dry-run preview
       reason: 'unsafe',
       fieldsCopied: [],
       fieldsOmitted: ['why'],
+      blockFingerprint: 'fp-x',
       // approvedFields deliberately omitted — nothing was approved.
     };
     expect(buildIssueDescription(row)).toBe('## Source\nInbox ID: INBOX-x\n');
@@ -170,6 +171,7 @@ describe('B. sanitized why propagation — 1:1 with the approved dry-run preview
       fieldsCopied: [],
       fieldsOmitted: [],
       approvedFields: {},
+      blockFingerprint: 'fp-y',
     };
     expect(buildIssueDescription(row)).toBe('## Source\nInbox ID: INBOX-y\n');
   });

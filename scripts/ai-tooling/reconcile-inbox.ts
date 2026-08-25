@@ -69,6 +69,12 @@ async function main(): Promise<void> {
       console.log(`  MANUAL_REVIEW ${m.inboxId}: ${m.reason}`);
     for (const f of result.failed)
       console.log(`  FAILED ${f.inboxId}: ${f.reason}`);
+    // A per-row failure does not throw (applyPlan isolates rows) — surface
+    // it as a nonzero exit so shell automation and operators relying on the
+    // exit code see an incomplete reconciliation instead of false success.
+    if (result.failed.length > 0) {
+      process.exitCode = 1;
+    }
   } finally {
     lock.release();
   }

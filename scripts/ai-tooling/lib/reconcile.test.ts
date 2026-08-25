@@ -245,6 +245,41 @@ describe('applyPlan', () => {
     expect(readInboxRaw()).toContain('state: IMPORTED');
   });
 
+  it('refuses write-back when the block content changes while its own mutation is in flight', async () => {
+    // Regression: buildPlan captures blockFingerprint once at the top of
+    // applyPlan; a race window still exists between that read and the
+    // per-row write-back, which runs after the (awaited) Linear call. A
+    // state-only check would miss a same-block edit landing in that window
+    // and would mark the edited entry IMPORTED with stale content.
+    const id = 'INBOX-20260825-000000-aaaa';
+    writeInbox(canonicalNewBlock(id, 'Original title', 'why a'));
+    const plan = await buildPlan(config, adapter);
+
+    const racingDuringCreate = new (class extends FakeLinearAdapter {
+      async createIssue(
+        input: Parameters<FakeLinearAdapter['createIssue']>[0],
+      ) {
+        // Simulate an edit (e.g. mobile sync) landing on this exact block
+        // after buildPlan's read but before this row's write-back re-reads.
+        writeInbox(canonicalNewBlock(id, 'Changed mid-flight', 'why a'));
+        return super.createIssue(input);
+      }
+    })();
+
+    const result = await applyPlan(
+      config,
+      racingDuringCreate,
+      plan.fingerprint,
+    );
+    expect(result.created).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].inboxId).toBe(id);
+
+    const after = readInboxRaw();
+    expect(after).toContain('title: Changed mid-flight'); // not clobbered
+    expect(after).not.toContain('state: IMPORTED');
+  });
+
   it('preserves an unrelated block byte-for-byte while writing back a different entry', async () => {
     const idA = 'INBOX-20260825-000000-aaaa';
     const idB = 'INBOX-20260825-000000-bbbb';
@@ -286,11 +321,54 @@ describe('fingerprintRows', () => {
         reason: 'x',
         fieldsCopied: [],
         fieldsOmitted: [],
+        blockFingerprint: 'fp-1',
       },
     ];
     const rowsB = [{ ...rowsA[0], title: 'Changed' }];
     expect(fingerprintRows(rowsA)).toBe(fingerprintRows(rowsA));
     expect(fingerprintRows(rowsA)).not.toBe(fingerprintRows(rowsB));
+  });
+
+  it('changes when an approved free-text field (e.g. why) changes, even though inboxId/action/title/duplicate stay the same', () => {
+    const base = {
+      inboxId: 'INBOX-1',
+      title: 'A',
+      duplicate: { kind: 'NONE' as const },
+      action: 'CREATE' as const,
+      reason: 'x',
+      fieldsCopied: ['why'],
+      fieldsOmitted: [],
+      blockFingerprint: 'fp-1',
+      approvedFields: { why: 'original reason' },
+    };
+    const changed = { ...base, approvedFields: { why: 'different reason' } };
+    expect(fingerprintRows([base])).not.toBe(fingerprintRows([changed]));
+  });
+
+  it('changes when a LINK_EXISTING row resolves to a different Linear issue, even though duplicate.kind stays ONE', () => {
+    const base = {
+      inboxId: 'INBOX-1',
+      title: 'A',
+      duplicate: {
+        kind: 'ONE' as const,
+        linearId: 'OZI-1',
+        source: 'LEDGER' as const,
+      },
+      action: 'LINK_EXISTING' as const,
+      reason: 'x',
+      fieldsCopied: [],
+      fieldsOmitted: [],
+      blockFingerprint: 'fp-1',
+    };
+    const retargeted = {
+      ...base,
+      duplicate: {
+        kind: 'ONE' as const,
+        linearId: 'OZI-2',
+        source: 'LEDGER' as const,
+      },
+    };
+    expect(fingerprintRows([base])).not.toBe(fingerprintRows([retargeted]));
   });
 });
 

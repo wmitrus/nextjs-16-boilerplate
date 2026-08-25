@@ -79,6 +79,14 @@ export type PlanRow = {
   /** Fields that will be copied into Linear vs. omitted, for the dry-run security preview. */
   fieldsCopied: string[];
   fieldsOmitted: string[];
+  /**
+   * Change-detection fingerprint of this row's raw source block at plan-build
+   * time (`hashContent` over `source.slice(block.start, block.end)`). Applied
+   * at write-back time to refuse silently overwriting a block that an
+   * editor/sync changed after the plan was built but before the mutation
+   * completed — the state field alone is not sufficient (see `writeBackImported`).
+   */
+  blockFingerprint: string;
 };
 
 export type ReconciliationPlan = {

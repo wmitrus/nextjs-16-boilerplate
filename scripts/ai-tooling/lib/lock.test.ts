@@ -41,6 +41,15 @@ describe('acquireLock', () => {
     lock.release();
   });
 
+  it('creates a not-yet-existing parent directory (fresh install / new AI_INBOX_LEDGER_DIR)', () => {
+    // Regression: the ledger dir does not exist yet on a first run against
+    // the documented default location, or any new AI_INBOX_LEDGER_DIR — the
+    // lock path's parent must not be assumed to pre-exist.
+    const lockPath = path.join(dir, 'fresh-ledger-dir', 'reconcile.lock');
+    const lock = acquireLock(lockPath);
+    lock.release();
+  });
+
   it('records own pid+start-time and blocks a second acquire against that exact record', () => {
     const lockPath = path.join(dir, 'reconcile.lock');
     const lock = acquireLock(lockPath);

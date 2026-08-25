@@ -83,6 +83,21 @@ describe('loadConfig — account-configurable, no hardcoded personal path', () =
     expect(() => loadConfig()).toThrow(MissingConfigError);
   });
 
+  it(
+    'rejects AI_INBOX_PATH pointing inside the repository — inboxDir is derived from ' +
+      'the same value, so it cannot guard against this itself',
+    () => {
+      process.env.HOME = '/home/testuser';
+      process.env.AI_INBOX_PATH = path.join(
+        process.cwd(),
+        'scripts/ai-tooling/some-tracked-file.md',
+      );
+      expect(() => loadConfig()).toThrow(
+        /must not point inside the repository/,
+      );
+    },
+  );
+
   it('never hardcodes any specific account path — two different HOME values resolve differently', () => {
     process.env.AI_INBOX_PATH = '~/.linear/inbox/capture.md';
 

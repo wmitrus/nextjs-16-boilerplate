@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
-import { atomicWriteWithinBase } from './atomic-fs';
+import { atomicWriteWithinBase, hashContent } from './atomic-fs';
 import type { ReconcileConfig } from './config';
 import { fuzzyTitleWarning, resolveDuplicate, sourceMarker } from './duplicate';
 import { fieldValue, parseInbox, validateInbox } from './inbox-parser';
@@ -46,6 +46,18 @@ export class ApprovalInvalidatedError extends Error {
 function readInbox(config: ReconcileConfig): string {
   if (!existsSync(config.inboxPath)) return '';
   return readFileSync(config.inboxPath, 'utf8');
+}
+
+/**
+ * Change-detection fingerprint over a block's parsed fields — deliberately
+ * NOT the raw `source.slice(block.start, block.end)` text: a sibling block
+ * appended/removed elsewhere in the file shifts where "end of this block"
+ * falls (start-of-next-heading vs. end-of-file) and changes how much
+ * trailing whitespace the slice captures, with no change to this block's
+ * own content. Fields are structural and immune to that boundary shift.
+ */
+function blockContentFingerprint(block: InboxBlock): string {
+  return hashContent(JSON.stringify(block.fields));
 }
 
 /** Runs the normalization pass and writes it back atomically. Not a Linear mutation — safe in dry-run. */
@@ -104,6 +116,7 @@ export async function buildPlan(
 
     const title = fieldValue(block, 'title') ?? '';
     const { safe, unsafe, approvedFields } = planFieldsForRow(block);
+    const blockFingerprint = blockContentFingerprint(block);
 
     if (unsafe.length > 0) {
       rows.push({
@@ -118,6 +131,7 @@ export async function buildPlan(
         reason: `Credential-shaped content detected in: ${unsafe.join(', ')}.`,
         fieldsCopied: [],
         fieldsOmitted: [...safe, ...unsafe],
+        blockFingerprint,
       });
       continue;
     }
@@ -151,6 +165,7 @@ export async function buildPlan(
       fieldsOmitted: [],
       fuzzyWarning,
       approvedFields,
+      blockFingerprint,
     });
   }
 
@@ -186,9 +201,41 @@ function actionForDuplicate(duplicate: DuplicateResolution): {
   }
 }
 
+/**
+ * Approval must be bound to everything `applyRow`/`buildIssueDescription`
+ * can act on, not just the fields that decided `action` — otherwise a field
+ * that changes between dry-run and apply (why/type/priority/hints, or which
+ * exact Linear issue a LINK_EXISTING/AMBIGUOUS row resolves to) leaves the
+ * fingerprint unchanged and `applyPlan` silently applies values the operator
+ * never saw approved.
+ */
 export function fingerprintRows(rows: PlanRow[]): string {
   const stable = rows
-    .map((r) => `${r.inboxId}|${r.action}|${r.duplicate.kind}|${r.title}`)
+    .map((r) => {
+      const duplicateIdentity =
+        r.duplicate.kind === 'ONE'
+          ? r.duplicate.linearId
+          : r.duplicate.kind === 'AMBIGUOUS'
+            ? [...r.duplicate.candidates].sort()
+            : null;
+      const approvedFields = Object.fromEntries(
+        Object.entries(r.approvedFields ?? {}).sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+      );
+      return JSON.stringify({
+        inboxId: r.inboxId,
+        action: r.action,
+        duplicateKind: r.duplicate.kind,
+        duplicateIdentity,
+        title: r.title,
+        typeHint: r.typeHint ?? null,
+        priorityHint: r.priorityHint ?? null,
+        milestoneHint: r.milestoneHint ?? null,
+        parentHint: r.parentHint ?? null,
+        approvedFields,
+      });
+    })
     .sort();
   return createHash('sha256').update(stable.join('\n')).digest('hex');
 }
@@ -288,7 +335,7 @@ async function applyRow(
     confirmedAt: new Date().toISOString(),
   });
 
-  writeBackImported(config, row.inboxId, linearId);
+  writeBackImported(config, row.inboxId, linearId, row.blockFingerprint);
 }
 
 /**
@@ -311,17 +358,28 @@ export function buildIssueDescription(row: PlanRow): string {
  * Re-reads the inbox immediately before writing, locates the block by its
  * immutable ID in the CURRENT content, and patches only that block —
  * never restores a stale whole-file snapshot over a newer (e.g. mobile)
- * edit. If the block is missing or no longer NEW, stops for manual review.
+ * edit. Refuses to proceed if the block is missing, no longer NEW, or its
+ * content no longer matches `expectedBlockFingerprint` (captured at plan-
+ * build time) — the state check alone would miss a title/why/hint edit that
+ * lands while the Linear mutation for this row is in flight, which would
+ * otherwise mark the edited entry IMPORTED with the older, already-mutated
+ * values still sitting in Linear.
  */
 function writeBackImported(
   config: ReconcileConfig,
   inboxId: string,
   linearId: string,
+  expectedBlockFingerprint: string,
 ): void {
   const current = readInbox(config);
   const parsed = parseInbox(current);
   const block = parsed.blocks.find((b) => b.heading === inboxId);
-  if (!block || fieldValue(block, 'state') !== 'NEW') {
+  const currentFingerprint = block ? blockContentFingerprint(block) : null;
+  if (
+    !block ||
+    fieldValue(block, 'state') !== 'NEW' ||
+    currentFingerprint !== expectedBlockFingerprint
+  ) {
     throw new Error(
       `Inbox entry ${inboxId} changed or disappeared before write-back; stopped for manual review.`,
     );

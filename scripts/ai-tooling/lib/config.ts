@@ -7,6 +7,8 @@
 
 import path from 'node:path';
 
+import { assertPathWithinBase } from '../../lib/fs-guards-shared';
+
 export type ReconcileConfig = {
   inboxPath: string;
   inboxDir: string;
@@ -42,6 +44,29 @@ export function expandHome(inputPath: string): string {
   return inputPath;
 }
 
+/**
+ * `inboxDir` (below) is derived from this same configurable path, so it can
+ * never itself guard against `AI_INBOX_PATH` pointing into the repository —
+ * checking a path against a base built from that path is a tautology. This
+ * is the independent, point-of-use guard AGENTS.md requires for configurable
+ * script paths: reject any target inside the repository working tree
+ * (`process.cwd()`, independent of `AI_INBOX_PATH`) before it is used as its
+ * own confinement base anywhere downstream.
+ */
+function assertOutsideRepo(resolvedInboxPath: string): void {
+  const repoRoot = path.resolve(process.cwd());
+  try {
+    assertPathWithinBase(resolvedInboxPath, repoRoot, 'AI_INBOX_PATH');
+  } catch {
+    return; // outside the repo — good.
+  }
+  throw new Error(
+    `AI_INBOX_PATH must not point inside the repository (${repoRoot}).\n` +
+      `  Resolved path: ${resolvedInboxPath}\n` +
+      '  Point it at an off-repo capture file instead — see scripts/ai-tooling/linear.env.example.',
+  );
+}
+
 function homeDir(): string {
   const home = process.env.HOME ?? process.env.USERPROFILE;
   if (!home) {
@@ -57,6 +82,7 @@ export function loadConfig(): ReconcileConfig {
   if (!inboxPath) throw new MissingConfigError('AI_INBOX_PATH');
 
   const resolvedInbox = path.resolve(expandHome(inboxPath));
+  assertOutsideRepo(resolvedInbox);
   const inboxDir = path.dirname(resolvedInbox);
 
   // Ledger lives local-only, outside the (possibly synced) inbox directory

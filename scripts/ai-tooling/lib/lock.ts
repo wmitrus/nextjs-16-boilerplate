@@ -35,6 +35,7 @@
 import {
   closeSync,
   existsSync,
+  mkdirSync,
   openSync,
   readFileSync,
   unlinkSync,
@@ -126,6 +127,12 @@ export function acquireLock(lockPath: string): { release: () => void } {
     // process via start-time mismatch). Clear it and retry once.
     unlinkSync(resolved);
   }
+
+  // First run against the documented default ledger dir (or any new
+  // AI_INBOX_LEDGER_DIR) has no parent directory yet — create it before the
+  // exclusive open, or that open throws ENOENT instead of the intended
+  // EEXIST/success outcomes below.
+  mkdirSync(path.dirname(resolved), { recursive: true });
 
   let fd: number;
   try {

@@ -158,11 +158,17 @@ When the role changes, update:
 - `.agents/skills/workflow-orchestrator/SKILL.md`
 - the applicable description guides under `docs/ai/`
 
-## Leantime Integration
+## Task Lifecycle Ownership
 
-**This skill participates in the mandatory Leantime workflow.**
+Ensure a canonical Linear issue exists for the orchestrated task (fetch a
+known `OZI-NN`, promote from inbox, or create/triage per the root
+instructions/`Linear Task Operating Model`) before delegating to specialists.
 
-At task open and close, the Workflow Orchestrator invokes
-`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
-
-Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+- when a child workflow/skill is active, tell it Orchestrator owns this
+  issue-lifecycle handling — it must not duplicate it;
+- on a resumed/re-entered orchestration run, reuse the existing tracked
+  Linear state;
+- record material progress checkpoints (decision, root cause, milestone,
+  important test result, blocker, direction change) as Linear comments;
+- do not invoke Leantime for active task tracking unless the user explicitly
+  requests a Leantime operation or migration.

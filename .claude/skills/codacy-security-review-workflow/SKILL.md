@@ -444,17 +444,13 @@ Do not close until all are true:
 - final pattern propagation is complete or explicitly confirmed unnecessary;
 - all required artifacts are current.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, do not duplicate its logical open/close calls;
-- when this workflow runs standalone on a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed/re-entered standalone work, reuse existing tracked state;
-- do not close Leantime during the required between-group pauses;
-- perform one logical close only after Workflow 10 completion criteria pass;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions; mark the
+tracked Linear issue Done only after this workflow's own completion criteria
+pass — not during the required between-group pauses.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

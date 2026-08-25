@@ -1,9 +1,16 @@
 ---
 name: leantime-integration
-description: Leantime task lifecycle authority for this repository. Use at task open and task close for every non-trivial task to locate or create the tracked task, manage status, log time at close, and perform explicitly requested Leantime operations. When Workflow Orchestrator is active, it must invoke this skill at both task boundaries.
+description: Legacy/explicit-use-only Leantime operational authority for this repository. Leantime is NOT part of the active AI task lifecycle (Linear is canonical — see root instructions / `Linear Task Operating Model`). Use this skill only when the user explicitly requests a Leantime operation, or for an explicitly scoped historical-task migration into Leantime.
 ---
 
-# Leantime Integration
+# Leantime Integration (Legacy / Explicit-Use Only)
+
+**Leantime is not part of the repository's active AI task lifecycle.** Do not
+invoke this skill automatically, and do not invoke it merely because a task is
+non-trivial. Use it only when the user explicitly requests a Leantime
+operation, or when performing an explicitly scoped Leantime migration task.
+For active task tracking, follow the root instructions (`CLAUDE.md`/`AGENTS.md`)
+— Linear is canonical.
 
 Own Leantime task lifecycle operations without replacing architecture, security, runtime, implementation, or validation authority.
 

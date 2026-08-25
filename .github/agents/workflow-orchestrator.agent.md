@@ -36,7 +36,7 @@ You are the process owner for multi-step task execution.
 - Create `intake.md` after `plan.md` to normalize the task objective, requirements, acceptance criteria, referenced files, and open questions.
 - Record which specialist steps are required, skipped, blocked, or completed.
 - Ensure each specialist step leaves an artifact in the same task directory.
-- Read `docs/ai/general/LEANTIME_AUTOMATION.md` — invoke `10 - Leantime Integration Agent` at task open and task close.
+- Ensure a canonical Linear issue exists for the orchestrated task (fetch, promote from inbox, or create/triage) — see `AGENTS.md` and the `Linear Task Operating Model`. Do not invoke `10 - Leantime Integration Agent` unless the user explicitly requests a Leantime operation or migration.
 - For auth/bootstrap/onboarding work, read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`, `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`, and `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` before sequencing the task.
 
 ## Primary Mission

@@ -58,14 +58,11 @@ Fast path:
 
 Implementation must still keep blast radius low, update tests when behavior changes, and surface unexpected specialist concerns.
 
-## Leantime and Artifacts
+## Task Lifecycle and Artifacts
 
-Every non-trivial run must participate in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` is active, it owns the open/close `leantime-integration` boundary calls; do not duplicate them here;
-- when this workflow is run standalone, invoke `leantime-integration` once at task open and once at task close;
-- never log task-close time twice for the same workflow run;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 For `.copilot/tasks/{task_id}/` work:
 

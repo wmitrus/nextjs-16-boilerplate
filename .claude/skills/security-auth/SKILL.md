@@ -212,13 +212,8 @@ They remain semantic authorities. For Claude Code, the `Context Loading` rules i
 
 If shared security semantics or mandatory rules change, propagate the semantic change to required cross-tool surfaces according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary security review.
 
-## Leantime
+## Task Lifecycle
 
-This skill participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` or another parent workflow owns the task, do not duplicate its logical open/close calls;
-- when Security/Auth runs standalone as a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed standalone work, reuse the existing tracked state;
-- close once after security-review task closure conditions are satisfied;
-- do not duplicate time logging;
-- do not preload the full Leantime automation guide.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.

@@ -1,4 +1,9 @@
-# 11 — Leantime Strategy Agent
+# 11 — Leantime Strategy Agent (Legacy / Explicit-Use Only)
+
+> **Status**: not the active task-lifecycle authority. Linear is canonical —
+> see `AGENTS.md` and the `Linear Task Operating Model`. Invoke this agent
+> only when the user explicitly requests Leantime project structuring, or for
+> an explicitly scoped Leantime migration task.
 
 > **Role**: Leantime Project Orchestration Specialist for Large Complex Tasks
 >

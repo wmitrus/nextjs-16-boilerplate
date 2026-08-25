@@ -84,7 +84,7 @@ today. Not a Claude-specific gap.
 - browser-first verification as the main deliverable: [Workflow 06 - Playwright E2E Validation Workflow.md](./Workflow%2006%20-%20Playwright%20E2E%20Validation%20Workflow.md)
 - validation-only closure after implementation is done: [Workflow 07 - Change Validation Workflow.md](./Workflow%2007%20-%20Change%20Validation%20Workflow.md)
 - periodic repository health review: [Workflow 08 - Repository Baseline Validation Workflow.md](./Workflow%2008%20-%20Repository%20Baseline%20Validation%20Workflow.md)
-- task lifecycle open/close (mandatory for non-trivial work): `10 - Leantime Integration Agent`
+- task lifecycle (canonical, non-trivial work): Linear — see `AGENTS.md` and the `Linear Task Operating Model`; `10 - Leantime Integration Agent` is legacy/explicit-use only
 
 ## 08 vs 09
 

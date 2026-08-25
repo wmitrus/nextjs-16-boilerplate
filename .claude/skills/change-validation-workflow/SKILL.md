@@ -484,18 +484,15 @@ Stop and report before or during execution when:
 
 Do not convert a block into a broad “run everything” fallback.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` or another parent workflow owns the task, do not duplicate logical open/close calls;
-- when this workflow runs standalone on a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed/re-entered standalone work, reuse existing tracked state;
-- reaching Pass / Fail / Blocked completes the current validation run, but does not by itself mean the tracked task should be marked done;
-- close the standalone Leantime task only when the validation task's own closure conditions are satisfied and no in-scope remediation/unblock/revalidation remains;
-- after Fail/Blocked that requires follow-up within the same tracked task, keep/reuse the existing Leantime state for the follow-up run instead of closing and reopening;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions. Reaching
+Pass / Fail / Blocked completes the current validation run, but does not by
+itself mean the tracked Linear issue should be marked Done — a Fail/Blocked
+outcome requiring in-scope follow-up keeps the issue open for that follow-up
+rather than closing and reopening it.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

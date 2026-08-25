@@ -586,16 +586,13 @@ Do not close until:
 - baseline/new-vs-historical status is honest;
 - final summary artifact is current.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, do not duplicate its logical open/close calls;
-- when this workflow runs standalone on a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed/re-entered standalone work, reuse existing tracked state;
-- close once only after Workflow 11 completion criteria pass;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions; mark the
+tracked Linear issue Done only after this workflow's own completion criteria
+pass.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

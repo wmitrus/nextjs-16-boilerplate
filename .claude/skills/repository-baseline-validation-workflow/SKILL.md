@@ -587,17 +587,14 @@ If the user wants to act on recommendations, hand off the selected gap to the ap
 
 Do not automatically convert an audit finding into an implementation task.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the parent task, do not duplicate logical open/close calls;
-- when Workflow 08 runs standalone on a fresh non-trivial audit, use `leantime-integration` for one logical open;
-- on resumed/re-entered audit work, reuse the same tracked state;
-- a blocked audit caused by missing scope/access does not automatically close the tracked task when follow-up is still in scope;
-- close only when the audit itself reaches its closure condition: completed report or an explicitly final blocked result with required evidence recorded;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions; a blocked
+audit caused by missing scope/access does not by itself mark the tracked
+Linear issue Done when follow-up is still in scope — only a completed report
+or an explicitly final blocked result with required evidence recorded does.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

@@ -50,11 +50,8 @@ For AuthJS-focused regressions, do not treat completed-user browser proof as suf
 - `.zenflow/workflows/auth-flow-change-review.md` remains the ZenFlow execution layer
 - this skill is the Codex-native runtime surface for the same workflow intent
 
-## Leantime Integration
+## Task Lifecycle
 
-**This skill participates in the mandatory Leantime workflow.**
-
-At task open and close, the Workflow Orchestrator invokes
-`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
-
-Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.

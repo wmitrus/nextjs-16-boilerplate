@@ -1,9 +1,15 @@
 ---
 name: leantime-integration
-description: Leantime task lifecycle authority for this repository. Use this skill at the start and end of every non-trivial task to create milestones and tasks in Leantime, manage status lifecycle (Nowe → W toku → Zrobione), log time at task close, and seed boards when required. This skill must be invoked by the Workflow Orchestrator at task open and task close.
+description: Legacy/explicit-use-only Leantime operational authority for this repository. Leantime is NOT part of the active AI task lifecycle (Linear is canonical — see AGENTS.md). Use this skill only when the user explicitly requests a Leantime operation, or for an explicitly scoped historical-task migration into Leantime.
 ---
 
-# Leantime Integration Agent
+# Leantime Integration Agent (Legacy / Explicit-Use Only)
+
+**Leantime is not part of the repository's active AI task lifecycle.** Do not
+invoke this skill automatically. Use it only when the user explicitly
+requests a Leantime operation, or when performing an explicitly scoped
+Leantime migration task. For active task tracking, follow `AGENTS.md` —
+Linear is canonical.
 
 This is the Codex-native counterpart to:
 
@@ -11,7 +17,7 @@ This is the Codex-native counterpart to:
 - `.github/agents/leantime-integration.agent.md`
 
 Use this skill to mirror repository work into the on-prem Leantime workspace
-at every task boundary.
+when a Leantime operation is explicitly requested.
 
 ## Startup
 

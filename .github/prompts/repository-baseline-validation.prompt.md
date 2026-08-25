@@ -5,9 +5,9 @@ argument-hint: 'Optional validation concerns, critical flows, or repo areas to e
 agent: '05 - Validation Strategy'
 ---
 
-> **Leantime Integration Required**
-> At task open and close, invoke the `10 - Leantime Integration Agent`.
-> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+> **Task Lifecycle**
+> Ensure a canonical Linear issue exists (see `AGENTS.md`). Do not invoke
+> `10 - Leantime Integration Agent` unless the user explicitly requests it.
 
 Run `05 - Validation Strategy` in `Repository Baseline Validation` mode for this repository.
 

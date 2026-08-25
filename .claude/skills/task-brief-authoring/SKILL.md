@@ -462,18 +462,14 @@ A question about product intent, required behavior, scope, or acceptance criteri
 
 It is **not** workflow-ready whenever implementation or specialist sequencing would still require guessing an important user requirement.
 
-## Leantime
+## Task Lifecycle
 
-Task Brief Authoring participates in the mandatory Leantime lifecycle only as part of the non-trivial task's existing lifecycle.
-
-- when `workflow-orchestrator` already owns the parent task, do not duplicate its logical open/close calls;
-- when authoring a brief is itself a standalone non-trivial tracked task, use `leantime-integration` for one logical open;
-- on resumed standalone brief work, reuse existing tracked state;
-- close once after the brief-authoring task is complete;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
-
-The Leantime smoke-test section inside a brief describes **future downstream execution preconditions**; it does not itself open another Leantime lifecycle.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation. The Leantime smoke-test
+section inside a brief (see above) describes **future downstream execution
+preconditions** for an explicitly Leantime-dependent task; it is not itself
+an active-lifecycle dependency of authoring the brief.
 
 ## Response
 

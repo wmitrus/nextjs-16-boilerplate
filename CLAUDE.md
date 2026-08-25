@@ -31,17 +31,14 @@ Use repository-native skills from `.claude/skills/`.
 - For ambiguous bugs or regressions, prefer `debug-investigation` before implementation.
 - If no Claude-native skill exists for a required role/workflow, use the matching neutral source under `docs/ai/general/`.
 
-## Task Lifecycle and Leantime
+## Task Lifecycle
 
-Every non-trivial task participates in the repository Leantime lifecycle.
+Linear is the canonical active-task state for this repository.
 
-Use `.claude/skills/leantime-integration/SKILL.md` for task open/close operations.
-
-- Avoid duplicate milestones/tasks.
-- Keep the task ID synchronized with task artifacts when work is artifact-backed.
-- Before claiming Leantime is unavailable or broken, verify the repository CLI entrypoint, expected local env files, required environment variables, and the smallest connectivity check.
-- If the session cannot execute a required operation, report a session/tool limitation rather than a broken integration.
-- Do not preload `docs/ai/general/LEANTIME_AUTOMATION.md` unless the active Leantime work needs details not already available.
+- Ensure a canonical Linear issue exists before starting active work — fetch a known `OZI-NN`, promote an existing inbox entry (preserving its Inbox ID and completing the canonical write-back), or create/triage per the `Linear Task Operating Model`.
+- Record material progress checkpoints (a decision, root cause, implementation milestone, important test result, blocker, or material change of direction) as Linear comments — not a transcript, not per command.
+- The inbox (`scripts/ai-tooling/`) is pre-task capture only — never a runtime dependency of active work.
+- Leantime is not part of the active AI task lifecycle. Do not invoke it automatically. It remains available for explicit, user-requested Leantime operations or historical-task migration — see `docs/ai/general/LEANTIME_AUTOMATION.md` (legacy/manual-use only).
 
 ## Evidence, Scope, and Implementation
 

@@ -427,16 +427,13 @@ Use the status consistently in workflow output.
 
 Do not use `REMEDIATION IMPLEMENTED` as a synonym for “code changed” when required validation or security close-out is still incomplete.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, do not duplicate its logical open/close calls;
-- when this workflow runs standalone on a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed/re-entered standalone work, reuse existing tracked state instead of creating another logical open;
-- perform one logical close only after remediation/validation closure conditions are satisfied;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions; mark the
+tracked Linear issue Done only after remediation/validation closure
+conditions are satisfied.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

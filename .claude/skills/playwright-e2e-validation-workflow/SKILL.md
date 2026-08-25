@@ -565,18 +565,14 @@ When a parent workflow defines another required run/evidence artifact:
 - do not invent a second parallel parent run artifact;
 - keep the Workflow 06 artifacts and specialist summary aligned by reference rather than duplicating large evidence.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` or another parent workflow owns the task, do not duplicate logical open/close calls;
-- when Workflow 06 runs standalone on a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed/re-entered work, reuse the same tracked task;
-- a Fail/Blocked run requiring in-scope remediation or unblock does not automatically close the tracked task;
-- reruns after remediation/precondition recovery reuse the same logical task;
-- close only when the browser-validation task's actual closure conditions are satisfied;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions; reruns after
+remediation/precondition recovery reuse the same tracked Linear issue. A
+Fail/Blocked run requiring in-scope remediation or unblock does not by itself
+mark the issue Done.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

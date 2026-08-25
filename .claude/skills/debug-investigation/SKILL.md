@@ -236,13 +236,11 @@ When the cause is sufficiently established:
 - hand Validation Strategy the proven failure mode and regression risk;
 - hand Implementation Agent only stabilized constraints/root-cause evidence.
 
-## Leantime
+## Task Lifecycle
 
-This skill participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, do not duplicate its open/close Leantime calls;
-- when this investigation is run standalone as a non-trivial task, use `leantime-integration` at task open and task close;
-- do not preload the full Leantime automation guide.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

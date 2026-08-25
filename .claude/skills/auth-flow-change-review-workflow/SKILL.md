@@ -354,15 +354,11 @@ A review is complete only when:
 
 Do not mark the work complete merely because the currently changed code looks locally correct.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, do not duplicate its logical open/close calls;
-- when this workflow runs standalone on a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed/re-entered standalone work, reuse the existing tracked task state rather than creating another logical open;
-- perform one logical close only after completion/closure conditions are satisfied;
-- do not preload the full Leantime automation guide.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

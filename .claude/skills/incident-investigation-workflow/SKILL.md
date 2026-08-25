@@ -548,18 +548,14 @@ In a blocked state state:
 - owning specialist/phase;
 - smallest next action that removes the block.
 
-## Leantime
+## Task Lifecycle
 
-This workflow participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the parent task, do not duplicate open/close calls;
-- when this workflow runs standalone as a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed/re-entered standalone work, reuse the same tracked state;
-- investigation/remediation/validation re-entry uses the same task rather than opening duplicates;
-- close only when the incident/remediation task's actual closure conditions are satisfied;
-- a Blocked or failed-validation run that requires in-scope follow-up does not by itself close the tracked task;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions; investigation/
+remediation/validation re-entry uses the same tracked Linear issue rather than
+creating another. A Blocked or failed-validation run that requires in-scope
+follow-up does not by itself mark the issue Done.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

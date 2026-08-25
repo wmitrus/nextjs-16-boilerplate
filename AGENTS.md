@@ -560,26 +560,31 @@ If a requested solution conflicts with sound architecture, security, or runtime 
 
 ---
 
-## Leantime Integration
+## Linear Task Lifecycle
 
-Every non-trivial AI task participates in the repository Leantime lifecycle.
-
-Use the applicable `leantime-integration` agent/skill as the operational
-authority for task open, resume, close, time logging, diagnostics, and CLI use.
+Linear is the canonical active-task state for this repository (see the
+`Linear Task Operating Model` document).
 
 Repository-wide invariants:
 
-- reuse existing task/milestone state; do not create duplicates;
-- record the active Leantime task ID in the workflow control artifact;
-- close and log time only when the logical task is actually complete;
-- parent workflows own lifecycle when they invoke child specialists;
-- resumed work reuses the existing lifecycle state;
-- do not infer that `.env.leantime` or `.env.leantime-dev` is absent from
-  default search results alone.
+- ensure a canonical Linear issue exists before starting active work — fetch a
+  known `OZI-NN`, promote an existing inbox entry (preserving its Inbox ID and
+  completing the canonical write-back per the reconciliation contract), or
+  create/triage directly;
+- inbox capture (`scripts/ai-tooling/`) is pre-task only — never a runtime
+  dependency of active work, and a task never has parallel active state in
+  both the inbox and Linear;
+- record material progress checkpoints (a decision, root cause, implementation
+  milestone, important test result, blocker, or material change of direction)
+  as Linear comments — not a transcript, not per command;
+- parent workflows own lifecycle when they invoke child specialists; do not
+  duplicate issue-lifecycle handling across a workflow and its child skills;
+- resumed work reuses the existing tracked Linear state.
 
-Detailed automation rules live in:
-
-`docs/ai/general/LEANTIME_AUTOMATION.md`
+Leantime is not part of the active AI task lifecycle. Do not invoke it
+automatically. It remains available only for explicit, user-requested Leantime
+operations or historical-task migration — see
+`docs/ai/general/LEANTIME_AUTOMATION.md` (legacy/manual-use only).
 
 ---
 
@@ -902,8 +907,8 @@ surface (or asked to check for pending security work) MUST**:
 6. If this section is still unresolved by the time you read it (advisory
    not yet published, or published but not yet actioned): say so
    explicitly rather than silently skipping it, and if a tracked task for
-   this doesn't already exist (check Leantime per this file's mandatory
-   protocol, and this repo's `.copilot/tasks/` history), create one so the
+   this doesn't already exist (check Linear per this file's task lifecycle,
+   and this repo's `.copilot/tasks/` history), create one so the
    follow-up isn't lost between sessions.
 
 Once this follow-up is actually completed (patch applied and the full gate
@@ -1263,19 +1268,19 @@ Full correspondence table and process ownership rules: `docs/ai/general/REPOSITO
 
 ### Agent Numbering and File Correspondence
 
-| #   | Role                  | Zencoder Prompt                                       | GitHub Copilot Agent                            | Codex Skill                                     | Claude Code Skill                               | ZenFlow Preset              |
-| --- | --------------------- | ----------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | --------------------------- |
-| 01  | Architecture Guard    | `docs/ai/general/01 - Architecture Guard Agent.md`    | `.github/agents/architecture-guard.agent.md`    | `.agents/skills/architecture-guard/SKILL.md`    | `.claude/skills/architecture-guard/SKILL.md`    | `architecture-guard-agent`  |
-| 02  | Security & Auth       | `docs/ai/general/02 - Security & Auth Agent.md`       | `.github/agents/security-auth.agent.md`         | `.agents/skills/security-auth/SKILL.md`         | `.claude/skills/security-auth/SKILL.md`         | `security-auth-agent`       |
-| 03  | Next.js Runtime       | `docs/ai/general/03 - Next.js Runtime Agent.md`       | `.github/agents/nextjs-runtime.agent.md`        | `.agents/skills/nextjs-runtime/SKILL.md`        | `.claude/skills/nextjs-runtime/SKILL.md`        | `nextjs-runtime-agent`      |
-| 04  | Implementation        | `docs/ai/general/04 - Implementation Agents.md`       | `.github/agents/implementation-agent.agent.md`  | `.agents/skills/implementation-agent/SKILL.md`  | `.claude/skills/implementation-agent/SKILL.md`  | `implementation-agent`      |
-| 05  | Validation Strategy   | `docs/ai/general/05 - Validation Strategy Agent.md`   | `.github/agents/validation-strategy.agent.md`   | `.agents/skills/validation-strategy/SKILL.md`   | `.claude/skills/validation-strategy/SKILL.md`   | `validation-strategy-agent` |
-| 06  | Debug Investigation   | `docs/ai/general/06 - Debug Investigation Agent.md`   | `.github/agents/debug-investigation.agent.md`   | `.agents/skills/debug-investigation/SKILL.md`   | `.claude/skills/debug-investigation/SKILL.md`   | `debug-investigation-agent` |
-| 07  | Playwright E2E        | `docs/ai/general/07 - Playwright E2E Agent.md`        | `.github/agents/playwright-e2e.agent.md`        | `.agents/skills/playwright-e2e/SKILL.md`        | `.claude/skills/playwright-e2e/SKILL.md`        | `playwright-e2e-agent`      |
-| 08  | Workflow Orchestrator | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | `.github/agents/workflow-orchestrator.agent.md` | `.agents/skills/workflow-orchestrator/SKILL.md` | `.claude/skills/workflow-orchestrator/SKILL.md` | —                           |
-| 09  | Task Brief Authoring  | `docs/ai/general/09 - Task Brief Authoring.md`        | —                                               | `.agents/skills/task-brief-authoring/SKILL.md`  | `.claude/skills/task-brief-authoring/SKILL.md`  | —                           |
-| 10  | Leantime Integration  | `docs/ai/general/10 - Leantime Integration Agent.md`  | `.github/agents/leantime-integration.agent.md`  | `.agents/skills/leantime-integration/SKILL.md`  | `.claude/skills/leantime-integration/SKILL.md`  | —                           |
-| 11  | Leantime Strategy     | `docs/ai/general/11 - Leantime Strategy Agent.md`     | —                                               | —                                               | —                                               | —                           |
+| #   | Role                                                                             | Zencoder Prompt                                       | GitHub Copilot Agent                            | Codex Skill                                     | Claude Code Skill                               | ZenFlow Preset              |
+| --- | -------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | --------------------------- |
+| 01  | Architecture Guard                                                               | `docs/ai/general/01 - Architecture Guard Agent.md`    | `.github/agents/architecture-guard.agent.md`    | `.agents/skills/architecture-guard/SKILL.md`    | `.claude/skills/architecture-guard/SKILL.md`    | `architecture-guard-agent`  |
+| 02  | Security & Auth                                                                  | `docs/ai/general/02 - Security & Auth Agent.md`       | `.github/agents/security-auth.agent.md`         | `.agents/skills/security-auth/SKILL.md`         | `.claude/skills/security-auth/SKILL.md`         | `security-auth-agent`       |
+| 03  | Next.js Runtime                                                                  | `docs/ai/general/03 - Next.js Runtime Agent.md`       | `.github/agents/nextjs-runtime.agent.md`        | `.agents/skills/nextjs-runtime/SKILL.md`        | `.claude/skills/nextjs-runtime/SKILL.md`        | `nextjs-runtime-agent`      |
+| 04  | Implementation                                                                   | `docs/ai/general/04 - Implementation Agents.md`       | `.github/agents/implementation-agent.agent.md`  | `.agents/skills/implementation-agent/SKILL.md`  | `.claude/skills/implementation-agent/SKILL.md`  | `implementation-agent`      |
+| 05  | Validation Strategy                                                              | `docs/ai/general/05 - Validation Strategy Agent.md`   | `.github/agents/validation-strategy.agent.md`   | `.agents/skills/validation-strategy/SKILL.md`   | `.claude/skills/validation-strategy/SKILL.md`   | `validation-strategy-agent` |
+| 06  | Debug Investigation                                                              | `docs/ai/general/06 - Debug Investigation Agent.md`   | `.github/agents/debug-investigation.agent.md`   | `.agents/skills/debug-investigation/SKILL.md`   | `.claude/skills/debug-investigation/SKILL.md`   | `debug-investigation-agent` |
+| 07  | Playwright E2E                                                                   | `docs/ai/general/07 - Playwright E2E Agent.md`        | `.github/agents/playwright-e2e.agent.md`        | `.agents/skills/playwright-e2e/SKILL.md`        | `.claude/skills/playwright-e2e/SKILL.md`        | `playwright-e2e-agent`      |
+| 08  | Workflow Orchestrator                                                            | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | `.github/agents/workflow-orchestrator.agent.md` | `.agents/skills/workflow-orchestrator/SKILL.md` | `.claude/skills/workflow-orchestrator/SKILL.md` | —                           |
+| 09  | Task Brief Authoring                                                             | `docs/ai/general/09 - Task Brief Authoring.md`        | —                                               | `.agents/skills/task-brief-authoring/SKILL.md`  | `.claude/skills/task-brief-authoring/SKILL.md`  | —                           |
+| 10  | Leantime Integration _(legacy/explicit-use only — not active AI task lifecycle)_ | `docs/ai/general/10 - Leantime Integration Agent.md`  | `.github/agents/leantime-integration.agent.md`  | `.agents/skills/leantime-integration/SKILL.md`  | `.claude/skills/leantime-integration/SKILL.md`  | —                           |
+| 11  | Leantime Strategy _(legacy/explicit-use only — not active AI task lifecycle)_    | `docs/ai/general/11 - Leantime Strategy Agent.md`     | —                                               | —                                               | —                                               | —                           |
 
 ### Workflow Entry Point Correspondence
 

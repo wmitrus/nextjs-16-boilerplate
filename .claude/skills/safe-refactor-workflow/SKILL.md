@@ -102,16 +102,11 @@ Fast path still requires:
 
 Skip Security/Auth and Next.js Runtime only while evidence continues to show they are irrelevant.
 
-## Leantime and Artifacts
+## Task Lifecycle and Artifacts
 
-Every non-trivial run participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, it owns the logical open/close calls; do not duplicate them here;
-- when this workflow runs standalone on a fresh task, use `leantime-integration` for one logical task open;
-- when a standalone task is resumed/re-entered, reuse its existing tracked Leantime state instead of creating a second logical open;
-- perform one logical task close only after closure conditions are satisfied;
-- do not duplicate time logging;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 For `.copilot/tasks/{task_id}/` work:
 

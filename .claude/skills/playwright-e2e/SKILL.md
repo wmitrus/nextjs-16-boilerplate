@@ -416,16 +416,11 @@ Report a block when:
 
 State the smallest next action that removes the block.
 
-## Leantime
+## Task Lifecycle
 
-This skill participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, do not duplicate its logical open/close calls;
-- when another parent workflow owns the task lifecycle, do not duplicate that parent's boundary calls;
-- when Playwright E2E runs standalone as a fresh non-trivial task, use `leantime-integration` for one logical open;
-- on resumed standalone work, reuse existing tracked state;
-- close once after E2E task closure conditions are satisfied;
-- do not preload the full Leantime guide.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

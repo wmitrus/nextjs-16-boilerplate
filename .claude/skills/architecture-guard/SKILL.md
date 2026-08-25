@@ -244,13 +244,11 @@ Use:
 
 Security/Auth may assign a different security severity to the same underlying issue; do not override its security classification.
 
-## Leantime
+## Task Lifecycle
 
-This skill participates in the mandatory Leantime lifecycle.
-
-- when `workflow-orchestrator` owns the task, do not duplicate its open/close calls;
-- when Architecture Guard runs standalone as a non-trivial task, use `leantime-integration` at task open and close;
-- do not preload the full Leantime automation guide.
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
 ## Response
 

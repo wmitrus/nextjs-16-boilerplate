@@ -1,6 +1,6 @@
 ---
 name: workflow-orchestrator
-description: Process owner for non-trivial repository tasks that need plan-first execution, coordinated specialist handoffs, task artifacts, or multi-step sequencing. Use to classify the task, choose one primary workflow or specialist sequence, own Leantime/task-state boundaries, and prevent duplicated or out-of-order specialist work. Do not use it as a replacement for specialist authority.
+description: Process owner for non-trivial repository tasks that need plan-first execution, coordinated specialist handoffs, task artifacts, or multi-step sequencing. Use to classify the task, choose one primary workflow or specialist sequence, own the canonical Linear task-lifecycle boundary, and prevent duplicated or out-of-order specialist work. Do not use it as a replacement for specialist authority.
 ---
 
 # Workflow Orchestrator
@@ -64,18 +64,24 @@ The selected workflow owns its internal phase order and phase-level artifact upd
 
 Do not nest two workflows that independently own the same implementation/validation sequence unless the selected workflow explicitly calls for that composition.
 
-## Leantime Ownership
+## Task Lifecycle Ownership
 
-For every non-trivial orchestrated task, ensure exactly one logical Leantime open and one logical close across the task lifecycle.
+Ensure a canonical Linear issue exists for the orchestrated task (fetch a
+known `OZI-NN`, promote from inbox, or create/triage per the root
+instructions/`Linear Task Operating Model`) before delegating to specialists.
 
-- on a fresh task, invoke `leantime-integration` for task open;
-- on a resumed/re-entered orchestration run, reuse the existing tracked task/lifecycle state and do not create a second logical open;
-- invoke `leantime-integration` for task close only once, after repository closure conditions are satisfied;
-- when a child workflow is active, tell it that Orchestrator owns these boundary calls;
-- do not duplicate time logging at specialist or child-workflow handoffs;
-- do not preload the full Leantime automation guide.
+- when a child workflow/skill is active, tell it Orchestrator owns this
+  issue-lifecycle handling — it must not duplicate it;
+- on a resumed/re-entered orchestration run, reuse the existing tracked
+  Linear state;
+- record material progress checkpoints (decision, root cause, milestone,
+  important test result, blocker, direction change) as Linear comments;
+- do not invoke Leantime for active task tracking unless the user explicitly
+  requests a Leantime operation or migration.
 
-If the task is not actually orchestrated by this skill, the standalone workflow/skill may own its own Leantime boundary according to its rules.
+If the task is not actually orchestrated by this skill, the standalone
+workflow/skill follows its own task-lifecycle rules from the root
+instructions.
 
 ## Task Workspace
 

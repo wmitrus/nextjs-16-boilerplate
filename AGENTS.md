@@ -474,14 +474,19 @@ an always-available escalation path to raw logs.
 10. **Truncation must be explicit.** When working from a truncated excerpt,
     say so: name the workflow/job/step it came from and that the full raw log
     is available as fallback. Never present an excerpt as a complete log.
-11. **GitHub connector/API vs RTK — don't mix them.** Use the GitHub
-    connector/API only for metadata (rule 1). Route all job-log retrieval —
-    partial or full — through the local-file/targeted-extraction path in
-    rule 3, never through RTK. RTK remains first-pass compression for local
-    shell output (git, tests, package manager, build, lint, and supported
-    `gh` summaries); it is not the primary layer for GitHub Actions job logs,
-    and raw output remains RTK's fallback too. Do not install a global RTK
-    hook and do not run `rtk init -g`.
+11. **GitHub connector/API vs RTK — different evidence layers, don't mix
+    them.** Use the GitHub connector/API only for metadata (rule 1). Job-log
+    content is retrieved via local-file/targeted extraction (rule 3);
+    workflow-run artifact evidence via local download + targeted extraction
+    (rule 7/12); production/Vercel deployment diagnostic evidence via the
+    same targeted, authoritative path (rule 12) — none of these go through
+    RTK. This is a layer-ownership boundary, not a claim that running RTK on
+    such output is inherently unsafe: RTK simply isn't the evidence layer for
+    CI/CD or deployment diagnostics in this repo. RTK remains first-pass
+    compression for local shell output (git, tests, package manager, build,
+    lint, and supported non-log-content `gh` summaries); raw output remains
+    RTK's fallback too. Do not install a global RTK hook and do not run
+    `rtk init -g`.
 12. **Evidence escalation ladder.** Use the lightest evidence layer that can
     answer the question correctly, and apply the same metadata-first /
     targeted-extraction discipline at every layer. The default escalation path

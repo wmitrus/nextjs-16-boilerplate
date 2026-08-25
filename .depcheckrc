@@ -41,6 +41,7 @@
     "drizzle-kit",
     "newrelic",
     "postgres",
-    "vercel"
+    "vercel",
+    "@colbymchenry/codegraph"
   ]
 }

@@ -134,6 +134,8 @@ Use focused validation during implementation and expand with risk.
 - Update/add tests at the level that can falsify the changed behavior.
 - Do not treat mocked/unit-only evidence as sufficient for a schema-, runtime-, security-, or cross-layer risk.
 - For substantial phase close, run repo-wide `pnpm lint --fix` (never plain `pnpm lint`) and `pnpm typecheck`.
+- Before reporting implementation complete, lint the changed JS/TS files (targeted, not repo-wide) and confirm no new ESLint errors or warnings versus the pre-change baseline.
+- Fix each finding on a changed file, or report it explicitly as a verified false positive/pre-existing finding — never leave it unaddressed or silence it with a new suppression or disabled rule.
 - For Playwright where scenario env/DB setup matters, use `node scripts/e2e/run-scenario.mjs ...` or a package script built on it, not raw `playwright test`.
 - `E2E_BACKEND_MODE=container` means the isolated test DB profile `127.0.0.1:5433/app_test`.
 - Use `--reporter=line` for interactive Playwright terminal evidence.

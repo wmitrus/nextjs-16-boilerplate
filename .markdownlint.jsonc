@@ -1,0 +1,9 @@
+{
+  "default": true,
+
+  // Repeated semantic subheadings are valid under different workflow stages.
+  // Still reject duplicate sibling headings within the same parent section.
+  "MD024": {
+    "siblings_only": true
+  }
+}

@@ -37,33 +37,33 @@ safety, and live code taking precedence over stale documentation.
 
 Use the following ownership model:
 
-| Layer | Purpose | Loading model |
-| --- | --- | --- |
-| `AGENTS.md` | Codex-native operating model, core invariants, and skill routing | Codex always-on |
-| `CLAUDE.md` | Claude-native operating model, core invariants, and skill routing | Claude always-on |
-| `.agents/skills/*/SKILL.md` | Codex specialist and workflow behavior | On demand by task |
-| `.claude/skills/*/SKILL.md` | Claude specialist and workflow behavior | On demand by task |
-| `docs/ai/general/*.md` | Neutral cross-tool semantic authorities | Targeted on demand |
-| Domain, feature, usage, and architecture docs | Human and agent implementation evidence | Targeted on demand |
-| Tool-specific guides under `docs/ai/{codex,claude,copilot,zencoder}/` | Human-facing discovery and compatibility guidance | Maintenance or explicit reference |
+| Layer                                                                 | Purpose                                                           | Loading model                     |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------- |
+| `AGENTS.md`                                                           | Codex-native operating model, core invariants, and skill routing  | Codex always-on                   |
+| `CLAUDE.md`                                                           | Claude-native operating model, core invariants, and skill routing | Claude always-on                  |
+| `.agents/skills/*/SKILL.md`                                           | Codex specialist and workflow behavior                            | On demand by task                 |
+| `.claude/skills/*/SKILL.md`                                           | Claude specialist and workflow behavior                           | On demand by task                 |
+| `docs/ai/general/*.md`                                                | Neutral cross-tool semantic authorities                           | Targeted on demand                |
+| Domain, feature, usage, and architecture docs                         | Human and agent implementation evidence                           | Targeted on demand                |
+| Tool-specific guides under `docs/ai/{codex,claude,copilot,zencoder}/` | Human-facing discovery and compatibility guidance                 | Maintenance or explicit reference |
 
 Do not use a large shared root document as a hidden startup knowledge base.
 Semantic authority and always-on runtime context are separate concerns.
 
 ## Role Correspondence
 
-| Role | Neutral authority | Codex runtime | Claude Code runtime |
-| --- | --- | --- | --- |
-| Architecture Guard | `docs/ai/general/01 - Architecture Guard Agent.md` | `.agents/skills/architecture-guard/SKILL.md` | `.claude/skills/architecture-guard/SKILL.md` |
-| Security & Auth | `docs/ai/general/02 - Security & Auth Agent.md` | `.agents/skills/security-auth/SKILL.md` | `.claude/skills/security-auth/SKILL.md` |
-| Next.js Runtime | `docs/ai/general/03 - Next.js Runtime Agent.md` | `.agents/skills/nextjs-runtime/SKILL.md` | `.claude/skills/nextjs-runtime/SKILL.md` |
-| Implementation | `docs/ai/general/04 - Implementation Agents.md` | `.agents/skills/implementation-agent/SKILL.md` | `.claude/skills/implementation-agent/SKILL.md` |
-| Validation Strategy | `docs/ai/general/05 - Validation Strategy Agent.md` | `.agents/skills/validation-strategy/SKILL.md` | `.claude/skills/validation-strategy/SKILL.md` |
-| Debug Investigation | `docs/ai/general/06 - Debug Investigation Agent.md` | `.agents/skills/debug-investigation/SKILL.md` | `.claude/skills/debug-investigation/SKILL.md` |
-| Playwright E2E | `docs/ai/general/07 - Playwright E2E Agent.md` | `.agents/skills/playwright-e2e/SKILL.md` | `.claude/skills/playwright-e2e/SKILL.md` |
+| Role                  | Neutral authority                                     | Codex runtime                                   | Claude Code runtime                             |
+| --------------------- | ----------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
+| Architecture Guard    | `docs/ai/general/01 - Architecture Guard Agent.md`    | `.agents/skills/architecture-guard/SKILL.md`    | `.claude/skills/architecture-guard/SKILL.md`    |
+| Security & Auth       | `docs/ai/general/02 - Security & Auth Agent.md`       | `.agents/skills/security-auth/SKILL.md`         | `.claude/skills/security-auth/SKILL.md`         |
+| Next.js Runtime       | `docs/ai/general/03 - Next.js Runtime Agent.md`       | `.agents/skills/nextjs-runtime/SKILL.md`        | `.claude/skills/nextjs-runtime/SKILL.md`        |
+| Implementation        | `docs/ai/general/04 - Implementation Agents.md`       | `.agents/skills/implementation-agent/SKILL.md`  | `.claude/skills/implementation-agent/SKILL.md`  |
+| Validation Strategy   | `docs/ai/general/05 - Validation Strategy Agent.md`   | `.agents/skills/validation-strategy/SKILL.md`   | `.claude/skills/validation-strategy/SKILL.md`   |
+| Debug Investigation   | `docs/ai/general/06 - Debug Investigation Agent.md`   | `.agents/skills/debug-investigation/SKILL.md`   | `.claude/skills/debug-investigation/SKILL.md`   |
+| Playwright E2E        | `docs/ai/general/07 - Playwright E2E Agent.md`        | `.agents/skills/playwright-e2e/SKILL.md`        | `.claude/skills/playwright-e2e/SKILL.md`        |
 | Workflow Orchestrator | `docs/ai/general/08 - Workflow Orchestrator Agent.md` | `.agents/skills/workflow-orchestrator/SKILL.md` | `.claude/skills/workflow-orchestrator/SKILL.md` |
-| Task Brief Authoring | `docs/ai/general/09 - Task Brief Authoring.md` | `.agents/skills/task-brief-authoring/SKILL.md` | `.claude/skills/task-brief-authoring/SKILL.md` |
-| Leantime Integration | `docs/ai/general/10 - Leantime Integration Agent.md` | `.agents/skills/leantime-integration/SKILL.md` | `.claude/skills/leantime-integration/SKILL.md` |
+| Task Brief Authoring  | `docs/ai/general/09 - Task Brief Authoring.md`        | `.agents/skills/task-brief-authoring/SKILL.md`  | `.claude/skills/task-brief-authoring/SKILL.md`  |
+| Leantime Integration  | `docs/ai/general/10 - Leantime Integration Agent.md`  | `.agents/skills/leantime-integration/SKILL.md`  | `.claude/skills/leantime-integration/SKILL.md`  |
 
 Leantime remains legacy and explicit-use only. Linear is the canonical active
 task lifecycle.

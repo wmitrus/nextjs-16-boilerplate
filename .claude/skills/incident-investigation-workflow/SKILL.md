@@ -195,12 +195,11 @@ Require Debug Investigation to:
 8. produce ranked hypotheses supported by evidence;
 9. falsify alternatives where practical;
 10. classify likely domain involvement:
-
-- runtime;
-- architecture;
-- security;
-- application/domain logic;
-- combination;
+    - runtime;
+    - architecture;
+    - security;
+    - application/domain logic;
+    - combination;
 
 11. recommend only the next specialists justified by evidence.
 

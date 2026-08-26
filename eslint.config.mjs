@@ -323,6 +323,13 @@ const eslintConfig = defineConfig([
     'next-env.d.ts',
     'node_modules/**',
     'docs/**/*.js',
+    // Markdown is formatted by Prettier directly (pnpm lint's own script,
+    // lint-staged, editor on-save) -- never by ESLint. ESLint's default
+    // parser (espree) tries to read markdown text as JavaScript and throws
+    // a parse error the moment a files:['**/*.md'] block exists (confirmed
+    // while investigating OZI-59); excluding it explicitly here documents
+    // that and guards against a future block accidentally matching it.
+    '**/*.md',
   ]),
   prettier,
   ...storybook.configs['flat/recommended'],

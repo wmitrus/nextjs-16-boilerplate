@@ -241,7 +241,7 @@ If new SEC-XX entries were added:
 3. Update `docs/ai/general/04 - Implementation Agents.md` when the SEC category affects implementation patterns.
 4. Propagate runtime routing or always-on invariants according to `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`.
 5. Update affected tool-specific security and implementation surfaces.
-5. If pattern affects E2E code: update `docs/ai/general/07 - Playwright E2E Agent.md` and `.github/agents/playwright-e2e.agent.md`.
+6. If pattern affects E2E code: update `docs/ai/general/07 - Playwright E2E Agent.md` and `.github/agents/playwright-e2e.agent.md`.
 
 If no new SEC-XX entries (all matched existing patterns):
 

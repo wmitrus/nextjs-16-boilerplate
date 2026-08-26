@@ -24,10 +24,10 @@ authoritative. Report drift between this document and executable code.
 Choose a database type according to the identifier's authority and origin, not
 according to whether its current example value happens to look UUID-shaped.
 
-| Column type | Use when |
-| --- | --- |
-| `uuid` | Database-generated primary keys and foreign keys referencing UUID-typed primary keys. |
-| `text` | Externally supplied or application-level string identifiers such as provider organization IDs, tenant slugs, and string scope keys. |
+| Column type | Use when                                                                                                                            |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `uuid`      | Database-generated primary keys and foreign keys referencing UUID-typed primary keys.                                               |
+| `text`      | Externally supplied or application-level string identifiers such as provider organization IDs, tenant slugs, and string scope keys. |
 
 Do not use a Postgres `uuid` column for an externally controlled identifier
 unless the external contract guarantees a valid UUID and the repository
@@ -102,9 +102,7 @@ When `NULL` values must participate as equal values in uniqueness, use a unique
 constraint with `NULLS NOT DISTINCT` through Drizzle:
 
 ```typescript
-unique('example_unique')
-  .on(table.key, table.nullableScope)
-  .nullsNotDistinct();
+unique('example_unique').on(table.key, table.nullableScope).nullsNotDistinct();
 ```
 
 This is PostgreSQL-specific behavior supported by PostgreSQL 15 and later. Do

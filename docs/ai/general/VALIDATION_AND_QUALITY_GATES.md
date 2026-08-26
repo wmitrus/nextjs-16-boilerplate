@@ -67,21 +67,21 @@ may identify gaps without implementing fixes unless implementation is in scope.
 
 Verify commands against the current `package.json` before execution.
 
-| Concern | Current command | Notes |
-| --- | --- | --- |
-| Lint with repository fixes | `pnpm lint --fix` | Preferred interactive/phase-close lint command; report remaining errors and warnings. |
-| Type safety | `pnpm typecheck` | Runs Next.js type generation before `tsc --noEmit`. |
-| Unit tests | `pnpm test` | Vitest unit configuration with coverage. |
-| Integration tests | `pnpm test:integration` | Integration configuration with coverage. |
-| Database tests | `pnpm test:db` | Select a more specific DB profile when the task requires it. |
-| All Vitest projects | `pnpm test:all` | Broad validation; do not run after every local edit. |
-| Storybook tests | `pnpm test:storybook` | Use when component/story behavior is affected. |
-| E2E | Repository scenario/package command | Prefer scenario-owned setup over raw Playwright. |
-| Production build | `pnpm build` | Use when build/runtime integration risk warrants it. |
-| Environment consistency | `pnpm env:check` | Required when env contracts or deployment configuration change. |
-| Dependency graph | `pnpm skott:check:only` | Detects circular dependencies through the configured source graph. |
-| Unused dependencies | `pnpm depcheck` | Interpret findings against live usage and configuration. |
-| Circular imports | `pnpm madge` | Uses the repository's configured source extensions. |
+| Concern                    | Current command                     | Notes                                                                                 |
+| -------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------- |
+| Lint with repository fixes | `pnpm lint --fix`                   | Preferred interactive/phase-close lint command; report remaining errors and warnings. |
+| Type safety                | `pnpm typecheck`                    | Runs Next.js type generation before `tsc --noEmit`.                                   |
+| Unit tests                 | `pnpm test`                         | Vitest unit configuration with coverage.                                              |
+| Integration tests          | `pnpm test:integration`             | Integration configuration with coverage.                                              |
+| Database tests             | `pnpm test:db`                      | Select a more specific DB profile when the task requires it.                          |
+| All Vitest projects        | `pnpm test:all`                     | Broad validation; do not run after every local edit.                                  |
+| Storybook tests            | `pnpm test:storybook`               | Use when component/story behavior is affected.                                        |
+| E2E                        | Repository scenario/package command | Prefer scenario-owned setup over raw Playwright.                                      |
+| Production build           | `pnpm build`                        | Use when build/runtime integration risk warrants it.                                  |
+| Environment consistency    | `pnpm env:check`                    | Required when env contracts or deployment configuration change.                       |
+| Dependency graph           | `pnpm skott:check:only`             | Detects circular dependencies through the configured source graph.                    |
+| Unused dependencies        | `pnpm depcheck`                     | Interpret findings against live usage and configuration.                              |
+| Circular imports           | `pnpm madge`                        | Uses the repository's configured source extensions.                                   |
 
 Do not treat this table as permission to run every command automatically. The
 active risk and workflow determine the required subset.

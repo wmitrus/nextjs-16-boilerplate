@@ -12,7 +12,7 @@
     "dev:webpack": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint/.eslintcache --cache-strategy content",
+    "lint": "prettier --write '**/*.md' --log-level warn && eslint --cache --cache-location node_modules/.cache/eslint/.eslintcache --cache-strategy content",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run --config vitest.unit.config.ts --coverage",
     "test:watch": "vitest --config vitest.unit.config.ts",

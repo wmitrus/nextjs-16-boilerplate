@@ -52,6 +52,8 @@ Treat `export const dynamic` / `export const runtime` under an active Cache Comp
 
 When `cacheComponents` is disabled, do not carry the Cache-Components ban over mechanically. Route Segment Config semantics become available again, but do not add or change them unless the task requires it and current Next.js behavior plus repository conventions justify the choice.
 
+The inverse also holds: `export const instant` (Cache Components' per-route instant-navigation validation control) throws a hard build-time error when `cacheComponents` is disabled, regardless of the value assigned — confirmed in `node_modules/next/dist/build/analysis/get-page-static-info.js`. Since this repository's two CSP build modes share the same `src/app/**` source tree, never add `export const instant` to a page or layout unless `cacheComponents` is unconditionally enabled for every build mode that includes it (see OZI-62).
+
 ### Request-Time Rendering and `connection()`
 
 Use `connection()` when code must defer to an incoming request and no already-required Dynamic API establishes request-time execution.
@@ -213,9 +215,7 @@ They remain semantic authorities, but live repository configuration and version-
 
 For Codex, the `Context Loading` rules in this skill control retrieval: use targeted sections instead of legacy mandatory full-file startup reads, expanding when needed to establish the applicable runtime constraints.
 
-Known current drift to surface rather than hide: the neutral Runtime Agent still describes `cacheComponents: true` as unconditional, while current `next.config.ts` disables Cache Components for the `nonce-dynamic` CSP build profile.
-
-If that shared runtime description is corrected, propagate the semantic/documentation fix to required cross-tool surfaces according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary runtime review.
+If the shared runtime description in the neutral Runtime Agent changes, propagate the semantic/documentation fix to required cross-tool surfaces according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary runtime review.
 
 ## Task Lifecycle
 

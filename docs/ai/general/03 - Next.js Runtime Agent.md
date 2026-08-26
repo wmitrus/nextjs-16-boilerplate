@@ -42,9 +42,11 @@ Protect the repository's runtime correctness around:
 - Do not spend time searching for `middleware.ts` or treating its absence as a finding.
 - For middleware-like concerns, inspect `src/proxy.ts` first.
 
-### `cacheComponents: true` — Route Segment Configs Are Banned
+### `cacheComponents` — Route Segment Configs Are Banned (Build-Mode Conditional)
 
-`next.config.ts` has `cacheComponents: true` (Cache Components model, PPR-compatible). This setting **forbids** `export const dynamic` and `export const runtime` in any App Router file. Both cause a compile-time hard error that loops indefinitely in Turbopack HMR:
+`next.config.ts` derives `cacheComponents` from the CSP build mode: `cacheComponents: !isNonceDynamicMode`, i.e. **enabled** for the default/cache-compatible build and **disabled** when building with `CSP_SCRIPT_MODE=nonce-dynamic`. Both modes build the same `src/app/**` source tree, so a route segment config choice must be safe in whichever mode is actually resolving `next.config.ts` at that time — never assume one mode without checking.
+
+When `cacheComponents` is enabled, this setting **forbids** `export const dynamic` and `export const runtime` in any App Router file. Both cause a compile-time hard error that loops indefinitely in Turbopack HMR:
 
 ```text
 Route segment config "dynamic" is not compatible with nextConfig.cacheComponents. Please remove it.
@@ -74,6 +76,22 @@ export async function GET(): Promise<Response> {
 `connection()` must be the **first `await`** in the handler/page before any request-time data access, timestamp recording, or DI container call. This rule applies to RSC pages, layouts, and route handlers equally.
 
 **Treat any `export const dynamic` or `export const runtime` in this repository as CRITICAL — flag it before implementation proceeds.**
+
+### `instant` Route Segment Config — Requires `cacheComponents`, Hard Error Otherwise
+
+The inverse constraint of the ban above: `export const instant = ...` (Cache Components' per-route "instant navigation" validation opt-out/opt-in, e.g. to silence a dev-only "encountered runtime data during a navigation" insight) is itself banned when `cacheComponents` is disabled. Confirmed directly in the installed Next.js build (`node_modules/next/dist/build/analysis/get-page-static-info.js`):
+
+```js
+if ('instant' in config && !nextConfig.cacheComponents) {
+  throw new Error(
+    `Route "${page}" cannot use \`export const instant = ...\` without enabling \`cacheComponents\`.`,
+  );
+}
+```
+
+This is a **hard build-time error** (not a warning) triggered by the mere presence of an `instant` export in the file, regardless of its value (`true`, `false`, or the object form). Because this repository resolves `cacheComponents` differently per CSP build mode from the same source files (see above), **adding `export const instant` to any page or layout reachable by the `CSP_SCRIPT_MODE=nonce-dynamic` build breaks that build.** Route segment config exports must be static literals — there is no way to make the export conditional per build mode within one file.
+
+**Rule**: do not add `export const instant` to any App Router file unless `cacheComponents` is unconditionally enabled for every build mode that includes it. When a route is inherently blocking (e.g. gated on live auth/DB checks) and trips the dev-only instant-navigation validator, prefer leaving the warning in place over disabling it with an unsafe `instant` export — the warning has no effect on build or production behavior. See OZI-62 for the investigation that established this.
 
 ### RSC Dynamic Rendering — `getAppContainer()` Pattern
 

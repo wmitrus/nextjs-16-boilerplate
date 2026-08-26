@@ -253,15 +253,59 @@ const eslintConfig = defineConfig([
   },
   security.configs.recommended,
   {
-    files: ['scripts/lib/fs-guards-shared.ts', 'scripts/lib/fs-guards.mjs'],
+    // Reviewed confinement primitives: every fs.* call here is immediately
+    // preceded by assertPathWithinBase() on the same value (OZI-42 Step 3A);
+    // atomic-fs.ts is the ai-tooling-local counterpart to fs-guards-shared.ts
+    // itself, not a consumer of it.
+    files: [
+      'scripts/lib/fs-guards-shared.ts',
+      'scripts/lib/fs-guards.mjs',
+      'scripts/ai-tooling/lib/atomic-fs.ts',
+    ],
     rules: {
       'no-restricted-syntax': 'off',
       'security/detect-non-literal-fs-filename': 'off',
     },
   },
+  {
+    // Individually verified (OZI-42 Step 3C): every flagged path in exactly
+    // these files traces to that same test's own mkdtempSync() result,
+    // created in beforeEach and destroyed in afterEach — never a hardcoded,
+    // env-derived, or otherwise externally-influenced path. A future test
+    // file added to scripts/ai-tooling/lib/ is NOT automatically covered —
+    // it must be individually verified and added to this exact list.
+    files: [
+      'scripts/ai-tooling/lib/atomic-fs.test.ts',
+      'scripts/ai-tooling/lib/core-safety.test.ts',
+      'scripts/ai-tooling/lib/create-mapping-sanitization.test.ts',
+      'scripts/ai-tooling/lib/duplicate.test.ts',
+      'scripts/ai-tooling/lib/fuzzy-and-audit.test.ts',
+      'scripts/ai-tooling/lib/ledger.test.ts',
+      'scripts/ai-tooling/lib/lock.concurrency.test.ts',
+      'scripts/ai-tooling/lib/lock.test.ts',
+      'scripts/ai-tooling/lib/reconcile.test.ts',
+    ],
+    rules: {
+      'security/detect-non-literal-fs-filename': 'off',
+      // Re-declared with only the process.env[key] selector kept — the
+      // bare-identifier fs.*Sync selector is the one being exempted here;
+      // every other restriction from the scripts/** block above still
+      // applies to these files.
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector:
+            "MemberExpression[computed=true][property.type!='Literal'][object.type='MemberExpression'][object.object.name='process'][object.property.name='env']",
+          message:
+            'Avoid dynamic process.env[key] access in scripts and E2E helpers. Prefer an allowlisted helper or typed resolver so the access pattern is visible in local lint before review.',
+        },
+      ],
+    },
+  },
   globalIgnores([
     '.git/**',
     '.next/**',
+    '.vercel/**',
     'out/**',
     'build/**',
     'coverage/**',
@@ -279,6 +323,13 @@ const eslintConfig = defineConfig([
     'next-env.d.ts',
     'node_modules/**',
     'docs/**/*.js',
+    // Markdown is formatted by Prettier directly (pnpm lint's own script,
+    // lint-staged, editor on-save) -- never by ESLint. ESLint's default
+    // parser (espree) tries to read markdown text as JavaScript and throws
+    // a parse error the moment a files:['**/*.md'] block exists (confirmed
+    // while investigating OZI-59); excluding it explicitly here documents
+    // that and guards against a future block accidentally matching it.
+    '**/*.md',
   ]),
   prettier,
   ...storybook.configs['flat/recommended'],

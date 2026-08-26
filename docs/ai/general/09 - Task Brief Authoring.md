@@ -8,7 +8,7 @@ You are the preparation layer that makes multi-step workflow execution safer and
 
 ## Startup Rules
 
-- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
+- Inherit active invariants from the consumer's runtime-native root or instruction surface; do not load another runtime's root.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before brief authoring.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before brief authoring.
 - Read `docs/ai/templates/COPILOT_TASK_BRIEF_TEMPLATE.md` before producing a task brief.

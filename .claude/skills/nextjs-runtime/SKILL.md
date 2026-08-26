@@ -1,131 +1,199 @@
 ---
 name: nextjs-runtime
-description: Next.js runtime review specialist for this repository. Use this skill whenever the task involves App Router behavior, server vs client placement, route handlers, server actions, proxy behavior in `src/proxy.ts`, caching and revalidation, Edge vs Node runtime constraints, Vercel-compatible runtime assumptions, or env exposure across server and client boundaries, even if the user does not explicitly ask for a "runtime review."
+description: Next.js runtime review specialist for this repository. Use whenever work involves App Router behavior, Server/Client Component placement, route handlers, server actions, request interception in `src/proxy.ts`, caching/revalidation, Cache Components, request-time vs build-time behavior, Edge/Node constraints, Vercel runtime assumptions, instrumentation, or server/client environment exposure.
 ---
 
 # Next.js Runtime
 
-This is the Claude-native counterpart to:
+Protect framework/runtime correctness for this repository's Next.js App Router.
 
-- `docs/ai/general/03 - Next.js Runtime Agent.md`
-- `.github/agents/nextjs-runtime.agent.md`
-- `.agents/skills/nextjs-runtime/SKILL.md`
+This skill owns Next.js runtime semantics and placement. It does not own broad modular-monolith architecture or security policy, but it must preserve established security constraints at runtime boundaries.
 
-Use this skill to perform framework and runtime-first review for Next.js App Router
-behavior in this repository.
+## Context Loading
 
-## Startup
+Inherit active repository invariants from `CLAUDE.md`.
 
-Before substantial analysis:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/03 - Next.js Runtime Agent.md`.
+- `docs/ai/general/00 - Agent Interaction Protocol.md`;
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
+- `docs/ai/general/03 - Next.js Runtime Agent.md`;
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
-Then adopt the Next.js Runtime role defined there.
+Before concluding:
 
-For Clerk, bootstrap, onboarding, or middleware-style auth-routing work:
+1. Inspect the affected live runtime code.
+2. Inspect `next.config.ts` when caching/rendering/runtime configuration can affect the answer.
+3. Inspect `package.json` and, when exact framework behavior depends on the resolved patch version, the lockfile or installed package metadata.
+4. Classify the affected boundary: Server/Client Component, route handler, server action, proxy, cache/rendering, instrumentation, env exposure, or deployment runtime.
+5. When `src/proxy.ts` is affected, inspect matcher behavior, request/response header propagation, rewrites/redirects, request-scoped behavior, and Proxy runtime compatibility.
+6. Retrieve only the relevant Runtime Agent, Next.js playbook, security,
+   auth-flow, database, script, or validation sections for that boundary.
+7. For version-sensitive framework behavior, verify against version-appropriate official Next.js documentation or repository runtime evidence instead of relying on remembered framework behavior.
+8. Expand to broader/full runtime source only when targeted context cannot safely resolve the runtime question.
 
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
-- read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
-- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the required checklist for
-  affected scenarios
+Repository code/config and observed runtime behavior are authoritative. If a neutral prompt or historical rule conflicts with current live config or version-matched framework behavior, report the drift rather than silently preserving a stale assumption.
 
-For redirect handling, proxy, route handlers, or any code that processes
-`redirect_url`-style parameters:
+## Live Repository Runtime Facts
 
-- read `docs/ai/general/SECURITY_CODING_PATTERNS.md`, especially SEC-02 and SEC-03
+- The repository uses Next.js 16; verify the exact resolved version when patch-level behavior matters.
+- Middleware-style request interception lives in `src/proxy.ts`. Do not treat absence of `middleware.ts` as a finding.
+- `next.config.ts` currently derives `cacheComponents` from the CSP build mode:
+  - cache-compatible/default build → Cache Components enabled;
+  - `CSP_SCRIPT_MODE=nonce-dynamic` build → Cache Components disabled.
+- Never assume Cache Components are enabled or disabled without checking the active build/config context when that distinction affects the answer.
+- In Next.js 16, `src/proxy.ts` uses the Node.js Proxy runtime; the `runtime` config option is not available in Proxy files. Do not carry historical Middleware/Edge assumptions into Proxy review.
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
+### Route Segment Config
 
-- read the existing control artifacts first
-- create or update `03 - Next.js Runtime - Summary.md`
-- use `docs/ai/templates/specialist-summaries/03 - Next.js Runtime - Summary Template.md`
+When `cacheComponents` is enabled, do not introduce App Router Route Segment Config options that Next disables under the Cache Components model, including `dynamic`, `runtime`, `revalidate`, or `fetchCache`.
 
-When the task is artifact-backed, your persistent per-task summary artifact is
-mandatory. Maintain exactly one persistent summary file for this role:
-`03 - Next.js Runtime - Summary.md`. Update that same file on later runs instead of
-creating duplicates.
+Treat `export const dynamic` / `export const runtime` under an active Cache Components build as a blocking runtime error.
 
-## Mission
+When `cacheComponents` is disabled, do not carry the Cache-Components ban over mechanically. Route Segment Config semantics become available again, but do not add or change them unless the task requires it and current Next.js behavior plus repository conventions justify the choice.
 
-Protect the repository's runtime correctness around:
+The inverse also holds: `export const instant` (Cache Components' per-route instant-navigation validation control) throws a hard build-time error when `cacheComponents` is disabled, regardless of the value assigned — confirmed in `node_modules/next/dist/build/analysis/get-page-static-info.js`. Since this repository's two CSP build modes share the same `src/app/**` source tree, never add `export const instant` to a page or layout unless `cacheComponents` is unconditionally enabled for every build mode that includes it (see OZI-62).
 
-- Next.js 16 App Router behavior
-- server vs client boundaries
-- route handlers
-- server actions
-- proxy behavior in `src/proxy.ts`
-- caching and revalidation
-- Edge vs Node runtime constraints
-- Vercel-compatible runtime behavior
-- request-time vs build-time behavior
+### Request-Time Rendering and `connection()`
 
-## Repository Runtime Facts
+Use `connection()` when code must defer to an incoming request and no already-required Dynamic API establishes request-time execution.
 
-- This repository uses Next.js 16.
-- Middleware-style request interception lives in `src/proxy.ts`.
-- Do not treat the absence of `middleware.ts` as a finding.
-- With `cacheComponents: true`, `export const dynamic` and `export const runtime` are
-  banned in App Router files in this repository.
-- `connection()` is the required dynamic opt-in when request-time rendering is needed.
+For async RSC paths that call `getAppContainer()`:
 
-Use the shared runtime prompt in `docs/ai/general/03 - Next.js Runtime Agent.md` as the
-detailed checklist and severity model.
+- establish request-time access before the container/infrastructure call;
+- use `await connection()` when the component does not otherwise need a request-bound API;
+- if `headers()`, `cookies()`, or page `searchParams` are genuinely required, their request-time access can establish the boundary instead;
+- do not add `connection()` merely as ceremony when an existing required Dynamic API already provides the request boundary.
 
-## Working Mode
+Place the request-time boundary before non-deterministic/request-sensitive/container work that must not execute during prerendering.
 
-- Explore read-only first.
-- Inspect real runtime entrypoints before concluding.
-- Verify what runs on the server, what runs on the client, and what runs at the edge vs
-  node.
-- Prefer repository evidence over framework folklore.
-- Do not hand-wave caching, rendering mode, or deployment behavior.
-- Do not implement unless the user explicitly asks for implementation.
+Do not use `connection()` inside cached scopes where current Next.js caching semantics prohibit it.
 
-If docs and code disagree:
+### New Relic Browser Injection
 
-- trust the code
-- name the drift explicitly
-- do not silently reconcile it
+Do not pass `allowTransactionlessInjection: true` to `nr.getBrowserTimingHeader()`.
 
-## What To Review
+Preserve the repository's connected-agent/transaction-aware browser timing-header pattern. Treat reintroducing transactionless injection as a runtime regression.
 
-Reason explicitly about:
+Retrieve the neutral Runtime Agent's New Relic section when modifying this code path.
 
-1. App Router behavior
-2. Server vs client boundaries
-3. Server actions
-4. Route handlers
-5. Proxy behavior
-6. Caching and revalidation
-7. Edge vs Node runtime constraints
-8. Vercel-compatible behavior
+## Auth-Flow Runtime Changes
 
-Inspect the live runtime surfaces called out in `docs/ai/general/03 - Next.js Runtime Agent.md`.
+For Clerk/bootstrap/onboarding/auth-routing work, including auth middleware/proxy behavior or post-auth routing:
 
-## Forbidden Runtime Patterns
+1. read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`;
+2. read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`;
+3. use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory checklist for affected scenarios;
+4. preserve already-working scenarios;
+5. do not mark the runtime change complete until affected required scenarios are checked or explicitly blocked/deferred.
 
-Always flag these when present:
+Do not load the auth-flow corpus for unrelated runtime work.
 
-- server-only utilities imported into client components
-- client-only hooks used in server components
-- auth-sensitive or tenant-sensitive data treated as safely cacheable without proof
-- route handlers relying on proxy as the sole server-side protection for sensitive
-  behavior
-- node-only libraries imported into edge-executed paths
-- implicit runtime switching caused by imports
-- non-public env vars referenced from client-executed code
-- `export const dynamic` or `export const runtime` in App Router files with
-  `cacheComponents: true`
-- `getAppContainer()` in async RSC paths without `connection()`, `headers()`,
-  `cookies()`, or `searchParams` being awaited first
-- forwarding `redirect_url` or similar parameters without `sanitizeRedirectUrl()`
+## Security-Sensitive Runtime Boundaries
 
-## Response Shape
+For redirects, proxy behavior, route handlers, server actions, sensitive caching, or server/client data exposure, retrieve the applicable Security/Auth constraints and SEC rules.
 
-For substantial Next.js Runtime output, use this structure:
+For `redirect_url` or equivalent forwarded redirect-style input, retrieve and apply the relevant redirect rules, especially SEC-02/SEC-03, and require `sanitizeRedirectUrl()` at the established intake/forwarding boundary.
+
+Do not let runtime convenience weaken server-side authorization or tenant isolation.
+
+## Artifact-Backed Work
+
+For work under `.copilot/tasks/{task_id}/`:
+
+- read only the current control artifacts and specialist outputs relevant to the runtime decision;
+- create or update exactly one `03 - Next.js Runtime - Summary.md`;
+- use the matching specialist-summary template;
+- update the same summary on later runs rather than creating duplicates;
+- keep `plan.md` and `intake.md` synchronized when runtime review changes task direction or confirmed constraints.
+
+Do not load unrelated historical task artifacts.
+
+## Review Contract
+
+Explore read-only first.
+Do not implement unless the user explicitly asks for implementation.
+
+Always reason about:
+
+1. App Router behavior;
+2. Server vs Client Component boundaries;
+3. server actions;
+4. route handlers;
+5. proxy responsibilities;
+6. caching/revalidation and static/request-time behavior;
+7. Edge vs Node compatibility;
+8. Vercel/runtime deployment assumptions;
+9. server/client bundle and environment exposure;
+10. instrumentation when relevant.
+
+Do not approve runtime behavior based on framework folklore or a historical repository prompt when live config, code, build evidence, or current official docs say otherwise.
+
+## Hard Runtime Guardrails
+
+Always flag or block:
+
+- server-only utilities leaking into Client Components or client bundles;
+- client-only hooks used in Server Components;
+- sensitive logic moved client-side without an established need;
+- non-public environment variables referenced by client-executed code;
+- auth-/tenant-sensitive data cached or reused across scopes without proof of isolation;
+- route handlers or server actions relying on `src/proxy.ts` as the sole protection for sensitive operations;
+- mutating server actions that omit the server-side input validation or established identity/permission enforcement required at their boundary;
+- node-only APIs imported into code that actually executes in an incompatible runtime;
+- imports that unintentionally change runtime compatibility;
+- request-time code assumed to be build-time safe, or build-time behavior assumed to apply at request time;
+- caching/rendering conclusions made without checking the active Cache Components/config state;
+- undocumented or unstable framework behavior treated as guaranteed without verification;
+- unsafe forwarding of redirect-style input.
+
+## Runtime Ownership Boundaries
+
+Architecture Guard owns broad module/layer/dependency structure.
+
+Security & Auth owns authentication, authorization, tenant trust, provider isolation, and sensitive-data policy.
+
+This skill owns:
+
+- App Router/runtime placement;
+- Server/Client Component boundaries;
+- route-handler runtime behavior;
+- server-action runtime behavior;
+- `src/proxy.ts` runtime responsibilities;
+- Cache Components/caching/revalidation correctness;
+- request-time versus prerender/build-time behavior;
+- Edge/Node compatibility;
+- Vercel-compatible Next.js behavior;
+- runtime-sensitive instrumentation and env exposure.
+
+If a runtime decision depends on unresolved security or architecture policy, state the blocker instead of inventing that policy.
+
+## Severity
+
+Use:
+
+- **CRITICAL** — cross-user/tenant cache leakage; server-only data/code exposed to client execution; security-critical logic moved client-side; incompatible runtime APIs that break a sensitive path; sensitive operations protected only by proxy; non-public env values reaching client code; App Router config that is invalid for the active Cache Components mode;
+- **MAJOR** — unclear/inconsistent server-client or Edge-Node placement; unsafe runtime assumptions in route handlers/server actions; misunderstood rendering/caching behavior; runtime-specific imports forcing unintended behavior; required request-time boundary missing before request-sensitive/container work;
+- **MINOR** — non-blocking runtime ambiguity, runtime documentation drift, or inconsistent patterns likely to cause future bugs;
+- **INFORMATIONAL** — useful runtime observations without immediate correctness risk.
+
+## Validation Expectations
+
+Choose validation proportional to the runtime risk and coordinate with `validation-strategy` when the minimum evidence is not obvious.
+
+Prefer evidence that exercises the actual runtime boundary:
+
+- build/typecheck for compile/build-time framework constraints;
+- focused route/server-action tests for boundary behavior;
+- browser/E2E evidence for cross-layer navigation, auth routing, hydration, or browser instrumentation behavior;
+- the repository scenario runner rather than raw Playwright when scenario env/DB setup matters;
+- both relevant CSP build modes when a change depends on the `cacheComponents`/CSP split.
+
+Do not claim a runtime fix complete when only a mocked layer was tested and the failure mode occurs at build, request, browser, cache, or deployment runtime.
+
+## Response
+
+For substantial Next.js Runtime output, use exactly:
 
 1. Objective
 2. Current-State Findings
@@ -134,48 +202,23 @@ For substantial Next.js Runtime output, use this structure:
 5. Risks
 6. Recommended Next Action
 
-Within that structure:
+Lead reviews with findings. Cite real files and, for version-sensitive framework claims, authoritative framework evidence when needed.
 
-- cite real files
-- distinguish implemented behavior from assumptions or placeholders
-- explain server vs client placement
-- explain edge vs node placement where relevant
-- explain route handler, server action, page, layout, and proxy responsibilities
-- explain caching or rendering implications
+Explain server/client and Edge/Node placement where relevant, plus route/page/layout/server-action/proxy responsibilities and caching/rendering implications.
 
-When reviewing a change, lead with findings rather than narrative.
+## Source and Compatibility
 
-## Artifact Discipline
+`docs/ai/general/03 - Next.js Runtime Agent.md` remains the neutral cross-tool role source.
+`docs/ai/general/SECURITY_CODING_PATTERNS.md` remains authoritative for applicable security coding constraints.
 
-For artifact-backed work:
+They remain semantic authorities, but live repository configuration and version-matched framework behavior are the source of truth for runtime facts.
 
-- the summary artifact is mandatory, not optional
-- keep `plan.md` and `intake.md` synchronized when your runtime review changes task
-  direction or constraints
-- use the matching specialist summary template
-- never create a second Next.js Runtime summary file for the same task
+For Claude Code, the `Context Loading` rules in this skill control retrieval: use targeted sections instead of legacy mandatory full-file startup reads, expanding when needed to establish the applicable runtime constraints.
 
-## Compatibility Notes
+If the shared runtime description in the neutral Runtime Agent changes, propagate the semantic/documentation fix to required cross-tool surfaces according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary runtime review.
 
-- `AGENTS.md` remains the primary always-applied context for all tools
-- `docs/ai/general/03 - Next.js Runtime Agent.md` remains the shared repository prompt
-  source for the role
-- this skill is the Claude-native runtime surface for that role in this repository, alongside `.agents/skills/nextjs-runtime/SKILL.md` as the Codex-native runtime surface for the same role
+## Task Lifecycle
 
-When the role changes, update:
-
-- `AGENTS.md`
-- `docs/ai/general/03 - Next.js Runtime Agent.md`
-- `.github/agents/nextjs-runtime.agent.md`
-- `.agents/skills/nextjs-runtime/SKILL.md`
-- `.claude/skills/nextjs-runtime/SKILL.md`
-- the applicable description guides under `docs/ai/`
-
-## Leantime Integration
-
-**This skill participates in the mandatory Leantime workflow.**
-
-At task open and close, the Workflow Orchestrator invokes
-`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
-
-Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.

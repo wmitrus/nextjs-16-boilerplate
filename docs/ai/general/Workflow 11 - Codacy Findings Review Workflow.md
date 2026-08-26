@@ -32,7 +32,7 @@ Available agents:
 
 Before running this workflow, read:
 
-- `AGENTS.md` (repository root)
+- the consumer's runtime-native root or instruction surface
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md`
@@ -310,12 +310,9 @@ Step 6. Patterns and Prompt Propagation
 For every durable false-positive pattern or remediation pattern confirmed during triage:
 
 1. Update `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
-2. If the pattern changes broad implementation behavior, update:
-   - `AGENTS.md`
-   - `docs/ai/general/02 - Security & Auth Agent.md`
-   - `docs/ai/general/04 - Implementation Agents.md`
-   - relevant `.github/agents/*.agent.md`
-   - relevant workflow or prompt docs
+2. If the pattern changes broad implementation behavior, update the applicable neutral role or pattern authorities.
+3. Update the relevant tool-specific agent, skill, workflow, or prompt surfaces.
+4. Propagate runtime routing or always-on invariants according to `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`.
 
 If the confirmed real-risk pattern is mechanically detectable with low false-positive
 risk, add or update a local guardrail such as `scripts/architecture-lint.sh`, ESLint, or

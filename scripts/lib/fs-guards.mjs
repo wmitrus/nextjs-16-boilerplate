@@ -2,6 +2,8 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -53,4 +55,14 @@ export function removeFileWithinBase(filePath, baseDir, label = 'path') {
   if (existsSync(safePath)) {
     unlinkSync(safePath);
   }
+}
+
+export function statWithinBase(filePath, baseDir, label = 'path') {
+  const safePath = assertPathWithinBase(filePath, baseDir, label);
+  return statSync(safePath);
+}
+
+export function readdirWithinBase(dirPath, baseDir, label = 'path', options) {
+  const safePath = assertPathWithinBase(dirPath, baseDir, label);
+  return readdirSync(safePath, options);
 }

@@ -12,6 +12,7 @@ const TRUSTED_PROVIDER_ENDPOINTS = {
   neon: {
     origin: NEON_API_ORIGIN,
     pathname:
+      // eslint-disable-next-line security/detect-unsafe-regex -- anchored, both quantifiers are bounded ({1,60}) with no nested/overlapping repetition, so this cannot backtrack catastrophically.
       /^\/api\/v2\/projects\/[a-z0-9-]{1,60}\/branches(?:\/[a-z0-9-]{1,60})?$/,
   },
 } as const;
@@ -40,7 +41,11 @@ interface NeonConfig {
 }
 
 function requiredEnv(name: 'NEON_API_KEY' | 'NEON_PROJECT_ID'): string {
-  const value = process.env[name]?.trim();
+  const raw =
+    name === 'NEON_API_KEY'
+      ? process.env.NEON_API_KEY
+      : process.env.NEON_PROJECT_ID;
+  const value = raw?.trim();
   if (!value) {
     throw new Error(`${name} is required.`);
   }

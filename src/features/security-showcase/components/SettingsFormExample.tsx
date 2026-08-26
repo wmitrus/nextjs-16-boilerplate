@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
 import { updateSecuritySettings } from '../actions/showcase-actions';
@@ -11,6 +12,7 @@ import { createReplayToken } from '@/security/actions/replay-token';
  * Demonstrates: Handling action results and validation errors.
  */
 export function SettingsFormExample() {
+  const router = useRouter();
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,10 +37,9 @@ export function SettingsFormExample() {
       setError(`Validation failed: ${JSON.stringify(result.errors)}`);
       setStatus(null);
     } else if (result.status === 'bootstrap_required') {
-      window.location.href =
-        '/auth/bootstrap/start?redirect_url=/security-showcase';
+      router.push('/auth/bootstrap/start?redirect_url=/security-showcase');
     } else if (result.status === 'onboarding_required') {
-      window.location.href = '/onboarding';
+      router.push('/onboarding');
     } else {
       setError(
         'error' in result

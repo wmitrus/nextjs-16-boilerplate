@@ -16,10 +16,10 @@
 - [done] Add anonymous hosted AuthJS runtime smoke.
 - [done] Stage Production before smoke and promote only after success.
 - [done] Complete local unit, type, profile, and production-build validation.
-- [pending] Deploy fresh Preview and pass hosted smoke/log verification.
-- [pending] Build fresh prebuilt Production artifact and pass `filePathMap` plus
+- [done] Deploy fresh Preview and pass hosted smoke/log verification.
+- [done] Build fresh prebuilt Production artifact and pass `filePathMap` plus
   dry-run validation.
-- [pending] Pass staged Production smoke, promote, and pass canonical-domain
+- [done] Pass staged Production smoke, promote, and pass canonical-domain
   smoke.
 
 Existing client rejection handling and visible Suspense fallback may remain as

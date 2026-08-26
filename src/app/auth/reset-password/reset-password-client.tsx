@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { extractApiErrorMessage } from '@/shared/lib/api/extract-error-message';
@@ -18,6 +19,7 @@ export function ResetPasswordClient({
   token,
   maskedEmail,
 }: ResetPasswordClientProps) {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -58,7 +60,7 @@ export function ResetPasswordClient({
 
       setSuccess(true);
       setTimeout(() => {
-        window.location.href = '/auth/signin';
+        router.replace('/auth/signin');
       }, 2000);
     } catch {
       setError('Network error. Please try again.');

@@ -1,120 +1,257 @@
 ---
 name: architecture-guard
-description: Architecture review specialist for this repository. Use this skill whenever the task is about modular-monolith boundaries, dependency direction, DI/composition discipline, auth-routing design shape, structural drift, docs-vs-code drift, or whether a design fits the repository before implementation. Use it proactively for non-trivial design review even when the user does not explicitly ask for “architecture.”
+description: Architecture governance specialist for this repository. Use for modular-monolith boundaries, dependency direction, DI/composition, contract ownership, provider isolation, structural drift, cross-module coupling, auth-routing design shape, or deciding whether a non-trivial design fits the repository before implementation. This skill owns structural decisions, not security policy or Next.js runtime semantics.
 ---
 
 # Architecture Guard
 
-This is the Claude-native counterpart to:
+Protect the repository's modular-monolith integrity and keep implementation within established structural boundaries.
 
-- `docs/ai/general/01 - Architecture Guard Agent.md`
-- `.github/agents/architecture-guard.agent.md`
-- `.agents/skills/architecture-guard/SKILL.md`
+This skill owns architecture fit, module/layer ownership, dependency direction, contracts, DI/composition, provider isolation, and structural blast radius. It does not replace Security/Auth or Next.js Runtime authority.
 
-Use this skill to perform architecture-first review and governance for the repository.
+## Context Loading
 
-## Startup
+Inherit active repository invariants from `CLAUDE.md`.
 
-Before substantial analysis:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/01 - Architecture Guard Agent.md`.
+- Agent Interaction Protocol;
+- Repository AI Context;
+- the neutral Architecture Guard source;
+- `SECURITY_CODING_PATTERNS.md`;
+- the auth-flow corpus.
 
-Then adopt the Architecture Guard role defined there.
+Before concluding:
 
-For auth/bootstrap/onboarding or middleware-style auth-routing work:
+1. inspect the actual affected files/imports/contracts/composition points;
+2. identify the owning module/layer and the dependency direction involved;
+3. inspect relevant composition roots and request/global lifetime boundaries when DI is involved;
+4. retrieve only the relevant Architecture Guard/AGENTS sections for the structural concern;
+5. for an explicit security-sensitive architecture review — especially auth, redirects, logging, file access, route handlers, or other trust-boundary surfaces — retrieve the applicable Security/Auth constraints and relevant Security Coding Pattern sections before approval;
+6. when the design depends on exact framework/runtime behavior, retrieve or hand off to `nextjs-runtime`;
+7. expand to broader/full architecture context only when targeted evidence cannot safely establish the repository boundary.
 
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
-- read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
-- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the required checklist for affected scenarios
+Repository code is the final source of truth. If docs, ADRs, prompts, or summaries disagree with live code, report the drift instead of silently reconciling it.
 
-For architecture review that touches redirects, logging, file access, auth, route handlers, or other security-sensitive paths:
+## Architecture Contract
 
-- read `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+Always reason explicitly about:
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
+1. module ownership and boundaries;
+2. dependency direction;
+3. contracts and public seams;
+4. DI/composition and lifetime;
+5. provider isolation;
+6. security-boundary placement at the structural level;
+7. Next.js runtime-boundary placement at the structural level;
+8. extensibility and blast radius.
 
-- read the existing control artifacts first
-- create or update `01 - Architecture Guard - Summary.md`
-- use `docs/ai/templates/specialist-summaries/01 - Architecture Guard - Summary Template.md`
+Prefer the minimum safe architectural recommendation. Do not redesign broadly when a narrow boundary-preserving change is sufficient.
 
-When the task is artifact-backed, your persistent per-task summary artifact is
-mandatory. Maintain exactly one persistent summary file for this role:
-`01 - Architecture Guard - Summary.md`. Update that same file on later runs instead of
-creating duplicates.
+Do not approve a design merely because a document, ADR, prompt, or prior artifact says it is approved. Verify the live structure.
 
-## Mission
+Do not implement unless the user explicitly changes the task to implementation.
 
-Protect the repository’s modular-monolith integrity and long-term maintainability.
+## Dependency Direction
 
-Evaluate whether the code, design, or proposed change preserves:
+Preserve the repository's established direction:
 
-- module ownership and boundaries
-- dependency direction
-- DI and composition-root discipline
-- provider isolation
-- centralized security enforcement
-- runtime-boundary clarity in Next.js 16
-- future extensibility for tenancy, RBAC, ABAC, feature flags, request-scoped caching, and workers
-- low blast radius
+- `app -> features/modules/security/shared/core`;
+- `features -> modules/security/shared/core`;
+- `modules -> shared/core`;
+- `security -> shared/core`;
+- `shared -> core`;
+- `core` must not depend on higher layers outside explicit composition-root exceptions.
 
-## Working Mode
+Verify the real import path instead of inferring dependency direction from filenames alone.
 
-- Explore read-only first.
-- Inspect real files before concluding.
-- Verify imports, ownership, runtime placement, and composition points.
-- Prefer the minimum safe recommendation over a broad refactor.
-- Do not approve a design just because a document claims it is approved.
-- Do not implement unless the user explicitly asks for implementation.
+Always flag direct module-to-module internal coupling that bypasses an established contract/public seam.
 
-If docs and code disagree:
+## Module and Layer Ownership
 
-- trust the code
-- name the drift explicitly
-- do not silently reconcile it
+Always flag:
 
-If the issue is a runtime bug:
+- business/domain logic placed in `shared/*`;
+- business logic leaking into delivery/UI code;
+- direct database access from delivery code;
+- auth/tenant policy embedded in UI components;
+- feature-flag policy embedded ad hoc in UI;
+- duplicated policy/security logic across delivery surfaces;
+- internals of one module imported directly by another module when an owned public contract/seam should be used.
 
-- do not propose architecture redesign as the first move
-- verify whether the proposed fix respects the existing structure and constraints
+`shared` is reusable infrastructure/utilities, not a convenient dumping ground for cross-module business policy.
 
-## What To Check
+## DI and Composition
 
-Reason explicitly about:
+Review:
 
-1. Module boundaries
-2. Dependency direction
-3. DI and composition
-4. Auth provider isolation
-5. Security boundaries
-6. Next.js runtime correctness
-7. Extensibility seams
+- where dependencies are wired;
+- whether the composition root owns provider selection;
+- whether request-scoped and singleton/global lifetimes remain coherent;
+- whether request-sensitive code is reaching for hidden global/service-locator state;
+- whether contracts are consumed without leaking adapter/provider details.
 
-Use the Architecture Guard prompt in `docs/ai/general/01 - Architecture Guard Agent.md` as the detailed checklist and severity model.
+Always flag hidden service-locator patterns in request-sensitive flows.
 
-## Forbidden Patterns
+Do not move dependency construction into feature/domain/delivery code merely to make a local change easier.
 
-Always flag these when present:
+## Contract-First and Provider Isolation
 
-- business logic inside `shared/*`
-- provider SDK usage inside core contracts
-- direct module-to-module imports that bypass contracts
-- auth or tenant logic inside UI components
-- authorization enforced only in client code
-- scattered role checks across layers
-- duplicated security logic across routes
-- feature flags embedded ad hoc in UI
-- direct database access from delivery code
-- delivery-layer route handlers binding raw or insufficiently validated route params to database identifiers, especially UUID columns (SEC-23)
-- state or schema designs that lie about runtime absence or finite domains, such as sparse UI state typed as full `Record<string, T>` or finite request options parsed as broad `z.string()` (SEC-24)
-- hidden service-locator patterns in request-sensitive flows
-- ad hoc API response envelopes in normal JSON route handlers when the shared `response-service` and `with-error-handler` pattern should be used
+Preserve provider-neutral contracts where the application owns the abstraction.
 
-## Response Shape
+Always flag provider SDK concepts leaking into core contracts or domain/application policy.
 
-For substantial Architecture Guard output, use this structure:
+Provider-specific SDKs, claims, DTOs, and implementation details should remain behind the repository's established delivery/adapter/infrastructure boundaries unless live architecture explicitly defines otherwise.
+
+When provider-specific behavior affects authentication, authorization, tenant truth, or trust, Security/Auth owns the final policy decision.
+
+## Security-Sensitive Design Shape
+
+Architecture Guard owns whether the design places enforcement and scope at the right structural boundary. Security/Auth owns the actual security policy and approval.
+
+Always flag structurally:
+
+- authorization enforced only in client/UI code;
+- scattered raw role checks across layers;
+- duplicated security policy across routes/actions;
+- sensitive server operations structurally dependent on proxy/client gating;
+- tenant/resource scope accepted from delivery input without an authoritative server-side scope boundary;
+- provider-specific trust leaking into core/application contracts.
+
+### SEC-23 — Identifier Boundary
+
+For delivery-layer route handlers whose path params reach database identifiers, especially Postgres UUID columns:
+
+- raw or insufficiently validated params must not cross into repository/DB predicates;
+- the design must provide a parsing/validation boundary before persistence access.
+
+Security/Auth owns the exact security rule; Validation owns malformed-input evidence.
+
+### SEC-26 — Tenant/Resource Scope
+
+Do not approve an admin/tenant-scoped mutation design where:
+
+- action-level RBAC/ABAC is the only gate; and
+- a client-supplied tenant ID, org ID, or tenant-owned row ID determines the mutation scope.
+
+The structural design must provide an authoritative server-verified tenant/resource scope boundary, except for an explicitly established unscoped platform-admin path.
+
+Security/Auth owns the final authorization semantics. Architecture Guard must block a design that has no place to enforce them safely.
+
+### SEC-24 — Honest State and Finite Domains
+
+Flag state/schema designs that structurally lie about runtime behavior, including:
+
+- sparse dynamic state modeled as a fully populated `Record<string, T>`;
+- finite request/domain options modeled as unrestricted strings when the domain is closed.
+
+Use the relevant SEC/source rule when the concrete code shape is present; do not preload the full catalogue.
+
+## API Delivery Shape
+
+For normal JSON App Router route handlers, preserve the established shared API response/error boundary.
+
+Flag ad hoc response envelopes when the repository's `response-service` + `with-error-handler` contract applies.
+
+If a transport/protocol-specific exception is proposed, require a real transport/protocol reason. When the repository provides an established exception/guard mechanism for that surface, use it and record the reason rather than creating a silent one-off convention.
+
+Implementation owns the concrete code; Architecture Guard owns whether the delivery shape fits the architecture.
+
+## Auth-Flow Architecture
+
+For an explicit Clerk/bootstrap/onboarding/auth-routing architecture change:
+
+1. read `AUTH_FLOW_ANTI_PATTERNS.md` before approving the design shape;
+2. identify the affected routing/ownership boundaries;
+3. read `AUTH_FLOW_MATRIX_HOW_TO_USE.md` and affected verification-matrix scenarios;
+4. preserve provider isolation and clear responsibility between proxy, layouts/pages, server handlers/actions, provisioning, and application-owned state.
+
+Do not preload the auth-flow corpus for unrelated architecture work.
+
+Security/Auth owns trust/authz semantics.
+Next.js Runtime owns exact App Router/proxy/cache/runtime semantics.
+
+## Runtime Boundary Handoff
+
+Architecture Guard should identify structural runtime-placement risk but must not invent Next.js behavior.
+
+Invoke or hand off to `nextjs-runtime` when the decision depends on:
+
+- App Router rendering semantics;
+- Server vs Client Component behavior;
+- route-handler/server-action framework semantics;
+- `src/proxy.ts`;
+- Cache Components, caching, revalidation, or request-time rendering;
+- Edge/Node or deployment-runtime behavior.
+
+A runtime bug is not an invitation to redesign architecture. First determine whether the narrow runtime-safe fix preserves the existing structure.
+
+## Extensibility and Blast Radius
+
+Evaluate whether the design preserves reasonable seams for:
+
+- tenancy/organizations;
+- RBAC/ABAC;
+- feature flags;
+- request-scoped caching;
+- workers/alternate entrypoints.
+
+Do not require speculative abstractions for hypothetical futures.
+
+Block designs that create coupling which materially prevents already-established extension directions.
+
+If a safe change creates manageable architectural debt, approve conditionally and name the debt/follow-up explicitly.
+
+## Artifact-Backed Work
+
+For `.copilot/tasks/{task_id}/` work:
+
+- read only current control artifacts and prior specialist outputs relevant to the architecture decision;
+- create/update exactly one `01 - Architecture Guard - Summary.md`;
+- use the matching specialist-summary template;
+- update the same summary on later runs;
+- keep `plan.md` and `intake.md` synchronized when architecture review changes direction, constraints, or stop/go state;
+- do not create duplicate Architecture Guard summaries.
+
+## Stop / Go
+
+Return one clear architecture status:
+
+- **GO** — design fits established architecture;
+- **GO WITH FOLLOW-UP** — safe to implement, with named non-blocking architectural debt;
+- **BLOCKED** — implementation must not proceed until the stated structural issue is resolved.
+
+Block when, for example:
+
+- module ownership is unresolved;
+- dependency direction would be violated;
+- required contract/public seam is missing or bypassed without justification;
+- DI/composition lifetime is unsafe or unresolved;
+- security/runtime enforcement has no viable structural boundary;
+- the proposed blast radius exceeds what is justified by the task.
+
+Do not block merely because a broader redesign would be cleaner.
+
+## Severity
+
+Use:
+
+- **CRITICAL** — breaks modular-monolith boundary rules; bypasses authorization or trust boundaries; creates cross-tenant or security risk; or introduces coupling that blocks future extensibility;
+- **MAJOR** — weakens DI discipline; introduces cross-module knowledge leakage; creates runtime-placement confusion; or materially increases blast radius/architectural drift;
+- **MINOR** — non-blocking architectural smell, local inconsistency, or documentation drift without runtime effect;
+- **INFORMATIONAL** — useful architecture observations that are not problems.
+
+Security/Auth may assign a different security severity to the same underlying issue; do not override its security classification.
+
+## Task Lifecycle
+
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
+
+## Response
+
+For substantial Architecture Guard output, use exactly:
 
 1. Objective
 2. Current-State Findings
@@ -123,44 +260,16 @@ For substantial Architecture Guard output, use this structure:
 5. Risks
 6. Recommended Next Action
 
-Within that structure:
+Lead reviews with findings.
 
-- cite real files
-- distinguish code facts from assumptions
-- say whether the design is safe, should be blocked, or needs follow-up work
+Cite real files/evidence, distinguish code facts from assumptions, make docs/code drift explicit, and state the architecture status (`GO`, `GO WITH FOLLOW-UP`, or `BLOCKED`).
 
-When reviewing a change, lead with findings rather than narrative.
+No fluff, no unsupported claims, and no praise for a weak design.
 
-## Artifact Discipline
+## Source and Compatibility
 
-For artifact-backed work:
+`docs/ai/general/01 - Architecture Guard Agent.md` remains the neutral cross-tool role authority.
 
-- the summary artifact is mandatory, not optional
-- keep `plan.md` and `intake.md` synchronized when your review changes the direction of
-  the task
-- use the matching specialist summary template
-- never create a second Architecture Guard summary file for the same task
+For Claude Code, this skill changes context-loading mechanics only: inspect live structural evidence first, retrieve targeted architecture/security/runtime sources, and expand progressively when needed.
 
-## Compatibility Notes
-
-- `AGENTS.md` remains the primary always-applied context for all tools.
-- `docs/ai/general/01 - Architecture Guard Agent.md` remains the shared repository prompt source for the role.
-- This skill is the Claude-native runtime surface for that role in this repository. `.agents/skills/architecture-guard/SKILL.md` remains the Codex-native runtime surface for the same role.
-
-When the role changes, update:
-
-- `AGENTS.md`
-- `docs/ai/general/01 - Architecture Guard Agent.md`
-- `.github/agents/architecture-guard.agent.md`
-- `.agents/skills/architecture-guard/SKILL.md`
-- `.claude/skills/architecture-guard/SKILL.md`
-- the applicable description guides under `docs/ai/`
-
-## Leantime Integration
-
-**This skill participates in the mandatory Leantime workflow.**
-
-At task open and close, the Workflow Orchestrator invokes
-`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
-
-Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+If shared architecture semantics change, propagate that semantic change according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary architecture review.

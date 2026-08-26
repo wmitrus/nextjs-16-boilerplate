@@ -26,10 +26,10 @@ Real Claude skill file: [`.claude/skills/debug-investigation/SKILL.md`](../../..
 
 ## Startup Note
 
-The skill reads the shared authority docs first:
+The skill inherits `CLAUDE.md` and retrieves shared authority docs only when required:
 
-- `AGENTS.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/CI_CD_EVIDENCE_RETRIEVAL.md` for CI or deployment evidence
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/ARTIFACTS_GUIDE.md`
 - `docs/ai/general/06 - Debug Investigation Agent.md`

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
@@ -142,5 +143,25 @@ export const auditEventsTable = pgTable(
     index('idx_audit_events_category_occurred').on(t.category, t.occurredAt),
     index('idx_audit_events_actor_occurred').on(t.actorUserId, t.occurredAt),
     index('idx_audit_events_target').on(t.targetType, t.targetId),
+    // Trigram GIN indexes back the admin audit-log "contains" filter
+    // (OZI-54): a plain btree on these columns only helps an exact match or
+    // a leading-wildcard `ILIKE 'x%'` prefix search -- a real `ILIKE '%x%'`
+    // contains query degrades to a full scan without one. Requires the
+    // pg_trgm extension (see the 0020 migration and
+    // src/core/db/drivers/create-pglite.ts for local/PGlite registration).
+    // actorUserId is a native uuid column; pg_trgm/gin_trgm_ops only apply
+    // to text, hence the cast in the index expression.
+    index('idx_audit_events_target_type_trgm').using(
+      'gin',
+      sql`${t.targetType} gin_trgm_ops`,
+    ),
+    index('idx_audit_events_target_id_trgm').using(
+      'gin',
+      sql`${t.targetId} gin_trgm_ops`,
+    ),
+    index('idx_audit_events_actor_user_id_trgm').using(
+      'gin',
+      sql`(${t.actorUserId}::text) gin_trgm_ops`,
+    ),
   ],
 );

@@ -24,7 +24,7 @@ Available agents:
 
 Before running this workflow, read:
 
-- `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` deprecated April 20, 2026.
+- the consumer's runtime-native root or instruction surface
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md` — cross-reference every finding before classifying
@@ -236,11 +236,12 @@ Review all new SEC-XX entries added during this session.
 
 If new SEC-XX entries were added:
 
-1. Update `AGENTS.md` (root) — add rule to the SEC table.
-2. Update `docs/ai/general/02 - Security & Auth Agent.md` — mandatory startup rules.
-3. Update `docs/ai/general/04 - Implementation Agents.md` — if SEC category affects implementation patterns.
-4. Update `.github/agents/security-auth.agent.md` and `.github/agents/implementation-agent.agent.md`.
-5. If pattern affects E2E code: update `docs/ai/general/07 - Playwright E2E Agent.md` and `.github/agents/playwright-e2e.agent.md`.
+1. Update `docs/ai/general/SECURITY_CODING_PATTERNS.md` as the SEC authority.
+2. Update `docs/ai/general/02 - Security & Auth Agent.md` when specialist behavior changes.
+3. Update `docs/ai/general/04 - Implementation Agents.md` when the SEC category affects implementation patterns.
+4. Propagate runtime routing or always-on invariants according to `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`.
+5. Update affected tool-specific security and implementation surfaces.
+6. If pattern affects E2E code: update `docs/ai/general/07 - Playwright E2E Agent.md` and `.github/agents/playwright-e2e.agent.md`.
 
 If no new SEC-XX entries (all matched existing patterns):
 

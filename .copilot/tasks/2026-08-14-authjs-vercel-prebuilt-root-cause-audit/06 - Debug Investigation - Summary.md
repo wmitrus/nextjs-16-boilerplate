@@ -5,7 +5,7 @@
 - Task ID: `2026-08-14-authjs-vercel-prebuilt-root-cause-audit`
 - Objective: identify the source-to-artifact regression behind hosted AuthJS
   `Connection closed.` and the later invalid Vercel function package.
-- Status: COMPLETED LOCALLY; hosted confirmation pending.
+- Status: COMPLETED; hosted Preview and Production confirmed.
 - Last updated: 2026-08-14.
 
 ## Confirmed Evidence

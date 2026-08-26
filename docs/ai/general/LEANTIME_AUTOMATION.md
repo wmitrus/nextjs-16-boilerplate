@@ -1,4 +1,11 @@
-# Leantime Automation Guide
+# Leantime Automation Guide (Legacy / Explicit-Use / Migration Only)
+
+**Status: not the active task-lifecycle authority.** Linear is the canonical
+active-task state for this repository — see the root instructions
+(`CLAUDE.md`/`AGENTS.md`) and the `Linear Task Operating Model`. This guide
+is retained for explicitly requested Leantime operations and for migrating
+historical tasks into Leantime; it is not read or invoked automatically as
+part of the active AI task lifecycle.
 
 This document is the single agent-facing reference for the repository's
 Leantime automation scripts.
@@ -832,20 +839,26 @@ Keep this follow-up list explicit:
 
 ---
 
-## Mandatory Agent Flow
+## Agent Flow (Legacy / Explicit-Use Only)
 
-**Every non-trivial task that uses an AI agent or workflow MUST include Leantime
-steps at task open and task close.**
+**This flow is not part of the active AI task lifecycle.** Linear is
+canonical — see the root instructions and the `Linear Task Operating Model`.
+Follow the steps below only when the user has explicitly requested a
+Leantime operation, or when performing an explicitly scoped Leantime
+migration task; they no longer run automatically at task open/close for
+ordinary work.
 
-This applies to all task types: feature implementation, bug fix, refactor,
-documentation, security incident, baseline validation, and E2E verification.
+Historically this flow applied to all task types: feature implementation,
+bug fix, refactor, documentation, security incident, baseline validation,
+and E2E verification. That history is preserved below for explicit-use and
+migration reference.
 
-The `10 - Leantime Integration Agent` is responsible for executing these steps.
-The Workflow Orchestrator (`08`) invokes it at the boundaries defined below.
+When explicitly invoked, `10 - Leantime Integration Agent` (Codex:
+`leantime-integration` skill) is responsible for executing these steps.
 
 ### Task Open Protocol
 
-At the start of every non-trivial task:
+When explicitly performing a Leantime task-open operation:
 
 1. **Check for existing tasks**: Run `tasks.list` and `milestones.list` for the
    project. Do not create duplicates.
@@ -859,7 +872,7 @@ At the start of every non-trivial task:
 
 ### Task Close Protocol
 
-At the end of every non-trivial task:
+When explicitly performing a Leantime task-close operation:
 
 1. **Patch task status to Zrobione**: Run `task.patch` with `status: 0`.
 2. **Log time**: Run `time.log` with a summary of work done.

@@ -9,7 +9,7 @@
 - Task ID: `2026-08-14-authjs-login-connection-closed`
 - Task Objective: Identify the source and trigger of the hosted AuthJS login `Unhandled Promise Rejection: Connection closed.` incident without changing production behavior.
 - Current Run Scope: Installed dependency source, AuthJS credentials sign-in path, redirect/bootstrap flow, root error handling, supplied HAR, local hosted artifacts, and focused AuthJS E2E coverage.
-- Status: COMPLETED - exact message source and failure boundary confirmed; the upstream Flight-close trigger requires one browser capture.
+- Status: COMPLETED - exact source, hosted failure chain, and final remediation confirmed.
 - Last Updated: 2026-08-14
 - Related Control Artifacts: `plan.md`, `intake.md`
 

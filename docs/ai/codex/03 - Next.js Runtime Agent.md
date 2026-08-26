@@ -25,9 +25,8 @@ Real Codex skill file: [`.agents/skills/nextjs-runtime/SKILL.md`](../../../.agen
 
 ## Startup Note
 
-The skill reads the shared authority docs first:
+The skill inherits `AGENTS.md` and retrieves shared authority docs only when required:
 
-- `AGENTS.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/03 - Next.js Runtime Agent.md`

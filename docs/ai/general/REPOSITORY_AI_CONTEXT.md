@@ -122,21 +122,29 @@ settled and the task is building the thing.
 
 ## Agent Infrastructure — Complete Location Map
 
-This is the authoritative map of every place agent rules must be propagated.
+This is the inventory of repository AI surfaces. Authority boundaries and
+propagation rules are defined in
+`docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`.
 
 **When you add, change, or remove a coding rule, security pattern, or behavioral constraint:**
 Update all locations below that apply to the rule's scope.
 
 | Location                                            | Purpose                                                   | Consumer            | Format                                                                                               |
 | --------------------------------------------------- | --------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
-| **`AGENTS.md`** (root)                              | **Primary always-applied context**                        | **All AI agents**   | Plain markdown — **update here first**                                                               |
+| `AGENTS.md`                                         | Codex-native root entry point                             | Codex               | Plain markdown — always-on Codex invariants and routing                                              |
+| `CLAUDE.md`                                         | Claude Code-native root entry point                       | Claude Code         | Plain markdown — always-on Claude invariants and routing                                             |
 | `docs/ai/general/0[1-9] - *.md`                     | Agent prompt source                                       | Zencoder extension  | Plain markdown prompt                                                                                |
 | `.github/agents/*.agent.md`                         | Agent prompt source                                       | GitHub Copilot      | YAML frontmatter + markdown                                                                          |
 | `.github/prompts/*.prompt.md`                       | Workflow prompt source                                    | GitHub Copilot      | YAML frontmatter + markdown                                                                          |
 | `.agents/skills/*/SKILL.md`                         | Skill runtime source                                      | Codex               | YAML frontmatter + markdown                                                                          |
 | `.claude/skills/*/SKILL.md`                         | Skill runtime source                                      | Claude Code         | YAML frontmatter + markdown                                                                          |
-| `CLAUDE.md`                                         | Bridges to this file (root context)                       | Claude Code         | Plain markdown — update its quick-reference sections when Testing/Env/Quality-Gate rules change      |
 | `.zenflow/workflows/*.md`                           | Workflow execution specs                                  | ZenFlow extension   | Step-based markdown                                                                                  |
+| `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md` | Authority boundaries and propagation                      | Maintainers         | Neutral maintenance authority                                                                        |
+| `docs/ai/general/VALIDATION_AND_QUALITY_GATES.md`   | Shared quality-gate contract                              | All agents + humans | Neutral on-demand authority                                                                          |
+| `docs/ai/general/CI_CD_EVIDENCE_RETRIEVAL.md`       | CI/CD evidence retrieval                                  | All agents + humans | Neutral on-demand authority                                                                          |
+| `docs/ai/general/DATABASE_AND_SCHEMA_PATTERNS.md`   | Database and schema patterns                              | All agents + humans | Neutral on-demand authority                                                                          |
+| `docs/ai/general/SCRIPT_IMPLEMENTATION_PATTERNS.md` | Script implementation patterns                            | All agents + humans | Neutral on-demand authority                                                                          |
+| `docs/ai/general/SECURITY_FOLLOW_UPS.md`            | Time-bound unresolved security maintenance                | Security work       | Neutral on-demand authority plus canonical Linear state                                              |
 | `docs/ai/general/SECURITY_CODING_PATTERNS.md`       | Living security rule catalogue                            | All agents + humans | Indexed pattern entries                                                                              |
 | `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`        | Auth-specific anti-patterns                               | Auth/security work  | Anti-pattern list                                                                                    |
 | `docs/ai/general/NEXTJS_IMPLEMENTATION_PLAYBOOK.md` | How to build a new API route, page/route segment, or test | All agents + humans | Cross-linked "how", not a duplicate of SECURITY_CODING_PATTERNS.md / IMPLEMENTATION_ANTI_PATTERNS.md |
@@ -144,7 +152,7 @@ Update all locations below that apply to the rule's scope.
 | `docs/ai/copilot/*.md`                              | Description guides (non-authoritative)                    | Humans              | Points to `.github/agents/`                                                                          |
 | `docs/ai/codex/*.md`                                | Description guides (non-authoritative)                    | Humans              | Points to `.agents/skills/`                                                                          |
 | `docs/ai/claude/*.md`                               | Description guides (non-authoritative)                    | Humans              | Points to `.claude/skills/`                                                                          |
-| ~~`.zencoder/rules/repo.md`~~                       | ~~Always-applied context~~                                | ~~Zencoder~~        | **DEPRECATED — April 20, 2026. Never use. See `AGENTS.md`.**                                         |
+| ~~`.zencoder/rules/repo.md`~~                       | ~~Always-applied context~~                                | ~~Zencoder~~        | **DEPRECATED — April 20, 2026. Never restore as an active authority.**                               |
 
 ### Agent Numbering and File Correspondence
 
@@ -330,24 +338,20 @@ Unit tests are co-located with source files.
 | Unused dep check   | `pnpm depcheck`         |
 | Env consistency    | `pnpm env:check`        |
 
-**Lint rule**: Always run `pnpm lint --fix`, never plain `pnpm lint`. The linter auto-fixes import ordering and formatting issues on save; running without `--fix` only reports fixable errors and wastes tokens. If unfixable errors remain after `--fix`, report them.
-
-**Temporary ESLint execution blocker (effective 2026-08-14, narrowed 2026-08-20):** `pnpm lint --fix` repeatedly hung in some agent shells. **Confirmed Codex-specific** — Claude Code's shell does not reproduce the hang (verified 2026-08-20). **Claude Code agents must run `pnpm lint --fix` normally.** Codex agents (and any other tool that still reproduces the hang) should continue to skip `pnpm lint`, `pnpm lint --fix`, ESLint directly, and any script that invokes ESLint, and report lint as skipped because of this blocker. See `AGENTS.md` for the full note.
-
-**Phase-close rule**: For substantial phase-based implementation work, use narrower validation during the phase and run repo-wide `pnpm lint --fix` plus `pnpm typecheck` before declaring the phase complete. Do not run both after every tiny code edit unless the task specifically requires it.
-
-Pre-push hook runs: typecheck -> skott -> depcheck -> madge.
+The complete shared contract, including focused and phase-close validation,
+runtime-specific command failures, current hooks, and CI coverage, is maintained
+in `docs/ai/general/VALIDATION_AND_QUALITY_GATES.md`.
 
 ---
 
 ## AI Governance Files
 
-Before performing architectural, security, or runtime analysis, agents should read:
+Before performing architectural, security, or runtime analysis, agents should:
 
-- `AGENTS.md`
-- `docs/ai/general/00 - Agent Interaction Protocol.md`
-- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
-- `docs/ai/general/MODE_MANIFEST.md`
+- inherit the consumer's runtime-native root or instruction surface;
+- use the narrowest applicable runtime skill or workflow;
+- load only the neutral role, pattern, mode, or repository context required by
+  the active decision.
 
 These files define:
 

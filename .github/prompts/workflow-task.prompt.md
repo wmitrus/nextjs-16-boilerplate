@@ -5,9 +5,9 @@ argument-hint: 'Task description, requirements summary, referenced files, risks,
 agent: '08 - Workflow Orchestrator'
 ---
 
-> **Leantime Integration Required**
-> At task open and close, invoke the `10 - Leantime Integration Agent`.
-> Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+> **Task Lifecycle**
+> Ensure a canonical Linear issue exists (see `AGENTS.md`). Do not invoke
+> `10 - Leantime Integration Agent` unless the user explicitly requests it.
 
 Start a non-trivial workflow task using `08 - Workflow Orchestrator`.
 

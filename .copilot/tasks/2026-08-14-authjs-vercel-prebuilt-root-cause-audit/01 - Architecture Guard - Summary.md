@@ -4,7 +4,7 @@
 
 - Task ID: `2026-08-14-authjs-vercel-prebuilt-root-cause-audit`
 - Scope: placement and ownership of the Production single-tenant readiness fix.
-- Status: APPROVED AND IMPLEMENTED LOCALLY.
+- Status: COMPLETED; hosted Preview and Production confirmed.
 - Last updated: 2026-08-15.
 
 ## Findings
@@ -34,4 +34,7 @@
   plus organization. It does not duplicate provisioning or authorization logic.
 - Empty production databases still require the explicit one-time bootstrap; the
   deploy gate must not synthesize privileged data automatically.
-- A fresh hosted deployment remains required after the Production env update.
+- Hosted Preview and Production confirm the deployment/artifact model works
+  (build, packaging, promotion, and the shallow sign-in-page smoke). Full
+  bootstrap-admin and protected-administration usage were not exercised by
+  CI — see `OZI-50` for a live admin-panel regression this gap let through.

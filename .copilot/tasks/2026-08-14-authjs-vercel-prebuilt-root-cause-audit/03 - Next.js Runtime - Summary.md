@@ -5,7 +5,7 @@
 - Task ID: `2026-08-14-authjs-vercel-prebuilt-root-cause-audit`
 - Scope: Next.js 16 output tracing, Vercel source/prebuilt boundaries, and PPR
   failure propagation.
-- Status: COMPLETED LOCALLY; hosted confirmation pending.
+- Status: COMPLETED; hosted Preview and Production confirmed.
 - Last updated: 2026-08-14.
 
 ## Runtime Findings

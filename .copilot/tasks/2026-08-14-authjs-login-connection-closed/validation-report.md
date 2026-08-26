@@ -34,8 +34,10 @@
 - Production is promoted only after staged smoke, followed by canonical-domain
   smoke.
 
-Local validation supports the implementation. Hosted resolution remains pending
-until these deployment gates run on the new revision.
+Local and hosted validation support the implementation for the `Connection
+closed.` regression itself. Preview and Production sign-in _page load_ and the
+session endpoint are confirmed by automated smoke; bootstrap-admin and
+protected/admin _use_ were never exercised by CI (see `OZI-50`).
 
 ## Deployment-ID Follow-Up
 
@@ -44,5 +46,6 @@ until these deployment gates run on the new revision.
 - `74` focused deployment validator tests now pass with regression coverage for
   the reserved variable and generated runtime flag.
 - Typecheck and deployment-profile validation pass.
-- A fresh staged and promoted Production run remains required; the incident is
-  not closed from local evidence alone.
+- The fresh staged and promoted Production run passed; the `Connection
+closed.` incident is closed. This does not cover admin-panel behavior — see
+  `OZI-50`.

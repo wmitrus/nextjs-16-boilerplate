@@ -80,7 +80,7 @@ one safe correction.
 
 ## Leantime
 
-- Auth incident milestone/task: `99` / `100` (`W toku`).
-- Vercel prebuilt incident milestone/task: `97` / `98` (reopened to `W toku`).
+- Auth incident milestone/task: `99` / `100` (`Zrobione`).
+- Vercel prebuilt incident milestone/task: `97` / `98` (`Zrobione`).
 - No duplicate umbrella ticket was created; this task workspace coordinates the
   two existing incident records.

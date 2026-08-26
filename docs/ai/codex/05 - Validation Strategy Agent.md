@@ -24,10 +24,10 @@ Real Codex skill file: [`.agents/skills/validation-strategy/SKILL.md`](../../../
 
 ## Startup Note
 
-The skill reads the shared authority docs first:
+The skill inherits `AGENTS.md` and retrieves shared authority docs only when required:
 
-- `AGENTS.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/VALIDATION_AND_QUALITY_GATES.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/05 - Validation Strategy Agent.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md` when validation risk touches security

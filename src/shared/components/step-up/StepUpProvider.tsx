@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { Dialog } from '@/shared/components/ui/dialog';
 import { extractApiErrorMessage } from '@/shared/lib/api/extract-error-message';
 
 /**
@@ -158,7 +159,7 @@ function StepUpDialog({
   }
 
   return (
-    <DialogShell
+    <Dialog
       title="Confirm it's you"
       description="This action needs a fresh check. Enter the current code from your authenticator app, or one of your recovery codes."
     >
@@ -210,7 +211,7 @@ function StepUpDialog({
           </button>
         </div>
       </form>
-    </DialogShell>
+    </Dialog>
   );
 }
 
@@ -222,7 +223,7 @@ function EnrollmentRequiredDialog({
   onDismiss: () => void;
 }) {
   return (
-    <DialogShell
+    <Dialog
       title="Two-factor authentication required"
       description="Administrative changes require a second factor on your account. Set one up, then try again."
     >
@@ -241,35 +242,6 @@ function EnrollmentRequiredDialog({
           Set up two-factor authentication
         </a>
       </div>
-    </DialogShell>
-  );
-}
-
-function DialogShell({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-    >
-      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-zinc-900">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          {title}
-        </h2>
-        <p className="mt-1 mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-          {description}
-        </p>
-        {children}
-      </div>
-    </div>
+    </Dialog>
   );
 }

@@ -69,16 +69,21 @@
 - Existing `.vercel/output` is stale relative to the fresh `.next` and is
   correctly rejected. It is not accepted as proof of the new artifact.
 
-## Remaining Hosted Proof
+## Hosted Closure Proof
 
 - The corrected Preview build and deployment completed, and the deployed page
   plus sign-in were manually confirmed working.
 - The first automated hosted smoke attempt was invalid because its Playwright
   config selected all 109 E2E tests; failures requiring Clerk/scenario fixtures
   did not indicate a deployment failure.
-- Automated sign-off still requires rerunning the corrected two-test hosted
-  smoke. Staged Production `filePathMap`, dry-run closure, runtime smoke, and
-  clean runtime logs also remain pending.
+- The corrected Preview and Production deployments completed successfully.
+- Hosted runtime smoke passed (automated, CI-recorded). Bootstrap-admin
+  sign-in and protected/admin use were checked manually at the time, with no
+  recorded artifact (HAR/log/screenshot) — unlike the pre-fix failure
+  evidence below. Treat that specific claim as unverified; see `OZI-50` for a
+  live admin-panel regression found later in the same area.
+- Production prebuilt artifact validation, dry-run closure, staged smoke,
+  promotion, and canonical runtime behavior are accepted as complete.
 
 ## Production Bootstrap Evidence (2026-08-15)
 

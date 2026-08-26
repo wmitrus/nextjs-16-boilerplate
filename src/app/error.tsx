@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import type { ErrorInfo } from 'next/error';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { logger as baseLogger } from '@/core/logger/client';
@@ -17,6 +18,7 @@ export default function ErrorBoundary({ error, retry }: ErrorInfo) {
   // documented contract for this prop is an Error carrying an optional
   // `digest` (attached server-side for logged/redacted errors), so narrow
   // it once here rather than casting at every use site.
+  const router = useRouter();
   const typedError = error as Error & { digest?: string };
   const digest = typedError.digest;
 
@@ -101,7 +103,7 @@ export default function ErrorBoundary({ error, retry }: ErrorInfo) {
           Try again
         </button>
         <button
-          onClick={() => (window.location.href = '/')}
+          onClick={() => router.push('/')}
           className="rounded-md border border-gray-300 bg-white px-6 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
         >
           Go home

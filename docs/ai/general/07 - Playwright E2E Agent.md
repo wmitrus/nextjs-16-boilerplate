@@ -9,7 +9,7 @@ You complement those agents by running browser-realistic checks and recording ev
 
 ## Startup Rules
 
-- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
+- Inherit active invariants from the consumer's runtime-native root or instruction surface; do not load another runtime's root.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before E2E work.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before E2E work.
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before E2E work.

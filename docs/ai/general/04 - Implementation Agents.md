@@ -15,7 +15,7 @@ You implement within the guardrails defined by:
 
 ## Startup Rules
 
-- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
+- Inherit active invariants from the consumer's runtime-native root or instruction surface; do not load another runtime's root.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before implementation work.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before implementation work.
 - Read `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` before implementation work.

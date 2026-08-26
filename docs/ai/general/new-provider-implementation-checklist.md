@@ -10,7 +10,7 @@ This checklist MUST be completed for every new provider added to the boilerplate
 
 ## Phase 0: Pre-Implementation Requirements
 
-- [ ] Read `AGENTS.md` — always-applied repository context
+- [ ] Inherit the active runtime root and load only the neutral authorities required by the provider boundary
 - [ ] Read `docs/ai/general/SECURITY_CODING_PATTERNS.md` — all security rules
 - [ ] Read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
 - [ ] Read `.copilot/tasks/2026-04-17-auth-foundation-redesign/architecture-design.md`

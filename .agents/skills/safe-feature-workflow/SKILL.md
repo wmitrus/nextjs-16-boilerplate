@@ -1,80 +1,205 @@
 ---
 name: safe-feature-workflow
-description: Feature-delivery workflow for this repository. Use whenever the task is a new feature or non-trivial behavior change that should preserve architecture, security, runtime correctness, and low blast radius, even if the user does not explicitly ask for a "workflow."
+description: Feature-delivery workflow for this repository. Use for new features or non-trivial behavior changes that need constraint-first delivery across architecture, security/auth, Next.js runtime, implementation, and validation. Use the fast path only when architecture, security, runtime, contracts/DI, and significant public behavior are clearly unaffected.
 ---
 
 # Safe Feature Workflow
 
-This is the Codex-native counterpart to:
+Coordinate safe feature delivery with the minimum specialist work needed before implementation.
 
-- `docs/ai/general/Workflow 01 - Safe Feature Workflow.md`
-- `.zenflow/workflows/feature-development.md`
+Own sequencing, handoffs, block/go decisions, and workflow artifacts. Do not duplicate specialist analysis.
 
-Use this skill when the task is feature delivery or a non-trivial behavior change that
-needs the repository's normal constraint-first sequence.
+## Context Loading
 
-## Startup
+Inherit repository invariants from `AGENTS.md`.
 
-Before substantial work:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/MODE_MANIFEST.md`.
-3. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-4. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-5. Read `docs/ai/general/Workflow 01 - Safe Feature Workflow.md`.
+- `MODE_MANIFEST.md`;
+- Agent Interaction Protocol;
+- Repository AI Context;
+- the neutral Safe Feature Workflow;
+- security/auth/runtime/validation catalogues.
 
-For security-sensitive feature work:
+At start:
 
-- read `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+1. inspect the request and enough live code/evidence to classify the change;
+2. decide whether the fast path is clearly safe;
+3. identify only the specialists actually needed;
+4. invoke those skills and let each perform its own targeted retrieval;
+5. load the neutral workflow source only when workflow semantics are unclear or being audited/changed.
 
-For auth/bootstrap/onboarding feature work:
+If requirements are materially messy or underspecified, use `task-brief-authoring` first.
 
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
-- read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
-- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md`
+## Entry and Fast Path
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
+Use for new features, non-trivial behavior changes, and cross-file changes that may affect boundaries, auth, tenancy, runtime, caching, request handling, contracts, DI/composition, or tests.
 
-- create or update `plan.md` first
-- create or update `intake.md` immediately after `plan.md`
-- keep checklist state synchronized as the work progresses
-- create or update the relevant specialist summary artifacts when those passes are run
-- create or update `validation-report.md` after validation
+Do not use for trivial copy/formatting, clearly isolated mechanical changes, read-only audits, or refactors better handled by the refactor workflow.
 
-## Mission
+Use the fast path only when **all** are clearly true:
 
-Safely introduce a new feature or non-trivial change while preserving architecture,
-security, runtime correctness, and low blast radius.
+- few files;
+- no architecture/module-boundary effect;
+- no auth/security/tenancy/trust-boundary effect;
+- no runtime/request/caching/revalidation effect;
+- no contract or DI/composition change;
+- no significant public-behavior change.
 
-## Fast Path
+If any criterion is uncertain, use the standard path.
 
-You may use the reduced path only when the change clearly:
+Fast path:
 
-- affects only a small number of files
-- does not touch architecture boundaries
-- does not touch auth or security flows
-- does not affect runtime placement or caching
-- does not modify contracts or DI/composition
-- does not change public behavior significantly
+1. intake/scope;
+2. `implementation-agent`;
+3. focused validation, using `validation-strategy` when scope is non-obvious;
+4. close-out.
 
-If any of these are uncertain, do not use the fast path.
+Implementation must still keep blast radius low, update tests when behavior changes, and surface unexpected specialist concerns.
 
-## Working Sequence
+## Task Lifecycle and Artifacts
 
-1. Intake and scope
-2. Architecture Guard review for non-trivial work
-3. Conditional Security/Auth review
-4. Conditional Next.js Runtime review
-5. Constraint summary
-6. Implementation
-7. Validation
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
 
-Use `09 - Task Brief Authoring` before this workflow when the requirements package is
-still messy or underspecified.
+For `.copilot/tasks/{task_id}/` work:
 
-## Required Output Shape
+- create/update `plan.md`, then `intake.md`;
+- keep durable checklist/state synchronized;
+- create specialist summaries only for passes actually run;
+- create/update `validation-report.md` after validation;
+- reuse existing role summaries instead of creating duplicates;
+- read only artifacts relevant to the active phase.
 
-For substantial kickoff or review output, use:
+## Standard Sequence
+
+### 1. Intake and Scope
+
+Determine:
+
+- requested behavior/acceptance criteria;
+- likely affected modules/layers/files;
+- explicit constraints/non-goals;
+- possible architecture, DI, security/tenancy, runtime, request, caching, or validation risk.
+
+Make only low-risk assumptions. Do not decide specialist-owned policy during intake.
+
+### 2. Architecture Guard
+
+For non-trivial standard-path work, invoke `architecture-guard` first.
+
+Required handoff:
+
+- architecture fit;
+- affected ownership/boundaries;
+- structural constraints;
+- minimum safe shape;
+- stop/go decision.
+
+### 3. Conditional Security/Auth
+
+Invoke `security-auth` only when work touches or may affect authentication, authorization, roles/policies, tenant/org/resource scope, membership, provider isolation, trust boundaries, sensitive data, or security enforcement.
+
+Required handoff:
+
+- security/auth constraints;
+- enforcement points;
+- trust/tenant/sensitive-data constraints;
+- stop/go decision.
+
+The specialist owns SEC/auth-flow retrieval.
+
+### 4. Conditional Next.js Runtime
+
+Invoke `nextjs-runtime` only when work touches or may affect `src/app/**`, App Router semantics, Server/Client placement, server actions, route handlers, `src/proxy.ts`, caching/revalidation, request-time rendering, instrumentation/env exposure, or deployment runtime.
+
+Required handoff:
+
+- runtime constraints;
+- placement/caching/request-time guidance;
+- stop/go decision.
+
+The specialist owns version/config-specific verification.
+
+### 5. Consolidate Constraints
+
+Produce one implementation-ready summary containing:
+
+- architecture constraints;
+- security/auth constraints when applicable;
+- runtime constraints when applicable;
+- explicitly allowed scope;
+- explicitly forbidden changes;
+- known validation risks.
+
+Remove duplication without weakening constraints.
+
+If any specialist-owned decision remains unresolved, stop before implementation.
+
+### 6. Implementation
+
+Invoke `implementation-agent` with the request, acceptance criteria, affected scope, consolidated constraints, allowed/forbidden scope, and known validation risks.
+
+Require:
+
+- live-code inspection first;
+- smallest correct production-grade change;
+- tests updated when behavior changes;
+- no architecture/security/runtime redesign;
+- uncertainty surfaced instead of guessed.
+
+### 7. Validation
+
+Require validation proportional to risk:
+
+- targeted checks first;
+- typecheck and broader tests when justified by the actual failure mode;
+- use `validation-strategy` when the minimum safe scope is not already clear;
+- do not broaden to E2E without a concrete risk.
+
+When `validation-strategy` is used, consume its required/optional/not-required evidence plan rather than duplicating its reasoning here.
+
+### 8. Optional Architecture Recheck
+
+Optionally run `architecture-guard` again when implementation materially affects multiple modules, contracts, DI/composition, security enforcement points, runtime placement, or another structural boundary where implementation drift is plausible.
+
+## Block Conditions
+
+Stop before implementation when:
+
+- architecture fit/module ownership/DI is unresolved;
+- auth/trust/tenant/resource-scope policy is unresolved;
+- runtime placement/caching/request behavior is unresolved;
+- repository evidence is materially contradictory;
+- the request is too ambiguous to implement safely;
+- required scope exceeds the approved blast radius;
+- a specialist returns a block.
+
+In a blocked state, do not implement. State the exact blocker and the owning specialist/decision.
+
+## Close-Out
+
+Before success:
+
+- inspect the final diff for unintended scope;
+- confirm required validation or record blocked/deferred evidence;
+- update artifacts when applicable;
+- report residual risks/follow-ups;
+- close Leantime only after repository closure conditions are satisfied.
+
+A successful run uses the right specialists in the right order, avoids duplicated review, establishes constraints before implementation, keeps scope narrow, and produces meaningful validation evidence.
+
+Retain in the workflow outcome:
+
+- affected files/modules;
+- implementation result;
+- validation result;
+- residual risks/follow-ups.
+
+## Response
+
+For substantial kickoff/review output:
 
 1. Objective
 2. Input Sources
@@ -84,18 +209,12 @@ For substantial kickoff or review output, use:
 6. Current Status
 7. Recommended Next Action
 
-## Compatibility Notes
+During later phases, use the more specific active specialist response shape when more useful.
 
-- `docs/ai/general/Workflow 01 - Safe Feature Workflow.md` remains the shared, neutral
-  workflow source
-- `.zenflow/workflows/feature-development.md` remains the ZenFlow execution layer
-- this skill is the Codex-native runtime surface for the same workflow intent
+## Source and Compatibility
 
-## Leantime Integration
+`docs/ai/general/Workflow 01 - Safe Feature Workflow.md` remains the neutral cross-tool workflow authority.
 
-**This skill participates in the mandatory Leantime workflow.**
+For Codex, this skill changes context-loading mechanics only: specialist details are delegated to their skills instead of preloaded here.
 
-At task open and close, the Workflow Orchestrator invokes
-`10 - Leantime Integration Agent` (Codex: `leantime-integration` skill).
-
-Reference: `docs/ai/general/LEANTIME_AUTOMATION.md`
+If shared workflow semantics change, propagate that semantic change according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary feature delivery.

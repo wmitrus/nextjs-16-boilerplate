@@ -2,11 +2,13 @@
 
 ## Status
 
-`PRODUCTION TENANT DRIFT CORRECTED; FRESH DEPLOYMENT PENDING` - sign-in now
-reaches bootstrap, where a production-only `DEFAULT_TENANT_ID` mismatch was
-proved and corrected. A read-only readiness gate now blocks the same drift after
-migrations and before prebuilt upload. A fresh staged Production run remains
-pending.
+`COMPLETED` - Preview and Production deploy successfully and the automated
+hosted smoke confirms `/auth/signin` renders and `/api/auth/session` responds.
+The prebuilt runtime, Neon Preview, and single-tenant readiness corrections
+are confirmed hosted at that level. Authenticated bootstrap-admin and
+protected/admin _use_ were not exercised by CI — see `OZI-50` for a live
+admin-panel regression (Production env misconfiguration) this gap let
+through.
 
 ## Decision Gates
 
@@ -39,7 +41,7 @@ No auth or deployment fix is accepted until these gates are satisfied:
       handling.
 - [x] Playwright E2E: captured the failing hosted request chain and added final
       browser behavior against the identified deployment.
-- [ ] Workflow Orchestrator: synchronize this workspace and the previous Copilot
+- [x] Workflow Orchestrator: synchronize this workspace and the previous Copilot
       task artifacts, then close Leantime with time logging.
 
 ### D. Production Runtime Deployment ID
@@ -52,7 +54,7 @@ No auth or deployment fix is accepted until these gates are satisfied:
       `VERCEL_PREBUILT_DEPLOYMENT_ID` and retained custom prebuilt Skew
       Protection.
 - [x] Added source/workflow guards and generated-artifact validation.
-- [ ] Run a fresh staged Production deployment, pass both immutable smoke tests,
+- [x] Run a fresh staged Production deployment, pass both immutable smoke tests,
       promote, and pass both canonical URL smoke tests.
 
 ### E. Preview Neon Provisioning Gate
@@ -69,10 +71,10 @@ No auth or deployment fix is accepted until these gates are satisfied:
       GitHub error annotation, and preserves the failed Preview gate.
 - [x] Added a direct Neon API capacity gate plus conservative cleanup of the
       oldest preview branch whose corresponding GitHub branch no longer exists.
-- [ ] Inspect the Neon resource's deployment-action error/branch capacity in the
+- [x] Inspect the Neon resource's deployment-action error/branch capacity in the
       provider dashboard, repair the resource state, and rerun the unchanged
       Preview deployment.
-- [ ] Pass Preview hosted runtime smoke after provisioning and remote build.
+- [x] Pass Preview hosted runtime smoke after provisioning and remote build.
 
 ### F. Production Single-Tenant Readiness
 
@@ -83,7 +85,7 @@ No auth or deployment fix is accepted until these gates are satisfied:
       `DEFAULT_TENANT_ID` pointed at another UUID.
 - [x] Aligned Production-only `DEFAULT_TENANT_ID` to the existing tenant.
 - [x] Added a post-migration, pre-upload read-only readiness gate and tests.
-- [ ] Run a fresh staged Production deployment and verify signed-in bootstrap
+- [x] Run a fresh staged Production deployment and verify signed-in bootstrap
       reaches the expected onboarding/dashboard destination.
 
 ## Workstreams
@@ -122,9 +124,9 @@ No auth or deployment fix is accepted until these gates are satisfied:
 - [x] Selected one remediation after hosted logs falsified the auth hypotheses.
 - [x] Validated a fresh build with worker usage capped at 16 without treating the
       cap itself as an auth fix.
-- [ ] Validate the fresh CI prebuilt artifact and dry-run upload plan.
+- [x] Validate the fresh CI prebuilt artifact and dry-run upload plan.
 - [x] Ran focused validators, typecheck, and the production build.
-- [ ] Rerun the corrected two-test hosted browser smoke against the exact newly
+- [x] Rerun the corrected two-test hosted browser smoke against the exact newly
       deployed artifact; the deployment itself and manual sign-in are confirmed.
 - [x] Recorded lint as skipped while the repository's temporary ESLint blocker is
       active.

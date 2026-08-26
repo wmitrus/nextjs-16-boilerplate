@@ -30,6 +30,15 @@ export interface UserRepository {
   findById(id: SubjectId): Promise<User | null>;
 
   /**
+   * Retrieves a user by email, or `null` if no user has activated with this
+   * address yet. Used to check whether an email already resolved to a real
+   * account through a path other than the one currently being reviewed (e.g.
+   * a waitlist entry whose applicant became a user via direct invite or
+   * platform-admin bootstrap) -- see OZI-64.
+   */
+  findByEmail(email: string): Promise<User | null>;
+
+  /**
    * Updates the onboarding status for a user.
    */
   updateOnboardingStatus(id: SubjectId, complete: boolean): Promise<void>;

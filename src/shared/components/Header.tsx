@@ -48,7 +48,6 @@ const Header = React.forwardRef<HTMLElement, HeaderProps>(
                 width={100}
                 height={20}
                 className="dark:invert"
-                priority
               />
             </Link>
             <nav className="hidden items-center gap-6 md:flex">

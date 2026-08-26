@@ -6,7 +6,7 @@ import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
  *
  * INVARIANT: Never decrement — stored versions in DB are compared with < operator.
  */
-export const POLICY_TEMPLATE_VERSION = 2;
+export const POLICY_TEMPLATE_VERSION = 3;
 
 export interface PolicyTemplate {
   readonly effect: 'allow';
@@ -50,6 +50,11 @@ export const ownerPolicies: readonly PolicyTemplate[] = [
     effect: 'allow',
     resource: RESOURCES.BILLING,
     actions: [ACTIONS.BILLING_READ, ACTIONS.BILLING_UPDATE],
+  },
+  {
+    effect: 'allow',
+    resource: RESOURCES.FEATURE_FLAG,
+    actions: [ACTIONS.FEATURE_FLAG_READ, ACTIONS.FEATURE_FLAG_MANAGE],
   },
   {
     effect: 'allow',

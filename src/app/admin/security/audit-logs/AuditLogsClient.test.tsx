@@ -171,6 +171,42 @@ describe('AuditLogsClient', () => {
     expect(lastCall).toContain('offset=0');
   });
 
+  it('does not fetch while typing into a filter field, only on submit', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        data: {
+          events: [],
+          total: 0,
+          limit: 25,
+          offset: 0,
+          scope: PLATFORM_ADMIN_SCOPE,
+        },
+      }),
+    );
+
+    render(<AuditLogsClient />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+
+    // Regression for OZI-52: typing progressively into a text filter used to
+    // fire one fetch per keystroke, exhausting the shared per-client API
+    // rate limit before any search could complete.
+    const targetTypeInput = screen.getByLabelText('Target type');
+    fireEvent.change(targetTypeInput, { target: { value: 'a' } });
+    fireEvent.change(targetTypeInput, { target: { value: 'au' } });
+    fireEvent.change(targetTypeInput, { target: { value: 'aud' } });
+    fireEvent.change(targetTypeInput, {
+      target: { value: 'audit_log_setting' },
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    const lastCall = vi.mocked(fetch).mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain('targetType=audit_log_setting');
+  });
+
   it('paginates with Previous/Next, disabling at boundaries', async () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({

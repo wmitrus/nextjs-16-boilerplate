@@ -4,7 +4,7 @@
 
 - Task ID: `2026-08-14-authjs-vercel-prebuilt-root-cause-audit`
 - Mode: Change Validation.
-- Status: LOCAL GATES PASSED; hosted gates pending.
+- Status: COMPLETED; local and hosted gates passed.
 - Last updated: 2026-08-14.
 
 ## Minimum Safe Proof
@@ -30,8 +30,7 @@
   function startup.
 - Full E2E is explicitly excluded from the hosted smoke because it requires
   scenario-owned credentials, fixtures, and mutable test state.
-- The incident remains open until both deployment paths pass on a fresh
-  immutable revision.
+- Both deployment paths passed on fresh hosted revisions.
 
 ## 2026-08-14 Deployment-ID Runtime Update
 
@@ -59,5 +58,7 @@
 - Static acceptance: typecheck and `pnpm vercel:deploy:validate` pass.
 - Operational acceptance: old Production env fails the new checker; corrected
   re-pulled Production env passes.
-- Final hosted acceptance still requires a new deployment and authenticated
-  bootstrap settlement; an env update alone cannot alter the active deployment.
+- Fresh hosted Preview and Production passed the automated smoke covering
+  bootstrap's failure signature (`TENANT_NOT_PROVISIONED` no longer reachable
+  under the corrected `DEFAULT_TENANT_ID`). Authenticated admin _use_ was not
+  exercised by CI — see `OZI-50`.

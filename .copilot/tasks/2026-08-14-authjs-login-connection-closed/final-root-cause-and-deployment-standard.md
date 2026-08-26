@@ -171,3 +171,20 @@ Production now runs `pnpm tenant:readiness:vercel:prod` after
 copied into GitHub's Preview pre-deploy phase because Neon binds the branch DB
 during the hosted source build; a pre-upload GitHub query could validate the
 wrong database.
+
+## Hosted Closure
+
+Preview and Production deploy successfully, and the automated hosted smoke
+(`pnpm vercel:runtime:smoke`) confirms `/auth/signin` renders without the
+`Connection closed.` regression and `/api/auth/session` returns JSON in both
+environments — this is CI evidence, not a claim of record.
+
+Full authenticated sign-in, bootstrap-admin, and protected/admin usage were
+**not** exercised by CI: the `Playwright Auth Matrix E2E` suite that would
+cover them is label-gated (`run-e2e-matrix`) and was never triggered on the
+PRs in this chain (#65, #66, #68). A live Production admin-page regression
+found on 2026-08-26 (`INTERNAL_API_KEY_PREVIOUS` too short — see
+[OZI-50](https://linear.app/oziniusz/issue/OZI-50)) confirms that gap was
+real, not theoretical. This document is the operational standard for the
+`Connection closed.` incident specifically; it is not evidence that the admin
+panel works end-to-end.

@@ -5,7 +5,7 @@
 - Task ID: `2026-08-14-authjs-vercel-prebuilt-root-cause-audit`
 - Scope: Production AuthJS bootstrap, single-tenant context, and deployment-time
   tenant readiness.
-- Status: IMPLEMENTED LOCALLY; fresh hosted deployment pending.
+- Status: COMPLETED; hosted Preview and Production confirmed.
 - Last updated: 2026-08-15.
 
 ## Current-State Findings
@@ -48,5 +48,8 @@
   and missing-mode states.
 - Production env was re-pulled after correction and the read-only checker
   returned `Ready`.
-- A new deployment is still required because Vercel env changes do not alter an
-  already running deployment.
+- Fresh Preview and Production deployments passed the automated hosted smoke
+  (sign-in page renders, session endpoint responds). Authenticated
+  bootstrap-admin and protected administration use were **not** exercised by
+  CI — see `OZI-50` for a live admin-panel regression (Production env
+  misconfiguration) this gap let through.

@@ -9,7 +9,7 @@
 - Task ID: `2026-08-14-authjs-login-connection-closed`
 - Task Objective: Contain the shared Preview/Production AuthJS sign-in `Connection closed.` incident without weakening auth controls.
 - Current Run Scope: Focused sign-in client recovery, navigation, PPR fallback, lightweight RSC JWT session predicate, production build worker cap, and regression coverage.
-- Status: COMPLETED - local implementation and validation complete; hosted release verification blocked pending deployment.
+- Status: COMPLETED - local and hosted Preview/Production verification passed.
 - Last Updated: 2026-08-14
 - Related Control Artifacts: `plan.md`, `intake.md`, `constraints.md`, `implementation-plan.md`, `validation-report.md`
 

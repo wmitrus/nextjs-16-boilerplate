@@ -13,8 +13,12 @@ package.
 ## Resolution
 
 Follow `final-root-cause-and-deployment-standard.md` and
-`implementation-plan.md`. The local implementation is complete. Hosted proof is
-pending a fresh Preview and staged prebuilt Production deployment.
+`implementation-plan.md`. The local implementation is complete. Hosted proof
+for the `Connection closed.` regression itself is complete: Preview and
+Production `/auth/signin` render and `/api/auth/session` responds correctly
+in both environments. Full sign-in/bootstrap-admin/protected-admin flows were
+never exercised by CI — see `OZI-50` for a live admin regression that gap let
+through.
 
 ## Leantime
 

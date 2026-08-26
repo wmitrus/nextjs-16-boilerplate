@@ -3,7 +3,7 @@
 ## Task Context
 
 - Task ID: `2026-08-14-authjs-vercel-prebuilt-root-cause-audit`
-- Status: COMPLETED LOCALLY; hosted confirmation pending.
+- Status: COMPLETED; hosted Preview and Production confirmed.
 - Last updated: 2026-08-14.
 
 ## Changes

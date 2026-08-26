@@ -4,7 +4,7 @@
 
 - Milestone ID: `99` - AuthJS login connection-closed incident.
 - Task ID: `100` - Resolve AuthJS login connection-closed incident.
-- Status: `W toku` (`4`) as of 2026-08-14.
+- Status: `Zrobione` (`0`) as of 2026-08-15.
 
 ## User-Reported Symptom
 
@@ -24,10 +24,15 @@ Error: Unhandled Promise Rejection: Connection closed.
 
 - [done] Incident classified as AuthJS/runtime behavior affecting Preview and Production.
 - [done] Mandatory auth-flow anti-patterns and verification matrix reviewed.
-- [done] Exact rejection source identified as the Next.js RSC client; the upstream hosted request remains evidence-pending.
+- [done] Exact rejection source and upstream hosted failure boundary confirmed.
 - [done] Auth/security and runtime review completed.
 - [done] Minimal correction implemented and locally tested.
-- [in progress] AuthJS core completed-user and incomplete-user scenarios passed locally; Preview/Production evidence is blocked pending deployment.
+- [done] Preview and Production hosted smoke (`/auth/signin` renders,
+  `/api/auth/session` returns JSON) passed. Full sign-in/bootstrap-admin/
+  protected-admin flows were **not** exercised by CI (Auth Matrix E2E is
+  label-gated and was never triggered here) — see
+  [OZI-50](https://linear.app/oziniusz/issue/OZI-50) for a live admin
+  regression this gap let through.
 
 ## Acceptance Criteria
 

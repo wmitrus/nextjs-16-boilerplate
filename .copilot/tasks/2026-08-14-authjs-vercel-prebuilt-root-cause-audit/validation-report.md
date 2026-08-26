@@ -80,16 +80,18 @@
   runs `pnpm db:migrate:prod` against Production before `pnpm build`. Running it
   merely to inspect packaging would mutate Production data.
 
-## Pending CI Evidence
+## Hosted CI Evidence
 
-- fresh Preview remote build and hosted smoke;
-- fresh Production prebuilt `filePathMap` and dry-run validation;
-- staged Production smoke before promotion;
-- promoted Production smoke and clean Vercel runtime logs.
+- fresh Preview remote build and hosted smoke: passed;
+- fresh Production prebuilt `filePathMap` and dry-run validation: passed;
+- staged Production smoke before promotion: passed;
+- promoted Production runtime smoke (automated): passed. Authenticated admin
+  verification was manual and unrecorded — see `OZI-50`.
 
-The corrected implementation is locally validated. The previous manual include
-failed hosted packaging and is superseded; the incident remains open until the
-new immutable Preview and Production artifacts pass the hosted gates.
+The corrected implementation is validated locally and hosted for the prebuilt
+packaging/deployment regression this task tracked. The previous manual
+include is superseded, and that specific incident is closed; it does not
+cover admin-panel behavior.
 
 ## 2026-08-15 Production Tenant Readiness
 
@@ -110,5 +112,7 @@ new immutable Preview and Production artifacts pass the hosted gates.
   `git diff --check` passed.
 - No local production build was added for this scripts/workflow-only change; the
   existing 16-worker cap and CI prebuilt build remain authoritative.
-- Pending: push the change, complete a fresh staged Production deployment, and
-  verify authenticated bootstrap settlement on the new deployment.
+- Fresh staged and promoted Production passed automated hosted smoke;
+  authenticated bootstrap and admin use were checked manually with no
+  recorded evidence — see `OZI-50` for a live admin-panel regression found
+  in the same area.

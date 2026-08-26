@@ -101,6 +101,7 @@
     "chromatic": "chromatic",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
+    "ai:instructions:check": "node scripts/validate-agent-instruction-architecture.mjs",
     "arch:lint": "./scripts/architecture-lint.sh",
     "db:generate": "drizzle-kit generate --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:pglite:migrate": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.dev.ts",

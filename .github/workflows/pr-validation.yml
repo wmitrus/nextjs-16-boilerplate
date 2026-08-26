@@ -52,6 +52,9 @@ jobs:
       - name: Environment Consistency
         run: pnpm env:check
 
+      - name: AI Instruction Architecture
+        run: pnpm ai:instructions:check
+
       # env:validate is intentionally NOT run here.
       # It is a deployment-configuration gate, not a code-quality gate.
       # It requires deployment secrets (CLERK_SECRET_KEY, DEFAULT_TENANT_ID, etc.)

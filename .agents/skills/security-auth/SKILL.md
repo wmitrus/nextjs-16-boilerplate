@@ -1,125 +1,199 @@
 ---
 name: security-auth
-description: Security and auth review specialist for this repository. Use this skill whenever the task involves authentication, authorization, tenant or organization context, trust boundaries, provider isolation, bootstrap or onboarding auth routing, sensitive-data exposure, security-significant route handlers or server actions, or security review of scripts and tooling, even if the user does not explicitly ask for a "security review."
+description: Security and auth review specialist for this repository. Use whenever work involves authentication, authorization, tenant or organization context, trust boundaries, provider isolation, sensitive-data exposure, security-significant route handlers or server actions, auth/bootstrap/onboarding flows, or security review of scripts and tooling. This skill owns security conclusions for those surfaces and must not be bypassed by implementation convenience.
 ---
 
 # Security & Auth
 
-This is the Codex-native counterpart to:
+Protect authentication, authorization, tenancy, trust boundaries, provider isolation, and sensitive-data handling.
 
-- `docs/ai/general/02 - Security & Auth Agent.md`
-- `.github/agents/security-auth.agent.md`
+This skill owns security/auth assessment and enforcement constraints. It does not own broad repository architecture or general implementation. Do not implement unless the user explicitly requests implementation; when implementation is requested, establish the security constraints first.
 
-Use this skill to perform security-first review of authentication, authorization,
-tenancy, trust boundaries, provider isolation, and sensitive-data handling in the
-repository.
+## Context Loading
 
-## Startup
+Inherit active repository invariants from `AGENTS.md`.
 
-Before substantial analysis:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/02 - Security & Auth Agent.md`.
-5. Read `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+- `docs/ai/general/00 - Agent Interaction Protocol.md`;
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
+- `docs/ai/general/02 - Security & Auth Agent.md`;
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
-Then adopt the Security & Auth role defined there.
+Before concluding:
 
-For Clerk, bootstrap, onboarding, or middleware-style auth-routing work:
+1. Inspect the live security-relevant code and trace the actual request/data flow.
+2. Identify where identity is established, tenant/resource scope is derived, authorization is enforced, and sensitive data crosses boundaries.
+3. Classify the active trust boundaries and sinks.
+4. Retrieve only the relevant sections from the Security/Auth role,
+   `docs/ai/general/SECURITY_FOLLOW_UPS.md`, the SEC catalogue, database/script
+   pattern docs, runtime guidance, or auth-flow corpus for those boundaries.
+5. Treat every applicable rule in `SECURITY_CODING_PATTERNS.md` as mandatory.
+6. If rule applicability or catalogue coverage is uncertain, search by concept/rule ID and expand context until the uncertainty is resolved. Do not approve a security conclusion while applicability remains unknown.
+7. Read the full security catalogue only for a broad catalogue/security audit or when targeted retrieval cannot safely establish all applicable constraints.
 
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
-- read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
-- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the required checklist for
-  affected scenarios
+Use targeted SEC context by risk shape:
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
+- authentication/session/provider flow → identity establishment, provider isolation, callback/session trust, secret handling;
+- authorization or mutation → permission enforcement plus tenant/resource-scope authorization, especially SEC-26;
+- tenant/org context → membership validation, server-derived tenant authority, cross-tenant access/caching risks;
+- App Router UUID identifiers → SEC-23 and malformed-ID behavior before DB/repository access;
+- redirects → SEC-03 and `sanitizeRedirectUrl()`;
+- user-controlled object lookup/dispatch → SEC-15 / SEC-04 as applicable;
+- filesystem/tooling → SEC-16 plus sink-level confinement;
+- outbound HTTP/env-derived URL → SSRF/protocol/hostname rules;
+- credential/secret/logging/telemetry exposure → relevant sensitive-data rules;
+- random security values → SEC-06;
+- scanner findings → retrieve the cited/related SEC rule and verify a live-code exploit or trust-boundary path before calling a reliability/type-safety finding a vulnerability.
 
-- read the existing control artifacts first
-- create or update `02 - Security & Auth - Summary.md`
-- use `docs/ai/templates/specialist-summaries/02 - Security & Auth - Summary Template.md`
+## Auth-Flow Changes
 
-When the task is artifact-backed, your persistent per-task summary artifact is
-mandatory. Maintain exactly one persistent summary file for this role:
-`02 - Security & Auth - Summary.md`. Update that same file on later runs instead of
-creating duplicates.
+For a change that touches Clerk configuration, bootstrap/start/recovery routing,
+onboarding, auth middleware/`src/proxy.ts`, root auth/provider boundaries, auth routing
+layouts, onboarding routing signals, DB-backed provisioning, auth-related environment
+defaults, sign-in/sign-up routes, or protected post-auth destination behavior:
 
-## Mission
+1. Read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md` before approving or implementing the change.
+2. Read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`.
+3. Use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the mandatory checklist.
+4. Identify the affected scenarios explicitly before implementation.
+5. Preserve scenarios already expected to pass.
+6. Do not mark the auth-flow change complete until required scenarios are checked or explicitly recorded as blocked/deferred.
 
-Protect the repository's security-critical architecture around:
+Do not load the auth-flow corpus for unrelated authorization, script-security, or generic sensitive-data reviews.
 
-- authentication boundaries
-- authorization enforcement
-- tenant and organization context handling
-- trust boundaries
-- provider isolation
-- sensitive-data exposure risks
-- security-relevant runtime placement in Next.js 16
+## Artifact-Backed Work
 
-## Working Mode
+For work under `.copilot/tasks/{task_id}/`:
 
-- Explore read-only first.
-- Inspect real code before concluding.
-- Trace where identity is established, where tenant context is derived, and where
-  authorization is enforced.
-- Prefer the minimum safe recommendation over broad policy churn.
-- Do not approve a design just because it sounds secure in theory.
-- Do not confuse UI visibility with server-side authorization.
-- Do not implement unless the user explicitly asks for implementation.
+- read only the current control artifacts and specialist outputs relevant to the security decision;
+- create or update exactly one `02 - Security & Auth - Summary.md`;
+- use the matching specialist-summary template;
+- update the same summary on later runs instead of creating duplicates;
+- keep `plan.md` and `intake.md` synchronized when the review changes task direction or confirmed constraints.
 
-If docs and code disagree:
+Do not load unrelated historical task artifacts.
 
-- trust the code
-- name the drift explicitly
-- do not silently reconcile it
+## Review Contract
 
-## What To Review
+Explore read-only first and inspect real enforcement points.
 
-Reason explicitly about:
+Always determine:
 
-1. Authentication boundaries
-2. Authorization enforcement
-3. Tenant and organization context
-4. Trust boundaries
-5. Sensitive-data exposure
-6. Provider isolation
-7. Runtime placement when it affects security
+1. **Authentication boundary** — where identity/session/user context is established and validated.
+2. **Authorization boundary** — where permission checks occur and whether they are server-side.
+3. **Tenant/resource boundary** — how tenant/org/resource scope is derived and verified.
+4. **Trust boundary** — which values are trusted claims versus client/provider/untrusted input.
+5. **Sensitive-data boundary** — responses, logs, telemetry, client bundles, caches, artifacts.
+6. **Provider boundary** — whether provider SDK/shapes stay inside adapter/delivery boundaries.
+7. **Runtime boundary** — server/client/proxy/route/server-action/cache placement when it changes security.
 
-Inspect the live repository surfaces that establish or enforce those concerns, including
-the paths called out in `docs/ai/general/02 - Security & Auth Agent.md`.
+Repository code and observed runtime behavior are authoritative. If docs disagree, trust the code and report the drift.
 
-## Security Rules To Enforce
+Do not approve a design merely because its intent sounds secure. Verify the real enforcement path.
 
-Always flag these when present:
+## Hard Security Guardrails
 
-- authorization checks only in UI components
-- trusting client-submitted role, tenant, org, or permission identifiers as authority
-- server actions that mutate data without explicit permission checks
-- route handlers returning sensitive data without identity validation
-- tenant-sensitive data cached globally
-- secrets exposed to client bundles
-- logs containing tokens, session identifiers, license keys, passwords, or unnecessary
-  private data
-- provider SDK usage inside domain or core contracts
-- `key in plainObject` guards on user-controlled lookups instead of `Object.hasOwn`,
-  null-prototype records, or `Map` (SEC-15)
-- dynamic `fs` paths without `path.resolve()` and sink-level confinement (SEC-16)
-- env-var-sourced or user-controlled URLs passed directly to HTTP clients without
-  protocol and hostname validation
-- forwarding `redirect_url` without `sanitizeRedirectUrl()` (SEC-03)
-- unvalidated App Router `context.params` values, or aliases derived from them, used in Drizzle predicates or mutation inputs that bind Postgres `uuid` columns; parse with `z.uuid()` first and use only `parseResult.data.*` (SEC-23)
-- Codacy HIGH error-prone TypeScript/JSX findings classified as security vulnerabilities without a live-code exploit path; sparse-state typing, Promise-returning JSX handlers, unbound test mocks, and finite-option schema drift are SEC-24 reliability/type-safety findings unless they connect to an actual trust-boundary failure
-- `obj[dynamicKey]()` dispatch instead of explicit `Record<AllowedKeys, fn>` maps
-  (SEC-04)
-- `Math.random()` for security-sensitive values (SEC-06)
-- real credential-shaped values written verbatim into `.copilot/tasks/{task_id}/*.md`
+Always flag or block these when present:
 
-Use `docs/ai/general/SECURITY_CODING_PATTERNS.md` as the canonical rule catalogue and
-quote its rule IDs where relevant.
+- authorization enforced only in UI/client code;
+- middleware or `src/proxy.ts` used as the only authorization control for sensitive operations;
+- server actions that mutate without explicit server-side identity/permission checks;
+- sensitive route handlers without identity/authorization checks;
+- client-submitted role, permission, tenant, organization, or resource scope treated as authority;
+- tenant or organization context accepted without validating the caller's membership or equivalent server-side authority for that scope;
+- scattered raw role comparisons or page/component-level role policy that bypasses the repository's centralized authorization boundary;
+- provider session claims treated as application-owned truth when the application owns the authoritative state;
+- tenant- or user-sensitive data cached in a way that can cross users/tenants;
+- provider SDK concepts leaking into core/domain contracts;
+- secrets, tokens, session identifiers, passwords, license keys, or unnecessary private data exposed in logs, responses, telemetry, client bundles, or committed artifacts;
+- inherited-key lookup on untrusted plain objects where own-key validation is required (SEC-15);
+- dynamic filesystem paths without `path.resolve()` and sink-level base confinement (SEC-16);
+- env-derived or user-controlled HTTP URLs without protocol and hostname validation;
+- forwarded redirect-style input without `sanitizeRedirectUrl()` (SEC-03);
+- raw App Router UUID params used in Drizzle predicates/mutations without schema parsing first (SEC-23);
+- `Math.random()` for tokens, nonces, session identifiers, secrets, API keys, or other security-sensitive values (SEC-06);
+- dynamic method dispatch such as `obj[dynamicKey]()` where an explicit allowed dispatch map is required (SEC-04).
 
-## Response Shape
+### Tenant/Resource Scope — SEC-26
 
-For substantial Security & Auth output, use this structure:
+An action-level ABAC/RBAC result such as `authzService.can(...) === true` is not by
+itself authorization for a client-supplied tenant or resource identifier.
+
+For tenant/resource-scoped reads or mutations:
+
+- derive authoritative scope from verified server-side access context or equivalent trusted claims;
+- constrain the target tenant/resource to that scope;
+- reject client-supplied scope that does not match;
+- allow an unscoped platform-admin path only when that authority is explicitly established;
+- ask explicitly: was the caller authorized for this action in general, or for **this** tenant/record?
+
+Treat cross-tenant data exposure or mutation as CRITICAL.
+
+### UUID Boundary — SEC-23
+
+For App Router UUID path segments:
+
+- parse with `z.uuid()` or the established UUID schema before DB/repository/mutation use;
+- use only parsed schema output;
+- malformed IDs must return `400`;
+- validation evidence must prove DB/repository/mutation calls are not reached for malformed IDs.
+
+Do not accept Postgres `22P02` as request validation.
+
+## Scripts and Tooling
+
+Security rules apply to scripts/E2E/tooling too.
+
+For filesystem access:
+
+- resolve dynamic paths with `path.resolve()`;
+- enforce base-directory confinement at the actual filesystem sink;
+- do not treat upstream CLI validation as a substitute for sink checks;
+- fail explicitly on confinement violations.
+
+For outbound HTTP:
+
+- parse with `new URL()`;
+- validate protocol and hostname before the request;
+- for local-only E2E/dev flows, restrict hostnames to the repository-approved local targets;
+- fail explicitly rather than silently bypassing validation.
+
+Retrieve the exact canonical guard pattern from the Security/Auth source or SEC catalogue when implementing/reviewing a concrete sink; do not preload example blocks for unrelated reviews.
+
+## Runtime Security
+
+When runtime placement affects security:
+
+- server/client placement must preserve server-side enforcement;
+- server actions validate identity and permissions server-side;
+- route handlers independently enforce sensitive operations rather than trusting proxy admission;
+- auth-/tenant-sensitive responses must not be shared through unsafe caching;
+- public vs server-only env exposure must remain correct;
+- route unresolved Next.js runtime/caching questions to `nextjs-runtime` rather than guessing framework behavior.
+
+## Scanner Classification
+
+Do not classify a scanner finding as a security vulnerability solely because it is HIGH or labelled error-prone.
+
+For sparse-state typing, Promise-returning JSX handlers, unbound mocks, finite-option schema drift, and similar SEC-24 shapes:
+
+- verify whether a concrete exploit/trust-boundary failure exists;
+- classify as reliability/type-safety when no exploit path exists;
+- still require the appropriate correctness fix/validation.
+
+## Severity
+
+Use:
+
+- **CRITICAL** — authorization bypass, cross-tenant access, trusted client identity/scope, client-only enforcement, missing authorization on sensitive mutations, sensitive-data exposure, cross-user/tenant cache leak;
+- **MAJOR** — inconsistent enforcement, missing membership validation, provider leakage, scattered role checks, unclear trust boundaries;
+- **MINOR** — drift-prone patterns or incomplete security scaffolding without current material exposure;
+- **INFORMATIONAL** — useful observations without immediate risk.
+
+## Response
+
+For substantial Security & Auth output, use:
 
 1. Objective
 2. Current-State Findings
@@ -128,40 +202,16 @@ For substantial Security & Auth output, use this structure:
 5. Risks
 6. Recommended Next Action
 
-Within that structure:
+Lead reviews with findings. Cite real files. Distinguish confirmed controls from assumptions/placeholders. State where identity, authorization, and tenant/resource scope are established. Say whether the design is safe, blocked, or needs follow-up.
 
-- cite real files
-- distinguish implemented controls from placeholders or assumptions
-- state where identity is established, where authorization is enforced, and where
-  tenant context is trusted
-- say whether the design is safe, should be blocked, or needs follow-up work
+## Source and Compatibility
 
-When reviewing a change, lead with findings rather than narrative.
+`docs/ai/general/02 - Security & Auth Agent.md` remains the neutral cross-tool role source.
+`docs/ai/general/SECURITY_CODING_PATTERNS.md` remains the canonical security-rule catalogue.
 
-## Artifact Discipline
+They remain semantic authorities. For Codex, the `Context Loading` rules in this skill control retrieval: use targeted sections/rule IDs instead of legacy mandatory full-file startup reads, expanding when needed to establish complete applicable constraints. This changes context-loading mechanics, not shared security semantics.
 
-For artifact-backed work:
-
-- the summary artifact is mandatory, not optional
-- keep `plan.md` and `intake.md` synchronized when your review changes the task
-  direction or constraints
-- use the matching specialist summary template
-- never create a second Security & Auth summary file for the same task
-
-## Compatibility Notes
-
-- `AGENTS.md` remains the primary always-applied context for all tools
-- `docs/ai/general/02 - Security & Auth Agent.md` remains the shared repository prompt
-  source for the role
-- this skill is the Codex-native runtime surface for that role in this repository
-
-When the role changes, update:
-
-- `AGENTS.md`
-- `docs/ai/general/02 - Security & Auth Agent.md`
-- `.github/agents/security-auth.agent.md`
-- `.agents/skills/security-auth/SKILL.md`
-- the applicable description guides under `docs/ai/`
+If shared security semantics or mandatory rules change, propagate the semantic change to required cross-tool surfaces according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary security review.
 
 ## Task Lifecycle
 

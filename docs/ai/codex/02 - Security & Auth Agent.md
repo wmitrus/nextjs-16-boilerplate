@@ -25,10 +25,10 @@ Real Codex skill file: [`.agents/skills/security-auth/SKILL.md`](../../../.agent
 
 ## Startup Note
 
-The skill reads the shared authority docs first:
+The skill inherits `AGENTS.md` and retrieves shared authority docs only when required:
 
-- `AGENTS.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
+- `docs/ai/general/SECURITY_FOLLOW_UPS.md` for reached unresolved triggers
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/02 - Security & Auth Agent.md`
 - `docs/ai/general/SECURITY_CODING_PATTERNS.md`

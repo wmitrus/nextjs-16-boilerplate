@@ -9,7 +9,8 @@ You complement those agents by producing evidence-driven investigation output th
 
 ## Startup Rules
 
-- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
+- Inherit active invariants from the consumer's runtime-native root or instruction surface; do not load another runtime's root.
+- For CI, pull-request check, or deployment-log investigation, use `docs/ai/general/CI_CD_EVIDENCE_RETRIEVAL.md`.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before investigation.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before investigation.
 - Read `docs/ai/general/ARTIFACTS_GUIDE.md` before investigation.

@@ -15,7 +15,6 @@ Inherit active repository invariants from `CLAUDE.md`.
 
 Do not preload full copies of:
 
-- `AGENTS.md`;
 - Agent Interaction Protocol;
 - Repository AI Context;
 - `ARTIFACTS_GUIDE.md`;
@@ -42,7 +41,7 @@ Do not load security/auth/runtime catalogues merely because the bug occurs in co
 - structural ownership/DI hypothesis → retrieve `architecture-guard`;
 - validation-gap hypothesis → retrieve `validation-strategy`;
 - browser-only reproduction/evidence need → retrieve `playwright-e2e`;
-- CI/GitHub Actions/PR-check/Vercel-deployment-log investigation → follow the `GitHub Actions / CI Log Retrieval Discipline` section in `AGENTS.md` before fetching job logs.
+- CI/GitHub Actions/PR-check/Vercel-deployment-log investigation → follow `docs/ai/general/CI_CD_EVIDENCE_RETRIEVAL.md` before fetching job logs.
 
 If a security/auth/runtime/architecture decision is required, hand off the established evidence rather than deciding that policy here.
 

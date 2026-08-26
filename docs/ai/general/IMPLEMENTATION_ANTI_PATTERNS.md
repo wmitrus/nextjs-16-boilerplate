@@ -109,7 +109,7 @@ Why this is banned:
 
 Preferred pattern:
 
-- use the established runtime-safe patterns documented in `AGENTS.md`
+- use the established runtime-safe patterns documented in `docs/ai/general/NEXTJS_IMPLEMENTATION_PLAYBOOK.md`
 - make request-time boundaries explicit before request-sensitive helper calls
 
 ### 2.3 Cache-Blind Sensitive Data Handling
@@ -525,6 +525,6 @@ For implementation, refactor, and remediation work:
 1. Read this file before code changes.
 2. Check whether the requested change naturally pushes toward any banned shape above.
 3. If yes, choose the preferred pattern first instead of patching the anti-pattern and planning a cleanup later.
-4. When a new recurring anti-pattern is discovered, update this document and propagate the rule to the instruction surfaces listed in `AGENTS.md`.
+4. When a new recurring anti-pattern is discovered, update this document and propagate the rule according to `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`.
 
 If a future task reveals another mass-fix class, add it here instead of relying on chat memory.

@@ -15,7 +15,6 @@ Inherit active repository invariants from `CLAUDE.md`.
 
 Do not preload full copies of:
 
-- `AGENTS.md`;
 - `docs/ai/general/00 - Agent Interaction Protocol.md`;
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
 - `docs/ai/general/05 - Validation Strategy Agent.md`;
@@ -27,7 +26,9 @@ Before recommending validation:
 2. State the active mode: `Repository Baseline Validation` or `Change Validation`.
 3. Identify the failure mode the validation must detect.
 4. Confirm upstream architecture/security/runtime decisions are sufficiently established.
-5. Retrieve only the relevant `AGENTS.md`, Validation Strategy, SEC, auth-flow, runtime, or E2E sections required by that risk.
+5. Retrieve only the relevant Validation Strategy,
+   `docs/ai/general/VALIDATION_AND_QUALITY_GATES.md`, SEC, auth-flow, runtime,
+   database, script, or E2E sections required by that risk.
 6. If the minimum safe validation cannot be determined confidently from targeted context, expand retrieval until the relevant constraints are complete. Do not guess.
 
 Use targeted context by risk shape:

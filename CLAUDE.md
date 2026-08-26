@@ -1,14 +1,15 @@
 # Claude Code — Repository Entry Point
 
-`AGENTS.md` is the authoritative cross-agent repository knowledge base.
-Do not preload it in full by default.
+This file is the Claude Code-native root instruction surface for this
+repository. Shared repository semantics live in focused neutral authorities
+under `docs/ai/general/` and in domain documentation.
 
 ## Core Operating Model
 
 For non-trivial work:
 
 1. Classify the task and invoke the narrowest applicable `.claude/skills/` skill or workflow.
-2. Read only the `AGENTS.md` sections and supporting docs required for that task.
+2. Read only the focused neutral authorities and supporting docs required for that task.
 3. Inspect live code before concluding; code wins over documentation on drift.
 4. Escalate context only when current evidence is insufficient.
 5. Do not preload unrelated skills, guides, workflows, historical artifacts, or specialist docs.
@@ -49,6 +50,7 @@ Repository code and observed runtime behavior are authoritative. Docs, prompts, 
 - For ambiguous failures, establish root cause before remediation.
 - If docs conflict with code, trust the code and report the drift.
 - Escalate to exact source, raw logs, or runtime evidence whenever omitted detail could change the conclusion.
+- For CI, pull-request check, GitHub Actions, artifact, or deployment evidence, use `docs/ai/general/CI_CD_EVIDENCE_RETRIEVAL.md`.
 - Build the smallest correct production-grade change that satisfies the confirmed requirement.
 - Understand the relevant flow before editing.
 - Reuse existing patterns, utilities, platform capabilities, and installed dependencies before adding new code.
@@ -75,6 +77,8 @@ Use risk-based validation appropriate to the change.
 - For security-, auth-, tenancy-, persistence-, runtime-, caching-, deployment-, or cross-layer changes, validate the actual affected boundary rather than relying only on isolated unit tests.
 - When repository-wide phase-close validation applies and the active workflow does not define an exact lint command, run `pnpm lint --fix` (never plain `pnpm lint`) and `pnpm typecheck`; use the validation skill to determine additional gates.
 - Report exactly what was validated, what was not, and any remaining uncertainty.
+
+The shared validation contract and live command map are maintained in `docs/ai/general/VALIDATION_AND_QUALITY_GATES.md`.
 
 A task is complete only when requested behavior is implemented, intended scope is verified, relevant validation passes, and no unrelated changes were introduced.
 
@@ -112,6 +116,8 @@ Treat authentication, authorization, tenancy, sensitive data, secrets, redirects
 - Prefer existing repository scripts over ad-hoc replacements that perform the same operation.
 - Treat generated artifacts, caches, build output, and tool indexes as non-authoritative unless the task concerns them.
 - Do not assume a CLI, local service, MCP server, or integration is unavailable because a broad search missed it; verify the configured entrypoint/path first.
+- For Drizzle schemas, UUID-backed route parameters, migrations, constraints, and DB adapter tests, use `docs/ai/general/DATABASE_AND_SCHEMA_PATTERNS.md`.
+- For environment loading, import-safe script entry points, filesystem confinement, dynamic environment access, and configurable outbound URLs under `scripts/**`, use `docs/ai/general/SCRIPT_IMPLEMENTATION_PATTERNS.md`.
 
 ## Context and Usage Discipline
 
@@ -143,12 +149,6 @@ Minimize context consumption without reducing correctness.
 - Reuse an existing backlog entry when one already covers the idea.
 - Read the backlog only when the task surfaces a deferred idea, requires triage, or explicitly concerns an enhancement.
 
-Current alert:
-
-- For security-adjacent work on or after **2026-08-26**, check `AGENTS.md` → `Pending Scheduled Security Follow-Ups` before completion.
-- Do not assume the current Next.js version contains the announced fix without repository evidence or authoritative release information.
-- Remove this pointer when that authoritative follow-up is retired.
-
 Response/session rules:
 
 - Lead with the result, finding, or decision; keep output proportional to the task.
@@ -165,7 +165,7 @@ Response/session rules:
 Agent-rule propagation is maintenance context, not normal task context.
 
 - Load propagation docs only when changing shared AI instructions, skills, workflows, or agent infrastructure.
-- `AGENTS.md` remains authoritative for cross-tool propagation requirements.
+- `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md` is authoritative for cross-tool propagation and runtime-isolation requirements.
 - When modifying a role/workflow, update required tool-specific runtime surfaces according to its compatibility notes.
 - Do not duplicate propagation tables or full agent inventories here.
 - Do not create `.claude/agents/*.md` identities unless the task explicitly covers the deferred subagent architecture.

@@ -54,7 +54,7 @@ real backend, that a tenant-A admin cannot list/read/rename/deactivate a
 tenant-B user via the UI or a direct API call from an authenticated session.
 Would require new `org-db`-scenario AuthJS/Clerk fixture wiring for a second
 stable tenant (see `docs/usage/05 - Playwright E2E Architecture.md` and the
-Clerk E2E fixture contract in `AGENTS.md`).
+applicable Playwright/Auth-flow authorities).
 
 **Why deferred**: The vulnerability lives entirely in the SQL predicate
 layer; unit (route-handler) tests plus a real-DB integration test

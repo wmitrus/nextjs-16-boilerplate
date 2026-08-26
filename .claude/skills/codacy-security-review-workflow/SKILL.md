@@ -17,7 +17,6 @@ Inherit active repository invariants from `CLAUDE.md`.
 
 Do not preload full copies of:
 
-- `AGENTS.md`;
 - Agent Interaction Protocol;
 - Repository AI Context;
 - the neutral Workflow 10 source;
@@ -377,10 +376,10 @@ The workflow is not complete until this step passes.
 
 For every new SEC entry added during the run, propagate the new durable rule to the surfaces required by neutral Workflow 10:
 
-1. `AGENTS.md` — SEC table;
-2. `docs/ai/general/02 - Security & Auth Agent.md` — mandatory security guidance where applicable;
+1. `docs/ai/general/SECURITY_CODING_PATTERNS.md` — SEC authority;
+2. `docs/ai/general/02 - Security & Auth Agent.md` — security specialist guidance where applicable;
 3. `docs/ai/general/04 - Implementation Agents.md` — when the SEC category affects implementation patterns;
-4. `.github/agents/security-auth.agent.md`;
+4. affected runtime and prompt surfaces according to `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`;
 5. `.github/agents/implementation-agent.agent.md`;
 6. when the pattern affects E2E code:
    - `docs/ai/general/07 - Playwright E2E Agent.md`;

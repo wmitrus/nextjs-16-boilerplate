@@ -17,8 +17,8 @@ Codex-native surface and `docs/ai/copilot/README.md` for the Copilot-native
 surface.
 
 Use it when you want to understand which repo-local Claude skill to invoke
-before working in the repo — or read `CLAUDE.md` at the repository root
-first, which is the actual bridge into `AGENTS.md` and this whole system.
+before working in the repo. `CLAUDE.md` is the native Claude Code root and
+routes directly to Claude skills and focused neutral authorities.
 
 ## Current Scope
 
@@ -84,7 +84,7 @@ today. Not a Claude-specific gap.
 - browser-first verification as the main deliverable: [Workflow 06 - Playwright E2E Validation Workflow.md](./Workflow%2006%20-%20Playwright%20E2E%20Validation%20Workflow.md)
 - validation-only closure after implementation is done: [Workflow 07 - Change Validation Workflow.md](./Workflow%2007%20-%20Change%20Validation%20Workflow.md)
 - periodic repository health review: [Workflow 08 - Repository Baseline Validation Workflow.md](./Workflow%2008%20-%20Repository%20Baseline%20Validation%20Workflow.md)
-- task lifecycle (canonical, non-trivial work): Linear — see `AGENTS.md` and the `Linear Task Operating Model`; `10 - Leantime Integration Agent` is legacy/explicit-use only
+- task lifecycle (canonical, non-trivial work): Linear — see `CLAUDE.md` and the `Linear Task Operating Model`; `10 - Leantime Integration Agent` is legacy/explicit-use only
 
 ## 08 vs 09
 
@@ -142,15 +142,14 @@ workflow changes (mirroring the equivalent section in its Codex source).
 This README doesn't duplicate that per-skill detail — for the authoritative,
 cross-tool version of the same information, see:
 
-- `AGENTS.md` → "Agent Infrastructure — Where to Propagate Rules" and
-  "Agent Numbering and File Correspondence"
+- `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md` → authority boundaries and propagation rules
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md` → the matching tables
 - `docs/ai/codex/README.md` → the Codex-side "Compatibility Notes" section,
   which follows the same per-role/workflow propagation-list pattern
 
 ## Compatibility Notes
 
-- `AGENTS.md` remains the primary always-applied context for all tools.
+- `CLAUDE.md` is the Claude Code-native always-on root; it does not depend on another runtime root.
 - `docs/ai/general/*.md` remains the shared, neutral prompt/workflow source
   for every role and workflow listed above.
 - This directory (`docs/ai/claude/`) is the human-facing guide layer for

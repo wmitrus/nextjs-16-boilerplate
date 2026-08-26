@@ -114,6 +114,9 @@ fail_unvalidated_route_param_uuid_sinks() {
 
 print_section "Architecture lint"
 
+print_section "AI instruction architecture checks"
+run_command_check "AI instruction architecture" pnpm ai:instructions:check
+
 print_section "Layer dependency checks"
 
 # src/core/runtime/bootstrap.ts and src/core/runtime/edge.ts are the

@@ -22,9 +22,8 @@ Real Claude skill file: [`.claude/skills/architecture-guard/SKILL.md`](../../../
 
 ## Startup Note
 
-The skill reads the shared authority docs first:
+The skill inherits `CLAUDE.md` and retrieves shared authority docs only when required:
 
-- `AGENTS.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 - `docs/ai/general/01 - Architecture Guard Agent.md`

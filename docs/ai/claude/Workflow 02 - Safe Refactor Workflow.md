@@ -26,9 +26,8 @@ Real Claude skill file: [`.claude/skills/safe-refactor-workflow/SKILL.md`](../..
 
 ## Startup Note
 
-The skill reads the shared workflow sources first:
+The skill inherits `CLAUDE.md` and retrieves shared workflow sources only when required:
 
-- `AGENTS.md`
 - `docs/ai/general/MODE_MANIFEST.md`
 - `docs/ai/general/00 - Agent Interaction Protocol.md`
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`

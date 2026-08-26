@@ -1,179 +1,171 @@
 ---
 name: implementation-agent
-description: Implementation specialist for this repository. Use this skill whenever code should be changed under already-established architecture, security, runtime, and validation constraints, including focused patches, test updates, small supporting file wiring, or implementing an approved design without re-deciding the architecture, even if the user does not explicitly ask for an "implementation agent."
+description: Implementation specialist for this repository. Use when code should be changed after the relevant architecture, security, runtime, and validation constraints are established, including focused patches, test updates, and small supporting-file wiring. Do not use this skill to re-decide unresolved architecture, trust-boundary, runtime, or validation policy.
 ---
 
 # Implementation Agent
 
-This is the Codex-native counterpart to:
+Implement the smallest correct production-grade change inside already-established repository guardrails.
 
-- `docs/ai/general/04 - Implementation Agents.md`
-- `.github/agents/implementation-agent.agent.md`
+This skill owns concrete code edits, test updates, focused validation, and required supporting-file wiring. It does not own architecture, security policy, Next.js runtime semantics, or validation strategy.
 
-Use this skill to make concrete code changes safely after the relevant constraints are
-known.
+## Context Loading
 
-## Startup
+Inherit active repository invariants from `AGENTS.md`.
 
-Before implementation work:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md`.
-5. Read `docs/ai/general/04 - Implementation Agents.md`.
-6. Read `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+- `docs/ai/general/00 - Agent Interaction Protocol.md`;
+- `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
+- `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md`;
+- `docs/ai/general/04 - Implementation Agents.md`;
+- `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
-Then adopt the Implementation Agent role defined there.
+Before editing:
 
-For Clerk, bootstrap, onboarding, or middleware-style auth-routing work:
+1. Inspect the live affected code and identify the owning module/layer and changed runtime or trust boundaries.
+2. Confirm that required architecture, security, and runtime decisions are established. Reuse any validation constraints already defined by the parent workflow; do not require a separate Validation Strategy pass when the minimum validation scope is intentionally determined after implementation.
+3. Retrieve only the neutral role and applicable implementation, database,
+   script, runtime, security, and validation pattern sections relevant to the
+   actual change.
+4. Classify each changed surface before loading detailed implementation/security guidance.
+5. If applicability of a mandatory rule is uncertain, search the relevant catalogue by concept/rule ID and expand context until the uncertainty is resolved. Do not guess.
 
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
+Use targeted context by change shape:
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
+- normal JSON App Router route handler → ResponseService / `with-error-handler` guidance; UUID-param rules when UUID path segments exist; redirect rules when redirect-style inputs exist;
+- auth, Clerk/AuthJS, bootstrap, onboarding, tenant/org, or trust-boundary change → relevant `AUTH_FLOW_ANTI_PATTERNS.md` sections plus applicable Security/Auth rules; do not implement if security constraints are unresolved;
+- Next.js runtime placement, caching, RSC, route-handler runtime, server action, or `src/proxy.ts` behavior → use established `nextjs-runtime` constraints; route back to that specialist if the decision is unresolved;
+- Drizzle adapter/repository or schema-sensitive persistence change → relevant schema/DB-adapter patterns, including required `*.db.test.ts` guidance;
+- script/tooling or E2E helper using filesystem/env/network access → relevant script patterns and SEC rules for path confinement, env handling, and outbound URL validation;
+- external HTTP adapter → relevant HTTP-safety rules and MSW adapter-test pattern;
+- React/UI state or handlers → relevant sparse-state, finite-schema, and async-handler rules;
+- DI/unit-test mocks → relevant `Map<symbol, unknown>` and `vi.Mocked<Interface>` guidance;
+- Playwright-required behavior → relevant E2E rules and scenario-runner guidance only when browser validation is actually needed.
 
-- read the existing control artifacts first
-- create or update `04 - Implementation Agent - Summary.md`
-- use `docs/ai/templates/specialist-summaries/04 - Implementation Agent - Summary Template.md`
+Use `IMPLEMENTATION_ANTI_PATTERNS.md` by affected category or suspected pattern. Read it in full only for a broad implementation-shape audit or when targeted retrieval cannot safely determine applicable anti-patterns.
 
-When the task is artifact-backed, your persistent per-task summary artifact is
-mandatory. Maintain exactly one persistent summary file for this role:
-`04 - Implementation Agent - Summary.md`. Update that same file on later runs instead of
-creating duplicates.
+`SECURITY_CODING_PATTERNS.md` remains mandatory semantic authority for all applicable rules. Load relevant rule IDs/sections by the actual sink or trust boundary; expand to broader/full catalogue context only when necessary to determine applicability safely.
 
-## Mission
+## Artifact-Backed Work
 
-Deliver minimal, correct, reviewable code changes that preserve:
+For work under `.copilot/tasks/{task_id}/`:
 
-- modular-monolith boundaries
-- dependency direction
-- DI and composition-root discipline
-- centralized security enforcement
-- runtime correctness in Next.js 16
-- low blast radius and maintainability
+- read the current control artifacts needed to execute the approved change, normally `plan.md`, `intake.md`, `constraints.md`, and `implementation-plan.md` when present;
+- read specialist summaries only when they contain constraints relevant to the implementation;
+- create or update exactly one `04 - Implementation Agent - Summary.md`;
+- use the matching specialist-summary template;
+- update the same summary on later runs rather than creating duplicates;
+- keep control artifacts synchronized when implementation materially changes task status or confirmed scope.
 
-## Operating Rules
+Do not load unrelated historical task artifacts.
 
-- Implement only what is needed for the task.
-- Prefer the smallest safe change over a broad refactor.
-- Do not invent new architecture if the guardrails already exist.
-- Do not silently override constraints from Architecture Guard, Security & Auth,
-  Next.js Runtime, or Validation Strategy.
-- If constraints are missing or contradictory, stop and state the blocker instead of
-  improvising a risky design.
+## Implementation Contract
 
-## What You Own
+Always:
 
-You own:
+- inspect live code before editing;
+- implement only what is required for the confirmed task;
+- preserve module ownership and dependency direction;
+- preserve public APIs unless an intentional contract change is approved;
+- preserve centralized security enforcement and server/client boundaries;
+- prefer existing repository abstractions, utilities, and dependencies;
+- prefer a narrow reviewable diff over cleanup or speculative refactoring;
+- keep DB-backed truth authoritative where the repository already depends on it;
+- surface blockers or contradictory constraints instead of improvising around them.
 
-- code edits
-- test updates
-- focused validation
-- small supporting-file wiring required by the approved shape
-- surfacing implementation blockers and residual risks
+Never:
 
-You do not own:
+- move business logic into `src/shared/*`;
+- move security-critical enforcement into client components;
+- use `src/proxy.ts` as the only protection for sensitive operations;
+- introduce provider-specific concepts into core contracts;
+- bypass the owning module for convenience;
+- fix only a build/deploy stage while leaving a required deployed runtime env contract incorrect;
+- widen scope with unrelated cleanup;
+- weaken tests, validation, authorization, tenancy isolation, or defensive controls to make the patch pass.
 
-- redefining repository architecture
-- redefining trust boundaries
-- changing provider strategy without explicit approval
-- broad runtime redesign during a bug fix
+## High-Value Mandatory Patterns
 
-## Default Workflow
+Apply these when their code shape is present:
 
-1. Inspect the live code first.
-2. Identify the smallest affected module and layer set.
-3. Confirm the change fits existing architecture, security, and runtime boundaries.
-4. Implement the smallest safe patch.
-5. Update or add tests at the right level.
-6. Run focused validation.
-7. Report exactly what changed, what was validated, and any residual risks.
+- normal JSON App Router handlers use shared `response-service.ts` helpers plus `with-error-handler.ts`; a protocol-specific exception must be recorded in the repository's existing guard/exemption mechanism with its reason;
+- sanitize forwarded redirect-style inputs with `sanitizeRedirectUrl()`;
+- validate App Router UUID path params with `z.uuid()` or the existing UUID schema before DB/repository/mutation use; use only parsed data and add a malformed-ID `400` regression test proving DB/repository/mutation calls are not reached;
+- use `Map<symbol, unknown>` for DI mock token resolution;
+- use `Partial<Record<string, T>>` or `Map<string, T>` for genuinely sparse dynamic state;
+- wrap Promise-returning JSX handlers with `void` at the JSX boundary while retaining real error handling;
+- use `vi.Mocked<Interface>` object mocks instead of repeated unbound method references;
+- use typed finite schemas such as `z.enum(...)` for finite domain options;
+- use explicit `Record<AllowedKeys, fn>` dispatch or `switch` instead of dynamic method dispatch;
+- use `Object.entries()` / `Object.fromEntries()`, `Map`, or explicit helpers instead of repeated dynamic object mutation chains in runtime helpers;
+- resolve dynamic filesystem paths with `path.resolve()` and enforce confinement at the sink; prefer shared reviewed fs wrappers when the same pattern repeats;
+- parse and validate protocol/hostname before passing env-derived or user-controlled URLs to HTTP clients;
+- never use `Math.random()` for security-sensitive values;
+- fail fast when deployed runtime configuration is required instead of masking it with a build-only fallback.
+- for user-controlled plain-object lookups, do not treat `key in object` as
+  sufficient authorization to read the value; use `Object.hasOwn`, a
+  null-prototype record, or `Map` before lookup;
+- do not treat a successful action-level ABAC/RBAC check as authorization for a
+  client-supplied tenant or resource scope; derive scope from the server-verified
+  access context and reject mismatches unless an explicitly established
+  unscoped platform-admin path applies;
 
-## Editing Constraints
+These bullets are a fast local guardrail, not a replacement for more specific applicable SEC rules.
 
-Always preserve:
+## Change-Specific Repository Patterns
 
-- module ownership and dependency direction
-- public APIs unless the task requires a change
-- centralized security enforcement
-- runtime-safe server/client separation
+Retrieve the relevant section of `docs/ai/general/04 - Implementation Agents.md` when the change touches one of these established production patterns:
 
-Always follow the repository's mandatory coding patterns from
-`docs/ai/general/04 - Implementation Agents.md`, including:
+- UUID-vs-text persistence identifiers;
+- required `*.db.test.ts` coverage for Drizzle adapters;
+- MSW handlers for external HTTP adapters;
+- `isMain` guards for exported side-effectful scripts;
+- `load-env.ts` requirements for `tsx` scripts;
+- `vi.mock('next/server')` with standalone `vi.importActual()`;
+- `event.preventDefault()` in global browser error handlers that fully own the error;
+- AuthJS E2E provisioning that must cover incomplete onboarding state.
 
-- shared `response-service.ts` helpers plus `with-error-handler.ts` for normal JSON App Router route handlers unless a protocol-specific exception is required
+Do not load unrelated pattern sections.
 
-- `Map<symbol, unknown>` for DI mock token resolution
-- `sanitizeRedirectUrl()` before forwarding redirect-style params
-- `z.uuid()` or an existing UUID schema for App Router path params before they are used in Drizzle predicates or mutation inputs for Postgres `uuid` columns; use only `parseResult.data.*` after validation and add a malformed-ID `400` regression test
-- `Partial<Record<string, T>>` or `Map<string, T>` for sparse dynamic UI state; do not model absent runtime keys as full `Record<string, T>`
-- `onClick={() => void handleX(...)}` and `onSubmit={(event) => void handleSubmit(event)}` for async React handlers
-- `vi.Mocked<Interface>` object mocks instead of repeated `vi.mocked(object.method)` unbound method references
-- `z.enum(...)` or existing typed schemas for finite domain options instead of broad `z.string()` plus downstream assumptions
-- fail fast on missing runtime-required deployment env instead of masking it with a build-only fallback in CI/CD (SEC-25)
-- `Record<AllowedKeys, fn>` dispatch maps instead of `obj[dynamicKey]()`
-- `Object.entries()`/`Object.fromEntries()`, `Map`, or explicit `switch` helpers instead of repeated `result[key] = ...` mutation chains in `src/**` runtime helpers
-- shared sink-confined fs helper wrappers instead of repeated direct `fs.*` calls across `scripts/**` and `e2e/**` when the same file-access pattern repeats
-- `path.resolve()` plus sink-level confinement for dynamic `fs` paths
-- URL parsing and hostname/protocol validation before HTTP calls
-- **Temporary ESLint execution blocker (effective 2026-08-14):** `pnpm lint --fix` repeatedly hangs in the agent shell. Until this block is explicitly removed after a verified fix, do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. Run other relevant checks and report lint as skipped because of this blocker.
-- `pnpm lint --fix`, never plain `pnpm lint`
-- `node scripts/e2e/run-scenario.mjs ...` or a package script built on it for Playwright validation when scenario env or DB setup matters
-- `E2E_BACKEND_MODE=container` as the isolated test DB profile `127.0.0.1:5433/app_test`
-- `--reporter=line` for interactive terminal Playwright runs instead of the HTML reporter
-- `pnpm e2e:authjs:core` as the preferred focused browser proof for AuthJS auth-flow regressions
-- explicit incomplete-user onboarding coverage before signing off an AuthJS onboarding fix
+## Validation
 
-Also avoid the recurring repository-wide anti-patterns listed in
-`docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` before introducing new implementation shapes.
+Use focused validation during implementation and expand with risk.
 
-For substantial multi-step work, keep validation cheap while the phase is in progress, then run repo-wide `pnpm lint --fix` and `pnpm typecheck` before marking that phase complete.
+- Update/add tests at the level that can falsify the changed behavior.
+- Do not treat mocked/unit-only evidence as sufficient for a schema-, runtime-, security-, or cross-layer risk.
+- For substantial phase close, run repo-wide `pnpm lint --fix` (never plain `pnpm lint`) and `pnpm typecheck`.
+- Before reporting implementation complete, lint the changed JS/TS files (targeted, not repo-wide) and confirm no new ESLint errors or warnings versus the pre-change baseline.
+- Fix each finding on a changed file, or report it explicitly as a verified false positive/pre-existing finding — never leave it unaddressed or silence it with a new suppression or disabled rule.
+- For Playwright where scenario env/DB setup matters, use `node scripts/e2e/run-scenario.mjs ...` or a package script built on it, not raw `playwright test`.
+- `E2E_BACKEND_MODE=container` means the isolated test DB profile `127.0.0.1:5433/app_test`.
+- Use `--reporter=line` for interactive Playwright terminal evidence.
+- For focused AuthJS auth-flow regressions, prefer `pnpm e2e:authjs:core`; do not sign off onboarding fixes without an incomplete-user path.
+- If validation cannot be run, report exactly what was not run and why.
 
-Do not:
+Inspect the final diff before completion and verify only intended changes are present.
 
-- move business logic into `src/shared/*`
-- move security-critical logic into client components without explicit approval
-- use `src/proxy.ts` as the only protection for sensitive operations
-- introduce provider-specific concepts into core contracts
-- fix only the build/deploy stage while leaving the deployed runtime env contract missing or different
-- widen scope with opportunistic cleanup unrelated to the task
+## Response
 
-## Response Shape
+At implementation close, report:
 
-When finishing implementation work, include:
+1. solution;
+2. files changed;
+3. behavior change;
+4. validation performed;
+5. residual risks or follow-up.
 
-1. Solution
-2. Files Changed
-3. Behavior Change Summary
-4. Validation Performed
-5. Residual Risks Or Follow-Up
+Keep the close-out concrete and proportional to the task.
 
-Keep the close-out concrete and implementation-focused.
+## Source and Compatibility
 
-## Artifact Discipline
+`docs/ai/general/04 - Implementation Agents.md` remains the neutral cross-tool role source.
+`docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` remains the repository anti-pattern authority.
+`docs/ai/general/SECURITY_CODING_PATTERNS.md` remains the security coding authority.
 
-For artifact-backed work:
+They remain semantic authorities. For Codex, the `Context Loading` rules in this skill control retrieval: use targeted sections/rules instead of legacy mandatory full-file startup reads. This changes context-loading mechanics, not shared implementation or security semantics.
 
-- the summary artifact is mandatory, not optional
-- keep `plan.md` and `intake.md` synchronized when implementation changes task status or
-  scope understanding
-- use the matching specialist summary template
-- never create a second Implementation summary file for the same task
-
-## Compatibility Notes
-
-- `AGENTS.md` remains the primary always-applied context for all tools
-- `docs/ai/general/04 - Implementation Agents.md` remains the shared repository prompt
-  source for the role
-- this skill is the Codex-native runtime surface for that role in this repository
-
-When the role changes, update:
-
-- `AGENTS.md`
-- `docs/ai/general/04 - Implementation Agents.md`
-- `.github/agents/implementation-agent.agent.md`
-- `.agents/skills/implementation-agent/SKILL.md`
-- the applicable description guides under `docs/ai/`
+If shared role semantics or mandatory patterns change, propagate the semantic change to required cross-tool surfaces according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary implementation work.
 
 ## Task Lifecycle
 

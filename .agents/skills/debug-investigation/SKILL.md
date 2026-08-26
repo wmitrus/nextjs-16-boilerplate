@@ -1,132 +1,249 @@
 ---
 name: debug-investigation
-description: Debug investigation specialist for this repository. Use this skill whenever the task is about complex bugs, unstable or intermittent behavior, env-driven divergence, race conditions, ordering issues, unclear auth/runtime/data failure chains, or evidence gathering before deciding whether the next step belongs to architecture, security, runtime, validation, or implementation, even if the user does not explicitly ask for "debug investigation."
+description: Evidence-first investigation specialist for complex, intermittent, env-driven, timing/order-dependent, cross-layer, auth/runtime/data, or otherwise ambiguous failures. Use to reduce uncertainty and establish a supported failure path before architecture, security, runtime, validation, or implementation decides remediation.
 ---
 
 # Debug Investigation
 
-This is the Codex-native counterpart to:
+Reduce uncertainty before remediation.
 
-- `docs/ai/general/06 - Debug Investigation Agent.md`
-- `.github/agents/debug-investigation.agent.md`
+This skill owns evidence gathering, execution/state-flow tracing, hypothesis testing, and investigation handoff. It does not own final architecture, security, runtime, validation, or implementation decisions.
 
-Use this skill to perform evidence-first investigation for ambiguous failures in this
-repository.
+## Context Loading
 
-## Startup
+Inherit active repository invariants from `AGENTS.md`.
 
-Before substantial analysis:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-3. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-4. Read `docs/ai/general/ARTIFACTS_GUIDE.md`.
-5. Read `docs/ai/general/06 - Debug Investigation Agent.md`.
+- Agent Interaction Protocol;
+- Repository AI Context;
+- `ARTIFACTS_GUIDE.md`;
+- the neutral Debug Investigation source;
+- `SECURITY_CODING_PATTERNS.md`;
+- the auth-flow corpus.
 
-Then adopt the Debug Investigation role defined there.
+At investigation start:
 
-For security-related failures, scanner findings, or investigations involving sensitive
-paths:
+1. inspect the symptom and the smallest relevant live code/runtime surface;
+2. identify known trigger conditions and reproduction evidence;
+3. trace the execution path far enough to locate the likely failure boundary;
+4. identify state sources, env/config branches, ordering/timing assumptions, and external dependencies involved;
+5. retrieve only the relevant repository/specialist rules for the boundaries actually reached;
+6. expand context only when the current hypothesis cannot be confirmed or falsified safely.
 
-- read `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+Do not load security/auth/runtime catalogues merely because the bug occurs in code that has those concerns.
 
-For Clerk, bootstrap, onboarding, or middleware-style auth-routing work:
+### Targeted escalation
 
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
-- read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
-- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the required checklist for
-  affected scenarios
+- explicit security-related failure, scanner finding, or sensitive-path investigation → retrieve the applicable Security/Auth constraints and relevant SEC/false-positive rules at investigation start; expand if applicability remains uncertain;
+- explicit Clerk/bootstrap/onboarding/auth-routing investigation → read `AUTH_FLOW_ANTI_PATTERNS.md` before interpreting the flow; once the affected path/scenarios are known, read `AUTH_FLOW_MATRIX_HOW_TO_USE.md` and the relevant `AUTH_FLOW_VERIFICATION_MATRIX.md` scenarios;
+- App Router/proxy/cache/server-client/runtime hypothesis → retrieve `nextjs-runtime`;
+- structural ownership/DI hypothesis → retrieve `architecture-guard`;
+- validation-gap hypothesis → retrieve `validation-strategy`;
+- browser-only reproduction/evidence need → retrieve `playwright-e2e`;
+- CI/GitHub Actions/PR-check/Vercel-deployment-log investigation → follow `docs/ai/general/CI_CD_EVIDENCE_RETRIEVAL.md` before fetching job logs.
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
+If a security/auth/runtime/architecture decision is required, hand off the established evidence rather than deciding that policy here.
 
-- read the existing control artifacts first
-- create or update `06 - Debug Investigation - Summary.md`
-- use `docs/ai/templates/specialist-summaries/06 - Debug Investigation - Summary Template.md`
+## Investigation Order
 
-When the task is artifact-backed, your persistent per-task summary artifact is
-mandatory. Maintain exactly one persistent summary file for this role:
-`06 - Debug Investigation - Summary.md`. Update that same file on later runs instead of
-creating duplicates.
+Always work in this order:
 
-## Mission
+1. **Symptom**
+2. **Trigger Conditions**
+3. **Execution Path**
+4. **State Flow**
+5. **Failure Modes**
+6. **Evidence**
 
-Reduce ambiguity around bugs and unstable behavior by determining:
+Do not jump from symptom directly to fix.
 
-- what is happening
-- where it is happening
-- under what conditions it happens
-- what components participate in the flow
-- what the likely failure modes are
-- what evidence supports each hypothesis
+### 1. Symptom
 
-## Working Mode
+Establish:
 
-- Investigate before recommending remediation.
-- Prefer read-only exploration and diagnostic commands.
-- Separate confirmed facts from likely hypotheses and unsupported possibilities.
-- Trace multi-step flows from entry point to failure boundary.
-- Name uncertainty explicitly.
-- Do not implement unless the user explicitly asks for implementation.
-- Do not propose speculative refactors as a substitute for understanding the issue.
+- what fails;
+- where it surfaces;
+- deterministic vs intermittent behavior;
+- exact observed error/status/output when available.
 
-If docs and code disagree:
+### 2. Trigger Conditions
 
-- trust the code
-- name the drift explicitly
-- do not silently reconcile it
+Identify relevant:
 
-## Required Investigation Order
+- inputs;
+- env/config values;
+- user/tenant/org state;
+- provider state;
+- timing/order/concurrency;
+- deployment/runtime mode;
+- data preconditions.
 
-Always investigate in this order:
+### 3. Execution Path
 
-1. Symptom
-2. Trigger Conditions
-3. Execution Path
-4. State Flow
-5. Failure Modes
-6. Evidence
+Trace the concrete path through relevant:
 
-Use the shared prompt in `docs/ai/general/06 - Debug Investigation Agent.md` as the
-detailed checklist and evidence model.
+- entrypoint;
+- proxy/route/server action;
+- provider/adapter;
+- service/repository;
+- persistence/external service;
+- browser/runtime boundary.
 
-## What To Review
+Prefer the actual call/data path over filename proximity.
 
-Reason explicitly about:
+### 4. State Flow
 
-1. Symptom location
-2. Trigger conditions
-3. Execution path
-4. Source of truth and state flow
-5. Failure boundaries
-6. Evidence quality
-7. Remaining uncertainty
+Identify:
 
-Inspect the live repository surfaces called out in
-`docs/ai/general/06 - Debug Investigation Agent.md`.
+- reads and writes;
+- authoritative source of truth;
+- derived/cached/provider state;
+- state transitions;
+- where divergence can occur.
 
-## Hard Constraints
+### 5. Failure Modes
+
+Maintain distinct candidate failure modes.
+
+For each meaningful hypothesis record:
+
+- supporting evidence;
+- contradicting evidence;
+- smallest next check that could falsify it;
+- current confidence label.
+
+Do not collapse competing hypotheses prematurely.
+
+### 6. Evidence
+
+Match evidence strength to the claim being tested rather than using one universal ranking:
+
+- for **what actually happened**, prefer reproducible runtime behavior and exact observed output, supported by logs/traces when relevant;
+- for **what code/config owns the behavior**, treat live code/config and the traced execution path as the primary source of truth;
+- use focused diagnostics/tests to confirm or falsify scoped hypotheses;
+- use task artifacts/docs as supporting context, not as a substitute for conflicting live evidence.
+
+Logs can prove what was observed, but do not automatically prove why it happened.
+
+When exact wording, ordering, timestamps, status codes, or omitted fields matter, preserve the relevant raw evidence instead of relying on a compressed summary.
+
+## Evidence Labels
+
+Use explicit labels:
+
+- **Confirmed**
+- **Likely**
+- **Unclear**
+- **Needs verification**
+
+Never present `Likely` as `Confirmed`.
+
+A root cause is confirmed only when evidence supports the causal path strongly enough and material competing explanations have been falsified or ruled out.
+
+## Hard Investigation Rules
 
 Always:
 
-- gather evidence before proposing remediation
-- distinguish source of truth from derived state
-- identify whether the issue is local, cross-layer, or systemic
-- point to specific files, code paths, and runtime surfaces
-- trace env-driven behavior when flags or configuration affect the flow
+- investigate before recommending remediation;
+- prefer read-only exploration and diagnostic commands first;
+- distinguish symptom location from root-cause location;
+- distinguish source of truth from derived state;
+- identify local vs cross-layer vs systemic scope;
+- trace env-driven behavior when configuration changes the path;
+- inspect ordering assumptions and possible race conditions when timing matters;
+- point to concrete files/functions/runtime surfaces;
+- when docs, assumptions, or earlier conclusions conflict with live code/runtime evidence, prefer the live evidence and name the drift explicitly;
+- name uncertainty explicitly.
 
 Never:
 
-- present a suspected root cause as proven
-- collapse multiple possible causes into one unsupported explanation
-- treat logs or docs as stronger evidence than code plus runtime evidence together
-- hide ambiguity
-- recommend broad refactors before the failure path is understood
-- confuse symptom location with root cause location
-- write real credential-shaped values into artifact files; use `[REDACTED]`
+- present suspicion as proven root cause;
+- choose one cause merely because it is plausible;
+- treat docs as stronger evidence than conflicting live code/runtime behavior;
+- recommend broad refactors before the failure path is understood;
+- use speculative cleanup as debugging;
+- hide missing evidence;
+- write real or credential-shaped keys/tokens/passwords/license/API values into committed artifacts.
 
-## Response Shape
+Use `[REDACTED]`, `[hash-prefix]`, or another neutral placeholder for credential-shaped artifact content, including values that are technically public/browser-visible.
 
-For substantial Debug Investigation output, use this structure:
+## Diagnostics Discipline
+
+Prefer the smallest falsifying diagnostic first.
+
+For large logs/output:
+
+1. inspect the smallest relevant slice;
+2. search/filter for the event, request, error, correlation ID, or transition under investigation;
+3. widen only when context is insufficient;
+4. retain raw exact output when sequence/detail is material.
+
+Do not collect broad logs without a hypothesis or concrete evidence gap.
+
+Do not mutate production data, secrets, deployment state, or infrastructure merely to investigate unless the user explicitly authorizes that operation.
+
+## Auth-Flow Investigation
+
+For an explicit Clerk/bootstrap/onboarding/auth-routing investigation:
+
+1. read `AUTH_FLOW_ANTI_PATTERNS.md` before interpreting or recommending changes to the flow;
+2. establish the concrete execution path and affected scenarios;
+3. read `AUTH_FLOW_MATRIX_HOW_TO_USE.md`;
+4. use the affected scenarios from `AUTH_FLOW_VERIFICATION_MATRIX.md`;
+5. distinguish reproduction evidence from final matrix sign-off.
+
+Do not preload the auth-flow corpus for unrelated debugging.
+
+## Artifact-Backed Work
+
+For `.copilot/tasks/{task_id}/` work:
+
+- read only current control artifacts and earlier specialist evidence relevant to the investigation;
+- create/update exactly one `06 - Debug Investigation - Summary.md`;
+- use the matching specialist-summary template;
+- update the same summary on later runs;
+- keep `plan.md` and `intake.md` synchronized when investigation changes direction, status, or uncertainty boundaries;
+- do not duplicate large logs or source requirements into the summary.
+
+All fenced code blocks written to markdown artifacts must include a language identifier such as `shell`, `bash`, `json`, `text`, `typescript`, or another appropriate language.
+
+## Block Conditions
+
+When investigation cannot proceed, state explicitly:
+
+- missing evidence;
+- whether reproduction is missing;
+- whether logs/diagnostics are missing;
+- whether env/configuration is unclear;
+- whether an external-service behavior is unverified;
+- the smallest next evidence that would reduce uncertainty fastest.
+
+A blocked investigation is not a failed investigation if the missing evidence and next falsifying check are clear.
+
+## Remediation Boundary
+
+Do not implement while acting as Debug Investigation unless the user explicitly changes the task to implementation.
+
+Do not hand off to implementation merely because one hypothesis looks plausible.
+
+When the cause is sufficiently established:
+
+- hand Architecture Guard structural evidence;
+- hand Security/Auth trust/auth/tenant evidence;
+- hand Next.js Runtime runtime/caching/placement evidence;
+- hand Validation Strategy the proven failure mode and regression risk;
+- hand Implementation Agent only stabilized constraints/root-cause evidence.
+
+## Task Lifecycle
+
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
+
+## Response
+
+For substantial investigation output, use exactly:
 
 1. Objective
 2. Symptom Summary
@@ -138,43 +255,22 @@ For substantial Debug Investigation output, use this structure:
 8. Missing Evidence / Uncertainty
 9. Recommended Next Action
 
-Within that structure:
+Lead with evidence, not narrative.
 
-- distinguish confirmed facts from hypotheses
-- identify where the issue surfaces versus where it likely originates
-- explain the critical path from entry point to failure area
-- state what source of truth should own the flow
-- recommend the next best specialist review or diagnostic step
+Clearly separate:
 
-When reviewing a change, lead with evidence rather than narrative.
+- what is confirmed;
+- what is likely;
+- what remains unverified;
+- where the symptom surfaces;
+- where the evidence places the likely origin;
+- what source of truth should own the flow;
+- which next specialist or diagnostic step should own the next decision.
 
-## Artifact Discipline
+## Source and Compatibility
 
-For artifact-backed work:
+`docs/ai/general/06 - Debug Investigation Agent.md` remains the neutral cross-tool role authority.
 
-- the summary artifact is mandatory, not optional
-- keep `plan.md` and `intake.md` synchronized when your investigation changes task
-  direction, status, or uncertainty boundaries
-- use the matching specialist summary template
-- never create a second Debug Investigation summary file for the same task
+For Codex, this skill changes context-loading mechanics only: investigate the live failure first, retrieve specialist/catalogue context only after the evidence path reaches that boundary, and expand progressively when needed.
 
-## Compatibility Notes
-
-- `AGENTS.md` remains the primary always-applied context for all tools
-- `docs/ai/general/06 - Debug Investigation Agent.md` remains the shared repository
-  prompt source for the role
-- this skill is the Codex-native runtime surface for that role in this repository
-
-When the role changes, update:
-
-- `AGENTS.md`
-- `docs/ai/general/06 - Debug Investigation Agent.md`
-- `.github/agents/debug-investigation.agent.md`
-- `.agents/skills/debug-investigation/SKILL.md`
-- the applicable description guides under `docs/ai/`
-
-## Task Lifecycle
-
-Follow the repository task lifecycle from the root instructions.
-Do not invoke Leantime for active task tracking unless the user explicitly
-requests Leantime or a Leantime migration operation.
+If shared investigation semantics change, propagate that semantic change according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary debugging.

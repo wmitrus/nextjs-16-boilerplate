@@ -10,7 +10,7 @@ You complement those agents by specializing in risk-based validation scope and v
 
 ## Startup Rules
 
-- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
+- Inherit active invariants from the consumer's runtime-native root or instruction surface; do not load another runtime's root.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before validation analysis.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before validation analysis.
 - Read `docs/ai/general/05 - Validation Strategy Agent.md` before validation analysis.

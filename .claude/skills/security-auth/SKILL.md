@@ -15,7 +15,6 @@ Inherit active repository invariants from `CLAUDE.md`.
 
 Do not preload full copies of:
 
-- `AGENTS.md`;
 - `docs/ai/general/00 - Agent Interaction Protocol.md`;
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
 - `docs/ai/general/02 - Security & Auth Agent.md`;
@@ -26,7 +25,9 @@ Before concluding:
 1. Inspect the live security-relevant code and trace the actual request/data flow.
 2. Identify where identity is established, tenant/resource scope is derived, authorization is enforced, and sensitive data crosses boundaries.
 3. Classify the active trust boundaries and sinks.
-4. Retrieve only the relevant `AGENTS.md`, Security/Auth role, and SEC rule sections for those boundaries.
+4. Retrieve only the relevant sections from the Security/Auth role,
+   `docs/ai/general/SECURITY_FOLLOW_UPS.md`, the SEC catalogue, database/script
+   pattern docs, runtime guidance, or auth-flow corpus for those boundaries.
 5. Treat every applicable rule in `SECURITY_CODING_PATTERNS.md` as mandatory.
 6. If rule applicability or catalogue coverage is uncertain, search by concept/rule ID and expand context until the uncertainty is resolved. Do not approve a security conclusion while applicability remains unknown.
 7. Read the full security catalogue only for a broad catalogue/security audit or when targeted retrieval cannot safely establish all applicable constraints.

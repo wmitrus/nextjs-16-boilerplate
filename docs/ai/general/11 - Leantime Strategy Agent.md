@@ -1,7 +1,7 @@
 # 11 — Leantime Strategy Agent (Legacy / Explicit-Use Only)
 
 > **Status**: not the active task-lifecycle authority. Linear is canonical —
-> see `AGENTS.md` and the `Linear Task Operating Model`. Invoke this agent
+> see the runtime-native root and the `Linear Task Operating Model`. Invoke this agent
 > only when the user explicitly requests Leantime project structuring, or for
 > an explicitly scoped Leantime migration task.
 
@@ -31,7 +31,7 @@ Do NOT invoke this agent for:
 
 ## Startup Rules
 
-- Read `AGENTS.md` (repository root) — primary always-applied context
+- Inherit active invariants from the consumer's runtime-native root or instruction surface; do not load another runtime's root
 - Read `docs/ai/general/LEANTIME_AUTOMATION.md` — all Leantime operations
 - Read `docs/ai/general/10 - Leantime Integration Agent.md` — base Leantime agent
 - Read all `.md` files in the active task directory before making decisions

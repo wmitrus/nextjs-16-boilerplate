@@ -9,8 +9,7 @@ description: Legacy/explicit-use-only Leantime operational authority for this re
 invoke this skill automatically, and do not invoke it merely because a task is
 non-trivial. Use it only when the user explicitly requests a Leantime
 operation, or when performing an explicitly scoped Leantime migration task.
-For active task tracking, follow the root instructions (`CLAUDE.md`/`AGENTS.md`)
-— Linear is canonical.
+For active task tracking, follow `CLAUDE.md` — Linear is canonical.
 
 Own Leantime task lifecycle operations without replacing architecture, security, runtime, implementation, or validation authority.
 
@@ -18,7 +17,7 @@ Own Leantime task lifecycle operations without replacing architecture, security,
 
 Inherit active repository invariants from `CLAUDE.md`.
 
-Do not preload `AGENTS.md`, `docs/ai/general/00 - Agent Interaction Protocol.md`,
+Do not preload `docs/ai/general/00 - Agent Interaction Protocol.md`,
 `docs/ai/general/REPOSITORY_AI_CONTEXT.md`, or the full
 `docs/ai/general/LEANTIME_AUTOMATION.md` for normal task open/close operations.
 

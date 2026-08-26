@@ -47,9 +47,9 @@ When a task depends on an unresolved decision owned by another agent:
 
 Before any non-trivial task, agents must read:
 
-1. This file (`00 - Agent Interaction Protocol.md`)
-2. `AGENTS.md`
-3. `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+1. The consumer's runtime-native root or instruction surface
+2. This file (`00 - Agent Interaction Protocol.md`) when the active workflow requires it
+3. `docs/ai/general/REPOSITORY_AI_CONTEXT.md` when repository-wide context is required
 4. `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md` for implementation, refactor, script, or tooling work
 5. Domain-specific reference files listed in their own Startup Rules
 
@@ -92,20 +92,18 @@ Do not delegate by default when the task is simple, mixed, or can be handled dir
 
 ## Agent Infrastructure — Propagation Requirement
 
-When any agent rule, security pattern, or behavioral constraint is added or changed, it MUST be propagated to all applicable locations:
+When any agent rule, security pattern, or behavioral constraint is added or
+changed, identify its neutral semantic owner first and propagate only to the
+runtime and human-facing surfaces affected by that change.
 
-- **`AGENTS.md`** (root) — primary always-applied context, update here first
-- `docs/ai/general/0[1-9] - *.md` — Zencoder agent prompts
-- `.github/agents/*.agent.md` — GitHub Copilot agents
-- `.github/prompts/*.prompt.md` — GitHub Copilot workflow prompts
-- `.agents/skills/*/SKILL.md` — Codex repo-local skills
-- `.zenflow/workflows/*.md` — ZenFlow workflow specs
-- `docs/ai/general/SECURITY_CODING_PATTERNS.md` — if the rule is security-related
-- `docs/ai/zencoder/*.md`, `docs/ai/copilot/*.md`, `docs/ai/codex/*.md` — human-facing description guides
+Use `docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md` for authority
+boundaries, the complete propagation process, and runtime-isolation rules. Do
+not update every surface mechanically, and do not place a task-specific rule in
+a runtime root merely because it applies repository-wide.
 
 **Never add to `.zencoder/rules/` — Zen Rules are deprecated April 20, 2026.**
 
-Full location map: `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
+Surface inventory: `docs/ai/general/REPOSITORY_AI_CONTEXT.md`
 
 ---
 

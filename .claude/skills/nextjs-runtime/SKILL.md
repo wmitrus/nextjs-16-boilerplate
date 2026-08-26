@@ -15,7 +15,6 @@ Inherit active repository invariants from `CLAUDE.md`.
 
 Do not preload full copies of:
 
-- `AGENTS.md`;
 - `docs/ai/general/00 - Agent Interaction Protocol.md`;
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
 - `docs/ai/general/03 - Next.js Runtime Agent.md`;
@@ -28,7 +27,8 @@ Before concluding:
 3. Inspect `package.json` and, when exact framework behavior depends on the resolved patch version, the lockfile or installed package metadata.
 4. Classify the affected boundary: Server/Client Component, route handler, server action, proxy, cache/rendering, instrumentation, env exposure, or deployment runtime.
 5. When `src/proxy.ts` is affected, inspect matcher behavior, request/response header propagation, rewrites/redirects, request-scoped behavior, and Proxy runtime compatibility.
-6. Retrieve only the relevant `AGENTS.md`, Runtime Agent, security, auth-flow, or validation sections for that boundary.
+6. Retrieve only the relevant Runtime Agent, Next.js playbook, security,
+   auth-flow, database, script, or validation sections for that boundary.
 7. For version-sensitive framework behavior, verify against version-appropriate official Next.js documentation or repository runtime evidence instead of relying on remembered framework behavior.
 8. Expand to broader/full runtime source only when targeted context cannot safely resolve the runtime question.
 

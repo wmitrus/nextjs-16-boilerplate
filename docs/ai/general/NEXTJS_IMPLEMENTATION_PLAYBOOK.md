@@ -404,7 +404,6 @@ Two details that matter and are easy to get wrong:
   review specifically; this playbook is the "how to build it" companion to
   that skill's "is this the right shape" review.
 
-Per `AGENTS.md`'s Agent Infrastructure location map, this document's
-location is registered in `AGENTS.md`, `CLAUDE.md`, and
-`docs/ai/general/REPOSITORY_AI_CONTEXT.md`'s required-reading sequences —
-update all three if this doc moves.
+This document's ownership and runtime routing follow
+`docs/ai/general/AGENT_INSTRUCTION_ARCHITECTURE.md`. If it moves, update the
+neutral inventory and only the runtime skills or entry points that route to it.

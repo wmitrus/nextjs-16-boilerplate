@@ -15,7 +15,6 @@ Inherit active repository invariants from `CLAUDE.md`.
 
 Do not preload full copies of:
 
-- `AGENTS.md`;
 - `docs/ai/general/00 - Agent Interaction Protocol.md`;
 - `docs/ai/general/REPOSITORY_AI_CONTEXT.md`;
 - `docs/ai/general/IMPLEMENTATION_ANTI_PATTERNS.md`;
@@ -26,7 +25,9 @@ Before editing:
 
 1. Inspect the live affected code and identify the owning module/layer and changed runtime or trust boundaries.
 2. Confirm that required architecture, security, and runtime decisions are established. Reuse any validation constraints already defined by the parent workflow; do not require a separate Validation Strategy pass when the minimum validation scope is intentionally determined after implementation.
-3. Retrieve only the `AGENTS.md` sections and role/pattern sections relevant to the actual change.
+3. Retrieve only the neutral role and applicable implementation, database,
+   script, runtime, security, and validation pattern sections relevant to the
+   actual change.
 4. Classify each changed surface before loading detailed implementation/security guidance.
 5. If applicability of a mandatory rule is uncertain, search the relevant catalogue by concept/rule ID and expand context until the uncertainty is resolved. Do not guess.
 

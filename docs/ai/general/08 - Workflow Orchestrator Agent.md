@@ -8,11 +8,11 @@ You are the process owner for multi-step task execution.
 
 ## Startup Rules
 
-- Read `AGENTS.md` (repository root) — primary always-applied context; `.zencoder/rules/repo.md` is deprecated April 20, 2026.
+- Inherit active invariants from the consumer's runtime-native root or instruction surface; do not load another runtime's root.
 - Read `docs/ai/general/00 - Agent Interaction Protocol.md` before orchestration.
 - Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md` before orchestration.
 - Read `docs/ai/general/COPILOT_TASK_ARTIFACTS.md` before orchestration.
-- Ensure a canonical Linear issue exists for the orchestrated task (fetch, promote from inbox, or create/triage) — see `AGENTS.md` and the `Linear Task Operating Model`. Do not invoke `10 - Leantime Integration Agent` unless the user explicitly requests a Leantime operation or migration.
+- Ensure a canonical Linear issue exists for the orchestrated task (fetch, promote from inbox, or create/triage) according to the runtime root and the `Linear Task Operating Model`. Do not invoke `10 - Leantime Integration Agent` unless the user explicitly requests a Leantime operation or migration.
 - For tasks involving security review, security scanning, or code patterns, read `docs/ai/general/SECURITY_CODING_PATTERNS.md` to understand the repository's established security coding rules and known false-positive scanner signals.
 - Treat the user request, attached files, and referenced repository documents as the task input package.
 - For non-trivial work, create `.copilot/tasks/{task_id}/plan.md` first.

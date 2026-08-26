@@ -34,7 +34,6 @@ Inherit active repository invariants from `CLAUDE.md`.
 
 Do not preload full copies of:
 
-- `AGENTS.md`;
 - `MODE_MANIFEST.md`;
 - Agent Interaction Protocol;
 - Repository AI Context;

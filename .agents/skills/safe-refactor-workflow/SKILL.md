@@ -1,199 +1,321 @@
 ---
 name: safe-refactor-workflow
-description: Behavior-preserving refactor workflow for this repository. Use whenever the user asks for cleanup, code organization, dependency cleanup, file or module moves, DI cleanup, extraction, consolidation, or replacing weak patterns with safer equivalents while keeping behavior unchanged, even if they do not explicitly ask for a "workflow."
+description: Behavior-preserving refactor workflow for cleanup, dependency cleanup, module/file moves, DI cleanup, extraction, consolidation, code organization, boundary cleanup, or safer equivalent patterns where intended behavior must remain unchanged. Architecture Guard is required even on the fast path; Security/Auth and Next.js Runtime are conditional.
 ---
 
 # Safe Refactor Workflow
 
-This is the Codex-native counterpart to:
+Perform the smallest safe structural/code-quality improvement while preserving intended behavior and established architecture/security/runtime invariants.
 
-- `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md`
-- `.github/prompts/safe-refactor.prompt.md`
-- `.zenflow/workflows/safe-refactor.md`
+This workflow owns refactor sequencing, protected-invariant consolidation, block/go decisions, and workflow artifacts. It does not duplicate specialist analysis.
 
-Use this skill when the task is a refactor or cleanup that is intended to preserve
-behavior and still needs the repository's normal boundary, runtime, and validation
-discipline.
+## Context Loading
 
-## Startup
+Inherit active repository invariants from `AGENTS.md`.
 
-Before substantial work:
+Do not preload full copies of:
 
-1. Read `AGENTS.md`.
-2. Read `docs/ai/general/MODE_MANIFEST.md`.
-3. Read `docs/ai/general/00 - Agent Interaction Protocol.md`.
-4. Read `docs/ai/general/REPOSITORY_AI_CONTEXT.md`.
-5. Read `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md`.
+- `MODE_MANIFEST.md`;
+- Agent Interaction Protocol;
+- Repository AI Context;
+- the neutral Safe Refactor Workflow;
+- Security Coding Patterns;
+- Security/Auth or Next.js Runtime sources;
+- the auth-flow corpus.
 
-For refactors that touch redirects, logging, auth, route handlers, file access, or
-other security-sensitive code:
+At workflow start:
 
-- read `docs/ai/general/SECURITY_CODING_PATTERNS.md`
+1. inspect the request and enough live code to confirm this is actually a behavior-preserving refactor;
+2. identify the observable behavior/contracts that must remain unchanged;
+3. identify affected ownership, boundaries, DI/composition, security, and runtime surfaces;
+4. invoke `architecture-guard`;
+5. invoke Security/Auth or Runtime only when the affected surface requires them;
+6. let each specialist perform its own targeted retrieval;
+7. load the neutral workflow source only when workflow semantics themselves are unclear or being audited/changed.
 
-For refactors that touch auth, onboarding, bootstrap, or middleware-style auth
-routing:
+## Entry Conditions
 
-- read `docs/ai/general/02 - Security & Auth Agent.md`
-- read `docs/ai/general/AUTH_FLOW_ANTI_PATTERNS.md`
-- read `docs/ai/general/AUTH_FLOW_MATRIX_HOW_TO_USE.md`
-- use `docs/ai/general/AUTH_FLOW_VERIFICATION_MATRIX.md` as the required checklist
+Use for:
 
-For refactors that touch `src/app/*`, route handlers, server actions, caching, env
-exposure, or runtime placement:
+- cleanup;
+- dependency cleanup;
+- file/module moves;
+- code organization improvements;
+- DI/composition cleanup;
+- boundary cleanup;
+- extraction or consolidation intended to preserve behavior;
+- replacing weak patterns with safer equivalents without changing intended outcomes.
 
-- read `docs/ai/general/03 - Next.js Runtime Agent.md`
+Do **not** use for:
 
-For artifact-backed work under `.copilot/tasks/{task_id}/`:
+- new features;
+- intentional behavior changes;
+- vulnerability remediation under active risk;
+- auth bug fixes with unclear behavioral impact;
+- runtime bug fixes that require behavior change;
+- incident response;
+- broad redesign disguised as cleanup.
 
-- create or update `plan.md` first
-- create or update `intake.md` immediately after `plan.md`
-- keep checklist state synchronized as the work progresses
-- create or update `01 - Architecture Guard - Summary.md` when you perform the
-  architecture pass
-- create or update `04 - Implementation Agent - Summary.md` when you implement
-- create or update `validation-report.md` after validation
-- if you materially perform a security or runtime specialist pass in-session,
-  create the matching persistent summary artifact for that specialist too
+Route those tasks to the appropriate feature, investigation, security-incident, or other workflow.
 
-Summary artifacts are mandatory in artifact-backed workflow runs:
+If safe refactoring depends on unresolved invariants, stop rather than guessing.
 
-- each non-orchestrator specialist must maintain exactly one persistent summary artifact
-  for the task
-- update the same summary file on later runs instead of creating duplicates
-- use the matching template from `docs/ai/templates/specialist-summaries/`
-- if this workflow run materially performs implementation, `04 - Implementation Agent -
-Summary.md` is mandatory
+## Refactor Invariant
 
-Repository note:
+`refactor != rewrite`
 
-- `src/proxy.ts` is the middleware-equivalent file in this repo
-- do not treat the absence of `middleware.ts` as a finding
+`cleanup != permission to change behavior`
 
-## Mission
+Before implementation, explicitly identify:
 
-Safely perform refactors, cleanup, and structural improvements that are intended to
-preserve behavior.
+- expected unchanged observable behavior;
+- public contracts that must remain stable;
+- structural boundaries that must remain stable;
+- security/auth invariants when relevant;
+- runtime invariants when relevant;
+- allowed implementation scope;
+- forbidden refactor moves.
 
-Protect:
-
-- existing observable behavior unless an intentional change is explicitly approved
-- modular-monolith boundaries
-- dependency direction
-- DI and composition-root discipline
-- auth and trust-boundary correctness when relevant
-- Next.js runtime correctness when relevant
-- low blast radius
+An intentional behavior or public-contract change requires explicit approval and may require reclassification out of this workflow.
 
 ## Fast Path
 
-You may use a reduced path only when all of the following are true:
+Use the reduced path only when **all** are clearly true:
 
-- the change affects only a small number of files
-- no public contract changes are involved
-- DI or composition is untouched
-- no auth or trust-sensitive path is touched
-- no runtime placement, cache, or env exposure risk is introduced
-- no module boundary crossing is involved
+- few files are affected;
+- public contracts are unchanged;
+- DI/composition is untouched;
+- auth/security/trust-sensitive paths are untouched;
+- runtime placement/caching/env exposure is unaffected;
+- no module boundary is crossed;
+- intended behavior remains unchanged.
 
-If any of these are uncertain, do not use the fast path.
+If any criterion is uncertain, use the standard path.
 
-## Working Sequence
+Fast path still requires:
+
+1. intake/refactor classification;
+2. `architecture-guard`;
+3. implementation;
+4. validation.
+
+Skip Security/Auth and Next.js Runtime only while evidence continues to show they are irrelevant.
+
+## Task Lifecycle and Artifacts
+
+Follow the repository task lifecycle from the root instructions.
+Do not invoke Leantime for active task tracking unless the user explicitly
+requests Leantime or a Leantime migration operation.
+
+For `.copilot/tasks/{task_id}/` work:
+
+- create/update `plan.md`, then `intake.md`;
+- keep control-artifact/checklist state synchronized;
+- create/update specialist summaries only for passes actually run;
+- each specialist maintains exactly one persistent summary using its matching template;
+- if implementation is materially performed, `04 - Implementation Agent - Summary.md` is mandatory;
+- create/update `validation-report.md` after validation;
+- read only artifacts relevant to the active phase.
+
+## Standard Sequence
 
 ### 1. Intake and Refactor Classification
 
-- confirm the request is a refactor, not feature delivery
-- identify the intended unchanged behavior
-- identify affected modules, layers, and contracts
-- identify whether auth, runtime, or security-sensitive paths are touched
-- classify the refactor shape: ownership cleanup, DI cleanup, organization move,
-  extraction, consolidation, safer pattern replacement, or another equivalent class
+Confirm:
 
-### 2. Architecture Guard First
+- this is refactor/cleanup, not feature delivery;
+- expected unchanged behavior;
+- affected modules/layers/contracts;
+- possible boundary or DI/composition impact;
+- possible auth/security/trust impact;
+- possible runtime/cache/env impact;
+- likely validation surface.
 
-Run the Architecture Guard reasoning first, even when the implementation looks
-small.
+Classify the refactor shape, for example:
 
-Decide:
+- ownership cleanup;
+- DI/composition cleanup;
+- organization/file/module move;
+- extraction;
+- consolidation;
+- dependency cleanup;
+- safer pattern replacement.
 
-- which boundaries are affected
-- which structural invariants must remain unchanged
-- whether the refactor is safe, risky, or blocked
+Make only low-risk assumptions.
 
-Do not begin edits until the architecture constraints are clear enough to execute.
+### 2. Architecture Guard — Always
 
-### 3. Conditional Security/Auth Pass
+Invoke `architecture-guard` before implementation for every workflow path.
 
-Run a security/auth pass only if the refactor touches or may affect:
+Required handoff:
 
-- auth flows
-- authorization enforcement
-- tenancy or organization context
-- provider isolation
-- trust boundaries
-- sensitive-data handling
-- security-significant route handlers or server actions
+- architecture fit;
+- affected modules/layers/ownership;
+- structural constraints;
+- explicitly protected structural invariants;
+- stop/go status.
 
-Capture the invariants that must remain unchanged before editing.
+Do not edit until Architecture Guard has made the refactor structurally executable.
 
-### 4. Conditional Next.js Runtime Pass
+### 3. Conditional Security/Auth
 
-Run a runtime pass only if the refactor touches or may affect:
+Invoke `security-auth` when the refactor touches or may affect:
 
-- `src/app/*`
-- route handlers
-- server actions
-- `src/proxy.ts`
-- server/client placement
-- caching or revalidation
-- Edge vs Node runtime behavior
-- env exposure or build-time vs request-time behavior
+- auth flows;
+- authorization enforcement;
+- tenancy/org/resource scope;
+- membership/provider isolation;
+- trust boundaries;
+- sensitive-data handling;
+- security-significant route handlers/server actions.
 
-Capture the runtime invariants that must remain unchanged before editing.
+Required handoff:
 
-### 5. Constraint Summary
+- auth/security invariants that must remain unchanged;
+- trust/scope constraints;
+- security stop/go decision.
 
-Before implementation, write down the implementation-ready constraints:
+The specialist owns SEC/auth-flow retrieval.
 
-- explicitly protected invariants
-- allowed implementation scope
-- forbidden refactor moves
-- whether public contracts must remain unchanged
-- whether the task is still safe to proceed
+### 4. Conditional Next.js Runtime
 
-If safe refactoring depends on a broader redesign, stop and report that instead of
-continuing.
+Invoke `nextjs-runtime` when the refactor touches or may affect:
+
+- `src/app/**`;
+- App Router boundaries;
+- Server/Client placement;
+- route handlers/server actions;
+- `src/proxy.ts`;
+- caching/revalidation;
+- request-time/build-time behavior;
+- runtime placement;
+- env exposure/runtime assumptions.
+
+Required handoff:
+
+- runtime invariants;
+- placement/cache/runtime constraints;
+- runtime stop/go decision.
+
+The specialist owns version/config-specific verification.
+
+### 5. Refactor Constraint Summary
+
+Consolidate without weakening:
+
+- architecture constraints;
+- security/auth constraints when applicable;
+- runtime constraints when applicable;
+- explicitly protected behavior/invariants;
+- forbidden refactor moves;
+- allowed implementation scope;
+- public-contract stability requirements.
+
+If any required invariant or specialist decision remains unresolved, stop here.
+
+Do not let Implementation decide a missing architecture/security/runtime invariant.
 
 ### 6. Implementation
 
-Apply the minimum safe refactor only.
+Invoke `implementation-agent` with:
 
-Always:
+- refactor goal;
+- expected unchanged behavior;
+- affected scope;
+- protected invariants;
+- consolidated approved constraints;
+- allowed/forbidden moves.
 
-- preserve behavior unless an explicit behavior change was approved
-- avoid opportunistic redesign
-- keep edits narrow and reviewable
-- update tests only when the refactor changes the test surface or contract surface
+Require:
 
-Never:
-
-- hide architectural change inside cleanup
-- mix new feature work into the refactor
-- widen coupling in the name of simplification
-- change public contracts casually
+- minimum safe refactor;
+- narrow, reviewable edits;
+- behavior preservation;
+- no opportunistic redesign;
+- no hidden feature work;
+- no casual public-contract changes;
+- no widened coupling;
+- uncertainty surfaced instead of guessed;
+- test updates when test or contract surfaces change.
 
 ### 7. Validation
 
-Run focused validation with strong signal for the actual risk surface.
+Require validation proportional to refactor scope.
 
-Prefer:
+At minimum preserve the neutral workflow requirements:
 
-- **Temporary ESLint execution blocker (effective 2026-08-14):** do not run `pnpm lint`, `pnpm lint --fix`, ESLint directly, or a script that invokes ESLint. The command repeatedly hangs in the agent shell; run other relevant checks and report lint as skipped until this block is explicitly removed after a verified fix.
-- targeted tests for the touched behavior
-- explicit documentation of residual risk when validation is intentionally limited
+- targeted tests first;
+- typecheck;
+- architecture lint when relevant;
+- broader tests when the refactor crosses boundaries.
 
-## Required Output Shape
+Also honor repository-wide closure gates inherited from `AGENTS.md`.
 
-For substantial kickoff or review output, use:
+Validation must confirm, as applicable:
+
+- intended behavior remains intact;
+- architecture boundaries remain intact;
+- no new security issue was introduced;
+- no new runtime issue was introduced.
+
+Use `validation-strategy` when the minimum safe evidence is not already clear.
+
+Do not broaden validation without a concrete risk.
+
+### 8. Optional Post-Refactor Architecture Check
+
+Run `architecture-guard` again when the refactor affects multiple modules, contracts, DI/composition, or structural boundaries and dependency drift is plausible.
+
+When a refactor crosses multiple layers/contracts, strongly prefer this recheck.
+
+Verify:
+
+- no dependency drift;
+- boundaries remain intact;
+- implementation respected approved constraints.
+
+## Block Conditions
+
+Stop and do not implement when:
+
+- safe refactoring would require an unintended behavior change;
+- required invariants are unclear;
+- module ownership/dependency direction becomes weaker or unresolved;
+- DI/composition decisions are unresolved;
+- auth/security invariants are unclear;
+- runtime placement/cache invariants are unclear;
+- the task is actually a feature/redesign/incident/bugfix requiring another workflow;
+- structural drift would be introduced in the name of simplification;
+- required scope exceeds the approved blast radius.
+
+State the exact blocker and which decision/specialist owns resolution.
+
+## Close-Out
+
+Before success:
+
+- inspect final diff for accidental behavior/scope change;
+- confirm protected invariants remain true;
+- confirm required validation completed or record blocked/deferred evidence;
+- update task artifacts when applicable;
+- report residual risks/follow-ups;
+- close Leantime only after closure conditions are satisfied.
+
+## Refactor Status
+
+For non-trivial runs, explicitly state exactly one:
+
+- **SAFE TO REFACTOR**
+- **REFACTOR IMPLEMENTED**
+- **PARTIALLY IMPLEMENTED**
+- **BLOCKED**
+- **NOT SAFE TO REFACTOR YET**
+
+Use the status consistently in workflow output.
+
+## Response
+
+For substantial kickoff/review output:
 
 1. Objective
 2. Input Sources
@@ -203,33 +325,18 @@ For substantial kickoff or review output, use:
 6. Artifacts To Be Produced
 7. Recommended Next Action
 
-For implementation close-out, include:
+For implementation close-out, also state:
 
-- what changed
-- what behavior was intentionally preserved
-- validation performed
-- residual risks or follow-up items
+- what changed;
+- what behavior was intentionally preserved;
+- validation performed;
+- residual risks/follow-ups;
+- Refactor Status.
 
-## Compatibility Notes
+## Source and Compatibility
 
-- `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md` remains the shared,
-  neutral workflow source
-- `.github/prompts/safe-refactor.prompt.md` remains the Copilot workflow entrypoint
-- `.zenflow/workflows/safe-refactor.md` remains the ZenFlow execution layer
-- this skill is the Codex-native runtime surface for the same workflow intent
+`docs/ai/general/Workflow 02 - Safe Refactor Workflow.md` remains the neutral cross-tool workflow authority.
 
-When this workflow changes, update:
+For Codex, this skill changes context-loading mechanics only: specialist details are delegated to their skills instead of preloaded here, while workflow sequence, protected-invariant semantics, fast-path requirements, validation obligations, and statuses remain shared.
 
-- `AGENTS.md`
-- `docs/ai/general/MODE_MANIFEST.md` when mode behavior or required files change
-- `docs/ai/general/Workflow 02 - Safe Refactor Workflow.md`
-- `.github/prompts/safe-refactor.prompt.md`
-- `.agents/skills/safe-refactor-workflow/SKILL.md`
-- `.zenflow/workflows/safe-refactor.md`
-- the applicable description guides under `docs/ai/`
-
-## Task Lifecycle
-
-Follow the repository task lifecycle from the root instructions.
-Do not invoke Leantime for active task tracking unless the user explicitly
-requests Leantime or a Leantime migration operation.
+If shared workflow semantics change, propagate that semantic change according to repository agent-infrastructure rules. Do not load propagation documentation during ordinary refactor delivery.

@@ -68,13 +68,23 @@ const PAGE_SIZE = 25;
 export function AuditLogsClient() {
   const [state, setState] = React.useState<FetchState>({ status: 'idle' });
   const [offset, setOffset] = React.useState(0);
-  const [filters, setFilters] = React.useState({
+  const emptyFilters = {
     category: '',
     outcome: '',
     actorUserId: '',
     targetType: '',
     targetId: '',
-  });
+  };
+  // Applied filters (drive the fetch) vs. draft filters (bound to the form
+  // inputs). Splitting these is the whole fix: without it, every keystroke
+  // changed `filters` directly, which re-created `fetchEvents` and re-fired
+  // the effect below on every character typed -- firing the shared
+  // per-client API rate limit before a real search ever completed, and
+  // reflowing the table into its loading skeleton on every keystroke. The
+  // form already has an explicit "Filter" submit button; this makes the
+  // fetch actually wait for it.
+  const [filters, setFilters] = React.useState(emptyFilters);
+  const [draftFilters, setDraftFilters] = React.useState(emptyFilters);
   const [expanded, setExpanded] = React.useState<number | null>(null);
 
   const fetchEvents = React.useCallback(async () => {
@@ -125,7 +135,7 @@ export function AuditLogsClient() {
   ) {
     event.preventDefault();
     setOffset(0);
-    void fetchEvents();
+    setFilters(draftFilters);
   }
 
   return (
@@ -158,9 +168,9 @@ export function AuditLogsClient() {
           </label>
           <select
             id="al-category"
-            value={filters.category}
+            value={draftFilters.category}
             onChange={(e) =>
-              setFilters((f) => ({ ...f, category: e.target.value }))
+              setDraftFilters((f) => ({ ...f, category: e.target.value }))
             }
             className="w-40 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
           >
@@ -181,9 +191,9 @@ export function AuditLogsClient() {
           </label>
           <select
             id="al-outcome"
-            value={filters.outcome}
+            value={draftFilters.outcome}
             onChange={(e) =>
-              setFilters((f) => ({ ...f, outcome: e.target.value }))
+              setDraftFilters((f) => ({ ...f, outcome: e.target.value }))
             }
             className="w-32 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
           >
@@ -203,9 +213,9 @@ export function AuditLogsClient() {
           <input
             id="al-actor"
             type="text"
-            value={filters.actorUserId}
+            value={draftFilters.actorUserId}
             onChange={(e) =>
-              setFilters((f) => ({ ...f, actorUserId: e.target.value }))
+              setDraftFilters((f) => ({ ...f, actorUserId: e.target.value }))
             }
             className="w-44 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -220,9 +230,9 @@ export function AuditLogsClient() {
           <input
             id="al-target-type"
             type="text"
-            value={filters.targetType}
+            value={draftFilters.targetType}
             onChange={(e) =>
-              setFilters((f) => ({ ...f, targetType: e.target.value }))
+              setDraftFilters((f) => ({ ...f, targetType: e.target.value }))
             }
             className="w-32 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -237,9 +247,9 @@ export function AuditLogsClient() {
           <input
             id="al-target-id"
             type="text"
-            value={filters.targetId}
+            value={draftFilters.targetId}
             onChange={(e) =>
-              setFilters((f) => ({ ...f, targetId: e.target.value }))
+              setDraftFilters((f) => ({ ...f, targetId: e.target.value }))
             }
             className="w-44 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
           />

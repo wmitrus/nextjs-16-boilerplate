@@ -226,6 +226,7 @@ export function assertVercelDeploymentIdContractValid(
 ): void {
   if (
     nextConfigContent.includes('process.env.NEXT_DEPLOYMENT_ID') ||
+    // eslint-disable-next-line security/detect-unsafe-regex -- one bounded optional group (export\s+)? plus a literal, no nested/ambiguous repetition; cannot backtrack catastrophically.
     /\b(?:export\s+)?NEXT_DEPLOYMENT_ID\s*=/.test(productionWorkflowContent) ||
     /(?:^|\n)\s*NEXT_DEPLOYMENT_ID\s*:/.test(productionWorkflowContent) ||
     nextConfigContent.includes('runtimeServerDeploymentId')

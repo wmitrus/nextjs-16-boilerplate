@@ -12,6 +12,14 @@ vi.mock('@/core/logger/client', () => ({
   logger: mockLogger,
 }));
 
+const pushMock = vi.hoisted(() => vi.fn());
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: pushMock,
+  }),
+}));
+
 describe('Users error boundary UI', () => {
   it('renders fallback and calls retry', async () => {
     const user = userEvent.setup();
@@ -31,5 +39,21 @@ describe('Users error boundary UI', () => {
 
     expect(retry).toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalled();
+  });
+
+  it('navigates home via the router on "Go home"', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <UsersErrorBoundary
+        error={new Error('Oops')}
+        reset={vi.fn()}
+        retry={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Go home' }));
+
+    expect(pushMock).toHaveBeenCalledWith('/');
   });
 });

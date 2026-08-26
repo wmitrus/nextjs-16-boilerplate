@@ -22,6 +22,7 @@ export function useSignOut(): () => Promise<void> {
       await signOut();
       router.push('/sign-in');
     } catch {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full-reload fallback: signOut() itself failed, so a client-side router transition cannot be trusted to reflect a clean auth state; force the browser to refetch everything.
       window.location.href = '/sign-in';
     }
   }, [signOut, router]);

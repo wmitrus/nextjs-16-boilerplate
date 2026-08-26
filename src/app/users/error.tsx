@@ -1,11 +1,13 @@
 'use client';
 
 import type { ErrorInfo } from 'next/error';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { logger } from '@/core/logger/client';
 
 export default function UsersErrorBoundary({ error, retry }: ErrorInfo) {
+  const router = useRouter();
   // Next's ErrorInfo types `error` as `unknown` -- App Router's own
   // documented contract for this prop is an Error carrying an optional
   // `digest` (attached server-side for logged/redacted errors), so narrow
@@ -51,7 +53,7 @@ export default function UsersErrorBoundary({ error, retry }: ErrorInfo) {
           Retry users page
         </button>
         <button
-          onClick={() => (window.location.href = '/')}
+          onClick={() => router.push('/')}
           className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:outline-none"
         >
           Go home

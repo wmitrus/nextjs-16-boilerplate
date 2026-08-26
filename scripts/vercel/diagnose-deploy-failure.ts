@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+
+import { readTextFileWithinBase } from '../lib/fs-guards-shared';
 
 interface DeploymentResult {
   deploymentApiUrl?: string;
@@ -94,9 +96,15 @@ function runVercelJson(args: string[]): unknown {
   return JSON.parse(output);
 }
 
+/**
+ * `resultPath` is always a CLI-supplied path to a Vercel deploy-result JSON
+ * file written under the system temp directory (see `preview-deploy.yml`'s
+ * `pnpm vercel:deploy:diagnose -- /tmp/vercel-preview-deploy.json`) — confined
+ * to `tmpdir()` at the read sink itself, not just resolved.
+ */
 export function diagnoseDeployFailure(resultPath: string): string {
   const result = JSON.parse(
-    readFileSync(resultPath, 'utf8'),
+    readTextFileWithinBase(resultPath, tmpdir(), 'Vercel deploy result JSON'),
   ) as DeploymentResult;
   const deploymentId = result.id;
 

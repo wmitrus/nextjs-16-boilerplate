@@ -12,6 +12,10 @@
         "CODEGRAPH_TELEMETRY": "0",
         "CODEGRAPH_NO_UPDATE_CHECK": "1"
       }
+    },
+    "sentry": {
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp/ozi/nextjs-16-boilerplate"
     }
   }
 }

@@ -44,6 +44,41 @@ export class DrizzleUserRepository implements UserRepository {
     };
   }
 
+  async findByEmail(email: string): Promise<User | null> {
+    const rows = await this.db
+      .select({
+        id: usersTable.id,
+        email: usersTable.email,
+        onboardingComplete: usersTable.onboardingComplete,
+        displayName: usersTable.displayName,
+        locale: usersTable.locale,
+        timezone: usersTable.timezone,
+        deactivatedAt: usersTable.deactivatedAt,
+        sessionsValidFrom: usersTable.sessionsValidFrom,
+        createdAt: usersTable.createdAt,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      email: row.email,
+      onboardingComplete: row.onboardingComplete,
+      displayName: row.displayName ?? undefined,
+      locale: row.locale ?? undefined,
+      timezone: row.timezone ?? undefined,
+      deactivatedAt: row.deactivatedAt ?? undefined,
+      sessionsValidFrom: row.sessionsValidFrom ?? null,
+      createdAt: row.createdAt,
+    };
+  }
+
   async updateOnboardingStatus(
     id: SubjectId,
     complete: boolean,

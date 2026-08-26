@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { connection } from 'next/server';
 
-import { INFRASTRUCTURE } from '@/core/contracts';
+import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
+import type { UserRepository } from '@/core/contracts/user';
 import type { DrizzleDb } from '@/core/db/types';
 import { env } from '@/core/env';
 import { getAppContainer } from '@/core/runtime/bootstrap';
@@ -41,12 +42,39 @@ function resolveWaitlistService() {
   );
 }
 
+/**
+ * Joining the waitlist and actually becoming an active user are two
+ * unconnected paths (a direct invite or the `ADMIN_USER_EMAILS` bootstrap
+ * never touches the waitlist), so a pending entry can outlive its own
+ * relevance -- the applicant already has a real account. Filtering that out
+ * here, at the point this list is displayed, keeps "pending" honest without
+ * giving the `waitlist` module a dependency on the `user` module (OZI-64).
+ */
+async function filterOutAlreadyActive(
+  entries: WaitlistEntry[],
+): Promise<WaitlistEntry[]> {
+  if (entries.length === 0) return entries;
+
+  const userRepository = getAppContainer().resolve<UserRepository>(
+    AUTH.USER_REPOSITORY,
+  );
+
+  const stillPending = await Promise.all(
+    entries.map(async (entry) => {
+      const user = await userRepository.findByEmail(entry.email);
+      return user && !user.deactivatedAt ? null : entry;
+    }),
+  );
+
+  return stillPending.filter((entry) => entry !== null);
+}
+
 export default async function WaitlistAdminPage() {
   await connection();
   await getServerRequestLogContext({ pathname: '/admin/waitlist' });
 
   const service = resolveWaitlistService();
-  const entries = await service.listPending();
+  const entries = await filterOutAlreadyActive(await service.listPending());
 
   return (
     <div>

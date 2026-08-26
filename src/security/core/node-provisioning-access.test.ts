@@ -25,6 +25,7 @@ function createDeps() {
       findById: vi
         .fn()
         .mockResolvedValue({ id: 'u-1', onboardingComplete: true }),
+      findByEmail: vi.fn().mockResolvedValue(null),
       updateOnboardingStatus: vi.fn().mockResolvedValue(undefined),
       updateProfile: vi.fn().mockResolvedValue(undefined),
       listAll: vi.fn().mockResolvedValue({ users: [], total: 0 }),

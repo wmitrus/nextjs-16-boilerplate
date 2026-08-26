@@ -69,6 +69,22 @@ describe('DrizzleUserRepository (real DB)', () => {
     expect(user).toBeNull();
   });
 
+  describe('findByEmail()', () => {
+    it('returns the user matching the email (OZI-64)', async () => {
+      const repo = new DrizzleUserRepository(testDb.db);
+      const user = await repo.findByEmail('alice@example.com');
+
+      expect(user?.id).toBe(aliceId);
+    });
+
+    it('returns null for an email with no user', async () => {
+      const repo = new DrizzleUserRepository(testDb.db);
+      const user = await repo.findByEmail('nobody@example.com');
+
+      expect(user).toBeNull();
+    });
+  });
+
   describe('listAll()', () => {
     it('returns all seeded users with pagination defaults', async () => {
       const repo = new DrizzleUserRepository(testDb.db);

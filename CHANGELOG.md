@@ -1,3 +1,35 @@
+# [2.2.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.1.0...v2.2.0) (2026-08-26)
+
+
+### Bug Fixes
+
+* **ai-tooling:** address Codex review findings on inbox reconciliation ([bcd1ea1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/bcd1ea14398dd3007e0b0a5e30e41658991b5e25))
+* **ai:** enforce reconciliation path confinement ([9bd78b1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9bd78b199b5f0b8aee37bbf086c7f372238a6f01))
+* **ai:** require targeted lint for implementation changes ([ee935ae](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ee935aed037cf207ff18b25d78bbef22aa9515f3))
+* **audit-logs:** split applied and draft filters to prevent excessive refetching ([fdbf46e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/fdbf46e14608b946247f32072f743bf9a2163afc))
+* **authorization:** grant owner role FEATURE_FLAG policy ([ad38926](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ad38926142282cac379559c72668880d308b6160))
+* **config:** add markdownlint rules and jsonc override for prettier ([1bec610](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1bec6101f84eadb4ab47096f1d0a6d3dc9229c7e))
+* **git:** propagate pre-push gate failures ([0e30270](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0e3027090a00124e6eb282389e57145d0d446f49))
+* **lint:** close remaining repo-wide eslint warnings outside ai-tooling ([102f5a1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/102f5a13cb48027813d7c9240386fc4299325151))
+* **markdown:** wire up prettier formatting for .md and fix list-indent bug ([02b9115](https://github.com/wmitrus/nextjs-16-boilerplate/commit/02b9115273841ee06585f4a2452ebe432f12b951))
+* **security:** ignore known credential-shaped test fixtures in gitleaks ([627576f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/627576f4178f0a9b05cd265b46e3607f1a2c9a05))
+* **ui:** remove unnecessary priority preload on header logo ([def45d6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/def45d6131a8a7dc138f2331609fecde0877ff3d))
+* **waitlist:** stop showing an already-active user as pending ([0dd470f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0dd470f2eb738edc09de0c6a6aa3d05365e3e443))
+
+
+### Features
+
+* **ai:** add Linear inbox reconciliation workflow ([98a6c81](https://github.com/wmitrus/nextjs-16-boilerplate/commit/98a6c81a7215350e346937b64ca023256521c257))
+* **audit-logs:** selectable match operator (exact/starts-with/contains) + fix table jank ([3d37e88](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3d37e88fa79b3fd329e3844ec4bde2107d5ce8e1))
+* **audit-logs:** show clickable actor name in a dialog instead of raw UUID ([024ec2c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/024ec2c29e2bea0eaa9414dbf2129e087e3f9b61))
+* **fs-guards:** add stat and readdir guarded wrappers for safe base‑dir operations ([e4850c4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/e4850c431dcedccad381f2db651aa17436ac6e7b))
+* **mcp:** add Sentry MCP endpoint configuration to .mcp.json ([384893c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/384893cffe8a23567eb571a0d7c05db9a1f4d68b))
+
+
+### Performance Improvements
+
+* **eslint:** exclude Vercel build artifacts ([db1814b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db1814bc2f1fa3a152d2e65aa4a08bc8e339bed7))
+
 # [2.1.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.0.0...v2.1.0) (2026-08-24)
 
 

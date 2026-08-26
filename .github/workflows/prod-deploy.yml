@@ -82,6 +82,8 @@ jobs:
           APP_ENV: production
           NEXT_PUBLIC_APP_ENV: production
 
+      # Durable order: Vercel-owned migrations -> tenant readiness -> artifact upload.
+      # Guarded by validate-vercel-deploy-profiles.ts; do not move this check.
       - name: Validate Production Tenant Readiness
         run: pnpm tenant:readiness:vercel:prod
 

@@ -9,6 +9,9 @@ import {
   tenantsTable,
 } from '@/modules/authorization/infrastructure/drizzle/schema';
 
+// Deployment invariant: this remains read-only and runs after migrations but
+// before Production artifact upload. AGENTS.md scopes the rule to deploy work.
+
 export interface TenantReadinessSnapshot {
   defaultTenantId?: string;
   matchingOrganizationCount: number;

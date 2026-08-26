@@ -1,6 +1,12 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  readTextFileWithinBase,
+  readdirWithinBase,
+  statWithinBase,
+} from './lib/fs-guards.mjs';
+
+const REPO_ROOT = process.cwd();
 const MAX_ROOT_BYTES = 16_384;
 let failed = false;
 
@@ -15,10 +21,12 @@ function pass(label) {
 }
 
 function markdownFiles(path) {
-  const stat = statSync(path);
+  const stat = statWithinBase(path, REPO_ROOT, 'markdown scan path');
   if (stat.isFile()) return path.endsWith('.md') ? [path] : [];
 
-  return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
+  return readdirWithinBase(path, REPO_ROOT, 'markdown scan dir', {
+    withFileTypes: true,
+  }).flatMap((entry) => {
     const child = join(path, entry.name);
     return markdownFiles(child);
   });
@@ -27,9 +35,14 @@ function markdownFiles(path) {
 function findText(files, pattern) {
   const findings = [];
   for (const file of files) {
-    const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+    const lines = readTextFileWithinBase(
+      file,
+      REPO_ROOT,
+      'markdown file',
+    ).split(/\r?\n/);
     lines.forEach((line, index) => {
-      if (pattern.test(line)) findings.push(`${file}:${index + 1}: ${line.trim()}`);
+      if (pattern.test(line))
+        findings.push(`${file}:${index + 1}: ${line.trim()}`);
       pattern.lastIndex = 0;
     });
   }
@@ -37,7 +50,9 @@ function findText(files, pattern) {
 }
 
 function skillNames(root) {
-  return readdirSync(root, { withFileTypes: true })
+  return readdirWithinBase(root, REPO_ROOT, 'skills dir', {
+    withFileTypes: true,
+  })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
@@ -89,7 +104,9 @@ if (onlyCodex.length > 0 || onlyClaude.length > 0) {
     ...onlyClaude.map((name) => `Claude only: ${name}`),
   ]);
 } else {
-  pass(`Codex and Claude skill names are paired (${codexSkills.length}/${claudeSkills.length})`);
+  pass(
+    `Codex and Claude skill names are paired (${codexSkills.length}/${claudeSkills.length})`,
+  );
 }
 
 for (const [root, names] of [
@@ -100,7 +117,7 @@ for (const [root, names] of [
     .map((name) => join(root, name, 'SKILL.md'))
     .filter((file) => {
       try {
-        return !statSync(file).isFile();
+        return !statWithinBase(file, REPO_ROOT, 'skill entry').isFile();
       } catch {
         return true;
       }
@@ -114,13 +131,16 @@ for (const [root, names] of [
 }
 
 for (const root of ['AGENTS.md', 'CLAUDE.md']) {
-  const size = statSync(root).size;
+  const size = statWithinBase(root, REPO_ROOT, 'root instruction file').size;
   if (size > MAX_ROOT_BYTES) {
-    fail(`${root} must stay within the ${MAX_ROOT_BYTES}-byte always-on budget`, [
-      `${size} bytes`,
-    ]);
+    fail(
+      `${root} must stay within the ${MAX_ROOT_BYTES}-byte always-on budget`,
+      [`${size} bytes`],
+    );
   } else {
-    pass(`${root} stays within the ${MAX_ROOT_BYTES}-byte always-on budget (${size} bytes)`);
+    pass(
+      `${root} stays within the ${MAX_ROOT_BYTES}-byte always-on budget (${size} bytes)`,
+    );
   }
 }
 

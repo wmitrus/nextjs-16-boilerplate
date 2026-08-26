@@ -97,6 +97,7 @@ function planFieldsForRow(block: InboxBlock): {
     if (value === undefined) continue;
     if (scanForCredentialShapedContent(value).safe) {
       safe.push(key);
+      // eslint-disable-next-line security/detect-object-injection -- key only ever iterates the fixed FREE_TEXT_FIELDS const tuple, never user-controlled.
       approvedFields[key] = value;
     } else {
       unsafe.push(key);

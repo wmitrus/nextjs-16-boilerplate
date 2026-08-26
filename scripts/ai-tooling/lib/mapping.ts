@@ -6,12 +6,12 @@
 
 const ALLOWED_TYPE_LABELS = new Set(['Bug', 'Feature', 'Improvement']);
 
-const PRIORITY_MAP: Record<string, number> = {
-  Urgent: 1,
-  High: 2,
-  Medium: 3,
-  Low: 4,
-};
+const PRIORITY_MAP: Map<string, number> = new Map([
+  ['Urgent', 1],
+  ['High', 2],
+  ['Medium', 3],
+  ['Low', 4],
+]);
 
 /** `type:` hint → Linear label, only for the three canonical labels (Linear Task Operating Model §10). */
 export function mapTypeHintToLabels(
@@ -25,11 +25,8 @@ export function mapTypeHintToLabels(
 export function mapPriorityHintToNumber(
   hint: string | undefined,
 ): number | undefined {
-  if (
-    hint !== undefined &&
-    Object.prototype.hasOwnProperty.call(PRIORITY_MAP, hint)
-  ) {
-    return PRIORITY_MAP[hint];
+  if (hint !== undefined && PRIORITY_MAP.has(hint)) {
+    return PRIORITY_MAP.get(hint);
   }
   return undefined;
 }

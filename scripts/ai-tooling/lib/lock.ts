@@ -71,6 +71,7 @@ function isProcessAlive(pid: number): boolean {
  */
 function processStartTime(pid: number): string | null {
   try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- pid is type-constrained to number; interpolation cannot escape /proc/<digits>/stat.
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
     // Command name (field 2) is parenthesized and may itself contain
     // spaces/parens, so split on the LAST ")" before reading further fields.

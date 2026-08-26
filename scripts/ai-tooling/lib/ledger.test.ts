@@ -25,12 +25,12 @@ afterEach(() => {
 
 describe('readLedger', () => {
   it('returns an empty ledger when the file is missing', () => {
-    expect(readLedger(ledgerPath, dir)).toEqual({});
+    expect(readLedger(ledgerPath, dir)).toEqual(new Map());
   });
 
   it('returns an empty ledger when the file is corrupted (Tier-2 fallback applies)', () => {
     writeFileSync(ledgerPath, '{not valid json');
-    expect(readLedger(ledgerPath, dir)).toEqual({});
+    expect(readLedger(ledgerPath, dir)).toEqual(new Map());
   });
 
   it('parses a valid ledger file', () => {
@@ -61,8 +61,8 @@ describe('recordConfirmedMapping', () => {
       action: 'create',
       confirmedAt: '2026-08-25T14:35:10.000Z',
     });
-    expect(ledger['INBOX-1'].linearId).toBe('OZI-40');
-    expect(readLedger(ledgerPath, dir)['INBOX-1'].linearId).toBe('OZI-40');
+    expect(ledger.get('INBOX-1')?.linearId).toBe('OZI-40');
+    expect(readLedger(ledgerPath, dir).get('INBOX-1')?.linearId).toBe('OZI-40');
   });
 
   it('is idempotent for an identical repeated confirmed mapping', () => {

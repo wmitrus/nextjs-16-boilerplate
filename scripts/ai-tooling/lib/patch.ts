@@ -23,6 +23,7 @@ export function patchBlockFields(
   const remaining = new Map(Object.entries(fields));
 
   for (const [key, value] of Array.from(remaining.entries())) {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- key is passed through escapeRegExp() immediately above before construction.
     const lineRe = new RegExp(`^${escapeRegExp(key)}:.*$`, 'm');
     if (lineRe.test(text)) {
       text = text.replace(lineRe, `${key}: ${value}`);

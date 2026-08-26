@@ -129,4 +129,10 @@ export type LedgerEntry = {
   confirmedAt: string;
 };
 
-export type Ledger = Record<string, LedgerEntry>;
+/**
+ * In-memory representation only — `Map` avoids plain-object bracket lookup
+ * on an `inboxId` key (see `lookupLedger`/`recordConfirmedMapping`). The
+ * persisted `reconcile-map.json` file stays a plain JSON object; conversion
+ * happens at the read/write boundary in `ledger.ts`.
+ */
+export type Ledger = Map<string, LedgerEntry>;

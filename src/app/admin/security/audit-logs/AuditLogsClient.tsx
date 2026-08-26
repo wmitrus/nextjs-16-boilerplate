@@ -8,6 +8,8 @@ import {
 } from '@tanstack/react-table';
 import * as React from 'react';
 
+import { Dialog } from '@/shared/components/ui/dialog';
+
 interface AdminAuditEvent {
   id: number;
   occurredAt: string;
@@ -24,6 +26,32 @@ interface AdminAuditEvent {
 }
 
 type AdminScope = { isPlatformAdmin: boolean; tenantId: string | null };
+
+/**
+ * Shape of `AdminUserDto` (`DrizzleAdminUsersService.ts`) as it crosses the
+ * wire -- `Date` fields serialize to ISO strings over JSON.
+ */
+interface AdminUserSummary {
+  id: string;
+  email: string;
+  displayName?: string;
+  deactivatedAt?: string;
+  createdAt: string;
+}
+
+/**
+ * Resolves `actorUserId -> {email, displayName}` (OZI-57) via the existing
+ * tenant/platform-admin-scoped `GET /api/admin/users/[id]` -- no new backend
+ * read path. Keyed by user id and shared across the whole page's lifetime so
+ * paging back to an already-seen actor never re-fetches. An `error` entry
+ * (404 for a user outside the caller's authorized scope, or 403 when the
+ * caller lacks `USER_READ`) is not retried; the cell just falls back to the
+ * raw id.
+ */
+type UserCacheEntry =
+  | { status: 'loading' }
+  | { status: 'success'; user: AdminUserSummary }
+  | { status: 'error' };
 
 /**
  * How a text filter matches its column (OZI-54). Mirrors
@@ -196,6 +224,11 @@ export function AuditLogsClient() {
   const [targetId, setTargetId] =
     React.useState<TextFilterValue>(emptyTextFilter);
   const [expanded, setExpanded] = React.useState<number | null>(null);
+  const [userCache, setUserCache] = React.useState<
+    Record<string, UserCacheEntry>
+  >({});
+  const [actorDialogUser, setActorDialogUser] =
+    React.useState<AdminUserSummary | null>(null);
 
   const fetchEvents = React.useCallback(async () => {
     // Keep already-rendered rows on screen during a refetch -- only the
@@ -260,6 +293,52 @@ export function AuditLogsClient() {
 
   const events = state.status === 'success' ? state.events : [];
 
+  React.useEffect(() => {
+    const idsToFetch = [
+      ...new Set(
+        events
+          .map((event) => event.actorUserId)
+          .filter((id): id is string => id !== null),
+      ),
+    ].filter((id) => !(id in userCache));
+
+    if (idsToFetch.length === 0) return;
+
+    setUserCache((prev) => {
+      const next = { ...prev };
+      for (const id of idsToFetch) {
+        // `id` is a deduped actorUserId already filtered to `string`, not
+        // free-form user input reaching a prototype key.
+        // eslint-disable-next-line security/detect-object-injection
+        next[id] = { status: 'loading' };
+      }
+      return next;
+    });
+
+    for (const id of idsToFetch) {
+      void fetch(`/api/admin/users/${id}`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error('lookup failed');
+          const body = (await res.json()) as {
+            data?: { user?: AdminUserSummary };
+          };
+          const user = body.data?.user;
+          if (!user) throw new Error('malformed response');
+          setUserCache((prev) => ({
+            ...prev,
+            [id]: { status: 'success', user },
+          }));
+        })
+        .catch(() => {
+          setUserCache((prev) => ({ ...prev, [id]: { status: 'error' } }));
+        });
+    }
+    // Only new events should trigger a lookup -- `userCache` is read above to
+    // dedupe, but including it here would re-run this effect (and re-check
+    // every id) on every cache update it just made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
   const columns = React.useMemo<ColumnDef<AdminAuditEvent>[]>(
     () => [
       {
@@ -285,7 +364,28 @@ export function AuditLogsClient() {
       {
         id: 'actor',
         header: 'Actor',
-        cell: ({ row }) => row.original.actorUserId ?? '—',
+        cell: ({ row }) => {
+          const actorUserId = row.original.actorUserId;
+          if (!actorUserId) return '—';
+
+          // eslint-disable-next-line security/detect-object-injection -- actorUserId comes from the fetched audit event, not free-form user input
+          const entry = userCache[actorUserId];
+          if (entry?.status !== 'success') return actorUserId;
+
+          const user = entry.user;
+          return (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setActorDialogUser(user);
+              }}
+              className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+            >
+              {user.displayName ?? user.email}
+            </button>
+          );
+        },
       },
       {
         id: 'target',
@@ -296,7 +396,7 @@ export function AuditLogsClient() {
             : '—',
       },
     ],
-    [],
+    [userCache],
   );
 
   // TanStack Table exposes imperative instance helpers. This component
@@ -649,6 +749,50 @@ export function AuditLogsClient() {
             </div>
           </div>
         </>
+      )}
+
+      {actorDialogUser && (
+        <Dialog
+          title={actorDialogUser.displayName ?? actorDialogUser.email}
+          onClose={() => setActorDialogUser(null)}
+        >
+          <dl className="space-y-2 text-sm">
+            <div>
+              <dt className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                Email
+              </dt>
+              <dd className="text-zinc-800 dark:text-zinc-200">
+                {actorDialogUser.email}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                User ID
+              </dt>
+              <dd className="font-mono text-xs text-zinc-800 dark:text-zinc-200">
+                {actorDialogUser.id}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                Joined
+              </dt>
+              <dd className="text-zinc-800 dark:text-zinc-200">
+                {formatDateTime(actorDialogUser.createdAt)}
+              </dd>
+            </div>
+            {actorDialogUser.deactivatedAt && (
+              <div>
+                <dt className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  Deactivated
+                </dt>
+                <dd className="text-zinc-800 dark:text-zinc-200">
+                  {formatDateTime(actorDialogUser.deactivatedAt)}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </Dialog>
       )}
     </div>
   );

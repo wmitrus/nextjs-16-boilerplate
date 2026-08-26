@@ -1,4 +1,9 @@
 import { PGlite } from '@electric-sql/pglite';
+// OZI-54: the audit-log "contains" filter's GIN trigram indexes need
+// pg_trgm. Unlike real Postgres (Neon/Testcontainers), PGlite doesn't ship
+// contrib extensions enabled by default -- they must be registered on the
+// client, or the migration's `CREATE EXTENSION pg_trgm` fails locally.
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { drizzle } from 'drizzle-orm/pglite';
 
 import { resolveServerLogger } from '@/core/logger/di';
@@ -78,7 +83,7 @@ export function createPglite(url?: string): DbRuntime {
 
   let pglite: PGlite;
   try {
-    pglite = new PGlite(resolvedPath);
+    pglite = new PGlite(resolvedPath, { extensions: { pg_trgm } });
   } catch (err) {
     pathState.activeCount = Math.max(0, pathState.activeCount - 1);
     pathState.lastFinishedAt = Date.now();

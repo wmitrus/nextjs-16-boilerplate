@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleAuditLogReadService } from './DrizzleAuditLogReadService';
 import { auditEventsTable } from './schema';
 
+import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
 let testDb: TestDb;
@@ -134,6 +135,84 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
       expect(total).toBe(1);
       expect(events[0]?.tenantId).toBe('acme');
       expect(events[0]?.targetId).toBe('u1');
+    });
+  });
+
+  describe('text match operators (OZI-54)', () => {
+    it('exact (default) only matches the full value', async () => {
+      await insertEvent({ targetType: 'audit_log_setting' });
+      await insertEvent({ targetType: 'audit_log_setting_extra' });
+
+      const { events, total } = await svc.listGlobal(
+        { targetType: 'audit_log_setting' },
+        { limit: 50, offset: 0 },
+      );
+      expect(total).toBe(1);
+      expect(events[0]?.targetType).toBe('audit_log_setting');
+    });
+
+    it('startsWith matches a prefix but not a middle/end substring', async () => {
+      await insertEvent({ targetType: 'audit_log_setting' });
+      await insertEvent({ targetType: 'organization' });
+
+      const { events, total } = await svc.listGlobal(
+        { targetType: 'audit', targetTypeOp: 'startsWith' },
+        { limit: 50, offset: 0 },
+      );
+      expect(total).toBe(1);
+      expect(events[0]?.targetType).toBe('audit_log_setting');
+    });
+
+    it('contains matches a substring anywhere, backed by the trigram index', async () => {
+      await insertEvent({ targetType: 'audit_log_setting' });
+      await insertEvent({ targetType: 'organization' });
+
+      const { events, total } = await svc.listGlobal(
+        { targetType: 'log', targetTypeOp: 'contains' },
+        { limit: 50, offset: 0 },
+      );
+      expect(total).toBe(1);
+      expect(events[0]?.targetType).toBe('audit_log_setting');
+    });
+
+    it('escapes literal % and _ in the search value instead of treating them as wildcards', async () => {
+      await insertEvent({ targetType: '50%_off' });
+      await insertEvent({ targetType: '50Xoff' });
+
+      const { events, total } = await svc.listGlobal(
+        { targetType: '%_', targetTypeOp: 'contains' },
+        { limit: 50, offset: 0 },
+      );
+      expect(total).toBe(1);
+      expect(events[0]?.targetType).toBe('50%_off');
+    });
+
+    it('contains works on the native uuid actorUserId column via an explicit text cast', async () => {
+      // actorUserId is a real FK to users.id -- needs actual rows there,
+      // unlike the other filter columns.
+      const actorId = '11111111-2222-4333-8444-555555555555';
+      const otherActorId = '99999999-2222-4333-8444-555555555555';
+      await testDb.db.insert(usersTable).values([
+        { id: actorId, email: 'trgm-actor-1@example.test' },
+        { id: otherActorId, email: 'trgm-actor-2@example.test' },
+      ]);
+
+      try {
+        await insertEvent({ actorUserId: actorId });
+        await insertEvent({ actorUserId: otherActorId });
+
+        const { events, total } = await svc.listGlobal(
+          { actorUserId: '2222-4333-8444', actorUserIdOp: 'contains' },
+          { limit: 50, offset: 0 },
+        );
+        expect(total).toBe(2);
+        expect(events.map((e) => e.actorUserId).sort()).toEqual(
+          [actorId, otherActorId].sort(),
+        );
+      } finally {
+        await testDb.db.delete(auditEventsTable);
+        await testDb.db.delete(usersTable);
+      }
     });
   });
 });

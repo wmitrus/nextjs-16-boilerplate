@@ -104,7 +104,7 @@
     "ai:instructions:check": "node scripts/validate-agent-instruction-architecture.mjs",
     "arch:lint": "./scripts/architecture-lint.sh",
     "db:generate": "drizzle-kit generate --config=src/core/db/migrations/config/drizzle.dev.ts",
-    "db:pglite:migrate": "drizzle-kit migrate --config=src/core/db/migrations/config/drizzle.dev.ts",
+    "db:pglite:migrate": "tsx src/core/db/migrate-cli.ts",
     "db:migrate:prod": "tsx scripts/db-migrate-prod.ts",
     "db:migrate:prod:local": "node --env-file=.env.production --import tsx scripts/db-migrate-prod.ts",
     "db:export:sql": "mkdir -p exports/sql && drizzle-kit export --config=src/core/db/migrations/config/drizzle.dev.ts > exports/sql/schema.sql",

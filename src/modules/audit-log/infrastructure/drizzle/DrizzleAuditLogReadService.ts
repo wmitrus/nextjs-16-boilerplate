@@ -1,4 +1,14 @@
-import { and, count, desc, eq, gte, lte, type SQL } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  lte,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 
 import type { DrizzleDb } from '@/core/db';
 
@@ -23,12 +33,23 @@ export type AuditEventDto = {
   metadata: Record<string, unknown> | null;
 };
 
+/**
+ * How a free-text filter value is matched against its column (OZI-54).
+ * `contains`/`startsWith` are `ILIKE`, backed by the trigram/btree-friendly
+ * GIN indexes added alongside this type -- see `schema.ts`'s
+ * `idx_audit_events_*_trgm` indexes and their doc comment.
+ */
+export type TextMatchOperator = 'exact' | 'startsWith' | 'contains';
+
 export type AuditEventFilters = {
   category?: AuditCategory;
   outcome?: 'success' | 'failure' | 'denied';
   actorUserId?: string;
+  actorUserIdOp?: TextMatchOperator;
   targetType?: string;
+  targetTypeOp?: TextMatchOperator;
   targetId?: string;
+  targetIdOp?: TextMatchOperator;
   occurredAfter?: Date;
   occurredBefore?: Date;
 };
@@ -37,6 +58,21 @@ export type AuditEventPagination = {
   limit: number;
   offset: number;
 };
+
+/**
+ * Escapes ILIKE metacharacters in caller-supplied text so a literal `%`,
+ * `_`, or `\` the user typed is matched literally rather than treated as
+ * our own wildcard/escape syntax. Postgres's default ILIKE escape
+ * character is `\`, which this relies on.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function likePattern(value: string, op: 'startsWith' | 'contains'): string {
+  const escaped = escapeLikePattern(value);
+  return op === 'startsWith' ? `${escaped}%` : `%${escaped}%`;
+}
 
 function filterPredicates(filters: AuditEventFilters): SQL[] {
   const predicates: SQL[] = [];
@@ -47,13 +83,33 @@ function filterPredicates(filters: AuditEventFilters): SQL[] {
     predicates.push(eq(auditEventsTable.outcome, filters.outcome));
   }
   if (filters.actorUserId) {
-    predicates.push(eq(auditEventsTable.actorUserId, filters.actorUserId));
+    const op = filters.actorUserIdOp ?? 'exact';
+    predicates.push(
+      op === 'exact'
+        ? eq(auditEventsTable.actorUserId, filters.actorUserId)
+        : // actorUserId is a native `uuid` column; ILIKE needs text, hence
+          // the explicit cast (matches the migration's expression index).
+          sql`(${auditEventsTable.actorUserId}::text) ILIKE ${likePattern(filters.actorUserId, op)}`,
+    );
   }
   if (filters.targetType) {
-    predicates.push(eq(auditEventsTable.targetType, filters.targetType));
+    const op = filters.targetTypeOp ?? 'exact';
+    predicates.push(
+      op === 'exact'
+        ? eq(auditEventsTable.targetType, filters.targetType)
+        : ilike(
+            auditEventsTable.targetType,
+            likePattern(filters.targetType, op),
+          ),
+    );
   }
   if (filters.targetId) {
-    predicates.push(eq(auditEventsTable.targetId, filters.targetId));
+    const op = filters.targetIdOp ?? 'exact';
+    predicates.push(
+      op === 'exact'
+        ? eq(auditEventsTable.targetId, filters.targetId)
+        : ilike(auditEventsTable.targetId, likePattern(filters.targetId, op)),
+    );
   }
   if (filters.occurredAfter) {
     predicates.push(gte(auditEventsTable.occurredAt, filters.occurredAfter));

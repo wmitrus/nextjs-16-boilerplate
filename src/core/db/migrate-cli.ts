@@ -2,6 +2,17 @@ import { createDb } from '@/core/db/create-db';
 import { runMigrations } from '@/core/db/migrations/run-migrations';
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
+/**
+ * `pnpm db:pglite:migrate` runs this instead of a bare `drizzle-kit migrate`
+ * (OZI-54): drizzle-kit's own `driver: 'pglite'` integration instantiates
+ * PGlite itself with no way to register contrib extensions, so it cannot run
+ * the `CREATE EXTENSION pg_trgm` migration this task added. Going through
+ * `createDb()` uses this repo's own `create-pglite.ts`, which does register
+ * it -- verified against a fresh PGlite path. `db:generate`/`db:pglite:studio`
+ * stay on drizzle-kit directly: generate only diffs `schema.ts` (never
+ * executes SQL), and studio only reads an already-migrated DB.
+ */
+
 function resolveProvider(): DbProvider {
   const raw = process.env.DB_PROVIDER?.trim();
 

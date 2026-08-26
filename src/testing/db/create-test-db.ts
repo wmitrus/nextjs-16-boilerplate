@@ -1,4 +1,8 @@
 import { PGlite } from '@electric-sql/pglite';
+// OZI-54: same reason as src/core/db/drivers/create-pglite.ts -- PGlite
+// doesn't enable contrib extensions by default, so the migration's
+// `CREATE EXTENSION pg_trgm` needs it registered on the client.
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { sql } from 'drizzle-orm';
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
@@ -86,7 +90,7 @@ async function createDbByDriver(
 }
 
 async function createPgliteTestDb(): Promise<TestDb> {
-  const pglite = new PGlite('memory://');
+  const pglite = new PGlite('memory://', { extensions: { pg_trgm } });
   const db = drizzlePglite(pglite) as unknown as DrizzleDb;
   await runMigrations(db, 'pglite');
 

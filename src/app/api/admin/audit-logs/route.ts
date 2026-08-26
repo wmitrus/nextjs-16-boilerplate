@@ -25,12 +25,17 @@ const logger = resolveServerLogger().child({
   module: 'admin-audit-logs',
 });
 
+const textMatchOperatorSchema = z.enum(['exact', 'startsWith', 'contains']);
+
 const querySchema = z.object({
   category: z.enum(AUDIT_CATEGORIES).optional(),
   outcome: z.enum(['success', 'failure', 'denied']).optional(),
   actorUserId: z.string().trim().min(1).max(200).optional(),
+  actorUserIdOp: textMatchOperatorSchema.optional(),
   targetType: z.string().trim().min(1).max(100).optional(),
+  targetTypeOp: textMatchOperatorSchema.optional(),
   targetId: z.string().trim().min(1).max(200).optional(),
+  targetIdOp: textMatchOperatorSchema.optional(),
   occurredAfter: z.coerce.date().optional(),
   occurredBefore: z.coerce.date().optional(),
   limit: z.coerce
@@ -97,8 +102,11 @@ export const GET = withErrorHandler(
       category: url.searchParams.get('category') ?? undefined,
       outcome: url.searchParams.get('outcome') ?? undefined,
       actorUserId: url.searchParams.get('actorUserId') ?? undefined,
+      actorUserIdOp: url.searchParams.get('actorUserIdOp') ?? undefined,
       targetType: url.searchParams.get('targetType') ?? undefined,
+      targetTypeOp: url.searchParams.get('targetTypeOp') ?? undefined,
       targetId: url.searchParams.get('targetId') ?? undefined,
+      targetIdOp: url.searchParams.get('targetIdOp') ?? undefined,
       occurredAfter: url.searchParams.get('occurredAfter') ?? undefined,
       occurredBefore: url.searchParams.get('occurredBefore') ?? undefined,
       limit: url.searchParams.get('limit') ?? undefined,

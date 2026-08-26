@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  type ColumnDef,
+} from '@tanstack/react-table';
 import * as React from 'react';
 
 interface AdminAuditEvent {
@@ -18,6 +24,14 @@ interface AdminAuditEvent {
 }
 
 type AdminScope = { isPlatformAdmin: boolean; tenantId: string | null };
+
+/**
+ * How a text filter matches its column (OZI-54). Mirrors
+ * `TextMatchOperator` in `DrizzleAuditLogReadService.ts` -- kept as a
+ * separate literal union here rather than a shared import since this is a
+ * client bundle and the server type lives behind the module boundary.
+ */
+type TextMatchOperator = 'exact' | 'startsWith' | 'contains';
 
 type FetchState =
   | { status: 'idle' }
@@ -45,6 +59,22 @@ const CATEGORY_OPTIONS = [
   'server_action',
 ];
 
+const TEXT_MATCH_OPERATORS: Array<{ value: TextMatchOperator; label: string }> =
+  [
+    { value: 'exact', label: 'Exact' },
+    { value: 'startsWith', label: 'Starts with' },
+    { value: 'contains', label: 'Contains' },
+  ];
+
+/** Below this many characters, `startsWith`/`contains` fire nothing --
+ * wildcard scans on 1-2 chars are both low-value and (for `contains`, which
+ * runs a trigram GIN scan rather than an index-backed prefix lookup) the
+ * most expensive case to run on every keystroke. Real values in this table
+ * (UUIDs, category-like strings) are never shorter than this anyway, so the
+ * gate never gets in the way of a real search. */
+const MIN_FILTER_LENGTH = 3;
+const FILTER_DEBOUNCE_MS = 500;
+
 const OUTCOME_BADGE: Record<string, string> = {
   success:
     'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -65,37 +95,133 @@ function formatDateTime(d: string): string {
 
 const PAGE_SIZE = 25;
 
+interface TextFilterValue {
+  value: string;
+  op: TextMatchOperator;
+}
+
+const emptyTextFilter: TextFilterValue = { value: '', op: 'exact' };
+
+/**
+ * Local-state-then-debounce input, matching TanStack Table's own reference
+ * pattern for a filter box (see their `examples/react/filters`): the
+ * keystroke updates local state instantly for a responsive field, and only
+ * the settled value is pushed up to the caller (and from there, to a
+ * fetch) after `debounceMs`. Also gates on `MIN_FILTER_LENGTH` so a 1-2
+ * character wildcard search never fires -- see the constant's doc comment.
+ */
+function DebouncedTextInput({
+  id,
+  value,
+  onChange,
+  className,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [localValue, setLocalValue] = React.useState(value);
+
+  React.useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  React.useEffect(() => {
+    const trimmed = localValue.trim();
+    if (trimmed.length > 0 && trimmed.length < MIN_FILTER_LENGTH) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      onChange(localValue);
+    }, FILTER_DEBOUNCE_MS);
+
+    return () => clearTimeout(timeout);
+    // Only the value should re-arm the debounce timer; `onChange` is a
+    // fresh closure on every parent render and would otherwise restart it
+    // on every keystroke before it ever fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localValue]);
+
+  return (
+    <input
+      id={id}
+      type="text"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      className={className}
+    />
+  );
+}
+
+function TextMatchOperatorSelect({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: TextMatchOperator;
+  onChange: (op: TextMatchOperator) => void;
+}) {
+  return (
+    <select
+      id={id}
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value as TextMatchOperator)}
+      className="rounded-lg border border-zinc-200 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
+    >
+      {TEXT_MATCH_OPERATORS.map((op) => (
+        <option key={op.value} value={op.value}>
+          {op.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function AuditLogsClient() {
   const [state, setState] = React.useState<FetchState>({ status: 'idle' });
+  const [isRefetching, setIsRefetching] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
-  const emptyFilters = {
-    category: '',
-    outcome: '',
-    actorUserId: '',
-    targetType: '',
-    targetId: '',
-  };
-  // Applied filters (drive the fetch) vs. draft filters (bound to the form
-  // inputs). Splitting these is the whole fix: without it, every keystroke
-  // changed `filters` directly, which re-created `fetchEvents` and re-fired
-  // the effect below on every character typed -- firing the shared
-  // per-client API rate limit before a real search ever completed, and
-  // reflowing the table into its loading skeleton on every keystroke. The
-  // form already has an explicit "Filter" submit button; this makes the
-  // fetch actually wait for it.
-  const [filters, setFilters] = React.useState(emptyFilters);
-  const [draftFilters, setDraftFilters] = React.useState(emptyFilters);
+  const [category, setCategory] = React.useState('');
+  const [outcome, setOutcome] = React.useState('');
+  const [actorUserId, setActorUserId] =
+    React.useState<TextFilterValue>(emptyTextFilter);
+  const [targetType, setTargetType] =
+    React.useState<TextFilterValue>(emptyTextFilter);
+  const [targetId, setTargetId] =
+    React.useState<TextFilterValue>(emptyTextFilter);
   const [expanded, setExpanded] = React.useState<number | null>(null);
 
   const fetchEvents = React.useCallback(async () => {
-    setState({ status: 'loading' });
+    // Keep already-rendered rows on screen during a refetch -- only the
+    // true first load (no `success` state yet) shows the skeleton. Fixes
+    // OZI-53: filtering used to tear the table down into a loading skeleton
+    // on every request, jumping the whole page.
+    setState((prev) =>
+      prev.status === 'success' ? prev : { status: 'loading' },
+    );
+    setIsRefetching(true);
     try {
       const params = new URLSearchParams();
-      if (filters.category) params.set('category', filters.category);
-      if (filters.outcome) params.set('outcome', filters.outcome);
-      if (filters.actorUserId) params.set('actorUserId', filters.actorUserId);
-      if (filters.targetType) params.set('targetType', filters.targetType);
-      if (filters.targetId) params.set('targetId', filters.targetId);
+      if (category) params.set('category', category);
+      if (outcome) params.set('outcome', outcome);
+      if (actorUserId.value) {
+        params.set('actorUserId', actorUserId.value);
+        params.set('actorUserIdOp', actorUserId.op);
+      }
+      if (targetType.value) {
+        params.set('targetType', targetType.value);
+        params.set('targetTypeOp', targetType.op);
+      }
+      if (targetId.value) {
+        params.set('targetId', targetId.value);
+        params.set('targetIdOp', targetId.op);
+      }
       params.set('limit', String(PAGE_SIZE));
       params.set('offset', String(offset));
 
@@ -123,19 +249,71 @@ export function AuditLogsClient() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Network error';
       setState({ status: 'error', message: msg });
+    } finally {
+      setIsRefetching(false);
     }
-  }, [filters, offset]);
+  }, [category, outcome, actorUserId, targetType, targetId, offset]);
 
   React.useEffect(() => {
     void fetchEvents();
   }, [fetchEvents]);
 
-  function handleFilterSubmit(
-    event: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
-  ) {
-    event.preventDefault();
+  const events = state.status === 'success' ? state.events : [];
+
+  const columns = React.useMemo<ColumnDef<AdminAuditEvent>[]>(
+    () => [
+      {
+        id: 'occurredAt',
+        header: 'Occurred',
+        cell: ({ row }) => formatDateTime(row.original.occurredAt),
+      },
+      {
+        id: 'category',
+        header: 'Category',
+        cell: ({ row }) => row.original.category,
+      },
+      {
+        id: 'action',
+        header: 'Action',
+        cell: ({ row }) => row.original.action,
+      },
+      {
+        id: 'outcome',
+        header: 'Outcome',
+        cell: ({ row }) => row.original.outcome,
+      },
+      {
+        id: 'actor',
+        header: 'Actor',
+        cell: ({ row }) => row.original.actorUserId ?? '—',
+      },
+      {
+        id: 'target',
+        header: 'Target',
+        cell: ({ row }) =>
+          row.original.targetType
+            ? `${row.original.targetType}:${row.original.targetId ?? '?'}`
+            : '—',
+      },
+    ],
+    [],
+  );
+
+  // TanStack Table exposes imperative instance helpers. This component
+  // keeps the instance local and does not pass it through memoized props
+  // or hooks.
+
+  const table = useReactTable({
+    data: events,
+    columns,
+    manualFiltering: true,
+    manualPagination: true,
+    getRowId: (event) => String(event.id),
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  function resetToFirstPage() {
     setOffset(0);
-    setFilters(draftFilters);
   }
 
   return (
@@ -155,10 +333,7 @@ export function AuditLogsClient() {
         </div>
       )}
 
-      <form
-        onSubmit={handleFilterSubmit}
-        className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700"
-      >
+      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
         <div className="flex flex-col gap-1">
           <label
             htmlFor="al-category"
@@ -168,10 +343,11 @@ export function AuditLogsClient() {
           </label>
           <select
             id="al-category"
-            value={draftFilters.category}
-            onChange={(e) =>
-              setDraftFilters((f) => ({ ...f, category: e.target.value }))
-            }
+            value={category}
+            onChange={(e) => {
+              resetToFirstPage();
+              setCategory(e.target.value);
+            }}
             className="w-40 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
           >
             <option value="">All</option>
@@ -191,10 +367,11 @@ export function AuditLogsClient() {
           </label>
           <select
             id="al-outcome"
-            value={draftFilters.outcome}
-            onChange={(e) =>
-              setDraftFilters((f) => ({ ...f, outcome: e.target.value }))
-            }
+            value={outcome}
+            onChange={(e) => {
+              resetToFirstPage();
+              setOutcome(e.target.value);
+            }}
             className="w-32 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
           >
             <option value="">All</option>
@@ -210,15 +387,26 @@ export function AuditLogsClient() {
           >
             Actor user ID
           </label>
-          <input
-            id="al-actor"
-            type="text"
-            value={draftFilters.actorUserId}
-            onChange={(e) =>
-              setDraftFilters((f) => ({ ...f, actorUserId: e.target.value }))
-            }
-            className="w-44 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="flex gap-1">
+            <DebouncedTextInput
+              id="al-actor"
+              value={actorUserId.value}
+              onChange={(value) => {
+                resetToFirstPage();
+                setActorUserId((f) => ({ ...f, value }));
+              }}
+              className="w-40 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <TextMatchOperatorSelect
+              id="al-actor-op"
+              label="Actor user ID match"
+              value={actorUserId.op}
+              onChange={(op) => {
+                resetToFirstPage();
+                setActorUserId((f) => ({ ...f, op }));
+              }}
+            />
+          </div>
         </div>
         <div className="flex flex-col gap-1">
           <label
@@ -227,15 +415,26 @@ export function AuditLogsClient() {
           >
             Target type
           </label>
-          <input
-            id="al-target-type"
-            type="text"
-            value={draftFilters.targetType}
-            onChange={(e) =>
-              setDraftFilters((f) => ({ ...f, targetType: e.target.value }))
-            }
-            className="w-32 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="flex gap-1">
+            <DebouncedTextInput
+              id="al-target-type"
+              value={targetType.value}
+              onChange={(value) => {
+                resetToFirstPage();
+                setTargetType((f) => ({ ...f, value }));
+              }}
+              className="w-28 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <TextMatchOperatorSelect
+              id="al-target-type-op"
+              label="Target type match"
+              value={targetType.op}
+              onChange={(op) => {
+                resetToFirstPage();
+                setTargetType((f) => ({ ...f, op }));
+              }}
+            />
+          </div>
         </div>
         <div className="flex flex-col gap-1">
           <label
@@ -244,23 +443,28 @@ export function AuditLogsClient() {
           >
             Target ID
           </label>
-          <input
-            id="al-target-id"
-            type="text"
-            value={draftFilters.targetId}
-            onChange={(e) =>
-              setDraftFilters((f) => ({ ...f, targetId: e.target.value }))
-            }
-            className="w-44 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="flex gap-1">
+            <DebouncedTextInput
+              id="al-target-id"
+              value={targetId.value}
+              onChange={(value) => {
+                resetToFirstPage();
+                setTargetId((f) => ({ ...f, value }));
+              }}
+              className="w-40 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <TextMatchOperatorSelect
+              id="al-target-id-op"
+              label="Target ID match"
+              value={targetId.op}
+              onChange={(op) => {
+                resetToFirstPage();
+                setTargetId((f) => ({ ...f, op }));
+              }}
+            />
+          </div>
         </div>
-        <button
-          type="submit"
-          className="rounded-lg bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"
-        >
-          Filter
-        </button>
-      </form>
+      </div>
 
       {state.status === 'loading' && (
         <div className="space-y-3">
@@ -281,114 +485,139 @@ export function AuditLogsClient() {
 
       {state.status === 'success' && (
         <>
-          <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50 text-left dark:border-zinc-700 dark:bg-zinc-800/50">
-                  <th className="px-4 py-3 font-medium text-zinc-600 dark:text-zinc-400">
-                    Occurred
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-600 dark:text-zinc-400">
-                    Category
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-600 dark:text-zinc-400">
-                    Action
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-600 dark:text-zinc-400">
-                    Outcome
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-600 dark:text-zinc-400">
-                    Actor
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-600 dark:text-zinc-400">
-                    Target
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {state.events.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-8 text-center text-zinc-400"
-                    >
-                      No audit events found for this filter.
-                    </td>
-                  </tr>
-                )}
-                {state.events.map((ev) => (
-                  <React.Fragment key={ev.id}>
+          <div className="relative">
+            {isRefetching && (
+              <div
+                role="status"
+                aria-label="Refreshing results"
+                className="absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-white/60 pt-6 dark:bg-zinc-950/60"
+              >
+                <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white dark:bg-white dark:text-zinc-900">
+                  Refreshing…
+                </span>
+              </div>
+            )}
+            <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
+              <table className="w-full text-sm">
+                <thead>
+                  {table.getHeaderGroups().map((headerGroup) => (
                     <tr
-                      className="cursor-pointer bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
-                      onClick={() =>
-                        setExpanded((prev) => (prev === ev.id ? null : ev.id))
-                      }
+                      key={headerGroup.id}
+                      className="border-b border-zinc-200 bg-zinc-50 text-left dark:border-zinc-700 dark:bg-zinc-800/50"
                     >
-                      <td className="px-4 py-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
-                        {formatDateTime(ev.occurredAt)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-zinc-800 dark:text-zinc-200">
-                        {ev.category}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-zinc-800 dark:text-zinc-200">
-                        {ev.action}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={[
-                            'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                            OUTCOME_BADGE[ev.outcome] ??
-                              'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
-                          ].join(' ')}
+                      {headerGroup.headers.map((header) => (
+                        <th
+                          key={header.id}
+                          className="px-4 py-3 font-medium text-zinc-600 dark:text-zinc-400"
                         >
-                          {ev.outcome}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                        {ev.actorUserId ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                        {ev.targetType
-                          ? `${ev.targetType}:${ev.targetId ?? '?'}`
-                          : '—'}
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {events.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={columns.length}
+                        className="px-4 py-8 text-center text-zinc-400"
+                      >
+                        No audit events found for this filter.
                       </td>
                     </tr>
-                    {expanded === ev.id && (
-                      <tr className="bg-zinc-50 dark:bg-zinc-800/30">
-                        <td colSpan={6} className="px-4 py-3">
-                          <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                            <div>
-                              <span className="font-medium">Tenant:</span>{' '}
-                              {ev.tenantId ?? '—'}
-                            </div>
-                            <div>
-                              <span className="font-medium">IP:</span>{' '}
-                              {ev.ip ?? '—'}
-                            </div>
-                            <div>
-                              <span className="font-medium">
-                                Correlation ID:
-                              </span>{' '}
-                              {ev.correlationId ?? '—'}
-                            </div>
-                            <div className="col-span-2">
-                              <span className="font-medium">Metadata:</span>{' '}
-                              {ev.metadata ? (
-                                <pre className="mt-1 overflow-x-auto rounded bg-zinc-100 p-2 text-xs dark:bg-zinc-900">
-                                  {JSON.stringify(ev.metadata, null, 2)}
-                                </pre>
-                              ) : (
-                                'not captured'
+                  )}
+                  {table.getRowModel().rows.map((row) => (
+                    <React.Fragment key={row.id}>
+                      <tr
+                        className="cursor-pointer bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+                        onClick={() =>
+                          setExpanded((prev) =>
+                            prev === row.original.id ? null : row.original.id,
+                          )
+                        }
+                      >
+                        {row.getVisibleCells().map((cell) => {
+                          if (cell.column.id === 'outcome') {
+                            return (
+                              <td key={cell.id} className="px-4 py-3">
+                                <span
+                                  className={[
+                                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                    OUTCOME_BADGE[row.original.outcome] ??
+                                      'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+                                  ].join(' ')}
+                                >
+                                  {row.original.outcome}
+                                </span>
+                              </td>
+                            );
+                          }
+
+                          const className =
+                            cell.column.id === 'occurredAt'
+                              ? 'px-4 py-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400'
+                              : cell.column.id === 'category' ||
+                                  cell.column.id === 'action'
+                                ? 'px-4 py-3 font-mono text-xs text-zinc-800 dark:text-zinc-200'
+                                : 'px-4 py-3 text-zinc-600 dark:text-zinc-400';
+
+                          return (
+                            <td key={cell.id} className={className}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
                               )}
-                            </div>
-                          </div>
-                        </td>
+                            </td>
+                          );
+                        })}
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+                      {expanded === row.original.id && (
+                        <tr className="bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={columns.length} className="px-4 py-3">
+                            <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                              <div>
+                                <span className="font-medium">Tenant:</span>{' '}
+                                {row.original.tenantId ?? '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">IP:</span>{' '}
+                                {row.original.ip ?? '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium">
+                                  Correlation ID:
+                                </span>{' '}
+                                {row.original.correlationId ?? '—'}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="font-medium">Metadata:</span>{' '}
+                                {row.original.metadata ? (
+                                  <pre className="mt-1 overflow-x-auto rounded bg-zinc-100 p-2 text-xs dark:bg-zinc-900">
+                                    {JSON.stringify(
+                                      row.original.metadata,
+                                      null,
+                                      2,
+                                    )}
+                                  </pre>
+                                ) : (
+                                  'not captured'
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="mt-4 flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
@@ -396,7 +625,7 @@ export function AuditLogsClient() {
               {state.total === 0
                 ? 'No results'
                 : `Showing ${state.offset + 1}–${Math.min(
-                    state.offset + state.events.length,
+                    state.offset + events.length,
                     state.total,
                   )} of ${state.total}`}
             </span>
@@ -412,7 +641,7 @@ export function AuditLogsClient() {
               <button
                 type="button"
                 onClick={() => setOffset((o) => o + PAGE_SIZE)}
-                disabled={offset + state.events.length >= state.total}
+                disabled={offset + events.length >= state.total}
                 className="rounded-lg border border-zinc-200 px-3 py-1.5 disabled:opacity-50 dark:border-zinc-700"
               >
                 Next

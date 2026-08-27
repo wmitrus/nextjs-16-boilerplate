@@ -268,12 +268,16 @@ export interface QuotaSignal {
  * state; it does not and cannot establish why that state exists.
  */
 export async function quotaEnforcementSignal(tx: Tx): Promise<QuotaSignal> {
+  // Sequential, not Promise.all -- unchanged from before Phase B0's
+  // refactor. Both anomaly-check functions above already ran their two
+  // statements in parallel prior to this refactor, so they stayed
+  // parallel; this one was already sequential, and Phase B0 must not
+  // increase concurrent DB load ahead of the still-pending production
+  // plan review.
   const orgs = getStatement('quota_exceeding_max_organizations');
+  const orgRows = await tx.execute<{ exceeded: string }>(sql.raw(orgs.sql));
   const users = getStatement('quota_exceeding_max_users');
-  const [orgRows, userRows] = await Promise.all([
-    tx.execute<{ exceeded: string }>(sql.raw(orgs.sql)),
-    tx.execute<{ exceeded: string }>(sql.raw(users.sql)),
-  ]);
+  const userRows = await tx.execute<{ exceeded: string }>(sql.raw(users.sql));
 
   return {
     tenantsExceedingMaxOrganizations: Number(orgRows[0]?.exceeded ?? 0),

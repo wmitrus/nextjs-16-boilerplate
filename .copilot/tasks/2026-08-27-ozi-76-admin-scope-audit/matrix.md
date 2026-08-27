@@ -109,11 +109,12 @@ with no trustworthy tenant column.
 **Post-fix Security/Auth verdict:** see
 `02 - Security & Auth - Summary.md`.
 
-## Remaining before OZI-76 sign-off
+## Sign-off status
 
-- [ ] Formal Security/Auth sign-off statement across the whole matrix (not
-      just the one fixed finding).
+- [x] Formal Security/Auth sign-off statement across the whole matrix — see
+      `02 - Security & Auth - Summary.md` § Full-Matrix Sign-Off.
 - [ ] Linear OZI-76 evidence/closure update.
-- [ ] Confirm no additional admin surface exists outside
-      `src/app/api/admin/**` / `src/app/admin/**` that should be in scope
-      (out of scope for this pass; flag only if surfaced).
+- [x] Confirmed no additional admin surface exists outside
+      `src/app/api/admin/**` / `src/app/admin/**` in scope for this pass
+      (no Server Actions in either tree; every `route.ts` and `page.tsx`
+      under both trees is accounted for above).

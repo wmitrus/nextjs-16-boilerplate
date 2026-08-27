@@ -36,5 +36,6 @@ resource/tenant-level scope (SEC-26/SEC-41).
 - [x] local real-Postgres test environment confirmed working
 - [x] first CRITICAL finding fixed and validated (see `matrix.md`,
       `02 - Security & Auth - Summary.md`)
-- [ ] full route/page inventory matrix finalized with formal sign-off
+- [x] full route/page inventory matrix finalized with formal sign-off (see
+      `02 - Security & Auth - Summary.md` § Full-Matrix Sign-Off)
 - [ ] Linear closure update

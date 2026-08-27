@@ -78,6 +78,37 @@ Re-ran full validation after the fix: 7 unit tests, 7 real-DB tests (was
 6 — the new completeness test), typecheck clean, targeted lint clean,
 `arch:lint` unchanged (same one pre-existing unrelated FAIL).
 
+## Second Hardening Pass (2026-08-27, third commit)
+
+The user reviewed the pushed checkpoint directly (not via an agent
+review) and found 6 further items: missing schema-version/dirty-tree
+evidence, an under-resolved S6 (single bucket instead of distinguishing
+tenant-uuid vs organization-uuid matches), an under-resolved S4 (no
+same-tenant vs cross-tenant split), missing user-provider-mapping
+inventory (`auth_user_identities` was never covered, only
+`auth_organization_identities`), a false-positive risk in the duplicate
+provider-mapping check (grouped by organization only, not
+`(organization, provider)`), and non-symlink-safe evidence confinement.
+All 6 fixed; see both specialist summaries' "Second Hardening Pass"
+sections and `matrix.md` for the resulting (qualitatively) sharper
+findings. Also softened the quota-signal doc comment's inference and
+added `statement_timeout`/`lock_timeout`/
+`idle_in_transaction_session_timeout`/`default_transaction_read_only` to
+the connection (previously only `connect_timeout`).
+
+Re-ran full validation after all 6 fixes:
+
+| Check | Result |
+|---|---|
+| Unit tests | **PASS** — 10 tests (was 7 — 3 new symlink-safety tests) |
+| Real-DB tests | **PASS** — 7 tests (unchanged count; all still pass with new connection options/query shapes) |
+| Typecheck | **PASS** |
+| Targeted ESLint | **PASS**, clean after `--fix` + documented disables |
+| `pnpm arch:lint` | unchanged — same one pre-existing unrelated FAIL |
+| Manual dry-run, `scan --target=test` without `--allow-dirty` | **correctly refuses** with the dirty-tree error message |
+| Manual dry-run, `scan --target=test --allow-dirty` | **PASS** — `workingTreeDirty: true`, `schemaVersion` populated, all findings zero (test-db truncated between runs, expected) |
+| Manual dry-run, `scan --target=dev --allow-dirty` | **PASS** — real, qualitatively sharper findings: `audit_events.tenant_id`'s non-null values now resolve 100% to `matchesInternalOrganizationUuid`, 0% to `matchesInternalTenantUuid` (the first pass could only report "matches neither known-good bucket"); the one multi-org user is confirmed single-tenant; one same-provider duplicate user-mapping found |
+
 ## Conclusion
 
 All minimum-required validation for this local/schema pass is complete and

@@ -226,6 +226,74 @@ that remains a separate, explicit future authorization per the user's own
 sequencing, with the DB-role requirement above recorded as its design
 input.
 
+## Second Hardening Pass (User Code Review) — 2026-08-27
+
+The user reviewed the pushed checkpoint directly and found six items the
+formal review above did not catch. Six of six addressed; none deferred.
+
+1. **Evidence lacked schema/migration version, and dirty-tree runs were
+   undetectable.** Fixed: every report now records `schemaVersion` (latest
+   `drizzle.__drizzle_migrations` id/hash) and `workingTreeDirty`; `scan`
+   refuses to run against a dirty tree unless `--allow-dirty` is passed.
+2. **S6 collapsed everything non-tenant into one bucket**, missing the
+   architecturally load-bearing case: `tenant_id` actually holding an
+   `organization.id`. Fixed: `tenantIdShapeCounts` now returns
+   `matchesInternalTenantUuid` / `matchesInternalOrganizationUuid` /
+   `matchesNeither`. Confirmed materially different real result: 100% of
+   `audit_events.tenant_id` non-null values in local `dev-db` match an
+   organization, none match a tenant — the first pass's single-bucket
+   result had obscured this.
+3. **S4 didn't distinguish same-tenant multi-org from cross-tenant
+   multi-org.** Fixed: added `usersInMultipleTenantsCount`, joined through
+   `organizations.tenant_id`, alongside the existing
+   `usersInMultipleOrganizationsCount`.
+4. **Provider-mapping inventory only covered organizations
+   (`auth_organization_identities`), not users (`auth_user_identities`)**,
+   though OZI-75's own scope named both. Fixed: added
+   `userProviderMappingAnomalies`, symmetric to the organization version.
+5. **The organization duplicate-mapping check could false-positive**:
+   grouped by `organization_id` alone, so one organization with one
+   mapping per provider (healthy parity) would have been flagged as an
+   anomaly. Fixed: both the organization and new user duplicate checks now
+   group by `(entity_id, provider)`.
+6. **Evidence-directory confinement was lexical only** (`path.resolve` +
+   prefix check), not symlink-safe — a pre-planted symlink at or under the
+   evidence root would have been silently followed by `writeFile`. Fixed:
+   `assertNoSymlinkInPath` walks every existing path segment with `lstat`
+   (not `stat`, which follows symlinks) and refuses if any is one;
+   directory/file now also get explicit `0700`/`0600` permissions instead
+   of relying on the process umask.
+
+Also addressed, semantic rather than technical: the quota-signal doc
+comment overclaimed "nothing enforces them" from data alone. Reworded to
+"configured quota is exceeded in observed data; enforcement effectiveness
+requires runtime-path verification" — the finding stands, the inference
+drawn from it doesn't overreach. `matrix.md` updated to match.
+
+Also addressed, from the user's own explicit next step: production
+connection safety (`statement_timeout`/`lock_timeout`/
+`idle_in_transaction_session_timeout`/`default_transaction_read_only`)
+implemented now on the local connection (previously only
+`connect_timeout` existed), rather than deferred purely to the future
+`RemoteTarget` design.
+
+Not implemented, correctly scoped out by the user: a real DB read-only
+role for production (`SELECT`-only grants) — that remains part of the
+future, separately-authorized `RemoteTarget` work, per criterion 5 of the
+first formal review.
+
+Re-validated after all fixes: 10 unit tests (was 7 — 3 new symlink tests),
+7 real-DB tests (unchanged count, all still pass with the new connection
+options and query shapes), typecheck clean, targeted lint clean,
+`arch:lint` unchanged. Dry-ran both `test-db` and `dev-db` again after the
+fixes; `dev-db`'s new findings are qualitatively different and more
+precise than the first pass (see `matrix.md`).
+
+**Verdict: still GO.** This pass materially improved evidence
+trustworthiness (schema version, dirty-tree detection) and query
+precision (S6/S4 split, user mappings, false-positive fix) without
+touching production-execution scope.
+
 ## Update Log
 
 ### 2026-08-27 — Initial Review
@@ -246,3 +314,15 @@ input.
   real-DB test; confirmed classification rationale for every table;
   recorded the design input for a future production read-only-role layer
 - Sections refreshed: Formal Post-Implementation Review (new)
+
+### 2026-08-27 — Second Hardening Pass (User Code Review)
+
+- Trigger: user reviewed the pushed checkpoint directly and found 6
+  correctness/completeness/evidence-security items
+- Summary of change: fixed all 6 (schema-version + dirty-tree evidence,
+  S6 three-bucket split confirming organization-uuid-in-tenant_id in real
+  data, S4 multi-tenant split, user provider-mapping coverage,
+  same-provider grouping fix for the duplicate-mapping false-positive,
+  symlink-safe evidence confinement + explicit permissions); also softened
+  the quota-signal inference wording and added connection-level timeouts
+- Sections refreshed: Second Hardening Pass (new)

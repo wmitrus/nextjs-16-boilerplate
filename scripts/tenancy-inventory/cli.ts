@@ -12,17 +12,20 @@ import {
   type LocalTarget,
 } from './readonly-db';
 import {
+  latestSchemaMigration,
   organizationsMissingTenantAttributesCount,
   policiesWithNullOrganizationCount,
   providerOrganizationMappingAnomalies,
   quotaEnforcementSignal,
   tenantIdShapeCounts,
   tenantOrganizationCounts,
+  userProviderMappingAnomalies,
   usersInMultipleOrganizationsCount,
+  usersInMultipleTenantsCount,
   waitlistEntriesWithTenantIdCount,
 } from './topology-queries';
 
-const TOOL_VERSION = '0.1.0';
+const TOOL_VERSION = '0.2.0';
 
 function readOption(args: string[], name: string): string | undefined {
   const prefix = `${name}=`;
@@ -40,6 +43,26 @@ function resolveCommitSha(): string {
   }
 }
 
+/**
+ * A report claiming to describe "the state at commit X" is misleading if
+ * the working tree has uncommitted changes at run time -- `git rev-parse
+ * HEAD` alone doesn't detect that. `scan` refuses to run against a dirty
+ * tree unless the caller explicitly passes `--allow-dirty` (for local
+ * iteration); the report always records `workingTreeDirty` either way, so
+ * an `--allow-dirty` report is still self-describing evidence, not silent.
+ */
+function isWorkingTreeDirty(): boolean {
+  try {
+    const output = execFileSync('git', ['status', '--porcelain'], {
+      encoding: 'utf8',
+    });
+    return output.trim().length > 0;
+  } catch {
+    // Can't determine cleanliness -- fail closed, treat as dirty.
+    return true;
+  }
+}
+
 function printMatrix(): void {
   console.log('[tenancy-inventory] Table ownership matrix\n');
   for (const row of TABLE_OWNERSHIP) {
@@ -51,17 +74,33 @@ function printMatrix(): void {
   console.log(`\n[tenancy-inventory] ${TENANT_ORG_CONFLATION_NOTE}`);
 }
 
-async function runScan(target: LocalTarget): Promise<void> {
+async function runScan(
+  target: LocalTarget,
+  options: { allowDirty: boolean },
+): Promise<void> {
+  const dirty = isWorkingTreeDirty();
+  if (dirty && !options.allowDirty) {
+    throw new Error(
+      'Working tree has uncommitted changes. A formal evidence run must be ' +
+        'against a clean, committed tree so the report is unambiguously tied ' +
+        'to a real commit. Commit or stash first, or pass --allow-dirty for ' +
+        'local iteration (the report will record workingTreeDirty: true).',
+    );
+  }
+
   console.log(
     `[tenancy-inventory] Scanning ${describeLocalTarget(target)} (read-only transaction)…`,
   );
 
   const findings = await withReadOnlyDb(target, async (tx) => {
     const [
+      schemaMigration,
       tenantOrgCounts,
       usersInMultipleOrgs,
+      usersInMultipleTenants,
       orgsMissingTenantAttributes,
-      providerMappingAnomalies,
+      organizationMappingAnomalies,
+      userMappingAnomalies,
       waitlistEntriesWithTenantId,
       policiesWithNullOrganization,
       quotaSignal,
@@ -69,10 +108,13 @@ async function runScan(target: LocalTarget): Promise<void> {
       auditLogSettingsTenantIdShape,
       auditEventsTenantIdShape,
     ] = await Promise.all([
+      latestSchemaMigration(tx),
       tenantOrganizationCounts(tx),
       usersInMultipleOrganizationsCount(tx),
+      usersInMultipleTenantsCount(tx),
       organizationsMissingTenantAttributesCount(tx),
       providerOrganizationMappingAnomalies(tx),
+      userProviderMappingAnomalies(tx),
       waitlistEntriesWithTenantIdCount(tx),
       policiesWithNullOrganizationCount(tx),
       quotaEnforcementSignal(tx),
@@ -82,10 +124,13 @@ async function runScan(target: LocalTarget): Promise<void> {
     ]);
 
     return {
+      schemaMigration,
       tenantOrgCounts,
       usersInMultipleOrgs,
+      usersInMultipleTenants,
       orgsMissingTenantAttributes,
-      providerMappingAnomalies,
+      organizationMappingAnomalies,
+      userMappingAnomalies,
       waitlistEntriesWithTenantId,
       policiesWithNullOrganization,
       quotaSignal,
@@ -104,6 +149,7 @@ async function runScan(target: LocalTarget): Promise<void> {
     target,
     targetDescriptor: describeLocalTarget(target),
     commitSha: resolveCommitSha(),
+    workingTreeDirty: dirty,
     generatedAt: new Date().toISOString(),
     readOnlyEnforced: true,
     findings,
@@ -140,11 +186,13 @@ async function run(): Promise<void> {
         'scan requires --target=dev or --target=test. No other target is authorized this pass.',
       );
     }
-    await runScan(target);
+    await runScan(target, { allowDirty: args.includes('--allow-dirty') });
     return;
   }
 
-  throw new Error('Usage: tenancy-inventory <matrix|scan --target=dev|test>.');
+  throw new Error(
+    'Usage: tenancy-inventory <matrix|scan --target=dev|test [--allow-dirty]>.',
+  );
 }
 
 const isMain = process.argv[1]?.endsWith('/scripts/tenancy-inventory/cli.ts');

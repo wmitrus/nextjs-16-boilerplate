@@ -79,6 +79,13 @@ requires a separate, later-authorized handoff.
       See both specialist summaries' "Formal Post-Implementation Review"
       sections.
 - [x] Committed and pushed the hardening + completeness-test follow-up.
-- [ ] Hand the finished query set back to the user for review before any
-      staging/production follow-up (still open — this pass does not
+- [x] User reviewed the pushed checkpoint and found 6 correctness/
+      completeness/evidence-security items; all 6 fixed (S6 three-bucket
+      split, S4 multi-tenant split, user provider-mapping coverage,
+      same-provider grouping fix, symlink-safe evidence confinement +
+      explicit permissions, schema-version + dirty-tree evidence), plus
+      softened quota wording and added connection-level timeouts. See
+      both specialist summaries' "Second Hardening Pass" sections.
+- [ ] Hand the finished query set back to the user for a final look before
+      any staging/production follow-up (still open — this pass does not
       authorize or design production execution).

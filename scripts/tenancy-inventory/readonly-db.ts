@@ -54,11 +54,39 @@ type ReadOnlyDb = PostgresJsDatabase<Record<string, never>>;
  * Postgres-only by design (see `LocalTarget`), so it keeps the concrete
  * `PostgresJsDatabase` type instead.
  */
+/**
+ * All queries in this tool are bounded, single-row aggregates against
+ * local dev/test tables -- a well-formed one should return in well under a
+ * second. `statement_timeout`/`lock_timeout` bound the worst case (a query
+ * added later that regresses to an unbounded scan, or contends on a lock)
+ * rather than letting it hang indefinitely; `idle_in_transaction_session_timeout`
+ * bounds a transaction left open by a bug in `fn`. A future production
+ * `RemoteTarget` must set these too -- likely tighter, after an
+ * EXPLAIN/plan review of the actual query set against production-shaped
+ * data, not by reusing these local defaults unreviewed.
+ */
+const STATEMENT_TIMEOUT_MS = 5_000;
+const LOCK_TIMEOUT_MS = 2_000;
+const IDLE_IN_TRANSACTION_TIMEOUT_MS = 10_000;
+
 export async function withReadOnlyDb<T>(
   target: LocalTarget,
   fn: (tx: ReadOnlyDb) => Promise<T>,
 ): Promise<T> {
-  const client = postgres(resolveLocalUrl(target), { connect_timeout: 10 });
+  const client = postgres(resolveLocalUrl(target), {
+    connect_timeout: 10,
+    connection: {
+      // Session-level default, in addition to (not instead of) the
+      // explicit per-transaction `accessMode: 'read only'` below -- two
+      // independent places asserting read-only intent to the server,
+      // consistent with this tool's two-independent-controls posture
+      // elsewhere (target allowlist + transaction mode).
+      default_transaction_read_only: true,
+      statement_timeout: STATEMENT_TIMEOUT_MS,
+      lock_timeout: LOCK_TIMEOUT_MS,
+      idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
+    },
+  });
   const db = drizzle(client);
 
   try {

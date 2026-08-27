@@ -128,3 +128,16 @@ structural shape of a future production read-only-role layer.
   hardening fix is architecture-neutral; gave the structural design note
   for a future production read-only-role layer (additive, no redesign)
 - Sections refreshed: Risks, Formal Post-Implementation Review (new)
+
+### 2026-08-27 — Second Hardening Pass (User Code Review)
+
+- Trigger: user reviewed the pushed checkpoint directly; 6 items found,
+  see `02 - Security & Auth - Summary.md` for full detail (this pass was
+  predominantly query-correctness and evidence-security, not structural)
+- Summary of change: architecture-neutral confirmation — new functions
+  (`usersInMultipleTenantsCount`, `userProviderMappingAnomalies`,
+  `latestSchemaMigration`) follow the same `Tx`-parameter, no-DI shape as
+  every existing query function; connection-timeout additions and
+  evidence-confinement hardening stay inside `readonly-db.ts`/
+  `evidence-store.ts` respectively, no new module boundary crossed
+- Sections refreshed: Update Log only

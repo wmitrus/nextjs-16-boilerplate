@@ -29,7 +29,7 @@ Prevent a non-platform organization administrator from reading or mutating a sib
 - [x] Implementation
 - [x] Focused validation
 - [x] Post-fix Security/Auth close-out
-- [ ] Linear evidence and closure update (OZI-77 kept In Progress pending explicit user close; OZI-78 owns production rollout precondition)
+- [x] Linear evidence and closure update — OZI-77 marked Done; OZI-78 owns the Postgres-backed real-DB precondition before production rollout
 
 ## Known Risks
 

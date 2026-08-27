@@ -22,10 +22,10 @@ this phase added nothing runnable against a remote database.
 
 2. `withReadOnlyRemoteDb(target, fn)` opens the connection and, **before
    `fn` runs**, calls `verifyReadOnlyRole`, which is a database-wide
-   application-table least-privilege check (hardened twice already —
+   application-table least-privilege check (hardened three times already —
    Phase A.1 replaced an earlier version that only sampled 4 representative
-   tables and never checked SELECT's *presence*; Phase A.2 fixed two more
-   real gaps a user code review found):
+   tables and never checked SELECT's *presence*; Phase A.2 and Phase A.3
+   each fixed further real gaps a user code review found):
    - checks `pg_roles.rolsuper`/`rolcreatedb`/`rolcreaterole`/
      `rolreplication`/`rolbypassrls` for the connected role — refuses if
      any is true (each one can bypass table grants entirely, so no amount
@@ -52,12 +52,19 @@ this phase added nothing runnable against a remote database.
      **every** real table in the `public` and `drizzle` schemas (discovered
      live from `pg_class`/`pg_namespace`, not a hardcoded sample) —
      refuses if the connected role has any of them on any table;
-   - checks `has_table_privilege(current_user, table_oid, 'SELECT')` is
-     actually **present** on every table the frozen, approved OZI-79 query
-     set reads — the 12 `public` tables plus `drizzle.__drizzle_migrations`
-     (see "Exact query subset" below) — refuses if any is missing, since a
-     role with zero grants at all would otherwise pass a write-only check
-     while being unable to run any approved query.
+   - checks `has_table_privilege(current_user, table_oid, 'SELECT')` on
+     that same full table set, and refuses if it is present on any table
+     **outside** `REQUIRED_SELECT_TABLES` (Phase A.3 addition: the
+     credential must be scoped to exactly the tables the approved query
+     set reads, not "no writes anywhere" — a role that can read
+     `user_credentials`, say, is not the least-privilege credential OZI-79
+     requires just because it cannot write);
+   - checks that `SELECT` is actually **present** on every table in
+     `REQUIRED_SELECT_TABLES` — the 12 `public` tables plus
+     `drizzle.__drizzle_migrations` (see "Exact query subset" below) —
+     refuses if any is missing, since a role with zero grants at all would
+     otherwise pass a write-only check while being unable to run any
+     approved query.
 
    Only if all checks pass does `fn` (the actual diagnostic queries) run
    — and it runs inside a real Postgres `READ ONLY` transaction, the same
@@ -72,11 +79,12 @@ this phase added nothing runnable against a remote database.
 ## Proven, not asserted
 
 `readonly-db-remote.db.test.ts` creates several real, disposable Postgres
-roles on your local `test-db` and proves against them directly (10 tests):
+roles on your local `test-db` and proves against them directly (11 tests):
 
 - the local `test-db`'s own `postgres` superuser role is rejected;
-- a real role granted exactly the required `SELECT`/`USAGE` set, with no
-  memberships, passes cleanly;
+- a real role granted `SELECT` on exactly `REQUIRED_SELECT_TABLES`
+  (nothing more) and `USAGE` on both schemas, with no memberships, passes
+  cleanly;
 - a real role granted `SELECT, INSERT` is rejected;
 - a real role granted `UPDATE` on `audit_events` specifically — a table
   the old 4-table sample never looked at — is rejected (proves the
@@ -84,6 +92,10 @@ roles on your local `test-db` and proves against them directly (10 tests):
 - a real role missing `SELECT` on `feature_flags` (one of the tables the
   approved query set requires) is rejected (proves the check verifies
   SELECT *presence*, not just write-privilege absence);
+- a real role granted `SELECT` on `user_credentials` — outside
+  `REQUIRED_SELECT_TABLES` — is rejected even though it holds no write
+  privilege anywhere (Phase A.3: proves the check verifies SELECT
+  *scope*, not just SELECT presence plus write absence);
 - a real role explicitly granted `CREATE` on the `public` schema is
   rejected;
 - a role that is otherwise exactly the passing baseline is rejected when
@@ -93,6 +105,12 @@ roles on your local `test-db` and proves against them directly (10 tests):
 - a role with `USAGE` on `drizzle` but missing `SELECT` on
   `__drizzle_migrations` specifically is rejected;
 - a role that is a member of another role is rejected.
+
+The suite's own fixture setup practices what it checks: `beforeAll`
+records whether `PUBLIC` held `CREATE` on `public` *before* touching
+anything, and `afterAll` restores exactly that state (not an
+unconditional re-grant) — a database that never had the ambient grant
+wouldn't gain it as a side effect of running these tests.
 
 This is the strongest evidence available without a real remote credential
 — it proves the *detection mechanism* itself works against genuine
@@ -172,11 +190,28 @@ could be planned. All four are now resolved:
 Next up: plain-`EXPLAIN` plan review of the 12 checks above against
 production-shaped data (or a production snapshot), per point 3. That is a
 separate, not-yet-authorized phase — nothing in this repo runs it
-automatically. After that review, and only after it, wiring a
+automatically.
+
+**Phase B should start with a canonical query registry**, before any
+`EXPLAIN` or scan wiring: the 12 named checks above compile down to **15
+distinct data SQL statements** (`providerOrganizationMappingAnomalies`,
+`userProviderMappingAnomalies`, and `quotaEnforcementSignal` each issue 2
+statements; every other check issues 1) **plus the 1 schema-metadata
+statement** (`latestSchemaMigration`, evidence not a finding) — 16 SQL
+statements total. Both the plain-`EXPLAIN` preflight and the later
+inventory scan must consume this *exact same* registry — the same 16
+statements, defined once — so there is no duplicated SQL between what got
+reviewed and what actually runs remotely, and no way for the two to drift
+apart. This is a structural precondition for Phase B, not a nice-to-have:
+`EXPLAIN`-reviewing one copy of a query while a second, textually
+different copy runs against production defeats the entire point of the
+preflight review.
+
+After the registry exists and the `EXPLAIN` review is complete, wiring a
 `scan --target=staging|production` CLI command (calling
-`withReadOnlyRemoteDb`, reusing the approved subset, writing through
-`writeEvidence('staging' | 'production', ...)`, which already supports
-both) becomes small and mechanical. That command still would not run
-anything until execution is separately authorized — per OZI-79's two-stage
-execution control, building the command and running it against a real
-environment stay two distinct, explicit steps.
+`withReadOnlyRemoteDb`, running the registry's approved subset through
+it, writing through `writeEvidence('staging' | 'production', ...)`, which
+already supports both) becomes small and mechanical. That command still
+would not run anything until execution is separately authorized — per
+OZI-79's two-stage execution control, building the command and running it
+against a real environment stay two distinct, explicit steps.

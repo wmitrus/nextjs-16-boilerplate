@@ -24,14 +24,17 @@ after this plumbing and the exact query subset are reviewed.
 - `scripts/tenancy-inventory/readonly-db-remote.ts` -- `RemoteTarget`
   (`'staging' | 'production'`), env-var-per-target credential resolution
   (no fallback, never echoes the value on failure), live role-privilege
-  verification (`verifyReadOnlyRole` -- hardened twice: Phase A.1 to a
-  database-wide application-table least-privilege check (rejects elevated
-  role attributes, rejects write privilege on every real table in
+  verification (`verifyReadOnlyRole` -- hardened three times: Phase A.1 to
+  a database-wide application-table least-privilege check (rejects
+  elevated role attributes, rejects write privilege on every real table in
   `public`/`drizzle`, not a 4-table sample), Phase A.2 to also reject
   schema `CREATE` effective through `PUBLIC` (not just role-specific
   grants), require `USAGE` on both schemas, require `SELECT` presence on
   every table the frozen OZI-79 query subset reads including
-  `drizzle.__drizzle_migrations`, and reject any role membership), and
+  `drizzle.__drizzle_migrations`, and reject any role membership, Phase
+  A.3 to also reject `SELECT` on any `public`/`drizzle` table **outside**
+  the required set -- the credential must be scoped to exactly the tables
+  the approved query set reads, not merely "no writes anywhere"), and
   `withReadOnlyRemoteDb` (same `READ ONLY` transaction +
   `default_transaction_read_only` + timeouts as `LocalTarget`, with the
   role verification running first, inside the same transaction).
@@ -50,12 +53,14 @@ after this plumbing and the exact query subset are reviewed.
       role-verification mechanism, no-echo requirement)
 - [x] Implementation
 - [x] Tests: unit (credential resolution, no-echo proof, target isolation,
-      4 tests) + real-DB (10 tests against local `test-db`, no remote
-      credential needed: superuser rejection, a real purpose-created
-      SELECT-only-with-no-memberships role pass, and rejections for
-      INSERT, an untested-table UPDATE, missing required SELECT, explicit
-      schema CREATE, ambient PUBLIC-granted CREATE, missing drizzle USAGE,
-      missing drizzle SELECT, and role membership)
+      4 tests) + real-DB (11 tests against local `test-db`, no remote
+      credential needed: superuser rejection, a real role scoped to
+      exactly the required tables with no memberships passes, and
+      rejections for INSERT, an untested-table UPDATE, missing required
+      SELECT, SELECT on a table outside the required set
+      (`user_credentials`), explicit schema CREATE, ambient
+      PUBLIC-granted CREATE, missing drizzle USAGE, missing drizzle
+      SELECT, and role membership)
 - [x] Validation: typecheck, targeted lint, `arch:lint` (only the
       pre-existing unrelated `strict-rate-limit.ts` FAIL)
 - [ ] User reviews this runbook and the finished mechanism

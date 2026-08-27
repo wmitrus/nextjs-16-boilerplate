@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TEST_DEFAULT_URL } from '../lib/db-guard.mjs';
 
 import {
+  REQUIRED_SELECT_TABLES,
   RemoteRoleNotReadOnlyError,
   verifyReadOnlyRole,
 } from './readonly-db-remote';
@@ -16,15 +17,24 @@ import {
  * how it was provisioned. Tested here against the local `test-db` (safe,
  * disposable) rather than a real remote target -- proving the rejection
  * path (superuser, elevated attributes, a write grant anywhere across the
- * full application-table surface, missing required SELECT/USAGE, schema
- * CREATE including via PUBLIC, role membership) and the pass path (a
- * real, purpose-created SELECT-only role with no memberships) is equally
- * strong evidence for the detection logic itself, without needing an
- * actual remote credential.
+ * full application-table surface, missing required SELECT/USAGE, SELECT
+ * outside the required table set, schema CREATE including via PUBLIC,
+ * role membership) and the pass path (a real, purpose-created
+ * SELECT-only role scoped to exactly the required tables, with no
+ * memberships) is equally strong evidence for the detection logic
+ * itself, without needing an actual remote credential.
  */
 const READONLY_TEST_ROLE = 'ozi79_readonly_role_test';
 
 let adminClient: ReturnType<typeof postgres>;
+/**
+ * Whether `PUBLIC` held `CREATE` on `public` *before* this suite touched
+ * anything -- captured so `afterAll` restores the exact pre-suite state
+ * instead of unconditionally granting it back. A hardened database that
+ * never had this ambient grant must not gain it as a side effect of
+ * running these tests.
+ */
+let publicHadCreateBeforeSuite = false;
 
 /**
  * A granted privilege is a dependent object of the granting relationship
@@ -40,22 +50,19 @@ async function dropTestRole(role: string): Promise<void> {
 }
 
 /**
- * The exact set of grants a correctly provisioned OZI-79 credential needs:
- * `SELECT` on every application table in `public`, plus `USAGE` on
- * `drizzle` and `SELECT` on its one required table
- * (`__drizzle_migrations`, `latestSchemaMigration`'s source). Individual
- * tests build on this baseline and vary or omit exactly the one grant
- * they're testing, so a failure proves the specific check under test
- * fired -- not some other, unrelated gap in the baseline.
+ * The exact set of grants a correctly provisioned OZI-79 credential needs
+ * -- `SELECT` on exactly `REQUIRED_SELECT_TABLES`, nothing more. Built
+ * from the same exported list `verifyReadOnlyRole` checks against, so the
+ * fixture can never silently drift from what the check actually requires.
+ * Individual tests build on this baseline and vary or omit exactly the
+ * one grant they're testing, so a failure proves the specific check under
+ * test fired -- not some other, unrelated gap or excess in the baseline.
  */
 async function grantBaselineSelectOnly(role: string): Promise<void> {
-  await adminClient.unsafe(
-    `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${role}`,
-  );
   await adminClient.unsafe(`GRANT USAGE ON SCHEMA drizzle TO ${role}`);
-  await adminClient.unsafe(
-    `GRANT SELECT ON drizzle.__drizzle_migrations TO ${role}`,
-  );
+  for (const { schema, table } of REQUIRED_SELECT_TABLES) {
+    await adminClient.unsafe(`GRANT SELECT ON ${schema}.${table} TO ${role}`);
+  }
 }
 
 async function connectAs(role: string): Promise<ReturnType<typeof postgres>> {
@@ -73,8 +80,16 @@ beforeAll(async () => {
   // "clean pass" actually proves what it claims -- this test-db, like
   // plenty of real Postgres databases that predate PG15's hardened
   // default (or never ran this REVOKE themselves), ships with PUBLIC
-  // holding CREATE on `public`. Restored in afterAll.
-  await adminClient.unsafe(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`);
+  // holding CREATE on `public`. Captured and restored exactly, not
+  // unconditionally re-granted, in case this ever runs against a database
+  // that never had the ambient grant in the first place.
+  const [{ has_create: publicHadCreate }] = await adminClient.unsafe<
+    { has_create: boolean }[]
+  >(`select has_schema_privilege('public', 'public', 'CREATE') as has_create`);
+  publicHadCreateBeforeSuite = publicHadCreate;
+  if (publicHadCreateBeforeSuite) {
+    await adminClient.unsafe(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`);
+  }
   await adminClient.unsafe(
     `CREATE ROLE ${READONLY_TEST_ROLE} LOGIN PASSWORD 'ozi79-test-only'`,
   );
@@ -83,7 +98,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await dropTestRole(READONLY_TEST_ROLE);
-  await adminClient.unsafe(`GRANT CREATE ON SCHEMA public TO PUBLIC`);
+  if (publicHadCreateBeforeSuite) {
+    await adminClient.unsafe(`GRANT CREATE ON SCHEMA public TO PUBLIC`);
+  }
   await adminClient.end({ timeout: 5 });
 });
 
@@ -101,7 +118,7 @@ describe('verifyReadOnlyRole (real DB)', () => {
     }
   });
 
-  it('passes for a real, purpose-created SELECT-only role with no memberships', async () => {
+  it('passes for a real role scoped to exactly the required tables, with no memberships', async () => {
     const client = await connectAs(READONLY_TEST_ROLE);
     const db = drizzle(client);
 
@@ -198,6 +215,38 @@ describe('verifyReadOnlyRole (real DB)', () => {
     }
   });
 
+  /**
+   * The dedicated OZI-79 credential must have `SELECT` on exactly the
+   * required table set, not every application table. A role that reads
+   * `user_credentials` -- outside `REQUIRED_SELECT_TABLES`, and about as
+   * sensitive a table as this schema has -- is not the least-privilege
+   * credential OZI-79 requires just because it holds no write privilege
+   * anywhere.
+   */
+  it('rejects a role with SELECT on a table outside the required set (user_credentials)', async () => {
+    const roleWithExcessSelect = 'ozi79_excess_select_test';
+    await dropTestRole(roleWithExcessSelect);
+    await adminClient.unsafe(
+      `CREATE ROLE ${roleWithExcessSelect} LOGIN PASSWORD 'ozi79-test-only'`,
+    );
+    await grantBaselineSelectOnly(roleWithExcessSelect);
+    await adminClient.unsafe(
+      `GRANT SELECT ON user_credentials TO ${roleWithExcessSelect}`,
+    );
+
+    const client = await connectAs(roleWithExcessSelect);
+    const db = drizzle(client);
+
+    try {
+      await expect(
+        db.transaction((tx) => verifyReadOnlyRole(tx)),
+      ).rejects.toThrow(/SELECT privilege on "public\.user_credentials"/);
+    } finally {
+      await client.end({ timeout: 5 });
+      await dropTestRole(roleWithExcessSelect);
+    }
+  });
+
   it('rejects a role explicitly granted CREATE on the public schema', async () => {
     const roleWithCreate = 'ozi79_schema_create_test';
     await dropTestRole(roleWithCreate);
@@ -243,6 +292,10 @@ describe('verifyReadOnlyRole (real DB)', () => {
         db.transaction((tx) => verifyReadOnlyRole(tx)),
       ).rejects.toThrow(/effective CREATE privilege on schema "public"/);
     } finally {
+      // Restores this test's own pre-test state exactly: the suite's
+      // beforeAll already revoked PUBLIC's CREATE (or it never had it),
+      // so a plain REVOKE here is what "back to how it was before this
+      // test" actually means -- not a blind GRANT.
       await adminClient.unsafe(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`);
       await client.end({ timeout: 5 });
     }
@@ -255,9 +308,12 @@ describe('verifyReadOnlyRole (real DB)', () => {
       `CREATE ROLE ${roleMissingUsage} LOGIN PASSWORD 'ozi79-test-only'`,
     );
     // Deliberately public-only: no USAGE or SELECT anywhere in `drizzle`.
-    await adminClient.unsafe(
-      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${roleMissingUsage}`,
-    );
+    for (const { schema, table } of REQUIRED_SELECT_TABLES) {
+      if (schema !== 'public') continue;
+      await adminClient.unsafe(
+        `GRANT SELECT ON ${schema}.${table} TO ${roleMissingUsage}`,
+      );
+    }
 
     const client = await connectAs(roleMissingUsage);
     const db = drizzle(client);
@@ -278,13 +334,12 @@ describe('verifyReadOnlyRole (real DB)', () => {
     await adminClient.unsafe(
       `CREATE ROLE ${roleMissingDrizzleSelect} LOGIN PASSWORD 'ozi79-test-only'`,
     );
+    await grantBaselineSelectOnly(roleMissingDrizzleSelect);
+    // USAGE without SELECT: can see the schema exists, cannot read the
+    // one table it's required to read.
     await adminClient.unsafe(
-      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${roleMissingDrizzleSelect}`,
+      `REVOKE SELECT ON drizzle.__drizzle_migrations FROM ${roleMissingDrizzleSelect}`,
     );
-    await adminClient.unsafe(
-      `GRANT USAGE ON SCHEMA drizzle TO ${roleMissingDrizzleSelect}`,
-    );
-    // USAGE without SELECT: can see the schema exists, cannot read the table.
 
     const client = await connectAs(roleMissingDrizzleSelect);
     const db = drizzle(client);

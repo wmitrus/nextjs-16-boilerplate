@@ -107,7 +107,7 @@ const APPLICATION_SCHEMAS = ['public', 'drizzle'] as const;
  * *presence* -- a role with zero grants at all would pass a write-only
  * check but still could not run any approved query.
  */
-const REQUIRED_SELECT_TABLES = [
+export const REQUIRED_SELECT_TABLES = [
   { schema: 'public', table: 'tenants' },
   { schema: 'public', table: 'organizations' },
   { schema: 'public', table: 'memberships' },
@@ -162,6 +162,14 @@ const REQUIRED_SELECT_TABLES = [
  * (`SET ROLE` or automatic inheritance), which is a hidden path to
  * whatever that other role can do. A genuinely minimal, single-purpose
  * OZI-79 credential should have no memberships at all.
+ *
+ * `SELECT` itself is scoped, not just write privileges: the connected
+ * role must have `SELECT` on `REQUIRED_SELECT_TABLES` and nowhere else in
+ * `public`/`drizzle`. A credential that can read every application table
+ * (including e.g. `user_credentials`) is not the least-privilege
+ * credential OZI-79 requires just because it cannot write -- read access
+ * to sensitive tables the approved query set never touches is exactly the
+ * kind of scope creep this check exists to catch.
  *
  * What this does NOT defend against: a writable view or a
  * `SECURITY DEFINER` function the role happens to have execute privilege
@@ -247,10 +255,17 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
     );
   }
 
-  // One row per table, one column per write privilege -- a single round
-  // trip covers every discovered table instead of one query per
-  // (table, privilege) pair. Columns are explicit, not built from a
-  // dynamic key lookup, so there is no object-injection sink here.
+  const requiredQualifiedNames = new Set(
+    REQUIRED_SELECT_TABLES.map(({ schema, table }) => `${schema}.${table}`),
+  );
+
+  // One row per table, one column per privilege -- a single round trip
+  // covers every discovered table instead of one query per
+  // (table, privilege) pair, and covers `SELECT` alongside the write
+  // privileges so the required-table-presence check below can reuse this
+  // same result set instead of a second query. Columns are explicit, not
+  // built from a dynamic key lookup, so there is no object-injection sink
+  // here.
   //
   // Resolved via `pg_class`/`pg_namespace` and passed to
   // `has_table_privilege` by oid, deliberately not by schema-qualified
@@ -261,8 +276,9 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
   // that resolution throw "permission denied for schema", crashing this
   // check instead of cleanly reporting no privilege. The oid form needs
   // no such resolution.
-  const writeRows = await tx.execute<{
+  const tableRows = await tx.execute<{
     qualified_name: string;
+    can_select: boolean;
     can_insert: boolean;
     can_update: boolean;
     can_delete: boolean;
@@ -272,6 +288,7 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
   }>(sql`
     select
       n.nspname || '.' || c.relname as qualified_name,
+      has_table_privilege(current_user, c.oid, 'SELECT') as can_select,
       has_table_privilege(current_user, c.oid, 'INSERT') as can_insert,
       has_table_privilege(current_user, c.oid, 'UPDATE') as can_update,
       has_table_privilege(current_user, c.oid, 'DELETE') as can_delete,
@@ -282,8 +299,8 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
     join pg_namespace n on c.relnamespace = n.oid
     where n.nspname in (${applicationSchemaList}) and c.relkind = 'r'
   `);
-  for (const row of writeRows) {
-    const violation = [
+  for (const row of tableRows) {
+    const writeViolation = [
       row.can_insert && 'INSERT',
       row.can_update && 'UPDATE',
       row.can_delete && 'DELETE',
@@ -291,51 +308,41 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
       row.can_references && 'REFERENCES',
       row.can_trigger && 'TRIGGER',
     ].find((privilege): privilege is string => Boolean(privilege));
-    if (violation) {
+    if (writeViolation) {
       throw new RemoteRoleNotReadOnlyError(
-        `Connected role has ${violation} privilege on "${row.qualified_name}". ` +
+        `Connected role has ${writeViolation} privilege on "${row.qualified_name}". ` +
           `This tool requires a SELECT-only role across every application table, ` +
           `not just a representative sample. Refusing to proceed.`,
       );
     }
+    if (row.can_select && !requiredQualifiedNames.has(row.qualified_name)) {
+      throw new RemoteRoleNotReadOnlyError(
+        `Connected role has SELECT privilege on "${row.qualified_name}", which ` +
+          `is not one of the tables the approved OZI-79 query set reads. This ` +
+          `tool requires SELECT scoped to exactly the required table set, not ` +
+          `every application table. Refusing to proceed.`,
+      );
+    }
   }
 
-  // Row-value IN list -- (schema, table) pairs, not a single table-name
-  // list, since the required set spans two schemas (`public`'s
-  // application tables plus `drizzle`'s migration-metadata table).
-  const requiredTablePairs = sql.join(
-    REQUIRED_SELECT_TABLES.map(
-      ({ schema, table }) => sql`(${schema}, ${table})`,
-    ),
-    sql`, `,
+  const foundRequiredTables = new Map(
+    tableRows.map((row) => [row.qualified_name, row.can_select]),
   );
-  const selectRows = await tx.execute<{
-    qualified_name: string;
-    has_select: boolean;
-  }>(sql`
-    select n.nspname || '.' || c.relname as qualified_name,
-           has_table_privilege(current_user, c.oid, 'SELECT') as has_select
-    from pg_class c
-    join pg_namespace n on c.relnamespace = n.oid
-    where (n.nspname, c.relname) in (${requiredTablePairs}) and c.relkind = 'r'
-  `);
-  const missingSelect = selectRows.find((row) => !row.has_select);
-  if (missingSelect) {
-    throw new RemoteRoleNotReadOnlyError(
-      `Connected role is missing SELECT privilege on "${missingSelect.qualified_name}", ` +
-        `which the approved OZI-79 query set requires. Refusing to proceed.`,
-    );
-  }
-  const foundTables = new Set(selectRows.map((row) => row.qualified_name));
-  const missingTable = REQUIRED_SELECT_TABLES.find(
-    ({ schema, table }) => !foundTables.has(`${schema}.${table}`),
-  );
-  if (missingTable) {
-    throw new RemoteRoleNotReadOnlyError(
-      `Table "${missingTable.schema}.${missingTable.table}" required by the ` +
-        `approved OZI-79 query set does not exist on this target. Refusing ` +
-        `to proceed.`,
-    );
+  for (const { schema, table } of REQUIRED_SELECT_TABLES) {
+    const qualifiedName = `${schema}.${table}`;
+    const canSelect = foundRequiredTables.get(qualifiedName);
+    if (canSelect === undefined) {
+      throw new RemoteRoleNotReadOnlyError(
+        `Table "${qualifiedName}" required by the approved OZI-79 query set ` +
+          `does not exist on this target. Refusing to proceed.`,
+      );
+    }
+    if (!canSelect) {
+      throw new RemoteRoleNotReadOnlyError(
+        `Connected role is missing SELECT privilege on "${qualifiedName}", ` +
+          `which the approved OZI-79 query set requires. Refusing to proceed.`,
+      );
+    }
   }
 }
 

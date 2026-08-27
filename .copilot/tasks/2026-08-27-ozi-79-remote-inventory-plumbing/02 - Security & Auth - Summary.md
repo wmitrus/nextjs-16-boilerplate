@@ -237,3 +237,50 @@
   authorization, since it is still a live query against production
   Postgres even though it never executes the queried `SELECT`)
 - Sections refreshed: Current-State Findings, Update Log
+
+### 2026-08-27 — Phase A.3 Least-Privilege Hardening
+
+- Trigger: user code review of commit `6384df56` found the credential was
+  still not truly least-privilege: `verifyReadOnlyRole` verified "no
+  writes anywhere" and "SELECT present on the required tables," but never
+  verified "SELECT absent everywhere else" -- a role that could `SELECT`
+  every application table, including e.g. `user_credentials`, still passed
+  as long as it held no write privilege. Also flagged: the suite's
+  `afterAll` unconditionally re-granted `CREATE ON SCHEMA public TO
+  PUBLIC`, which would introduce that ambient grant on a database that
+  never had it, rather than restoring the actual pre-suite state.
+- Summary of change: (1) extended the existing table-privilege query (the
+  one already iterating every discovered table in `public`/`drizzle`) to
+  also select `SELECT`, and reject any table where `SELECT` is true but
+  the table is outside `REQUIRED_SELECT_TABLES` -- this reused the
+  existing single round-trip rather than adding a second query; (2) the
+  required-`SELECT`-presence check now reads directly from that same
+  result set (a `Map` keyed by qualified table name) instead of issuing
+  its own separate query, removing a redundant round-trip; (3) exported
+  `REQUIRED_SELECT_TABLES` so the test fixture builds its baseline grants
+  from the exact same list the check enforces, instead of a
+  independently-maintained duplicate that could silently drift; (4) the
+  suite's `beforeAll` now queries `has_schema_privilege('public', 'public',
+  'CREATE')` *before* touching anything, stores the result, and `afterAll`
+  restores exactly that captured state rather than unconditionally
+  granting it back.
+- Test-fixture consequence of (1)+(3): `grantBaselineSelectOnly` now
+  grants `SELECT` on exactly the 13 tables in `REQUIRED_SELECT_TABLES`
+  (was: `SELECT ON ALL TABLES IN SCHEMA public`), so the "clean pass"
+  fixture is itself now the least-privilege credential the check demands,
+  not a broader one that happens to pass anyway.
+- Real-DB test added: a role granted `SELECT` on `user_credentials` (not
+  in the required set) is rejected, even though it holds no write
+  privilege anywhere -- proves the check verifies SELECT *scope*, not
+  just SELECT presence plus write absence. 11 tests total now (was 10).
+- Still no execution capability: `cli.ts`'s only change remains the import
+  rename; no remote CLI execution path exists, no
+  `scan --target=staging|production` command exists.
+- security status: **GO** (Phase A.3 least-privilege hardening only —
+  Phase B remote preflight/`EXPLAIN` review remains a separate,
+  not-yet-authorized step; per the user's direction, Phase B must also
+  build a canonical query registry first, so `EXPLAIN` review and the
+  later inventory scan consume the exact same 15 data SQL statements plus
+  the 1 schema-metadata statement -- no duplicated SQL between what gets
+  reviewed and what actually runs remotely)
+- Sections refreshed: Current-State Findings, Update Log

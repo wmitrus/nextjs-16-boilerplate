@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 
 import type { DrizzleDb } from '@/core/db/types';
 
+import type { AdminOrganizationsScope } from '../../domain/AdminOrganizationsScope';
 import { OrganizationNotFoundError } from '../../domain/errors';
 
 import { organizationsTable } from './schema';
@@ -39,27 +40,20 @@ export class DrizzleAdminOrganizationsMutationService {
   constructor(private readonly db: DrizzleDb) {}
 
   async updateOrganizationStatus(input: {
-    activeOrganizationId: string;
+    scope: AdminOrganizationsScope;
     organizationId: string;
     status: OrganizationStatus;
   }): Promise<OrganizationStatusDto> {
-    const tenantId = await this.resolveParentTenantId(
-      input.activeOrganizationId,
-    );
+    const scopeFilter = await this.resolveScopeFilter(input.scope);
 
-    if (!tenantId) {
+    if (!scopeFilter) {
       throw new OrganizationNotFoundError();
     }
 
     const rows = await this.db
       .update(organizationsTable)
       .set({ status: input.status })
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          eq(organizationsTable.tenantId, tenantId),
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .returning();
 
     const row = rows[0];
@@ -71,15 +65,18 @@ export class DrizzleAdminOrganizationsMutationService {
     return mapOrganizationRow(row);
   }
 
-  private async resolveParentTenantId(
-    organizationId: string,
-  ): Promise<string | null> {
+  private async resolveScopeFilter(scope: AdminOrganizationsScope) {
+    if (scope.kind === 'organization') {
+      return eq(organizationsTable.id, scope.organizationId);
+    }
+
     const rows = await this.db
       .select({ tenantId: organizationsTable.tenantId })
       .from(organizationsTable)
-      .where(eq(organizationsTable.id, organizationId))
+      .where(eq(organizationsTable.id, scope.activeOrganizationId))
       .limit(1);
 
-    return rows[0]?.tenantId ?? null;
+    const tenantId = rows[0]?.tenantId;
+    return tenantId ? eq(organizationsTable.tenantId, tenantId) : null;
   }
 }

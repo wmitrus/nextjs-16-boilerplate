@@ -17,6 +17,7 @@ import {
   checkOrganizationsActionAccess,
   getFieldErrors,
   organizationIdSchema,
+  toAdminOrganizationsScope,
 } from '../../../_lib';
 
 import {
@@ -44,7 +45,7 @@ export const PATCH = withErrorHandler(
       await connection();
 
       const container = getAppContainer();
-      const canManageMembers = await checkOrganizationsActionAccess(
+      const adminAccess = await checkOrganizationsActionAccess(
         access.identity.email,
         access.user.id,
         access.tenant.tenantId,
@@ -52,7 +53,7 @@ export const PATCH = withErrorHandler(
         ACTIONS.TENANT_MANAGE_MEMBERS,
       );
 
-      if (!canManageMembers) {
+      if (!adminAccess.allowed) {
         return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
       }
 
@@ -91,7 +92,10 @@ export const PATCH = withErrorHandler(
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
       const readService = new DrizzleAdminOrganizationsReadService(db);
       const organization = await readService.getDetailInActiveScope({
-        activeOrganizationId: access.tenant.organizationId,
+        scope: toAdminOrganizationsScope(
+          adminAccess,
+          access.tenant.organizationId,
+        ),
         organizationId: organizationResult.data.id,
       });
 

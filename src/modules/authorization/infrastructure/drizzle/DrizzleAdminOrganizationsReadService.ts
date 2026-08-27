@@ -2,6 +2,8 @@ import { and, count, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import type { DrizzleDb } from '@/core/db/types';
 
+import type { AdminOrganizationsScope } from '../../domain/AdminOrganizationsScope';
+
 import {
   invitationsTable,
   membershipsTable,
@@ -139,7 +141,7 @@ export interface OrganizationInvitationsPageDto {
 }
 
 export interface ListOrganizationsInActiveScopeInput {
-  activeOrganizationId: string;
+  scope: AdminOrganizationsScope;
   limit: number;
   offset: number;
   search?: string;
@@ -152,11 +154,9 @@ export class DrizzleAdminOrganizationsReadService {
   async listInActiveScope(
     input: ListOrganizationsInActiveScopeInput,
   ): Promise<{ organizations: OrganizationSummaryDto[]; total: number }> {
-    const tenantId = await this.resolveParentTenantId(
-      input.activeOrganizationId,
-    );
+    const resolvedScope = await this.resolveScope(input.scope);
 
-    if (!tenantId) {
+    if (!resolvedScope) {
       return {
         organizations: [],
         total: 0,
@@ -174,18 +174,19 @@ export class DrizzleAdminOrganizationsReadService {
       ? eq(organizationsTable.status, input.status)
       : undefined;
 
+    const scopeFilter =
+      resolvedScope.kind === 'organization'
+        ? eq(organizationsTable.id, resolvedScope.organizationId)
+        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
+
     const whereClause =
       searchFilter && statusFilter
-        ? and(
-            eq(organizationsTable.tenantId, tenantId),
-            searchFilter,
-            statusFilter,
-          )
+        ? and(scopeFilter, searchFilter, statusFilter)
         : searchFilter
-          ? and(eq(organizationsTable.tenantId, tenantId), searchFilter)
+          ? and(scopeFilter, searchFilter)
           : statusFilter
-            ? and(eq(organizationsTable.tenantId, tenantId), statusFilter)
-            : eq(organizationsTable.tenantId, tenantId);
+            ? and(scopeFilter, statusFilter)
+            : scopeFilter;
 
     const [organizationRows, countRows] = await Promise.all([
       this.db
@@ -270,23 +271,30 @@ export class DrizzleAdminOrganizationsReadService {
         roleCount: roleCountByOrganization.get(organization.id) ?? 0,
         pendingInvitationCount:
           invitationCountByOrganization.get(organization.id) ?? 0,
-        isActive: organization.id === input.activeOrganizationId,
+        isActive:
+          organization.id ===
+          (input.scope.kind === 'organization'
+            ? input.scope.organizationId
+            : input.scope.activeOrganizationId),
       })),
       total: countRows[0]?.total ?? 0,
     };
   }
 
   async getDetailInActiveScope(input: {
-    activeOrganizationId: string;
+    scope: AdminOrganizationsScope;
     organizationId: string;
   }): Promise<OrganizationDetailDto | null> {
-    const tenantId = await this.resolveParentTenantId(
-      input.activeOrganizationId,
-    );
+    const resolvedScope = await this.resolveScope(input.scope);
 
-    if (!tenantId) {
+    if (!resolvedScope) {
       return null;
     }
+
+    const scopeFilter =
+      resolvedScope.kind === 'organization'
+        ? eq(organizationsTable.id, resolvedScope.organizationId)
+        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
 
     const organizationRows = await this.db
       .select({
@@ -297,12 +305,7 @@ export class DrizzleAdminOrganizationsReadService {
         createdAt: organizationsTable.createdAt,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          eq(organizationsTable.tenantId, tenantId),
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -315,24 +318,24 @@ export class DrizzleAdminOrganizationsReadService {
         this.db
           .select({ count: sql<number>`count(*)::int` })
           .from(membershipsTable)
-          .where(eq(membershipsTable.organizationId, input.organizationId)),
+          .where(eq(membershipsTable.organizationId, organization.id)),
         this.db
           .select({ count: sql<number>`count(*)::int` })
           .from(rolesTable)
-          .where(eq(rolesTable.organizationId, input.organizationId)),
+          .where(eq(rolesTable.organizationId, organization.id)),
         this.db
           .select({ count: sql<number>`count(*)::int` })
           .from(invitationsTable)
           .where(
             and(
-              eq(invitationsTable.organizationId, input.organizationId),
+              eq(invitationsTable.organizationId, organization.id),
               eq(invitationsTable.status, 'pending'),
             ),
           ),
         this.db
           .select({ count: sql<number>`count(*)::int` })
           .from(policiesTable)
-          .where(eq(policiesTable.organizationId, input.organizationId)),
+          .where(eq(policiesTable.organizationId, organization.id)),
       ]);
 
     return {
@@ -353,16 +356,19 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getRolesInActiveScope(input: {
-    activeOrganizationId: string;
+    scope: AdminOrganizationsScope;
     organizationId: string;
   }): Promise<OrganizationRolesPageDto | null> {
-    const tenantId = await this.resolveParentTenantId(
-      input.activeOrganizationId,
-    );
+    const resolvedScope = await this.resolveScope(input.scope);
 
-    if (!tenantId) {
+    if (!resolvedScope) {
       return null;
     }
+
+    const scopeFilter =
+      resolvedScope.kind === 'organization'
+        ? eq(organizationsTable.id, resolvedScope.organizationId)
+        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
 
     const organizationRows = await this.db
       .select({
@@ -372,12 +378,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          eq(organizationsTable.tenantId, tenantId),
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -393,7 +394,7 @@ export class DrizzleAdminOrganizationsReadService {
         createdAt: rolesTable.createdAt,
       })
       .from(rolesTable)
-      .where(eq(rolesTable.organizationId, input.organizationId))
+      .where(eq(rolesTable.organizationId, organization.id))
       .orderBy(rolesTable.createdAt, rolesTable.name);
 
     const roleIds = roles.map((role) => role.id);
@@ -449,16 +450,19 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getPoliciesInActiveScope(input: {
-    activeOrganizationId: string;
+    scope: AdminOrganizationsScope;
     organizationId: string;
   }): Promise<OrganizationPoliciesPageDto | null> {
-    const tenantId = await this.resolveParentTenantId(
-      input.activeOrganizationId,
-    );
+    const resolvedScope = await this.resolveScope(input.scope);
 
-    if (!tenantId) {
+    if (!resolvedScope) {
       return null;
     }
+
+    const scopeFilter =
+      resolvedScope.kind === 'organization'
+        ? eq(organizationsTable.id, resolvedScope.organizationId)
+        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
 
     const organizationRows = await this.db
       .select({
@@ -468,12 +472,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          eq(organizationsTable.tenantId, tenantId),
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -493,7 +492,7 @@ export class DrizzleAdminOrganizationsReadService {
           createdAt: policiesTable.createdAt,
         })
         .from(policiesTable)
-        .where(eq(policiesTable.organizationId, input.organizationId))
+        .where(eq(policiesTable.organizationId, organization.id))
         .orderBy(
           policiesTable.resource,
           policiesTable.effect,
@@ -506,7 +505,7 @@ export class DrizzleAdminOrganizationsReadService {
           isSystem: rolesTable.isSystem,
         })
         .from(rolesTable)
-        .where(eq(rolesTable.organizationId, input.organizationId)),
+        .where(eq(rolesTable.organizationId, organization.id)),
     ]);
 
     const roleNameById = new Map(roleRows.map((role) => [role.id, role.name]));
@@ -545,16 +544,19 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getInvitationsInActiveScope(input: {
-    activeOrganizationId: string;
+    scope: AdminOrganizationsScope;
     organizationId: string;
   }): Promise<OrganizationInvitationsPageDto | null> {
-    const tenantId = await this.resolveParentTenantId(
-      input.activeOrganizationId,
-    );
+    const resolvedScope = await this.resolveScope(input.scope);
 
-    if (!tenantId) {
+    if (!resolvedScope) {
       return null;
     }
+
+    const scopeFilter =
+      resolvedScope.kind === 'organization'
+        ? eq(organizationsTable.id, resolvedScope.organizationId)
+        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
 
     const organizationRows = await this.db
       .select({
@@ -564,12 +566,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          eq(organizationsTable.tenantId, tenantId),
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -591,14 +588,14 @@ export class DrizzleAdminOrganizationsReadService {
           createdAt: invitationsTable.createdAt,
         })
         .from(invitationsTable)
-        .where(eq(invitationsTable.organizationId, input.organizationId)),
+        .where(eq(invitationsTable.organizationId, organization.id)),
       this.db
         .select({
           id: rolesTable.id,
           name: rolesTable.name,
         })
         .from(rolesTable)
-        .where(eq(rolesTable.organizationId, input.organizationId))
+        .where(eq(rolesTable.organizationId, organization.id))
         .orderBy(rolesTable.name),
     ]);
 
@@ -620,16 +617,19 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getMembersInActiveScope(input: {
-    activeOrganizationId: string;
+    scope: AdminOrganizationsScope;
     organizationId: string;
   }): Promise<OrganizationMembersPageDto | null> {
-    const tenantId = await this.resolveParentTenantId(
-      input.activeOrganizationId,
-    );
+    const resolvedScope = await this.resolveScope(input.scope);
 
-    if (!tenantId) {
+    if (!resolvedScope) {
       return null;
     }
+
+    const scopeFilter =
+      resolvedScope.kind === 'organization'
+        ? eq(organizationsTable.id, resolvedScope.organizationId)
+        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
 
     const organizationRows = await this.db
       .select({
@@ -639,12 +639,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          eq(organizationsTable.tenantId, tenantId),
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -667,7 +662,7 @@ export class DrizzleAdminOrganizationsReadService {
         .from(membershipsTable)
         .innerJoin(usersTable, eq(usersTable.id, membershipsTable.userId))
         .innerJoin(rolesTable, eq(rolesTable.id, membershipsTable.roleId))
-        .where(eq(membershipsTable.organizationId, input.organizationId))
+        .where(eq(membershipsTable.organizationId, organization.id))
         .orderBy(usersTable.email, membershipsTable.createdAt),
       this.db
         .select({
@@ -676,7 +671,7 @@ export class DrizzleAdminOrganizationsReadService {
           isSystem: rolesTable.isSystem,
         })
         .from(rolesTable)
-        .where(eq(rolesTable.organizationId, input.organizationId))
+        .where(eq(rolesTable.organizationId, organization.id))
         .orderBy(rolesTable.name),
     ]);
 
@@ -696,15 +691,24 @@ export class DrizzleAdminOrganizationsReadService {
     };
   }
 
-  private async resolveParentTenantId(
-    activeOrganizationId: string,
-  ): Promise<string | null> {
+  private async resolveScope(
+    scope: AdminOrganizationsScope,
+  ): Promise<
+    | { kind: 'organization'; organizationId: string }
+    | { kind: 'tenant'; tenantId: string }
+    | null
+  > {
+    if (scope.kind === 'organization') {
+      return scope;
+    }
+
     const rows = await this.db
       .select({ tenantId: organizationsTable.tenantId })
       .from(organizationsTable)
-      .where(eq(organizationsTable.id, activeOrganizationId))
+      .where(eq(organizationsTable.id, scope.activeOrganizationId))
       .limit(1);
 
-    return rows[0]?.tenantId ?? null;
+    const tenantId = rows[0]?.tenantId;
+    return tenantId ? { kind: 'tenant', tenantId } : null;
   }
 }

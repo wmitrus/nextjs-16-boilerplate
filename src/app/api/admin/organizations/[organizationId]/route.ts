@@ -18,6 +18,7 @@ import {
   checkOrganizationsAdminAccess,
   getFieldErrors,
   organizationIdSchema,
+  toAdminOrganizationsScope,
 } from '../_lib';
 
 import { OrganizationNotFoundError } from '@/modules/authorization/domain/errors';
@@ -36,14 +37,14 @@ export const GET = withErrorHandler(
     await connection();
 
     const container = getAppContainer();
-    const isAdmin = await checkOrganizationsAdminAccess(
+    const adminAccess = await checkOrganizationsAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
       container,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
@@ -59,7 +60,10 @@ export const GET = withErrorHandler(
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleAdminOrganizationsReadService(db);
     const organization = await service.getDetailInActiveScope({
-      activeOrganizationId: access.tenant.organizationId,
+      scope: toAdminOrganizationsScope(
+        adminAccess,
+        access.tenant.organizationId,
+      ),
       organizationId: parseResult.data.id,
     });
 
@@ -81,7 +85,7 @@ export const PATCH = withErrorHandler(
       await connection();
 
       const container = getAppContainer();
-      const canUpdateTenant = await checkOrganizationsActionAccess(
+      const adminAccess = await checkOrganizationsActionAccess(
         access.identity.email,
         access.user.id,
         access.tenant.tenantId,
@@ -89,7 +93,7 @@ export const PATCH = withErrorHandler(
         ACTIONS.TENANT_UPDATE,
       );
 
-      if (!canUpdateTenant) {
+      if (!adminAccess.allowed) {
         return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
       }
 
@@ -119,9 +123,13 @@ export const PATCH = withErrorHandler(
       }
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const scope = toAdminOrganizationsScope(
+        adminAccess,
+        access.tenant.organizationId,
+      );
       const readService = new DrizzleAdminOrganizationsReadService(db);
       const organization = await readService.getDetailInActiveScope({
-        activeOrganizationId: access.tenant.organizationId,
+        scope,
         organizationId: parseResult.data.id,
       });
 
@@ -139,7 +147,7 @@ export const PATCH = withErrorHandler(
         );
         const updatedOrganization =
           await mutationService.updateOrganizationStatus({
-            activeOrganizationId: access.tenant.organizationId,
+            scope,
             organizationId: parseResult.data.id,
             status: bodyResult.data.status,
           });

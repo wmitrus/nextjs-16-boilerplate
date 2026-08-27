@@ -11,8 +11,10 @@ import { getServerRequestLogContext } from '@/shared/lib/observability/server-re
 
 import { MembersTableClient } from './MembersTableClient';
 
+import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
+import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
 export const metadata: Metadata = {
   title: 'Organization Members — Administration',
@@ -129,7 +131,10 @@ async function loadOrganizationMembers(organizationId: string) {
   const service = new DrizzleAdminOrganizationsReadService(db);
 
   return await service.getMembersInActiveScope({
-    activeOrganizationId: access.tenant.organizationId,
+    scope: createAdminOrganizationsScope({
+      activeOrganizationId: access.tenant.organizationId,
+      isPlatformAdmin: isEnvBasedPlatformAdmin(access.identity.email),
+    }),
     organizationId,
   });
 }

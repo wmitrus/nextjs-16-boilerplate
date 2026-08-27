@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.4.0...v2.5.0) (2026-08-27)
+
+
+### Features
+
+* **ozi-79:** canonical query registry for tenancy-inventory (Phase B0) ([#82](https://github.com/wmitrus/nextjs-16-boilerplate/issues/82)) ([a19ef34](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a19ef34a98a3f316c25d2553a2121a821c8cdd40))
+
 # [2.4.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.3.0...v2.4.0) (2026-08-27)
 
 

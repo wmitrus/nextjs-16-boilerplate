@@ -3,3 +3,4 @@ eddc394dd8840b855ee30e675c4ccb36315430f7:.copilot/tasks/2026-04-05-nr-browser-sp
 4edbc6b78087c98ada44d52e7729dd902cd42ee9:docs/ai/general/SECURITY_CODING_PATTERNS.md:generic-api-key:212
 98a6c81a7215350e346937b64ca023256521c257:scripts/ai-tooling/lib/security.test.ts:aws-access-token:8
 98a6c81a7215350e346937b64ca023256521c257:scripts/ai-tooling/lib/security.test.ts:jwt:21
+2b4d2818e58820b9518050e9da677845e9e34c31:.copilot/tasks/2026-08-27-ozi-75-tenant-org-topology-inventory/plan.md:generic-api-key:36

@@ -24,6 +24,7 @@ export default defineConfig({
     exclude: [
       'src/**/*.integration.test.{ts,tsx}',
       'src/**/*.db.test.{ts,tsx}',
+      'scripts/**/*.db.test.{ts,tsx}',
       'src/stories/**',
       'src/core/db/migrations/**',
     ],

@@ -320,6 +320,44 @@ describe('artifactFingerprint -- exact-evidence identity of one artifact instanc
     const b = buildExplainPreflightArtifact(factsBA, BASE_CALLER);
     expect(a.artifactFingerprint).not.toBe(b.artifactFingerprint);
   });
+
+  /**
+   * Regression for a real collision: `canonicalizeDeep` built its
+   * canonical object as a plain `{}`, so assigning a key literally named
+   * `__proto__` (e.g. injected into a tampered `rawPlan`) invoked
+   * `Object.prototype`'s `__proto__` accessor instead of creating an
+   * enumerable own property -- `JSON.stringify` never saw that key, so
+   * an artifact with an injected `__proto__` fingerprinted identically
+   * to one without it. Fixed by building the canonical object with a
+   * null prototype. This proves the fix: the two fingerprints must
+   * differ once `__proto__` actually participates in the JSON.
+   */
+  it('is sensitive to an injected __proto__ key inside a raw plan (no silent prototype-pollution collision)', () => {
+    const withoutInjectedKey: ExplainPreflightFacts = {
+      ...BASE_FACTS,
+      statementPlans: [
+        {
+          ...BASE_FACTS.statementPlans[0]!,
+          rawPlan: { 'Node Type': 'Seq Scan' },
+        },
+      ],
+    };
+    const withInjectedKey: ExplainPreflightFacts = {
+      ...BASE_FACTS,
+      statementPlans: [
+        {
+          ...BASE_FACTS.statementPlans[0]!,
+          rawPlan: JSON.parse(
+            '{"Node Type":"Seq Scan","__proto__":{"polluted":true}}',
+          ) as unknown,
+        },
+      ],
+    };
+
+    const a = buildExplainPreflightArtifact(withoutInjectedKey, BASE_CALLER);
+    const b = buildExplainPreflightArtifact(withInjectedKey, BASE_CALLER);
+    expect(a.artifactFingerprint).not.toBe(b.artifactFingerprint);
+  });
 });
 
 describe('checkArtifactIntegrity', () => {

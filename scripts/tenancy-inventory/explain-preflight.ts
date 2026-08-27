@@ -363,11 +363,30 @@ function canonicalizeDeep(value: unknown): unknown {
   if (value !== null && typeof value === 'object') {
     const record = value as Record<string, unknown>;
     const sortedKeys = Object.keys(record).sort();
-    const result: Record<string, unknown> = {};
+    // A null-prototype object, not `{}`: on a plain object literal,
+    // `Object.prototype.__proto__` is an accessor, so `result[key] = ...`
+    // where `key` is literally the string `"__proto__"` (e.g. this
+    // artifact's `rawPlan` -- untrusted stored/loaded input, not
+    // something this module authored -- tampered with an own `__proto__`
+    // property) would silently reassign `result`'s prototype instead of
+    // creating an enumerable own property. `JSON.stringify` would then
+    // never see that key at all, so two artifacts differing only by an
+    // injected `__proto__` key would canonicalize identically and
+    // collide onto the same fingerprint -- exactly the kind of collision
+    // this whole canonicalization step exists to prevent. A
+    // null-prototype object has no such accessor, so every key,
+    // including `__proto__`, becomes a normal own property instead.
+    const result: Record<string, unknown> = Object.create(null) as Record<
+      string,
+      unknown
+    >;
     for (const key of sortedKeys) {
       // `key` comes from `Object.keys` on this same object -- an own,
-      // enumerable key, never caller/request input (SEC-18-style closed
-      // iteration, not dynamic external access).
+      // enumerable key, not an externally chosen lookup path -- and
+      // `result` has no inherited setters to trigger (see above), so
+      // this assignment cannot do anything but create a plain own
+      // property (SEC-18-style closed iteration, not dynamic external
+      // access).
       // eslint-disable-next-line security/detect-object-injection
       result[key] = canonicalizeDeep(record[key]);
     }

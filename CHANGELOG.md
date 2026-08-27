@@ -1,3 +1,10 @@
+## [2.2.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.2.0...v2.2.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **authz:** contain organization administration scope ([3a2502d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3a2502daee436c0b0f53e01a4083d6671ff37d6e))
+
 # [2.2.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.1.0...v2.2.0) (2026-08-26)
 
 

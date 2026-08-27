@@ -15,7 +15,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import {
   __test__,
   describeEvidenceRoot,
-  writeLocalEvidence,
+  writeEvidence,
 } from './evidence-store';
 
 const EVIDENCE_ROOT = path.resolve(
@@ -26,14 +26,14 @@ const EVIDENCE_ROOT = path.resolve(
   'ozi-75',
 );
 
-describe('writeLocalEvidence', () => {
+describe('writeEvidence', () => {
   it('is confined to the evidence root, outside the repository', () => {
     expect(describeEvidenceRoot()).toBe(EVIDENCE_ROOT);
     expect(EVIDENCE_ROOT.startsWith(process.cwd())).toBe(false);
   });
 
   it('writes an allowed file name under local/ with restrictive permissions', async () => {
-    const written = await writeLocalEvidence(
+    const written = await writeEvidence(
       'local',
       '__test__.json',
       '{"ok":true}',
@@ -41,7 +41,7 @@ describe('writeLocalEvidence', () => {
 
     expect(written).toBe(path.resolve(EVIDENCE_ROOT, 'local', '__test__.json'));
 
-    // `written` is this test's own return value from `writeLocalEvidence`,
+    // `written` is this test's own return value from `writeEvidence`,
     // already confined to EVIDENCE_ROOT by that function -- read back and
     // clean up the exact file this test just created and owns. The parent
     // `local/` directory is real, shared evidence storage (may already
@@ -62,7 +62,7 @@ describe('writeLocalEvidence', () => {
 
   it('rejects a file name that attempts to escape the evidence root', async () => {
     await expect(
-      writeLocalEvidence('local', '../../../etc/passwd', 'pwned'),
+      writeEvidence('local', '../../../etc/passwd', 'pwned'),
     ).rejects.toThrow('escapes the allowed directory');
   });
 });
@@ -71,11 +71,11 @@ describe('writeLocalEvidence', () => {
  * `assertNoSymlinkInPath` is tested in isolation against a disposable
  * temp directory it does not know is not the real `EVIDENCE_ROOT` -- it
  * only cares about the (root, target) pair it's given. Exercising the
- * symlink-rejection path through `writeLocalEvidence` itself would require
+ * symlink-rejection path through `writeEvidence` itself would require
  * planting a symlink at the real, shared `EVIDENCE_ROOT/local` (which may
  * already hold real prior scan output) or making `EVIDENCE_ROOT`
  * injectable purely for testability -- neither is worth the risk/cost, and
- * this function is the entire enforcement surface `writeLocalEvidence`
+ * this function is the entire enforcement surface `writeEvidence`
  * delegates to, so testing it directly is equally strong evidence.
  */
 describe('assertNoSymlinkInPath', () => {

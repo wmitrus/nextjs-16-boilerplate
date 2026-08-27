@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
-import { describeEvidenceRoot, writeLocalEvidence } from './evidence-store';
+import { describeEvidenceRoot, writeEvidence } from './evidence-store';
 import {
   summarizeOwnership,
   TABLE_OWNERSHIP,
@@ -161,7 +161,7 @@ async function runScan(
   console.log(JSON.stringify(report, null, 2));
 
   const fileName = `${target}-${report.generatedAt.replace(/[:.]/g, '-')}.json`;
-  const writtenPath = await writeLocalEvidence(
+  const writtenPath = await writeEvidence(
     'local',
     fileName,
     JSON.stringify(report, null, 2),

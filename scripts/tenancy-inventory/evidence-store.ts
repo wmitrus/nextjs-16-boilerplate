@@ -13,9 +13,13 @@ const chmodAsync = promisify(chmod);
 /**
  * Raw, environment-specific evidence never lives in the repo (per OZI-75's
  * evidence-storage constraint) -- it goes here instead, outside any git
- * working tree. `staging`/`production` are named for the eventual layout
- * but are not writable by this tool yet: only `local` is authorized this
- * pass (see `readonly-db.ts`'s `LocalTarget`).
+ * working tree. `staging`/`production` (OZI-79) are structurally supported
+ * -- the type below and the confinement/permission logic apply identically
+ * to all three -- but nothing in this tool actually writes to them yet:
+ * OZI-79 Phase A builds and reviews the remote connection/verification
+ * plumbing only. No `scan`-equivalent command exists for `staging`/
+ * `production` until that review is complete and the user separately
+ * authorizes execution.
  */
 const EVIDENCE_ROOT = path.resolve(
   homedir(),
@@ -25,7 +29,7 @@ const EVIDENCE_ROOT = path.resolve(
   'ozi-75',
 );
 
-export type EvidenceEnvironment = 'local';
+export type EvidenceEnvironment = 'local' | 'staging' | 'production';
 
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
@@ -94,7 +98,7 @@ function assertNoSymlinkInPath(
  * permissions (0700/0600) rather than relying on the process umask, since
  * this evidence may eventually include production-environment output.
  */
-export async function writeLocalEvidence(
+export async function writeEvidence(
   environment: EvidenceEnvironment,
   fileName: string,
   content: string,

@@ -16,6 +16,8 @@ import { createEmailService } from '@/modules/invitations/infrastructure/EmailSe
 import type { WaitlistEntry } from '@/modules/waitlist/domain/types';
 import { DefaultWaitlistService } from '@/modules/waitlist/infrastructure/DefaultWaitlistService';
 import { DrizzleWaitlistRepository } from '@/modules/waitlist/infrastructure/drizzle/DrizzleWaitlistRepository';
+import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
+import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
 export const metadata: Metadata = {
   title: 'Waitlist — Administration',
@@ -69,12 +71,39 @@ async function filterOutAlreadyActive(
   return stillPending.filter((entry) => entry !== null);
 }
 
+/**
+ * The waitlist is platform-global (see `resolveWaitlistService` call sites
+ * and `/api/admin/waitlist/route.ts`'s identical gate): `listPending()` has
+ * no tenant/organization scope to filter by, so ANY caller who reaches this
+ * loader sees every tenant's pending applicants. The `/admin` layout only
+ * proves the caller holds `SECURITY_MANAGE_POLICIES` on their own active
+ * tenant -- every ordinary tenant/organization admin holds that -- so it
+ * must not be treated as proof of platform-wide authority here (SEC-41,
+ * SEC-26). This must be checked, and `listPending()` must not be reached,
+ * before any other loading in this Server Component runs.
+ */
+export async function loadPendingEntriesForPlatformAdmin(): Promise<
+  WaitlistEntry[]
+> {
+  const container = getAppContainer();
+  const access = await resolveNodeProvisioningAccess(container);
+
+  if (
+    access.status !== 'ALLOWED' ||
+    !isEnvBasedPlatformAdmin(access.identity.email)
+  ) {
+    return [];
+  }
+
+  const service = resolveWaitlistService();
+  return filterOutAlreadyActive(await service.listPending());
+}
+
 export default async function WaitlistAdminPage() {
   await connection();
   await getServerRequestLogContext({ pathname: '/admin/waitlist' });
 
-  const service = resolveWaitlistService();
-  const entries = await filterOutAlreadyActive(await service.listPending());
+  const entries = await loadPendingEntriesForPlatformAdmin();
 
   return (
     <div>

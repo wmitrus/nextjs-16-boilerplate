@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.3.0...v2.4.0) (2026-08-27)
+
+
+### Features
+
+* **ozi-79:** remote read-only inventory plumbing (Phase A, no execution) ([#81](https://github.com/wmitrus/nextjs-16-boilerplate/issues/81)) ([dd1127e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dd1127ef7a7f6c6f794ae91bb454d5b89a63c20e))
+
 # [2.3.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.2.2...v2.3.0) (2026-08-27)
 
 

@@ -579,6 +579,15 @@ describe('checkSchemaCompatibility', () => {
     });
     expect(result.compatible).toBe(false);
   });
+
+  it('fails closed without throwing when the artifact itself is null', () => {
+    const result = checkSchemaCompatibility(
+      BASE_FACTS.schemaMigration,
+      // @ts-expect-error -- intentionally malformed for the test
+      null,
+    );
+    expect(result.compatible).toBe(false);
+  });
 });
 
 describe('checkTargetCompatibility', () => {
@@ -623,6 +632,15 @@ describe('checkTargetCompatibility', () => {
       // @ts-expect-error -- intentionally malformed for the test
       target: undefined,
     });
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed without throwing when the artifact itself is null', () => {
+    const result = checkTargetCompatibility(
+      BASE_CALLER.target,
+      // @ts-expect-error -- intentionally malformed for the test
+      null,
+    );
     expect(result.compatible).toBe(false);
   });
 });

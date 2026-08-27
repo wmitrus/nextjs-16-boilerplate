@@ -756,6 +756,12 @@ export function checkSchemaCompatibility(
         'Current target reports no applied schema migration; cannot prove compatibility.',
     };
   }
+  if (!artifact) {
+    return {
+      compatible: false,
+      reason: 'Approved artifact is missing; cannot prove compatibility.',
+    };
+  }
   if (!artifact.schemaMigration) {
     return {
       compatible: false,
@@ -810,6 +816,7 @@ export function checkTargetCompatibility(
     };
   }
   if (
+    !artifact ||
     !artifact.target ||
     !artifact.target.environment ||
     !artifact.target.descriptor

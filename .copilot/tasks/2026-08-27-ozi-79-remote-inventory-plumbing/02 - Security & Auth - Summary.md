@@ -133,3 +133,48 @@
   the originally proposed reuse of `db-guard.mjs`'s `parsePostgresUrl`;
   confirmed all controls in the finished, tested implementation
 - Sections refreshed: all
+
+### 2026-08-27 — Phase A.1 Hardening
+
+- Trigger: user code review of commit `95f374c1` found `verifyReadOnlyRole`
+  insufficient — it sampled only 4 representative tables for write
+  privilege and never checked for `SELECT`'s *presence*, so a write grant
+  on any unsampled table (e.g. `audit_events`) or a role with zero grants
+  at all would incorrectly pass.
+- Summary of change: rewrote `verifyReadOnlyRole` as a database-wide
+  application-table least-privilege check: (1) rejects `rolsuper`,
+  `rolcreatedb`, `rolcreaterole`, `rolreplication`, `rolbypassrls`; (2)
+  rejects schema-level `CREATE` on `public`/`drizzle`, via `aclexplode`
+  filtered to exclude the `PUBLIC` pseudo-grantee (oid 0) rather than
+  `has_schema_privilege()`, which folds in `PUBLIC`'s grants and would
+  false-positive on any database — this local test-db included — that
+  still has `PUBLIC` holding `CREATE` on `public` (the pre-PG15 default,
+  still common); (3) rejects any write privilege
+  (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`/`REFERENCES`/`TRIGGER`) on
+  *every* real table in `public`/`drizzle`, discovered live via
+  `pg_class`/`pg_namespace`, not a hardcoded sample; (4) requires `SELECT`
+  presence on every table the frozen OZI-79 12-check query subset reads.
+- Real bug found and fixed during implementation, not just design: the
+  first draft resolved tables via `pg_catalog.pg_tables` +
+  `has_table_privilege(current_user, 'schema.table', priv)` (text form).
+  Postgres's text-to-`regclass` resolution for that call requires `USAGE`
+  on the containing schema — a role legitimately never granted `USAGE` on
+  `drizzle` (a real, minimal provisioning shape) made that call throw
+  `permission denied for schema drizzle` instead of returning `false`,
+  crashing the check for a role that should have passed. Fixed by
+  resolving tables via `pg_class`/`pg_namespace` and calling
+  `has_table_privilege` with the table's **oid**, which needs no such
+  resolution. Caught by the real-Postgres test suite (test-db), not by
+  design review — this is exactly why Phase A.1 required this repository's
+  actual DB test coverage before being called done, not just a reasoned
+  design.
+- Real-DB tests added, proving both new failure modes the user named: a
+  role with `UPDATE` on `audit_events` (never in the old 4-table sample)
+  is rejected; a role missing `SELECT` on `feature_flags` (in the required
+  set) is rejected. Also added: explicit-`CREATE`-on-schema rejection.
+- Still no execution capability: `cli.ts` untouched, no
+  `scan --target=staging|production` command exists.
+- security status: **GO** (Phase A.1 hardening only — Phase B remote
+  preflight/`EXPLAIN` review remains a separate, not-yet-authorized step)
+- Sections refreshed: Current-State Findings, Sensitive Data And Exposure
+  Notes (unchanged — still N/A), Update Log

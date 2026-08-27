@@ -24,11 +24,15 @@ after this plumbing and the exact query subset are reviewed.
 - `scripts/tenancy-inventory/readonly-db-remote.ts` -- `RemoteTarget`
   (`'staging' | 'production'`), env-var-per-target credential resolution
   (no fallback, never echoes the value on failure), live role-privilege
-  verification (`verifyReadOnlyRole`, via Postgres's own
-  `has_table_privilege()` + a `rolsuper` check), and
-  `withReadOnlyRemoteDb` (same `READ ONLY` transaction +
-  `default_transaction_read_only` + timeouts as `LocalTarget`, with the
-  role verification running first, inside the same transaction).
+  verification (`verifyReadOnlyRole` -- Phase A.1 hardened to a
+  database-wide application-table least-privilege check: rejects elevated
+  role attributes, rejects write privilege on every real table in
+  `public`/`drizzle` (not a 4-table sample), requires `SELECT` presence on
+  every table the frozen OZI-79 query subset reads, rejects role-specific
+  schema `CREATE`), and `withReadOnlyRemoteDb` (same `READ ONLY`
+  transaction + `default_transaction_read_only` + timeouts as
+  `LocalTarget`, with the role verification running first, inside the
+  same transaction).
 - `evidence-store.ts`'s `EvidenceEnvironment` extended to
   `'local' | 'staging' | 'production'` (structural only -- nothing writes
   to `staging`/`production` yet). Renamed `writeLocalEvidence` ->

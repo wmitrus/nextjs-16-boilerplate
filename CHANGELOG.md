@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.2.2...v2.3.0) (2026-08-27)
+
+
+### Features
+
+* **ozi-75:** read-only tenant/organization topology inventory tooling ([#80](https://github.com/wmitrus/nextjs-16-boilerplate/issues/80)) ([b9a8f61](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b9a8f61c823bf97039f43e69f2633db6b968e4fb))
+
 ## [2.2.2](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.2.1...v2.2.2) (2026-08-27)
 
 

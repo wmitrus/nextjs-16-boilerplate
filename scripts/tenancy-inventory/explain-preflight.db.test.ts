@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildExplainPreflightArtifact,
+  checkArtifactIntegrity,
   checkRegistryCompatibility,
   checkSchemaCompatibility,
+  checkTargetCompatibility,
   collectExplainPreflightFacts,
 } from './explain-preflight';
 import { QUERY_REGISTRY, REQUIRED_SELECT_TABLES } from './query-registry';
@@ -40,8 +42,10 @@ describe('collectExplainPreflightFacts (real DB, local test-db only)', () => {
     expect(statCoverage).toEqual(requiredCoverage);
     for (const stat of facts.requiredRelationStats) {
       expect(typeof stat.estimatedRowCount).toBe('number');
+      expect(typeof stat.relPages).toBe('number');
       expect(typeof stat.relationSizeBytes).toBe('number');
       expect(typeof stat.totalRelationSizeBytes).toBe('number');
+      expect(typeof stat.indexSizeBytes).toBe('number');
     }
   });
 
@@ -84,30 +88,40 @@ describe('collectExplainPreflightFacts (real DB, local test-db only)', () => {
   });
 });
 
+// `environment` is a closed 'staging' | 'production' domain -- this test
+// never connects to either; local test-db stands in under a synthetic
+// 'staging' label purely to satisfy the type while exercising the real
+// collection + fingerprinting/compatibility logic end to end.
+const REAL_DATA_CALLER = {
+  target: {
+    environment: 'staging' as const,
+    descriptor: 'test-db (local, standing in for staging in this test)',
+  },
+  commit: { commitSha: 'test-fixture', workingTreeDirty: false },
+};
+
 describe('artifact + compatibility checks against real collected data', () => {
-  it('builds an artifact from real facts that is immediately registry- and schema-compatible with itself', async () => {
+  it('builds an artifact from real facts that is immediately registry-, schema-, target-compatible, and self-integral', async () => {
     const facts = await withReadOnlyDb('test', (tx) =>
       collectExplainPreflightFacts(tx),
     );
-    const artifact = buildExplainPreflightArtifact(facts, {
-      target: { environment: 'local', descriptor: 'test-db (local)' },
-      commit: { commitSha: 'test-fixture', workingTreeDirty: false },
-    });
+    const artifact = buildExplainPreflightArtifact(facts, REAL_DATA_CALLER);
 
     expect(checkRegistryCompatibility(artifact).compatible).toBe(true);
     expect(
       checkSchemaCompatibility(facts.schemaMigration, artifact).compatible,
     ).toBe(true);
+    expect(
+      checkTargetCompatibility(REAL_DATA_CALLER.target, artifact).compatible,
+    ).toBe(true);
+    expect(checkArtifactIntegrity(artifact).compatible).toBe(true);
   });
 
   it('fails closed when the current schema migration no longer matches the approved artifact', async () => {
     const facts = await withReadOnlyDb('test', (tx) =>
       collectExplainPreflightFacts(tx),
     );
-    const artifact = buildExplainPreflightArtifact(facts, {
-      target: { environment: 'local', descriptor: 'test-db (local)' },
-      commit: { commitSha: 'test-fixture', workingTreeDirty: false },
-    });
+    const artifact = buildExplainPreflightArtifact(facts, REAL_DATA_CALLER);
 
     const driftedMigration = facts.schemaMigration
       ? { id: facts.schemaMigration.id + 1, hash: 'drifted-hash' }
@@ -115,5 +129,40 @@ describe('artifact + compatibility checks against real collected data', () => {
 
     const result = checkSchemaCompatibility(driftedMigration, artifact);
     expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when the current target does not match the approved artifact', async () => {
+    const facts = await withReadOnlyDb('test', (tx) =>
+      collectExplainPreflightFacts(tx),
+    );
+    const artifact = buildExplainPreflightArtifact(facts, REAL_DATA_CALLER);
+
+    const result = checkTargetCompatibility(
+      {
+        environment: 'production',
+        descriptor: REAL_DATA_CALLER.target.descriptor,
+      },
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when a real artifact is mutated after the fact', async () => {
+    const facts = await withReadOnlyDb('test', (tx) =>
+      collectExplainPreflightFacts(tx),
+    );
+    const artifact = buildExplainPreflightArtifact(facts, REAL_DATA_CALLER);
+
+    const tampered = {
+      ...artifact,
+      statementPlans: [
+        {
+          ...artifact.statementPlans[0]!,
+          rawPlan: { 'Node Type': 'Tampered' },
+        },
+        ...artifact.statementPlans.slice(1),
+      ],
+    };
+    expect(checkArtifactIntegrity(tampered).compatible).toBe(false);
   });
 });

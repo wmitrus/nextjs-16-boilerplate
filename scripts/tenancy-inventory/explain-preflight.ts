@@ -23,8 +23,8 @@ import {
  * OZI-79 Phase B1: a **build-only, local-test-only** plain-`EXPLAIN`
  * preflight core. This module collects `EXPLAIN` plans and relation
  * statistics for the frozen Phase B0 `QUERY_REGISTRY` and assembles them
- * into a versioned, fingerprinted artifact for later human review -- it
- * does not decide anything, connect to anything remote, or execute
+ * into a versioned, dual-fingerprinted artifact for later human review --
+ * it does not decide anything, connect to anything remote, or execute
  * anything beyond `EXPLAIN` (never `EXPLAIN ANALYZE`).
  *
  * Explicit non-goals, enforced by what this file does NOT import or call:
@@ -44,6 +44,34 @@ import {
  * B1 does not decide which one a caller uses; a future Phase B2 would be
  * the (separately authorized) decision to actually call this against a
  * remote transaction.
+ *
+ * ## Two fingerprints, two different jobs
+ *
+ * `scopeFingerprint` is the stable, cross-run "what was reviewed"
+ * identity: target, commit, schema migration, and the exact registry
+ * content (`registryFingerprint` + every statement fingerprint). Two
+ * preflight runs against the identical schema and query set produce the
+ * *same* `scopeFingerprint`, even though their `EXPLAIN` plans and
+ * relation stats will normally differ run to run (ordinary data/vacuum/
+ * analyze churn). This is what a human approval realistically references.
+ *
+ * `artifactFingerprint` is the exact-evidence identity: everything in the
+ * scope, plus `generatedAt` and the full collected evidence
+ * (`requiredRelationStats`, all 16 complete `statementPlans` -- raw plan,
+ * parsed facts, planning metadata). It is **not** expected to reproduce
+ * across two different runs, even against the identical schema -- that
+ * would defeat its purpose. Its job is narrower: prove *this specific
+ * artifact instance* has not been mutated since it was produced
+ * (`checkArtifactIntegrity`).
+ *
+ * **`artifactFingerprint` is an integrity/identity value, not an
+ * authentication mechanism.** Passing `checkArtifactIntegrity` only
+ * proves an artifact is internally self-consistent -- it says nothing
+ * about whether a human ever actually approved it. A future scan must
+ * compare an artifact's fingerprint against a separately, externally
+ * recorded *approved* fingerprint (e.g. from an approval record kept
+ * outside the artifact itself) before trusting it -- never accept an
+ * artifact merely because it is self-consistent.
  */
 
 type Tx = PostgresJsDatabase<Record<string, never>>;
@@ -54,17 +82,22 @@ export interface RelationStat {
   readonly schema: ApplicationSchema;
   readonly table: string;
   readonly estimatedRowCount: number;
+  readonly relPages: number;
   readonly relationSizeBytes: number;
   readonly totalRelationSizeBytes: number;
+  readonly indexSizeBytes: number;
 }
 
 /**
  * `pg_catalog` size/row-estimate metadata for exactly
  * `REQUIRED_SELECT_TABLES` -- not a caller-selected table list, not every
- * table in the schema. `reltuples` is a planner estimate (updated by
- * `ANALYZE`/autovacuum), not a live `count(*)` -- exactly what a plan-
- * review needs (the planner's own view of the data), and cheap to read
- * regardless of table size.
+ * table in the schema. `reltuples`/`relpages` are planner estimates
+ * (updated by `ANALYZE`/autovacuum), not a live `count(*)` -- exactly
+ * what a plan review needs (the planner's own view of the data), and
+ * cheap to read regardless of table size. `pg_indexes_size` sums every
+ * index on the relation separately from `pg_total_relation_size` (which
+ * already includes indexes) so a reviewer can see index weight on its
+ * own, not just folded into the total.
  */
 async function collectRequiredRelationStats(
   tx: Tx,
@@ -79,15 +112,19 @@ async function collectRequiredRelationStats(
     schema: ApplicationSchema;
     table_name: string;
     estimated_row_count: string;
+    rel_pages: string;
     relation_size_bytes: string;
     total_relation_size_bytes: string;
+    index_size_bytes: string;
   }>(sql`
     select
       n.nspname as schema,
       c.relname as table_name,
       c.reltuples::bigint as estimated_row_count,
+      c.relpages as rel_pages,
       pg_relation_size(c.oid) as relation_size_bytes,
-      pg_total_relation_size(c.oid) as total_relation_size_bytes
+      pg_total_relation_size(c.oid) as total_relation_size_bytes,
+      pg_indexes_size(c.oid) as index_size_bytes
     from pg_class c
     join pg_namespace n on c.relnamespace = n.oid
     where (n.nspname, c.relname) in (${tablePairs})
@@ -96,8 +133,10 @@ async function collectRequiredRelationStats(
     schema: row.schema,
     table: row.table_name,
     estimatedRowCount: Number(row.estimated_row_count),
+    relPages: Number(row.rel_pages),
     relationSizeBytes: Number(row.relation_size_bytes),
     totalRelationSizeBytes: Number(row.total_relation_size_bytes),
+    indexSizeBytes: Number(row.index_size_bytes),
   }));
 }
 
@@ -143,7 +182,9 @@ interface RawExplainRoot {
 
 /**
  * Exported so plan-parsing recursion can be unit-tested directly against
- * a synthetic, multi-level plan fixture, without a database.
+ * a synthetic, multi-level plan fixture, without a database. `children`
+ * preserves `Plans`' original order -- it is the actual left-to-right
+ * structure of the query plan tree, not a sortable collection.
  */
 export function parsePlanNode(node: RawExplainPlanNode): PlanNodeFact {
   return {
@@ -255,14 +296,24 @@ export async function collectExplainPreflightFacts(
 // ─── Artifact contract ──────────────────────────────────────────────────
 
 /**
+ * Narrowed to the closed remote-environment domain -- deliberately not
+ * importing `RemoteTarget` from `readonly-db-remote.ts` (or anything else
+ * from it): this module stays structurally independent of that one, the
+ * same way `LocalTarget` and `RemoteTarget` stay independent of each
+ * other. Phase B2 will be the (separately authorized) work of deriving a
+ * real value here from `describeRemoteTarget`; nothing here does that.
+ */
+export type ExplainPreflightEnvironment = 'staging' | 'production';
+
+/**
  * Caller-supplied, not collector-derived: this module has no concept of
  * "which environment" -- it only knows how to read a transaction handed
- * to it. Phase B1 has no caller that fills this in with anything but a
- * local descriptor (see the tests); a `staging`/`production` value here
- * is a Phase B2 concern, still unauthorized.
+ * to it. `descriptor` is expected to be the same safe `host:port/database`
+ * shape `describeRemoteTarget`/`describeLocalTarget` already produce
+ * elsewhere in this tool -- never a raw connection string or credential.
  */
 export interface ExplainPreflightTargetMetadata {
-  readonly environment: string;
+  readonly environment: ExplainPreflightEnvironment;
   readonly descriptor: string;
 }
 
@@ -285,6 +336,9 @@ export interface ExplainPreflightArtifactV1 {
   readonly requiresManualReview: true;
   readonly requiredRelationStats: readonly RelationStat[];
   readonly statementPlans: readonly StatementPlanResult[];
+  /** Stable, cross-run "what was reviewed" identity -- see the module doc comment. */
+  readonly scopeFingerprint: string;
+  /** Exact-evidence identity of this specific artifact instance -- see the module doc comment. */
   readonly artifactFingerprint: string;
 }
 
@@ -293,28 +347,36 @@ function sha256(text: string): string {
 }
 
 /**
- * The fields the artifact fingerprint covers, and the fields it
- * deliberately does not.
- *
- * Covered: `target`, `commit`, `schemaMigration`, `registryFingerprint`,
- * `statementFingerprints`, `priorityManualReviewStatementIds`,
- * `requiresManualReview` -- together, exactly "what was reviewed, against
- * which schema, on which target, at which commit." This is what a later
- * compatibility check needs to bind an approval to.
- *
- * Deliberately excluded: `generatedAt` (a timestamp -- including it would
- * make the fingerprint different on every single run even with zero real
- * drift, which is not "deterministic" in any useful sense), `rawPlan`/
- * `facts`/`requiredRelationStats` (planner estimates and relation sizes
- * are expected to vary between two runs against the *same* schema and
- * query set as normal data/vacuum/analyze churn -- fingerprinting them
- * would make the fingerprint fail to reproduce for the identical review
- * scope, which is the opposite of what a binding artifact fingerprint is
- * for). Statement-level SQL/table-set content is already covered via
- * `registryFingerprint`/`statementFingerprints` -- there is no separate
- * need to re-hash the plans themselves to prove which queries were run.
+ * Recursively sorts object keys at every level so two structurally
+ * identical values always serialize identically regardless of property
+ * insertion order. Deliberately does **not** reorder array elements --
+ * only the two explicit top-level sorts in the callers below (statement
+ * plans/fingerprints by `id`, relation stats by `schema`+`table`) change
+ * array order; everything else, including a plan node's `children`/
+ * `Plans`, is a semantically ordered sequence (the real left-to-right
+ * shape of the query plan), not a sortable set, and is preserved as-is.
  */
-type ArtifactFingerprintPayload = Pick<
+function canonicalizeDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalizeDeep(entry));
+  }
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const sortedKeys = Object.keys(record).sort();
+    const result: Record<string, unknown> = {};
+    for (const key of sortedKeys) {
+      // `key` comes from `Object.keys` on this same object -- an own,
+      // enumerable key, never caller/request input (SEC-18-style closed
+      // iteration, not dynamic external access).
+      // eslint-disable-next-line security/detect-object-injection
+      result[key] = canonicalizeDeep(record[key]);
+    }
+    return result;
+  }
+  return value;
+}
+
+type ScopeFingerprintPayload = Pick<
   ExplainPreflightArtifactV1,
   | 'version'
   | 'target'
@@ -326,29 +388,82 @@ type ArtifactFingerprintPayload = Pick<
   | 'requiresManualReview'
 >;
 
-function canonicalArtifactRepresentation(
-  payload: ArtifactFingerprintPayload,
+/**
+ * The stable, cross-run "what was reviewed" identity -- see the module
+ * doc comment's "Two fingerprints, two different jobs" section. Excludes
+ * `generatedAt` and all collected evidence (raw plans, parsed facts,
+ * relation stats): those are expected to vary between two runs against
+ * the *same* schema and query set as normal data/vacuum/analyze churn,
+ * and including them here would make this fingerprint fail to reproduce
+ * for what should be treated as the identical review scope.
+ */
+export function computeScopeFingerprint(
+  payload: ScopeFingerprintPayload,
 ): string {
-  return JSON.stringify({
+  const canonical = canonicalizeDeep({
     version: payload.version,
     target: payload.target,
     commit: payload.commit,
     schemaMigration: payload.schemaMigration,
-    registryFingerprint: payload.registryFingerprint,
     statementFingerprints: [...payload.statementFingerprints].sort((a, b) =>
       a.id.localeCompare(b.id),
     ),
+    registryFingerprint: payload.registryFingerprint,
     priorityManualReviewStatementIds: [
       ...payload.priorityManualReviewStatementIds,
     ].sort(),
     requiresManualReview: payload.requiresManualReview,
   });
+  return sha256(JSON.stringify(canonical));
 }
 
+type ArtifactFingerprintPayload = ScopeFingerprintPayload &
+  Pick<
+    ExplainPreflightArtifactV1,
+    'generatedAt' | 'requiredRelationStats' | 'statementPlans'
+  >;
+
+function relationStatSortKey(stat: RelationStat): string {
+  return `${stat.schema}.${stat.table}`;
+}
+
+/**
+ * The exact-evidence identity of one specific artifact instance -- see
+ * the module doc comment. Covers everything `computeScopeFingerprint`
+ * does, plus `generatedAt` and the full collected evidence
+ * (`requiredRelationStats`, every complete `statementPlans` entry
+ * including its raw plan). This is deliberately **not** expected to
+ * reproduce across two different collection runs, even against the
+ * identical schema -- that reproducibility property belongs to
+ * `computeScopeFingerprint`, not this function. This function's job is
+ * narrower: let `checkArtifactIntegrity` prove a *specific* artifact
+ * instance was not mutated after being produced.
+ */
 export function computeArtifactFingerprint(
   payload: ArtifactFingerprintPayload,
 ): string {
-  return sha256(canonicalArtifactRepresentation(payload));
+  const canonical = canonicalizeDeep({
+    version: payload.version,
+    target: payload.target,
+    commit: payload.commit,
+    schemaMigration: payload.schemaMigration,
+    statementFingerprints: [...payload.statementFingerprints].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    ),
+    registryFingerprint: payload.registryFingerprint,
+    priorityManualReviewStatementIds: [
+      ...payload.priorityManualReviewStatementIds,
+    ].sort(),
+    requiresManualReview: payload.requiresManualReview,
+    generatedAt: payload.generatedAt,
+    requiredRelationStats: [...payload.requiredRelationStats].sort((a, b) =>
+      relationStatSortKey(a).localeCompare(relationStatSortKey(b)),
+    ),
+    statementPlans: [...payload.statementPlans].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    ),
+  });
+  return sha256(JSON.stringify(canonical));
 }
 
 export interface ExplainPreflightCallerMetadata {
@@ -362,7 +477,7 @@ export interface ExplainPreflightCallerMetadata {
  * The pure half of Phase B1: no DB I/O, no clock dependency beyond an
  * overridable `generatedAt`. Takes already-collected facts (see
  * `collectExplainPreflightFacts`) plus caller-supplied target/commit
- * metadata and assembles the versioned, fingerprinted artifact. Kept
+ * metadata and assembles the versioned, dual-fingerprinted artifact. Kept
  * separate from collection specifically so this assembly/fingerprinting
  * logic is unit-testable without a database.
  */
@@ -370,7 +485,7 @@ export function buildExplainPreflightArtifact(
   facts: ExplainPreflightFacts,
   caller: ExplainPreflightCallerMetadata,
 ): ExplainPreflightArtifactV1 {
-  const payload: ArtifactFingerprintPayload = {
+  const scopePayload: ScopeFingerprintPayload = {
     version: 1,
     target: caller.target,
     commit: caller.commit,
@@ -380,22 +495,79 @@ export function buildExplainPreflightArtifact(
     priorityManualReviewStatementIds: PRIORITY_MANUAL_REVIEW_STATEMENT_IDS,
     requiresManualReview: true,
   };
-
-  return {
-    ...payload,
-    generatedAt: caller.generatedAt ?? new Date().toISOString(),
+  const generatedAt = caller.generatedAt ?? new Date().toISOString();
+  const artifactPayload: ArtifactFingerprintPayload = {
+    ...scopePayload,
+    generatedAt,
     requiredRelationStats: facts.requiredRelationStats,
     statementPlans: facts.statementPlans,
-    artifactFingerprint: computeArtifactFingerprint(payload),
+  };
+
+  return {
+    ...scopePayload,
+    generatedAt,
+    requiredRelationStats: facts.requiredRelationStats,
+    statementPlans: facts.statementPlans,
+    scopeFingerprint: computeScopeFingerprint(scopePayload),
+    artifactFingerprint: computeArtifactFingerprint(artifactPayload),
   };
 }
 
-// ─── Compatibility checks (for later scan wiring -- unused today) ──────
+// ─── Compatibility / integrity checks (for later scan wiring -- unused today) ──
 
 export interface CompatibilityResult {
   readonly compatible: boolean;
   readonly reason: string;
   readonly details?: Record<string, unknown>;
+}
+
+/**
+ * Pure, synchronous, fail-closed: recomputes `artifactFingerprint` from
+ * the artifact's own recorded contents and compares it to the stored
+ * value. Proves the artifact has not been mutated since it was produced.
+ *
+ * This does **not** prove the artifact was ever legitimately approved --
+ * see the module doc comment. A future scan must additionally compare an
+ * artifact's fingerprint against a separately, externally recorded
+ * *approved* fingerprint before trusting it.
+ */
+export function checkArtifactIntegrity(
+  artifact: ExplainPreflightArtifactV1,
+): CompatibilityResult {
+  if (
+    !artifact ||
+    typeof artifact.artifactFingerprint !== 'string' ||
+    !artifact.artifactFingerprint
+  ) {
+    return {
+      compatible: false,
+      reason: 'Artifact is missing its fingerprint; cannot prove integrity.',
+    };
+  }
+
+  let recomputed: string;
+  try {
+    recomputed = computeArtifactFingerprint(artifact);
+  } catch {
+    return {
+      compatible: false,
+      reason:
+        'Artifact contents could not be canonicalized; cannot prove integrity.',
+    };
+  }
+
+  if (recomputed !== artifact.artifactFingerprint) {
+    return {
+      compatible: false,
+      reason:
+        'Artifact contents do not match its recorded fingerprint -- it may have been mutated since it was produced.',
+    };
+  }
+
+  return {
+    compatible: true,
+    reason: 'Artifact contents match its recorded fingerprint exactly.',
+  };
 }
 
 /**
@@ -405,10 +577,17 @@ export interface CompatibilityResult {
  * *positively* prove a match returns `compatible: false`; there is no
  * default-true path.
  *
- * Recomputes `registryFingerprint()` from the *current* in-process
- * `QUERY_REGISTRY` and compares it to what the artifact recorded. On
- * mismatch, also diffs the per-statement fingerprints so the caller can
- * report exactly which statement(s) drifted, not just "something did."
+ * Independently of whether the top-level `registryFingerprint` string
+ * already matches, always validates the artifact's own
+ * `statementFingerprints` array structurally against the current
+ * registry: exactly 16 entries, every id known and unique, no id
+ * missing, no extra/unknown id, and every fingerprint value equal to the
+ * current one for that id. This catches an artifact whose top-level
+ * `registryFingerprint` string happens to be correct while its own
+ * embedded per-statement list was independently tampered (missing,
+ * duplicated, or swapped in an unrelated entry) -- a scenario the
+ * top-level string alone cannot detect, since nothing re-derives it from
+ * the array before trusting it.
  */
 export function checkRegistryCompatibility(
   artifact: Pick<
@@ -429,37 +608,70 @@ export function checkRegistryCompatibility(
     };
   }
 
+  const current = new Map(
+    allStatementFingerprints().map((entry) => [entry.id, entry.fingerprint]),
+  );
+
+  const seenIds = new Set<string>();
+  const duplicated: string[] = [];
+  for (const entry of artifact.statementFingerprints) {
+    if (seenIds.has(entry.id)) {
+      duplicated.push(entry.id);
+    }
+    seenIds.add(entry.id);
+  }
+
+  const approved = new Map(
+    artifact.statementFingerprints.map((entry) => [
+      entry.id,
+      entry.fingerprint,
+    ]),
+  );
+
+  const changed: string[] = [];
+  const missing: string[] = [];
+  for (const [id, fingerprint] of current) {
+    if (!approved.has(id)) {
+      missing.push(id);
+    } else if (approved.get(id) !== fingerprint) {
+      changed.push(id);
+    }
+  }
+  const extra: string[] = [];
+  for (const id of approved.keys()) {
+    if (!current.has(id)) {
+      extra.push(id);
+    }
+  }
+
+  const countMismatch = artifact.statementFingerprints.length !== current.size;
+  const structurallyValid =
+    duplicated.length === 0 &&
+    missing.length === 0 &&
+    extra.length === 0 &&
+    changed.length === 0 &&
+    !countMismatch;
+
   const currentRegistryFingerprint = registryFingerprint();
-  if (currentRegistryFingerprint !== artifact.registryFingerprint) {
-    const current = new Map(
-      allStatementFingerprints().map((entry) => [entry.id, entry.fingerprint]),
-    );
-    const approved = new Map(
-      artifact.statementFingerprints.map((entry) => [
-        entry.id,
-        entry.fingerprint,
-      ]),
-    );
-    const changed: string[] = [];
-    const added: string[] = [];
-    const removed: string[] = [];
-    for (const [id, fingerprint] of current) {
-      if (!approved.has(id)) {
-        added.push(id);
-      } else if (approved.get(id) !== fingerprint) {
-        changed.push(id);
-      }
-    }
-    for (const id of approved.keys()) {
-      if (!current.has(id)) {
-        removed.push(id);
-      }
-    }
+  const topLevelMismatch =
+    currentRegistryFingerprint !== artifact.registryFingerprint;
+
+  if (!structurallyValid || topLevelMismatch) {
     return {
       compatible: false,
       reason:
-        'Current QUERY_REGISTRY does not match the fingerprint recorded on the approved artifact.',
-      details: { changed, added, removed },
+        !structurallyValid && !topLevelMismatch
+          ? "The top-level registry fingerprint matches, but the artifact's per-statement fingerprint list does not structurally match the current registry."
+          : 'Current QUERY_REGISTRY does not match the fingerprint(s) recorded on the approved artifact.',
+      details: {
+        changed,
+        missing,
+        extra,
+        duplicated,
+        expectedCount: current.size,
+        actualCount: artifact.statementFingerprints.length,
+        topLevelMismatch,
+      },
     };
   }
 
@@ -511,6 +723,60 @@ export function checkSchemaCompatibility(
   return {
     compatible: true,
     reason: 'Current schema migration matches the approved artifact exactly.',
+  };
+}
+
+/**
+ * Pure, synchronous, fail-closed. `currentTarget` must be resolved by the
+ * caller -- a future Phase B2 would derive it from the real
+ * `RemoteTarget`/`describeRemoteTarget` wiring; this function does no I/O
+ * and imports nothing from `readonly-db-remote.ts`. Both `environment`
+ * and `descriptor` must match exactly: an artifact approved against
+ * staging must never be treated as compatible with a production target
+ * (or vice versa) merely because the registry and schema migration
+ * happen to agree -- two environments can share both while holding
+ * materially different data distributions.
+ */
+export function checkTargetCompatibility(
+  currentTarget: ExplainPreflightTargetMetadata,
+  artifact: Pick<ExplainPreflightArtifactV1, 'target'>,
+): CompatibilityResult {
+  if (
+    !currentTarget ||
+    !currentTarget.environment ||
+    !currentTarget.descriptor
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Current target is missing environment/descriptor; cannot prove compatibility.',
+    };
+  }
+  if (
+    !artifact.target ||
+    !artifact.target.environment ||
+    !artifact.target.descriptor
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Approved artifact is missing target metadata; cannot prove compatibility.',
+    };
+  }
+  if (
+    currentTarget.environment !== artifact.target.environment ||
+    currentTarget.descriptor !== artifact.target.descriptor
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Current target does not match the target recorded on the approved artifact.',
+      details: { current: currentTarget, approved: artifact.target },
+    };
+  }
+  return {
+    compatible: true,
+    reason: 'Current target matches the approved artifact exactly.',
   };
 }
 

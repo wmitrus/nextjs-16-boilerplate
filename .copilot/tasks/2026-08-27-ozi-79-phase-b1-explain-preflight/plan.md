@@ -21,18 +21,51 @@ execution boundary and design rationale.
 ## What was built
 
 - `scripts/tenancy-inventory/explain-preflight.ts` -- see `runbook.md`
-- `scripts/tenancy-inventory/explain-preflight.test.ts` (19 unit tests)
-- `scripts/tenancy-inventory/explain-preflight.db.test.ts` (6 real-DB
+- `scripts/tenancy-inventory/explain-preflight.test.ts` (40 unit tests)
+- `scripts/tenancy-inventory/explain-preflight.db.test.ts` (8 real-DB
   tests, local `test-db` only)
+- `scripts/tenancy-inventory/explain-preflight.least-privilege.db.test.ts`
+  (1 real-DB test, local `test-db` only) -- end-to-end least-privilege
+  integration proof
 
 ## Validation
 
-typecheck clean · lint clean · 53/53 unit tests (`scripts/tenancy-inventory`
-subset) · 31 files / 293 tests in the full local db-local suite · same
-31/293 via `pnpm test:db:ci` (the required CI job's exact command,
-confirming the new `.db.test.ts` file is picked up automatically by the
-existing Phase B0 CI include) · `arch:lint` shows only the same
-pre-existing unrelated `strict-rate-limit.ts` FAIL
+typecheck clean · lint clean · 74/74 unit tests (`scripts/tenancy-inventory`
+subset) · 32 files / 296 tests in the full local db-local suite (`PUBLIC`'s
+`CREATE` grant confirmed restored) · same 32/296 via `pnpm test:db:ci` (the
+required CI job's exact command, confirming the new `.db.test.ts` files are
+picked up automatically by the existing Phase B0 CI include) · `arch:lint`
+shows only the same pre-existing unrelated `strict-rate-limit.ts` FAIL
+
+## Update Log
+
+### 2026-08-27 — Final Phase B1 security/integrity review, before merge
+
+- Split the single `artifactFingerprint` concept into `scopeFingerprint`
+  (stable, cross-run "what was reviewed" identity) and a redefined
+  `artifactFingerprint` (exact-evidence identity covering `generatedAt`
+  and all collected evidence -- raw plans, parsed facts, relation stats).
+- Added `checkArtifactIntegrity()`; documented explicitly that
+  `artifactFingerprint` is an integrity/identity value, not an
+  authentication mechanism.
+- Narrowed `ExplainPreflightTargetMetadata.environment` to the closed
+  `'staging' | 'production'` domain (defined locally, not imported from
+  `readonly-db-remote.ts`); added `checkTargetCompatibility()`.
+- Hardened `checkRegistryCompatibility()` to always independently
+  validate the artifact's own `statementFingerprints` array (exactly 16
+  known unique ids, every fingerprint current) regardless of whether the
+  top-level `registryFingerprint` string already matches; added four
+  negative tests proving this against a *correct* top-level fingerprint
+  combined with a missing/extra/duplicate/changed statement entry.
+- Completed `RelationStat` with `relPages`/`indexSizeBytes`.
+- Added `explain-preflight.least-privilege.db.test.ts` -- real-Postgres
+  proof that a disposable role with exactly `USAGE` on `public`/`drizzle`
+  + `SELECT` on `REQUIRED_SELECT_TABLES`, no memberships, no writes,
+  passes `verifyReadOnlyRole` and then successfully drives
+  `collectExplainPreflightFacts` inside one `READ ONLY` transaction.
+- Fixed the Codacy markdown-fence-language finding in `runbook.md`.
+- Still true: no remote CLI command, no remote credential, no remote
+  connection, no Phase B2 work started.
 
 ## Artifacts
 

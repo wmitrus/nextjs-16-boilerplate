@@ -171,7 +171,10 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
     expect(response.status).toBe(200);
     expect(mocks.mutationService.updateOrganizationStatus).toHaveBeenCalledWith(
       {
-        activeOrganizationId: 'tenant_test_1',
+        scope: {
+          kind: 'organization',
+          organizationId: 'tenant_test_1',
+        },
         organizationId: ORG_ID,
         status: 'archived',
       },
@@ -185,5 +188,47 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
         targetId: ORG_ID,
       }),
     );
+  });
+
+  it('preserves active-tenant scope for an explicit environment platform admin', async () => {
+    mocks.isEnvAdmin.mockReturnValue(true);
+
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest({ status: 'archived' }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.authzService.can).not.toHaveBeenCalled();
+    expect(mocks.readService.getDetailInActiveScope).toHaveBeenCalledWith({
+      scope: {
+        kind: 'active-tenant',
+        activeOrganizationId: 'tenant_test_1',
+      },
+      organizationId: ORG_ID,
+    });
+    expect(mocks.mutationService.updateOrganizationStatus).toHaveBeenCalledWith(
+      {
+        scope: {
+          kind: 'active-tenant',
+          activeOrganizationId: 'tenant_test_1',
+        },
+        organizationId: ORG_ID,
+        status: 'archived',
+      },
+    );
+  });
+
+  it('rejects a malformed organization id before any resource lookup or mutation', async () => {
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest({ status: 'archived' }),
+      makeContext('not-a-uuid'),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
+    expect(mocks.mutationService.updateOrganizationStatus).not.toHaveBeenCalled();
   });
 });

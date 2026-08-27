@@ -15,7 +15,10 @@
 - `scripts/tenancy-inventory/readonly-db-remote.ts` (new module)
 - `scripts/tenancy-inventory/evidence-store.ts` (`EvidenceEnvironment`
   extension, `writeLocalEvidence` -> `writeEvidence` rename)
-- `scripts/tenancy-inventory/cli.ts` (deliberately NOT touched)
+- `scripts/tenancy-inventory/cli.ts` (only touched for the
+  `writeLocalEvidence` -> `writeEvidence` import rename; no remote CLI
+  execution path exists -- there is no `staging`/`production` target or
+  command anywhere in it)
 
 ## Architectural Decisions / Constraints
 

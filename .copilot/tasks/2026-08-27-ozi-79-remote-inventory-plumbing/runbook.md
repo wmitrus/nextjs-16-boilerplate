@@ -3,8 +3,9 @@
 ## What exists right now
 
 `scripts/tenancy-inventory/readonly-db-remote.ts` — tested, reviewed
-plumbing. Nothing in it is reachable from the CLI (`cli.ts` is unchanged
-from OZI-75) — there is no `pnpm tenancy-inventory -- scan
+plumbing. Nothing in it is reachable from the CLI — `cli.ts`'s only change
+since OZI-75 is an import rename (`writeLocalEvidence` -> `writeEvidence`);
+there is no remote CLI execution path, no `pnpm tenancy-inventory -- scan
 --target=staging` command. Running `pnpm tenancy-inventory:matrix` or
 `:scan:dev`/`:scan:test` today behaves exactly as it did after OZI-75;
 this phase added nothing runnable against a remote database.
@@ -21,29 +22,42 @@ this phase added nothing runnable against a remote database.
 
 2. `withReadOnlyRemoteDb(target, fn)` opens the connection and, **before
    `fn` runs**, calls `verifyReadOnlyRole`, which is a database-wide
-   application-table least-privilege check (Phase A.1 hardening — this
-   replaced an earlier version that only sampled 4 representative tables
-   and never checked for SELECT's *presence*):
+   application-table least-privilege check (hardened twice already —
+   Phase A.1 replaced an earlier version that only sampled 4 representative
+   tables and never checked SELECT's *presence*; Phase A.2 fixed two more
+   real gaps a user code review found):
    - checks `pg_roles.rolsuper`/`rolcreatedb`/`rolcreaterole`/
      `rolreplication`/`rolbypassrls` for the connected role — refuses if
      any is true (each one can bypass table grants entirely, so no amount
      of `REVOKE` matters if you're accidentally connected as a role with
      one of these);
-   - checks, via `aclexplode` (deliberately not `has_schema_privilege()`,
-     which folds in whatever `PUBLIC` was granted and would false-positive
-     on any database that hasn't run `REVOKE CREATE ON SCHEMA public FROM
-     PUBLIC`), whether the role itself — not `PUBLIC` — was granted
-     `CREATE` on the `public` or `drizzle` schema — refuses if so;
+   - checks `has_schema_privilege(current_user, schema, 'CREATE')` for the
+     `public` and `drizzle` schemas — refuses if true, **inclusive of
+     `PUBLIC`'s own grants** (Phase A.2 fix: an earlier version deliberately
+     excluded `PUBLIC` via `aclexplode`, which was wrong — if `PUBLIC` holds
+     `CREATE` on a schema, as this repo's own test-db and any database that
+     predates PG15's hardened default still can, *every* role including a
+     correctly provisioned one can actually `CREATE TABLE` there, so the
+     tool must refuse rather than report a false "SELECT-only" pass);
+   - checks `has_schema_privilege(current_user, schema, 'USAGE')` for both
+     schemas — refuses if missing on either (Phase A.2 addition: without
+     `USAGE` on `drizzle`, `latestSchemaMigration`'s query would fail at
+     execution time, which the old check never caught);
+   - checks `pg_auth_members` for any role the connected role is a member
+     of — refuses if any exist (Phase A.2 addition: role membership is a
+     hidden `SET ROLE`/inheritance path to whatever privileges that other
+     role holds; a genuinely minimal OZI-79 credential must have none);
    - checks `has_table_privilege(current_user, table_oid, privilege)` for
      `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`/`REFERENCES`/`TRIGGER` against
      **every** real table in the `public` and `drizzle` schemas (discovered
      live from `pg_class`/`pg_namespace`, not a hardcoded sample) —
      refuses if the connected role has any of them on any table;
    - checks `has_table_privilege(current_user, table_oid, 'SELECT')` is
-     actually **present** on every table the frozen, approved OZI-79
-     query set reads (see "Exact query subset" below) — refuses if any is
-     missing, since a role with zero grants at all would otherwise pass a
-     write-only check while being unable to run any approved query.
+     actually **present** on every table the frozen, approved OZI-79 query
+     set reads — the 12 `public` tables plus `drizzle.__drizzle_migrations`
+     (see "Exact query subset" below) — refuses if any is missing, since a
+     role with zero grants at all would otherwise pass a write-only check
+     while being unable to run any approved query.
 
    Only if all checks pass does `fn` (the actual diagnostic queries) run
    — and it runs inside a real Postgres `READ ONLY` transaction, the same
@@ -58,10 +72,11 @@ this phase added nothing runnable against a remote database.
 ## Proven, not asserted
 
 `readonly-db-remote.db.test.ts` creates several real, disposable Postgres
-roles on your local `test-db` and proves against them directly:
+roles on your local `test-db` and proves against them directly (10 tests):
 
 - the local `test-db`'s own `postgres` superuser role is rejected;
-- a real role granted `SELECT` only on every table passes cleanly;
+- a real role granted exactly the required `SELECT`/`USAGE` set, with no
+  memberships, passes cleanly;
 - a real role granted `SELECT, INSERT` is rejected;
 - a real role granted `UPDATE` on `audit_events` specifically — a table
   the old 4-table sample never looked at — is rejected (proves the
@@ -70,7 +85,14 @@ roles on your local `test-db` and proves against them directly:
   approved query set requires) is rejected (proves the check verifies
   SELECT *presence*, not just write-privilege absence);
 - a real role explicitly granted `CREATE` on the `public` schema is
-  rejected.
+  rejected;
+- a role that is otherwise exactly the passing baseline is rejected when
+  `PUBLIC` itself is granted `CREATE` on `public` (proves the check
+  catches the ambient case, not just a role-specific grant);
+- a role missing `USAGE` on `drizzle` is rejected;
+- a role with `USAGE` on `drizzle` but missing `SELECT` on
+  `__drizzle_migrations` specifically is rejected;
+- a role that is a member of another role is rejected.
 
 This is the strongest evidence available without a real remote credential
 — it proves the *detection mechanism* itself works against genuine
@@ -112,8 +134,13 @@ could be planned. All four are now resolved:
    `maxUsers` join especially closely. A sequential scan alone is not
    automatically disqualifying for a small table — look at estimated
    rows/cost/relation size/join shape before setting real production
-   timeouts, not just plan shape in isolation. Not yet done — this is the
-   next phase after this hardening pass, still not authorized to execute.
+   timeouts, not just plan shape in isolation. **Its own explicit
+   authorization, separate from the later inventory scan**: plain
+   `EXPLAIN` doesn't execute the queried `SELECT`, but it is still a live
+   remote query against production Postgres — connecting at all is the
+   thing that needs its own sign-off, distinct from "run the real inventory
+   scan." Not yet done — this is the next phase after this hardening pass,
+   still not authorized to execute.
 
 4. **Exact query subset.** Frozen as design-approved (not yet
    execution-approved) — the 12 named checks below, plus

@@ -24,32 +24,38 @@ after this plumbing and the exact query subset are reviewed.
 - `scripts/tenancy-inventory/readonly-db-remote.ts` -- `RemoteTarget`
   (`'staging' | 'production'`), env-var-per-target credential resolution
   (no fallback, never echoes the value on failure), live role-privilege
-  verification (`verifyReadOnlyRole` -- Phase A.1 hardened to a
-  database-wide application-table least-privilege check: rejects elevated
+  verification (`verifyReadOnlyRole` -- hardened twice: Phase A.1 to a
+  database-wide application-table least-privilege check (rejects elevated
   role attributes, rejects write privilege on every real table in
-  `public`/`drizzle` (not a 4-table sample), requires `SELECT` presence on
-  every table the frozen OZI-79 query subset reads, rejects role-specific
-  schema `CREATE`), and `withReadOnlyRemoteDb` (same `READ ONLY`
-  transaction + `default_transaction_read_only` + timeouts as
-  `LocalTarget`, with the role verification running first, inside the
-  same transaction).
+  `public`/`drizzle`, not a 4-table sample), Phase A.2 to also reject
+  schema `CREATE` effective through `PUBLIC` (not just role-specific
+  grants), require `USAGE` on both schemas, require `SELECT` presence on
+  every table the frozen OZI-79 query subset reads including
+  `drizzle.__drizzle_migrations`, and reject any role membership), and
+  `withReadOnlyRemoteDb` (same `READ ONLY` transaction +
+  `default_transaction_read_only` + timeouts as `LocalTarget`, with the
+  role verification running first, inside the same transaction).
 - `evidence-store.ts`'s `EvidenceEnvironment` extended to
   `'local' | 'staging' | 'production'` (structural only -- nothing writes
   to `staging`/`production` yet). Renamed `writeLocalEvidence` ->
   `writeEvidence` since it's no longer local-only.
-- No CLI wiring: `cli.ts` is unchanged. This is deliberate -- Phase A
-  produces tested, reviewed plumbing, not a runnable remote command.
+- No CLI wiring: `cli.ts`'s only change is the `writeLocalEvidence` ->
+  `writeEvidence` import rename above -- no remote CLI execution path
+  exists. This is deliberate -- Phase A produces tested, reviewed
+  plumbing, not a runnable remote command.
 
 ## Progress
 
 - [x] Security/Auth pre-implementation review (credential trust boundary,
       role-verification mechanism, no-echo requirement)
 - [x] Implementation
-- [x] Tests: unit (credential resolution, no-echo proof, target
-      isolation) + real-DB (role-verification proven against a real
-      superuser rejection, a real purpose-created SELECT-only role pass,
-      and a real role-with-INSERT rejection -- all against local
-      `test-db`, no remote credential needed to prove the mechanism)
+- [x] Tests: unit (credential resolution, no-echo proof, target isolation,
+      4 tests) + real-DB (10 tests against local `test-db`, no remote
+      credential needed: superuser rejection, a real purpose-created
+      SELECT-only-with-no-memberships role pass, and rejections for
+      INSERT, an untested-table UPDATE, missing required SELECT, explicit
+      schema CREATE, ambient PUBLIC-granted CREATE, missing drizzle USAGE,
+      missing drizzle SELECT, and role membership)
 - [x] Validation: typecheck, targeted lint, `arch:lint` (only the
       pre-existing unrelated `strict-rate-limit.ts` FAIL)
 - [ ] User reviews this runbook and the finished mechanism

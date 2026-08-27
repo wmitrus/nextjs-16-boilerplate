@@ -16,10 +16,11 @@ import {
  * how it was provisioned. Tested here against the local `test-db` (safe,
  * disposable) rather than a real remote target -- proving the rejection
  * path (superuser, elevated attributes, a write grant anywhere across the
- * full application-table surface -- not just a representative sample,
- * missing required SELECT, schema CREATE) and the pass path (a real,
- * purpose-created SELECT-only role) is equally strong evidence for the
- * detection logic itself, without needing an actual remote credential.
+ * full application-table surface, missing required SELECT/USAGE, schema
+ * CREATE including via PUBLIC, role membership) and the pass path (a
+ * real, purpose-created SELECT-only role with no memberships) is equally
+ * strong evidence for the detection logic itself, without needing an
+ * actual remote credential.
  */
 const READONLY_TEST_ROLE = 'ozi79_readonly_role_test';
 
@@ -38,20 +39,51 @@ async function dropTestRole(role: string): Promise<void> {
   await adminClient.unsafe(`DROP ROLE IF EXISTS ${role}`);
 }
 
+/**
+ * The exact set of grants a correctly provisioned OZI-79 credential needs:
+ * `SELECT` on every application table in `public`, plus `USAGE` on
+ * `drizzle` and `SELECT` on its one required table
+ * (`__drizzle_migrations`, `latestSchemaMigration`'s source). Individual
+ * tests build on this baseline and vary or omit exactly the one grant
+ * they're testing, so a failure proves the specific check under test
+ * fired -- not some other, unrelated gap in the baseline.
+ */
+async function grantBaselineSelectOnly(role: string): Promise<void> {
+  await adminClient.unsafe(
+    `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${role}`,
+  );
+  await adminClient.unsafe(`GRANT USAGE ON SCHEMA drizzle TO ${role}`);
+  await adminClient.unsafe(
+    `GRANT SELECT ON drizzle.__drizzle_migrations TO ${role}`,
+  );
+}
+
+async function connectAs(role: string): Promise<ReturnType<typeof postgres>> {
+  const url = new URL(TEST_DEFAULT_URL);
+  url.username = role;
+  url.password = 'ozi79-test-only';
+  return postgres(url.toString(), { connect_timeout: 10 });
+}
+
 beforeAll(async () => {
   adminClient = postgres(TEST_DEFAULT_URL, { connect_timeout: 10 });
   // Idempotent: drop first in case a previous run crashed before cleanup.
   await dropTestRole(READONLY_TEST_ROLE);
+  // Harden the schema-level ACL for the duration of this suite so a
+  // "clean pass" actually proves what it claims -- this test-db, like
+  // plenty of real Postgres databases that predate PG15's hardened
+  // default (or never ran this REVOKE themselves), ships with PUBLIC
+  // holding CREATE on `public`. Restored in afterAll.
+  await adminClient.unsafe(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`);
   await adminClient.unsafe(
     `CREATE ROLE ${READONLY_TEST_ROLE} LOGIN PASSWORD 'ozi79-test-only'`,
   );
-  await adminClient.unsafe(
-    `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${READONLY_TEST_ROLE}`,
-  );
+  await grantBaselineSelectOnly(READONLY_TEST_ROLE);
 });
 
 afterAll(async () => {
   await dropTestRole(READONLY_TEST_ROLE);
+  await adminClient.unsafe(`GRANT CREATE ON SCHEMA public TO PUBLIC`);
   await adminClient.end({ timeout: 5 });
 });
 
@@ -69,12 +101,8 @@ describe('verifyReadOnlyRole (real DB)', () => {
     }
   });
 
-  it('passes for a real, purpose-created SELECT-only role', async () => {
-    const url = new URL(TEST_DEFAULT_URL);
-    url.username = READONLY_TEST_ROLE;
-    url.password = 'ozi79-test-only';
-
-    const client = postgres(url.toString(), { connect_timeout: 10 });
+  it('passes for a real, purpose-created SELECT-only role with no memberships', async () => {
+    const client = await connectAs(READONLY_TEST_ROLE);
     const db = drizzle(client);
 
     try {
@@ -92,14 +120,12 @@ describe('verifyReadOnlyRole (real DB)', () => {
     await adminClient.unsafe(
       `CREATE ROLE ${roleWithWrite} LOGIN PASSWORD 'ozi79-test-only'`,
     );
+    await grantBaselineSelectOnly(roleWithWrite);
     await adminClient.unsafe(
-      `GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO ${roleWithWrite}`,
+      `GRANT INSERT ON ALL TABLES IN SCHEMA public TO ${roleWithWrite}`,
     );
 
-    const url = new URL(TEST_DEFAULT_URL);
-    url.username = roleWithWrite;
-    url.password = 'ozi79-test-only';
-    const client = postgres(url.toString(), { connect_timeout: 10 });
+    const client = await connectAs(roleWithWrite);
     const db = drizzle(client);
 
     try {
@@ -124,17 +150,12 @@ describe('verifyReadOnlyRole (real DB)', () => {
     await adminClient.unsafe(
       `CREATE ROLE ${roleWithWrite} LOGIN PASSWORD 'ozi79-test-only'`,
     );
-    await adminClient.unsafe(
-      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${roleWithWrite}`,
-    );
+    await grantBaselineSelectOnly(roleWithWrite);
     await adminClient.unsafe(
       `GRANT UPDATE ON audit_events TO ${roleWithWrite}`,
     );
 
-    const url = new URL(TEST_DEFAULT_URL);
-    url.username = roleWithWrite;
-    url.password = 'ozi79-test-only';
-    const client = postgres(url.toString(), { connect_timeout: 10 });
+    const client = await connectAs(roleWithWrite);
     const db = drizzle(client);
 
     try {
@@ -159,17 +180,12 @@ describe('verifyReadOnlyRole (real DB)', () => {
     await adminClient.unsafe(
       `CREATE ROLE ${roleMissingSelect} LOGIN PASSWORD 'ozi79-test-only'`,
     );
-    await adminClient.unsafe(
-      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${roleMissingSelect}`,
-    );
+    await grantBaselineSelectOnly(roleMissingSelect);
     await adminClient.unsafe(
       `REVOKE SELECT ON feature_flags FROM ${roleMissingSelect}`,
     );
 
-    const url = new URL(TEST_DEFAULT_URL);
-    url.username = roleMissingSelect;
-    url.password = 'ozi79-test-only';
-    const client = postgres(url.toString(), { connect_timeout: 10 });
+    const client = await connectAs(roleMissingSelect);
     const db = drizzle(client);
 
     try {
@@ -188,26 +204,132 @@ describe('verifyReadOnlyRole (real DB)', () => {
     await adminClient.unsafe(
       `CREATE ROLE ${roleWithCreate} LOGIN PASSWORD 'ozi79-test-only'`,
     );
-    await adminClient.unsafe(
-      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${roleWithCreate}`,
-    );
+    await grantBaselineSelectOnly(roleWithCreate);
     await adminClient.unsafe(
       `GRANT CREATE ON SCHEMA public TO ${roleWithCreate}`,
     );
 
-    const url = new URL(TEST_DEFAULT_URL);
-    url.username = roleWithCreate;
-    url.password = 'ozi79-test-only';
-    const client = postgres(url.toString(), { connect_timeout: 10 });
+    const client = await connectAs(roleWithCreate);
     const db = drizzle(client);
 
     try {
       await expect(
         db.transaction((tx) => verifyReadOnlyRole(tx)),
-      ).rejects.toThrow(/CREATE privilege on schema "public"/);
+      ).rejects.toThrow(/effective CREATE privilege on schema "public"/);
     } finally {
       await client.end({ timeout: 5 });
       await dropTestRole(roleWithCreate);
+    }
+  });
+
+  /**
+   * The Phase A.1 CREATE check deliberately ignored PUBLIC's own grants,
+   * checking only role-specific ACL entries -- so a database whose
+   * `public` schema still has CREATE granted to PUBLIC (the pre-PG15
+   * default; this repo's own test-db reproduces it) would report a
+   * correctly scoped role as "SELECT-only" even though every role on that
+   * database, including this one, can actually CREATE TABLE. This proves
+   * the Phase A.2 fix catches that ambient case: a role that is otherwise
+   * exactly the passing baseline is rejected purely because PUBLIC itself
+   * holds CREATE.
+   */
+  it('rejects a role when PUBLIC itself holds CREATE on the schema (ambient, not role-specific)', async () => {
+    const client = await connectAs(READONLY_TEST_ROLE);
+    const db = drizzle(client);
+
+    await adminClient.unsafe(`GRANT CREATE ON SCHEMA public TO PUBLIC`);
+    try {
+      await expect(
+        db.transaction((tx) => verifyReadOnlyRole(tx)),
+      ).rejects.toThrow(/effective CREATE privilege on schema "public"/);
+    } finally {
+      await adminClient.unsafe(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`);
+      await client.end({ timeout: 5 });
+    }
+  });
+
+  it('rejects a role missing USAGE on schema drizzle', async () => {
+    const roleMissingUsage = 'ozi79_missing_drizzle_usage_test';
+    await dropTestRole(roleMissingUsage);
+    await adminClient.unsafe(
+      `CREATE ROLE ${roleMissingUsage} LOGIN PASSWORD 'ozi79-test-only'`,
+    );
+    // Deliberately public-only: no USAGE or SELECT anywhere in `drizzle`.
+    await adminClient.unsafe(
+      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${roleMissingUsage}`,
+    );
+
+    const client = await connectAs(roleMissingUsage);
+    const db = drizzle(client);
+
+    try {
+      await expect(
+        db.transaction((tx) => verifyReadOnlyRole(tx)),
+      ).rejects.toThrow(/missing USAGE privilege on schema "drizzle"/);
+    } finally {
+      await client.end({ timeout: 5 });
+      await dropTestRole(roleMissingUsage);
+    }
+  });
+
+  it('rejects a role with USAGE on drizzle but missing SELECT on __drizzle_migrations', async () => {
+    const roleMissingDrizzleSelect = 'ozi79_missing_drizzle_select_test';
+    await dropTestRole(roleMissingDrizzleSelect);
+    await adminClient.unsafe(
+      `CREATE ROLE ${roleMissingDrizzleSelect} LOGIN PASSWORD 'ozi79-test-only'`,
+    );
+    await adminClient.unsafe(
+      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${roleMissingDrizzleSelect}`,
+    );
+    await adminClient.unsafe(
+      `GRANT USAGE ON SCHEMA drizzle TO ${roleMissingDrizzleSelect}`,
+    );
+    // USAGE without SELECT: can see the schema exists, cannot read the table.
+
+    const client = await connectAs(roleMissingDrizzleSelect);
+    const db = drizzle(client);
+
+    try {
+      await expect(
+        db.transaction((tx) => verifyReadOnlyRole(tx)),
+      ).rejects.toThrow(
+        /missing SELECT privilege on "drizzle\.__drizzle_migrations"/,
+      );
+    } finally {
+      await client.end({ timeout: 5 });
+      await dropTestRole(roleMissingDrizzleSelect);
+    }
+  });
+
+  /**
+   * A login role that is a member of another role inherits that role's
+   * privileges too -- a hidden `SET ROLE`/inheritance path to whatever the
+   * group role can do, even if the login role's own direct grants are
+   * exactly SELECT-only. A genuinely minimal OZI-79 credential must have
+   * no memberships at all.
+   */
+  it('rejects a role that is a member of another role', async () => {
+    const groupRole = 'ozi79_group_role_test';
+    const memberRole = 'ozi79_member_role_test';
+    await dropTestRole(memberRole);
+    await dropTestRole(groupRole);
+    await adminClient.unsafe(`CREATE ROLE ${groupRole} NOLOGIN`);
+    await adminClient.unsafe(
+      `CREATE ROLE ${memberRole} LOGIN PASSWORD 'ozi79-test-only' IN ROLE ${groupRole}`,
+    );
+    await grantBaselineSelectOnly(memberRole);
+
+    const client = await connectAs(memberRole);
+    const db = drizzle(client);
+
+    try {
+      await expect(
+        db.transaction((tx) => verifyReadOnlyRole(tx)),
+      ).rejects.toThrow(new RegExp(`member of role "${groupRole}"`));
+    } finally {
+      await client.end({ timeout: 5 });
+      await dropTestRole(memberRole);
+      await dropTestRole(groupRole);
     }
   });
 });

@@ -35,8 +35,11 @@
    that never echoes the value on any failure path -- only the env var
    *name* is ever included in an error message.
 4. **No execution capability yet**: confirmed and enforced structurally --
-   `cli.ts` was not touched, so there is no command surface that could
-   run this code against a real remote database in this phase.
+   `cli.ts`'s only change is an import rename (`writeLocalEvidence` ->
+   `writeEvidence`, needed because `evidence-store.ts` renamed the
+   function it re-exports); no remote target, command, or execution
+   surface exists in it, so there is no command surface that could run
+   this code against a real remote database in this phase.
 
 ## Current-State Findings (post-implementation)
 
@@ -172,9 +175,65 @@
   role with `UPDATE` on `audit_events` (never in the old 4-table sample)
   is rejected; a role missing `SELECT` on `feature_flags` (in the required
   set) is rejected. Also added: explicit-`CREATE`-on-schema rejection.
-- Still no execution capability: `cli.ts` untouched, no
-  `scan --target=staging|production` command exists.
+- Still no execution capability: `cli.ts`'s only change is an import
+  rename (`writeLocalEvidence` -> `writeEvidence`); no remote CLI execution
+  path exists, no `scan --target=staging|production` command exists.
 - security status: **GO** (Phase A.1 hardening only — Phase B remote
   preflight/`EXPLAIN` review remains a separate, not-yet-authorized step)
 - Sections refreshed: Current-State Findings, Sensitive Data And Exposure
   Notes (unchanged — still N/A), Update Log
+
+### 2026-08-27 — Phase A.2 Correctness Pass
+
+- Trigger: user code review of commit `84e40752` found two further real
+  gaps and one wording inaccuracy: (1) the Phase A.1 `CREATE` check
+  deliberately excluded `PUBLIC`'s own grants via `aclexplode`, which is
+  wrong -- a privilege granted to `PUBLIC` is effective for every role,
+  including the connected one, so excluding it lets a database whose
+  `public` schema still has `CREATE` granted to `PUBLIC` (the pre-PG15
+  default; this repo's own test-db reproduces it) report a false
+  "SELECT-only" pass; (2) `REQUIRED_SELECT_TABLES` covered only the 12
+  `public` tables, not `drizzle.__drizzle_migrations`, which
+  `latestSchemaMigration` actually reads -- the existing "clean pass" test
+  never granted `USAGE`/`SELECT` on `drizzle` at all and still passed,
+  meaning a real inventory run's metadata query would have failed at
+  execution time despite `verifyReadOnlyRole` reporting success; (3)
+  "`cli.ts` untouched" was literally false against `main` (the branch
+  renamed an import in it) even though the underlying security claim --
+  no remote execution capability exists -- remained true.
+- Summary of change: (1) reverted the `CREATE` check to
+  `has_schema_privilege()`, now deliberately *inclusive* of `PUBLIC`'s
+  grants -- correct Postgres semantics, since `PUBLIC`'s grants are
+  effective for the connected role exactly like a role-specific grant;
+  (2) added an explicit `USAGE` requirement on both `public` and
+  `drizzle` (also via `has_schema_privilege()`, also `PUBLIC`-inclusive);
+  (3) extended `REQUIRED_SELECT_TABLES` to a schema-qualified list
+  including `drizzle.__drizzle_migrations`; (4) added a role-membership
+  check (`pg_auth_members`) rejecting any role the connected role is a
+  member of, closing a hidden `SET ROLE`/inheritance path to a stronger
+  role's privileges for what should be a genuinely minimal, single-purpose
+  credential; (5) corrected "`cli.ts` untouched" to "`cli.ts`'s only
+  change is an import rename; no remote CLI execution path exists" in
+  `plan.md`, `01 - Architecture Guard - Summary.md`, this file, and
+  `runbook.md`.
+- Test-fixture consequence of (1): since this local test-db's `PUBLIC`
+  already holds `CREATE` on `public` (the same ambient condition the fix
+  targets), `readonly-db-remote.db.test.ts`'s `beforeAll` now revokes it
+  for the duration of the suite (restored in `afterAll`) so the "clean
+  pass" test proves what it claims; a dedicated new test proves the
+  ambient-`PUBLIC`-`CREATE` rejection path directly by temporarily
+  re-granting it against the otherwise-passing baseline role.
+- Real-DB tests added: PUBLIC-granted (not role-specific) `CREATE` causes
+  rejection; missing `USAGE` on `drizzle` causes rejection; `USAGE` present
+  but missing `SELECT` on `__drizzle_migrations` specifically causes
+  rejection; role membership causes rejection. 10 tests total now (was 6).
+- Still no execution capability: `cli.ts`'s only change remains the import
+  rename; no remote CLI execution path exists, no
+  `scan --target=staging|production` command exists.
+- security status: **GO** (Phase A.2 correctness pass only — Phase B
+  remote preflight/`EXPLAIN` review remains a separate, not-yet-authorized
+  step, and per the user's explicit note, plain `EXPLAIN` itself will need
+  its own authorization distinct from the later inventory-scan
+  authorization, since it is still a live query against production
+  Postgres even though it never executes the queried `SELECT`)
+- Sections refreshed: Current-State Findings, Update Log

@@ -87,7 +87,8 @@ export class RemoteRoleNotReadOnlyError extends Error {}
  * Schemas this tool ever touches: `public` holds every application table;
  * `drizzle` holds only the migration-metadata table
  * (`latestSchemaMigration`'s source, see `topology-queries.ts`). Both are
- * checked for write privilege and schema-level `CREATE`.
+ * checked for write privilege, schema-level `CREATE` (must be absent), and
+ * schema-level `USAGE` (must be present).
  */
 const APPLICATION_SCHEMAS = ['public', 'drizzle'] as const;
 
@@ -99,25 +100,31 @@ const APPLICATION_SCHEMAS = ['public', 'drizzle'] as const;
  * `providerOrganizationMappingAnomalies`, `userProviderMappingAnomalies`,
  * `tenantIdShapeCounts` against `feature_flags`/`audit_log_settings`/
  * `audit_events`, `waitlistEntriesWithTenantIdCount`,
- * `policiesWithNullOrganizationCount`, `quotaEnforcementSignal`), reviewed
- * 2026-08-27. Checked for explicit `SELECT` *presence* -- a role with zero
- * grants at all would pass a write-only check but still could not run any
- * approved query.
+ * `policiesWithNullOrganizationCount`, `quotaEnforcementSignal`) plus
+ * `latestSchemaMigration`'s `drizzle.__drizzle_migrations` (evidence
+ * metadata, not a finding, but still a table the credential must be able
+ * to read). Reviewed 2026-08-27. Checked for explicit `SELECT`
+ * *presence* -- a role with zero grants at all would pass a write-only
+ * check but still could not run any approved query.
  */
 const REQUIRED_SELECT_TABLES = [
-  'tenants',
-  'organizations',
-  'memberships',
-  'tenant_attributes',
-  'auth_organization_identities',
-  'users',
-  'auth_user_identities',
-  'feature_flags',
-  'audit_log_settings',
-  'audit_events',
-  'waitlist_entries',
-  'policies',
-] as const;
+  { schema: 'public', table: 'tenants' },
+  { schema: 'public', table: 'organizations' },
+  { schema: 'public', table: 'memberships' },
+  { schema: 'public', table: 'tenant_attributes' },
+  { schema: 'public', table: 'auth_organization_identities' },
+  { schema: 'public', table: 'users' },
+  { schema: 'public', table: 'auth_user_identities' },
+  { schema: 'public', table: 'feature_flags' },
+  { schema: 'public', table: 'audit_log_settings' },
+  { schema: 'public', table: 'audit_events' },
+  { schema: 'public', table: 'waitlist_entries' },
+  { schema: 'public', table: 'policies' },
+  { schema: 'drizzle', table: '__drizzle_migrations' },
+] as const satisfies readonly {
+  schema: (typeof APPLICATION_SCHEMAS)[number];
+  table: string;
+}[];
 
 /**
  * Exported directly (not just used internally by `withReadOnlyRemoteDb`)
@@ -134,10 +141,27 @@ const REQUIRED_SELECT_TABLES = [
  * `information_schema.role_table_grants` query filtered by
  * `grantee = current_user` -- the latter can miss a privilege the role
  * holds only through group/role membership; `has_table_privilege` resolves
- * the role's real, effective privilege including inheritance. The
- * schema-level `CREATE` check uses `aclexplode` instead of
- * `has_schema_privilege()` for a narrower reason -- see the comment at
- * that check.
+ * the role's real, effective privilege including inheritance.
+ *
+ * The schema-level `CREATE`/`USAGE` checks use `has_schema_privilege()`
+ * deliberately *inclusive* of whatever `PUBLIC` was granted: `PUBLIC`'s
+ * grants are just as effective for the connected role as a role-specific
+ * grant would be (Postgres does not distinguish "this role's own
+ * privilege" from "a privilege every role gets through `PUBLIC`" when
+ * actually enforcing access), so a database whose `public` schema still
+ * has `CREATE` granted to `PUBLIC` (the pre-PG15 default; PostgreSQL's own
+ * docs note databases upgraded from PG14 and earlier can still carry it)
+ * genuinely does NOT hand out a SELECT-only credential to anyone connecting
+ * to it, no matter how the specific role was provisioned. This tool
+ * refuses to proceed in that case rather than reporting a false
+ * "SELECT-only" pass -- fixing the ambient `PUBLIC` grant is a separate,
+ * operational `REVOKE`, outside this tool's job (it never runs DDL).
+ *
+ * The role-membership check exists for the same reason: a login role that
+ * is a member of another role inherits that role's privileges too
+ * (`SET ROLE` or automatic inheritance), which is a hidden path to
+ * whatever that other role can do. A genuinely minimal, single-purpose
+ * OZI-79 credential should have no memberships at all.
  *
  * What this does NOT defend against: a writable view or a
  * `SECURITY DEFINER` function the role happens to have execute privilege
@@ -177,30 +201,49 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
     APPLICATION_SCHEMAS.map((schema) => sql`${schema}`),
     sql`, `,
   );
-  // Deliberately NOT `has_schema_privilege()` here -- it folds in whatever
-  // PUBLIC was granted, and on plenty of real Postgres instances (this
-  // local test-db included, and any that predate PG15's hardened default
-  // or never ran `REVOKE CREATE ON SCHEMA public FROM PUBLIC`), PUBLIC
-  // already has CREATE on `public`. That's an ambient, environment-wide
-  // fact, not a signal about *this* role's provisioning -- checking it
-  // this way would fail every role on such a database, including a
-  // correctly scoped one. `aclexplode` asks the narrower, actually useful
-  // question: was CREATE granted to this role specifically, or to a role
-  // it inherits from (excluding the synthetic PUBLIC grantee, oid 0)?
-  const schemaRows = await tx.execute<{ schema: string }>(sql`
-    select n.nspname as schema
-    from pg_namespace n
-    cross join lateral aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) as acl
-    where n.nspname in (${applicationSchemaList})
-      and acl.privilege_type = 'CREATE'
-      and acl.grantee <> 0
-      and pg_has_role(current_user, acl.grantee, 'USAGE')
+  const schemaRows = await tx.execute<{
+    schema: string;
+    has_create: boolean;
+    has_usage: boolean;
+  }>(sql`
+    select nspname as schema,
+           has_schema_privilege(current_user, nspname, 'CREATE') as has_create,
+           has_schema_privilege(current_user, nspname, 'USAGE') as has_usage
+    from pg_namespace
+    where nspname in (${applicationSchemaList})
   `);
-  const schemaWithCreate = schemaRows[0];
+  const schemaWithCreate = schemaRows.find((row) => row.has_create);
   if (schemaWithCreate) {
     throw new RemoteRoleNotReadOnlyError(
-      `Connected role has CREATE privilege on schema "${schemaWithCreate.schema}". ` +
-        `This tool requires a SELECT-only role. Refusing to proceed.`,
+      `Connected role has effective CREATE privilege on schema ` +
+        `"${schemaWithCreate.schema}" (directly, through role membership, ` +
+        `or through PUBLIC). This tool requires a SELECT-only role. ` +
+        `Refusing to proceed.`,
+    );
+  }
+  const schemaMissingUsage = schemaRows.find((row) => !row.has_usage);
+  if (schemaMissingUsage) {
+    throw new RemoteRoleNotReadOnlyError(
+      `Connected role is missing USAGE privilege on schema ` +
+        `"${schemaMissingUsage.schema}", which the approved OZI-79 query ` +
+        `set requires. Refusing to proceed.`,
+    );
+  }
+
+  const membershipRows = await tx.execute<{ group_role: string }>(sql`
+    select r2.rolname as group_role
+    from pg_auth_members m
+    join pg_roles r1 on r1.oid = m.member
+    join pg_roles r2 on r2.oid = m.roleid
+    where r1.rolname = current_user
+  `);
+  const membership = membershipRows[0];
+  if (membership) {
+    throw new RemoteRoleNotReadOnlyError(
+      `Connected role is a member of role "${membership.group_role}", a ` +
+        `hidden path to whatever privileges that role holds (via SET ROLE ` +
+        `or automatic inheritance). A dedicated OZI-79 credential must have ` +
+        `no role memberships. Refusing to proceed.`,
     );
   }
 
@@ -257,8 +300,13 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
     }
   }
 
-  const requiredTableList = sql.join(
-    REQUIRED_SELECT_TABLES.map((table) => sql`${table}`),
+  // Row-value IN list -- (schema, table) pairs, not a single table-name
+  // list, since the required set spans two schemas (`public`'s
+  // application tables plus `drizzle`'s migration-metadata table).
+  const requiredTablePairs = sql.join(
+    REQUIRED_SELECT_TABLES.map(
+      ({ schema, table }) => sql`(${schema}, ${table})`,
+    ),
     sql`, `,
   );
   const selectRows = await tx.execute<{
@@ -269,7 +317,7 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
            has_table_privilege(current_user, c.oid, 'SELECT') as has_select
     from pg_class c
     join pg_namespace n on c.relnamespace = n.oid
-    where n.nspname = 'public' and c.relname in (${requiredTableList}) and c.relkind = 'r'
+    where (n.nspname, c.relname) in (${requiredTablePairs}) and c.relkind = 'r'
   `);
   const missingSelect = selectRows.find((row) => !row.has_select);
   if (missingSelect) {
@@ -278,16 +326,15 @@ export async function verifyReadOnlyRole(tx: RemoteDb): Promise<void> {
         `which the approved OZI-79 query set requires. Refusing to proceed.`,
     );
   }
-  const foundTables = new Set(
-    selectRows.map((row) => row.qualified_name.split('.')[1]),
-  );
+  const foundTables = new Set(selectRows.map((row) => row.qualified_name));
   const missingTable = REQUIRED_SELECT_TABLES.find(
-    (table) => !foundTables.has(table),
+    ({ schema, table }) => !foundTables.has(`${schema}.${table}`),
   );
   if (missingTable) {
     throw new RemoteRoleNotReadOnlyError(
-      `Table "public.${missingTable}" required by the approved OZI-79 query set ` +
-        `does not exist on this target. Refusing to proceed.`,
+      `Table "${missingTable.schema}.${missingTable.table}" required by the ` +
+        `approved OZI-79 query set does not exist on this target. Refusing ` +
+        `to proceed.`,
     );
   }
 }

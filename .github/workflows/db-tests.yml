@@ -22,6 +22,29 @@ jobs:
       # Disable Ryuk cleanup container — avoids permission issues in some CI runners
       TESTCONTAINERS_RYUK_DISABLED: 'true'
 
+    # `src/**/*.db.test.ts` gets its own ephemeral Postgres from
+    # `tests/db/setup.postgres.ts` (Testcontainers, dynamic port). This
+    # fixed-port service is separate and exists only for
+    # `scripts/tenancy-inventory/**/*.db.test.ts`, which -- by deliberate
+    # OZI-75/OZI-79 design -- always targets the hardcoded
+    # `127.0.0.1:5433` (`scripts/lib/db-guard.mjs`'s `TEST_DEFAULT_URL`);
+    # that fixed-target allowlist is intentional and out of scope to
+    # change, so CI provides the fixed address instead.
+    services:
+      tenancy-inventory-test-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d app_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
@@ -40,6 +63,9 @@ jobs:
 
       - name: Pre-pull Postgres Docker image
         run: docker pull postgres:16-alpine
+
+      - name: Migrate fixed-port test-db (scripts/tenancy-inventory)
+        run: pnpm db:test:migrate
 
       - name: Run DB tests (Testcontainers)
         run: pnpm test:db:ci

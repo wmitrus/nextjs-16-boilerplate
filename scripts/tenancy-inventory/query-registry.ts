@@ -11,9 +11,10 @@ import { createHash } from 'node:crypto';
  * of owning its own copy of the SQL text, so there is no way for "what got
  * reviewed" and "what actually runs" to drift apart.
  *
- * Frozen at the object level (`Object.freeze`, not just `as const`'s
- * compile-time readonly) so a runtime mutation attempt throws in strict
- * mode rather than silently succeeding.
+ * Deep-frozen (`Object.freeze` at every level: the registry array, each
+ * statement object, each statement's `tables` array, and each individual
+ * `QualifiedTable` object within it) so a runtime mutation attempt throws
+ * in strict mode rather than silently succeeding.
  */
 
 export type ApplicationSchema = 'public' | 'drizzle';
@@ -53,9 +54,22 @@ export interface QueryStatement {
    * Fully static, parameter-free SQL text -- every value in it is a
    * hardcoded literal authored here, never caller/request input, so
    * running it via `sql.raw()` carries no injection surface (SEC-18-style
-   * closed authorship, not runtime-open).
+   * closed authorship, not runtime-open). Every application relation is
+   * schema-qualified with `public.` (and the one metadata statement with
+   * `drizzle.`) so the statement's meaning does not depend on the
+   * connecting role's `search_path` -- a hardened remote role may not
+   * have `public` on its search_path at all.
    */
   readonly sql: string;
+  /**
+   * The exact set of tables this statement reads -- declared here
+   * alongside the SQL, not parsed out of it. This is registry-declared
+   * dependency metadata; `query-registry.dependencies.db.test.ts` is what
+   * actually *validates* it against the real SQL (a disposable role
+   * granted `SELECT` on exactly these tables must be able to plain-
+   * `EXPLAIN` the statement, and revoking any one of them must break
+   * that), against local `test-db` only.
+   */
   readonly tables: readonly QualifiedTable[];
 }
 
@@ -67,7 +81,11 @@ const UUID_PATTERN =
  * template, three fixed table names baked in at registry-build time. This
  * is the one place the registry generates text via a helper rather than
  * three independent literals; the *result* is still three concrete,
- * frozen strings, not a runtime template.
+ * frozen strings, not a runtime template. `table` is schema-qualified in
+ * the `from` clause (`public."${table}"`); the `where`/`exists` clauses
+ * reference it by its resulting bare correlation name (`"${table}"`),
+ * which is the standard, unambiguous way to refer back to a schema-
+ * qualified relation that was not given an explicit alias.
  */
 function tenantIdShapeSql(table: string): string {
   return `
@@ -76,24 +94,24 @@ function tenantIdShapeSql(table: string): string {
       count(*) filter (
         where tenant_id is not null
           and tenant_id ~* '${UUID_PATTERN}'
-          and exists (select 1 from tenants where tenants.id::text = "${table}".tenant_id)
+          and exists (select 1 from public.tenants where tenants.id::text = "${table}".tenant_id)
       ) as matches_tenant,
       count(*) filter (
         where tenant_id is not null
           and tenant_id ~* '${UUID_PATTERN}'
-          and exists (select 1 from organizations where organizations.id::text = "${table}".tenant_id)
+          and exists (select 1 from public.organizations where organizations.id::text = "${table}".tenant_id)
       ) as matches_organization,
       count(*) filter (
         where tenant_id is not null
           and not (
             tenant_id ~* '${UUID_PATTERN}'
             and (
-              exists (select 1 from tenants where tenants.id::text = "${table}".tenant_id)
-              or exists (select 1 from organizations where organizations.id::text = "${table}".tenant_id)
+              exists (select 1 from public.tenants where tenants.id::text = "${table}".tenant_id)
+              or exists (select 1 from public.organizations where organizations.id::text = "${table}".tenant_id)
             )
           )
       ) as matches_neither
-    from "${table}"
+    from public."${table}"
   `;
 }
 
@@ -118,8 +136,8 @@ const REGISTRY: readonly QueryStatement[] = [
         count(*) filter (where org_count > 1) as multiple
       from (
         select t.id, count(o.id) as org_count
-        from tenants t
-        left join organizations o on o.tenant_id = t.id
+        from public.tenants t
+        left join public.organizations o on o.tenant_id = t.id
         group by t.id
       ) per_tenant
     `,
@@ -135,7 +153,7 @@ const REGISTRY: readonly QueryStatement[] = [
     sql: `
       select count(*) as value from (
         select user_id
-        from memberships
+        from public.memberships
         group by user_id
         having count(distinct organization_id) > 1
       ) users_with_multiple_orgs
@@ -150,8 +168,8 @@ const REGISTRY: readonly QueryStatement[] = [
     sql: `
       select count(*) as value from (
         select m.user_id
-        from memberships m
-        join organizations o on o.id = m.organization_id
+        from public.memberships m
+        join public.organizations o on o.id = m.organization_id
         group by m.user_id
         having count(distinct o.tenant_id) > 1
       ) users_with_multiple_tenants
@@ -167,9 +185,9 @@ const REGISTRY: readonly QueryStatement[] = [
     description: 'S3: organizations whose tenant has no tenant_attributes row.',
     sql: `
       select count(*) as value
-      from organizations
+      from public.organizations
       where not exists (
-        select 1 from tenant_attributes
+        select 1 from public.tenant_attributes
         where tenant_attributes.tenant_id = organizations.tenant_id
       )
     `,
@@ -185,9 +203,9 @@ const REGISTRY: readonly QueryStatement[] = [
       'S5: organizations with no auth_organization_identities mapping.',
     sql: `
       select count(*) as value
-      from organizations
+      from public.organizations
       where not exists (
-        select 1 from auth_organization_identities
+        select 1 from public.auth_organization_identities
         where auth_organization_identities.organization_id = organizations.id
       )
     `,
@@ -204,7 +222,7 @@ const REGISTRY: readonly QueryStatement[] = [
     sql: `
       select count(*) as value from (
         select organization_id, provider
-        from auth_organization_identities
+        from public.auth_organization_identities
         group by organization_id, provider
         having count(*) > 1
       ) orgs_with_multiple_mappings_same_provider
@@ -218,9 +236,9 @@ const REGISTRY: readonly QueryStatement[] = [
       'The auth_user_identities counterpart: users with no provider mapping.',
     sql: `
       select count(*) as value
-      from users
+      from public.users
       where not exists (
-        select 1 from auth_user_identities
+        select 1 from public.auth_user_identities
         where auth_user_identities.user_id = users.id
       )
     `,
@@ -236,7 +254,7 @@ const REGISTRY: readonly QueryStatement[] = [
     sql: `
       select count(*) as value from (
         select user_id, provider
-        from auth_user_identities
+        from public.auth_user_identities
         group by user_id, provider
         having count(*) > 1
       ) users_with_multiple_mappings_same_provider
@@ -282,7 +300,7 @@ const REGISTRY: readonly QueryStatement[] = [
     kind: 'data',
     description:
       'Whether waitlist_entries.tenant_id (unused by app code) is ever set.',
-    sql: `select count(*) as value from waitlist_entries where tenant_id is not null`,
+    sql: `select count(*) as value from public.waitlist_entries where tenant_id is not null`,
     tables: [{ schema: 'public', table: 'waitlist_entries' }],
   },
   {
@@ -290,7 +308,7 @@ const REGISTRY: readonly QueryStatement[] = [
     kind: 'data',
     description:
       'Whether policies.organization_id IS NULL happens in practice.',
-    sql: `select count(*) as value from policies where organization_id is null`,
+    sql: `select count(*) as value from public.policies where organization_id is null`,
     tables: [{ schema: 'public', table: 'policies' }],
   },
   {
@@ -301,8 +319,8 @@ const REGISTRY: readonly QueryStatement[] = [
     sql: `
       select count(*) as exceeded from (
         select ta.tenant_id
-        from tenant_attributes ta
-        join organizations o on o.tenant_id = ta.tenant_id
+        from public.tenant_attributes ta
+        join public.organizations o on o.tenant_id = ta.tenant_id
         group by ta.tenant_id, ta.max_organizations
         having count(o.id) > ta.max_organizations
       ) t
@@ -320,9 +338,9 @@ const REGISTRY: readonly QueryStatement[] = [
     sql: `
       select count(*) as exceeded from (
         select ta.tenant_id
-        from tenant_attributes ta
-        join organizations o on o.tenant_id = ta.tenant_id
-        join memberships m on m.organization_id = o.id
+        from public.tenant_attributes ta
+        join public.organizations o on o.tenant_id = ta.tenant_id
+        join public.memberships m on m.organization_id = o.id
         group by ta.tenant_id, ta.max_users
         having count(distinct m.user_id) > ta.max_users
       ) t
@@ -339,7 +357,9 @@ export const QUERY_REGISTRY: readonly QueryStatement[] = Object.freeze(
   REGISTRY.map((statement) =>
     Object.freeze({
       ...statement,
-      tables: Object.freeze([...statement.tables]),
+      tables: Object.freeze(
+        statement.tables.map((table) => Object.freeze({ ...table })),
+      ),
     }),
   ),
 );
@@ -368,11 +388,22 @@ export function getStatement(id: StatementId): QueryStatement {
 }
 
 /**
- * Every table any registry statement reads, deduplicated -- the single
- * source `verifyReadOnlyRole`'s required-`SELECT` check and the test
- * fixture's baseline grants both consume, so the DB-role verifier, test
- * provisioning, and the executable query set cannot silently drift from
- * each other or from the registry itself.
+ * Every table any registry statement declares as a dependency,
+ * deduplicated -- the single source `verifyReadOnlyRole`'s required-
+ * `SELECT` check and the test fixture's baseline grants both consume, so
+ * the DB-role verifier, test provisioning, and the executable query set
+ * cannot silently drift from each other or from the registry itself.
+ *
+ * This is registry-*declared* metadata (each statement's `tables` field,
+ * authored alongside its `sql`), not something parsed out of the SQL
+ * text -- there is no SQL parser here. What makes that declaration
+ * trustworthy is `query-registry.dependencies.db.test.ts`: a real-Postgres
+ * test, local `test-db` only, that grants a disposable role `SELECT` on
+ * exactly each statement's declared tables and proves (a) the statement
+ * plain-`EXPLAIN`s successfully under that role, and (b) removing any one
+ * declared table's `SELECT` breaks it. That test is what actually
+ * validates this list against the real SQL; this constant is only its
+ * declared, deduplicated union.
  */
 export const REQUIRED_SELECT_TABLES: readonly QualifiedTable[] = Object.freeze(
   (() => {
@@ -391,8 +422,25 @@ export const REQUIRED_SELECT_TABLES: readonly QualifiedTable[] = Object.freeze(
   })(),
 );
 
-function normalizeSql(text: string): string {
-  return text.trim().replace(/\s+/g, ' ');
+/**
+ * The exact, canonical representation a statement's fingerprint is
+ * computed over: its id, kind, verbatim SQL bytes (no normalization --
+ * see `statementFingerprint`'s doc comment), and its declared table
+ * dependencies as a sorted, deduplicated set (order-independent, but
+ * membership-sensitive). `description` is deliberately excluded -- it is
+ * documentation, not a security-relevant property of what the statement
+ * does.
+ */
+function canonicalStatementRepresentation(statement: QueryStatement): string {
+  const tables = [...statement.tables]
+    .map((table) => `${table.schema}.${table.table}`)
+    .sort();
+  return JSON.stringify({
+    id: statement.id,
+    kind: statement.kind,
+    sql: statement.sql,
+    tables,
+  });
 }
 
 function sha256(text: string): string {
@@ -400,12 +448,21 @@ function sha256(text: string): string {
 }
 
 /**
- * A statement's fingerprint changes if and only if its id or its SQL
- * *meaning* changes -- whitespace-only reformatting (line wrapping,
- * indentation) does not, since the text is normalized before hashing.
+ * A statement's fingerprint changes if and only if its id, kind, declared
+ * table set, or SQL changes -- including a change that is *only*
+ * whitespace, since whitespace can be semantically load-bearing in SQL
+ * (inside a quoted string literal, or around a `--` line comment, where
+ * collapsing a real newline to a space silently changes which text the
+ * comment swallows). This fingerprints the exact bytes `sql.raw(statement
+ * .sql)` will execute -- anything less than that would let two statements
+ * that mean different things collide onto the same fingerprint, which
+ * would defeat the entire point of binding an approved `EXPLAIN` artifact
+ * to what actually runs later. See `query-registry.test.ts`'s "no
+ * whitespace normalization" suite for concrete collision regressions this
+ * guards against.
  */
 export function statementFingerprint(statement: QueryStatement): string {
-  return sha256(`${statement.id}\n${normalizeSql(statement.sql)}`);
+  return sha256(canonicalStatementRepresentation(statement));
 }
 
 export interface StatementFingerprintEntry {
@@ -429,8 +486,8 @@ export function allStatementFingerprints(): readonly StatementFingerprintEntry[]
  *
  * Deterministic regardless of `QUERY_REGISTRY`'s declaration order: the
  * per-statement fingerprints are sorted by id before combining, so only a
- * real change to the statement set or its SQL can change this value, not
- * an incidental reordering of the array literal above.
+ * real change to the statement set or its content can change this value,
+ * not an incidental reordering of the array literal above.
  */
 export function registryFingerprint(): string {
   const sorted = [...allStatementFingerprints()].sort((a, b) =>

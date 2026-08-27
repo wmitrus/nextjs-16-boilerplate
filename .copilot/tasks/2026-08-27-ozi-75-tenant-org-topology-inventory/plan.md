@@ -67,5 +67,18 @@ requires a separate, later-authorized handoff.
       Postgres (INSERT/UPDATE/DELETE/DDL all rejected with error `25006`).
 - [x] typecheck, targeted lint, `arch:lint` all clean (one pre-existing
       unrelated `arch:lint` FAIL, confirmed present on `main` since OZI-77).
+- [x] Committed and pushed the local checkpoint (`2b4d2818`).
+- [x] Added `ownership-matrix.completeness.db.test.ts` — derives the live
+      table list from `pg_catalog.pg_tables` and diffs it against
+      `TABLE_OWNERSHIP`, so a future added/renamed/dropped table fails this
+      test instead of silently going stale.
+- [x] Formal Security/Auth + Architecture Guard post-implementation review
+      against 5 explicit criteria — found and fixed a query-shape weakness
+      (3 of 8 queries were bounded but not aggregate-only at the SQL level;
+      now all 8 are pure aggregates, no row-level id ever leaves Postgres).
+      See both specialist summaries' "Formal Post-Implementation Review"
+      sections.
+- [x] Committed and pushed the hardening + completeness-test follow-up.
 - [ ] Hand the finished query set back to the user for review before any
-      staging/production follow-up.
+      staging/production follow-up (still open — this pass does not
+      authorize or design production execution).

@@ -11,7 +11,7 @@
 | Check | Command | Result |
 |---|---|---|
 | Unit tests (matrix data, evidence-store confinement) | `vitest run --config vitest.unit.config.ts scripts/tenancy-inventory` | **PASS** — 2 files, 7 tests |
-| Real-DB tests (read-only enforcement) | `pnpm test:db:local -- scripts/tenancy-inventory` | **PASS** — 1 file, 6 tests |
+| Real-DB tests (read-only enforcement + matrix completeness) | `pnpm test:db:local -- scripts/tenancy-inventory` | **PASS** — 2 files, 7 tests |
 | Typecheck | `pnpm typecheck` | **PASS** |
 | Targeted ESLint | `eslint --fix` on all new/changed files | **PASS** after `--fix` + 2 narrow, documented `eslint-disable` comments in the test's own confined file cleanup (per `SCRIPT_IMPLEMENTATION_PATTERNS.md`'s "test-owned temporary directories" allowance) |
 | `pnpm arch:lint` | full run | Only the pre-existing, unrelated `strict-rate-limit.ts` FAIL (confirmed present on `main` since OZI-77's own validation report) — nothing in `scripts/tenancy-inventory/` flagged |
@@ -59,6 +59,24 @@ Changed/added files: `scripts/tenancy-inventory/**` (new), `package.json`
 (added `scripts/**/*.db.test.{ts,tsx}` to `exclude`, so the new DB test
 isn't double-run by the jsdom unit runner without a real Postgres
 connection). No application code (`src/**`) touched.
+
+## Formal Review Follow-Up (2026-08-27, second commit)
+
+Requested and completed after the first checkpoint commit: formal
+Security/Auth + Architecture review against 5 explicit criteria (see both
+specialist summaries). Found and fixed one real issue during the review —
+3 of 8 topology queries were bounded (`LIMIT`) but fetched row-level ids
+into Node before collapsing to a count, rather than being aggregate-only
+at the SQL level. Rewrote all 3 as pure Postgres aggregates; re-ran the
+full dry-run against `dev-db` afterward and confirmed byte-identical
+output to the pre-fix run, so the rewrite is behavior-preserving. Also
+added `ownership-matrix.completeness.db.test.ts`, which passes against
+real `test-db` and closes the "hand-authored, could silently go stale"
+risk noted in the first `01 - Architecture Guard - Summary.md`.
+
+Re-ran full validation after the fix: 7 unit tests, 7 real-DB tests (was
+6 — the new completeness test), typecheck clean, targeted lint clean,
+`arch:lint` unchanged (same one pre-existing unrelated FAIL).
 
 ## Conclusion
 

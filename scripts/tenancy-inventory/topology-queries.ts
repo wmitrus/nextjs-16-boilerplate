@@ -1,4 +1,4 @@
-import { sql, count, eq, isNull } from 'drizzle-orm';
+import { sql, count, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import { authOrganizationIdentitiesTable } from '@/modules/auth/infrastructure/drizzle/schema';
@@ -7,21 +7,10 @@ import {
   organizationsTable,
   policiesTable,
   tenantAttributesTable,
-  tenantsTable,
   waitlistEntriesTable,
 } from '@/modules/authorization/infrastructure/drizzle/schema';
 
 type Tx = PostgresJsDatabase<Record<string, never>>;
-
-/**
- * Safety net for every listing query in this module, independent of the
- * `READ ONLY` transaction: this tool never needs more than a bounded sample
- * of raw rows, even against a much larger environment than local dev/test.
- * Aggregate (`count`) queries below don't need it -- they return one row
- * regardless of table size -- but it is applied wherever a query could
- * otherwise return one row per entity.
- */
-const MAX_ROWS = 10_000;
 
 export interface TenantOrgCountBuckets {
   readonly zeroOrganizations: number;
@@ -29,54 +18,59 @@ export interface TenantOrgCountBuckets {
   readonly multipleOrganizations: number;
 }
 
-/** S1/S2: buckets every tenant by how many organizations it has. */
+/**
+ * S1/S2: buckets every tenant by how many organizations it has. Computed
+ * entirely inside Postgres (an aggregate over a per-tenant subquery) --
+ * unlike an app-side `GROUP BY` fetch-then-bucket, no per-tenant row (and
+ * so no tenant id) ever leaves the database into this process; only the
+ * three final counts do.
+ */
 export async function tenantOrganizationCounts(
   tx: Tx,
 ): Promise<TenantOrgCountBuckets> {
-  const rows = await tx
-    .select({
-      tenantId: tenantsTable.id,
-      orgCount: count(organizationsTable.id),
-    })
-    .from(tenantsTable)
-    .leftJoin(
-      organizationsTable,
-      eq(organizationsTable.tenantId, tenantsTable.id),
-    )
-    .groupBy(tenantsTable.id)
-    .limit(MAX_ROWS);
+  const rows = await tx.execute<{
+    zero: string;
+    one: string;
+    multiple: string;
+  }>(sql`
+    select
+      count(*) filter (where org_count = 0) as zero,
+      count(*) filter (where org_count = 1) as one,
+      count(*) filter (where org_count > 1) as multiple
+    from (
+      select t.id, count(o.id) as org_count
+      from tenants t
+      left join ${organizationsTable} o on o.tenant_id = t.id
+      group by t.id
+    ) per_tenant
+  `);
 
-  const buckets = {
-    zeroOrganizations: 0,
-    oneOrganization: 0,
-    multipleOrganizations: 0,
+  const row = rows[0];
+  return {
+    zeroOrganizations: Number(row?.zero ?? 0),
+    oneOrganization: Number(row?.one ?? 0),
+    multipleOrganizations: Number(row?.multiple ?? 0),
   };
-
-  for (const row of rows) {
-    if (row.orgCount === 0) buckets.zeroOrganizations += 1;
-    else if (row.orgCount === 1) buckets.oneOrganization += 1;
-    else buckets.multipleOrganizations += 1;
-  }
-
-  return buckets;
 }
 
 /**
  * S4: counts users who hold a membership in more than one organization.
- * Returns only the count -- never the user ids -- consistent with keeping
- * this tool's output aggregate-only.
+ * Computed as a single aggregate over a per-user subquery -- no user id
+ * ever leaves the database.
  */
 export async function usersInMultipleOrganizationsCount(
   tx: Tx,
 ): Promise<number> {
-  const rows = await tx
-    .select({ userId: membershipsTable.userId })
-    .from(membershipsTable)
-    .groupBy(membershipsTable.userId)
-    .having(sql`count(distinct ${membershipsTable.organizationId}) > 1`)
-    .limit(MAX_ROWS);
+  const rows = await tx.execute<{ value: string }>(sql`
+    select count(*) as value from (
+      select ${membershipsTable.userId}
+      from ${membershipsTable}
+      group by ${membershipsTable.userId}
+      having count(distinct ${membershipsTable.organizationId}) > 1
+    ) users_with_multiple_orgs
+  `);
 
-  return rows.length;
+  return Number(rows[0]?.value ?? 0);
 }
 
 /** S3: organizations whose tenant has no tenant_attributes row at all. */
@@ -101,7 +95,11 @@ export interface ProviderMappingAnomalies {
   readonly organizationsWithMultipleProviderMappings: number;
 }
 
-/** S5: organization <-> external-provider identity mapping shape. */
+/**
+ * S5: organization <-> external-provider identity mapping shape. Both
+ * counts are single-row aggregates -- no organization id or provider
+ * identity row ever leaves the database.
+ */
 export async function providerOrganizationMappingAnomalies(
   tx: Tx,
 ): Promise<ProviderMappingAnomalies> {
@@ -115,19 +113,21 @@ export async function providerOrganizationMappingAnomalies(
           where ${authOrganizationIdentitiesTable.organizationId} = ${organizationsTable.id}
         )`,
       ),
-    tx
-      .select({
-        organizationId: authOrganizationIdentitiesTable.organizationId,
-      })
-      .from(authOrganizationIdentitiesTable)
-      .groupBy(authOrganizationIdentitiesTable.organizationId)
-      .having(sql`count(*) > 1`)
-      .limit(MAX_ROWS),
+    tx.execute<{ value: string }>(sql`
+      select count(*) as value from (
+        select ${authOrganizationIdentitiesTable.organizationId}
+        from ${authOrganizationIdentitiesTable}
+        group by ${authOrganizationIdentitiesTable.organizationId}
+        having count(*) > 1
+      ) orgs_with_multiple_mappings
+    `),
   ]);
 
   return {
     organizationsWithoutProviderMapping: unmapped[0]?.value ?? 0,
-    organizationsWithMultipleProviderMappings: duplicated.length,
+    organizationsWithMultipleProviderMappings: Number(
+      duplicated[0]?.value ?? 0,
+    ),
   };
 }
 

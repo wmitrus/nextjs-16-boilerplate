@@ -63,10 +63,40 @@
 
 ## Risks
 
-- None blocking. Non-blocking debt: the ownership matrix is hand-authored
-  from live schema inspection (Phase 0), not derived by automated
-  `information_schema` introspection. Acceptable for a first pass; revisit
-  if this tool is extended/reused significantly.
+- Superseded below: the ownership-matrix hand-authoring risk noted in the
+  initial review is now closed by an automated completeness check, not
+  merely accepted as debt.
+
+## Formal Post-Implementation Review — 2026-08-27
+
+User-requested, alongside the Security/Auth formal review. Architecture
+scope of the same five criteria: matrix completeness mechanism, and the
+structural shape of a future production read-only-role layer.
+
+- **Matrix completeness** (criterion 3): the previously-accepted debt
+  ("hand-authored, not automatically derived") is now closed —
+  `ownership-matrix.completeness.db.test.ts` derives the live table list
+  from `pg_catalog.pg_tables` and diffs it against `TABLE_OWNERSHIP` in a
+  real-DB test, independent of the schema files the matrix itself was
+  built by reading. This is exactly the kind of drift-detection mechanism
+  this debt entry called for; no further follow-up needed on this point.
+- **Query hardening** (criterion 1, structural angle): the fix that moved
+  3 of 8 queries from an app-side `GROUP BY`-then-count to a pure Postgres
+  aggregate is architecture-neutral — no boundary, DI, or dependency-
+  direction change; it only removes a now-unneeded `MAX_ROWS`/`.limit()`
+  pattern from `topology-queries.ts`. Re-verified: `withReadOnlyDb` is
+  still the only transaction-construction path used by every query.
+- **Future production read-only role** (criterion 5, structural angle):
+  agrees with Security/Auth's design note. Structurally, this only
+  requires a new `RemoteTarget` type and URL-resolution function parallel
+  to (not replacing) `LocalTarget`/`resolveLocalUrl`, keeping the
+  `withReadOnlyDb` wrapper and every query function completely unchanged
+  — the DB-access layer already isolates "how a connection is obtained"
+  from "what runs against it" cleanly enough that this is an additive
+  change, not a redesign. No DI/container involvement needed for that
+  future path either, consistent with this pass's decision to keep this
+  tool outside the app's request-scoped composition root.
+- architecture status: **GO** (unchanged)
 
 ## Artifact Synchronization
 
@@ -88,3 +118,13 @@
 - Summary of change: approved script location, dispatcher shape, direct DB
   connection pattern, and the read-only transaction mechanism
 - Sections refreshed: all
+
+### 2026-08-27 — Formal Post-Implementation Review
+
+- Trigger: user-requested formal Architecture review alongside
+  Security/Auth, against 5 specific criteria
+- Summary of change: confirmed the ownership-matrix hand-authoring debt is
+  now closed by an automated completeness test; confirmed the query
+  hardening fix is architecture-neutral; gave the structural design note
+  for a future production read-only-role layer (additive, no redesign)
+- Sections refreshed: Risks, Formal Post-Implementation Review (new)

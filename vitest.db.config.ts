@@ -7,7 +7,7 @@ export default defineConfig({
     name: 'db',
     environment: 'node',
     globals: true,
-    include: ['src/**/*.db.test.ts'],
+    include: ['src/**/*.db.test.ts', 'scripts/**/*.db.test.ts'],
     pool: 'threads',
     testTimeout: 30_000,
     coverage: {

@@ -7,7 +7,7 @@ export default defineConfig({
     name: 'db-local',
     environment: 'node',
     globals: true,
-    include: ['src/**/*.db.test.ts'],
+    include: ['src/**/*.db.test.ts', 'scripts/**/*.db.test.ts'],
     pool: 'forks',
     fileParallelism: false,
     testTimeout: 60_000,

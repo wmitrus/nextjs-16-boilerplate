@@ -15,6 +15,7 @@ import {
 import {
   allStatementFingerprints,
   registryFingerprint,
+  type StatementFingerprintEntry,
 } from './query-registry';
 
 /**
@@ -369,6 +370,37 @@ describe('checkArtifactIntegrity', () => {
     };
     expect(checkArtifactIntegrity(tampered).compatible).toBe(false);
   });
+
+  /**
+   * `computeArtifactFingerprint` never reads the stored `scopeFingerprint`
+   * field itself -- it recomputes the scope's constituent fields
+   * directly. Without an independent check, an artifact whose
+   * `scopeFingerprint` was silently rewritten would still pass an
+   * `artifactFingerprint`-only integrity check, which would let an
+   * internally inconsistent approval identity through.
+   */
+  it('fails closed when scopeFingerprint alone is tampered, even though artifactFingerprint still matches', () => {
+    const artifact = buildExplainPreflightArtifact(BASE_FACTS, BASE_CALLER);
+    const tampered: ExplainPreflightArtifactV1 = {
+      ...artifact,
+      scopeFingerprint: 'a'.repeat(64),
+    };
+    // Sanity check: artifactFingerprint truly is untouched and would, on
+    // its own, still say "intact" -- this is exactly the gap being closed.
+    expect(tampered.artifactFingerprint).toBe(artifact.artifactFingerprint);
+    const result = checkArtifactIntegrity(tampered);
+    expect(result.compatible).toBe(false);
+    expect(result.details?.scopeMismatch).toBe(true);
+  });
+
+  it('fails closed when scopeFingerprint is blank', () => {
+    const artifact = buildExplainPreflightArtifact(BASE_FACTS, BASE_CALLER);
+    const tampered: ExplainPreflightArtifactV1 = {
+      ...artifact,
+      scopeFingerprint: '',
+    };
+    expect(checkArtifactIntegrity(tampered).compatible).toBe(false);
+  });
 });
 
 describe('checkRegistryCompatibility', () => {
@@ -409,6 +441,56 @@ describe('checkRegistryCompatibility', () => {
       statementFingerprints: null,
     });
     expect(result.compatible).toBe(false);
+  });
+
+  /**
+   * A loaded artifact is untrusted stored input. Before this fix, a
+   * malformed entry made the function throw while reading `.id` instead
+   * of returning `compatible: false` -- these prove it now rejects
+   * cleanly instead of crashing the caller.
+   */
+  describe('rejects malformed statementFingerprints entries instead of throwing', () => {
+    it('rejects a null entry', () => {
+      const entries = allStatementFingerprints();
+      const malformed: StatementFingerprintEntry[] = [
+        ...entries.slice(1),
+        null as unknown as StatementFingerprintEntry,
+      ];
+      const result = checkRegistryCompatibility({
+        registryFingerprint: registryFingerprint(),
+        statementFingerprints: malformed,
+      });
+      expect(result.compatible).toBe(false);
+    });
+
+    it('rejects an entry missing id', () => {
+      const entries = allStatementFingerprints();
+      const malformed: StatementFingerprintEntry[] = [
+        ...entries.slice(1),
+        { fingerprint: 'b'.repeat(64) } as unknown as StatementFingerprintEntry,
+      ];
+      const result = checkRegistryCompatibility({
+        registryFingerprint: registryFingerprint(),
+        statementFingerprints: malformed,
+      });
+      expect(result.compatible).toBe(false);
+    });
+
+    it('rejects an entry with a non-string fingerprint', () => {
+      const entries = allStatementFingerprints();
+      const malformed: StatementFingerprintEntry[] = [
+        ...entries.slice(1),
+        {
+          id: entries[0]!.id,
+          fingerprint: 12345,
+        } as unknown as StatementFingerprintEntry,
+      ];
+      const result = checkRegistryCompatibility({
+        registryFingerprint: registryFingerprint(),
+        statementFingerprints: malformed,
+      });
+      expect(result.compatible).toBe(false);
+    });
   });
 
   /**

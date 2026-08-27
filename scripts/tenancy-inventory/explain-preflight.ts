@@ -522,9 +522,41 @@ export interface CompatibilityResult {
 }
 
 /**
- * Pure, synchronous, fail-closed: recomputes `artifactFingerprint` from
- * the artifact's own recorded contents and compares it to the stored
- * value. Proves the artifact has not been mutated since it was produced.
+ * A loaded artifact is untrusted stored input, not a value this module
+ * itself constructed -- `TypeScript`'s static type on a compatibility
+ * check's parameter is a compile-time promise, not a runtime guarantee.
+ * Used to reject a malformed `statementFingerprints` entry cleanly before
+ * any code dereferences `.id`/`.fingerprint` on it.
+ */
+function isPlausibleStatementFingerprintEntry(
+  value: unknown,
+): value is StatementFingerprintEntry {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { id?: unknown; fingerprint?: unknown };
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.length > 0 &&
+    typeof candidate.fingerprint === 'string' &&
+    candidate.fingerprint.length > 0
+  );
+}
+
+/**
+ * Pure, synchronous, fail-closed: recomputes **both** `scopeFingerprint`
+ * and `artifactFingerprint` from the artifact's own recorded contents and
+ * compares each to its stored value. Proves the artifact has not been
+ * mutated since it was produced.
+ *
+ * Checking only `artifactFingerprint` would miss a real tamper case:
+ * `computeArtifactFingerprint` never reads the stored `scopeFingerprint`
+ * field itself (it recomputes the scope's constituent fields directly),
+ * so an artifact with its `scopeFingerprint` field silently rewritten to
+ * an arbitrary value would still pass an `artifactFingerprint`-only
+ * check. Since Phase B2 is documented to persist and separately approve
+ * `scopeFingerprint`, this function must independently verify it too, or
+ * an internally inconsistent approval identity could pass integrity.
  *
  * This does **not** prove the artifact was ever legitimately approved --
  * see the module doc comment. A future scan must additionally compare an
@@ -537,17 +569,22 @@ export function checkArtifactIntegrity(
   if (
     !artifact ||
     typeof artifact.artifactFingerprint !== 'string' ||
-    !artifact.artifactFingerprint
+    !artifact.artifactFingerprint ||
+    typeof artifact.scopeFingerprint !== 'string' ||
+    !artifact.scopeFingerprint
   ) {
     return {
       compatible: false,
-      reason: 'Artifact is missing its fingerprint; cannot prove integrity.',
+      reason:
+        'Artifact is missing its scope or artifact fingerprint; cannot prove integrity.',
     };
   }
 
-  let recomputed: string;
+  let recomputedScope: string;
+  let recomputedArtifact: string;
   try {
-    recomputed = computeArtifactFingerprint(artifact);
+    recomputedScope = computeScopeFingerprint(artifact);
+    recomputedArtifact = computeArtifactFingerprint(artifact);
   } catch {
     return {
       compatible: false,
@@ -556,17 +593,22 @@ export function checkArtifactIntegrity(
     };
   }
 
-  if (recomputed !== artifact.artifactFingerprint) {
+  const scopeMismatch = recomputedScope !== artifact.scopeFingerprint;
+  const artifactMismatch = recomputedArtifact !== artifact.artifactFingerprint;
+
+  if (scopeMismatch || artifactMismatch) {
     return {
       compatible: false,
       reason:
-        'Artifact contents do not match its recorded fingerprint -- it may have been mutated since it was produced.',
+        'Artifact contents do not match its recorded fingerprint(s) -- it may have been mutated since it was produced.',
+      details: { scopeMismatch, artifactMismatch },
     };
   }
 
   return {
     compatible: true,
-    reason: 'Artifact contents match its recorded fingerprint exactly.',
+    reason:
+      'Artifact contents match both its recorded scope and artifact fingerprints exactly.',
   };
 }
 
@@ -605,6 +647,21 @@ export function checkRegistryCompatibility(
       compatible: false,
       reason:
         'Artifact is missing registry fingerprint data; cannot prove compatibility.',
+    };
+  }
+
+  // Validate every entry's own shape before dereferencing `.id`/
+  // `.fingerprint` below -- a loaded artifact is untrusted stored input,
+  // and a malformed entry (e.g. `null`, or an object missing either
+  // field) must be rejected cleanly, not thrown on. Fail-closed means
+  // "reject", never "crash the caller".
+  if (
+    !artifact.statementFingerprints.every(isPlausibleStatementFingerprintEntry)
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Artifact statementFingerprints contains a malformed entry; cannot prove compatibility.',
     };
   }
 

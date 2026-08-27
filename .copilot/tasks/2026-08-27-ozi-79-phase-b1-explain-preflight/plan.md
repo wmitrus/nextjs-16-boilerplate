@@ -60,7 +60,7 @@ shows only the same pre-existing unrelated `strict-rate-limit.ts` FAIL
 - Completed `RelationStat` with `relPages`/`indexSizeBytes`.
 - Added `explain-preflight.least-privilege.db.test.ts` -- real-Postgres
   proof that a disposable role with exactly `USAGE` on `public`/`drizzle`
-  + `SELECT` on `REQUIRED_SELECT_TABLES`, no memberships, no writes,
+  and `SELECT` on `REQUIRED_SELECT_TABLES`, no memberships, no writes,
   passes `verifyReadOnlyRole` and then successfully drives
   `collectExplainPreflightFacts` inside one `READ ONLY` transaction.
 - Fixed the Codacy markdown-fence-language finding in `runbook.md`.

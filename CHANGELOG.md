@@ -1,3 +1,10 @@
+## [2.2.2](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.2.1...v2.2.2) (2026-08-27)
+
+
+### Bug Fixes
+
+* **admin:** gate waitlist page loader to platform admins (OZI-76) ([0912756](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0912756a803747fc6fe399b739f739a2e806cd28))
+
 ## [2.2.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.2.0...v2.2.1) (2026-08-27)
 
 

@@ -1,3 +1,10 @@
+# [2.6.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.5.0...v2.6.0) (2026-08-27)
+
+
+### Features
+
+* **ozi-79:** remote plain-EXPLAIN preflight core (Phase B1, build-only) ([#83](https://github.com/wmitrus/nextjs-16-boilerplate/issues/83)) ([df5c709](https://github.com/wmitrus/nextjs-16-boilerplate/commit/df5c7090605cd62ed7537153af06b4349cba0c79))
+
 # [2.5.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.4.0...v2.5.0) (2026-08-27)
 
 

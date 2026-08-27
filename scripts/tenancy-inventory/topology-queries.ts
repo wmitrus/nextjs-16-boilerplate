@@ -82,12 +82,16 @@ export async function tenantOrganizationCounts(
 }
 
 /**
- * S4: counts users who hold a membership in more than one organization
- * *belonging to the same tenant*. Distinct from
- * `usersInMultipleTenantsCount` below -- two organizations under one
- * tenant and two organizations under two different tenants are
- * architecturally different states. Computed as a single aggregate over a
- * per-user subquery -- no user id ever leaves the database.
+ * S4: counts any user who holds a membership in more than one
+ * organization -- regardless of whether those organizations belong to the
+ * same tenant or different tenants. Distinct from
+ * `usersInMultipleTenantsCount` below, which specifically isolates the
+ * cross-tenant case: two organizations under one tenant and two
+ * organizations under two different tenants are architecturally different
+ * states, and this function alone cannot tell them apart -- read it
+ * together with `usersInMultipleTenantsCount`, not in isolation. Computed
+ * as a single aggregate over a per-user subquery -- no user id ever
+ * leaves the database.
  */
 export async function usersInMultipleOrganizationsCount(
   tx: Tx,

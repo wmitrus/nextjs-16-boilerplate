@@ -6,6 +6,9 @@ import type { AuthorizationService } from '@/core/contracts/authorization';
 import { ACTIONS } from '@/core/contracts/resources-actions';
 import type { getAppContainer } from '@/core/runtime/bootstrap';
 
+import type { AdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
+import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
+
 export type {
   OrganizationDetailDto,
   OrganizationSummaryDto,
@@ -29,15 +32,20 @@ export const organizationIdSchema = z.object({
   id: z.uuid(),
 });
 
+export type OrganizationsAdminAccess = {
+  allowed: boolean;
+  isPlatformAdmin: boolean;
+};
+
 export async function checkOrganizationsActionAccess(
   email: string | undefined,
   userId: string,
   tenantId: string,
   container: ReturnType<typeof getAppContainer>,
   action: Action,
-): Promise<boolean> {
+): Promise<OrganizationsAdminAccess> {
   if (isEnvBasedPlatformAdmin(email)) {
-    return true;
+    return { allowed: true, isPlatformAdmin: true };
   }
 
   const authzService = container.resolve<AuthorizationService>(
@@ -45,12 +53,14 @@ export async function checkOrganizationsActionAccess(
   );
   const { resource } = parseAction(action);
 
-  return await authzService.can({
+  const allowed = await authzService.can({
     tenant: { tenantId },
     subject: { id: userId },
     resource: { type: resource, id: 'admin-panel' },
     action,
   });
+
+  return { allowed, isPlatformAdmin: false };
 }
 
 export async function checkOrganizationsAdminAccess(
@@ -58,7 +68,7 @@ export async function checkOrganizationsAdminAccess(
   userId: string,
   tenantId: string,
   container: ReturnType<typeof getAppContainer>,
-): Promise<boolean> {
+): Promise<OrganizationsAdminAccess> {
   return checkOrganizationsActionAccess(
     email,
     userId,
@@ -66,6 +76,16 @@ export async function checkOrganizationsAdminAccess(
     container,
     ACTIONS.SECURITY_MANAGE_POLICIES,
   );
+}
+
+export function toAdminOrganizationsScope(
+  access: OrganizationsAdminAccess,
+  activeOrganizationId: string,
+): AdminOrganizationsScope {
+  return createAdminOrganizationsScope({
+    activeOrganizationId,
+    isPlatformAdmin: access.isPlatformAdmin,
+  });
 }
 
 // Moved to shared/lib/api so non-admin API families can use it too.

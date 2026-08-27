@@ -15,6 +15,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import {
   checkOrganizationsAdminAccess,
   organizationsQuerySchema,
+  toAdminOrganizationsScope,
 } from './_lib';
 
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
@@ -25,14 +26,14 @@ export const GET = withErrorHandler(
     await connection();
 
     const container = getAppContainer();
-    const isAdmin = await checkOrganizationsAdminAccess(
+    const adminAccess = await checkOrganizationsAdminAccess(
       access.identity.email,
       access.user.id,
       access.tenant.tenantId,
       container,
     );
 
-    if (!isAdmin) {
+    if (!adminAccess.allowed) {
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
@@ -58,7 +59,10 @@ export const GET = withErrorHandler(
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleAdminOrganizationsReadService(db);
     const result = await service.listInActiveScope({
-      activeOrganizationId: access.tenant.organizationId,
+      scope: toAdminOrganizationsScope(
+        adminAccess,
+        access.tenant.organizationId,
+      ),
       ...queryResult.data,
     });
 

@@ -5,8 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { TEST_DEFAULT_URL } from '../lib/db-guard.mjs';
 
+import { REQUIRED_SELECT_TABLES } from './query-registry';
 import {
-  REQUIRED_SELECT_TABLES,
   RemoteRoleNotReadOnlyError,
   verifyReadOnlyRole,
 } from './readonly-db-remote';

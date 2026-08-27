@@ -3,6 +3,12 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
+// Phase B0: `REQUIRED_SELECT_TABLES` is derived from `query-registry.ts`
+// (the union of every registry statement's referenced tables), not
+// hand-maintained here -- see that module's doc comment. This is the one
+// thing this file imports from the registry; it never touches SQL text.
+import { REQUIRED_SELECT_TABLES } from './query-registry';
+
 /**
  * OZI-79 Phase A: connection/verification plumbing only. Nothing in this
  * module is wired into a CLI command yet -- there is no `scan
@@ -91,40 +97,6 @@ export class RemoteRoleNotReadOnlyError extends Error {}
  * schema-level `USAGE` (must be present).
  */
 const APPLICATION_SCHEMAS = ['public', 'drizzle'] as const;
-
-/**
- * Every table the OZI-79 frozen, approved check set actually reads --
- * `topology-queries.ts`'s 12 named exports (`tenantOrganizationCounts`,
- * `usersInMultipleOrganizationsCount`, `usersInMultipleTenantsCount`,
- * `organizationsMissingTenantAttributesCount`,
- * `providerOrganizationMappingAnomalies`, `userProviderMappingAnomalies`,
- * `tenantIdShapeCounts` against `feature_flags`/`audit_log_settings`/
- * `audit_events`, `waitlistEntriesWithTenantIdCount`,
- * `policiesWithNullOrganizationCount`, `quotaEnforcementSignal`) plus
- * `latestSchemaMigration`'s `drizzle.__drizzle_migrations` (evidence
- * metadata, not a finding, but still a table the credential must be able
- * to read). Reviewed 2026-08-27. Checked for explicit `SELECT`
- * *presence* -- a role with zero grants at all would pass a write-only
- * check but still could not run any approved query.
- */
-export const REQUIRED_SELECT_TABLES = [
-  { schema: 'public', table: 'tenants' },
-  { schema: 'public', table: 'organizations' },
-  { schema: 'public', table: 'memberships' },
-  { schema: 'public', table: 'tenant_attributes' },
-  { schema: 'public', table: 'auth_organization_identities' },
-  { schema: 'public', table: 'users' },
-  { schema: 'public', table: 'auth_user_identities' },
-  { schema: 'public', table: 'feature_flags' },
-  { schema: 'public', table: 'audit_log_settings' },
-  { schema: 'public', table: 'audit_events' },
-  { schema: 'public', table: 'waitlist_entries' },
-  { schema: 'public', table: 'policies' },
-  { schema: 'drizzle', table: '__drizzle_migrations' },
-] as const satisfies readonly {
-  schema: (typeof APPLICATION_SCHEMAS)[number];
-  table: string;
-}[];
 
 /**
  * Exported directly (not just used internally by `withReadOnlyRemoteDb`)

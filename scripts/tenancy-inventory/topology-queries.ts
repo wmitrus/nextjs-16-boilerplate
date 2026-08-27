@@ -1,18 +1,7 @@
-import { sql, count, isNull } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
-import {
-  authOrganizationIdentitiesTable,
-  authUserIdentitiesTable,
-} from '@/modules/auth/infrastructure/drizzle/schema';
-import {
-  membershipsTable,
-  organizationsTable,
-  policiesTable,
-  tenantAttributesTable,
-  waitlistEntriesTable,
-} from '@/modules/authorization/infrastructure/drizzle/schema';
-import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+import { getStatement } from './query-registry';
 
 type Tx = PostgresJsDatabase<Record<string, never>>;
 
@@ -29,12 +18,16 @@ export interface LatestSchemaMigration {
  * not just the application code's git state, which can drift from it
  * (e.g. a report run against a DB that hasn't picked up the latest
  * migration yet, even on a clean checkout).
+ *
+ * SQL text lives in `query-registry.ts` (`latest_schema_migration`), not
+ * here -- this function's job is only to run it and shape the result.
  */
 export async function latestSchemaMigration(
   tx: Tx,
 ): Promise<LatestSchemaMigration | null> {
+  const statement = getStatement('latest_schema_migration');
   const rows = await tx.execute<{ id: number; hash: string }>(
-    sql`select id, hash from drizzle.__drizzle_migrations order by id desc limit 1`,
+    sql.raw(statement.sql),
   );
   const row = rows[0];
   return row ? { id: row.id, hash: row.hash } : null;
@@ -56,22 +49,12 @@ export interface TenantOrgCountBuckets {
 export async function tenantOrganizationCounts(
   tx: Tx,
 ): Promise<TenantOrgCountBuckets> {
+  const statement = getStatement('tenant_organization_counts');
   const rows = await tx.execute<{
     zero: string;
     one: string;
     multiple: string;
-  }>(sql`
-    select
-      count(*) filter (where org_count = 0) as zero,
-      count(*) filter (where org_count = 1) as one,
-      count(*) filter (where org_count > 1) as multiple
-    from (
-      select t.id, count(o.id) as org_count
-      from tenants t
-      left join ${organizationsTable} o on o.tenant_id = t.id
-      group by t.id
-    ) per_tenant
-  `);
+  }>(sql.raw(statement.sql));
 
   const row = rows[0];
   return {
@@ -96,14 +79,8 @@ export async function tenantOrganizationCounts(
 export async function usersInMultipleOrganizationsCount(
   tx: Tx,
 ): Promise<number> {
-  const rows = await tx.execute<{ value: string }>(sql`
-    select count(*) as value from (
-      select ${membershipsTable.userId}
-      from ${membershipsTable}
-      group by ${membershipsTable.userId}
-      having count(distinct ${membershipsTable.organizationId}) > 1
-    ) users_with_multiple_orgs
-  `);
+  const statement = getStatement('users_in_multiple_organizations_count');
+  const rows = await tx.execute<{ value: string }>(sql.raw(statement.sql));
 
   return Number(rows[0]?.value ?? 0);
 }
@@ -117,15 +94,8 @@ export async function usersInMultipleOrganizationsCount(
  * spanning two different tenants is a different kind of state entirely.
  */
 export async function usersInMultipleTenantsCount(tx: Tx): Promise<number> {
-  const rows = await tx.execute<{ value: string }>(sql`
-    select count(*) as value from (
-      select m.user_id
-      from ${membershipsTable} m
-      join ${organizationsTable} o on o.id = m.organization_id
-      group by m.user_id
-      having count(distinct o.tenant_id) > 1
-    ) users_with_multiple_tenants
-  `);
+  const statement = getStatement('users_in_multiple_tenants_count');
+  const rows = await tx.execute<{ value: string }>(sql.raw(statement.sql));
 
   return Number(rows[0]?.value ?? 0);
 }
@@ -134,17 +104,12 @@ export async function usersInMultipleTenantsCount(tx: Tx): Promise<number> {
 export async function organizationsMissingTenantAttributesCount(
   tx: Tx,
 ): Promise<number> {
-  const rows = await tx
-    .select({ value: count() })
-    .from(organizationsTable)
-    .where(
-      sql`not exists (
-        select 1 from ${tenantAttributesTable}
-        where ${tenantAttributesTable.tenantId} = ${organizationsTable.tenantId}
-      )`,
-    );
+  const statement = getStatement(
+    'organizations_missing_tenant_attributes_count',
+  );
+  const rows = await tx.execute<{ value: string }>(sql.raw(statement.sql));
 
-  return rows[0]?.value ?? 0;
+  return Number(rows[0]?.value ?? 0);
 }
 
 export interface ProviderMappingAnomalies {
@@ -167,30 +132,17 @@ export interface ProviderMappingAnomalies {
 export async function providerOrganizationMappingAnomalies(
   tx: Tx,
 ): Promise<ProviderMappingAnomalies> {
-  const [unmapped, duplicated] = await Promise.all([
-    tx
-      .select({ value: count() })
-      .from(organizationsTable)
-      .where(
-        sql`not exists (
-          select 1 from ${authOrganizationIdentitiesTable}
-          where ${authOrganizationIdentitiesTable.organizationId} = ${organizationsTable.id}
-        )`,
-      ),
-    tx.execute<{ value: string }>(sql`
-      select count(*) as value from (
-        select ${authOrganizationIdentitiesTable.organizationId}, ${authOrganizationIdentitiesTable.provider}
-        from ${authOrganizationIdentitiesTable}
-        group by ${authOrganizationIdentitiesTable.organizationId}, ${authOrganizationIdentitiesTable.provider}
-        having count(*) > 1
-      ) orgs_with_multiple_mappings_same_provider
-    `),
+  const unmapped = getStatement('provider_organization_mapping_unmapped');
+  const duplicated = getStatement('provider_organization_mapping_duplicated');
+  const [unmappedRows, duplicatedRows] = await Promise.all([
+    tx.execute<{ value: string }>(sql.raw(unmapped.sql)),
+    tx.execute<{ value: string }>(sql.raw(duplicated.sql)),
   ]);
 
   return {
-    organizationsWithoutProviderMapping: unmapped[0]?.value ?? 0,
+    organizationsWithoutProviderMapping: Number(unmappedRows[0]?.value ?? 0),
     organizationsWithMultipleMappingsSameProvider: Number(
-      duplicated[0]?.value ?? 0,
+      duplicatedRows[0]?.value ?? 0,
     ),
   };
 }
@@ -210,29 +162,18 @@ export interface UserProviderMappingAnomalies {
 export async function userProviderMappingAnomalies(
   tx: Tx,
 ): Promise<UserProviderMappingAnomalies> {
-  const [unmapped, duplicated] = await Promise.all([
-    tx
-      .select({ value: count() })
-      .from(usersTable)
-      .where(
-        sql`not exists (
-          select 1 from ${authUserIdentitiesTable}
-          where ${authUserIdentitiesTable.userId} = ${usersTable.id}
-        )`,
-      ),
-    tx.execute<{ value: string }>(sql`
-      select count(*) as value from (
-        select ${authUserIdentitiesTable.userId}, ${authUserIdentitiesTable.provider}
-        from ${authUserIdentitiesTable}
-        group by ${authUserIdentitiesTable.userId}, ${authUserIdentitiesTable.provider}
-        having count(*) > 1
-      ) users_with_multiple_mappings_same_provider
-    `),
+  const unmapped = getStatement('user_provider_mapping_unmapped');
+  const duplicated = getStatement('user_provider_mapping_duplicated');
+  const [unmappedRows, duplicatedRows] = await Promise.all([
+    tx.execute<{ value: string }>(sql.raw(unmapped.sql)),
+    tx.execute<{ value: string }>(sql.raw(duplicated.sql)),
   ]);
 
   return {
-    usersWithoutProviderMapping: unmapped[0]?.value ?? 0,
-    usersWithMultipleMappingsSameProvider: Number(duplicated[0]?.value ?? 0),
+    usersWithoutProviderMapping: Number(unmappedRows[0]?.value ?? 0),
+    usersWithMultipleMappingsSameProvider: Number(
+      duplicatedRows[0]?.value ?? 0,
+    ),
   };
 }
 
@@ -243,8 +184,11 @@ export interface TenantIdShapeCounts {
   readonly matchesNeither: number;
 }
 
-const UUID_PATTERN =
-  "'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'";
+const TENANT_ID_SHAPE_STATEMENT_ID = {
+  feature_flags: 'tenant_id_shape_feature_flags',
+  audit_log_settings: 'tenant_id_shape_audit_log_settings',
+  audit_events: 'tenant_id_shape_audit_events',
+} as const;
 
 /**
  * S6: for a `tenant_id text` column that may hold either an internal
@@ -262,37 +206,16 @@ export async function tenantIdShapeCounts(
   tx: Tx,
   tableName: 'feature_flags' | 'audit_log_settings' | 'audit_events',
 ): Promise<TenantIdShapeCounts> {
-  const table = sql.raw(`"${tableName}"`);
+  // `tableName` is one of exactly three literal values from the closed
+  // record above, never a caller-supplied string (SEC-18).
+  // eslint-disable-next-line security/detect-object-injection
+  const statement = getStatement(TENANT_ID_SHAPE_STATEMENT_ID[tableName]);
   const rows = await tx.execute<{
     non_null: string;
     matches_tenant: string;
     matches_organization: string;
     matches_neither: string;
-  }>(sql`
-    select
-      count(*) filter (where tenant_id is not null) as non_null,
-      count(*) filter (
-        where tenant_id is not null
-          and tenant_id ~* ${sql.raw(UUID_PATTERN)}
-          and exists (select 1 from tenants where tenants.id::text = ${table}.tenant_id)
-      ) as matches_tenant,
-      count(*) filter (
-        where tenant_id is not null
-          and tenant_id ~* ${sql.raw(UUID_PATTERN)}
-          and exists (select 1 from ${organizationsTable} where ${organizationsTable.id}::text = ${table}.tenant_id)
-      ) as matches_organization,
-      count(*) filter (
-        where tenant_id is not null
-          and not (
-            tenant_id ~* ${sql.raw(UUID_PATTERN)}
-            and (
-              exists (select 1 from tenants where tenants.id::text = ${table}.tenant_id)
-              or exists (select 1 from ${organizationsTable} where ${organizationsTable.id}::text = ${table}.tenant_id)
-            )
-          )
-      ) as matches_neither
-    from ${table}
-  `);
+  }>(sql.raw(statement.sql));
 
   const row = rows[0];
   return {
@@ -311,24 +234,20 @@ export async function tenantIdShapeCounts(
 export async function waitlistEntriesWithTenantIdCount(
   tx: Tx,
 ): Promise<number> {
-  const rows = await tx
-    .select({ value: count() })
-    .from(waitlistEntriesTable)
-    .where(sql`${waitlistEntriesTable.tenantId} is not null`);
+  const statement = getStatement('waitlist_entries_with_tenant_id_count');
+  const rows = await tx.execute<{ value: string }>(sql.raw(statement.sql));
 
-  return rows[0]?.value ?? 0;
+  return Number(rows[0]?.value ?? 0);
 }
 
 /** Confirms whether policies.organization_id IS NULL happens in practice. */
 export async function policiesWithNullOrganizationCount(
   tx: Tx,
 ): Promise<number> {
-  const rows = await tx
-    .select({ value: count() })
-    .from(policiesTable)
-    .where(isNull(policiesTable.organizationId));
+  const statement = getStatement('policies_with_null_organization_count');
+  const rows = await tx.execute<{ value: string }>(sql.raw(statement.sql));
 
-  return rows[0]?.value ?? 0;
+  return Number(rows[0]?.value ?? 0);
 }
 
 export interface QuotaSignal {
@@ -349,26 +268,12 @@ export interface QuotaSignal {
  * state; it does not and cannot establish why that state exists.
  */
 export async function quotaEnforcementSignal(tx: Tx): Promise<QuotaSignal> {
-  const orgRows = await tx.execute<{ exceeded: string }>(sql`
-    select count(*) as exceeded from (
-      select ta.tenant_id
-      from ${tenantAttributesTable} ta
-      join ${organizationsTable} o on o.tenant_id = ta.tenant_id
-      group by ta.tenant_id, ta.max_organizations
-      having count(o.id) > ta.max_organizations
-    ) t
-  `);
-
-  const userRows = await tx.execute<{ exceeded: string }>(sql`
-    select count(*) as exceeded from (
-      select ta.tenant_id
-      from ${tenantAttributesTable} ta
-      join ${organizationsTable} o on o.tenant_id = ta.tenant_id
-      join ${membershipsTable} m on m.organization_id = o.id
-      group by ta.tenant_id, ta.max_users
-      having count(distinct m.user_id) > ta.max_users
-    ) t
-  `);
+  const orgs = getStatement('quota_exceeding_max_organizations');
+  const users = getStatement('quota_exceeding_max_users');
+  const [orgRows, userRows] = await Promise.all([
+    tx.execute<{ exceeded: string }>(sql.raw(orgs.sql)),
+    tx.execute<{ exceeded: string }>(sql.raw(users.sql)),
+  ]);
 
   return {
     tenantsExceedingMaxOrganizations: Number(orgRows[0]?.exceeded ?? 0),

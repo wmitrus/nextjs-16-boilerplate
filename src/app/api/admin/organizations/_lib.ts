@@ -8,7 +8,6 @@ import type { getAppContainer } from '@/core/runtime/bootstrap';
 
 import type { AdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
 import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
-
 export type {
   OrganizationDetailDto,
   OrganizationSummaryDto,

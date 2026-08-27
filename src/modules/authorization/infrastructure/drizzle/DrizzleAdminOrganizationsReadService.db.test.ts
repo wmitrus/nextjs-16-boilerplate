@@ -84,9 +84,9 @@ describe('DrizzleAdminOrganizationsReadService (real DB)', () => {
     expect(list.organizations.map((organization) => organization.id)).toEqual(
       expect.arrayContaining([acmeOrgId, acmeSiblingOrgId]),
     );
-    expect(list.organizations.map((organization) => organization.id)).not.toContain(
-      globexOrgId,
-    );
+    expect(
+      list.organizations.map((organization) => organization.id),
+    ).not.toContain(globexOrgId);
     expect(list.total).toBe(2);
     expect(sibling?.organization.id).toBe(acmeSiblingOrgId);
     expect(outsideTenant).toBeNull();

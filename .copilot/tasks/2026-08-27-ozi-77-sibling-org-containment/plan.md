@@ -26,10 +26,10 @@ Prevent a non-platform organization administrator from reading or mutating a sib
 - [x] Next.js Runtime review
 - [x] Architecture Guard review
 - [x] Validation Strategy
-- [ ] Implementation
-- [ ] Focused validation
-- [ ] Post-fix Security/Auth close-out
-- [ ] Linear evidence and closure update
+- [x] Implementation
+- [x] Focused validation
+- [x] Post-fix Security/Auth close-out
+- [ ] Linear evidence and closure update (OZI-77 kept In Progress pending explicit user close; OZI-78 owns production rollout precondition)
 
 ## Known Risks
 
@@ -57,8 +57,8 @@ Prevent a non-platform organization administrator from reading or mutating a sib
 - [x] Defined a discriminated server-derived admin organization scope.
 - [x] Defined fail-closed and platform-admin compatibility behavior.
 - [x] Defined required route and real-DB evidence.
-- [ ] Implement the approved scope contract and service predicates.
-- [ ] Update all in-scope callers.
-- [ ] Add sibling and cross-tenant negative tests.
-- [ ] Run required validation.
-- [ ] Recheck the final diff and close the incident.
+- [x] Implement the approved scope contract and service predicates.
+- [x] Update all in-scope callers.
+- [x] Add sibling and cross-tenant negative tests.
+- [x] Run required validation (route tests, PGlite DB tests, typecheck, changed-file lint, arch lint).
+- [x] Recheck the final diff and close the incident locally (see `validation-report.md` and the Post-Fix Recheck in `02 - Security & Auth - Summary.md`).

@@ -3,41 +3,41 @@
 ## Progress
 
 - [x] Constraints stabilized
-- [ ] Scope contract implemented
-- [ ] Read service contained
-- [ ] Status mutation contained
-- [ ] Route callers updated
-- [ ] Server Component callers updated
-- [ ] Route tests updated
-- [ ] Real-DB tests updated
-- [ ] Validation complete
+- [x] Scope contract implemented
+- [x] Read service contained
+- [x] Status mutation contained
+- [x] Route callers updated
+- [x] Server Component callers updated
+- [x] Route tests updated
+- [x] Real-DB tests updated (PGlite; Postgres-backed run deferred — see intake.md Open Questions)
+- [x] Validation complete (local environment)
 
 ## Step 1 — Explicit Scope Contract
 
-- [ ] Add a discriminated `AdminOrganizationsScope` contract in the authorization module.
-- [ ] Add a safe factory that selects organization scope by default and active-tenant scope only for explicit platform authority.
-- [ ] Change organization access helpers to return `{ allowed, isPlatformAdmin }`.
+- [x] Add a discriminated `AdminOrganizationsScope` contract in the authorization module (`src/modules/authorization/domain/AdminOrganizationsScope.ts`).
+- [x] Add a safe factory that selects organization scope by default and active-tenant scope only for explicit platform authority (`createAdminOrganizationsScope`).
+- [x] Change organization access helpers to return `{ allowed, isPlatformAdmin }` (`_lib.ts`).
 
 ## Step 2 — Drizzle Enforcement
 
-- [ ] Require `scope` in all organization read-service inputs.
-- [ ] For organization scope, filter directly by the authorized organization ID.
-- [ ] For active-tenant scope, resolve the active organization's parent tenant and preserve current sibling behavior.
-- [ ] Require the same scope in organization-status mutation.
-- [ ] Use the scope predicate in the update statement.
+- [x] Require `scope` in all organization read-service inputs.
+- [x] For organization scope, filter directly by the authorized organization ID.
+- [x] For active-tenant scope, resolve the active organization's parent tenant and preserve current sibling behavior.
+- [x] Require the same scope in organization-status mutation.
+- [x] Use the scope predicate in the update statement.
 
 ## Step 3 — Delivery Callers
 
-- [ ] Update all organization API routes to reject `!allowed` and pass the derived scope.
-- [ ] Update all organization/invitation Server Component loaders to pass a scope derived from verified access and platform-admin status.
-- [ ] Preserve UUID parsing, shared responses, `withAdminStepUp`, and audit events.
+- [x] Update all organization API routes to reject `!allowed` and pass the derived scope.
+- [x] Update all organization/invitation Server Component loaders to pass a scope derived from verified access and platform-admin status.
+- [x] Preserve UUID parsing, shared responses, `withAdminStepUp`, and audit events.
 
 ## Step 4 — Scenario Validation
 
-- [ ] S1/S2 read service organization-scope allow/deny.
-- [ ] S3/S4/S5 mutation allow/deny and unchanged-row proof.
-- [ ] S6/S7 platform active-tenant scope allow/deny.
-- [ ] S8 malformed UUID returns 400 before service/mutation.
-- [ ] Run all organization admin route tests.
-- [ ] Run focused PGlite DB tests and PostgreSQL-backed DB tests.
-- [ ] Run changed-file lint, architecture lint, typecheck, and repository phase-close gates.
+- [x] S1/S2 read service organization-scope allow/deny — proven by DB test.
+- [x] S3/S4/S5 mutation allow/deny and unchanged-row proof — proven by DB test.
+- [x] S6/S7 platform active-tenant scope allow/deny — proven by DB test.
+- [x] S8 malformed UUID returns 400 before service/mutation — proven by route test.
+- [x] Run all organization admin route tests — 54/54 passing.
+- [x] Run focused PGlite DB tests (7/7 passing); PostgreSQL-backed DB tests could not run (no local Postgres test service).
+- [x] Run changed-file lint, architecture lint, typecheck — clean (pre-existing unrelated arch:lint FAIL on `strict-rate-limit.ts` confirmed present on `main`).

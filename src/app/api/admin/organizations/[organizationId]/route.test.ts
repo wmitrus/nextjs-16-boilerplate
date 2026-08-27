@@ -229,6 +229,8 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
 
     expect(response.status).toBe(400);
     expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
-    expect(mocks.mutationService.updateOrganizationStatus).not.toHaveBeenCalled();
+    expect(
+      mocks.mutationService.updateOrganizationStatus,
+    ).not.toHaveBeenCalled();
   });
 });

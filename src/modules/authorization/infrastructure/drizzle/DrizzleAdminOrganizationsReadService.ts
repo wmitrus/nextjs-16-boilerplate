@@ -305,12 +305,7 @@ export class DrizzleAdminOrganizationsReadService {
         createdAt: organizationsTable.createdAt,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          scopeFilter,
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -383,12 +378,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          scopeFilter,
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -482,12 +472,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          scopeFilter,
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -581,12 +566,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          scopeFilter,
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -659,12 +639,7 @@ export class DrizzleAdminOrganizationsReadService {
         status: organizationsTable.status,
       })
       .from(organizationsTable)
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          scopeFilter,
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .limit(1);
 
     const organization = organizationRows[0];
@@ -716,7 +691,9 @@ export class DrizzleAdminOrganizationsReadService {
     };
   }
 
-  private async resolveScope(scope: AdminOrganizationsScope): Promise<
+  private async resolveScope(
+    scope: AdminOrganizationsScope,
+  ): Promise<
     | { kind: 'organization'; organizationId: string }
     | { kind: 'tenant'; tenantId: string }
     | null

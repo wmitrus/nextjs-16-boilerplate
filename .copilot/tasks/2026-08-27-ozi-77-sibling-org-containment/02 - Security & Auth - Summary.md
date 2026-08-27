@@ -74,10 +74,46 @@
 - what should not be re-decided without new evidence: non-platform sibling access is denied during Phase 0
 - recommended next specialist or step: Runtime and Architecture confirmation, then Validation Strategy
 
-## Update Log
+## Post-Fix Recheck — 2026-08-27
+
+- Current Run Scope: post-implementation close-out recheck against merged code (commits `65ecd80e`, `3a2502da`, `0777bda9` on `fix/ozi-77-sibling-org-containment`)
+- Status: COMPLETED
+
+### Verification performed against live code
+
+- `AdminOrganizationsScope` (`src/modules/authorization/domain/AdminOrganizationsScope.ts`) is a discriminated union (`organization` | `active-tenant`); `createAdminOrganizationsScope` selects `active-tenant` only when `isPlatformAdmin` is true, else `organization`.
+- `_lib.ts` keeps action authorization (`allowed`, from `authzService.can(...)` or `isEnvBasedPlatformAdmin`) and resource scope (`isPlatformAdmin`) as independent fields — `allowed: true` is never used as proof of resource scope; `toAdminOrganizationsScope` derives scope only from `isPlatformAdmin`, which is only ever set from the server-verified `isEnvBasedPlatformAdmin(email)` check. Satisfies SEC-26.
+- `DrizzleAdminOrganizationsReadService` and `DrizzleAdminOrganizationsMutationService`: for `organization` scope, every read/mutation predicate binds directly to `eq(organizationsTable.id, scope.organizationId)` — no tenant widening. For `active-tenant` scope, the service independently re-resolves the active organization's `tenantId` server-side before widening (`resolveScope`/`resolveScopeFilter`), so a spoofed scope object still can't roam outside the tenant that was actually looked up. Sibling/cross-tenant target IDs (`input.organizationId`) are always AND-ed with the scope filter in the same statement.
+- All 16 in-scope callers (10 API routes' GET/PATCH/POST/DELETE handlers under `src/app/api/admin/organizations/**`, and 7 Server Component loaders under `src/app/admin/organizations/**` + `src/app/admin/invitations/page.tsx`) were individually diffed: every one replaced the bare boolean with `adminAccess`/`isEnvBasedPlatformAdmin(...)` and now passes an explicit `scope` derived server-side into the service call. No caller was missed.
+- UUID boundary (SEC-23): `organizationIdSchema` (`z.uuid()`) is still parsed before any service/DB call in every route; a new route test proves `PATCH` returns 400 with zero calls to `getDetailInActiveScope`/`updateOrganizationStatus` for a malformed id.
+- Non-disclosure: `OrganizationNotFoundError` message ("Organization not found in this tenant") is unchanged/generic and does not distinguish "exists but out of scope" from "does not exist"; read paths return `null`/empty list the same way for both cases.
+- Step-up/MFA (`withAdminStepUp`) and `recordAdminAuditEvent` calls are structurally unchanged in every route diff — only the local variable name (`isAdmin` → `adminAccess`) and the scope construction changed.
+- No UI-only gating, no bare-boolean scope, no shared-parent-tenant trust for non-platform actors, no client/provider-supplied scope anywhere in the diff.
+
+### Evidence already gathered this session (supporting, not re-run by this recheck)
+
+- Focused route tests: 54/54 passing (`vitest run --config vitest.unit.config.ts` scoped to the organizations/invitations admin paths).
+- Real-DB PGlite tests: 7/7 passing, covering S1/S2 (non-platform organization-scope read allow/deny), S4 (non-platform sibling mutation denied, row unchanged), S6/S7 (platform active-tenant scope allow within tenant / deny across tenant).
+- `pnpm typecheck`: clean. Targeted ESLint on the full changed-file set: clean after `--fix` plus one manual import-order fix. `pnpm arch:lint`: the only FAIL (`security must not directly depend on app/features/modules`, `src/security/api/strict-rate-limit.ts`) is confirmed pre-existing on `main` and untouched by this diff.
+
+### Residual gap
+
+- PostgreSQL-backed real-DB validation (`pnpm test:db:local`) could not run in this environment — no local Postgres test service is available (no `pg_isready`, no matching Docker container). PGlite real-DB evidence stands in for this locally; the Postgres-backed run remains required before/at production rollout under OZI-78 and is not yet obtained.
+
+### Close-out verdict
+
+- **SAFE TO CLOSE LOCALLY** — the CRITICAL sibling-organization/cross-tenant authorization bypass is contained: every non-platform admin data path is now bound to the caller's own organization in the SQL predicate, the explicit platform-admin path is preserved and re-scoped to a server-verified active tenant, and DB-backed negative tests prove both the sibling and cross-tenant denial with unchanged rows. This closes OZI-77 as implemented and validated in this environment. It does not clear OZI-78 (production rollout), which still needs the PostgreSQL-backed real-DB run as a precondition.
+
+### Update Log
 
 ### 2026-08-27 — Initial Review
 
 - Trigger: OZI-77 implementation start
 - Summary of change: confirmed CRITICAL scope bypass and approved minimum containment
 - Sections refreshed: all
+
+### 2026-08-27 — Post-Fix Recheck
+
+- Trigger: OZI-77 implementation already merged to the fix branch; workflow-mandated post-fix Security/Auth close-out
+- Summary of change: verified merged code against every approved constraint; confirmed CRITICAL bypass is closed locally; flagged missing Postgres-backed real-DB run as a residual gap before OZI-78 rollout
+- Sections refreshed: Post-Fix Recheck, Update Log

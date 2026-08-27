@@ -53,12 +53,7 @@ export class DrizzleAdminOrganizationsMutationService {
     const rows = await this.db
       .update(organizationsTable)
       .set({ status: input.status })
-      .where(
-        and(
-          eq(organizationsTable.id, input.organizationId),
-          scopeFilter,
-        ),
-      )
+      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
       .returning();
 
     const row = rows[0];

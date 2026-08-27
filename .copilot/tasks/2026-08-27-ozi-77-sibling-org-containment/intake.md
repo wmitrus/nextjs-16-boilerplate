@@ -74,10 +74,11 @@ Contain the confirmed sibling-organization authorization bypass without implemen
 - [x] security constraints established
 - [x] runtime and architecture placement established
 - [x] validation plan established
-- [ ] implementation complete
-- [ ] validation complete
+- [x] implementation complete
+- [x] validation complete (local environment; Postgres-backed real-DB run deferred, see Open Questions)
 
 ## Open Questions
 
 - None blocking local containment implementation.
 - Production canary and rollout decisions belong to OZI-78.
+- PostgreSQL-backed real-DB validation (`pnpm test:db:local`) could not be run in this environment (no local Postgres test service reachable). PGlite real-DB evidence (`pnpm test:db`) stands in locally; the Postgres-backed run remains an explicit precondition before OZI-78 production rollout.

@@ -15,11 +15,13 @@ const chmodAsync = promisify(chmod);
  * evidence-storage constraint) -- it goes here instead, outside any git
  * working tree. `staging`/`production` (OZI-79) are structurally supported
  * -- the type below and the confinement/permission logic apply identically
- * to all three -- but nothing in this tool actually writes to them yet:
- * OZI-79 Phase A builds and reviews the remote connection/verification
- * plumbing only. No `scan`-equivalent command exists for `staging`/
- * `production` until that review is complete and the user separately
- * authorizes execution.
+ * to all three. As of OZI-79 Phase B2, `cli.ts`'s `plan --target=staging|
+ * production --execute-remote-explain` does write here for real, behind
+ * its own fail-closed acknowledgement/clean-tree/resolvable-commit
+ * preconditions -- see that command's doc comment. This module's
+ * confinement/permission logic was already reviewed for all three
+ * environments before that command existed; nothing about it changed to
+ * accommodate the command.
  */
 const EVIDENCE_ROOT = path.resolve(
   homedir(),

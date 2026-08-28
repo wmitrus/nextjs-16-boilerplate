@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  assertTargetDescriptorMatchesExpectation,
   describeRemoteTarget,
   withReadOnlyRemoteDb,
 } from './readonly-db-remote';
@@ -26,6 +27,7 @@ vi.mock('drizzle-orm/postgres-js', () => ({
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.clearAllMocks();
 });
 
 describe('describeRemoteTarget', () => {
@@ -86,6 +88,68 @@ describe('describeRemoteTarget', () => {
   });
 });
 
+describe('assertTargetDescriptorMatchesExpectation', () => {
+  it('fails closed when the expected-descriptor env var is unset', () => {
+    expect(() =>
+      assertTargetDescriptorMatchesExpectation(
+        'staging',
+        'staging-db.internal:5432/app_staging',
+      ),
+    ).toThrow('OZI79_STAGING_EXPECTED_DESCRIPTOR is required');
+  });
+
+  it('fails closed when the resolved descriptor does not match the declared expectation -- the swapped-credential case', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'staging-db.internal:5432/app_staging',
+    );
+
+    expect(() =>
+      assertTargetDescriptorMatchesExpectation(
+        'staging',
+        // What OZI79_STAGING_READONLY_DATABASE_URL actually resolved to
+        // -- the production host, e.g. because the two credential env
+        // vars were swapped during provisioning.
+        'production-db.internal:5432/app_production',
+      ),
+    ).toThrow(/does not match the expected descriptor/);
+  });
+
+  it('passes when the resolved descriptor matches exactly', () => {
+    vi.stubEnv(
+      'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
+      'production-db.internal:5432/app_production',
+    );
+
+    expect(() =>
+      assertTargetDescriptorMatchesExpectation(
+        'production',
+        'production-db.internal:5432/app_production',
+      ),
+    ).not.toThrow();
+  });
+
+  it("never mixes up the two targets' expectation env vars", () => {
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'staging-db.internal:5432/app_staging',
+    );
+    vi.stubEnv(
+      'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
+      'production-db.internal:5432/app_production',
+    );
+
+    // Staging's real descriptor checked against production's expectation
+    // must fail, even though both env vars are set to *something*.
+    expect(() =>
+      assertTargetDescriptorMatchesExpectation(
+        'staging',
+        'production-db.internal:5432/app_production',
+      ),
+    ).toThrow(/does not match the expected descriptor/);
+  });
+});
+
 describe('withReadOnlyRemoteDb connection contract', () => {
   it('requires certificate-validated TLS and one repeatable-read snapshot, regardless of what the URL itself claims', async () => {
     vi.stubEnv(
@@ -93,6 +157,10 @@ describe('withReadOnlyRemoteDb connection contract', () => {
       // sslmode=disable in the URL must NOT weaken the connection --
       // proving the explicit `ssl` option always wins.
       'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable',
+    );
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'staging-db.internal:5432/app_staging',
     );
 
     await withReadOnlyRemoteDb('staging', async () => 'ok');
@@ -108,5 +176,18 @@ describe('withReadOnlyRemoteDb connection contract', () => {
       accessMode: 'read only',
       isolationLevel: 'repeatable read',
     });
+  });
+
+  it('refuses to open a connection at all when the target-identity safeguard fails -- baked into the function itself, not left to the caller', async () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://u:p@staging-db.internal:5432/app_staging',
+    );
+    // Deliberately left unset: OZI79_STAGING_EXPECTED_DESCRIPTOR.
+
+    await expect(
+      withReadOnlyRemoteDb('staging', async () => 'should never run'),
+    ).rejects.toThrow(/OZI79_STAGING_EXPECTED_DESCRIPTOR is required/);
+    expect(postgres).not.toHaveBeenCalled();
   });
 });

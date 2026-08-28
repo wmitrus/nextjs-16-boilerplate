@@ -93,8 +93,27 @@ frozen `QUERY_REGISTRY`.
    remote database") than `scan`'s local report, so an unresolvable
    commit must be a hard failure here, not a placeholder baked into
    evidence a human might approve.
+4. **The resolved target's descriptor matches a separately, independently
+   declared expectation** (`assertTargetDescriptorMatchesExpectation`,
+   added in review round 1 below). Added after review correctly pointed
+   out that `resolveRemoteUrl` only validates that the target's env var
+   is *set* and looks like a postgres URL -- it has no way to know
+   whether `OZI79_STAGING_READONLY_DATABASE_URL` actually points at
+   staging rather than production. A swapped or misconfigured credential
+   would otherwise let `plan --target=staging` silently connect to
+   production while the persisted artifact is stamped
+   `environment: staging`. Fixed by requiring a SECOND, independently-set
+   env var per target (`OZI79_STAGING_EXPECTED_DESCRIPTOR`/
+   `OZI79_PRODUCTION_EXPECTED_DESCRIPTOR`) declaring the exact expected
+   `describeRemoteTarget` output, and failing closed if it is unset or
+   does not match. Baked into `withReadOnlyRemoteDb` itself (the same
+   placement reasoning as `verifyReadOnlyRole`), not left to `cli.ts` to
+   remember to call -- `cli.ts` also calls it explicitly beforehand so a
+   mismatch fails before the "connecting to..." log line is even printed,
+   but the authoritative enforcement point is inside the connection
+   function, for any future caller.
 
-Only once all three hold does `withReadOnlyRemoteDb` get called — exactly
+Only once all four hold does `withReadOnlyRemoteDb` get called — exactly
 once, with `collectExplainPreflightFacts(tx)` invoked exactly once inside
 it.
 
@@ -187,13 +206,57 @@ distinctly-named mock functions, logged which one each side actually
 called) before fixing it — the fix sets both `execFileSync` and
 `default.execFileSync` to the exact same function reference.
 
+## Review round 1 (Codex)
+
+Three findings, all fixed on the same branch:
+
+- **Add a language identifier to the runbook fence (P1, cosmetic).**
+  This document's wiring diagram opened with an untyped fence. Fixed by
+  labeling it `text`.
+- **Bind each remote target to its configured destination (P2, real
+  gap).** See the new fourth fail-closed precondition above
+  (`assertTargetDescriptorMatchesExpectation`) — this is the substantive
+  fix. Also added: 5 new tests in `readonly-db-remote.test.ts` (unset/
+  mismatched/matching/never-mixed-up expectation env vars, plus a
+  dedicated proof that `withReadOnlyRemoteDb` itself refuses to open a
+  connection -- `postgres()` never called -- when the safeguard fails)
+  and 2 new tests in `cli.test.ts` (the same two failure modes through
+  the full `plan` command). Both fail-closed checks (the one baked into
+  `withReadOnlyRemoteDb` and the one `cli.ts` calls explicitly
+  beforehand) were verified via temporary revert to genuinely catch a
+  removed check before being restored -- see below.
+- **Refresh the live remote-wiring documentation (P2, doc drift).**
+  `evidence-store.ts`'s module doc comment and
+  `tenancy-inventory.env.example` both still said nothing/no command was
+  wired to staging/production evidence, which `plan` now makes untrue.
+  Both updated; `tenancy-inventory.env.example` also documents the two
+  new `*_EXPECTED_DESCRIPTOR` variables the round-1 fix requires.
+
+### A test-isolation gap found while falsifying the round-1 fix
+
+While reverting `cli.ts`'s explicit `assertTargetDescriptorMatchesExpectation`
+call to confirm its two new tests genuinely fail without it, they instead
+failed with an unrelated *leaked* error from a different, earlier test
+(`mockRejectedValue('Connected role has elevated attribute(s)...')`)
+still active on the `withReadOnlyRemoteDb` mock. `cli.test.ts`'s
+`afterEach` was calling `vi.clearAllMocks()`, which resets call history
+but **not** mock implementations set via `mockImplementation`/
+`mockReturnValue`/`mockRejectedValue` -- so an implementation set by one
+test can silently persist into a later test that never expected that
+mock to be invoked at all. Every mock in this file has no factory-level
+default implementation (each test sets exactly what it needs), so
+switching to `vi.resetAllMocks()` is safe and closes the gap. Confirmed
+the fix doesn't break anything: full suite re-run green after the
+switch, and the round-1 tests were re-verified to still correctly fail
+against the reverted code afterward.
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 98/98 (83 pre-existing + 15
-  new in `cli.test.ts`)
-- unit (full repo, `pnpm test`): 279 files / 2351 tests, all pass
+- unit (`scripts/tenancy-inventory` subset): 105/105 (83 pre-existing +
+  17 in `cli.test.ts` + 5 new in `readonly-db-remote.test.ts`)
+- unit (full repo, `pnpm test`): 279 files / 2358 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

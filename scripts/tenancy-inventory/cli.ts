@@ -16,6 +16,7 @@ import {
   type LocalTarget,
 } from './readonly-db';
 import {
+  assertTargetDescriptorMatchesExpectation,
   describeRemoteTarget,
   withReadOnlyRemoteDb,
   type RemoteTarget,
@@ -245,7 +246,14 @@ async function runScan(
  *    that);
  * 3. the current commit SHA can be resolved (`resolveCommitShaStrict`,
  *    not the lenient `'unknown'`-falling-back `resolveCommitSha` `scan`
- *    uses).
+ *    uses);
+ * 4. the resolved target's descriptor matches a separately, independently
+ *    declared expectation (`assertTargetDescriptorMatchesExpectation`) --
+ *    defense-in-depth against `OZI79_STAGING_READONLY_DATABASE_URL`/
+ *    `OZI79_PRODUCTION_READONLY_DATABASE_URL` being swapped or
+ *    misconfigured, since the closed `RemoteTarget` domain only
+ *    constrains which env var name is *read*, not what value an operator
+ *    actually put there.
  */
 async function runRemoteExplainPlan(
   target: RemoteTarget,
@@ -271,6 +279,7 @@ async function runRemoteExplainPlan(
 
   const commitSha = resolveCommitShaStrict();
   const descriptor = describeRemoteTarget(target);
+  assertTargetDescriptorMatchesExpectation(target, descriptor);
 
   console.log(
     `[tenancy-inventory] Remote EXPLAIN preflight against ${descriptor} (read-only transaction)…`,

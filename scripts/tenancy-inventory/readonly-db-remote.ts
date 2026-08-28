@@ -96,6 +96,65 @@ export function describeRemoteTarget(target: RemoteTarget): string {
   return describeUrl(resolveRemoteUrl(target));
 }
 
+/**
+ * A second, named env var per target, deliberately separate from
+ * `REMOTE_ENV_VAR` above and never derived from it.
+ */
+const REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR: Record<RemoteTarget, string> = {
+  staging: 'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+  production: 'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
+};
+
+/**
+ * Defense-in-depth against a swapped or misconfigured credential:
+ * `resolveRemoteUrl` only validates that the target's env var is set and
+ * looks like a `postgres://`/`postgresql://` URL -- it has no way to know
+ * whether `OZI79_STAGING_READONLY_DATABASE_URL` actually points at
+ * staging rather than production. If the two credential env vars were
+ * accidentally swapped during provisioning, or staging's variable was
+ * pointed at the production host, `plan --target=staging` would silently
+ * connect to production while the persisted artifact is stamped
+ * `environment: staging` -- the closed `RemoteTarget` domain constrains
+ * which env var name is *read*, not what value an operator actually put
+ * there.
+ *
+ * This closes that gap by requiring a SECOND, independently-set env var
+ * per target declaring the exact expected `describeRemoteTarget` output,
+ * and fails closed if it is unset or does not match. An operator must
+ * state, in a variable that has no mechanical relationship to the
+ * connection URL, what they believe that target looks like -- a swap
+ * between the two credential URLs does not also swap the two expectation
+ * values, so it surfaces as a loud mismatch here instead of a silent
+ * cross-environment connection.
+ */
+export function assertTargetDescriptorMatchesExpectation(
+  target: RemoteTarget,
+  descriptor: string,
+): void {
+  // eslint-disable-next-line security/detect-object-injection -- see the identical justification on REMOTE_ENV_VAR's lookup above (SEC-18)
+  const envVar = REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR[target];
+  // eslint-disable-next-line security/detect-object-injection, no-restricted-syntax -- envVar is one of exactly two literal values from the closed record above, never a caller-supplied string (SEC-18)
+  const expected = process.env[envVar]?.trim();
+
+  if (!expected) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} is required to confirm the ${target} ` +
+        `target's identity and was not provided. This is a separate, ` +
+        `independently-set safeguard against a swapped or misconfigured ` +
+        `remote credential -- refusing to connect without it.`,
+    );
+  }
+
+  if (expected !== descriptor) {
+    throw new Error(
+      `[tenancy-inventory] Resolved ${target} target "${descriptor}" does ` +
+        `not match the expected descriptor declared in ${envVar} ` +
+        `("${expected}"). Refusing to connect -- this usually means the ` +
+        `staging/production credentials were swapped or misconfigured.`,
+    );
+  }
+}
+
 type RemoteDb = PostgresJsDatabase<Record<string, never>>;
 
 export class RemoteRoleNotReadOnlyError extends Error {}
@@ -366,12 +425,22 @@ const IDLE_IN_TRANSACTION_TIMEOUT_MS = 10_000;
  *   `fn` ever sees the connection. Two independent controls, not one: a
  *   `SELECT`-only DB-role grant (verified live, not just trusted) AND the
  *   read-only transaction.
+ * - `assertTargetDescriptorMatchesExpectation` runs before the connection
+ *   is even opened, baked in here rather than left to each caller (the
+ *   same reasoning as `verifyReadOnlyRole`'s placement): `target` only
+ *   constrains which env var *name* `resolveRemoteUrl` reads, not what an
+ *   operator actually put in it, so this is the authoritative point that
+ *   catches a swapped/misconfigured credential regardless of which
+ *   caller invokes this function.
  */
 export async function withReadOnlyRemoteDb<T>(
   target: RemoteTarget,
   fn: (tx: RemoteDb) => Promise<T>,
 ): Promise<T> {
-  const client = postgres(resolveRemoteUrl(target), {
+  const url = resolveRemoteUrl(target);
+  assertTargetDescriptorMatchesExpectation(target, describeUrl(url));
+
+  const client = postgres(url, {
     connect_timeout: 10,
     ssl: 'verify-full',
     connection: {

@@ -8,10 +8,12 @@
  * Central invariant under test: `plan --target=staging|production` must
  * never open a remote connection unless the caller passes the explicit
  * `--execute-remote-explain` acknowledgement AND the working tree is
- * clean AND the commit SHA resolves. Every negative case below asserts
- * `withReadOnlyRemoteDb` was never called -- not just that the command
- * rejected -- so a bug that reordered the checks after the connection
- * would fail these tests even if the command still eventually threw.
+ * clean AND the commit SHA resolves AND the resolved target's descriptor
+ * matches its separately declared `*_EXPECTED_DESCRIPTOR` expectation.
+ * Every negative case below asserts `withReadOnlyRemoteDb` was never
+ * called -- not just that the command rejected -- so a bug that reordered
+ * the checks after the connection would fail these tests even if the
+ * command still eventually threw.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -138,7 +140,16 @@ function captureConsoleLog(): { logs: string[]; restore: () => void } {
 }
 
 afterEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks (not clearAllMocks): every mock here has no factory-
+  // provided default implementation -- each test sets exactly the
+  // behavior it needs via mockReturnValue/mockResolvedValue/
+  // mockImplementation, so nothing of value is lost by fully resetting.
+  // clearAllMocks only clears call history, not implementations, which
+  // let a `mockRejectedValue` set by one test silently leak into a later
+  // test that never expected `withReadOnlyRemoteDb` to be called at all
+  // -- caught while falsifying this file's own checks (see the runbook).
+  vi.resetAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('plan -- fails before any remote connection', () => {
@@ -251,12 +262,47 @@ describe('plan -- fails before any remote connection', () => {
   it('does not write evidence when withReadOnlyRemoteDb itself rejects (e.g. a misconfigured role)', async () => {
     mockCleanGitState();
     mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'staging-db.example:5432/app',
+    );
     mockedWithReadOnlyRemoteDb.mockRejectedValue(
       new Error('Connected role has elevated attribute(s): rolsuper.'),
     );
     await expect(
       run(['plan', '--target=staging', '--execute-remote-explain']),
     ).rejects.toThrow(/elevated attribute/);
+    expect(mockedWriteEvidence).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the expected-descriptor safeguard env var is unset, without ever connecting', async () => {
+    mockCleanGitState();
+    mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
+    // OZI79_STAGING_EXPECTED_DESCRIPTOR deliberately left unset.
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/OZI79_STAGING_EXPECTED_DESCRIPTOR is required/);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+    expect(mockedWriteEvidence).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the resolved target does not match its declared expectation -- the swapped-credential case', async () => {
+    mockCleanGitState();
+    // Simulates OZI79_STAGING_READONLY_DATABASE_URL having been pointed
+    // at the production host (or the two credential env vars having been
+    // swapped): the resolved descriptor is real, but does not match what
+    // the operator separately declared staging should look like.
+    mockedDescribeRemoteTarget.mockReturnValue(
+      'production-db.example:5432/app_production',
+    );
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'staging-db.example:5432/app_staging',
+    );
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/does not match the expected descriptor/);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
     expect(mockedWriteEvidence).not.toHaveBeenCalled();
   });
 });
@@ -268,6 +314,10 @@ describe('plan -- exact wiring once every precondition is satisfied', () => {
       mockCleanGitState('abc123deadbeef');
       const descriptor = `${target}-db.example.internal:5432/app_${target}`;
       mockedDescribeRemoteTarget.mockReturnValue(descriptor);
+      vi.stubEnv(
+        `OZI79_${target.toUpperCase()}_EXPECTED_DESCRIPTOR`,
+        descriptor,
+      );
       mockedCollectExplainPreflightFacts.mockResolvedValue(FAKE_FACTS);
       mockedWithReadOnlyRemoteDb.mockImplementation(async (_t, fn) =>
         fn({} as never),

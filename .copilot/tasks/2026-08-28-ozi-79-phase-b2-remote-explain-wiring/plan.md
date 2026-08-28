@@ -25,19 +25,26 @@ execution boundary and design detail.
 - `scripts/tenancy-inventory/cli.ts` -- new `plan --target=staging|
   production --execute-remote-explain` command; `run()` refactored to
   accept an optional `argv` parameter for direct unit testing
-- `scripts/tenancy-inventory/cli.test.ts` (new, 15 unit tests, no DB, all
+- `scripts/tenancy-inventory/cli.test.ts` (new, 17 unit tests, no DB, all
   remote/network/evidence effects mocked)
-- `scripts/tenancy-inventory/readonly-db-remote.ts` -- doc-comment-only
-  update (the module previously said nothing was wired into a CLI
-  command; this phase makes that untrue)
+- `scripts/tenancy-inventory/readonly-db-remote.ts` -- doc-comment update
+  (the module previously said nothing was wired into a CLI command; this
+  phase makes that untrue) plus, from review round 1,
+  `assertTargetDescriptorMatchesExpectation` baked into
+  `withReadOnlyRemoteDb`
+- `scripts/tenancy-inventory/evidence-store.ts` -- doc-comment update
+  (review round 1)
+- `scripts/tenancy-inventory/tenancy-inventory.env.example` -- documents
+  the two new `*_EXPECTED_DESCRIPTOR` env vars (review round 1)
 
 ## Validation
 
 typecheck clean · lint clean · unit (`scripts/tenancy-inventory` subset)
-98/98 · unit (full repo) 279 files / 2351 tests · real DB
+105/105 · unit (full repo) 279 files / 2358 tests · real DB
 (`pnpm test:db:local`) 32 files / 297 tests · CI config (`pnpm
 test:db:ci`) 32 files / 297 tests · adversarial falsification pass
-performed on every negative-path invariant before push (see runbook.md)
+performed on every negative-path invariant, including review round 1's
+fix, before push (see runbook.md)
 
 ## Update Log
 
@@ -51,6 +58,22 @@ performed on every negative-path invariant before push (see runbook.md)
 - Still true: no remote timeout tuning, no approval records, no persisted-
   artifact loading, no automated verdict, no remote `scan` support, no
   Phase B3 functionality.
+
+### 2026-08-28 — Review round 1 (Codex)
+
+- Fixed a real P2 gap: neither the closed `RemoteTarget` domain nor
+  `resolveRemoteUrl` verified that a target's credential env var actually
+  pointed at that environment, so a swapped/misconfigured credential
+  could let `plan --target=staging` silently connect to production.
+  Added `assertTargetDescriptorMatchesExpectation`, baked into
+  `withReadOnlyRemoteDb` itself (matching `verifyReadOnlyRole`'s
+  placement) plus an explicit early check in `cli.ts`.
+- Fixed doc drift in `evidence-store.ts` and
+  `tenancy-inventory.env.example` that the new wiring made inaccurate.
+- Fixed the runbook's own missing code-fence language (Codacy).
+- Found and fixed a test-isolation gap in `cli.test.ts` while falsifying
+  the round-1 fix (`clearAllMocks` doesn't reset implementations,
+  letting one test's mock behavior leak into another) -- see runbook.
 
 ## Artifacts
 

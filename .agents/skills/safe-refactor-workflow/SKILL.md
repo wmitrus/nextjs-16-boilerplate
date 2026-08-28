@@ -274,6 +274,14 @@ Verify:
 - boundaries remain intact;
 - implementation respected approved constraints.
 
+### High-Risk Refactor Path
+
+Not a second workflow — an additional sequence layered onto the standard one for high-risk refactors. A refactor is high-risk when it is broad enough that preserving existing behavior is itself the main invariant (for example touching ordering/concurrency, a shared execution path, or a widely reused helper), or when it otherwise materially involves production-facing tooling; security/auth/trust boundaries; credentials or remote connections; persisted evidence, integrity, approval, or compatibility artifacts; migrations or data safety; tenancy/resource isolation; or CI/deployment safety gates. Do not apply to a small, local, clearly behavior-preserving refactor — the Fast Path above remains correct for those.
+
+For a high-risk refactor: run Steps 1-5 above (Architecture Guard always first, Security/Auth and Next.js Runtime conditionally); before implementation, produce `implementation-agent`'s existing compact invariant/trust-boundary map for the invariants this refactor must preserve; implement the minimum behavior-preserving refactor; run focused tests; perform `implementation-agent`'s existing pre-close falsification pass against the preserved invariants — confirming the refactor did not silently change ordering/concurrency or another load-bearing invariant while appearing locally correct; add/fix regression evidence for any discovered gap; perform proportional validation; when an actual security trigger is present (production-facing tooling, persisted approval/integrity evidence, remote credentials/connections, or a future production safety gate), run the same narrow post-implementation `security-auth` recheck against the final delivered behavior used by `safe-feature-workflow`'s High-Risk Path (skip it when no such trigger exists); inspect the complete final diff; reconcile authoritative current-state documentation where structural/contract documentation actually changed; perform one final self-review of the complete diff; only then request external review.
+
+**Review stop condition** (shared with `safe-feature-workflow`'s High-Risk Path): fresh external review is required after substantive executable, security/trust-boundary, or contract changes. Do not force another review cycle once the meaningful behavior is already reviewed and externally verified and the only remaining changes are formatting or self-referential documentation bookkeeping.
+
 ## Block Conditions
 
 Stop and do not implement when:

@@ -298,6 +298,58 @@ then run Architecture Guard Agent again to verify:
 - the refactor respected the approved constraints
 
 ==================================================
+HIGH-RISK REFACTOR PATH
+==================================================
+
+Not a second workflow — an additional sequence for high-risk refactors
+layered onto the steps above. A refactor is high-risk when it is broad
+enough that preserving existing behavior is itself the main invariant (for
+example touching ordering/concurrency, a shared execution path, or a widely
+reused helper), or when it otherwise materially involves production-facing
+tooling; security/auth/trust boundaries; credentials or remote connections;
+persisted evidence, integrity, approval, or compatibility artifacts;
+migrations or data safety; tenancy/resource isolation; or CI/deployment
+safety gates. Do not apply this path to a small, local, clearly
+behavior-preserving refactor — the Fast Path above remains correct for
+those.
+
+For a high-risk refactor:
+
+1. Run the existing refactor specialist/constraint sequence above
+   (Architecture Guard always first, Security/Auth and Next.js Runtime
+   conditionally, consolidated into the refactor constraint summary).
+2. Before implementation, produce Implementation Agent's existing compact
+   invariant/trust-boundary map for the invariants this refactor must
+   preserve.
+3. Implement the minimum behavior-preserving refactor.
+4. Run focused tests.
+5. Perform Implementation Agent's existing pre-close falsification pass
+   against the preserved invariants — this is the concrete failure mode a
+   behavior-preserving refactor can introduce: confirm the refactor did not
+   silently change ordering/concurrency or another load-bearing invariant
+   while appearing locally correct.
+6. Add or fix regression evidence for any gap the falsification pass finds.
+7. Perform proportional validation.
+8. When an actual security trigger is present — production-facing tooling,
+   persisted approval/integrity evidence, remote credentials/connections, or
+   a future production safety gate — perform the same narrow
+   post-implementation Security/Auth recheck against the final delivered
+   behavior used by the feature workflow's High-Risk Path. Do not run this
+   for a refactor with no such trigger.
+9. Inspect the complete final diff.
+10. Reconcile authoritative current-state documentation where structural or
+    contract documentation actually changed as a result of the refactor.
+11. Perform one final self-review of the complete diff.
+12. Only then request external review.
+
+Review stop condition (shared with the feature workflow's High-Risk Path):
+fresh external review is required after substantive executable,
+security/trust-boundary, or contract changes. Do not force another review
+cycle once the meaningful behavior is already reviewed and externally
+verified and the only remaining changes are formatting or self-referential
+documentation bookkeeping.
+
+==================================================
 DECISION / BRANCHING RULES
 ==================================================
 

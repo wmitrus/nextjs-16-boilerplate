@@ -31,6 +31,26 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/**
+ * Synthetic, deliberately non-secret credential-shaped values used only
+ * to prove the functions below never echo a resolved/expected value into
+ * a thrown message. Named with the established `ozi79-test-only-` prefix
+ * (matching every other credential fixture in this file) rather than a
+ * realistic-looking password string: a prior version of this file paired
+ * a plausible username with an all-caps "secret password"-shaped token
+ * in a complete `postgres://` URL -- despite being entirely synthetic,
+ * that was still flagged as exactly the kind of committed credential-
+ * shaped literal this repository's own invariants prohibit, regardless
+ * of whether it is a real secret.
+ */
+const MISMATCHED_TEST_USER = 'ozi79-test-only-mismatched-user';
+const MISMATCHED_TEST_PASSWORD = 'ozi79-test-only-mismatched-password';
+const MISMATCHED_TEST_URL = `postgres://${MISMATCHED_TEST_USER}:${MISMATCHED_TEST_PASSWORD}@production.example/db`;
+const ANOTHER_MISMATCHED_TEST_USER = 'ozi79-test-only-another-mismatched-user';
+const ANOTHER_MISMATCHED_TEST_PASSWORD =
+  'ozi79-test-only-another-mismatched-password';
+const ANOTHER_MISMATCHED_TEST_URL = `postgres://${ANOTHER_MISMATCHED_TEST_USER}:${ANOTHER_MISMATCHED_TEST_PASSWORD}@staging.example/db`;
+
 describe('describeRemoteTarget', () => {
   it('fails closed with a clear message when the env var is unset', () => {
     vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', '');
@@ -185,13 +205,8 @@ describe('assertTargetIdentityMatchesExpectation', () => {
   });
 
   it('never echoes the declared expectation value, the resolved username, or the full URL on a mismatch', () => {
-    vi.stubEnv(
-      'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db',
-    );
-    const credentialBearingExpectation =
-      'postgres://another-oops-user:ANOTHER-SECRET@staging.example/db';
-    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', credentialBearingExpectation);
+    vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', MISMATCHED_TEST_URL);
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', ANOTHER_MISMATCHED_TEST_URL);
 
     let thrown: unknown;
     try {
@@ -203,11 +218,11 @@ describe('assertTargetIdentityMatchesExpectation', () => {
     expect(thrown).toBeInstanceOf(Error);
     const message = (thrown as Error).message;
     expect(message).toContain('OZI79_STAGING_EXPECTED_IDENTITY');
-    expect(message).not.toContain(credentialBearingExpectation);
-    expect(message).not.toContain('ANOTHER-SECRET');
-    expect(message).not.toContain('another-oops-user');
-    expect(message).not.toContain('VERY-SECRET-PASSWORD');
-    expect(message).not.toContain('oops-user');
+    expect(message).not.toContain(ANOTHER_MISMATCHED_TEST_URL);
+    expect(message).not.toContain(ANOTHER_MISMATCHED_TEST_PASSWORD);
+    expect(message).not.toContain(ANOTHER_MISMATCHED_TEST_USER);
+    expect(message).not.toContain(MISMATCHED_TEST_PASSWORD);
+    expect(message).not.toContain(MISMATCHED_TEST_USER);
   });
 });
 
@@ -260,15 +275,12 @@ describe('computeVerifiedIdentityFingerprint', () => {
   });
 
   it('never contains the raw username, host, database, or credential -- it is a hash, not an encoding', () => {
-    vi.stubEnv(
-      'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db',
-    );
+    vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', MISMATCHED_TEST_URL);
 
     const fingerprint = computeVerifiedIdentityFingerprint('staging');
 
-    expect(fingerprint).not.toContain('oops-user');
-    expect(fingerprint).not.toContain('VERY-SECRET-PASSWORD');
+    expect(fingerprint).not.toContain(MISMATCHED_TEST_USER);
+    expect(fingerprint).not.toContain(MISMATCHED_TEST_PASSWORD);
     expect(fingerprint).not.toContain('production.example');
   });
 
@@ -287,12 +299,17 @@ describe('computeVerifiedIdentityFingerprint', () => {
 });
 
 describe('withReadOnlyRemoteDb connection contract', () => {
-  it('requires certificate-validated TLS and one repeatable-read snapshot, regardless of what the URL itself claims', async () => {
+  it('requires certificate-validated TLS and one repeatable-read snapshot, as an unconditional connection option', async () => {
+    // A URL claiming `?sslmode=disable` can no longer even reach this
+    // point -- `resolveRemoteUrl` now rejects any query string outright
+    // (see "remote credential URL query-string rejection" below), which
+    // is a stronger guarantee than "we override it" would have been.
+    // This test proves the remaining, narrower property: `ssl:
+    // 'verify-full'` is passed as an explicit, unconditional connection
+    // option, not derived from the URL in any way.
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      // sslmode=disable in the URL must NOT weaken the connection --
-      // proving the explicit `ssl` option always wins.
-      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable',
+      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging',
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_IDENTITY',
@@ -334,9 +351,7 @@ describe('withReadOnlyRemoteDb connection contract', () => {
       'OZI79_STAGING_READONLY_DATABASE_URL',
       'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging',
     );
-    const credentialBearingValue =
-      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
-    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', credentialBearingValue);
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', MISMATCHED_TEST_URL);
 
     let thrown: unknown;
     try {
@@ -347,9 +362,92 @@ describe('withReadOnlyRemoteDb connection contract', () => {
 
     expect(thrown).toBeInstanceOf(Error);
     const message = (thrown as Error).message;
-    expect(message).not.toContain(credentialBearingValue);
-    expect(message).not.toContain('VERY-SECRET-PASSWORD');
-    expect(message).not.toContain('oops-user');
+    expect(message).not.toContain(MISMATCHED_TEST_URL);
+    expect(message).not.toContain(MISMATCHED_TEST_PASSWORD);
+    expect(message).not.toContain(MISMATCHED_TEST_USER);
     expect(postgres).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * OZI-79 Phase B2, Codex review round 10: `describeRemoteTarget`/
+ * `resolveVerificationIdentity`/`computeVerifiedIdentityFingerprint`
+ * only ever inspect the resolved URL's authority (username/hostname/
+ * port) and pathname -- never `searchParams`. Verified directly against
+ * the actual pinned `postgres` package (`postgres@3.4.8`) that
+ * `host`/`port`/`user`/`database`/`pass` are derived only from the URL
+ * authority/pathname or the options object this code passes, never from
+ * `url.searchParams` -- so a `?host=`/`?database=`/`?user=` override
+ * does not actually redirect the connection with this dependency version.
+ * `resolveRemoteUrl` rejects any query string anyway regardless (see its
+ * own doc comment): a zero-cost defense against relying on that being
+ * true forever, since nothing in the documented credential format ever
+ * needs one.
+ */
+describe('remote credential URL query-string rejection', () => {
+  it('rejects a URL containing a query string, before resolving identity or connecting', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable',
+    );
+
+    expect(() => describeRemoteTarget('staging')).toThrow(
+      /OZI79_STAGING_READONLY_DATABASE_URL must not include a query string/,
+    );
+  });
+
+  it('rejects destination-altering query parameters specifically -- the exact mechanism this finding described', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://ozi79-test-only-safe-user:pw@ozi79-test-only-safe-host:5432/safe_db' +
+        '?host=evil-production-host&database=evil_production_db&user=evil-production-user',
+    );
+
+    expect(() => describeRemoteTarget('staging')).toThrow(
+      /must not include a query string/,
+    );
+  });
+
+  it('never echoes the raw URL or credential when rejecting a query string', () => {
+    const rawUrl =
+      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable';
+    vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', rawUrl);
+
+    let thrown: unknown;
+    try {
+      describeRemoteTarget('staging');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).not.toContain(rawUrl);
+    expect(message).not.toContain('ozi79-test-only-password');
+  });
+
+  it('refuses to open a connection at all when the URL has a query string -- enforced at resolution, not left to the caller', async () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://u:p@staging-db.internal:5432/app_staging?application_name=x',
+    );
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_IDENTITY',
+      'u@staging-db.internal:5432/app_staging',
+    );
+
+    await expect(
+      withReadOnlyRemoteDb('staging', async () => 'should never run'),
+    ).rejects.toThrow(/must not include a query string/);
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it('still accepts a URL with no query string', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://u:p@staging-db.internal:5432/app_staging',
+    );
+
+    expect(() => describeRemoteTarget('staging')).not.toThrow();
   });
 });

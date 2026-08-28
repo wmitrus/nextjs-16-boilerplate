@@ -96,6 +96,22 @@ const mockedCollectExplainPreflightFacts = vi.mocked(
  * persisted evidence file but never the terminal summary. */
 const RAW_PLAN_MARKER = 'RAW-PLAN-MARKER-must-never-reach-stdout';
 
+/**
+ * A synthetic, deliberately non-secret credential-shaped argument value,
+ * used only to prove a rejected CLI argument is never echoed. Named with
+ * the established `ozi79-test-only-` prefix (matching every other
+ * credential fixture in this codebase) rather than a realistic-looking
+ * password string: a prior version of this file paired a plausible
+ * username with an all-caps "secret password"-shaped token in a
+ * complete `postgres://` URL -- despite being entirely synthetic, that
+ * was still flagged as exactly the kind of committed credential-shaped
+ * literal this repository's own invariants prohibit, regardless of
+ * whether it is a real secret.
+ */
+const CREDENTIAL_SHAPED_TEST_USER = 'ozi79-test-only-rejected-arg-user';
+const CREDENTIAL_SHAPED_TEST_PASSWORD = 'ozi79-test-only-rejected-arg-password';
+const CREDENTIAL_SHAPED_TEST_ARG = `postgres://${CREDENTIAL_SHAPED_TEST_USER}:${CREDENTIAL_SHAPED_TEST_PASSWORD}@production.example/db`;
+
 const FAKE_FACTS: ExplainPreflightFacts = {
   schemaMigration: { id: 7, hash: 'fixture-schema-hash' },
   requiredRelationStats: [],
@@ -274,8 +290,7 @@ describe('plan -- fails before any remote connection', () => {
   );
 
   it('rejects an unrecognized --flag=value argument by name only, never echoing its value', async () => {
-    const rejectedArg =
-      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
+    const rejectedArg = CREDENTIAL_SHAPED_TEST_ARG;
     let thrown: unknown;
     try {
       await run([
@@ -290,15 +305,14 @@ describe('plan -- fails before any remote connection', () => {
     const message = (thrown as Error).message;
     expect(message).toContain('plan does not recognize: --database-url');
     expect(message).not.toContain(rejectedArg);
-    expect(message).not.toContain('VERY-SECRET-PASSWORD');
-    expect(message).not.toContain('oops-user');
+    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_PASSWORD);
+    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_USER);
     expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
 
   it('rejects positional garbage after plan, before any git call, without echoing its value', async () => {
-    const credentialBearingGarbage =
-      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
+    const credentialBearingGarbage = CREDENTIAL_SHAPED_TEST_ARG;
     await expect(
       run([
         'plan',
@@ -319,7 +333,9 @@ describe('plan -- fails before any remote connection', () => {
       thrown = error;
     }
     expect((thrown as Error).message).not.toContain(credentialBearingGarbage);
-    expect((thrown as Error).message).not.toContain('VERY-SECRET-PASSWORD');
+    expect((thrown as Error).message).not.toContain(
+      CREDENTIAL_SHAPED_TEST_PASSWORD,
+    );
     expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
@@ -330,8 +346,7 @@ describe('plan -- fails before any remote connection', () => {
     // non-`--`-prefixed positional case above (already position-only).
     // `safeArgumentDescription` must not fall back to returning the raw
     // token just because there is no `=` to slice at.
-    const credentialBearingArg =
-      '--postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
+    const credentialBearingArg = `--${CREDENTIAL_SHAPED_TEST_ARG}`;
     let thrown: unknown;
     try {
       await run([
@@ -346,8 +361,8 @@ describe('plan -- fails before any remote connection', () => {
     const message = (thrown as Error).message;
     expect(message).toContain('plan does not recognize: argument #1');
     expect(message).not.toContain(credentialBearingArg);
-    expect(message).not.toContain('VERY-SECRET-PASSWORD');
-    expect(message).not.toContain('oops-user');
+    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_PASSWORD);
+    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_USER);
     expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });

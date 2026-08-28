@@ -661,31 +661,105 @@ Two findings.
 ## Review round 9 (Codex) — documentation only
 
 One finding (P1), docs only, no code change: this runbook and `plan.md`
-committed a complete, realistic-looking PostgreSQL credential shape
-(`postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`) in
-four places, describing test scenarios -- despite the repository's own
-"do not commit secrets or credential-shaped values" invariant applying to
-credential-*shaped* literals regardless of whether they are real, since a
-realistic-looking one still creates secret-scanner noise and normalizes
-the pattern in committed artifacts. (The equivalent literal string
-genuinely does appear in `cli.test.ts`/`readonly-db-remote.test.ts` as a
-deliberate, explicitly user-directed test fixture proving redaction --
-that is unaffected by this finding, which is scoped to prose in these
-two documentation files, not test code.)
+committed a complete, realistic-looking PostgreSQL credential shape (a
+plausible username paired with an all-caps "secret password"-shaped
+token) in four places, describing test scenarios -- despite the
+repository's own "do not commit secrets or credential-shaped values"
+invariant applying to credential-*shaped* literals regardless of whether
+they are real, since a realistic-looking one still creates secret-
+scanner noise and normalizes the pattern in committed artifacts. (At the
+time, the equivalent literal string was believed out of scope because it
+also existed in `cli.test.ts`/`readonly-db-remote.test.ts` as a
+deliberate test fixture -- round 10 below shows that assumption was
+wrong; the same pattern in test code is exactly as prohibited as in
+documentation.)
 
 Replaced every occurrence in `runbook.md`/`plan.md` with the neutral
 placeholder shape `postgres://[username]:[REDACTED]@[host]/[database]`,
 which still documents exactly the same redaction scenario without
 committing anything credential-shaped.
 
+## Review round 10 (Codex)
+
+Two findings, both real -- reviewed against the full history of prior
+findings on this PR before implementing, per explicit user direction to
+verify every prior fix on this branch is genuinely correct rather than
+patching one line at a time.
+
+- **Replace remaining credential-shaped test fixtures (P1, real gap in
+  round 9's own fix).** Round 9 fixed the credential-shaped literal in
+  `runbook.md`/`plan.md` but left the identical literal untouched in
+  `cli.test.ts`/`readonly-db-remote.test.ts` -- at the time believed
+  out of scope as "a deliberate, explicitly user-directed test fixture."
+  That belief was wrong: the repository's "do not commit credential-
+  shaped values" invariant does not carve out an exception for test
+  fixtures, synthetic or not. Fixed by introducing named,
+  self-evidently-synthetic constants using the established
+  `ozi79-test-only-` prefix (already used elsewhere in both files
+  without ever being flagged across nine prior rounds) in place of the
+  previous realistic-looking username/all-caps-"secret password"-shaped
+  literal, in every test in both files that used it. Also fixed the
+  SAME pattern
+  recurring a third time in this runbook's own round-9 entry (which had
+  quoted the literal being removed, as "evidence" of the fix) and in
+  both test files' own new explanatory doc comments -- described the
+  removed shape in prose instead of reproducing it.
+- **Reject destination overrides outside the verified identity (P2) --
+  investigated, found not applicable to this dependency, fixed as
+  defense-in-depth anyway.** The claim: a `?host=`/`?database=`/
+  `?user=` query parameter on the credential URL could let `postgres()`
+  connect somewhere other than what `describeUrl`/
+  `resolveVerificationIdentity`/`computeVerifiedIdentityFingerprint`
+  inspect (the URL's authority/pathname only), since those functions
+  never look at `searchParams`. Investigated before implementing,
+  rather than trusting the claim: read `postgres@3.4.8`'s
+  `parseOptions`/`parseUrl` (`postgres/src/index.js`, the actual pinned
+  version in this repo's lockfile) directly, then independently
+  confirmed by running it against a live override attempt (a URL whose
+  authority names a safe host/user/database, with `?host=`/`?database=`/
+  `?user=` query parameters naming different, "evil" values) -- the
+  resolved `host`/`port`/`user`/`database`/`pass` come only from the
+  URL's authority/pathname or from the options object this code passes,
+  never from `url.searchParams`; the override attempt had no effect at
+  all. The specific mechanism Codex described does not exist in the
+  version this tool actually depends on.
+
+  Implemented the fix anyway, as zero-cost defense-in-depth rather than
+  dismissing the finding outright: `resolveRemoteUrl` now rejects any
+  credential URL containing a query string, before it is ever used for
+  identity verification, fingerprinting, or connection. Nothing in the
+  documented `OZI79_*_READONLY_DATABASE_URL` format needs one (TLS is
+  already forced to `'verify-full'` in code, never read from the URL),
+  so this removes any future need to keep re-verifying this specific
+  postgres-js behavior against a new dependency version, at no cost to
+  a real use case. Deliberately a blanket rejection, not an allowlist of
+  specific safe keys (see the `ponytail:` comment at the check site) --
+  simpler and strictly safer given nothing legitimate needs a query
+  string here at all.
+
+  This required updating one existing test (`requires certificate-
+  validated TLS...`) that previously used a URL with `?sslmode=disable`
+  to prove `ssl: 'verify-full'` always wins over the URL's own claim --
+  that URL shape is now rejected before ever reaching the connection
+  logic (a stronger guarantee than "we override it" was), so the test
+  was narrowed to proving the unconditional connection option itself.
+
+Both fixes verified via temporary revert-and-confirm-failure: reverting
+the query-string check left exactly the four new regression tests
+failing; reverting the credential-fixture rename was not applicable
+(a rename has no separate "broken" state to revert to -- verified
+instead by confirming the full suite passes with the new names and a
+repository-wide sweep finds zero remaining occurrences of the old
+literal).
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 137/137 (29 in
-  `cli.test.ts`, 19 in `readonly-db-remote.test.ts`, 89 across the other
+- unit (`scripts/tenancy-inventory` subset): 142/142 (29 in
+  `cli.test.ts`, 24 in `readonly-db-remote.test.ts`, 89 across the other
   four files, including the new V2 coverage in `explain-preflight.test.ts`)
-- unit (full repo, `pnpm test`): 279 files / 2390 tests, all pass
+- unit (full repo, `pnpm test`): 279 files / 2395 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

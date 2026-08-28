@@ -57,6 +57,30 @@ const REMOTE_ENV_VAR: Record<RemoteTarget, string> = {
  * NEVER echoes the raw value in an error message -- an externally
  * supplied, potentially secret-bearing, potentially operator-mistyped URL
  * must not be printed just because it failed validation.
+ *
+ * Rejects any query string outright (see the check below): this tool's
+ * `resolveVerificationIdentity`/`describeUrl`/`computeVerifiedIdentityFingerprint`
+ * only ever inspect the URL's authority (username/hostname/port) and
+ * pathname -- never `searchParams`. A query parameter that could change
+ * where `postgres()` actually connects (e.g. a hypothetical `?host=`/
+ * `?database=`/`?user=` override) without those functions ever seeing it
+ * would let a URL whose *authority* satisfies `*_EXPECTED_IDENTITY`
+ * silently connect somewhere else, while the persisted artifact is still
+ * stamped with the authority's (wrong) identity.
+ *
+ * Verified directly against the actual pinned `postgres` package
+ * (`postgres@3.4.8`'s `parseOptions`/`parseUrl` in `postgres/src/index.js`,
+ * both by reading the source and by running it against a live override
+ * attempt) that `host`/`port`/`user`/`database`/`pass` are derived only
+ * from the URL's authority/pathname or from the options object this code
+ * passes -- never from `url.searchParams` -- so this specific mechanism
+ * does not exist in the version this tool actually depends on today.
+ * Rejecting query strings anyway is a zero-cost defense: nothing in the
+ * documented credential format (`tenancy-inventory.env.example`) ever
+ * needs one, TLS is already forced to `'verify-full'` in code rather than
+ * read from the URL (see `withReadOnlyRemoteDb`), and doing so removes
+ * any need to keep re-verifying this specific behavior against a future
+ * `postgres` version.
  */
 function resolveRemoteUrl(target: RemoteTarget): string {
   // `target` is the closed RemoteTarget union, not a caller-supplied
@@ -77,6 +101,30 @@ function resolveRemoteUrl(target: RemoteTarget): string {
     throw new Error(
       `[tenancy-inventory] ${envVar} must be a postgres:// or postgresql:// URL. ` +
         `(Value not shown here -- it may contain credentials.)`,
+    );
+  }
+
+  // ponytail: a blanket "no query string at all" rejection, not an
+  // allowlist of specific safe parameter names -- simpler and strictly
+  // safer given nothing legitimate needs one here. If a real use case for
+  // a specific query parameter (e.g. `application_name`) ever appears,
+  // switch this to an explicit allowlist of that exact key instead of
+  // loosening it wholesale.
+  let parsedForQueryCheck: URL | undefined;
+  try {
+    parsedForQueryCheck = new URL(raw);
+  } catch {
+    // Unparseable -- describeUrl/resolveVerificationIdentity already fail
+    // closed on this via their own sentinel values; nothing further to
+    // check here, this function still returns the raw value as before.
+  }
+  if (parsedForQueryCheck && parsedForQueryCheck.search) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must not include a query string. ` +
+        `The documented ${target} credential format never needs one -- ` +
+        `TLS and every other connection option this tool relies on are ` +
+        `always forced in code, never read from the URL. (Value not ` +
+        `shown here -- it may contain credentials.)`,
     );
   }
 

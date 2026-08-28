@@ -10,13 +10,15 @@ import postgres from 'postgres';
 import { REQUIRED_SELECT_TABLES } from './query-registry';
 
 /**
- * OZI-79 Phase A: connection/verification plumbing only. Nothing in this
- * module is wired into a CLI command yet -- there is no `scan
- * --target=staging|production` this phase, deliberately, so that building
- * and testing this file cannot accidentally reach a real remote database.
- * Execution against either target requires a separate, explicit
- * authorization after this plumbing (and the exact query subset) has been
- * reviewed. See OZI-79.
+ * OZI-79 Phase A built this module's connection/verification plumbing
+ * with nothing wired into a CLI command, deliberately, so that building
+ * and testing it could not accidentally reach a real remote database.
+ * Phase B2 (`cli.ts`'s `plan --target=staging|production
+ * --execute-remote-explain`) is that separate, explicit wiring -- still
+ * only a plain-`EXPLAIN` preflight, still requiring the caller to pass
+ * the acknowledgement flag before any connection opens, and still not the
+ * inventory-scan execution `scan --target=staging|production` continues
+ * to refuse. See OZI-79.
  *
  * Deliberately a separate module from `readonly-db.ts`'s `LocalTarget`,
  * not an extension of it: no shared allowlist, no shared URL-resolution

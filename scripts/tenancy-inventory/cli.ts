@@ -2,6 +2,10 @@ import { execFileSync } from 'node:child_process';
 
 import { describeEvidenceRoot, writeEvidence } from './evidence-store';
 import {
+  buildExplainPreflightArtifact,
+  collectExplainPreflightFacts,
+} from './explain-preflight';
+import {
   summarizeOwnership,
   TABLE_OWNERSHIP,
   TENANT_ORG_CONFLATION_NOTE,
@@ -11,6 +15,11 @@ import {
   withReadOnlyDb,
   type LocalTarget,
 } from './readonly-db';
+import {
+  describeRemoteTarget,
+  withReadOnlyRemoteDb,
+  type RemoteTarget,
+} from './readonly-db-remote';
 import {
   latestSchemaMigration,
   organizationsMissingTenantAttributesCount,
@@ -41,6 +50,40 @@ function resolveCommitSha(): string {
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * The strict counterpart to `resolveCommitSha` above, used only by the
+ * `plan` (remote EXPLAIN preflight) command: `resolveCommitSha` silently
+ * falls back to the string `'unknown'` so `scan`'s local, low-stakes
+ * report is never blocked by a missing git binary/repo. A remote target's
+ * artifact makes a much stronger claim -- "this exact commit was reviewed
+ * against this exact remote database" -- so an unresolvable commit here
+ * must be a hard failure, not a silent `'unknown'` placeholder baked into
+ * evidence a human might later approve.
+ */
+function resolveCommitShaStrict(): string {
+  let sha: string;
+  try {
+    sha = execFileSync('git', ['rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim();
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not resolve the current Git commit SHA (git rev-parse HEAD ` +
+        `failed: ${cause}). A remote EXPLAIN preflight run must be tied to ` +
+        `an exact, resolvable commit -- refusing to connect without one.`,
+    );
+  }
+  if (!sha) {
+    throw new Error(
+      'git rev-parse HEAD returned an empty value. A remote EXPLAIN ' +
+        'preflight run must be tied to an exact, resolvable commit -- ' +
+        'refusing to connect without one.',
+    );
+  }
+  return sha;
 }
 
 /**
@@ -170,8 +213,125 @@ async function runScan(
   console.log(`[tenancy-inventory] Evidence root: ${describeEvidenceRoot()}`);
 }
 
-async function run(): Promise<void> {
-  const args = process.argv.slice(2).filter((arg) => arg !== '--');
+/**
+ * OZI-79 Phase B2: wires the already-reviewed Phase A (`RemoteTarget`,
+ * `withReadOnlyRemoteDb`, `describeRemoteTarget`) and Phase B1
+ * (`collectExplainPreflightFacts`, `buildExplainPreflightArtifact`)
+ * components together into one narrowly scoped command. Still no remote
+ * *inventory* execution, no approval records, no persisted-artifact
+ * loading, and no automated verdict -- this only produces the plain-
+ * `EXPLAIN` preflight artifact and writes it to disk for a human to read.
+ *
+ * `target`/`descriptor` are the only two things this function ever learns
+ * about "where" -- `target` from the caller's already-validated
+ * `RemoteTarget` (checked by `run()` before this is even called) and
+ * `descriptor` from `describeRemoteTarget(target)`. There is no parameter
+ * here, and no code path anywhere in this function, that accepts a
+ * caller-supplied connection URL, descriptor string, arbitrary SQL, a
+ * query id/subset, or an environment string outside that closed domain --
+ * `collectExplainPreflightFacts` always runs the full, frozen
+ * `QUERY_REGISTRY`, unmodified.
+ *
+ * Every check below runs, in this order, before `withReadOnlyRemoteDb` is
+ * ever called -- the whole point of the explicit `--execute-remote-explain`
+ * acknowledgement is that `plan --target=staging|production` alone, with
+ * no other flag, must never open a remote connection:
+ *
+ * 1. the acknowledgement flag is present;
+ * 2. the working tree is clean (unlike `scan`, there is no
+ *    `--allow-dirty` escape hatch here -- a remote target's artifact is
+ *    exactly the kind of evidence a human might later approve, and an
+ *    ambiguous "which commit does this describe" is not acceptable for
+ *    that);
+ * 3. the current commit SHA can be resolved (`resolveCommitShaStrict`,
+ *    not the lenient `'unknown'`-falling-back `resolveCommitSha` `scan`
+ *    uses).
+ */
+async function runRemoteExplainPlan(
+  target: RemoteTarget,
+  options: { readonly executeRemoteExplain: boolean },
+): Promise<void> {
+  if (!options.executeRemoteExplain) {
+    throw new Error(
+      'plan --target=staging|production requires the explicit ' +
+        '--execute-remote-explain acknowledgement before it will open any ' +
+        'remote connection. Omitting the flag is the safe default, not an ' +
+        'oversight to work around.',
+    );
+  }
+
+  if (isWorkingTreeDirty()) {
+    throw new Error(
+      'Working tree has uncommitted changes. A remote EXPLAIN preflight ' +
+        'run must be tied to an exact, clean, committed state -- unlike ' +
+        '`scan`, there is no --allow-dirty escape hatch for a remote ' +
+        'target. Commit or stash first.',
+    );
+  }
+
+  const commitSha = resolveCommitShaStrict();
+  const descriptor = describeRemoteTarget(target);
+
+  console.log(
+    `[tenancy-inventory] Remote EXPLAIN preflight against ${descriptor} (read-only transaction)…`,
+  );
+
+  const artifact = await withReadOnlyRemoteDb(target, async (tx) => {
+    const facts = await collectExplainPreflightFacts(tx);
+    return buildExplainPreflightArtifact(facts, {
+      target: { environment: target, descriptor },
+      commit: { commitSha, workingTreeDirty: false },
+    });
+  });
+
+  // Fingerprint prefix, not a counter/random suffix: two runs against the
+  // same second would otherwise collide, and this keeps the filename
+  // itself a piece of self-describing evidence. Neither this nor
+  // `generatedAt` contains a hostname, database name, URL, or credential
+  // -- `target` is one of exactly two literal words.
+  const fileName = `${target}-explain-preflight-${artifact.generatedAt.replace(/[:.]/g, '-')}-${artifact.artifactFingerprint.slice(0, 12)}.json`;
+  const writtenPath = await writeEvidence(
+    target,
+    fileName,
+    JSON.stringify(artifact, null, 2),
+  );
+
+  // Deliberately NOT `console.log(JSON.stringify(artifact, ...))`, unlike
+  // `scan`: the full artifact holds every raw `EXPLAIN` plan for every
+  // registry statement. That is safe to persist as evidence for a human
+  // to open deliberately, but not to dump into CI/terminal output that
+  // may be captured in logs far more casually than an evidence file a
+  // reviewer has to go and read.
+  console.log('[tenancy-inventory] Remote EXPLAIN preflight summary');
+  console.log(`  target:                       ${target}`);
+  console.log(`  descriptor:                   ${descriptor}`);
+  console.log(`  commit:                       ${commitSha}`);
+  console.log(
+    `  schemaMigration:              ${artifact.schemaMigration ? `#${artifact.schemaMigration.id} (${artifact.schemaMigration.hash})` : 'none'}`,
+  );
+  console.log(
+    `  registryFingerprint:          ${artifact.registryFingerprint}`,
+  );
+  console.log(`  scopeFingerprint:             ${artifact.scopeFingerprint}`);
+  console.log(
+    `  artifactFingerprint:          ${artifact.artifactFingerprint}`,
+  );
+  console.log(
+    `  statementCount:               ${artifact.statementPlans.length}`,
+  );
+  console.log(
+    `  priorityManualReviewStatementIds: ${artifact.priorityManualReviewStatementIds.join(', ')}`,
+  );
+  console.log(
+    `  requiresManualReview:         ${artifact.requiresManualReview}`,
+  );
+  console.log(`  evidence:                     ${writtenPath}`);
+}
+
+export async function run(
+  argv: readonly string[] = process.argv.slice(2),
+): Promise<void> {
+  const args = argv.filter((arg) => arg !== '--');
   const command = args[0];
 
   if (command === 'matrix') {
@@ -190,8 +350,19 @@ async function run(): Promise<void> {
     return;
   }
 
+  if (command === 'plan') {
+    const target = readOption(args, '--target');
+    if (target !== 'staging' && target !== 'production') {
+      throw new Error('plan requires --target=staging or --target=production.');
+    }
+    await runRemoteExplainPlan(target, {
+      executeRemoteExplain: args.includes('--execute-remote-explain'),
+    });
+    return;
+  }
+
   throw new Error(
-    'Usage: tenancy-inventory <matrix|scan --target=dev|test [--allow-dirty]>.',
+    'Usage: tenancy-inventory <matrix|scan --target=dev|test [--allow-dirty]|plan --target=staging|production --execute-remote-explain>.',
   );
 }
 

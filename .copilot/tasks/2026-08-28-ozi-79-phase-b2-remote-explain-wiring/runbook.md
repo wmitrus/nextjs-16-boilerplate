@@ -373,13 +373,52 @@ tree, unresolved commit, role verification failure, evidence write
 failure) -- each already had, or received, a regression test verified by
 temporary revert.
 
+## Review round 4 (Codex)
+
+Two findings, both fixed:
+
+- **Sanitize remote database failures before logging (P2, real gap).**
+  A raw Postgres/Drizzle failure (connection refused, TLS/authentication
+  error, or a preflight query error) propagated unchanged from
+  `withReadOnlyRemoteDb` up through `run()`'s top-level `catch`, which
+  prints `error.message` to stderr. Infrastructure errors from those
+  layers can contain a hostname, username, or other connection-string
+  fragment, unlike this tool's own deliberately-sanitized errors.
+  Fixed: the `withReadOnlyRemoteDb` call in `runRemoteExplainPlan` is now
+  wrapped in a `try`/`catch` that re-throws `RemoteRoleNotReadOnlyError`
+  as-is (already safe, deliberately-crafted) but translates everything
+  else to a stable, safe message naming only the target and the
+  already-sanitized `descriptor`, attaching the original error as
+  `cause` (reachable for a caller that deliberately inspects it, never
+  printed by the default top-level handler). Added a regression test
+  using a realistic credential-shaped Postgres auth-failure message,
+  asserting the username/hostname/full message never reach the thrown
+  error while `cause` still holds the original -- verified via temporary
+  revert. Also had to convert the existing "misconfigured role" test to
+  construct a real `RemoteRoleNotReadOnlyError` (it previously used a
+  generic `Error`, which the new sanitization would have incorrectly
+  swallowed).
+- **Update the preflight module's stale phase boundary (P2, doc drift).**
+  `explain-preflight.ts`'s module doc comment, `ExplainPreflightEnvironment`'s
+  doc comment, `checkTargetCompatibility`'s doc comment, and
+  `checkArtifactIntegrity`'s doc comment all still framed remote wiring
+  as "a future Phase B2 would..." -- exactly the phase this PR is. Fixed
+  each to describe the current state accurately: `cli.ts`'s `plan`
+  command is the real `RemoteTarget`/`describeRemoteTarget` wiring that
+  now exists, while the four compatibility/integrity check functions
+  remain genuinely unwired into any command (that really is still a
+  later phase's work, so those specific claims were left correctly
+  future-facing, just without the stale "Phase B2" label since Phase B2
+  turned out to mean something narrower than originally drafted).
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 114/114 (24 in `cli.test.ts`,
-  12 in `readonly-db-remote.test.ts`, 78 across the other four files)
-- unit (full repo, `pnpm test`): 279 files / 2367 tests, all pass
+- unit (`scripts/tenancy-inventory` subset): 115/115 (25 in
+  `cli.test.ts`, 12 in `readonly-db-remote.test.ts`, 78 across the other
+  four files)
+- unit (full repo, `pnpm test`): 279 files / 2368 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

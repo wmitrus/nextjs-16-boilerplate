@@ -20,19 +20,29 @@ import {
 } from './topology-queries';
 
 /**
- * OZI-79 Phase B1: a **build-only, local-test-only** plain-`EXPLAIN`
- * preflight core. This module collects `EXPLAIN` plans and relation
- * statistics for the frozen Phase B0 `QUERY_REGISTRY` and assembles them
- * into a versioned, dual-fingerprinted artifact for later human review --
- * it does not decide anything, connect to anything remote, or execute
- * anything beyond `EXPLAIN` (never `EXPLAIN ANALYZE`).
+ * OZI-79 Phase B1 built this as a **build-only, local-test-only**
+ * plain-`EXPLAIN` preflight core: it collects `EXPLAIN` plans and
+ * relation statistics for the frozen Phase B0 `QUERY_REGISTRY` and
+ * assembles them into a versioned, dual-fingerprinted artifact for later
+ * human review -- it does not decide anything or execute anything beyond
+ * `EXPLAIN` (never `EXPLAIN ANALYZE`).
  *
- * Explicit non-goals, enforced by what this file does NOT import or call:
+ * As of OZI-79 Phase B2, `cli.ts`'s `plan --target=staging|production
+ * --execute-remote-explain` command does call `collectExplainPreflightFacts`
+ * against a real remote transaction (`readonly-db-remote.ts`'s
+ * `withReadOnlyRemoteDb`), behind its own fail-closed acknowledgement/
+ * clean-tree/resolvable-commit/target-identity preconditions -- see that
+ * command's doc comment. This module's own code is unchanged by that:
+ * it still imports nothing from `readonly-db-remote.ts` or
+ * `evidence-store.ts`, and still has no concept of which target/
+ * environment a transaction handed to it came from --
+ * `ExplainPreflightTargetMetadata` remains entirely caller-supplied (see
+ * below). The non-goals below describe this module's own code, not
+ * whether some other module has since wired it to a remote transaction:
+ *
  * - no `withReadOnlyRemoteDb`, `describeRemoteTarget`, or any other
- *   `readonly-db-remote.ts` symbol
- * - no `writeEvidence('staging' | 'production', ...)`
- * - no `cli.ts` wiring, no `scan --target=...` command, no remote
- *   credential, no remote connection anywhere in this module
+ *   `readonly-db-remote.ts` symbol is imported here
+ * - no `writeEvidence(...)` call exists here
  * - no automatic production-safe verdict or numeric risk threshold --
  *   `requiresManualReview` is always `true`; this tool produces facts for
  *   a human to read, not a decision
@@ -40,10 +50,9 @@ import {
  * `collectExplainPreflightFacts` accepts an already-open transaction/
  * handle -- exactly the same `Tx` shape `readonly-db.ts`'s
  * `withReadOnlyDb` and `readonly-db-remote.ts`'s `withReadOnlyRemoteDb`
- * both already produce, structurally, with no import from either. Phase
- * B1 does not decide which one a caller uses; a future Phase B2 would be
- * the (separately authorized) decision to actually call this against a
- * remote transaction.
+ * both already produce, structurally, with no import from either. This
+ * module still does not decide which one a caller uses -- that decision
+ * now lives in `cli.ts`.
  *
  * ## Two fingerprints, two different jobs
  *
@@ -300,8 +309,9 @@ export async function collectExplainPreflightFacts(
  * importing `RemoteTarget` from `readonly-db-remote.ts` (or anything else
  * from it): this module stays structurally independent of that one, the
  * same way `LocalTarget` and `RemoteTarget` stay independent of each
- * other. Phase B2 will be the (separately authorized) work of deriving a
- * real value here from `describeRemoteTarget`; nothing here does that.
+ * other. `cli.ts`'s `plan` command (OZI-79 Phase B2) is what derives a
+ * real value here from `describeRemoteTarget`; nothing in this module
+ * does that itself.
  */
 export type ExplainPreflightEnvironment = 'staging' | 'production';
 
@@ -573,9 +583,11 @@ function isPlausibleStatementFingerprintEntry(
  * field itself (it recomputes the scope's constituent fields directly),
  * so an artifact with its `scopeFingerprint` field silently rewritten to
  * an arbitrary value would still pass an `artifactFingerprint`-only
- * check. Since Phase B2 is documented to persist and separately approve
- * `scopeFingerprint`, this function must independently verify it too, or
- * an internally inconsistent approval identity could pass integrity.
+ * check. Whenever a later phase persists and separately approves
+ * `scopeFingerprint` (not built yet -- OZI-79 Phase B2 only writes an
+ * artifact, it does not persist or approve one), this function must
+ * independently verify it too, or an internally inconsistent approval
+ * identity could pass integrity.
  *
  * This does **not** prove the artifact was ever legitimately approved --
  * see the module doc comment. A future scan must additionally compare an
@@ -810,14 +822,17 @@ export function checkSchemaCompatibility(
 
 /**
  * Pure, synchronous, fail-closed. `currentTarget` must be resolved by the
- * caller -- a future Phase B2 would derive it from the real
- * `RemoteTarget`/`describeRemoteTarget` wiring; this function does no I/O
- * and imports nothing from `readonly-db-remote.ts`. Both `environment`
- * and `descriptor` must match exactly: an artifact approved against
- * staging must never be treated as compatible with a production target
- * (or vice versa) merely because the registry and schema migration
- * happen to agree -- two environments can share both while holding
- * materially different data distributions.
+ * caller; this function does no I/O and imports nothing from
+ * `readonly-db-remote.ts`. The real `RemoteTarget`/`describeRemoteTarget`
+ * wiring exists as of OZI-79 Phase B2 (`cli.ts`'s `plan` command), but
+ * nothing calls this function yet -- wiring the four
+ * compatibility/integrity checks into an actual command's preflight gate
+ * remains unbuilt, a later phase's work. Both `environment` and
+ * `descriptor` must match exactly: an artifact approved against staging
+ * must never be treated as compatible with a production target (or vice
+ * versa) merely because the registry and schema migration happen to
+ * agree -- two environments can share both while holding materially
+ * different data distributions.
  */
 export function checkTargetCompatibility(
   currentTarget: ExplainPreflightTargetMetadata,

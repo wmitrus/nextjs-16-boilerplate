@@ -18,6 +18,7 @@ import {
 import {
   assertTargetDescriptorMatchesExpectation,
   describeRemoteTarget,
+  RemoteRoleNotReadOnlyError,
   withReadOnlyRemoteDb,
   type RemoteTarget,
 } from './readonly-db-remote';
@@ -303,6 +304,17 @@ async function runScan(
  *    misconfigured, since the closed `RemoteTarget` domain only
  *    constrains which env var name is *read*, not what value an operator
  *    actually put there.
+ *
+ * Once connected, a raw Postgres/Drizzle failure (TLS/authentication/
+ * connection setup, or a preflight query itself) is never allowed to
+ * reach `run()`'s top-level `catch`, which prints `error.message` to
+ * stderr: those infrastructure errors can contain a hostname, username,
+ * or other connection-string fragment, unlike this tool's own
+ * deliberately-sanitized errors (`RemoteRoleNotReadOnlyError`, the
+ * checks above). Such a failure is translated to a stable, safe message
+ * before it propagates, with the original attached only as `cause` --
+ * present for a caller that deliberately inspects it, never printed by
+ * the default top-level handler.
  */
 async function runRemoteExplainPlan(
   target: RemoteTarget,
@@ -334,13 +346,36 @@ async function runRemoteExplainPlan(
     `[tenancy-inventory] Remote EXPLAIN preflight against ${descriptor} (read-only transaction)…`,
   );
 
-  const artifact = await withReadOnlyRemoteDb(target, async (tx) => {
-    const facts = await collectExplainPreflightFacts(tx);
-    return buildExplainPreflightArtifact(facts, {
-      target: { environment: target, descriptor },
-      commit: { commitSha, workingTreeDirty: false },
+  let artifact;
+  try {
+    artifact = await withReadOnlyRemoteDb(target, async (tx) => {
+      const facts = await collectExplainPreflightFacts(tx);
+      return buildExplainPreflightArtifact(facts, {
+        target: { environment: target, descriptor },
+        commit: { commitSha, workingTreeDirty: false },
+      });
     });
-  });
+  } catch (error) {
+    if (error instanceof RemoteRoleNotReadOnlyError) {
+      // Already a deliberately-sanitized, safe-to-print message.
+      throw error;
+    }
+    // A raw Postgres/Drizzle error (connection refused, TLS/auth
+    // failure, a preflight query error, ...) can contain a hostname,
+    // username, or other connection-string fragment. Never let it reach
+    // the top-level handler's console.error -- keep it only as `cause`
+    // for a caller that deliberately inspects this error, not something
+    // printed by default.
+    throw new Error(
+      `[tenancy-inventory] Remote EXPLAIN preflight against ${target} ` +
+        `(${descriptor}) failed during connection, authentication, or a ` +
+        `preflight query. The underlying error is not shown here -- it ` +
+        `may contain a hostname, username, or other connection-string ` +
+        `fragment. Inspect this error's "cause" property directly if you ` +
+        `need the raw diagnostic; do not forward it to a shared log.`,
+      { cause: error },
+    );
+  }
 
   // Fingerprint prefix, not a counter/random suffix: two runs against the
   // same second would otherwise collide, and this keeps the filename

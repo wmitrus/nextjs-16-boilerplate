@@ -48,7 +48,7 @@ execution boundary and design detail.
 ## Validation
 
 typecheck clean · lint clean · unit (`scripts/tenancy-inventory` subset)
-114/114 · unit (full repo) 279 files / 2367 tests · real DB
+115/115 · unit (full repo) 279 files / 2368 tests · real DB
 (`pnpm test:db:local`) 32 files / 297 tests · CI config (`pnpm
 test:db:ci`) 32 files / 297 tests · adversarial falsification pass
 performed on every negative-path invariant across all three review
@@ -114,6 +114,22 @@ rounds' fixes, before push (see runbook.md)
   without an existing test.
 - Full systematic falsification pass across every named negative case;
   every check verified via temporary revert.
+
+### 2026-08-28 — Review round 4 (Codex)
+
+- Fixed a real P2 gap: a raw Postgres/Drizzle failure (connection,
+  auth, TLS, or query error) propagated unchanged to the top-level
+  handler's `console.error`, which could leak a hostname/username from
+  the underlying infrastructure error. `runRemoteExplainPlan` now
+  catches it, re-throws `RemoteRoleNotReadOnlyError` as-is (already
+  safe), and sanitizes everything else, keeping the original only as
+  `cause`. Added a regression test with a realistic credential-shaped
+  auth-failure message, verified via revert.
+- Fixed stale "a future Phase B2 would..." phase-boundary language in
+  `explain-preflight.ts` (module doc comment,
+  `ExplainPreflightEnvironment`, `checkTargetCompatibility`,
+  `checkArtifactIntegrity`) now that Phase B2 is the current, completed
+  phase and did something narrower than originally drafted.
 
 ## Artifacts
 

@@ -25,6 +25,7 @@ import type * as ExplainPreflightModule from './explain-preflight';
 import type { ExplainPreflightFacts } from './explain-preflight';
 import {
   describeRemoteTarget,
+  RemoteRoleNotReadOnlyError,
   withReadOnlyRemoteDb,
 } from './readonly-db-remote';
 import type * as ReadonlyDbRemoteModule from './readonly-db-remote';
@@ -316,7 +317,7 @@ describe('plan -- fails before any remote connection', () => {
     expect(mockedWriteEvidence).not.toHaveBeenCalled();
   });
 
-  it('does not write evidence when withReadOnlyRemoteDb itself rejects (e.g. a misconfigured role)', async () => {
+  it('propagates a RemoteRoleNotReadOnlyError as-is (already a safe, deliberately-sanitized message) and does not write evidence', async () => {
     mockCleanGitState();
     mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
     vi.stubEnv(
@@ -324,11 +325,44 @@ describe('plan -- fails before any remote connection', () => {
       'staging-db.example:5432/app',
     );
     mockedWithReadOnlyRemoteDb.mockRejectedValue(
-      new Error('Connected role has elevated attribute(s): rolsuper.'),
+      new RemoteRoleNotReadOnlyError(
+        'Connected role has elevated attribute(s): rolsuper.',
+      ),
     );
     await expect(
       run(['plan', '--target=staging', '--execute-remote-explain']),
     ).rejects.toThrow(/elevated attribute/);
+    expect(mockedWriteEvidence).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes a raw Postgres/Drizzle failure instead of letting it reach the top-level handler, and does not write evidence', async () => {
+    mockCleanGitState();
+    mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'staging-db.example:5432/app',
+    );
+    const rawInfrastructureError = new Error(
+      'password authentication failed for user "readonly_prod" at host internal-db-7.example.net',
+    );
+    mockedWithReadOnlyRemoteDb.mockRejectedValue(rawInfrastructureError);
+
+    let thrown: unknown;
+    try {
+      await run(['plan', '--target=staging', '--execute-remote-explain']);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).not.toContain('readonly_prod');
+    expect(message).not.toContain('internal-db-7.example.net');
+    expect(message).not.toContain(rawInfrastructureError.message);
+    // The raw error is still reachable via `cause` for a caller that
+    // deliberately wants it -- it is only kept out of the default
+    // top-level `console.error` path, not destroyed.
+    expect((thrown as Error).cause).toBe(rawInfrastructureError);
     expect(mockedWriteEvidence).not.toHaveBeenCalled();
   });
 

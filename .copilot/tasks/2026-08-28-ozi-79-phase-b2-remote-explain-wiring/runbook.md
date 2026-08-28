@@ -16,29 +16,59 @@ before any real remote execution is separately authorized.
   `--execute-remote-explain` acknowledgement before it opens any
   connection. `plan --target=production` alone, with no other flag, is a
   pure validation error — it never reaches git or network code.
-- The already-reviewed Phase A (`RemoteTarget`, `withReadOnlyRemoteDb`,
-  `describeRemoteTarget`, `verifyReadOnlyRole`) and Phase B1
-  (`collectExplainPreflightFacts`, the canonical 16-statement
-  `QUERY_REGISTRY`) components are wired together **unmodified** — this
-  phase adds no new SQL, no new registry statements, no changes to
-  `verifyReadOnlyRole`'s privilege checks, and no changes to the
-  collector's canonicalization/fingerprinting logic. `buildExplainPreflightArtifact`
-  (V1) itself is also unmodified, but round 6 added a parallel
-  `buildExplainPreflightArtifactV2` that `cli.ts` actually calls now —
-  see "What was built" and "Verified-identity fingerprint (V2, round 6)"
-  below.
-- `readonly-db-remote.ts` gained two functions as part of this phase's
-  final implementation, `assertTargetIdentityMatchesExpectation` (see
-  "Target-identity safeguard" below; renamed from
-  `assertTargetDescriptorMatchesExpectation` in round 6 — the required
-  value has been username-inclusive identity, not a safe descriptor,
-  since round 5) and `computeVerifiedIdentityFingerprint` (round 6, a
-  non-secret SHA-256 of that same identity, persisted on the artifact —
-  see "Verified-identity fingerprint (V2)" below) — its stale doc
-  comment (it previously said "nothing wired into a CLI command yet")
-  was also updated to match. Everything else — TLS (`ssl: 'verify-full'`),
-  least-privilege verification, `READ ONLY` + `REPEATABLE READ`
-  transaction, and timeout constants — is untouched.
+- The already-reviewed Phase A `RemoteTarget` type and `verifyReadOnlyRole`
+  are wired in **unmodified**: this phase adds no new SQL, no new
+  registry statements, and no changes to `verifyReadOnlyRole`'s privilege
+  checks. Phase A's `withReadOnlyRemoteDb`/`describeRemoteTarget` are
+  **not** unmodified -- see the `readonly-db-remote.ts` bullet below for
+  exactly what changed and why. Phase B1's `collectExplainPreflightFacts`
+  and the canonical 16-statement `QUERY_REGISTRY` are unmodified: no
+  changes to the collector's canonicalization/fingerprinting logic.
+  `buildExplainPreflightArtifact` (V1) itself is also unmodified, but
+  round 6 added a parallel `buildExplainPreflightArtifactV2` that
+  `cli.ts` actually calls now — see "What was built" and
+  "Verified-identity fingerprint (V2)" below.
+- `readonly-db-remote.ts` — the final Phase B2 implementation changed
+  more of this module than an earlier version of this checkpoint stated;
+  distinguished explicitly below rather than summarized as "everything
+  else is untouched," since a security checkpoint that undercounts
+  changed credential-trust-boundary code is itself a gap (Codex review
+  round 14).
+
+  **Changed in Phase B2:**
+  - `assertTargetIdentityMatchesExpectation` added (see "Target-identity
+    safeguard" below; renamed from `assertTargetDescriptorMatchesExpectation`
+    in round 6 — the required value has been username-inclusive identity,
+    not a safe descriptor, since round 5).
+  - `computeVerifiedIdentityFingerprint` added (round 6, a non-secret
+    SHA-256 of that same identity, persisted on the artifact — see
+    "Verified-identity fingerprint (V2)" below).
+  - `resolveRemoteUrl` hardened (round 12) into the authoritative
+    credential URL parse/normalization gate — see its own subsection
+    below for full detail: requires a successful `new URL()` parse;
+    requires the exact `postgres:`/`postgresql:` **parsed** protocol;
+    rejects a query string; rejects a fragment; requires a non-empty
+    hostname; requires a non-empty username; requires a non-empty
+    database pathname; returns the platform parser's own *normalized*
+    re-serialization, which is what every downstream consumer (this
+    module's own `describeUrl`/`resolveVerificationIdentity`, and
+    `postgres()` itself) now receives, never the untouched raw
+    environment value.
+  - `withReadOnlyRemoteDb` performs the authoritative
+    `assertTargetIdentityMatchesExpectation` re-check before opening the
+    connection, and connects using `resolveRemoteUrl`'s validated,
+    normalized URL — the same two calls this function has made since
+    round 6, but what `resolveRemoteUrl` now validates/returns before
+    `postgres()` ever sees it is materially stronger than at that time.
+  - This module's own doc comment (it previously said "nothing wired
+    into a CLI command yet") was also updated to match.
+
+  **Still unchanged:** TLS forced to `ssl: 'verify-full'`; the existing
+  `STATEMENT_TIMEOUT_MS`/`LOCK_TIMEOUT_MS`/`IDLE_IN_TRANSACTION_TIMEOUT_MS`
+  constants; `verifyReadOnlyRole`'s privilege-check semantics; the
+  `READ ONLY` + `REPEATABLE READ` transaction; the canonical query
+  registry/SQL this module reads via `REQUIRED_SELECT_TABLES`; no remote
+  inventory scan capability exists anywhere in this module.
 - `explain-preflight.ts`'s canonical 16-statement collector and
   fingerprinting logic are untouched. Round 6 added a parallel V2
   artifact contract (`ExplainPreflightArtifactV2`) alongside it — see
@@ -1170,6 +1200,41 @@ revert-and-confirm-failure: removing the `assertNoHiddenGitIndexState()`
 call left exactly the six new mocked tests (plus the updated dirty-tree
 call-count assertion) failing, nothing else; restored and reconfirmed
 green.
+
+## Review round 14 (Codex) — documentation only
+
+One finding (P2), docs only, no code change: the "Execution boundary —
+read this first" section's `readonly-db-remote.ts` bullet still said the
+module only gained `assertTargetIdentityMatchesExpectation`/
+`computeVerifiedIdentityFingerprint` and that "everything else" was
+untouched -- no longer true after round 12's `resolveRemoteUrl`
+hardening (the authoritative URL parse/normalization gate) and its
+effect on what `withReadOnlyRemoteDb` actually connects with. A security
+checkpoint that undercounts changed credential-trust-boundary code is
+itself a gap, independent of whether the later "What was built" sections
+already described the change correctly.
+
+Fixed by rewriting the bullet into explicit **Changed in Phase B2** /
+**Still unchanged** lists (see above). While reviewing the rest of the
+top-level section for the same category of stale wording, also narrowed
+the adjacent Phase A/B1 bullet: it grouped `withReadOnlyRemoteDb`/
+`describeRemoteTarget` together with `RemoteTarget`/`verifyReadOnlyRole`
+under one blanket "wired together unmodified" claim, which has the same
+problem -- `withReadOnlyRemoteDb` gained the identity-check call as far
+back as round 1, and both functions' effective behavior changed via
+`resolveRemoteUrl`. Split the claim so only the genuinely-unmodified
+carryovers (`RemoteTarget`, `verifyReadOnlyRole`, the B1 collector/
+registry) keep the "unmodified" wording, with an explicit pointer to the
+corrected bullet for the rest.
+
+Every other "unmodified"/"unchanged"/"untouched" sentence in the section
+was checked against the current diff and left as-is where still
+accurate (the acknowledgement-gate/git-reachability claim, the
+`explain-preflight.ts` V1-vs-V2 claim, the no-approval-record/no-Phase-B3
+claim, and the `scan` behavior claim all still hold).
+
+No executable TypeScript, test, artifact-contract, Git-guard, or
+remote-DB-wiring code was touched this round.
 
 ## Validation
 

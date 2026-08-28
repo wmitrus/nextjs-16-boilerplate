@@ -31,28 +31,36 @@ execution boundary and design detail.
 - `scripts/tenancy-inventory/cli.test.ts` (new, 24 unit tests, no DB, all
   remote/network/evidence effects mocked)
 - `scripts/tenancy-inventory/readonly-db-remote.ts` -- gained
-  `assertTargetDescriptorMatchesExpectation`, baked into
+  `assertTargetIdentityMatchesExpectation` (renamed in round 6 from
+  `assertTargetDescriptorMatchesExpectation`), baked into
   `withReadOnlyRemoteDb` (a real part of this phase's final design, not
-  an incidental patch), plus a doc-comment update (the module previously
-  said nothing was wired into a CLI command; this phase makes that
-  untrue)
-- `scripts/tenancy-inventory/readonly-db-remote.test.ts` -- 12 tests for
-  the target-identity safeguard, including credential-redaction proof
+  an incidental patch), plus `computeVerifiedIdentityFingerprint` (round
+  6, a non-secret SHA-256 of the same verified identity), plus a
+  doc-comment update (the module previously said nothing was wired into
+  a CLI command; this phase makes that untrue)
+- `scripts/tenancy-inventory/readonly-db-remote.test.ts` -- 19 tests for
+  the target-identity safeguard and the verified-identity fingerprint,
+  including credential-redaction proof
 - `scripts/tenancy-inventory/evidence-store.ts` -- doc-comment update
+- `scripts/tenancy-inventory/explain-preflight.ts` -- round 6 added
+  `ExplainPreflightArtifactV2`/`version: 2` and its parallel
+  `buildExplainPreflightArtifactV2`/`checkTargetCompatibilityV2`/
+  `checkArtifactIntegrityV2` (V1 unchanged); `cli.ts`'s `plan` command now
+  builds V2 artifacts
 - `scripts/tenancy-inventory/tenancy-inventory.env.example` -- documents
-  the two new `*_EXPECTED_DESCRIPTOR` env vars and their sourcing
-  requirement (must come from authoritative environment/provider
-  metadata, never derived from the corresponding
-  `*_READONLY_DATABASE_URL`)
+  the two `*_EXPECTED_IDENTITY` env vars (renamed in round 6 from
+  `*_EXPECTED_DESCRIPTOR`) and their sourcing requirement (must come from
+  authoritative environment/provider metadata, never derived from the
+  corresponding `*_READONLY_DATABASE_URL`)
 
 ## Validation
 
 typecheck clean · lint clean · unit (`scripts/tenancy-inventory` subset)
-117/117 · unit (full repo) 279 files / 2370 tests · real DB
+136/136 · unit (full repo) 279 files / 2389 tests · real DB
 (`pnpm test:db:local`) 32 files / 297 tests · CI config (`pnpm
 test:db:ci`) 32 files / 297 tests · adversarial falsification pass
-performed on every negative-path invariant across all three review
-rounds' fixes, before push (see runbook.md)
+performed on every negative-path invariant across all six review rounds'
+fixes, before push (see runbook.md)
 
 ## Update Log
 
@@ -149,6 +157,33 @@ rounds' fixes, before push (see runbook.md)
   `safeArgumentDescription` (flag name only, or argument position for a
   bare positional). Swept the rest of the diff for the same pattern;
   found nothing else.
+
+### 2026-08-28 — Review round 6 (user-directed hardening pass)
+
+- Persisted a non-secret `verifiedIdentityFingerprint` (domain-separated
+  SHA-256 of the same identity `assertTargetIdentityMatchesExpectation`
+  verifies) on the artifact itself, not just checked at connection time --
+  a produced artifact must already carry every identity component a
+  later approval gate will need. Introduced `ExplainPreflightArtifactV2`/
+  `version: 2` rather than mutating V1's meaning (no real V1 artifacts or
+  loader to migrate yet); V1 untouched. `checkTargetCompatibilityV2`
+  fails closed on a missing/malformed fingerprint, not just a mismatch.
+  Renamed `OZI79_*_EXPECTED_DESCRIPTOR` → `OZI79_*_EXPECTED_IDENTITY` and
+  `assertTargetDescriptorMatchesExpectation` →
+  `assertTargetIdentityMatchesExpectation` (the value was already
+  username-inclusive identity since round 5; the name was wrong).
+- Fixed a second real gap: `resolveCommitSha`/`resolveCommitShaStrict`/
+  `isWorkingTreeDirty` ran `git` with no explicit `cwd`, so launching the
+  script from a different working directory would report that
+  directory's git state while still querying this repository's schema.
+  Fixed by computing `REPO_ROOT` from `import.meta.url` and passing it
+  explicitly.
+- Both fixes verified via temporary revert-and-confirm-failure (the
+  cwd fix specifically required launching the test process from a real
+  different OS-level working directory to exercise the gap, since a
+  same-process test run cannot otherwise differ from `process.cwd()`).
+  See runbook.md for the full falsification detail and the adversarial
+  matrix covered.
 
 ## Artifacts
 

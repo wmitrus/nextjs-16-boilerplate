@@ -8,13 +8,17 @@
  * Central invariant under test: `plan --target=staging|production` must
  * never open a remote connection unless the caller passes the explicit
  * `--execute-remote-explain` acknowledgement AND the working tree is
- * clean AND the commit SHA resolves AND the resolved target's descriptor
- * matches its separately declared `*_EXPECTED_DESCRIPTOR` expectation.
+ * clean AND the commit SHA resolves AND the resolved target's identity
+ * matches its separately declared `*_EXPECTED_IDENTITY` expectation.
  * Every negative case below asserts `withReadOnlyRemoteDb` was never
  * called -- not just that the command rejected -- so a bug that reordered
  * the checks after the connection would fail these tests even if the
  * command still eventually threw.
  */
+import { createHash } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { run } from './cli';
@@ -122,9 +126,10 @@ function mockCleanGitState(commitSha = 'abc123deadbeef'): void {
 }
 
 /**
- * `assertTargetDescriptorMatchesExpectation` is NOT mocked in this file
- * (only `describeRemoteTarget`/`withReadOnlyRemoteDb` are) -- it resolves
- * everything itself from the real, unmocked `*_READONLY_DATABASE_URL`
+ * `assertTargetIdentityMatchesExpectation` and
+ * `computeVerifiedIdentityFingerprint` are NOT mocked in this file (only
+ * `describeRemoteTarget`/`withReadOnlyRemoteDb` are) -- they resolve
+ * everything themselves from the real, unmocked `*_READONLY_DATABASE_URL`
  * env var, independently of whatever `mockedDescribeRemoteTarget` is set
  * to return. Any test whose scenario is downstream of that check (i.e.
  * everything except the checks that must fire before it) needs this
@@ -142,7 +147,7 @@ function mockPassingTargetIdentity(
     `postgres://${username}:ozi79-test-only-password@${host}:5432/app_${target}`,
   );
   vi.stubEnv(
-    `OZI79_${envPrefix}_EXPECTED_DESCRIPTOR`,
+    `OZI79_${envPrefix}_EXPECTED_IDENTITY`,
     `${username}@${host}:5432/app_${target}`,
   );
 }
@@ -329,6 +334,72 @@ describe('plan -- fails before any remote connection', () => {
     expect(mockedExecFileSync).toHaveBeenCalledTimes(1);
   });
 
+  it("runs every git invocation pinned to this repository's own root, never the launching process's cwd", async () => {
+    // If cli.ts were launched by path from a different working directory
+    // (e.g. `cd /elsewhere && tsx /path/to/this/repo/scripts/...`),
+    // execFileSync without an explicit `cwd` would silently report
+    // *that* directory's git state instead of this repository's --
+    // defeating the whole commit-to-evidence binding. Computed
+    // independently here (from this test file's own location, walking up
+    // the same two directories `cli.ts` does) rather than hardcoding a
+    // path, so the assertion stays correct if this checkout ever moves.
+    const expectedRepoRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+    );
+    mockCleanGitState();
+    await run(['plan', '--target=staging', '--execute-remote-explain']).catch(
+      () => undefined,
+    );
+    expect(mockedExecFileSync).toHaveBeenCalled();
+    for (const call of mockedExecFileSync.mock.calls) {
+      const options = call[2] as { cwd?: string } | undefined;
+      expect(options?.cwd).toBe(expectedRepoRoot);
+    }
+  });
+
+  it("resolves git state from this repository regardless of the ambient process cwd, and independently of that cwd's own git status", async () => {
+    // Proves the cwd pin actually matters, not just that a `cwd` option
+    // is present: point the mocked git implementation's "status" branch
+    // at whichever cwd it was actually invoked with, so a bug that
+    // dropped the explicit `cwd` (falling back to `process.cwd()`) would
+    // make this test observe the *launching* process's ambient state
+    // instead of always this repository's.
+    const expectedRepoRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+    );
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs, options) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      const cwd = (options as { cwd?: string } | undefined)?.cwd;
+      // Ambient process.cwd() (wherever the test runner happens to be
+      // invoked from) is reported dirty; the pinned repo root is clean --
+      // the two must never be conflated.
+      const isPinnedRepoRoot = cwd === expectedRepoRoot;
+      if (args?.includes('status'))
+        return isPinnedRepoRoot ? '' : ' M ambient-cwd-file.ts\n';
+      if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
+      throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
+    });
+
+    mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
+    mockPassingTargetIdentity('staging');
+    mockedCollectExplainPreflightFacts.mockResolvedValue(FAKE_FACTS);
+    mockedWithReadOnlyRemoteDb.mockImplementation(async (_t, fn) =>
+      fn({} as never),
+    );
+    mockedWriteEvidence.mockResolvedValue('/fake/evidence/staging.json');
+
+    // No `uncommitted changes` rejection -- proves the dirty check
+    // observed the pinned repo root's clean state, not the (dirty)
+    // ambient cwd this mock would report for any other cwd value.
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).resolves.toBeUndefined();
+  });
+
   it('does not support --allow-dirty for plan -- it is an unrecognized argument, rejected before any git call', async () => {
     // Stronger than merely being ignored: the strict plan argument
     // parser rejects it outright, before isWorkingTreeDirty ever runs.
@@ -448,16 +519,16 @@ describe('plan -- fails before any remote connection', () => {
     ).rejects.toThrow(/permission denied/);
   });
 
-  it('rejects when the expected-descriptor safeguard env var is unset, without ever connecting', async () => {
+  it('rejects when the expected-identity safeguard env var is unset, without ever connecting', async () => {
     mockCleanGitState();
     mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
     // Stubbed to the empty string, not merely left absent -- this
     // scenario must not depend on the operator's real shell not
     // happening to have this variable exported.
-    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', '');
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', '');
     await expect(
       run(['plan', '--target=staging', '--execute-remote-explain']),
-    ).rejects.toThrow(/OZI79_STAGING_EXPECTED_DESCRIPTOR is required/);
+    ).rejects.toThrow(/OZI79_STAGING_EXPECTED_IDENTITY is required/);
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
     expect(mockedWriteEvidence).not.toHaveBeenCalled();
   });
@@ -473,7 +544,7 @@ describe('plan -- fails before any remote connection', () => {
       'postgres://prod-user:pw@production-db.example:5432/app_production',
     );
     vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'OZI79_STAGING_EXPECTED_IDENTITY',
       'staging-user@staging-db.example:5432/app_staging',
     );
     await expect(
@@ -530,27 +601,45 @@ describe('plan -- exact wiring once every precondition is satisfied', () => {
       expect(fileNameArg).not.toContain('app_' + target);
 
       const writtenArtifact = JSON.parse(contentArg as string) as {
-        target: unknown;
+        version: unknown;
+        target: {
+          environment: unknown;
+          descriptor: unknown;
+          verifiedIdentityFingerprint: unknown;
+        };
         commit: unknown;
       };
+      const expectedFingerprint = createHash('sha256')
+        .update(
+          `ozi79:remote-target-verified-identity:v1:ozi79-test-only-user@${target}-db.example.internal:5432/app_${target}`,
+          'utf8',
+        )
+        .digest('hex');
+      expect(writtenArtifact.version).toBe(2);
       expect(writtenArtifact.target).toEqual({
         environment: target,
         descriptor,
+        verifiedIdentityFingerprint: expectedFingerprint,
       });
       expect(writtenArtifact.commit).toEqual({
         commitSha: 'abc123deadbeef',
         workingTreeDirty: false,
       });
       // The full artifact (including the raw plan) does reach the
-      // persisted evidence file -- that is its whole purpose.
+      // persisted evidence file -- that is its whole purpose. The raw,
+      // username-inclusive verification identity must never reach it
+      // either way -- only its SHA-256 fingerprint does.
       expect(contentArg as string).toContain(RAW_PLAN_MARKER);
+      expect(contentArg as string).not.toContain('ozi79-test-only-user');
 
       // --- safe terminal output only ---
       const combined = logs.join('\n');
       expect(combined).toContain(descriptor);
       expect(combined).toContain('abc123deadbeef');
       expect(combined).toContain(`/fake/evidence/${target}.json`);
+      expect(combined).toContain(expectedFingerprint);
       expect(combined).not.toContain(RAW_PLAN_MARKER);
+      expect(combined).not.toContain('ozi79-test-only-user');
       expect(combined).not.toMatch(/"rawPlan"/);
       expect(combined).not.toMatch(/"statementPlans"/);
       expect(combined).not.toMatch(/QUERY PLAN/);

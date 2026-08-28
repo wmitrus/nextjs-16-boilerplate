@@ -471,14 +471,110 @@ the exact swap scenario against the reverted code (confirmed the swap
 was silently accepted) and then against the restored fix (confirmed it
 was correctly rejected).
 
+## Review round 6 (user-directed hardening pass)
+
+Two findings, both implemented in the same pass per the user's explicit
+instruction not to defer Finding #1 to a later phase: this is the first
+phase that produces real remote `EXPLAIN` evidence, and that evidence
+must already carry every identity component a later approval gate will
+need, or a production artifact collected now could never be proven later
+to belong to the same verified database identity without rerunning the
+preflight.
+
+- **Persist a non-secret verified-identity fingerprint on the artifact
+  itself, not just check it at connection time (security-semantic gap,
+  not a P2 style bug).** Round 5's `assertTargetDescriptorMatchesExpectation`
+  (now `assertTargetIdentityMatchesExpectation`) closed the *connection-time*
+  identity-binding gap, but nothing about the identity it verified was
+  ever recorded on the produced artifact -- `target.descriptor` alone
+  cannot distinguish two database instances sharing one connection-pooler
+  host:port/database (the same Supabase example round 5 used). Fixed by
+  adding `computeVerifiedIdentityFingerprint(target)` to
+  `readonly-db-remote.ts`: a domain-separated SHA-256
+  (`ozi79:remote-target-verified-identity:v1:<identity>`) of the exact
+  same username-inclusive identity `assertTargetIdentityMatchesExpectation`
+  already verifies -- non-secret (a hash cannot be reversed to the
+  username it was computed from), safe to persist and print, unlike the
+  raw identity it is computed from.
+
+  Because this adds a required security-semantic field to a versioned
+  artifact contract, introduced `ExplainPreflightArtifactV2`/`version: 2`
+  in `explain-preflight.ts` rather than silently mutating V1's meaning --
+  there are no real remote V1 artifacts or a persisted-artifact loader to
+  migrate yet, so this is the correct boundary for the bump. V1
+  (`ExplainPreflightArtifactV1`, `buildExplainPreflightArtifact`,
+  `checkTargetCompatibility`, `checkArtifactIntegrity`) is completely
+  unchanged. V2 adds, in parallel: `ExplainPreflightTargetMetadataV2`
+  (V1's target metadata plus `verifiedIdentityFingerprint`),
+  `computeScopeFingerprintV2`/`computeArtifactFingerprintV2` (identical
+  canonicalization algorithm, over the V2 shape),
+  `buildExplainPreflightArtifactV2`, `checkArtifactIntegrityV2`, and
+  `checkTargetCompatibilityV2` -- the last of which fails closed not just
+  on a mismatched `verifiedIdentityFingerprint` but also when it is
+  missing or empty on either side, exactly like the existing
+  environment/descriptor checks. `cli.ts`'s `plan` command now calls
+  `computeVerifiedIdentityFingerprint`/`buildExplainPreflightArtifactV2`;
+  the terminal summary gained one more safe (hash-only) line,
+  `verifiedIdentityFingerprint`, alongside the existing fingerprint
+  lines.
+
+  Renamed the now-misleading operator contract before first real use:
+  `OZI79_*_EXPECTED_DESCRIPTOR` → `OZI79_*_EXPECTED_IDENTITY` and
+  `assertTargetDescriptorMatchesExpectation` →
+  `assertTargetIdentityMatchesExpectation` (the required value was
+  already username-inclusive identity since round 5, not a safe
+  descriptor -- the name was wrong from round 5 onward). Updated every
+  call site, `tenancy-inventory.env.example`, and this runbook.
+
+- **Resolve Git metadata from the script's own repository, never
+  `process.cwd()` (P2, real gap).** `resolveCommitSha`/
+  `resolveCommitShaStrict`/`isWorkingTreeDirty` called `execFileSync('git',
+  ...)` with no explicit `cwd`, so launching the script by path from a
+  different working directory (`cd /elsewhere && tsx
+  /path/to/this/repo/scripts/tenancy-inventory/cli.ts plan ...`) would
+  silently report *that* directory's commit/dirty-state while still
+  querying this repository's schema -- defeating the exact
+  commit-to-evidence binding `resolveCommitShaStrict` exists to
+  guarantee, and separately making the dirty-tree check observe the
+  wrong repository's state entirely. Fixed by computing `REPO_ROOT` from
+  `import.meta.url` (`path.resolve(SCRIPT_DIR, '..', '..')` --
+  `scripts/tenancy-inventory/cli.ts` is always exactly two directories
+  below the repository root) and passing it as `cwd` to all three call
+  sites.
+
+Both fixes were verified via temporary revert-and-confirm-failure before
+being restored (per this session's standing practice), not trusted from
+static inspection or a single test pass/fail alone:
+
+- Reverted `checkTargetCompatibilityV2`'s `verifiedIdentityFingerprint`
+  comparison and reran `explain-preflight.test.ts`: exactly the two
+  tests built to prove the gap this closes (same-descriptor/
+  different-identity, and stale-identity-artifact) failed; everything
+  else still passed. Restored, reran clean (60/60).
+- Reverted `REPO_ROOT` to `process.cwd()` and ran `cli.test.ts` launched
+  from a directory outside this repository (via a direct `vitest`
+  invocation with `--root` pointed at this repo but the OS-level process
+  `cwd` elsewhere, since a normal same-process test run cannot otherwise
+  exercise a real ambient-`cwd` difference): both new cwd-pinning
+  regression tests failed with the expected mismatch. Restored, reran
+  the same way: clean (28/28).
+
+Also added focused adversarial coverage per the user's explicit matrix:
+same host/db with a different username/project, missing/malformed
+`verifiedIdentityFingerprint` (both empty-string and absent), an artifact
+recorded under a previous/rotated identity, staging vs. production
+identity, execution from an unrelated `cwd`, and the pinned-repo-root
+`cwd` producing the correct clean/dirty result independent of whatever
+the ambient launching process's own `cwd` git state looks like.
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 117/117 (26 in
-  `cli.test.ts`, 13 in `readonly-db-remote.test.ts`, 78 across the other
-  four files)
-- unit (full repo, `pnpm test`): 279 files / 2370 tests, all pass
+- unit (`scripts/tenancy-inventory` subset): 136/136 (28 in
+  `cli.test.ts`, 19 in `readonly-db-remote.test.ts`, 89 across the other
+  four files, including the new V2 coverage in `explain-preflight.test.ts`)
+- unit (full repo, `pnpm test`): 279 files / 2389 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass
@@ -498,8 +594,13 @@ Listed so the boundary stays visible for whoever scopes the next phase:
 - No approval-record concept: nothing stores or checks an *approved*
   `scopeFingerprint`/`artifactFingerprint` separately from the artifact
   itself. `checkRegistryCompatibility`/`checkSchemaCompatibility`/
-  `checkTargetCompatibility`/`checkArtifactIntegrity` (built in Phase B1)
-  remain unwired into any command.
+  `checkTargetCompatibility`/`checkArtifactIntegrity` (Phase B1) and their
+  V2 counterparts `checkTargetCompatibilityV2`/`checkArtifactIntegrityV2`
+  (round 6, added specifically so that machinery has the identity data it
+  will need) remain unwired into any command. `verifiedIdentityFingerprint`
+  is recorded on every V2 artifact now so a future approval gate has it
+  available -- persisting the field is in scope for this phase; building
+  the approval/persistence mechanism that reads it back is not.
 - No persisted-artifact loading or runtime artifact parsing — `plan` only
   ever writes an artifact, never reads one back.
 - No automated plan verdict, no risk score, no pass/fail logic —

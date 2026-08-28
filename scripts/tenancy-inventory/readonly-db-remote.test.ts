@@ -3,7 +3,8 @@ import postgres from 'postgres';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  assertTargetDescriptorMatchesExpectation,
+  assertTargetIdentityMatchesExpectation,
+  computeVerifiedIdentityFingerprint,
   describeRemoteTarget,
   withReadOnlyRemoteDb,
 } from './readonly-db-remote';
@@ -88,17 +89,17 @@ describe('describeRemoteTarget', () => {
   });
 });
 
-describe('assertTargetDescriptorMatchesExpectation', () => {
-  it('fails closed when the expected-descriptor env var is unset', () => {
+describe('assertTargetIdentityMatchesExpectation', () => {
+  it('fails closed when the expected-identity env var is unset', () => {
     // Stubbed to the empty string, not merely left absent -- this test's
     // scenario must not depend on the operator's real shell not
     // happening to have this variable exported. OZI79_STAGING_READONLY_
     // DATABASE_URL deliberately left unset too: the unset-expectation
     // check must fire before this function ever resolves the URL.
-    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', '');
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', '');
 
-    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR is required',
+    expect(() => assertTargetIdentityMatchesExpectation('staging')).toThrow(
+      'OZI79_STAGING_EXPECTED_IDENTITY is required',
     );
   });
 
@@ -111,11 +112,11 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
       'postgres://prod-user:pw@production-db.internal:5432/app_production',
     );
     vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'OZI79_STAGING_EXPECTED_IDENTITY',
       'staging-user@staging-db.internal:5432/app_staging',
     );
 
-    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
+    expect(() => assertTargetIdentityMatchesExpectation('staging')).toThrow(
       /does not match the expected identity/,
     );
   });
@@ -126,12 +127,12 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
       'postgres://prod-user:pw@production-db.internal:5432/app_production',
     );
     vi.stubEnv(
-      'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
+      'OZI79_PRODUCTION_EXPECTED_IDENTITY',
       'prod-user@production-db.internal:5432/app_production',
     );
 
     expect(() =>
-      assertTargetDescriptorMatchesExpectation('production'),
+      assertTargetIdentityMatchesExpectation('production'),
     ).not.toThrow();
   });
 
@@ -150,11 +151,11 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
       `postgres://postgres.production-project-ref:pw${sharedPoolerHostAndDb}`,
     );
     vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'OZI79_STAGING_EXPECTED_IDENTITY',
       `postgres.staging-project-ref${sharedPoolerHostAndDb}`,
     );
 
-    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
+    expect(() => assertTargetIdentityMatchesExpectation('staging')).toThrow(
       /does not match the expected identity/,
     );
   });
@@ -165,20 +166,20 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
       'postgres://prod-user:pw@production-db.internal:5432/app_production',
     );
     vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'OZI79_STAGING_EXPECTED_IDENTITY',
       'staging-user@staging-db.internal:5432/app_staging',
     );
     vi.stubEnv(
-      'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
+      'OZI79_PRODUCTION_EXPECTED_IDENTITY',
       'prod-user@production-db.internal:5432/app_production',
     );
 
     // Staging's real (swapped-to-production) identity checked against
     // production's own expectation would happen to match -- but nothing
-    // here calls assertTargetDescriptorMatchesExpectation('production'),
+    // here calls assertTargetIdentityMatchesExpectation('production'),
     // so that coincidence is irrelevant; staging's own check must still
     // fail against its own, correctly-declared expectation.
-    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
+    expect(() => assertTargetIdentityMatchesExpectation('staging')).toThrow(
       /does not match the expected identity/,
     );
   });
@@ -190,26 +191,98 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
     );
     const credentialBearingExpectation =
       'postgres://another-oops-user:ANOTHER-SECRET@staging.example/db';
-    vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      credentialBearingExpectation,
-    );
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', credentialBearingExpectation);
 
     let thrown: unknown;
     try {
-      assertTargetDescriptorMatchesExpectation('staging');
+      assertTargetIdentityMatchesExpectation('staging');
     } catch (error) {
       thrown = error;
     }
 
     expect(thrown).toBeInstanceOf(Error);
     const message = (thrown as Error).message;
-    expect(message).toContain('OZI79_STAGING_EXPECTED_DESCRIPTOR');
+    expect(message).toContain('OZI79_STAGING_EXPECTED_IDENTITY');
     expect(message).not.toContain(credentialBearingExpectation);
     expect(message).not.toContain('ANOTHER-SECRET');
     expect(message).not.toContain('another-oops-user');
     expect(message).not.toContain('VERY-SECRET-PASSWORD');
     expect(message).not.toContain('oops-user');
+  });
+});
+
+describe('computeVerifiedIdentityFingerprint', () => {
+  it('is deterministic for the exact same identity', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://staging-user:pw@staging-db.internal:5432/app_staging',
+    );
+
+    const first = computeVerifiedIdentityFingerprint('staging');
+    const second = computeVerifiedIdentityFingerprint('staging');
+
+    expect(first).toBe(second);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('differs for the same host:port/database but a different username -- the Supabase pooler case', () => {
+    const sharedPoolerHostAndDb =
+      '@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      `postgres://postgres.staging-project-ref:pw${sharedPoolerHostAndDb}`,
+    );
+    const stagingFingerprint = computeVerifiedIdentityFingerprint('staging');
+
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      `postgres://postgres.production-project-ref:pw${sharedPoolerHostAndDb}`,
+    );
+    const differentProjectFingerprint =
+      computeVerifiedIdentityFingerprint('staging');
+
+    expect(stagingFingerprint).not.toBe(differentProjectFingerprint);
+  });
+
+  it('differs between staging and production identities', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://u:p@staging-db.internal:5432/app_staging',
+    );
+    vi.stubEnv(
+      'OZI79_PRODUCTION_READONLY_DATABASE_URL',
+      'postgres://u:p@production-db.internal:5432/app_production',
+    );
+
+    expect(computeVerifiedIdentityFingerprint('staging')).not.toBe(
+      computeVerifiedIdentityFingerprint('production'),
+    );
+  });
+
+  it('never contains the raw username, host, database, or credential -- it is a hash, not an encoding', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db',
+    );
+
+    const fingerprint = computeVerifiedIdentityFingerprint('staging');
+
+    expect(fingerprint).not.toContain('oops-user');
+    expect(fingerprint).not.toContain('VERY-SECRET-PASSWORD');
+    expect(fingerprint).not.toContain('production.example');
+  });
+
+  it('still produces a stable, well-formed fingerprint for an unparseable URL (fails closed via the sentinel identity, not by throwing)', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      // Passes resolveRemoteUrl's postgres:// prefix check but is not a
+      // valid URL otherwise.
+      'postgres://[not-a-valid-url',
+    );
+
+    const fingerprint = computeVerifiedIdentityFingerprint('staging');
+
+    expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 
@@ -222,7 +295,7 @@ describe('withReadOnlyRemoteDb connection contract', () => {
       'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable',
     );
     vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'OZI79_STAGING_EXPECTED_IDENTITY',
       'ozi79-test-only-user@staging-db.internal:5432/app_staging',
     );
 
@@ -248,11 +321,11 @@ describe('withReadOnlyRemoteDb connection contract', () => {
     );
     // Stubbed to the empty string, not merely left absent -- see the
     // identical note on the unit-level test above.
-    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', '');
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', '');
 
     await expect(
       withReadOnlyRemoteDb('staging', async () => 'should never run'),
-    ).rejects.toThrow(/OZI79_STAGING_EXPECTED_DESCRIPTOR is required/);
+    ).rejects.toThrow(/OZI79_STAGING_EXPECTED_IDENTITY is required/);
     expect(postgres).not.toHaveBeenCalled();
   });
 
@@ -263,7 +336,7 @@ describe('withReadOnlyRemoteDb connection contract', () => {
     );
     const credentialBearingValue =
       'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
-    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', credentialBearingValue);
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', credentialBearingValue);
 
     let thrown: unknown;
     try {

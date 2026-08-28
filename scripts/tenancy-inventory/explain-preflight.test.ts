@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildExplainPreflightArtifact,
+  buildExplainPreflightArtifactV2,
   checkArtifactIntegrity,
+  checkArtifactIntegrityV2,
   checkRegistryCompatibility,
   checkSchemaCompatibility,
   checkTargetCompatibility,
+  checkTargetCompatibilityV2,
   parsePlanNode,
   PRIORITY_MANUAL_REVIEW_STATEMENT_IDS,
   type ExplainPreflightArtifactV1,
+  type ExplainPreflightArtifactV2,
   type ExplainPreflightFacts,
   type RawExplainPlanNode,
 } from './explain-preflight';
@@ -58,6 +62,26 @@ const BASE_CALLER = {
   target: {
     environment: 'staging' as const,
     descriptor: 'staging-db.internal:5432/app_staging',
+  },
+  commit: { commitSha: 'deadbeef', workingTreeDirty: false },
+  generatedAt: '2026-08-27T00:00:00.000Z',
+};
+
+// Fixed, arbitrary hex strings shaped like a real SHA-256 hex digest --
+// these tests never call `computeVerifiedIdentityFingerprint` (that
+// belongs to `readonly-db-remote.test.ts`); `checkTargetCompatibilityV2`/
+// `checkArtifactIntegrityV2`/`buildExplainPreflightArtifactV2` only ever
+// canonicalize and compare whatever string they are given.
+const FINGERPRINT_A =
+  'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9';
+const FINGERPRINT_B =
+  'f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a392817065f4e3d2c1b0';
+
+const BASE_CALLER_V2 = {
+  target: {
+    environment: 'staging' as const,
+    descriptor: 'staging-db.internal:5432/app_staging',
+    verifiedIdentityFingerprint: FINGERPRINT_A,
   },
   commit: { commitSha: 'deadbeef', workingTreeDirty: false },
   generatedAt: '2026-08-27T00:00:00.000Z',
@@ -676,6 +700,144 @@ describe('checkTargetCompatibility', () => {
   it('fails closed without throwing when the artifact itself is null', () => {
     const result = checkTargetCompatibility(
       BASE_CALLER.target,
+      // @ts-expect-error -- intentionally malformed for the test
+      null,
+    );
+    expect(result.compatible).toBe(false);
+  });
+});
+
+/**
+ * OZI-79 Phase B2, Finding #1: `checkTargetCompatibility` (V1) only ever
+ * compared `environment`/`descriptor` -- two different database instances
+ * behind the same provider connection pooler can share an identical
+ * descriptor (see `readonly-db-remote.ts`'s `resolveVerificationIdentity`
+ * doc comment for the documented Supabase example), so V1 alone cannot
+ * prove which of them a persisted artifact actually reviewed. V2 adds
+ * `verifiedIdentityFingerprint` to both the artifact-assembly and
+ * compatibility-check surface, and every scenario below specifically
+ * proves the fingerprint is a REQUIRED, independently-checked field, not
+ * just decoration alongside the unchanged environment/descriptor checks.
+ */
+describe('buildExplainPreflightArtifactV2', () => {
+  it('stamps version 2 and carries verifiedIdentityFingerprint on target', () => {
+    const artifact = buildExplainPreflightArtifactV2(
+      BASE_FACTS,
+      BASE_CALLER_V2,
+    );
+    expect(artifact.version).toBe(2);
+    expect(artifact.target).toEqual(BASE_CALLER_V2.target);
+  });
+
+  it('passes its own integrity check unmodified', () => {
+    const artifact = buildExplainPreflightArtifactV2(
+      BASE_FACTS,
+      BASE_CALLER_V2,
+    );
+    expect(checkArtifactIntegrityV2(artifact).compatible).toBe(true);
+  });
+
+  it('produces a different scopeFingerprint/artifactFingerprint for a different verifiedIdentityFingerprint, everything else equal', () => {
+    const a = buildExplainPreflightArtifactV2(BASE_FACTS, BASE_CALLER_V2);
+    const b = buildExplainPreflightArtifactV2(BASE_FACTS, {
+      ...BASE_CALLER_V2,
+      target: {
+        ...BASE_CALLER_V2.target,
+        verifiedIdentityFingerprint: FINGERPRINT_B,
+      },
+    });
+    expect(a.scopeFingerprint).not.toBe(b.scopeFingerprint);
+    expect(a.artifactFingerprint).not.toBe(b.artifactFingerprint);
+  });
+});
+
+describe('checkArtifactIntegrityV2', () => {
+  it('is incompatible when verifiedIdentityFingerprint is tampered without recomputing the artifact fingerprint', () => {
+    const artifact = buildExplainPreflightArtifactV2(
+      BASE_FACTS,
+      BASE_CALLER_V2,
+    );
+    const tampered: ExplainPreflightArtifactV2 = {
+      ...artifact,
+      target: {
+        ...artifact.target,
+        verifiedIdentityFingerprint: FINGERPRINT_B,
+      },
+    };
+    expect(checkArtifactIntegrityV2(tampered).compatible).toBe(false);
+  });
+});
+
+describe('checkTargetCompatibilityV2', () => {
+  const artifact = buildExplainPreflightArtifactV2(BASE_FACTS, BASE_CALLER_V2);
+
+  it('is compatible when environment, descriptor, and verifiedIdentityFingerprint all match exactly', () => {
+    const result = checkTargetCompatibilityV2(BASE_CALLER_V2.target, artifact);
+    expect(result.compatible).toBe(true);
+  });
+
+  it('fails closed on a same-descriptor, different-identity target -- the shared-pooler/different-project case, and the reason a V1-only check would have missed it', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: FINGERPRINT_B },
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when the current target is missing verifiedIdentityFingerprint', () => {
+    const { verifiedIdentityFingerprint: _omit, ...incompleteTarget } =
+      BASE_CALLER_V2.target;
+    const result = checkTargetCompatibilityV2(
+      // @ts-expect-error -- intentionally malformed for the test
+      incompleteTarget,
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when verifiedIdentityFingerprint is an empty string (malformed, not merely absent)', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: '' },
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when the approved artifact is missing verifiedIdentityFingerprint', () => {
+    const { verifiedIdentityFingerprint: _omit, ...incompleteArtifactTarget } =
+      artifact.target;
+    const result = checkTargetCompatibilityV2(BASE_CALLER_V2.target, {
+      ...artifact,
+      // @ts-expect-error -- intentionally malformed for the test
+      target: incompleteArtifactTarget,
+    });
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed against a stale artifact recorded under a previous, since-rotated identity', () => {
+    // A credential rotation (new password, new provisioned role under a
+    // different username) changes verifiedIdentityFingerprint even though
+    // environment/descriptor stay identical -- an artifact approved under
+    // the old identity must not be treated as compatible with the new one.
+    const rotatedTarget = {
+      ...BASE_CALLER_V2.target,
+      verifiedIdentityFingerprint: FINGERPRINT_B,
+    };
+    const result = checkTargetCompatibilityV2(rotatedTarget, artifact);
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when environment differs (staging vs. production identity)', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, environment: 'production' },
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed without throwing when the artifact itself is null', () => {
+    const result = checkTargetCompatibilityV2(
+      BASE_CALLER_V2.target,
       // @ts-expect-error -- intentionally malformed for the test
       null,
     );

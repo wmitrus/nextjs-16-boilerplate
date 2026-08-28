@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -98,11 +100,16 @@ export function describeRemoteTarget(target: RemoteTarget): string {
 
 /**
  * A second, named env var per target, deliberately separate from
- * `REMOTE_ENV_VAR` above and never derived from it.
+ * `REMOTE_ENV_VAR` above and never derived from it. Named `..._IDENTITY`,
+ * not `..._DESCRIPTOR`: the value it holds is the username-inclusive
+ * verification identity (see `resolveVerificationIdentity` below), not
+ * `describeRemoteTarget`'s safe, username-free printable descriptor --
+ * calling it a "descriptor" would misdescribe the actual required
+ * format.
  */
-const REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR: Record<RemoteTarget, string> = {
-  staging: 'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-  production: 'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
+const REMOTE_EXPECTED_IDENTITY_ENV_VAR: Record<RemoteTarget, string> = {
+  staging: 'OZI79_STAGING_EXPECTED_IDENTITY',
+  production: 'OZI79_PRODUCTION_EXPECTED_IDENTITY',
 };
 
 /**
@@ -181,11 +188,11 @@ function resolveVerificationIdentity(raw: string): string {
  * name, the env var name, and the already-sanitized `describeUrl` output
  * (host:port/database, no username) are safe to include.
  */
-export function assertTargetDescriptorMatchesExpectation(
+export function assertTargetIdentityMatchesExpectation(
   target: RemoteTarget,
 ): void {
   // eslint-disable-next-line security/detect-object-injection -- see the identical justification on REMOTE_ENV_VAR's lookup above (SEC-18)
-  const envVar = REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR[target];
+  const envVar = REMOTE_EXPECTED_IDENTITY_ENV_VAR[target];
   // eslint-disable-next-line security/detect-object-injection, no-restricted-syntax -- envVar is one of exactly two literal values from the closed record above, never a caller-supplied string (SEC-18)
   const expected = process.env[envVar]?.trim();
 
@@ -210,6 +217,33 @@ export function assertTargetDescriptorMatchesExpectation(
         `credentials were swapped or misconfigured.`,
     );
   }
+}
+
+/**
+ * A non-secret SHA-256 fingerprint of `resolveVerificationIdentity`'s
+ * output, domain-separated (a fixed, versioned prefix under the hash) so
+ * this value can never be confused with a hash of some unrelated
+ * identity-shaped string computed elsewhere in this tool. Safe to
+ * persist in an evidence artifact and print in terminal output -- a
+ * SHA-256 hash does not reveal the username it was computed from -- but
+ * the value it is *computed from* (the raw username-inclusive identity)
+ * never is.
+ *
+ * Exists specifically so a produced artifact records which underlying
+ * database instance was verified, not just its safe printable
+ * `describeRemoteTarget` descriptor: two different database instances
+ * behind the same provider pooler (see `resolveVerificationIdentity`'s
+ * Supabase example) can share an identical descriptor, so an artifact
+ * that only recorded the descriptor could not later prove which of them
+ * was actually reviewed.
+ */
+export function computeVerifiedIdentityFingerprint(
+  target: RemoteTarget,
+): string {
+  const identity = resolveVerificationIdentity(resolveRemoteUrl(target));
+  return createHash('sha256')
+    .update(`ozi79:remote-target-verified-identity:v1:${identity}`, 'utf8')
+    .digest('hex');
 }
 
 type RemoteDb = PostgresJsDatabase<Record<string, never>>;
@@ -482,7 +516,7 @@ const IDLE_IN_TRANSACTION_TIMEOUT_MS = 10_000;
  *   `fn` ever sees the connection. Two independent controls, not one: a
  *   `SELECT`-only DB-role grant (verified live, not just trusted) AND the
  *   read-only transaction.
- * - `assertTargetDescriptorMatchesExpectation` runs before the connection
+ * - `assertTargetIdentityMatchesExpectation` runs before the connection
  *   is even opened, baked in here rather than left to each caller (the
  *   same reasoning as `verifyReadOnlyRole`'s placement): `target` only
  *   constrains which env var *name* `resolveRemoteUrl` reads, not what an
@@ -494,7 +528,7 @@ export async function withReadOnlyRemoteDb<T>(
   target: RemoteTarget,
   fn: (tx: RemoteDb) => Promise<T>,
 ): Promise<T> {
-  assertTargetDescriptorMatchesExpectation(target);
+  assertTargetIdentityMatchesExpectation(target);
   const url = resolveRemoteUrl(target);
 
   const client = postgres(url, {

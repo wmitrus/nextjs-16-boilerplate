@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { describeEvidenceRoot, writeEvidence } from './evidence-store';
 import {
-  buildExplainPreflightArtifact,
+  buildExplainPreflightArtifactV2,
   collectExplainPreflightFacts,
 } from './explain-preflight';
 import {
@@ -16,7 +18,8 @@ import {
   type LocalTarget,
 } from './readonly-db';
 import {
-  assertTargetDescriptorMatchesExpectation,
+  assertTargetIdentityMatchesExpectation,
+  computeVerifiedIdentityFingerprint,
   describeRemoteTarget,
   RemoteRoleNotReadOnlyError,
   withReadOnlyRemoteDb,
@@ -37,6 +40,25 @@ import {
 } from './topology-queries';
 
 const TOOL_VERSION = '0.2.0';
+
+/**
+ * Every `git` invocation below (`resolveCommitSha`, `resolveCommitShaStrict`,
+ * `isWorkingTreeDirty`) must run against THIS repository, not whatever
+ * directory the process happened to be launched from: `execFileSync`
+ * without an explicit `cwd` runs relative to `process.cwd()`, so invoking
+ * this script by path from a different working directory (e.g. `cd
+ * /elsewhere && tsx /path/to/this/repo/scripts/tenancy-inventory/cli.ts
+ * plan ...`) would silently report *that* directory's commit/dirty-state
+ * while still querying this repository's schema -- defeating the exact
+ * commit-to-evidence binding `resolveCommitShaStrict` exists to
+ * guarantee, and (separately) making a working-tree-cleanliness check
+ * observe the wrong repository's dirty/clean state entirely. Anchored to
+ * this repository's own root, computed from this script's location via
+ * `import.meta.url` (`scripts/tenancy-inventory/cli.ts` is always exactly
+ * two directories below the repo root) -- never `process.cwd()`.
+ */
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..');
 
 function readOption(args: string[], name: string): string | undefined {
   const prefix = `${name}=`;
@@ -122,6 +144,7 @@ function parsePlanArgs(args: readonly string[]): PlanArgs {
 function resolveCommitSha(): string {
   try {
     return execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: REPO_ROOT,
       encoding: 'utf8',
     }).trim();
   } catch {
@@ -143,6 +166,7 @@ function resolveCommitShaStrict(): string {
   let sha: string;
   try {
     sha = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: REPO_ROOT,
       encoding: 'utf8',
     }).trim();
   } catch (error) {
@@ -174,6 +198,7 @@ function resolveCommitShaStrict(): string {
 function isWorkingTreeDirty(): boolean {
   try {
     const output = execFileSync('git', ['status', '--porcelain'], {
+      cwd: REPO_ROOT,
       encoding: 'utf8',
     });
     return output.trim().length > 0;
@@ -323,8 +348,8 @@ async function runScan(
  * 3. the current commit SHA can be resolved (`resolveCommitShaStrict`,
  *    not the lenient `'unknown'`-falling-back `resolveCommitSha` `scan`
  *    uses);
- * 4. the resolved target's descriptor matches a separately, independently
- *    declared expectation (`assertTargetDescriptorMatchesExpectation`) --
+ * 4. the resolved target's identity matches a separately, independently
+ *    declared expectation (`assertTargetIdentityMatchesExpectation`) --
  *    defense-in-depth against `OZI79_STAGING_READONLY_DATABASE_URL`/
  *    `OZI79_PRODUCTION_READONLY_DATABASE_URL` being swapped or
  *    misconfigured, since the closed `RemoteTarget` domain only
@@ -365,8 +390,18 @@ async function runRemoteExplainPlan(
   }
 
   const commitSha = resolveCommitShaStrict();
-  assertTargetDescriptorMatchesExpectation(target);
+  assertTargetIdentityMatchesExpectation(target);
   const descriptor = describeRemoteTarget(target);
+  // Non-secret SHA-256 of the username-inclusive verification identity
+  // (see `computeVerifiedIdentityFingerprint`'s doc comment) -- computed
+  // here, once, from the same already-verified `target` so the artifact
+  // and every later compatibility check share one source of truth for
+  // "which underlying database instance was this". Safe to persist and
+  // print: a SHA-256 hash never reveals the username it was computed
+  // from, unlike `descriptor` alone, which two different projects behind
+  // the same provider pooler can share.
+  const verifiedIdentityFingerprint =
+    computeVerifiedIdentityFingerprint(target);
 
   console.log(
     `[tenancy-inventory] Remote EXPLAIN preflight against ${descriptor} (read-only transaction)…`,
@@ -376,8 +411,12 @@ async function runRemoteExplainPlan(
   try {
     artifact = await withReadOnlyRemoteDb(target, async (tx) => {
       const facts = await collectExplainPreflightFacts(tx);
-      return buildExplainPreflightArtifact(facts, {
-        target: { environment: target, descriptor },
+      return buildExplainPreflightArtifactV2(facts, {
+        target: {
+          environment: target,
+          descriptor,
+          verifiedIdentityFingerprint,
+        },
         commit: { commitSha, workingTreeDirty: false },
       });
     });
@@ -434,6 +473,9 @@ async function runRemoteExplainPlan(
   console.log(`  scopeFingerprint:             ${artifact.scopeFingerprint}`);
   console.log(
     `  artifactFingerprint:          ${artifact.artifactFingerprint}`,
+  );
+  console.log(
+    `  verifiedIdentityFingerprint:  ${artifact.target.verifiedIdentityFingerprint}`,
   );
   console.log(
     `  statementCount:               ${artifact.statementPlans.length}`,

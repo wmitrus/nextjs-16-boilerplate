@@ -194,6 +194,61 @@ describe('plan -- fails before any remote connection', () => {
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
 
+  it('rejects a duplicated --target with the same value, before any git call', async () => {
+    await expect(
+      run([
+        'plan',
+        '--target=staging',
+        '--target=staging',
+        '--execute-remote-explain',
+      ]),
+    ).rejects.toThrow(/plan requires exactly one --target argument, got 2/);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+    expect(mockedDescribeRemoteTarget).not.toHaveBeenCalled();
+    expect(mockedWriteEvidence).not.toHaveBeenCalled();
+  });
+
+  it('rejects one --target=staging plus one --target=production together, before any git call', async () => {
+    await expect(
+      run([
+        'plan',
+        '--target=staging',
+        '--target=production',
+        '--execute-remote-explain',
+      ]),
+    ).rejects.toThrow(/plan requires exactly one --target argument, got 2/);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+    expect(mockedDescribeRemoteTarget).not.toHaveBeenCalled();
+  });
+
+  it.each(['--dry-run', '--force', '--no-execute'])(
+    'rejects the unknown flag %s, before any git call or remote wiring',
+    async (unknownFlag) => {
+      await expect(
+        run([
+          'plan',
+          '--target=staging',
+          '--execute-remote-explain',
+          unknownFlag,
+        ]),
+      ).rejects.toThrow(`plan does not recognize: ${unknownFlag}`);
+      expect(mockedExecFileSync).not.toHaveBeenCalled();
+      expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+      expect(mockedDescribeRemoteTarget).not.toHaveBeenCalled();
+      expect(mockedWriteEvidence).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects positional garbage after plan, before any git call', async () => {
+    await expect(
+      run(['plan', 'staging', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/plan does not recognize: staging/);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
   it('rejects a dirty working tree, before resolving a commit or connecting', async () => {
     mockDirtyGitState();
     await expect(
@@ -204,8 +259,9 @@ describe('plan -- fails before any remote connection', () => {
     expect(mockedExecFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('does not support --allow-dirty for plan -- a dirty tree still fails even when the flag is passed', async () => {
-    mockDirtyGitState();
+  it('does not support --allow-dirty for plan -- it is an unrecognized argument, rejected before any git call', async () => {
+    // Stronger than merely being ignored: the strict plan argument
+    // parser rejects it outright, before isWorkingTreeDirty ever runs.
     await expect(
       run([
         'plan',
@@ -213,7 +269,8 @@ describe('plan -- fails before any remote connection', () => {
         '--execute-remote-explain',
         '--allow-dirty',
       ]),
-    ).rejects.toThrow(/uncommitted changes/);
+    ).rejects.toThrow(/plan does not recognize: --allow-dirty/);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
 
@@ -275,10 +332,33 @@ describe('plan -- fails before any remote connection', () => {
     expect(mockedWriteEvidence).not.toHaveBeenCalled();
   });
 
+  it('propagates a writeEvidence failure instead of swallowing it', async () => {
+    mockCleanGitState('abc123deadbeef');
+    mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      'staging-db.example:5432/app',
+    );
+    mockedCollectExplainPreflightFacts.mockResolvedValue(FAKE_FACTS);
+    mockedWithReadOnlyRemoteDb.mockImplementation(async (_t, fn) =>
+      fn({} as never),
+    );
+    mockedWriteEvidence.mockRejectedValue(
+      new Error('EACCES: permission denied writing evidence file'),
+    );
+
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/permission denied/);
+  });
+
   it('rejects when the expected-descriptor safeguard env var is unset, without ever connecting', async () => {
     mockCleanGitState();
     mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
-    // OZI79_STAGING_EXPECTED_DESCRIPTOR deliberately left unset.
+    // Stubbed to the empty string, not merely left absent -- this
+    // scenario must not depend on the operator's real shell not
+    // happening to have this variable exported.
+    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', '');
     await expect(
       run(['plan', '--target=staging', '--execute-remote-explain']),
     ).rejects.toThrow(/OZI79_STAGING_EXPECTED_DESCRIPTOR is required/);

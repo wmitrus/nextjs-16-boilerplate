@@ -23,11 +23,13 @@ before any real remote execution is separately authorized.
   together **unmodified** — this phase adds no new SQL, no new registry
   statements, no changes to `verifyReadOnlyRole`'s privilege checks, and
   no changes to the collector's canonicalization/fingerprinting logic.
-- `readonly-db-remote.ts`'s only change is a stale doc-comment update
-  (it previously said "nothing wired into a CLI command yet," which this
-  phase makes untrue) — its TLS (`ssl: 'verify-full'`), least-privilege
-  verification, `READ ONLY` + `REPEATABLE READ` transaction, and timeout
-  constants are all untouched.
+- `readonly-db-remote.ts` gained one new function as part of this phase's
+  final implementation, `assertTargetDescriptorMatchesExpectation` (see
+  "Target-identity safeguard" below) — its stale doc comment (it
+  previously said "nothing wired into a CLI command yet") was also
+  updated to match. Everything else — TLS (`ssl: 'verify-full'`),
+  least-privilege verification, `READ ONLY` + `REPEATABLE READ`
+  transaction, and timeout constants — is untouched.
 - `explain-preflight.ts`'s canonical 16-statement collector and
   fingerprinting logic are untouched.
 - No remote timeout constant was tuned. No approval-record concept, no
@@ -93,17 +95,29 @@ frozen `QUERY_REGISTRY`.
    remote database") than `scan`'s local report, so an unresolvable
    commit must be a hard failure here, not a placeholder baked into
    evidence a human might approve.
-4. **The resolved target's descriptor matches a separately, independently
-   declared expectation** (`assertTargetDescriptorMatchesExpectation`,
-   added in review round 1 below). Added after review correctly pointed
-   out that `resolveRemoteUrl` only validates that the target's env var
-   is *set* and looks like a postgres URL -- it has no way to know
-   whether `OZI79_STAGING_READONLY_DATABASE_URL` actually points at
-   staging rather than production. A swapped or misconfigured credential
-   would otherwise let `plan --target=staging` silently connect to
-   production while the persisted artifact is stamped
-   `environment: staging`. Fixed by requiring a SECOND, independently-set
-   env var per target (`OZI79_STAGING_EXPECTED_DESCRIPTOR`/
+4. **`plan`'s argument contract is strict, not permissive.** Unlike
+   `scan`/`matrix` (which use the tolerant `readOption`/`args.includes()`
+   style that silently ignores an unrecognized or duplicated flag), a
+   dedicated `parsePlanArgs` requires exactly one `--target=staging|
+   production`, allows only the `--execute-remote-explain` flag alongside
+   it, and rejects everything else before `runRemoteExplainPlan` is ever
+   called: a duplicated `--target` (including one `staging` value plus
+   one `production` value), any unrecognized flag (`--dry-run`,
+   `--force`, `--no-execute`, ...), and positional garbage after `plan`.
+   A command whose only job is deciding whether to open a real remote
+   connection does not get to guess what an unrecognized argument was
+   supposed to mean.
+5. **The resolved target's descriptor matches a separately, independently
+   declared expectation** (`assertTargetDescriptorMatchesExpectation`) --
+   this is part of Phase B2's final implementation, not an optional
+   add-on: `resolveRemoteUrl` only validates that the target's env var is
+   *set* and looks like a postgres URL, which has no way to know whether
+   `OZI79_STAGING_READONLY_DATABASE_URL` actually points at staging
+   rather than production. A swapped or misconfigured credential would
+   otherwise let `plan --target=staging` silently connect to production
+   while the persisted artifact is stamped `environment: staging`. Closed
+   by requiring a SECOND, independently-set env var per target
+   (`OZI79_STAGING_EXPECTED_DESCRIPTOR`/
    `OZI79_PRODUCTION_EXPECTED_DESCRIPTOR`) declaring the exact expected
    `describeRemoteTarget` output, and failing closed if it is unset or
    does not match. Baked into `withReadOnlyRemoteDb` itself (the same
@@ -111,9 +125,24 @@ frozen `QUERY_REGISTRY`.
    remember to call -- `cli.ts` also calls it explicitly beforehand so a
    mismatch fails before the "connecting to..." log line is even printed,
    but the authoritative enforcement point is inside the connection
-   function, for any future caller.
+   function, for any future caller. **The mismatch/missing-value error
+   never interpolates the configured expected value itself** -- it names
+   the target and the env var, and may include the already-sanitized
+   resolved descriptor, but the raw `*_EXPECTED_DESCRIPTOR` contents are
+   never echoed, since an operator could have pasted a real credential
+   into that variable by mistake.
 
-Only once all four hold does `withReadOnlyRemoteDb` get called — exactly
+   **Sourcing requirement:** each `*_EXPECTED_DESCRIPTOR` value must come
+   from authoritative environment/provider metadata (e.g. the hosting
+   provider's own record of that environment's host/database, or a
+   value an operator independently transcribes from it) -- **never**
+   generated, derived, or copied from the corresponding
+   `*_READONLY_DATABASE_URL` itself. Deriving one from the other would
+   make the safeguard tautological: a swapped or mistyped credential
+   would silently satisfy an expectation computed from that same mistake
+   instead of catching it.
+
+Only once all five hold does `withReadOnlyRemoteDb` get called — exactly
 once, with `collectExplainPreflightFacts(tx)` invoked exactly once inside
 it.
 
@@ -141,7 +170,7 @@ someone has to go and read.
 
 ## Tests
 
-`cli.test.ts` (new, 15 tests, no DB, every remote/network/evidence effect
+`cli.test.ts` (new, 24 tests, no DB, every remote/network/evidence effect
 mocked — this is a wiring/fail-closed-boundary test file, not a real
 Postgres/EXPLAIN test; that remains `explain-preflight.db.test.ts`'s job):
 
@@ -160,6 +189,15 @@ Postgres/EXPLAIN test; that remains `explain-preflight.db.test.ts`'s job):
   propagates without ever calling `withReadOnlyRemoteDb`;
 - a `withReadOnlyRemoteDb` rejection (e.g. a misconfigured role) does not
   write evidence;
+- a `writeEvidence` rejection propagates instead of being swallowed;
+- the expected-descriptor safeguard being unset, or a resolved target
+  mismatching it (the swapped-credential case), rejects without ever
+  calling `withReadOnlyRemoteDb`;
+- `plan`'s strict argument contract: a duplicated `--target` (same value
+  twice, or one `staging` plus one `production`), any unrecognized flag
+  (`--dry-run`, `--force`, `--no-execute`, `--allow-dirty`), and
+  positional garbage after `plan` all reject before any git call,
+  `describeRemoteTarget` call, or remote wiring;
 - exact wiring, parameterized over both `staging` and `production`:
   exactly one `withReadOnlyRemoteDb` call with the correct target,
   exactly one `collectExplainPreflightFacts` call, the persisted
@@ -169,6 +207,17 @@ Postgres/EXPLAIN test; that remains `explain-preflight.db.test.ts`'s job):
   raw plan or the full artifact JSON;
 - `scan --target=staging` and `scan --target=production` still fail with
   the pre-existing validation error, without reaching any remote wiring.
+
+`readonly-db-remote.test.ts` gained 7 tests for
+`assertTargetDescriptorMatchesExpectation` and the connection-level
+safeguard: unset/mismatched/matching/never-mixed-up expectation env vars,
+a dedicated proof that `withReadOnlyRemoteDb` refuses to open a
+connection (`postgres()` never called) when the safeguard fails, and two
+tests proving a credential-bearing expected-descriptor value (a full
+`postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db` URL,
+at both the unit level and through `withReadOnlyRemoteDb`) never reaches
+the thrown error message -- not the full value, not the password, not
+the username, individually.
 
 ### Adversarial falsification pass (performed before push)
 
@@ -271,13 +320,66 @@ via temporary revert to genuinely fail against the pre-fix code before
 being restored. Grepped the rest of the file for the same interpolation
 pattern (`${expected}`/`${raw}`) afterward; no other instance exists.
 
+## Review round 3 (user-directed hardening pass)
+
+Not a Codex finding this round -- a directed final invariant-oriented
+pass before the next review, covering four areas:
+
+1. **Strengthened the round-2 redaction regression tests** with the
+   exact scenario named: `OZI79_STAGING_EXPECTED_DESCRIPTOR` set to
+   `postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`,
+   asserting the thrown message contains neither the full value nor
+   `VERY-SECRET-PASSWORD` nor `oops-user` individually, at both the
+   `assertTargetDescriptorMatchesExpectation` unit level and through
+   `withReadOnlyRemoteDb` (also proving `postgres()` is never called).
+   Both re-verified via temporary revert.
+2. **Hardened `plan`'s argument contract.** `scan`/`matrix` use a
+   permissive `readOption`/`args.includes()` style that silently ignores
+   an unrecognized or duplicated flag; `plan` now has its own strict
+   `parsePlanArgs`, requiring exactly one `--target=staging|production`
+   plus only the `--execute-remote-explain` flag, rejecting before any
+   git call or remote wiring: a duplicated `--target` (same value twice,
+   or one `staging` plus one `production`), any unrecognized flag
+   (`--dry-run`, `--force`, `--no-execute`, and -- now explicitly
+   rejected rather than merely ignored -- `--allow-dirty`), and
+   positional garbage after `plan`. `scan`'s own contract is untouched.
+   6 new tests, all verified via temporary revert of the relevant check.
+3. **Made env-var-unset tests independent of the real shell
+   environment.** Three tests (one in `readonly-db-remote.test.ts`'s
+   unit-level check, one in its `withReadOnlyRemoteDb`-level check, one
+   in `cli.test.ts`) asserted "unset" behavior by relying on the
+   variable simply not being exported in whatever shell runs the suite,
+   rather than explicitly stubbing it to `''`. Fixed by adding an
+   explicit `vi.stubEnv(VAR, '')` to each.
+4. **Reconciled documentation** that had drifted after round 1/2:
+   this runbook's execution-boundary section no longer claims
+   `readonly-db-remote.ts` "only changed a doc comment" (it also gained
+   `assertTargetDescriptorMatchesExpectation`); the fail-closed
+   precondition list now documents the target-identity safeguard and the
+   strict argument contract as part of the final design, not an
+   afterthought; both this runbook and `tenancy-inventory.env.example`
+   now explicitly state that `*_EXPECTED_DESCRIPTOR` must be sourced from
+   authoritative environment/provider metadata, never derived or copied
+   from the corresponding `*_READONLY_DATABASE_URL`.
+
+Added one more regression test this round for a case the review list
+named but which had no dedicated test yet: a `writeEvidence` rejection
+propagating instead of being silently swallowed.
+
+Full systematic falsification pass performed across every negative case
+named for this round (expected descriptor contains credentials, expected
+descriptor unset, target mismatch, duplicate target, unknown flag, dirty
+tree, unresolved commit, role verification failure, evidence write
+failure) -- each already had, or received, a regression test verified by
+temporary revert.
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 106/106 (83 pre-existing +
-  17 in `cli.test.ts` + 6 in `readonly-db-remote.test.ts`)
-- unit (full repo, `pnpm test`): 279 files / 2359 tests, all pass
+- unit (`scripts/tenancy-inventory` subset): 114/114 (24 in `cli.test.ts`,
+  12 in `readonly-db-remote.test.ts`, 78 across the other four files)
+- unit (full repo, `pnpm test`): 279 files / 2367 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

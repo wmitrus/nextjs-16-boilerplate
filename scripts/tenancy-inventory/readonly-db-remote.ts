@@ -126,6 +126,18 @@ const REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR: Record<RemoteTarget, string> = {
  * between the two credential URLs does not also swap the two expectation
  * values, so it surfaces as a loud mismatch here instead of a silent
  * cross-environment connection.
+ *
+ * The expectation value must be sourced independently from authoritative
+ * environment/provider metadata -- never generated, derived, or copied
+ * from the corresponding `*_READONLY_DATABASE_URL` itself (see
+ * `tenancy-inventory.env.example`). Deriving one from the other would
+ * make this check tautological.
+ *
+ * Neither error message below ever interpolates the configured expected
+ * value: it is untrusted operator-set input, and an operator could have
+ * pasted a real credential into it by mistake. Only the target name, the
+ * env var name, and the already-sanitized resolved `descriptor` are
+ * safe to include.
  */
 export function assertTargetDescriptorMatchesExpectation(
   target: RemoteTarget,

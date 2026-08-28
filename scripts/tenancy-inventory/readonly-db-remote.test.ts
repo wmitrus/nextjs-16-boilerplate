@@ -90,6 +90,11 @@ describe('describeRemoteTarget', () => {
 
 describe('assertTargetDescriptorMatchesExpectation', () => {
   it('fails closed when the expected-descriptor env var is unset', () => {
+    // Stubbed to the empty string, not merely left absent -- this test's
+    // scenario must not depend on the operator's real shell not
+    // happening to have this variable exported.
+    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', '');
+
     expect(() =>
       assertTargetDescriptorMatchesExpectation(
         'staging',
@@ -149,10 +154,10 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
     ).toThrow(/does not match the expected descriptor/);
   });
 
-  it('never echoes the declared expectation value on a mismatch, even if it looks credential-bearing', () => {
-    const secretLookingValue =
-      'postgres://readonly:s3cr3t-not-a-real-secret@internal-host:5432/app';
-    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', secretLookingValue);
+  it('never echoes the declared expectation value on a mismatch, even if it is a credential-bearing connection URL', () => {
+    const credentialBearingValue =
+      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
+    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', credentialBearingValue);
 
     let thrown: unknown;
     try {
@@ -167,8 +172,9 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
     expect(thrown).toBeInstanceOf(Error);
     const message = (thrown as Error).message;
     expect(message).toContain('OZI79_STAGING_EXPECTED_DESCRIPTOR');
-    expect(message).not.toContain(secretLookingValue);
-    expect(message).not.toContain('s3cr3t-not-a-real-secret');
+    expect(message).not.toContain(credentialBearingValue);
+    expect(message).not.toContain('VERY-SECRET-PASSWORD');
+    expect(message).not.toContain('oops-user');
   });
 });
 
@@ -205,11 +211,37 @@ describe('withReadOnlyRemoteDb connection contract', () => {
       'OZI79_STAGING_READONLY_DATABASE_URL',
       'postgres://u:p@staging-db.internal:5432/app_staging',
     );
-    // Deliberately left unset: OZI79_STAGING_EXPECTED_DESCRIPTOR.
+    // Stubbed to the empty string, not merely left absent -- see the
+    // identical note on the unit-level test above.
+    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', '');
 
     await expect(
       withReadOnlyRemoteDb('staging', async () => 'should never run'),
     ).rejects.toThrow(/OZI79_STAGING_EXPECTED_DESCRIPTOR is required/);
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it('refuses to open a connection when the declared expectation is a mismatched, credential-bearing value -- and never echoes it', async () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging',
+    );
+    const credentialBearingValue =
+      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
+    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', credentialBearingValue);
+
+    let thrown: unknown;
+    try {
+      await withReadOnlyRemoteDb('staging', async () => 'should never run');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).not.toContain(credentialBearingValue);
+    expect(message).not.toContain('VERY-SECRET-PASSWORD');
+    expect(message).not.toContain('oops-user');
     expect(postgres).not.toHaveBeenCalled();
   });
 });

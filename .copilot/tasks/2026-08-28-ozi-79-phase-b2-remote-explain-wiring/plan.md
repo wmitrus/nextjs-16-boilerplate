@@ -23,27 +23,35 @@ execution boundary and design detail.
 ## What was built
 
 - `scripts/tenancy-inventory/cli.ts` -- new `plan --target=staging|
-  production --execute-remote-explain` command; `run()` refactored to
-  accept an optional `argv` parameter for direct unit testing
-- `scripts/tenancy-inventory/cli.test.ts` (new, 17 unit tests, no DB, all
+  production --execute-remote-explain` command with its own strict
+  `parsePlanArgs` argument contract (exactly one `--target`, only the
+  acknowledgement flag, no unrecognized/duplicated/positional
+  arguments); `run()` refactored to accept an optional `argv` parameter
+  for direct unit testing
+- `scripts/tenancy-inventory/cli.test.ts` (new, 24 unit tests, no DB, all
   remote/network/evidence effects mocked)
-- `scripts/tenancy-inventory/readonly-db-remote.ts` -- doc-comment update
-  (the module previously said nothing was wired into a CLI command; this
-  phase makes that untrue) plus, from review round 1,
-  `assertTargetDescriptorMatchesExpectation` baked into
-  `withReadOnlyRemoteDb`
+- `scripts/tenancy-inventory/readonly-db-remote.ts` -- gained
+  `assertTargetDescriptorMatchesExpectation`, baked into
+  `withReadOnlyRemoteDb` (a real part of this phase's final design, not
+  an incidental patch), plus a doc-comment update (the module previously
+  said nothing was wired into a CLI command; this phase makes that
+  untrue)
+- `scripts/tenancy-inventory/readonly-db-remote.test.ts` -- 12 tests for
+  the target-identity safeguard, including credential-redaction proof
 - `scripts/tenancy-inventory/evidence-store.ts` -- doc-comment update
-  (review round 1)
 - `scripts/tenancy-inventory/tenancy-inventory.env.example` -- documents
-  the two new `*_EXPECTED_DESCRIPTOR` env vars (review round 1)
+  the two new `*_EXPECTED_DESCRIPTOR` env vars and their sourcing
+  requirement (must come from authoritative environment/provider
+  metadata, never derived from the corresponding
+  `*_READONLY_DATABASE_URL`)
 
 ## Validation
 
 typecheck clean · lint clean · unit (`scripts/tenancy-inventory` subset)
-106/106 · unit (full repo) 279 files / 2359 tests · real DB
+114/114 · unit (full repo) 279 files / 2367 tests · real DB
 (`pnpm test:db:local`) 32 files / 297 tests · CI config (`pnpm
 test:db:ci`) 32 files / 297 tests · adversarial falsification pass
-performed on every negative-path invariant, including both review
+performed on every negative-path invariant across all three review
 rounds' fixes, before push (see runbook.md)
 
 ## Update Log
@@ -82,6 +90,30 @@ rounds' fixes, before push (see runbook.md)
   credential if an operator mistakenly pasted a connection URL into it.
   Redacted; added a regression test with a secret-looking value,
   verified via revert.
+
+### 2026-08-28 — Review round 3 (user-directed hardening pass)
+
+- Strengthened the round-2 redaction tests to the exact named scenario
+  (`postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`),
+  checking the full value, the password, and the username individually
+  never reach the thrown message, at both the unit and
+  `withReadOnlyRemoteDb` level.
+- Added `parsePlanArgs`: `plan` now rejects a duplicated `--target`,
+  any unrecognized flag (including `--allow-dirty`, now explicitly
+  rejected rather than merely ignored), and positional garbage --
+  before any git call or remote wiring. `scan`'s contract is untouched.
+- Fixed three tests that relied on an env var merely not being exported
+  in the real shell, instead of explicitly stubbing it to `''`.
+- Reconciled documentation drift (the "only changed a doc comment"
+  claim, stale test counts, the target-identity safeguard now described
+  as part of the final design) and added the explicit sourcing
+  requirement for `*_EXPECTED_DESCRIPTOR` (never derived from
+  `*_READONLY_DATABASE_URL`) to both the runbook and the env template.
+- Added one more regression test (a `writeEvidence` rejection
+  propagating instead of being swallowed) to close the last named gap
+  without an existing test.
+- Full systematic falsification pass across every named negative case;
+  every check verified via temporary revert.
 
 ## Artifacts
 

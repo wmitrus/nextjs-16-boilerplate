@@ -43,6 +43,55 @@ function readOption(args: string[], name: string): string | undefined {
   return inline ? inline.slice(prefix.length) : undefined;
 }
 
+interface PlanArgs {
+  readonly target: RemoteTarget;
+  readonly executeRemoteExplain: boolean;
+}
+
+/**
+ * `plan`'s own strict, fail-closed argument parser -- deliberately not
+ * `readOption`/`args.includes()` (the permissive style `scan`/`matrix`
+ * use, which silently ignores an unrecognized or duplicated flag). A
+ * remote target command gets one narrow, explicit contract instead:
+ * exactly one `--target=staging|production`, the acknowledgement flag,
+ * and nothing else. `args` here excludes the leading `plan` command word
+ * itself (the caller passes `args.slice(1)`).
+ */
+function parsePlanArgs(args: readonly string[]): PlanArgs {
+  const targetPrefix = '--target=';
+  const targetArgs = args.filter((arg) => arg.startsWith(targetPrefix));
+
+  if (targetArgs.length > 1) {
+    throw new Error(
+      `plan requires exactly one --target argument, got ${targetArgs.length}: ` +
+        `${targetArgs.join(', ')}.`,
+    );
+  }
+
+  const target = targetArgs[0]?.slice(targetPrefix.length);
+  if (target !== 'staging' && target !== 'production') {
+    throw new Error('plan requires --target=staging or --target=production.');
+  }
+
+  const unrecognized = args.filter(
+    (arg) =>
+      arg !== '--execute-remote-explain' && !arg.startsWith(targetPrefix),
+  );
+  if (unrecognized.length > 0) {
+    throw new Error(
+      `plan does not recognize: ${unrecognized.join(', ')}. Allowed ` +
+        `arguments are exactly --target=staging|production and ` +
+        `--execute-remote-explain -- refusing to guess what an ` +
+        `unrecognized argument to a remote command was meant to do.`,
+    );
+  }
+
+  return {
+    target,
+    executeRemoteExplain: args.includes('--execute-remote-explain'),
+  };
+}
+
 function resolveCommitSha(): string {
   try {
     return execFileSync('git', ['rev-parse', 'HEAD'], {
@@ -360,12 +409,9 @@ export async function run(
   }
 
   if (command === 'plan') {
-    const target = readOption(args, '--target');
-    if (target !== 'staging' && target !== 'production') {
-      throw new Error('plan requires --target=staging or --target=production.');
-    }
-    await runRemoteExplainPlan(target, {
-      executeRemoteExplain: args.includes('--execute-remote-explain'),
+    const planArgs = parsePlanArgs(args.slice(1));
+    await runRemoteExplainPlan(planArgs.target, {
+      executeRemoteExplain: planArgs.executeRemoteExplain,
     });
     return;
   }

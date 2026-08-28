@@ -67,9 +67,11 @@ end to end:
 
 ```text
 RemoteTarget (--target=staging|production)
+  -> assertTargetIdentityMatchesExpectation(target) -- fail closed BEFORE descriptor/fingerprint resolution or any connection (see precondition 5 below)
   -> describeRemoteTarget(target)          -- safe host:port/database descriptor
   -> computeVerifiedIdentityFingerprint(target) -- round 6: non-secret SHA-256 of the verified identity
   -> withReadOnlyRemoteDb(target, async (tx) => {
+       -- re-asserts assertTargetIdentityMatchesExpectation(target) internally too (defense-in-depth, see precondition 5)
        collectExplainPreflightFacts(tx)     -- Phase B1, unmodified
          -> buildExplainPreflightArtifactV2(facts, { target: { environment, descriptor, verifiedIdentityFingerprint }, commit })
      })
@@ -611,14 +613,59 @@ identity, execution from an unrelated `cwd`, and the pinned-repo-root
 `cwd` producing the correct clean/dirty result independent of whatever
 the ambient launching process's own `cwd` git state looks like.
 
+## Review round 7 (Codex) — documentation only
+
+One finding, docs only, no code change: the "What was built" current-
+state section above still named the removed V1 builder and
+`*_EXPECTED_DESCRIPTOR` env vars after round 6's `c96daf6a` introduced
+the V2 builder and the identity rename -- only the dated round-6 history
+entry had been updated, not the current-state description an operator
+would actually follow. Fixed in `31f505e0` (pipeline diagram, precondition
+5, the new "Verified-identity fingerprint (V2, round 6)" subsection, the
+evidence/terminal-output section, and the Tests section's stale
+references). No code changed.
+
+## Review round 8 (Codex)
+
+Two findings.
+
+- **Redact rejected options that omit an equals sign (P2, real gap).**
+  `safeArgumentDescription`'s doc comment already claimed a bare
+  `--flag` (no `=`) is described only by position -- but the code
+  actually returned the whole raw token whenever it started with `--`
+  and had no `=`. A credential pasted with a leading `--` and no `=` at
+  all (e.g. `--postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`)
+  would reach the thrown error unredacted. Fixed with
+  `SAFE_FLAG_NAME_PATTERN` (`/^--[A-Za-z0-9][A-Za-z0-9-]*$/`): the
+  candidate flag-name portion (everything before `=`, or the whole token
+  if there is none) is only ever echoed when it matches that pattern --
+  letters/digits/hyphens only. This deliberately keeps genuinely bare
+  flags like `--allow-dirty`/`--dry-run` nameable (useful for an
+  operator) while refusing to name anything containing `:`, `/`, `@`,
+  `.`, or other URL/connection-string separators, whether or not an `=`
+  is present. Verified via revert: reverting to the pre-fix logic left
+  exactly the new regression test failing (28/29 still passed, including
+  every existing bare-flag-name test -- proving the fix does not
+  regress those).
+- **Include the identity assertion in the exact-order diagram (P2, doc
+  accuracy).** The "What was built" pipeline diagram omitted
+  `assertTargetIdentityMatchesExpectation(target)` entirely and placed
+  descriptor/fingerprint resolution as if they ran first, when live
+  `cli.ts` runs the identity assertion before both. Since this runbook
+  is the security checkpoint reviewed before any real execution is
+  authorized, an inaccurate enforcement-order diagram could mislead that
+  review. Fixed by adding the assertion in its real position (before
+  `describeRemoteTarget`/`computeVerifiedIdentityFingerprint`) and noting
+  `withReadOnlyRemoteDb`'s own internal re-assertion (defense-in-depth).
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 136/136 (28 in
+- unit (`scripts/tenancy-inventory` subset): 137/137 (29 in
   `cli.test.ts`, 19 in `readonly-db-remote.test.ts`, 89 across the other
   four files, including the new V2 coverage in `explain-preflight.test.ts`)
-- unit (full repo, `pnpm test`): 279 files / 2389 tests, all pass
+- unit (full repo, `pnpm test`): 279 files / 2390 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

@@ -324,6 +324,34 @@ describe('plan -- fails before any remote connection', () => {
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
 
+  it('rejects a rejected --flag-shaped argument with no "=" by position only, never echoing its value', async () => {
+    // A `--`-prefixed token with no `=` at all -- distinct from the
+    // `--flag=value` case above (redacted to the flag name) and the
+    // non-`--`-prefixed positional case above (already position-only).
+    // `safeArgumentDescription` must not fall back to returning the raw
+    // token just because there is no `=` to slice at.
+    const credentialBearingArg =
+      '--postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
+    let thrown: unknown;
+    try {
+      await run([
+        'plan',
+        credentialBearingArg,
+        '--target=staging',
+        '--execute-remote-explain',
+      ]);
+    } catch (error) {
+      thrown = error;
+    }
+    const message = (thrown as Error).message;
+    expect(message).toContain('plan does not recognize: argument #1');
+    expect(message).not.toContain(credentialBearingArg);
+    expect(message).not.toContain('VERY-SECRET-PASSWORD');
+    expect(message).not.toContain('oops-user');
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
   it('rejects a dirty working tree, before resolving a commit or connecting', async () => {
     mockDirtyGitState();
     await expect(

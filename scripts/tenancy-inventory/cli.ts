@@ -72,19 +72,41 @@ interface PlanArgs {
 }
 
 /**
+ * A `--`-prefixed token is only ever described by name when the
+ * candidate flag-name portion (everything before `=`, or the whole
+ * token if there is no `=`) is SHAPED like a real flag -- letters,
+ * digits, and hyphens only. This is deliberately conservative: it exists
+ * to let genuinely bare flags like `--allow-dirty`/`--dry-run` still be
+ * named in the rejection message (useful for an operator), while
+ * refusing to name anything containing `:`, `/`, `@`, `.`, or other
+ * separators a URL or connection string would carry -- whether or not it
+ * happens to also contain an `=`. Deliberately a strict allowlist, not a
+ * denylist of "suspicious" characters: only clearly-safe shapes ever get
+ * echoed.
+ */
+const SAFE_FLAG_NAME_PATTERN = /^--[A-Za-z0-9][A-Za-z0-9-]*$/;
+
+/**
  * Describes a rejected argument WITHOUT reproducing its value: an
  * operator's mistake (a stray flag, a pasted secret in the wrong place)
  * must not turn into a credential-bearing string sitting in a thrown
  * `Error` that `run()`'s top-level handler prints to stderr. A
- * `--flag=value`-shaped argument is described by its flag name only
- * (never what follows `=`); anything else -- a bare `--flag`, or a
- * positional token with no recognizable flag shape -- is described only
- * by its 1-based position in the argument list.
+ * `--flag=value`-shaped argument is described by its flag name only when
+ * that name matches `SAFE_FLAG_NAME_PATTERN` (never what follows `=`,
+ * and never a flag-shaped prefix that isn't actually safe-shaped --
+ * e.g. `--postgres://user:pass@host/db=x` must not be echoed just
+ * because it contains an `=`); a bare `--flag` with no `=` is named the
+ * same way when it matches that pattern (e.g. `--allow-dirty`); anything
+ * else -- including a `--`-prefixed token with no `=` that is NOT
+ * flag-shaped, such as a pasted `--postgres://user:pass@host/db`
+ * credential with no `=` in it at all -- is described only by its
+ * 1-based position in the argument list.
  */
 function safeArgumentDescription(arg: string, index: number): string {
-  if (arg.startsWith('--')) {
-    const equalsIndex = arg.indexOf('=');
-    return equalsIndex === -1 ? arg : arg.slice(0, equalsIndex);
+  const equalsIndex = arg.indexOf('=');
+  const flagPart = equalsIndex === -1 ? arg : arg.slice(0, equalsIndex);
+  if (SAFE_FLAG_NAME_PATTERN.test(flagPart)) {
+    return flagPart;
   }
   return `argument #${index + 1}`;
 }

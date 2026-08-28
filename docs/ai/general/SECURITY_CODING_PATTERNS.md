@@ -5374,23 +5374,33 @@ itself, not a specific library.
 ### When Downstream Code Does NOT Need To Re-Validate
 
 ```typescript
-// SAFE, no duplicate validation needed: the DB client/protocol already
-// enforces the column's runtime type and NOT NULL constraint for this
-// query — that is an authoritative runtime enforcement boundary for this
-// specific shape/invariant, not a compile-time-only claim.
 const rows = await db
   .select({ id: table.id, createdAt: table.createdAt })
   .from(table)
   .where(eq(table.id, id));
-// rows[0].id and rows[0].createdAt are safe to use directly as their
-// declared types — Postgres/the driver already validated them at the
-// protocol boundary.
+
+// Row existence/cardinality is not something NOT NULL or the column type
+// guarantees — a query with no match legitimately returns an empty array.
+// Establish that first, before relying on anything the DB boundary proves
+// about the row's shape.
+const row = rows[0];
+if (!row) {
+  throw new Error('Record not found');
+}
+
+// SAFE, no duplicate validation needed: once a row exists, the DB
+// client/protocol already enforces this column's runtime type and NOT
+// NULL constraint for this query — that is an authoritative runtime
+// enforcement boundary for this specific shape/invariant, not a
+// compile-time-only claim. row.id and row.createdAt are safe to use
+// directly as their declared types.
 
 // STILL REQUIRED: an application-level invariant the DB boundary does not
 // guarantee (e.g. "createdAt must not be in the future") must still be
 // validated at the point that invariant is relied upon — the lower
-// boundary only proves the column's shape, not this rule.
-if (rows[0].createdAt.getTime() > Date.now()) {
+// boundary only proves the column's shape and that this row exists, not
+// this rule.
+if (row.createdAt.getTime() > Date.now()) {
   throw new Error('createdAt invariant violated');
 }
 ```

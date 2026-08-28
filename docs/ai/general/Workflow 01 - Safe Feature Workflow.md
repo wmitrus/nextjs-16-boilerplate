@@ -112,6 +112,11 @@ If safe implementation depends on unresolved constraints, stop and surface them.
 FAST PATH
 ==================================================
 
+Evaluate high-risk classification first (see HIGH-RISK PATH below). If any
+high-risk trigger applies, Fast Path is not available regardless of file
+count — use the High-Risk Path instead. Only evaluate the following
+criteria for work already determined not to be high-risk.
+
 If the change clearly satisfies ALL of the following:
 
 - affects only a small number of files
@@ -312,13 +317,21 @@ For high-risk work:
 5. Perform the Implementation Agent's pre-close falsification pass.
 6. Add or fix regression evidence for any gap the falsification pass finds.
 7. Perform proportional validation.
-8. For production-facing tooling, persisted approval/integrity evidence,
-   remote credentials/connections, or a future production safety gate,
-   perform a post-implementation Security/Auth recheck against the final
+8. Perform a post-implementation Security/Auth recheck against the final
    delivered behavior — not only the constraints established before
-   implementation began. This catches implementation drift from the original
-   constraints, and is narrow: do not make it mandatory for ordinary low-risk
-   features.
+   implementation began — when the changed high-risk invariant itself
+   materially affects authentication, authorization, tenancy/resource
+   isolation, trust boundaries, or sensitive-data/security enforcement, OR
+   when one of the production-tooling triggers applies: production-facing
+   tooling, persisted approval/integrity evidence, remote
+   credentials/connections, or a future production safety gate. This catches
+   implementation drift from the original constraints. Stay proportional: an
+   ordinary low-risk feature does not get a second Security/Auth pass, and a
+   high-risk change with no actual security invariant (for example a
+   high-risk migration or broad refactor touching no auth/tenancy/trust
+   surface) does not get one merely because it is high-risk for an unrelated
+   reason. The trigger is the actual changed invariant, not mechanical
+   invocation on every high-risk task.
 9. Inspect the final full diff.
 10. Reconcile the authoritative current-state documentation where behavior or
     contracts changed. Maintain one authoritative current-state description

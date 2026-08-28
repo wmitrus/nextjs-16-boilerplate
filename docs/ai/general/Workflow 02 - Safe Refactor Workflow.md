@@ -123,6 +123,13 @@ If safe refactoring depends on unresolved invariants, stop and surface them.
 FAST PATH
 ==================================================
 
+Evaluate high-risk classification first (see HIGH-RISK REFACTOR PATH below).
+If any high-risk trigger applies — including a small refactor whose
+correctness depends on load-bearing external-tool semantics — Fast Path is
+not available regardless of file count; use the High-Risk Refactor Path
+instead. Only evaluate the following criteria for work already determined
+not to be high-risk.
+
 If the refactor clearly satisfies all of the following:
 
 - affects only a small number of files
@@ -308,10 +315,18 @@ example touching ordering/concurrency, a shared execution path, or a widely
 reused helper), or when it otherwise materially involves production-facing
 tooling; security/auth/trust boundaries; credentials or remote connections;
 persisted evidence, integrity, approval, or compatibility artifacts;
-migrations or data safety; tenancy/resource isolation; or CI/deployment
-safety gates. Do not apply this path to a small, local, clearly
-behavior-preserving refactor — the Fast Path above remains correct for
-those.
+migrations or data safety; tenancy/resource isolation; CI/deployment safety
+gates; or external-tool semantics that are load-bearing for a
+correctness/security claim (the actual behavior of Git, a database client,
+the filesystem, a parser/runtime, or CI/deployment tooling). The external-
+tool-semantics trigger applies even to a small, local refactor whose
+correctness depends on that behavior — it does not also need to be broad or
+production-facing. This does not mean integration-test everything; it means
+that when an external tool's behavior is itself part of the correctness/
+security proof, the task carrying it is high-risk even with a small diff.
+Do not apply this path to a small, local, clearly behavior-preserving
+refactor that triggers none of the above — the Fast Path above remains
+correct for those.
 
 For a high-risk refactor:
 
@@ -330,12 +345,18 @@ For a high-risk refactor:
    while appearing locally correct.
 6. Add or fix regression evidence for any gap the falsification pass finds.
 7. Perform proportional validation.
-8. When an actual security trigger is present — production-facing tooling,
-   persisted approval/integrity evidence, remote credentials/connections, or
-   a future production safety gate — perform the same narrow
-   post-implementation Security/Auth recheck against the final delivered
-   behavior used by the feature workflow's High-Risk Path. Do not run this
-   for a refactor with no such trigger.
+8. Perform the same post-implementation Security/Auth recheck against the
+   final delivered behavior used by the feature workflow's High-Risk Path
+   when the changed high-risk invariant itself materially affects
+   authentication, authorization, tenancy/resource isolation, trust
+   boundaries, or sensitive-data/security enforcement, OR when one of the
+   production-tooling triggers applies: production-facing tooling, persisted
+   approval/integrity evidence, remote credentials/connections, or a future
+   production safety gate. Do not run this for a refactor with no such
+   trigger — a high-risk refactor that is high-risk only for an unrelated
+   reason (a broad ordering/concurrency change with no security invariant, a
+   load-bearing external-tool-semantics change with no security invariant)
+   does not get a Security/Auth pass merely because it is high-risk.
 9. Inspect the complete final diff.
 10. Reconcile authoritative current-state documentation where structural or
     contract documentation actually changed as a result of the refactor.

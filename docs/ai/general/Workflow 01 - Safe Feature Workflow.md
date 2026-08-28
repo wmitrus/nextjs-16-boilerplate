@@ -289,6 +289,71 @@ Then optionally run Architecture Guard Agent again to verify:
 - implementation respected constraints.
 
 ==================================================
+HIGH-RISK PATH
+==================================================
+
+Not a second workflow — an additional sequence for high-risk work layered onto
+the steps above. A change is high-risk when it materially involves
+production-facing tooling; security/auth/trust boundaries; credentials or
+remote connections; persisted evidence, integrity, approval, or compatibility
+artifacts; migrations or data safety; tenancy/resource isolation;
+CI/deployment safety gates; external-tool semantics load-bearing for a
+correctness/security claim; or a broad refactor where preserving existing
+behavior is itself the main invariant. Do not apply this path to routine
+low-risk changes.
+
+For high-risk work:
+
+1. Architecture/Security/runtime constraints as applicable (Steps 2-4 above).
+2. Before implementation, produce the compact invariant/trust-boundary map
+   (Implementation Agent's High-Risk Implementation Protocol).
+3. Implement.
+4. Run focused development tests.
+5. Perform the Implementation Agent's pre-close falsification pass.
+6. Add or fix regression evidence for any gap the falsification pass finds.
+7. Perform proportional validation.
+8. For production-facing tooling, persisted approval/integrity evidence,
+   remote credentials/connections, or a future production safety gate,
+   perform a post-implementation Security/Auth recheck against the final
+   delivered behavior — not only the constraints established before
+   implementation began. This catches implementation drift from the original
+   constraints, and is narrow: do not make it mandatory for ordinary low-risk
+   features.
+9. Inspect the final full diff.
+10. Reconcile the authoritative current-state documentation where behavior or
+    contracts changed. Maintain one authoritative current-state description
+    for the active contract; use other artifacts primarily as links, evidence,
+    or clearly historical logs. Do not independently restate volatile
+    current-state facts in multiple files, and do not make a mutable
+    review-round count part of a load-bearing current-state contract.
+11. Perform one final self-review of the complete diff.
+12. Only then request external review. External review is the independent
+    final reviewer, not the mechanism for discovering adjacent implementation
+    gaps one at a time.
+
+Review stop condition: fresh external review is required after executable
+code changes responding to substantive findings, security/trust-boundary
+behavior changes, or operator documentation changes that materially change
+the execution/security contract. Do not force another review cycle when
+executable/security behavior is already stable and externally reviewed and
+the only remaining changes are self-referential review-history bookkeeping,
+formatting, or equivalent non-load-bearing documentation cleanup. The purpose
+is to prevent documentation about review rounds from creating an infinite
+review surface, not to bypass meaningful review.
+
+Operational handoff wording, for use on demand rather than copied into every
+root file or skill:
+
+- Implementation handoff: "Before pushing high-risk work, review your own
+  final diff adversarially. Identify the invariants changed by the
+  implementation and try to falsify the complete contract, not only the happy
+  path. Inspect adjacent producers/consumers and add regression tests for any
+  real gap before requesting external review."
+- Review-fix handoff: "Fix the underlying invariant rather than only the
+  cited line. Re-review the full affected contract and applicable adjacent
+  failure modes before pushing the next review revision."
+
+==================================================
 DECISION / BRANCHING RULES
 ==================================================
 

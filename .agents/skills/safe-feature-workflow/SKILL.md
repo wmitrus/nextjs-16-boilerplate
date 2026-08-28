@@ -164,6 +164,19 @@ When `validation-strategy` is used, consume its required/optional/not-required e
 
 Optionally run `architecture-guard` again when implementation materially affects multiple modules, contracts, DI/composition, security enforcement points, runtime placement, or another structural boundary where implementation drift is plausible.
 
+### High-Risk Path
+
+Not a second workflow — an additional sequence layered onto the standard one for high-risk work. A change is high-risk when it materially involves production-facing tooling; security/auth/trust boundaries; credentials or remote connections; persisted evidence, integrity, approval, or compatibility artifacts; migrations or data safety; tenancy/resource isolation; CI/deployment safety gates; external-tool semantics load-bearing for a correctness/security claim; or a broad refactor where preserving existing behavior is itself the main invariant. Do not apply to routine low-risk changes.
+
+For high-risk work: apply Steps 2-4 as applicable; before implementation, produce `implementation-agent`'s compact invariant/trust-boundary map; implement; run focused development tests; perform `implementation-agent`'s pre-close falsification pass; add/fix regression evidence for any discovered gap; perform proportional validation; for production-facing tooling, persisted approval/integrity evidence, remote credentials/connections, or a future production safety gate, run a post-implementation `security-auth` recheck against the final delivered behavior (narrow — not mandatory for ordinary low-risk features); inspect the final full diff; reconcile the authoritative current-state documentation where behavior/contracts changed (one canonical current-state source, pointers elsewhere, no mutable review-round count as load-bearing contract); perform one final self-review of the complete diff; only then request external review.
+
+**Review stop condition:** fresh external review is required after executable code changes responding to substantive findings, security/trust-boundary behavior changes, or operator documentation changes that materially change the execution/security contract. Do not force another review cycle when executable/security behavior is already stable and externally reviewed and the remaining changes are self-referential review-history bookkeeping, formatting, or equivalent non-load-bearing documentation cleanup.
+
+**Operational handoff wording** (use on demand, do not copy into every root/skill):
+
+- Implementation handoff: "Before pushing high-risk work, review your own final diff adversarially. Identify the invariants changed by the implementation and try to falsify the complete contract, not only the happy path. Inspect adjacent producers/consumers and add regression tests for any real gap before requesting external review."
+- Review-fix handoff: "Fix the underlying invariant rather than only the cited line. Re-review the full affected contract and applicable adjacent failure modes before pushing the next review revision."
+
 ## Block Conditions
 
 Stop before implementation when:

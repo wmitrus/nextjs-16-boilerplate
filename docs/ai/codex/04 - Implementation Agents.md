@@ -15,6 +15,12 @@ Real Codex skill file: [`.agents/skills/implementation-agent/SKILL.md`](../../..
 - Defers to Architecture Guard, Security & Auth, Next.js Runtime, and Validation
   Strategy instead of re-deciding those areas
 - Produces the concrete implementation pass and implementation summary artifact
+- For high-risk work (production-facing tooling, trust boundaries, credentials,
+  persisted evidence/integrity artifacts, tenancy isolation, CI/deployment safety
+  gates), applies a High-Risk Implementation Protocol: a pre-code invariant map,
+  a pre-close falsification pass, an external-tool real-behavior evidence rule,
+  and an invariant-level (not cited-line) review-fix rule — see the skill file
+  for full detail
 
 ## When to use it
 

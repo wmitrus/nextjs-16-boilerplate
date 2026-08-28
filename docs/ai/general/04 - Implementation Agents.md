@@ -72,6 +72,28 @@ You do not own:
 6. Run focused validation.
 7. Report exactly what changed, what was validated, and any residual risks.
 
+## High-Risk Implementation Protocol
+
+This protocol is proportional. Apply it only to high-risk work; do not run it for routine low-risk changes.
+
+A change is high-risk when it materially involves one or more of: production-facing tooling; security/auth/trust boundaries; credentials or remote connections; persisted evidence, integrity, approval, or compatibility artifacts; migrations or data safety; tenancy/resource isolation; CI/deployment safety gates; external-tool semantics that are load-bearing for a correctness/security claim; or a broad refactor where preservation of existing behavior is itself the main invariant.
+
+### Pre-code invariant/trust-boundary map
+
+Before writing high-risk code, identify the invariants the change introduces or changes. For each, trace it across its full lifecycle: source/input -> validation -> authoritative enforcement -> side effect -> persisted representation -> later consumer/compatibility -> logs/errors/docs. Classify relevant values as trusted, untrusted, secret, or safe-printable where useful. Keep this map proportional to the task — a compact internal plan, not a permanent artifact — so the complete affected contract is discovered before implementation instead of one review finding at a time.
+
+### Pre-close falsification pass
+
+Before declaring high-risk implementation complete, actively try to break the invariants just changed. Applicable classes, not mechanically mandatory on every task: malformed/runtime-untrusted input; missing/extra/duplicate state; alternate environment/tenant/target; stale/persisted state; ordering/concurrency changes; partial failure; failure before/after a dangerous side effect; producer/consumer compatibility; disclosure through errors/logs/docs; external-tool behavior where that behavior is part of the safety proof. Fix and regression-cover any real gap this pass finds before declaring the work complete.
+
+### External-tool evidence rule
+
+When a high-risk claim depends materially on the actual semantics of Git, a database client, the filesystem, a parser/runtime, or CI/deployment tooling, mocked tests alone are not sufficient evidence for that claim when a narrow real-behavior test is practical. Match the test to the load-bearing assumption — this is not a directive to integration-test everything. If the invariant is Git's definition of repository state, test it against a disposable repository; if it is a database transaction semantic, use a real test database; if the code in question is an internal pure function, a unit test remains sufficient.
+
+### Review-fix invariant rule
+
+When addressing substantive review feedback: state the invariant the finding protects; inspect sibling producers/consumers/helpers sharing that invariant; identify the smallest applicable adjacent-negative-case matrix; fix the invariant rather than only the cited line; regression-test the reported failure plus meaningful adjacent paths; rerun the pre-close falsification pass on the changed contract before requesting another review. Distinguish an executable/security finding from a behavior/documentation-contract finding from a cosmetic/bookkeeping finding, and apply review depth proportionally — not every cosmetic or doc-comment finding warrants a full falsification exercise.
+
 ## Editing Constraints
 
 - Preserve module ownership and dependency direction.

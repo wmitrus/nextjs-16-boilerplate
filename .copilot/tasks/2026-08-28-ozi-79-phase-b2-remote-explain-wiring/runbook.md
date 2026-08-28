@@ -257,7 +257,7 @@ expectation env vars, a dedicated proof that `withReadOnlyRemoteDb`
 refuses to open a connection (`postgres()` never called) when the
 safeguard fails, and two tests proving a credential-bearing expected-
 identity value (a full
-`postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db` URL,
+`postgres://[username]:[REDACTED]@[host]/[database]`-shaped URL,
 at both the unit level and through `withReadOnlyRemoteDb`) never reaches
 the thrown error message -- not the full value, not the password, not
 the username, individually. Round 6 added `computeVerifiedIdentityFingerprint`
@@ -372,10 +372,10 @@ Not a Codex finding this round -- a directed final invariant-oriented
 pass before the next review, covering four areas:
 
 1. **Strengthened the round-2 redaction regression tests** with the
-   exact scenario named: `OZI79_STAGING_EXPECTED_DESCRIPTOR` set to
-   `postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`,
-   asserting the thrown message contains neither the full value nor
-   `VERY-SECRET-PASSWORD` nor `oops-user` individually, at both the
+   exact scenario named: `OZI79_STAGING_EXPECTED_DESCRIPTOR` set to a
+   credential-shaped `postgres://[username]:[REDACTED]@[host]/[database]`
+   URL, asserting the thrown message contains neither the full value nor
+   the password nor the username individually, at both the
    `assertTargetDescriptorMatchesExpectation` unit level and through
    `withReadOnlyRemoteDb` (also proving `postgres()` is never called).
    Both re-verified via temporary revert.
@@ -634,8 +634,8 @@ Two findings.
   `--flag` (no `=`) is described only by position -- but the code
   actually returned the whole raw token whenever it started with `--`
   and had no `=`. A credential pasted with a leading `--` and no `=` at
-  all (e.g. `--postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`)
-  would reach the thrown error unredacted. Fixed with
+  all (e.g. a `--postgres://[username]:[REDACTED]@[host]/[database]`-shaped
+  token) would reach the thrown error unredacted. Fixed with
   `SAFE_FLAG_NAME_PATTERN` (`/^--[A-Za-z0-9][A-Za-z0-9-]*$/`): the
   candidate flag-name portion (everything before `=`, or the whole token
   if there is none) is only ever echoed when it matches that pattern --
@@ -657,6 +657,26 @@ Two findings.
   review. Fixed by adding the assertion in its real position (before
   `describeRemoteTarget`/`computeVerifiedIdentityFingerprint`) and noting
   `withReadOnlyRemoteDb`'s own internal re-assertion (defense-in-depth).
+
+## Review round 9 (Codex) — documentation only
+
+One finding (P1), docs only, no code change: this runbook and `plan.md`
+committed a complete, realistic-looking PostgreSQL credential shape
+(`postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`) in
+four places, describing test scenarios -- despite the repository's own
+"do not commit secrets or credential-shaped values" invariant applying to
+credential-*shaped* literals regardless of whether they are real, since a
+realistic-looking one still creates secret-scanner noise and normalizes
+the pattern in committed artifacts. (The equivalent literal string
+genuinely does appear in `cli.test.ts`/`readonly-db-remote.test.ts` as a
+deliberate, explicitly user-directed test fixture proving redaction --
+that is unaffected by this finding, which is scoped to prose in these
+two documentation files, not test code.)
+
+Replaced every occurrence in `runbook.md`/`plan.md` with the neutral
+placeholder shape `postgres://[username]:[REDACTED]@[host]/[database]`,
+which still documents exactly the same redaction scenario without
+committing anything credential-shaped.
 
 ## Validation
 

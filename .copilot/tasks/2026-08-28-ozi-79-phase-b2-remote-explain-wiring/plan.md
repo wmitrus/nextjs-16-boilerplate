@@ -102,9 +102,9 @@ fixes, before push (see runbook.md)
 ### 2026-08-28 — Review round 3 (user-directed hardening pass)
 
 - Strengthened the round-2 redaction tests to the exact named scenario
-  (`postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db`),
-  checking the full value, the password, and the username individually
-  never reach the thrown message, at both the unit and
+  (a credential-shaped `postgres://[username]:[REDACTED]@[host]/[database]`
+  URL), checking the full value, the password, and the username
+  individually never reach the thrown message, at both the unit and
   `withReadOnlyRemoteDb` level.
 - Added `parsePlanArgs`: `plan` now rejects a duplicated `--target`,
   any unrecognized flag (including `--allow-dirty`, now explicitly

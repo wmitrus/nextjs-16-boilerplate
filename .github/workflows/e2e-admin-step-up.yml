@@ -41,8 +41,35 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+
+      # Browser binaries alone (not the apt-installed OS deps) are the slow
+      # part of `playwright install --with-deps` -- multiple large
+      # per-browser downloads on every run, with nothing to reuse between
+      # them. Cached and keyed on the exact resolved `@playwright/test`
+      # version, so a version bump naturally busts the cache instead of
+      # silently reusing stale binaries.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # actions/cache@v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps
+
+      # On a cache hit the browser binaries are already present, but the
+      # runner image itself is not guaranteed to carry every OS-level
+      # library Playwright depends on -- `install-deps` alone (no browser
+      # download) is fast and keeps that guarantee without re-downloading
+      # anything.
+      - name: Install Playwright OS dependencies (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps
 
       # The scenario runner brings the test database up itself via
       # `pnpm db:test:up`, but that returns as soon as the container is

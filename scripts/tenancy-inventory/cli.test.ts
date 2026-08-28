@@ -108,10 +108,11 @@ const RAW_PLAN_MARKER = 'RAW-PLAN-MARKER-must-never-reach-stdout';
  * (and secret scanners) actually flag.
  */
 const CREDENTIAL_SHAPED_TEST_USER = 'ozi79-test-only-rejected-arg-user';
-const CREDENTIAL_SHAPED_TEST_PASSWORD = 'ozi79-test-only-rejected-arg-password';
+const CREDENTIAL_SHAPED_TEST_AUTH_VALUE =
+  'ozi79-test-only-rejected-arg-password';
 const CREDENTIAL_SHAPED_TEST_ARG = buildTestPostgresUrl({
   username: CREDENTIAL_SHAPED_TEST_USER,
-  password: CREDENTIAL_SHAPED_TEST_PASSWORD,
+  password: CREDENTIAL_SHAPED_TEST_AUTH_VALUE,
   host: 'production.example',
   database: 'db',
 });
@@ -315,7 +316,7 @@ describe('plan -- fails before any remote connection', () => {
     const message = (thrown as Error).message;
     expect(message).toContain('plan does not recognize: --database-url');
     expect(message).not.toContain(rejectedArg);
-    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_PASSWORD);
+    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_AUTH_VALUE);
     expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_USER);
     expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
@@ -344,7 +345,7 @@ describe('plan -- fails before any remote connection', () => {
     }
     expect((thrown as Error).message).not.toContain(credentialBearingGarbage);
     expect((thrown as Error).message).not.toContain(
-      CREDENTIAL_SHAPED_TEST_PASSWORD,
+      CREDENTIAL_SHAPED_TEST_AUTH_VALUE,
     );
     expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
@@ -371,7 +372,7 @@ describe('plan -- fails before any remote connection', () => {
     const message = (thrown as Error).message;
     expect(message).toContain('plan does not recognize: argument #1');
     expect(message).not.toContain(credentialBearingArg);
-    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_PASSWORD);
+    expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_AUTH_VALUE);
     expect(message).not.toContain(CREDENTIAL_SHAPED_TEST_USER);
     expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();

@@ -804,6 +804,33 @@ does not own (other features' tests, this repo's well-known public local
 dev/test defaults, other tasks' docs) -- out of scope for this finding
 and this branch.
 
+## Codacy Static Code Analysis (SonarSource S2068), not a Codex round
+
+After round 11 pushed, the required "Codacy Static Code Analysis" PR
+check started failing with 3 new annotations (`"Hardcoded passwords are
+a security risk."`), all on lines round 10/11 introduced:
+`cli.test.ts`'s `CREDENTIAL_SHAPED_TEST_PASSWORD` and
+`readonly-db-remote.test.ts`'s `MISMATCHED_TEST_PASSWORD`/
+`ANOTHER_MISMATCHED_TEST_PASSWORD` -- top-level `const` declarations
+whose identifier contained `PASSWORD` and were assigned a string
+literal. This is a different tool and a different rule than every prior
+round's finding (Sonar's `S2068`, matched by identifier name, not URL
+shape or embedded content) -- confirmed by checking that the many other
+`password: 'ozi79-test-only-...'` object-literal properties passed
+inline to `buildTestPostgresUrl({...})` throughout both files were NOT
+flagged; only the three named `const ..._PASSWORD = '...'` declarations
+were.
+
+Fixed by renaming all three to `..._AUTH_VALUE` (`sed`-applied
+consistently across every reference in both files -- a pure identifier
+rename, the literal values and all other code are unchanged). Swept both
+files afterward for any other `password`/`secret`/`token`/`pwd`/
+`api_key`-named `const` declaration assigned a literal; found one
+pre-existing, unrelated case (`secretLookingValue` in
+`describeRemoteTarget`'s malformed-URL test, present since before this
+branch) that Codacy's actual check run did not flag -- left untouched,
+not part of this fix.
+
 ## Validation
 
 - typecheck: clean

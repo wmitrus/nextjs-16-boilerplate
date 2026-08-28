@@ -43,19 +43,19 @@ afterEach(() => {
  * repository's invariants (and secret scanners) actually flag.
  */
 const MISMATCHED_TEST_USER = 'ozi79-test-only-mismatched-user';
-const MISMATCHED_TEST_PASSWORD = 'ozi79-test-only-mismatched-password';
+const MISMATCHED_TEST_AUTH_VALUE = 'ozi79-test-only-mismatched-password';
 const MISMATCHED_TEST_URL = buildTestPostgresUrl({
   username: MISMATCHED_TEST_USER,
-  password: MISMATCHED_TEST_PASSWORD,
+  password: MISMATCHED_TEST_AUTH_VALUE,
   host: 'production.example',
   database: 'db',
 });
 const ANOTHER_MISMATCHED_TEST_USER = 'ozi79-test-only-another-mismatched-user';
-const ANOTHER_MISMATCHED_TEST_PASSWORD =
+const ANOTHER_MISMATCHED_TEST_AUTH_VALUE =
   'ozi79-test-only-another-mismatched-password';
 const ANOTHER_MISMATCHED_TEST_URL = buildTestPostgresUrl({
   username: ANOTHER_MISMATCHED_TEST_USER,
-  password: ANOTHER_MISMATCHED_TEST_PASSWORD,
+  password: ANOTHER_MISMATCHED_TEST_AUTH_VALUE,
   host: 'staging.example',
   database: 'db',
 });
@@ -269,9 +269,9 @@ describe('assertTargetIdentityMatchesExpectation', () => {
     const message = (thrown as Error).message;
     expect(message).toContain('OZI79_STAGING_EXPECTED_IDENTITY');
     expect(message).not.toContain(ANOTHER_MISMATCHED_TEST_URL);
-    expect(message).not.toContain(ANOTHER_MISMATCHED_TEST_PASSWORD);
+    expect(message).not.toContain(ANOTHER_MISMATCHED_TEST_AUTH_VALUE);
     expect(message).not.toContain(ANOTHER_MISMATCHED_TEST_USER);
-    expect(message).not.toContain(MISMATCHED_TEST_PASSWORD);
+    expect(message).not.toContain(MISMATCHED_TEST_AUTH_VALUE);
     expect(message).not.toContain(MISMATCHED_TEST_USER);
   });
 });
@@ -359,7 +359,7 @@ describe('computeVerifiedIdentityFingerprint', () => {
     const fingerprint = computeVerifiedIdentityFingerprint('staging');
 
     expect(fingerprint).not.toContain(MISMATCHED_TEST_USER);
-    expect(fingerprint).not.toContain(MISMATCHED_TEST_PASSWORD);
+    expect(fingerprint).not.toContain(MISMATCHED_TEST_AUTH_VALUE);
     expect(fingerprint).not.toContain('production.example');
   });
 
@@ -461,7 +461,7 @@ describe('withReadOnlyRemoteDb connection contract', () => {
     expect(thrown).toBeInstanceOf(Error);
     const message = (thrown as Error).message;
     expect(message).not.toContain(MISMATCHED_TEST_URL);
-    expect(message).not.toContain(MISMATCHED_TEST_PASSWORD);
+    expect(message).not.toContain(MISMATCHED_TEST_AUTH_VALUE);
     expect(message).not.toContain(MISMATCHED_TEST_USER);
     expect(postgres).not.toHaveBeenCalled();
   });

@@ -148,8 +148,10 @@ export function assertTargetDescriptorMatchesExpectation(
   if (expected !== descriptor) {
     throw new Error(
       `[tenancy-inventory] Resolved ${target} target "${descriptor}" does ` +
-        `not match the expected descriptor declared in ${envVar} ` +
-        `("${expected}"). Refusing to connect -- this usually means the ` +
+        `not match the expected descriptor declared in ${envVar}. ` +
+        `(${envVar}'s value is not shown here -- an operator could have ` +
+        `accidentally pasted a connection URL or other credential-bearing ` +
+        `value into it.) Refusing to connect -- this usually means the ` +
         `staging/production credentials were swapped or misconfigured.`,
     );
   }

@@ -250,13 +250,34 @@ the fix doesn't break anything: full suite re-run green after the
 switch, and the round-1 tests were re-verified to still correctly fail
 against the reverted code afterward.
 
+## Review round 2 (Codex)
+
+One finding: **redact the expected descriptor from mismatch errors
+(P2, real gap).** `assertTargetDescriptorMatchesExpectation`'s mismatch
+error interpolated the raw `*_EXPECTED_DESCRIPTOR` env var value
+verbatim (`` `... declared in ${envVar} ("${expected}"). ...` ``). If an
+operator accidentally pasted a connection URL or other credential-
+bearing value into that variable instead of a plain descriptor, this
+error -- printed to stderr by `cli.ts`'s top-level handler -- would leak
+it into terminal/CI logs. This is exactly the "never echo an untrusted
+env var value" contract `resolveRemoteUrl` already follows elsewhere in
+this same file; the new function missed applying it.
+
+Fixed by naming the env var and noting the mismatch without ever
+including its value. Added a regression test (`readonly-db-remote.test.ts`)
+using a secret-looking value in the expectation variable, asserting the
+thrown message names the env var but never contains the value -- verified
+via temporary revert to genuinely fail against the pre-fix code before
+being restored. Grepped the rest of the file for the same interpolation
+pattern (`${expected}`/`${raw}`) afterward; no other instance exists.
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 105/105 (83 pre-existing +
-  17 in `cli.test.ts` + 5 new in `readonly-db-remote.test.ts`)
-- unit (full repo, `pnpm test`): 279 files / 2358 tests, all pass
+- unit (`scripts/tenancy-inventory` subset): 106/106 (83 pre-existing +
+  17 in `cli.test.ts` + 6 in `readonly-db-remote.test.ts`)
+- unit (full repo, `pnpm test`): 279 files / 2359 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

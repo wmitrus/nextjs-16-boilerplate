@@ -148,6 +148,28 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
       ),
     ).toThrow(/does not match the expected descriptor/);
   });
+
+  it('never echoes the declared expectation value on a mismatch, even if it looks credential-bearing', () => {
+    const secretLookingValue =
+      'postgres://readonly:s3cr3t-not-a-real-secret@internal-host:5432/app';
+    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', secretLookingValue);
+
+    let thrown: unknown;
+    try {
+      assertTargetDescriptorMatchesExpectation(
+        'staging',
+        'staging-db.internal:5432/app_staging',
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).toContain('OZI79_STAGING_EXPECTED_DESCRIPTOR');
+    expect(message).not.toContain(secretLookingValue);
+    expect(message).not.toContain('s3cr3t-not-a-real-secret');
+  });
 });
 
 describe('withReadOnlyRemoteDb connection contract', () => {

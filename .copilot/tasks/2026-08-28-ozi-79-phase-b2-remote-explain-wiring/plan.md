@@ -40,11 +40,11 @@ execution boundary and design detail.
 ## Validation
 
 typecheck clean · lint clean · unit (`scripts/tenancy-inventory` subset)
-105/105 · unit (full repo) 279 files / 2358 tests · real DB
+106/106 · unit (full repo) 279 files / 2359 tests · real DB
 (`pnpm test:db:local`) 32 files / 297 tests · CI config (`pnpm
 test:db:ci`) 32 files / 297 tests · adversarial falsification pass
-performed on every negative-path invariant, including review round 1's
-fix, before push (see runbook.md)
+performed on every negative-path invariant, including both review
+rounds' fixes, before push (see runbook.md)
 
 ## Update Log
 
@@ -74,6 +74,14 @@ fix, before push (see runbook.md)
 - Found and fixed a test-isolation gap in `cli.test.ts` while falsifying
   the round-1 fix (`clearAllMocks` doesn't reset implementations,
   letting one test's mock behavior leak into another) -- see runbook.
+
+### 2026-08-28 — Review round 2 (Codex)
+
+- Fixed a real P2 gap: the round-1 mismatch error echoed the raw
+  `*_EXPECTED_DESCRIPTOR` env var value verbatim, which could leak a
+  credential if an operator mistakenly pasted a connection URL into it.
+  Redacted; added a regression test with a secret-looking value,
+  verified via revert.
 
 ## Artifacts
 

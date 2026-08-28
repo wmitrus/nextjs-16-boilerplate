@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.6.1...v2.7.0) (2026-08-28)
+
+
+### Features
+
+* **ozi-79:** remote plain-EXPLAIN wiring (Phase B2, build/test/review only) ([#86](https://github.com/wmitrus/nextjs-16-boilerplate/issues/86)) ([314b6ac](https://github.com/wmitrus/nextjs-16-boilerplate/commit/314b6acce10589725854a07f4f30a620b188f445))
+
 ## [2.6.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.6.0...v2.6.1) (2026-08-28)
 
 

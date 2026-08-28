@@ -1,3 +1,10 @@
+## [2.6.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.6.0...v2.6.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **ozi-79:** pre-B2 reconciliation of [#80](https://github.com/wmitrus/nextjs-16-boilerplate/issues/80)/[#81](https://github.com/wmitrus/nextjs-16-boilerplate/issues/81) Codex findings ([#84](https://github.com/wmitrus/nextjs-16-boilerplate/issues/84)) ([a667e61](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a667e6169e98974feed50e7a7016a69b9c0c4d6f))
+
 # [2.6.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.5.0...v2.6.0) (2026-08-27)
 
 

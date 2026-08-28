@@ -93,10 +93,12 @@ list is a summary pointer, not a duplicate:
 
 See `runbook.md`'s "Validation" section for the current, exact
 typecheck/lint/unit/real-DB/CI-config results -- not duplicated here to
-avoid two counts drifting out of sync as the branch changes. Every
-review round's fixes were verified via adversarial falsification
-(temporary revert-and-confirm-failure) before push; see runbook.md for
-the full detail per round.
+avoid two counts drifting out of sync as the branch changes. Falsification
+coverage is not uniform across rounds -- see the `Review coverage` bullet
+under `Classification` above for the exact per-round breakdown (revert-
+verified executable fixes vs. refactors with no revertable state vs.
+documentation-only rounds); this section intentionally does not restate
+that breakdown a second time.
 
 ## Update Log
 
@@ -327,6 +329,17 @@ against `runbook.md`'s per-round sections, then replaced the blanket
 claim with three explicit evidence categories. The PR description carried
 the same claim with a stale round count and was corrected identically.
 Docs only.
+
+### 2026-08-28 — Round 17 (Codex, documentation only)
+
+Round 16's fix corrected the `Review coverage` bullet under
+`Classification` but left an independent, third occurrence of the same
+blanket falsification claim standing in this file's own `Validation`
+section -- a separate under-sweep, not a new defect. Replaced it with a
+pointer to the `Review coverage` breakdown instead of a second
+restatement, so the claim exists in exactly one place in `plan.md` going
+forward. Re-swept `plan.md`, `runbook.md`, and the PR description for any
+remaining instance of the phrase; none found. Docs only.
 
 ## Artifacts
 

@@ -1,6 +1,28 @@
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { describeRemoteTarget } from './readonly-db-remote';
+import {
+  describeRemoteTarget,
+  withReadOnlyRemoteDb,
+} from './readonly-db-remote';
+
+/**
+ * `withReadOnlyRemoteDb` is never exercised end-to-end against a real
+ * server anywhere in this repo (Phase A/B1 deliberately authorize no
+ * remote execution -- see the module's own doc comment). These two
+ * network functions are mocked purely to capture the exact options this
+ * function passes to them, proving the connection contract (TLS,
+ * isolation level) without needing a live remote target. The mocked
+ * `transaction` never invokes its callback, so `verifyReadOnlyRole`
+ * never runs and never needs its own DB-shaped fixtures here.
+ */
+vi.mock('postgres', () => ({
+  default: vi.fn(() => ({ end: vi.fn().mockResolvedValue(undefined) })),
+}));
+vi.mock('drizzle-orm/postgres-js', () => ({
+  drizzle: vi.fn(() => ({ transaction: vi.fn().mockResolvedValue(undefined) })),
+}));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -35,14 +57,14 @@ describe('describeRemoteTarget', () => {
   it('describes only host:port/database, never credentials, for a valid URL', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://readonly_user:s3cr3t-password@staging-db.internal:5432/app_staging',
+      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging',
     );
 
     const description = describeRemoteTarget('staging');
 
     expect(description).toBe('staging-db.internal:5432/app_staging');
-    expect(description).not.toContain('readonly_user');
-    expect(description).not.toContain('s3cr3t-password');
+    expect(description).not.toContain('ozi79-test-only-user');
+    expect(description).not.toContain('ozi79-test-only-password');
   });
 
   it("never mixes up the two targets' env vars", () => {
@@ -61,5 +83,30 @@ describe('describeRemoteTarget', () => {
     expect(describeRemoteTarget('production')).toBe(
       'production-host:5432/production_db',
     );
+  });
+});
+
+describe('withReadOnlyRemoteDb connection contract', () => {
+  it('requires certificate-validated TLS and one repeatable-read snapshot, regardless of what the URL itself claims', async () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      // sslmode=disable in the URL must NOT weaken the connection --
+      // proving the explicit `ssl` option always wins.
+      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable',
+    );
+
+    await withReadOnlyRemoteDb('staging', async () => 'ok');
+
+    expect(postgres).toHaveBeenCalledWith(
+      expect.stringContaining('staging-db.internal:5432/app_staging'),
+      expect.objectContaining({ ssl: 'verify-full' }),
+    );
+    const dbInstance = vi.mocked(drizzle).mock.results[0]?.value as {
+      transaction: ReturnType<typeof vi.fn>;
+    };
+    expect(dbInstance.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      accessMode: 'read only',
+      isolationLevel: 'repeatable read',
+    });
   });
 });

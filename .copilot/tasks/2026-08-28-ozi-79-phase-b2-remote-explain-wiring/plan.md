@@ -31,25 +31,27 @@ for the full execution boundary and design detail.
     breakdown.
 - Review coverage: no full specialist workflow cycle was re-run up front
   (the original narrow-wiring classification), but the credential and
-  connection boundary above received iterative security review across 15
-  rounds -- Codex findings plus two user-directed hardening/self-review
-  passes. Not every round carried the same class of evidence, so treat
+  connection boundary above received iterative security review throughout
+  this PR -- Codex findings plus two user-directed hardening/self-review
+  passes. Not every review carried the same class of evidence, so treat
   them separately rather than as one uniform falsification claim:
   - **Executable fix, verified by revert-and-confirm-failure** (the check
     was temporarily removed and the corresponding test confirmed to
     genuinely fail, then restored): rounds 1-6, 8, 10 (the query-string
-    rejection), 12, 13. This is the load-bearing security evidence.
+    rejection), 12, 13. This is the load-bearing security evidence, and
+    this list is a stable historical fact.
   - **Refactor/rename with no revertable broken state**, verified instead
     by a full passing suite plus a repository-wide sweep confirming zero
     remaining occurrences of the old shape: round 10 (the credential-
     fixture rename) and round 11 (the structural `buildTestPostgresUrl`
     extraction).
-  - **Documentation only, no executable change and therefore no
-    falsification testing**: rounds 7, 9, 14, 15. These corrected
-    control-artifact accuracy and carry no runtime security evidence.
+  - **Documentation-only review corrections** are recorded in the Update
+    Log below; they contain no executable change and carry no runtime
+    security evidence.
 
   Treat the first category as the security evidence for this PR, not the
-  stale opening classification and not the round count on its own.
+  stale opening classification and not the number of review passes on its
+  own.
 - Severity: N/A (tooling, not an incident)
 - Linear issue: OZI-79 (child of OZI-74, blocks OZI-78)
 - Branch: `feat/ozi-79-phase-b2-remote-explain-wiring`, from `main` @
@@ -94,10 +96,10 @@ list is a summary pointer, not a duplicate:
 See `runbook.md`'s "Validation" section for the current, exact
 typecheck/lint/unit/real-DB/CI-config results -- not duplicated here to
 avoid two counts drifting out of sync as the branch changes. Falsification
-coverage is not uniform across rounds -- see the `Review coverage` bullet
-under `Classification` above for the exact per-round breakdown (revert-
+coverage is not uniform across reviews -- see the `Review coverage` bullet
+under `Classification` above for the evidence-category breakdown (revert-
 verified executable fixes vs. refactors with no revertable state vs.
-documentation-only rounds); this section intentionally does not restate
+documentation-only corrections); this section intentionally does not restate
 that breakdown a second time.
 
 ## Update Log

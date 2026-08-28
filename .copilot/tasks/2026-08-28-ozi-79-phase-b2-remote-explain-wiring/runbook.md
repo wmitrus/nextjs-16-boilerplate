@@ -18,20 +18,31 @@ before any real remote execution is separately authorized.
   pure validation error — it never reaches git or network code.
 - The already-reviewed Phase A (`RemoteTarget`, `withReadOnlyRemoteDb`,
   `describeRemoteTarget`, `verifyReadOnlyRole`) and Phase B1
-  (`collectExplainPreflightFacts`, `buildExplainPreflightArtifact`,
-  the canonical 16-statement `QUERY_REGISTRY`) components are wired
-  together **unmodified** — this phase adds no new SQL, no new registry
-  statements, no changes to `verifyReadOnlyRole`'s privilege checks, and
-  no changes to the collector's canonicalization/fingerprinting logic.
-- `readonly-db-remote.ts` gained one new function as part of this phase's
-  final implementation, `assertTargetDescriptorMatchesExpectation` (see
-  "Target-identity safeguard" below) — its stale doc comment (it
-  previously said "nothing wired into a CLI command yet") was also
-  updated to match. Everything else — TLS (`ssl: 'verify-full'`),
+  (`collectExplainPreflightFacts`, the canonical 16-statement
+  `QUERY_REGISTRY`) components are wired together **unmodified** — this
+  phase adds no new SQL, no new registry statements, no changes to
+  `verifyReadOnlyRole`'s privilege checks, and no changes to the
+  collector's canonicalization/fingerprinting logic. `buildExplainPreflightArtifact`
+  (V1) itself is also unmodified, but round 6 added a parallel
+  `buildExplainPreflightArtifactV2` that `cli.ts` actually calls now —
+  see "What was built" and "Verified-identity fingerprint (V2, round 6)"
+  below.
+- `readonly-db-remote.ts` gained two functions as part of this phase's
+  final implementation, `assertTargetIdentityMatchesExpectation` (see
+  "Target-identity safeguard" below; renamed from
+  `assertTargetDescriptorMatchesExpectation` in round 6 — the required
+  value has been username-inclusive identity, not a safe descriptor,
+  since round 5) and `computeVerifiedIdentityFingerprint` (round 6, a
+  non-secret SHA-256 of that same identity, persisted on the artifact —
+  see "Verified-identity fingerprint (V2)" below) — its stale doc
+  comment (it previously said "nothing wired into a CLI command yet")
+  was also updated to match. Everything else — TLS (`ssl: 'verify-full'`),
   least-privilege verification, `READ ONLY` + `REPEATABLE READ`
   transaction, and timeout constants — is untouched.
 - `explain-preflight.ts`'s canonical 16-statement collector and
-  fingerprinting logic are untouched.
+  fingerprinting logic are untouched. Round 6 added a parallel V2
+  artifact contract (`ExplainPreflightArtifactV2`) alongside it — see
+  below — without modifying V1.
 - No remote timeout constant was tuned. No approval-record concept, no
   persisted-artifact loading, no automated plan verdict, no retry logic,
   and no Phase B3 functionality exists anywhere in this branch.
@@ -57,9 +68,10 @@ end to end:
 ```text
 RemoteTarget (--target=staging|production)
   -> describeRemoteTarget(target)          -- safe host:port/database descriptor
+  -> computeVerifiedIdentityFingerprint(target) -- round 6: non-secret SHA-256 of the verified identity
   -> withReadOnlyRemoteDb(target, async (tx) => {
        collectExplainPreflightFacts(tx)     -- Phase B1, unmodified
-         -> buildExplainPreflightArtifact(facts, { target, commit })
+         -> buildExplainPreflightArtifactV2(facts, { target: { environment, descriptor, verifiedIdentityFingerprint }, commit })
      })
   -> writeEvidence(target, fileName, JSON.stringify(artifact))
   -> safe terminal summary (never the full artifact)
@@ -107,8 +119,9 @@ frozen `QUERY_REGISTRY`.
    A command whose only job is deciding whether to open a real remote
    connection does not get to guess what an unrecognized argument was
    supposed to mean.
-5. **The resolved target's descriptor matches a separately, independently
-   declared expectation** (`assertTargetDescriptorMatchesExpectation`) --
+5. **The resolved target's identity matches a separately, independently
+   declared expectation** (`assertTargetIdentityMatchesExpectation`,
+   renamed in round 6 from `assertTargetDescriptorMatchesExpectation`) --
    this is part of Phase B2's final implementation, not an optional
    add-on: `resolveRemoteUrl` only validates that the target's env var is
    *set* and looks like a postgres URL, which has no way to know whether
@@ -117,25 +130,27 @@ frozen `QUERY_REGISTRY`.
    otherwise let `plan --target=staging` silently connect to production
    while the persisted artifact is stamped `environment: staging`. Closed
    by requiring a SECOND, independently-set env var per target
-   (`OZI79_STAGING_EXPECTED_DESCRIPTOR`/
-   `OZI79_PRODUCTION_EXPECTED_DESCRIPTOR`) declaring the exact expected
-   `describeRemoteTarget` output, and failing closed if it is unset or
-   does not match. Baked into `withReadOnlyRemoteDb` itself (the same
-   placement reasoning as `verifyReadOnlyRole`), not left to `cli.ts` to
-   remember to call -- `cli.ts` also calls it explicitly beforehand so a
-   mismatch fails before the "connecting to..." log line is even printed,
-   but the authoritative enforcement point is inside the connection
-   function, for any future caller. **The mismatch/missing-value error
-   never interpolates the configured expected value itself** -- it names
-   the target and the env var, and may include the already-sanitized
-   resolved descriptor, but the raw `*_EXPECTED_DESCRIPTOR` contents are
-   never echoed, since an operator could have pasted a real credential
-   into that variable by mistake.
+   (`OZI79_STAGING_EXPECTED_IDENTITY`/`OZI79_PRODUCTION_EXPECTED_IDENTITY`
+   -- renamed in round 6 from `*_EXPECTED_DESCRIPTOR`, since the required
+   value is username-inclusive identity, not `describeRemoteTarget`'s
+   safe descriptor) declaring the exact expected
+   `username@host:port/database` identity, and failing closed if it is
+   unset or does not match. Baked into `withReadOnlyRemoteDb` itself (the
+   same placement reasoning as `verifyReadOnlyRole`), not left to
+   `cli.ts` to remember to call -- `cli.ts` also calls it explicitly
+   beforehand so a mismatch fails before the "connecting to..." log line
+   is even printed, but the authoritative enforcement point is inside the
+   connection function, for any future caller. **The mismatch/missing-value
+   error never interpolates the configured expected value, the resolved
+   username, or the full URL** -- it names the target and the env var,
+   and may include the already-sanitized resolved descriptor, but the raw
+   `*_EXPECTED_IDENTITY` contents are never echoed, since an operator
+   could have pasted a real credential into that variable by mistake.
 
-   **Sourcing requirement:** each `*_EXPECTED_DESCRIPTOR` value must come
+   **Sourcing requirement:** each `*_EXPECTED_IDENTITY` value must come
    from authoritative environment/provider metadata (e.g. the hosting
-   provider's own record of that environment's host/database, or a
-   value an operator independently transcribes from it) -- **never**
+   provider's own record of that environment's host/database/username, or
+   a value an operator independently transcribes from it) -- **never**
    generated, derived, or copied from the corresponding
    `*_READONLY_DATABASE_URL` itself. Deriving one from the other would
    make the safeguard tautological: a swapped or mistyped credential
@@ -146,11 +161,29 @@ Only once all five hold does `withReadOnlyRemoteDb` get called — exactly
 once, with `collectExplainPreflightFacts(tx)` invoked exactly once inside
 it.
 
+### Verified-identity fingerprint (V2, round 6)
+
+`runRemoteExplainPlan` also computes
+`computeVerifiedIdentityFingerprint(target)` -- a non-secret,
+domain-separated SHA-256 of the exact same username-inclusive identity
+`assertTargetIdentityMatchesExpectation` verifies (fixed prefix
+`ozi79:remote-target-verified-identity:v1:`, so it can never be confused
+with a hash of some unrelated identity-shaped string computed elsewhere).
+It is persisted as `target.verifiedIdentityFingerprint` on the produced
+`ExplainPreflightArtifactV2` and printed (hash-only, safe) in the
+terminal summary. This closes a gap `describeRemoteTarget`'s descriptor
+alone leaves open: two different database instances behind the same
+provider connection pooler (e.g. Supabase, documented in this
+repository's own root `.env.example`) can share an identical
+`host:port/database`, so an artifact recording only the descriptor could
+not later prove which of them was actually reviewed.
+
 ### Evidence and terminal output
 
-The full `ExplainPreflightArtifactV1` (every raw `EXPLAIN` plan, every
-relation stat) is persisted via the existing `writeEvidence(target, ...)`
-mechanism, under the `staging`/`production` evidence directory
+The full `ExplainPreflightArtifactV2` (every raw `EXPLAIN` plan, every
+relation stat, plus `target.verifiedIdentityFingerprint` -- round 6) is
+persisted via the existing `writeEvidence(target, ...)` mechanism, under
+the `staging`/`production` evidence directory
 (`~/.local/share/nextjs-16-boilerplate/ozi-75/<target>/`) — never
 committed to the repo. The filename is
 `<target>-explain-preflight-<generatedAt>-<artifactFingerprint prefix>.json`:
@@ -158,8 +191,10 @@ timestamp- and fingerprint-based only, containing no hostname, database
 name, URL, or credential.
 
 Terminal output is a **safe, concise summary only** — target, safe target
-descriptor, commit SHA, schema migration id/hash, registry/scope/artifact
-fingerprints, statement count, the two priority-manual-review statement
+descriptor, commit SHA, schema migration id/hash,
+registry/scope/artifact/verified-identity fingerprints (round 6 added the
+last one — safe, since a SHA-256 hash does not reveal the username it was
+computed from), statement count, the two priority-manual-review statement
 ids, `requiresManualReview`, and the evidence file path. It deliberately
 never dumps the full artifact or any raw `EXPLAIN` plan to the terminal,
 unlike `scan` (which does print its full local report — that report holds
@@ -170,7 +205,12 @@ someone has to go and read.
 
 ## Tests
 
-`cli.test.ts` (new, 24 tests, no DB, every remote/network/evidence effect
+This section describes the test file's original (build-time) shape and
+scenario coverage; it has grown across review rounds since -- see each
+round's section below for what each round added, and the "Validation"
+section at the end of this document for current, exact per-file totals.
+
+`cli.test.ts` (no DB, every remote/network/evidence effect
 mocked — this is a wiring/fail-closed-boundary test file, not a real
 Postgres/EXPLAIN test; that remains `explain-preflight.db.test.ts`'s job):
 
@@ -190,7 +230,7 @@ Postgres/EXPLAIN test; that remains `explain-preflight.db.test.ts`'s job):
 - a `withReadOnlyRemoteDb` rejection (e.g. a misconfigured role) does not
   write evidence;
 - a `writeEvidence` rejection propagates instead of being swallowed;
-- the expected-descriptor safeguard being unset, or a resolved target
+- the expected-identity safeguard being unset, or a resolved target
   mismatching it (the swapped-credential case), rejects without ever
   calling `withReadOnlyRemoteDb`;
 - `plan`'s strict argument contract: a duplicated `--target` (same value
@@ -208,16 +248,20 @@ Postgres/EXPLAIN test; that remains `explain-preflight.db.test.ts`'s job):
 - `scan --target=staging` and `scan --target=production` still fail with
   the pre-existing validation error, without reaching any remote wiring.
 
-`readonly-db-remote.test.ts` gained 7 tests for
-`assertTargetDescriptorMatchesExpectation` and the connection-level
-safeguard: unset/mismatched/matching/never-mixed-up expectation env vars,
-a dedicated proof that `withReadOnlyRemoteDb` refuses to open a
-connection (`postgres()` never called) when the safeguard fails, and two
-tests proving a credential-bearing expected-descriptor value (a full
+`readonly-db-remote.test.ts` gained tests for
+`assertTargetIdentityMatchesExpectation` (renamed in round 6) and the
+connection-level safeguard: unset/mismatched/matching/never-mixed-up
+expectation env vars, a dedicated proof that `withReadOnlyRemoteDb`
+refuses to open a connection (`postgres()` never called) when the
+safeguard fails, and two tests proving a credential-bearing expected-
+identity value (a full
 `postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db` URL,
 at both the unit level and through `withReadOnlyRemoteDb`) never reaches
 the thrown error message -- not the full value, not the password, not
-the username, individually.
+the username, individually. Round 6 added `computeVerifiedIdentityFingerprint`
+coverage in the same file (deterministic, differs on a same-descriptor/
+different-username pooler swap, differs staging vs. production, never
+contains the raw identity, well-formed even for an unparseable URL).
 
 ### Adversarial falsification pass (performed before push)
 

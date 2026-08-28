@@ -60,114 +60,137 @@ building this wiring is not that authorization.
 
 ## What was built
 
+**This section is the single authoritative description of the current
+executable path.** It is rewritten in place, not patched around, each
+time the real order changes -- see "Review round 12" below for why this
+mattered enough to do as a full rewrite rather than another incremental
+correction.
+
 ### `cli.ts`'s `plan --target=staging|production --execute-remote-explain`
 
-Wires the already-reviewed components together, in this exact order,
-end to end:
+The real, complete, in-order pipeline, from `run()` receiving `argv`
+through evidence being written:
 
 ```text
-RemoteTarget (--target=staging|production)
-  -> assertTargetIdentityMatchesExpectation(target) -- fail closed BEFORE descriptor/fingerprint resolution or any connection (see precondition 5 below)
-  -> describeRemoteTarget(target)          -- safe host:port/database descriptor
-  -> computeVerifiedIdentityFingerprint(target) -- round 6: non-secret SHA-256 of the verified identity
-  -> withReadOnlyRemoteDb(target, async (tx) => {
-       -- re-asserts assertTargetIdentityMatchesExpectation(target) internally too (defense-in-depth, see precondition 5)
-       collectExplainPreflightFacts(tx)     -- Phase B1, unmodified
-         -> buildExplainPreflightArtifactV2(facts, { target: { environment, descriptor, verifiedIdentityFingerprint }, commit })
-     })
-  -> writeEvidence(target, fileName, JSON.stringify(artifact))
-  -> safe terminal summary (never the full artifact)
+run(argv)
+  -> parsePlanArgs(args)                    -- the FULL closed CLI contract, before runRemoteExplainPlan is ever called:
+       - exactly one --target=staging|production (a duplicate, of either value or a mix, is rejected)
+       - target must be exactly "staging" or "production" (any other string, including the LocalTarget value "dev", is rejected)
+       - only --execute-remote-explain is allowed alongside --target=...
+       - --allow-dirty is REJECTED here as an unrecognized flag -- not silently ignored, not merely "not read" later; `plan does not recognize: --allow-dirty` is thrown before any git call
+       - any other unrecognized flag (--dry-run, --force, ...) is rejected
+       - positional garbage after `plan` is rejected
+       - every rejection names the argument by position or by a letters/digits/hyphens-only flag name (SAFE_FLAG_NAME_PATTERN) -- never by echoing a credential-shaped value
+  -> runRemoteExplainPlan(target, { executeRemoteExplain })
+       1. executeRemoteExplain must be true                          -- plan --target=... alone, with no other flag, never opens a connection
+       2. isWorkingTreeDirty() must be false                          -- no --allow-dirty escape hatch exists for plan at all
+       3. resolveCommitShaStrict()                                    -- throws on any git failure or empty output; never interpolates the raw subprocess error text (see "Output-leak audit" below)
+       4. assertTargetIdentityMatchesExpectation(target)              -- fails closed against OZI79_<T>_EXPECTED_IDENTITY; internally calls resolveRemoteUrl(target), the single authoritative URL parse gate (see below)
+       5. descriptor = describeRemoteTarget(target)                   -- safe host:port/database, never the username
+       6. verifiedIdentityFingerprint = computeVerifiedIdentityFingerprint(target) -- non-secret SHA-256 of the same verified identity
+       -> withReadOnlyRemoteDb(target, async (tx) => {
+            - assertTargetIdentityMatchesExpectation(target) again    -- the authoritative re-check, independent of step 4 above (defense-in-depth: this function's own contract, for any future caller)
+            - url = resolveRemoteUrl(target)                          -- re-resolved, same single parse gate, same normalized string
+            - postgres(url, { ssl: 'verify-full', ... })               -- TLS and every timeout forced in code, never read from the URL
+            - db.transaction(fn, { accessMode: 'read only', isolationLevel: 'repeatable read' })
+                - verifyReadOnlyRole(tx)                               -- live least-privilege check; throws RemoteRoleNotReadOnlyError, already safe to print
+                - fn(tx):
+                    facts = collectExplainPreflightFacts(tx)           -- Phase B1, unmodified, the frozen QUERY_REGISTRY only
+                    return buildExplainPreflightArtifactV2(facts, {
+                      target: { environment, descriptor, verifiedIdentityFingerprint },  -- rejects a malformed verifiedIdentityFingerprint before producing an artifact
+                      commit: { commitSha, workingTreeDirty: false },
+                    })
+          })
+  -> writeEvidence(target, fileName, JSON.stringify(artifact))         -- fileName is timestamp + artifactFingerprint-prefix only
+  -> safe terminal summary                                            -- fingerprints/counts/booleans only, never the full artifact or a raw EXPLAIN plan
 ```
 
+A raw Postgres/Drizzle connection or query failure (anything other than
+`RemoteRoleNotReadOnlyError`, which is already a deliberately-sanitized,
+safe-to-print message) is caught around the `withReadOnlyRemoteDb` call
+and replaced with a stable, safe message before it can reach `run()`'s
+top-level `console.error` -- the original is preserved only as `cause`.
+
 `target`/`descriptor` are the only two things this command ever learns
-about "where": `target` comes only from the closed `--target=staging|
-production` check, `descriptor` only from `describeRemoteTarget(target)`.
-There is no flag, parameter, or code path anywhere in `runRemoteExplainPlan`
-that accepts a caller-supplied connection URL, descriptor string,
-arbitrary SQL, a query id/subset, or an environment string outside that
-closed domain — `collectExplainPreflightFacts` always runs the full,
-frozen `QUERY_REGISTRY`.
+about "where": `target` comes only from `parsePlanArgs`'s closed
+`--target=staging|production` check, `descriptor` only from
+`describeRemoteTarget(target)`. There is no flag, parameter, or code path
+anywhere in `runRemoteExplainPlan` that accepts a caller-supplied
+connection URL, descriptor string, arbitrary SQL, a query id/subset, or
+an environment string outside that closed domain --
+`collectExplainPreflightFacts` always runs the full, frozen
+`QUERY_REGISTRY`.
+
+### `resolveRemoteUrl` -- the single authoritative URL parse gate (round 12)
+
+Every caller of a remote credential URL -- `postgres()` itself, and this
+module's own `describeUrl`/`resolveVerificationIdentity`/
+`computeVerifiedIdentityFingerprint` -- receives the exact same,
+already-validated, already-normalized string: `resolveRemoteUrl` parses
+it with `new URL()` exactly once and returns that parser's own
+`.toString()` re-serialization, never the untouched raw environment
+value. No other function in this module does its own independent parse
+of an unvalidated raw string. Validated, in order, each failure a
+distinct fail-closed error that never echoes the raw value:
+
+1. the env var is set (non-empty after `.trim()`);
+2. it parses as a URL at all (`new URL()` does not throw);
+3. its **parsed** protocol is exactly `postgres:` or `postgresql:` --
+   checked against `URL#protocol`, never a string-prefix check, so a
+   scheme that merely starts with the right letters cannot slip through;
+4. it carries no query string;
+5. it carries no fragment;
+6. it has a non-empty hostname;
+7. it has a non-empty username;
+8. its path resolves to a non-empty database name.
+
+Query strings and fragments are rejected even though (verified directly
+against the actual pinned `postgres@3.4.8` package, by reading
+`parseOptions`/`parseUrl` in `postgres/src/index.js` and by running it
+against a live override attempt) this dependency version does not let a
+query parameter change the connection destination -- rejecting anyway is
+a zero-cost defense against relying on that being true forever, since
+nothing in the documented credential format ever needs either.
 
 ### Fail-closed preconditions, checked in this order, before any connection
 
-1. **`--execute-remote-explain` is present.** `plan --target=staging|
-   production` with no other flag is a hard error before any git call or
-   network I/O. This is the acknowledgement gate: the whole point is that
-   typing the target alone is never sufficient.
-2. **The working tree is clean.** Unlike `scan`, there is **no
-   `--allow-dirty` escape hatch** for `plan` — the flag is never even
-   read by `runRemoteExplainPlan`, so passing it has no effect on this
-   check. A remote target's artifact is exactly the kind of evidence a
-   human might later approve; an ambiguous "which commit does this
-   describe" is not acceptable for that, the way it is for `scan`'s
-   local, low-stakes iteration.
-3. **The commit SHA resolves.** `resolveCommitShaStrict` — a new function,
-   distinct from `scan`'s existing `resolveCommitSha` — throws on any
-   `git rev-parse HEAD` failure or empty output, instead of silently
-   falling back to the string `'unknown'`. A remote artifact makes a much
-   stronger claim ("this exact commit was reviewed against this exact
-   remote database") than `scan`'s local report, so an unresolvable
-   commit must be a hard failure here, not a placeholder baked into
-   evidence a human might approve.
-4. **`plan`'s argument contract is strict, not permissive.** Unlike
-   `scan`/`matrix` (which use the tolerant `readOption`/`args.includes()`
-   style that silently ignores an unrecognized or duplicated flag), a
-   dedicated `parsePlanArgs` requires exactly one `--target=staging|
-   production`, allows only the `--execute-remote-explain` flag alongside
-   it, and rejects everything else before `runRemoteExplainPlan` is ever
-   called: a duplicated `--target` (including one `staging` value plus
-   one `production` value), any unrecognized flag (`--dry-run`,
-   `--force`, `--no-execute`, ...), and positional garbage after `plan`.
-   A command whose only job is deciding whether to open a real remote
-   connection does not get to guess what an unrecognized argument was
-   supposed to mean.
-5. **The resolved target's identity matches a separately, independently
-   declared expectation** (`assertTargetIdentityMatchesExpectation`,
-   renamed in round 6 from `assertTargetDescriptorMatchesExpectation`) --
-   this is part of Phase B2's final implementation, not an optional
-   add-on: `resolveRemoteUrl` only validates that the target's env var is
-   *set* and looks like a postgres URL, which has no way to know whether
-   `OZI79_STAGING_READONLY_DATABASE_URL` actually points at staging
-   rather than production. A swapped or misconfigured credential would
-   otherwise let `plan --target=staging` silently connect to production
-   while the persisted artifact is stamped `environment: staging`. Closed
-   by requiring a SECOND, independently-set env var per target
-   (`OZI79_STAGING_EXPECTED_IDENTITY`/`OZI79_PRODUCTION_EXPECTED_IDENTITY`
-   -- renamed in round 6 from `*_EXPECTED_DESCRIPTOR`, since the required
-   value is username-inclusive identity, not `describeRemoteTarget`'s
-   safe descriptor) declaring the exact expected
-   `username@host:port/database` identity, and failing closed if it is
-   unset or does not match. Baked into `withReadOnlyRemoteDb` itself (the
-   same placement reasoning as `verifyReadOnlyRole`), not left to
-   `cli.ts` to remember to call -- `cli.ts` also calls it explicitly
-   beforehand so a mismatch fails before the "connecting to..." log line
-   is even printed, but the authoritative enforcement point is inside the
-   connection function, for any future caller. **The mismatch/missing-value
-   error never interpolates the configured expected value, the resolved
-   username, or the full URL** -- it names the target and the env var,
-   and may include the already-sanitized resolved descriptor, but the raw
-   `*_EXPECTED_IDENTITY` contents are never echoed, since an operator
-   could have pasted a real credential into that variable by mistake.
+Restated as a flat, numbered list for cross-reference (the pipeline
+diagram above is the authoritative sequence; this list names each check
+by what it enforces):
 
-   **Sourcing requirement:** each `*_EXPECTED_IDENTITY` value must come
-   from authoritative environment/provider metadata (e.g. the hosting
-   provider's own record of that environment's host/database/username, or
-   a value an operator independently transcribes from it) -- **never**
-   generated, derived, or copied from the corresponding
-   `*_READONLY_DATABASE_URL` itself. Deriving one from the other would
-   make the safeguard tautological: a swapped or mistyped credential
-   would silently satisfy an expectation computed from that same mistake
-   instead of catching it.
+0. **`parsePlanArgs`'s full closed CLI contract** (see the pipeline
+   above) -- runs in `run()`, before `runRemoteExplainPlan` exists on
+   the call stack at all.
+1. **`--execute-remote-explain` is present.**
+2. **The working tree is clean** -- no `--allow-dirty` escape hatch for
+   `plan` exists anywhere in this path (rejected at step 0, not merely
+   unread here).
+3. **The commit SHA resolves** (`resolveCommitShaStrict`, distinct from
+   `scan`'s lenient `resolveCommitSha`).
+4. **The resolved target's identity matches
+   `OZI79_<T>_EXPECTED_IDENTITY`** (`assertTargetIdentityMatchesExpectation`)
+   -- checked explicitly here AND again, independently, inside
+   `withReadOnlyRemoteDb` itself.
+5. **The credential URL passes `resolveRemoteUrl`'s full parse gate**
+   (see above) -- both when computing the descriptor/fingerprint and
+   again inside `withReadOnlyRemoteDb` before `postgres()` is called.
+6. **`verifyReadOnlyRole` passes**, inside the same `READ ONLY`/
+   `REPEATABLE READ` transaction, before the caller's function ever runs.
+7. **`buildExplainPreflightArtifactV2` accepts the computed
+   `verifiedIdentityFingerprint`** -- rejects a missing/malformed one
+   before an artifact can exist at all.
 
-Only once all five hold does `withReadOnlyRemoteDb` get called — exactly
-once, with `collectExplainPreflightFacts(tx)` invoked exactly once inside
-it.
+**Sourcing requirement for `*_EXPECTED_IDENTITY`:** must come from
+authoritative environment/provider metadata (the hosting provider's own
+record, or a value an operator independently transcribes from it) --
+**never** generated, derived, or copied from the corresponding
+`*_READONLY_DATABASE_URL` itself. Deriving one from the other would make
+the safeguard tautological.
 
-### Verified-identity fingerprint (V2, round 6)
+### Verified-identity fingerprint (V2)
 
-`runRemoteExplainPlan` also computes
-`computeVerifiedIdentityFingerprint(target)` -- a non-secret,
-domain-separated SHA-256 of the exact same username-inclusive identity
+`computeVerifiedIdentityFingerprint(target)` is a non-secret,
+domain-separated SHA-256 of the same username-inclusive identity
 `assertTargetIdentityMatchesExpectation` verifies (fixed prefix
 `ozi79:remote-target-verified-identity:v1:`, so it can never be confused
 with a hash of some unrelated identity-shaped string computed elsewhere).
@@ -180,12 +203,21 @@ repository's own root `.env.example`) can share an identical
 `host:port/database`, so an artifact recording only the descriptor could
 not later prove which of them was actually reviewed.
 
+`verifiedIdentityFingerprint` has exactly one canonical format: a
+lowercase 64-character SHA-256 hex digest
+(`isCanonicalVerifiedIdentityFingerprint`, `explain-preflight.ts`).
+`buildExplainPreflightArtifactV2` refuses to construct an artifact from a
+non-canonical value; `checkTargetCompatibilityV2` validates the format on
+both sides independently, before any equality comparison, so two
+malformed-but-identical values (e.g. two empty strings) are never treated
+as a match.
+
 ### Evidence and terminal output
 
 The full `ExplainPreflightArtifactV2` (every raw `EXPLAIN` plan, every
-relation stat, plus `target.verifiedIdentityFingerprint` -- round 6) is
-persisted via the existing `writeEvidence(target, ...)` mechanism, under
-the `staging`/`production` evidence directory
+relation stat, plus `target.verifiedIdentityFingerprint`) is persisted
+via the existing `writeEvidence(target, ...)` mechanism, under the
+`staging`/`production` evidence directory
 (`~/.local/share/nextjs-16-boilerplate/ozi-75/<target>/`) — never
 committed to the repo. The filename is
 `<target>-explain-preflight-<generatedAt>-<artifactFingerprint prefix>.json`:
@@ -194,16 +226,41 @@ name, URL, or credential.
 
 Terminal output is a **safe, concise summary only** — target, safe target
 descriptor, commit SHA, schema migration id/hash,
-registry/scope/artifact/verified-identity fingerprints (round 6 added the
-last one — safe, since a SHA-256 hash does not reveal the username it was
-computed from), statement count, the two priority-manual-review statement
-ids, `requiresManualReview`, and the evidence file path. It deliberately
-never dumps the full artifact or any raw `EXPLAIN` plan to the terminal,
-unlike `scan` (which does print its full local report — that report holds
-only aggregate counts, never a raw plan). A remote artifact's raw plans
-are safe to persist as evidence a reviewer opens deliberately, but not to
-print into logs that may be captured far more casually than a file
-someone has to go and read.
+registry/scope/artifact/verified-identity fingerprints (a SHA-256 hash
+does not reveal the username it was computed from), statement count, the
+two priority-manual-review statement ids, `requiresManualReview`, and the
+evidence file path. It deliberately never dumps the full artifact or any
+raw `EXPLAIN` plan to the terminal, unlike `scan` (which does print its
+full local report — that report holds only aggregate counts, never a raw
+plan). A remote artifact's raw plans are safe to persist as evidence a
+reviewer opens deliberately, but not to print into logs that may be
+captured far more casually than a file someone has to go and read.
+
+### Output-leak audit (round 12)
+
+Every value this path ever puts into a thrown `Error` message, a
+`console.log`, or a committed evidence filename was classified and
+checked:
+
+| Source | Trust | Ever echoed? |
+|---|---|---|
+| `*_READONLY_DATABASE_URL` raw value | untrusted, credential-bearing | never |
+| `*_EXPECTED_IDENTITY` raw value | untrusted, credential-bearing | never |
+| resolved username | untrusted, credential-bearing | never |
+| raw Postgres/Drizzle connection/query error | untrusted (may embed host/user) | never (sanitized message; original only as `cause`) |
+| raw `git`/subprocess error | untrusted (may embed local paths/argv) | never (sanitized message; original only as `cause`) |
+| rejected CLI argument value | untrusted, possibly credential-shaped | never (name/position only, `safeArgumentDescription`) |
+| `target` (`'staging'`/`'production'`) | closed literal domain | yes -- safe |
+| `descriptor` (host:port/database) | derived, username-stripped | yes -- safe |
+| `commitSha` | derived, resolvable public value | yes -- safe |
+| every fingerprint (registry/scope/artifact/verifiedIdentity) | SHA-256 hex digest | yes -- safe, non-reversible |
+| evidence file path/name | timestamp + fingerprint-prefix only | yes -- safe |
+
+`resolveCommitShaStrict` was found, during this audit, to interpolate the
+caught subprocess error's own `.message` directly into its thrown
+message -- fixed to a fixed, safe string with the original preserved
+only as `cause`, matching the pattern already used for raw Postgres/
+Drizzle failures.
 
 ## Tests
 
@@ -263,7 +320,13 @@ the thrown error message -- not the full value, not the password, not
 the username, individually. Round 6 added `computeVerifiedIdentityFingerprint`
 coverage in the same file (deterministic, differs on a same-descriptor/
 different-username pooler swap, differs staging vs. production, never
-contains the raw identity, well-formed even for an unparseable URL).
+contains the raw identity). Round 12 added a "resolveRemoteUrl -- single
+authoritative parse gate" describe block covering the full URL-validity
+matrix (fragment/hostname/username/database/scheme, never echoes on
+failure, connects with the parser's own normalized re-serialization);
+note that an unparseable URL now fails closed by throwing (from
+`resolveRemoteUrl` itself), superseding round 6's original sentinel-hash
+behavior for that one case.
 
 ### Adversarial falsification pass (performed before push)
 
@@ -490,8 +553,9 @@ the end of this section.
   interpolated the full rejected argument(s) verbatim into the thrown
   message for both a duplicated `--target` and any unrecognized
   argument -- an operator mistake such as
-  `--database-url=postgres://user:password@host/db` would put that
-  entire string into an `Error` the top-level handler prints to stderr.
+  `--database-url=postgres://[username]:[REDACTED]@[host]/[database]`
+  would put that entire string into an `Error` the top-level handler
+  prints to stderr.
   Fixed with `safeArgumentDescription`: a `--flag=value` argument is
   described by its flag name only (never what follows `=`); anything
   else (a bare flag, a positional token) is described only by its
@@ -758,16 +822,17 @@ One finding (P1), the same category as round 10 but a materially
 different -- and correct -- root cause: renaming the embedded username/
 password values to the self-evidently-fake `ozi79-test-only-*`
 convention (round 10) was not enough, because it is the committed
-*shape* of a complete, parseable `scheme://user:pass@host/db` literal
+*shape* of a complete, parseable
+`postgres://[username]:[REDACTED]@[host]/[database]`-shaped literal
 that this repository's invariants (and a secret scanner) actually flag,
 not whether the embedded values individually look like a real secret.
 Round 10's fix addressed content; this finding is about structure.
 
 Confirmed by inspecting exactly what Codex flagged: the finding's anchor
-line (`readonly-db-remote.test.ts`, the pre-existing, untouched-since-
-round-5 `'postgres://ozi79-test-only-user:ozi79-test-only-password@...'`
-fixture) already used the "safe-content" naming convention and was still
-flagged -- proving the shape itself, not the content, is the trigger.
+line (`readonly-db-remote.test.ts`, a pre-existing fixture untouched
+since round 5) already used the safe-content `ozi79-test-only-*` naming
+and was still flagged -- proving the shape itself, not the content, is
+the trigger.
 
 Fixed structurally, not cosmetically: added
 `scripts/tenancy-inventory/test-postgres-url.ts`, a small shared test-
@@ -831,17 +896,153 @@ pre-existing, unrelated case (`secretLookingValue` in
 branch) that Codacy's actual check run did not flag -- left untouched,
 not part of this fix.
 
+## Review round 12 -- self-review invariant pass (not a Codex round)
+
+User-directed: stop responding to individual cited lines one at a time
+and review the complete Phase B2 trust boundary as one invariant before
+pushing again. This section is that review's report -- built BEFORE any
+code changed, then used to find the fixes below, rather than waiting for
+an external tool to enumerate them one at a time.
+
+### The invariant
+
+A remote EXPLAIN preflight may execute only after an explicit
+unambiguous operator decision, against the intended verified database
+identity, using Git metadata from the repository whose code is
+executing; all security-relevant identity must be preserved in the V2
+evidence contract for later compatibility/approval, while no
+credential-bearing or untrusted value may leak into source, docs,
+errors, or logs; current-state documentation must exactly describe the
+executable path.
+
+### Invariant map
+
+| Stage | Trust | Authoritative validation | Authoritative enforcement | Persisted representation | Safe printable representation | Negative regression proof |
+|---|---|---|---|---|---|---|
+| CLI input (`argv`) | untrusted (operator-supplied, may be pasted-wrong) | `parsePlanArgs` | `parsePlanArgs` (throws before `runRemoteExplainPlan` exists on the call stack) | not persisted | flag name/position only (`safeArgumentDescription`) | credential-shaped unknown arg/positional-garbage tests |
+| Explicit acknowledgement | trusted once present (operator's own literal flag) | `runRemoteExplainPlan` step 1 | same | not persisted | the literal flag name | "missing acknowledgement" test |
+| Git identity (commit SHA, dirty state) | semi-trusted (local repo state, but must be THIS repo, not ambient cwd) | `resolveCommitShaStrict`/`isWorkingTreeDirty`, both pinned to `REPO_ROOT` | same | `commit: { commitSha, workingTreeDirty }` on the V2 artifact | commit SHA is safe to print; raw subprocess error text is not | cwd-independence test; raw-git-error-not-leaked test (round 12) |
+| Credential env var (`*_READONLY_DATABASE_URL`) | untrusted, credential-bearing | `resolveRemoteUrl` | same (single parse gate, round 12) | never persisted raw | never printed raw | "must be a valid/postgres/no-query/no-fragment/has-host/has-user/has-db" matrix |
+| Expected identity env var (`*_EXPECTED_IDENTITY`) | untrusted, credential-bearing (operator could paste a real credential by mistake) | `assertTargetIdentityMatchesExpectation` | same, called twice (`runRemoteExplainPlan` explicitly, `withReadOnlyRemoteDb` authoritatively) | never persisted raw | never printed raw | swapped-credential, Supabase-pooler-swap, never-echoes tests |
+| Verified identity fingerprint | non-secret derived value | `computeVerifiedIdentityFingerprint` | same | `target.verifiedIdentityFingerprint` on V2 artifact | yes -- SHA-256 hex, printed in terminal summary | deterministic/differs-on-swap/never-contains-raw tests |
+| Actual `postgres()` connection | the real remote side effect | `withReadOnlyRemoteDb` (TLS forced, timeouts forced) | same | not directly persisted (its result is) | never printed | `postgres()` mocked; every precondition test asserts `not.toHaveBeenCalled()` |
+| Least-privilege / `READ ONLY` transaction | must be independently verified, not merely trusted | `verifyReadOnlyRole` + `accessMode: 'read only'`/`isolationLevel: 'repeatable read'` | same | not persisted | `RemoteRoleNotReadOnlyError` message is pre-sanitized, safe to print | `.db.test.ts` real-role coverage; role-failure-does-not-write-evidence test |
+| `EXPLAIN` collector | reads only the frozen `QUERY_REGISTRY` | `collectExplainPreflightFacts` | same (Phase B1, unmodified) | `statementPlans`/`requiredRelationStats` on the artifact | raw plans are evidence-only, never terminal output | Phase B1's own coverage, unmodified |
+| V2 artifact | the produced evidence | `buildExplainPreflightArtifactV2` | same (rejects malformed `verifiedIdentityFingerprint` at construction, round 12) | the artifact itself, written to the evidence store | fingerprints only in terminal summary | constructor-invariant tests (round 12) |
+| Scope/artifact fingerprints | integrity values, not authentication | `computeScopeFingerprintV2`/`computeArtifactFingerprintV2` | `checkArtifactIntegrityV2` | on the artifact | yes -- SHA-256 hex | tamper-detection tests |
+| Evidence write | local filesystem, confined | `writeEvidence` | `assertNoSymlinkInPath` + path confinement | the evidence file | file path is safe to print | evidence-store.test.ts confinement suite; write-failure-not-swallowed test |
+| Terminal/error output | the final leak surface | manual review (this audit) | every `console.log`/thrown `Error` call site | n/a | see the "Output-leak audit" table above | full audit table above; raw-DB-failure/raw-git-error tests |
+| Future compatibility checks | not yet wired to any command | `checkTargetCompatibilityV2` | format-validates `verifiedIdentityFingerprint` on both sides independently before comparing | reads the artifact, does not persist | n/a (pure function) | malformed-but-equal-fingerprint tests (round 12) |
+| Runbook/PR description | must describe the executable path exactly | this document | manual review | n/a | n/a | this section; the "What was built" rewrite above |
+
+### Findings and fixes
+
+1. **`resolveRemoteUrl` was not the single authoritative parse gate.**
+   It validated the query-string rejection via its own ad hoc `new
+   URL()` try/catch that silently fell through to returning the raw,
+   unvalidated string on a parse failure -- `postgres()` and this
+   module's own `describeUrl`/`resolveVerificationIdentity` could
+   therefore be handed a value neither had actually agreed was a valid,
+   complete identity. Fixed: `resolveRemoteUrl` now requires a
+   successful parse, validates scheme/query/fragment/hostname/username/
+   database in one place, and returns the parser's own normalized
+   `.toString()` -- every downstream consumer receives that exact
+   string. See its own doc comment above for the full detail.
+2. **`verifiedIdentityFingerprint` had no format validation, only
+   truthiness.** `checkTargetCompatibilityV2` treated any non-empty
+   string as a candidate fingerprint; two malformed-but-equal strings
+   would have compared as compatible. Fixed with
+   `isCanonicalVerifiedIdentityFingerprint` (`^[a-f0-9]{64}$`), enforced
+   independently on both sides before any equality check, and as a
+   constructor invariant in `buildExplainPreflightArtifactV2`. This
+   immediately caught a genuine pre-existing bug: the round-6 test
+   fixtures `FINGERPRINT_A`/`FINGERPRINT_B` were 63 characters, one
+   short of canonical -- undetectable under the old truthiness-only
+   check, caught the moment format validation existed.
+3. **`resolveCommitShaStrict` leaked the raw subprocess error text.**
+   Found during the output-leak audit (see the table above and the
+   "Output-leak audit" section under "What was built"): the caught
+   `execFileSync` error's `.message` was interpolated directly into the
+   thrown message. Fixed to a fixed, safe string with the original
+   preserved only as `cause`, matching the pattern already used for raw
+   Postgres/Drizzle failures.
+4. **The runbook's own "What was built" section did not match the real
+   execution order.** It numbered `parsePlanArgs`'s full CLI contract as
+   step 4 in a "checked in this order" list, when it actually runs
+   before every other step, in `run()`, before `runRemoteExplainPlan`
+   exists on the call stack at all. Fixed by rewriting the section in
+   full (not patching the numbering) -- see "What was built" above.
+5. **Credential-shaped literals remained in a few places round 11's
+   sweep missed.** A fresh, from-scratch repository-wide sweep (not
+   trusting round 11's result) found: two doc-comment examples in
+   `cli.ts`, one historical example each in `plan.md`/`runbook.md`, and
+   two remaining inline test literals (`readonly-db-remote.test.ts`) --
+   one using generic `u:p` placeholders, one a hand-built raw string for
+   a normalization-proof test. All fixed: doc prose converted to
+   bracketed placeholders; the two test literals now go through
+   `buildTestPostgresUrl` (extended to make `database` optional for the
+   one fixture that genuinely needs no path) or are built by string-
+   splicing the builder's own output rather than a hand-written literal.
+
+### Adversarial matrix covered this round
+
+In addition to every prior round's coverage (still passing, unmodified
+in logic): fragment rejected; missing hostname/username/database path
+rejected; scheme validated against the parsed protocol, not a string
+prefix; the URL reaching `postgres()` is the parser's own normalized
+re-serialization, not the untouched raw value; missing/empty/wrong-
+length/non-hex/uppercase `verifiedIdentityFingerprint` rejected by
+`checkTargetCompatibilityV2`, including when identical on both sides;
+`buildExplainPreflightArtifactV2` rejects the same malformed shapes at
+construction; raw Git subprocess error text never reaches a thrown
+message. Every new check has `postgres`/`withReadOnlyRemoteDb` asserted
+`not.toHaveBeenCalled()` alongside it, and every new negative case was
+verified via temporary revert-and-confirm-failure before being restored
+(see the three falsification passes performed during this round, each
+confirming exactly the expected test subset failed and nothing else).
+
+### Self-review answers (required before push)
+
+- **Core invariants:** see "The invariant" and "Invariant map" above.
+- **Authoritative enforcement:** see the "Invariant map" table's
+  "Authoritative enforcement" column.
+- **Persisted in V2 evidence:** `target.verifiedIdentityFingerprint`,
+  `target.descriptor`, `target.environment`, `commit`, both fingerprints
+  -- see the same table's "Persisted representation" column.
+- **Negative test proving failure precedes the dangerous side effect:**
+  every precondition above has a dedicated test asserting `postgres`/
+  `withReadOnlyRemoteDb` was never called; see the "Negative regression
+  proof" column and the "Adversarial matrix covered this round" list.
+- **Secret/untrusted values and what prevents their leak:** see the
+  "Output-leak audit" table under "What was built" above.
+- **Are PR description, env template, and runbook exact representations
+  of the final code?** Runbook: yes, rewritten this round. Env template:
+  yes, updated this round with the query-string/fragment constraint. PR
+  description: updated as part of this round's push (see the PR itself).
+- **Claims dependent on unverified `postgres-js`/Node/Git behavior?**
+  The `postgres@3.4.8` query-parameter claim was independently verified
+  (source read + live override attempt, round 10) and is re-stated,
+  unchanged, in `resolveRemoteUrl`'s doc comment. `new URL()`
+  normalization behavior used in this round's tests (dot-segment
+  removal, non-special-scheme host case-sensitivity) was verified
+  empirically against the actual Node runtime before being relied on in
+  a test, not assumed.
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 142/142 (29 in
-  `cli.test.ts`, 23 in `readonly-db-remote.test.ts`, 90 across the other
-  four files, including the new V2 coverage in `explain-preflight.test.ts`)
-- unit (full repo, `pnpm test`): 279 files / 2395 tests, all pass
+- unit (`scripts/tenancy-inventory` subset): 160/160 (30 in
+  `cli.test.ts`, 30 in `readonly-db-remote.test.ts`, 70 in
+  `explain-preflight.test.ts`, 30 across `evidence-store.test.ts`/
+  `ownership-matrix.test.ts`/`query-registry.test.ts`)
+- unit (full repo, `pnpm test`): 279 files / 2413 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass
+- repository-wide credential-shaped-literal sweep: redone from scratch
+  (not trusting round 11's result), zero remaining matches in any file
+  this branch owns
 
 ## What Phase B2 explicitly does NOT do
 

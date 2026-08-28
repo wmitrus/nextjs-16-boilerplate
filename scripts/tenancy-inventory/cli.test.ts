@@ -484,6 +484,36 @@ describe('plan -- fails before any remote connection', () => {
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
 
+  it('never echoes the raw git subprocess error text when the commit SHA cannot be resolved -- only a stable safe message, with the original preserved as cause', async () => {
+    // Codex review round 12 (self-review): a raw execFileSync failure
+    // message can embed local detail (a path, a username, argv) this
+    // tool has no way to pre-verify as safe -- resolveCommitShaStrict
+    // must not interpolate it into the thrown message.
+    const rawGitError = new Error(
+      'fatal: /home/some-operator/.gitconfig: exec of git-remote-https failed for user some-operator',
+    );
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('status')) return '';
+      if (args?.includes('rev-parse')) throw rawGitError;
+      throw new Error('unexpected git invocation');
+    });
+
+    let thrown: unknown;
+    try {
+      await run(['plan', '--target=staging', '--execute-remote-explain']);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).not.toContain(rawGitError.message);
+    expect(message).not.toContain('some-operator');
+    expect((thrown as Error).cause).toBe(rawGitError);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
   it('rejects when git rev-parse succeeds but returns an empty value', async () => {
     mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
       const args = cmdArgs as readonly string[] | undefined;

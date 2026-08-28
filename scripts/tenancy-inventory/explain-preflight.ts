@@ -907,6 +907,29 @@ export interface ExplainPreflightTargetMetadataV2 extends ExplainPreflightTarget
   readonly verifiedIdentityFingerprint: string;
 }
 
+/**
+ * `verifiedIdentityFingerprint` has exactly one canonical format: the
+ * lowercase 64-character SHA-256 hex digest `computeVerifiedIdentityFingerprint`
+ * (`readonly-db-remote.ts`) emits -- nothing else is ever a valid value
+ * for this field, regardless of truthiness. Shared by both
+ * `buildExplainPreflightArtifactV2` (rejects a malformed caller-supplied
+ * value before it can ever become part of a V2 artifact) and
+ * `checkTargetCompatibilityV2` (rejects a malformed value on either side
+ * as incompatible, never merely "missing" -- two malformed-but-equal
+ * strings, e.g. two empty strings or two truncated hashes, must never be
+ * treated as a match).
+ */
+const VERIFIED_IDENTITY_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
+
+export function isCanonicalVerifiedIdentityFingerprint(
+  value: unknown,
+): value is string {
+  return (
+    typeof value === 'string' &&
+    VERIFIED_IDENTITY_FINGERPRINT_PATTERN.test(value)
+  );
+}
+
 export interface ExplainPreflightCallerMetadataV2 {
   readonly target: ExplainPreflightTargetMetadataV2;
   readonly commit: ExplainPreflightCommitMetadata;
@@ -998,11 +1021,30 @@ export function computeArtifactFingerprintV2(
 /**
  * V2 counterpart of `buildExplainPreflightArtifact` -- the artifact
  * contract emitted by OZI-79 Phase B2's real remote `plan` path.
+ *
+ * Fails closed on a malformed `caller.target.verifiedIdentityFingerprint`
+ * (missing, empty, wrong length, non-hex, or otherwise not the canonical
+ * lowercase 64-character SHA-256 hex digest `computeVerifiedIdentityFingerprint`
+ * emits) -- this is the V2 constructor invariant: a V2 artifact must
+ * never be produced carrying an identity fingerprint that later
+ * compatibility/approval checks could not reliably validate.
  */
 export function buildExplainPreflightArtifactV2(
   facts: ExplainPreflightFacts,
   caller: ExplainPreflightCallerMetadataV2,
 ): ExplainPreflightArtifactV2 {
+  if (
+    !isCanonicalVerifiedIdentityFingerprint(
+      caller.target.verifiedIdentityFingerprint,
+    )
+  ) {
+    throw new Error(
+      '[tenancy-inventory] Cannot build an ExplainPreflightArtifactV2: ' +
+        'target.verifiedIdentityFingerprint is missing or is not a ' +
+        'canonical lowercase 64-character SHA-256 hex digest.',
+    );
+  }
+
   const scopePayload: ScopeFingerprintPayloadV2 = {
     version: 2,
     target: caller.target,
@@ -1036,9 +1078,17 @@ export function buildExplainPreflightArtifactV2(
  * `verifiedIdentityFingerprint` to match exactly, closing the gap V1's
  * version has: two different database instances behind the same
  * provider pooler can share an identical `environment`+`descriptor` (see
- * the module-level V2 doc comment above). A missing or malformed
- * fingerprint on either side is treated as incompatible, the same
- * fail-closed posture as a missing `environment`/`descriptor`.
+ * the module-level V2 doc comment above).
+ *
+ * `verifiedIdentityFingerprint` is validated by FORMAT
+ * (`isCanonicalVerifiedIdentityFingerprint`), not merely truthiness, on
+ * both sides, before the equality check ever runs: missing, empty,
+ * wrong-length, non-hex, or otherwise non-canonical is incompatible on
+ * its own, independent of what the other side holds. This specifically
+ * closes a gap a truthiness-only check would have -- two malformed but
+ * byte-for-byte-equal strings (e.g. two empty strings, or two identical
+ * truncated/non-hex values) must never be treated as a match; each is
+ * rejected individually before any comparison between them happens.
  */
 export function checkTargetCompatibilityV2(
   currentTarget: ExplainPreflightTargetMetadataV2,
@@ -1048,12 +1098,14 @@ export function checkTargetCompatibilityV2(
     !currentTarget ||
     !currentTarget.environment ||
     !currentTarget.descriptor ||
-    !currentTarget.verifiedIdentityFingerprint
+    !isCanonicalVerifiedIdentityFingerprint(
+      currentTarget.verifiedIdentityFingerprint,
+    )
   ) {
     return {
       compatible: false,
       reason:
-        'Current target is missing environment/descriptor/verifiedIdentityFingerprint; cannot prove compatibility.',
+        'Current target is missing environment/descriptor, or verifiedIdentityFingerprint is missing or not a canonical SHA-256 hex digest; cannot prove compatibility.',
     };
   }
   if (
@@ -1061,12 +1113,14 @@ export function checkTargetCompatibilityV2(
     !artifact.target ||
     !artifact.target.environment ||
     !artifact.target.descriptor ||
-    !artifact.target.verifiedIdentityFingerprint
+    !isCanonicalVerifiedIdentityFingerprint(
+      artifact.target.verifiedIdentityFingerprint,
+    )
   ) {
     return {
       compatible: false,
       reason:
-        'Approved artifact is missing target metadata (including verifiedIdentityFingerprint); cannot prove compatibility.',
+        'Approved artifact is missing target metadata, or its verifiedIdentityFingerprint is missing or not a canonical SHA-256 hex digest; cannot prove compatibility.',
     };
   }
   if (

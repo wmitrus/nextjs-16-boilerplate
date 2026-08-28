@@ -22,45 +22,46 @@ execution boundary and design detail.
 
 ## What was built
 
-- `scripts/tenancy-inventory/cli.ts` -- new `plan --target=staging|
+Full, authoritative, current-state detail lives in `runbook.md`'s "What
+was built" section (rewritten in full at round 12, not patched) -- this
+list is a summary pointer, not a duplicate:
+
+- `scripts/tenancy-inventory/cli.ts` -- `plan --target=staging|
   production --execute-remote-explain` command with its own strict
   `parsePlanArgs` argument contract (exactly one `--target`, only the
   acknowledgement flag, no unrecognized/duplicated/positional
-  arguments); `run()` refactored to accept an optional `argv` parameter
-  for direct unit testing
-- `scripts/tenancy-inventory/cli.test.ts` (new, 24 unit tests, no DB, all
-  remote/network/evidence effects mocked)
-- `scripts/tenancy-inventory/readonly-db-remote.ts` -- gained
-  `assertTargetIdentityMatchesExpectation` (renamed in round 6 from
-  `assertTargetDescriptorMatchesExpectation`), baked into
-  `withReadOnlyRemoteDb` (a real part of this phase's final design, not
-  an incidental patch), plus `computeVerifiedIdentityFingerprint` (round
-  6, a non-secret SHA-256 of the same verified identity), plus a
-  doc-comment update (the module previously said nothing was wired into
-  a CLI command; this phase makes that untrue)
-- `scripts/tenancy-inventory/readonly-db-remote.test.ts` -- 19 tests for
-  the target-identity safeguard and the verified-identity fingerprint,
+  arguments, `--allow-dirty` explicitly rejected); `run()` accepts an
+  optional `argv` parameter for direct unit testing
+- `scripts/tenancy-inventory/cli.test.ts` -- wiring/fail-closed-boundary
+  coverage, no DB, all remote/network/evidence effects mocked
+- `scripts/tenancy-inventory/readonly-db-remote.ts` -- `resolveRemoteUrl`
+  (the single authoritative URL parse gate),
+  `assertTargetIdentityMatchesExpectation`, `computeVerifiedIdentityFingerprint`,
+  `withReadOnlyRemoteDb`
+- `scripts/tenancy-inventory/readonly-db-remote.test.ts` -- target-identity
+  safeguard, verified-identity fingerprint, and URL-parse-gate coverage,
   including credential-redaction proof
 - `scripts/tenancy-inventory/evidence-store.ts` -- doc-comment update
-- `scripts/tenancy-inventory/explain-preflight.ts` -- round 6 added
-  `ExplainPreflightArtifactV2`/`version: 2` and its parallel
-  `buildExplainPreflightArtifactV2`/`checkTargetCompatibilityV2`/
-  `checkArtifactIntegrityV2` (V1 unchanged); `cli.ts`'s `plan` command now
-  builds V2 artifacts
+- `scripts/tenancy-inventory/explain-preflight.ts` -- `ExplainPreflightArtifactV2`/
+  `version: 2` and its parallel `buildExplainPreflightArtifactV2`/
+  `checkTargetCompatibilityV2`/`checkArtifactIntegrityV2`/
+  `isCanonicalVerifiedIdentityFingerprint` (V1 unchanged); `cli.ts`'s
+  `plan` command builds V2 artifacts
 - `scripts/tenancy-inventory/tenancy-inventory.env.example` -- documents
-  the two `*_EXPECTED_IDENTITY` env vars (renamed in round 6 from
-  `*_EXPECTED_DESCRIPTOR`) and their sourcing requirement (must come from
-  authoritative environment/provider metadata, never derived from the
-  corresponding `*_READONLY_DATABASE_URL`)
+  the two `*_EXPECTED_IDENTITY` env vars and their sourcing requirement,
+  plus the query-string/fragment rejection
+- `scripts/tenancy-inventory/test-postgres-url.ts` -- shared test-only
+  helper assembling credential-shaped test URLs structurally, so no
+  committed source line writes a complete `user:pass@host` literal
 
 ## Validation
 
-typecheck clean · lint clean · unit (`scripts/tenancy-inventory` subset)
-136/136 · unit (full repo) 279 files / 2389 tests · real DB
-(`pnpm test:db:local`) 32 files / 297 tests · CI config (`pnpm
-test:db:ci`) 32 files / 297 tests · adversarial falsification pass
-performed on every negative-path invariant across all six review rounds'
-fixes, before push (see runbook.md)
+See `runbook.md`'s "Validation" section for the current, exact
+typecheck/lint/unit/real-DB/CI-config results -- not duplicated here to
+avoid two counts drifting out of sync as the branch changes. Every
+review round's fixes were verified via adversarial falsification
+(temporary revert-and-confirm-failure) before push; see runbook.md for
+the full detail per round.
 
 ## Update Log
 
@@ -152,7 +153,8 @@ fixes, before push (see runbook.md)
   resolve everything itself from `target`, removing the
   caller-supplied-descriptor parameter both callers had to keep in sync.
 - Fixed a second real gap: `parsePlanArgs` echoed rejected CLI argument
-  values verbatim (e.g. `--database-url=postgres://user:pass@host/db`)
+  values verbatim (e.g.
+  `--database-url=postgres://[username]:[REDACTED]@[host]/[database]`)
   into the thrown error the top-level handler prints. Fixed with
   `safeArgumentDescription` (flag name only, or argument position for a
   bare positional). Swept the rest of the diff for the same pattern;
@@ -184,6 +186,48 @@ fixes, before push (see runbook.md)
   same-process test run cannot otherwise differ from `process.cwd()`).
   See runbook.md for the full falsification detail and the adversarial
   matrix covered.
+
+### 2026-08-28 — Rounds 7–11 (Codex + docs-only fixes)
+
+Doc-drift fixes (V2 identity contract references, pipeline-diagram
+order), a `safeArgumentDescription` no-`=` redaction gap, replacing
+committed credential-shaped literals in docs then in test fixtures (by
+content, then structurally via `test-postgres-url.ts`), and a Codacy
+`S2068` identifier rename. Full detail in `runbook.md`'s "Review round
+7"–"Review round 11" sections; not repeated here.
+
+### 2026-08-28 — Round 12 (self-review invariant pass, not a Codex round)
+
+User-directed: stop the iterative cited-line-only repair loop and review
+the complete Phase B2 trust boundary as one invariant before pushing
+again. Full self-review report, invariant map, and findings are in
+`runbook.md`'s "Review round 12" section. Summary:
+
+- Rewrote `runbook.md`'s "What was built" section in full (not patched)
+  to exactly match the real execution order, including that
+  `parsePlanArgs` validates the complete CLI contract before
+  `runRemoteExplainPlan` runs at all.
+- `resolveRemoteUrl` is now the single authoritative URL parse gate:
+  requires a successful `new URL()` parse, the exact `postgres:`/
+  `postgresql:` scheme, no query string, no fragment, and non-empty
+  hostname/username/database -- and returns the parser's own normalized
+  re-serialization, so `postgres()` and this tool's identity functions
+  can never interpret the same configured value differently.
+- `verifiedIdentityFingerprint` now has one canonical format (lowercase
+  64-character SHA-256 hex), enforced by both
+  `buildExplainPreflightArtifactV2` (constructor invariant) and
+  `checkTargetCompatibilityV2` (format-validated independently on both
+  sides before any equality check, so two malformed-but-identical values
+  are never compatible) -- this caught a genuine pre-existing bug: the
+  round-6 test fixtures were 63 characters, one short of canonical.
+- `resolveCommitShaStrict` no longer interpolates the raw subprocess
+  error's `.message` into its thrown message (preserved only as
+  `cause`), closing an output-leak gap found during a full audit of
+  every value this path ever echoes.
+- Full repository-wide sweep for committed credential-shaped literals,
+  redone from scratch rather than trusting round 11's result -- found
+  and fixed a few remaining doc-prose and trivial test-literal instances
+  round 11 missed.
 
 ## Artifacts
 

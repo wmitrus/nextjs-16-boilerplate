@@ -94,11 +94,12 @@ const SAFE_FLAG_NAME_PATTERN = /^--[A-Za-z0-9][A-Za-z0-9-]*$/;
  * `--flag=value`-shaped argument is described by its flag name only when
  * that name matches `SAFE_FLAG_NAME_PATTERN` (never what follows `=`,
  * and never a flag-shaped prefix that isn't actually safe-shaped --
- * e.g. `--postgres://user:pass@host/db=x` must not be echoed just
- * because it contains an `=`); a bare `--flag` with no `=` is named the
- * same way when it matches that pattern (e.g. `--allow-dirty`); anything
- * else -- including a `--`-prefixed token with no `=` that is NOT
- * flag-shaped, such as a pasted `--postgres://user:pass@host/db`
+ * e.g. a pasted `--postgres://[username]:[REDACTED]@[host]/[database]=x`
+ * credential must not be echoed just because it contains an `=`); a bare
+ * `--flag` with no `=` is named the same way when it matches that
+ * pattern (e.g. `--allow-dirty`); anything else -- including a
+ * `--`-prefixed token with no `=` that is NOT flag-shaped, such as a
+ * pasted `--postgres://[username]:[REDACTED]@[host]/[database]`
  * credential with no `=` in it at all -- is described only by its
  * 1-based position in the argument list.
  */
@@ -183,6 +184,17 @@ function resolveCommitSha(): string {
  * against this exact remote database" -- so an unresolvable commit here
  * must be a hard failure, not a silent `'unknown'` placeholder baked into
  * evidence a human might later approve.
+ *
+ * Codex review round 12 (self-review): the thrown message is a fixed,
+ * safe string -- it never interpolates the caught subprocess error's own
+ * `.message`. `execFileSync`'s failure text can embed argv/environment
+ * fragments (a git implementation may echo the failing command line, a
+ * path, or other local detail) that this tool has no way to pre-verify
+ * as safe, unlike this tool's own deliberately-authored errors elsewhere.
+ * The original error is preserved only as `cause`, exactly like the raw
+ * Postgres/Drizzle failure `runRemoteExplainPlan` sanitizes below -- a
+ * caller that deliberately wants the raw diagnostic can inspect it there;
+ * `run()`'s top-level handler never does.
  */
 function resolveCommitShaStrict(): string {
   let sha: string;
@@ -192,11 +204,14 @@ function resolveCommitShaStrict(): string {
       encoding: 'utf8',
     }).trim();
   } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Could not resolve the current Git commit SHA (git rev-parse HEAD ` +
-        `failed: ${cause}). A remote EXPLAIN preflight run must be tied to ` +
-        `an exact, resolvable commit -- refusing to connect without one.`,
+      'Could not resolve the current Git commit SHA (git rev-parse HEAD ' +
+        'failed). A remote EXPLAIN preflight run must be tied to an ' +
+        'exact, resolvable commit -- refusing to connect without one. ' +
+        "The underlying error is not shown here -- inspect this error's " +
+        '"cause" property directly if you need the raw diagnostic; do ' +
+        'not forward it to a shared log.',
+      { cause: error },
     );
   }
   if (!sha) {

@@ -29,14 +29,18 @@ export function buildTestPostgresUrl(parts: {
   readonly password: string;
   readonly host: string;
   readonly port?: string;
-  readonly database: string;
+  /** Omit only for a fixture that deliberately needs no database path. */
+  readonly database?: string;
 }): string {
-  const url = new URL(`postgres://placeholder-host/${parts.database}`);
+  const url = new URL('postgres://placeholder-host');
   url.hostname = parts.host;
   if (parts.port) {
     url.port = parts.port;
   }
   url.username = parts.username;
   url.password = parts.password;
+  if (parts.database) {
+    url.pathname = `/${parts.database}`;
+  }
   return url.toString();
 }

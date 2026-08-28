@@ -58,29 +58,53 @@ const REMOTE_ENV_VAR: Record<RemoteTarget, string> = {
  * supplied, potentially secret-bearing, potentially operator-mistyped URL
  * must not be printed just because it failed validation.
  *
- * Rejects any query string outright (see the check below): this tool's
- * `resolveVerificationIdentity`/`describeUrl`/`computeVerifiedIdentityFingerprint`
- * only ever inspect the URL's authority (username/hostname/port) and
- * pathname -- never `searchParams`. A query parameter that could change
- * where `postgres()` actually connects (e.g. a hypothetical `?host=`/
- * `?database=`/`?user=` override) without those functions ever seeing it
- * would let a URL whose *authority* satisfies `*_EXPECTED_IDENTITY`
- * silently connect somewhere else, while the persisted artifact is still
- * stamped with the authority's (wrong) identity.
+ * Codex review round 12 (self-review): this is the SINGLE authoritative
+ * parse gate for a remote credential URL. `postgres()` (the actual
+ * connection) and this module's own identity functions
+ * (`describeUrl`/`resolveVerificationIdentity`/
+ * `computeVerifiedIdentityFingerprint`) must never be allowed to
+ * interpret the same configured value *differently* -- e.g. one
+ * accepting it as parseable while the other rejects it, or postgres-js's
+ * own internal URL parser extracting a different host/user/database than
+ * this tool's identity layer computed. Requiring a successful `new
+ * URL(raw)` parse HERE, validating every identity component this tool
+ * actually relies on, and returning the platform parser's own
+ * *normalized* re-serialization (`parsed.toString()`, not the original
+ * `raw` string) closes that gap: every downstream consumer -- `postgres()`
+ * itself, `describeUrl`, `resolveVerificationIdentity` -- receives the
+ * exact same, already-validated string, parsed exactly once by this
+ * function's own `new URL()` call. There is no path left where an
+ * unparseable or identity-incomplete raw string reaches `postgres()` for
+ * its own parser to interpret however it chooses.
  *
- * Verified directly against the actual pinned `postgres` package
- * (`postgres@3.4.8`'s `parseOptions`/`parseUrl` in `postgres/src/index.js`,
- * both by reading the source and by running it against a live override
- * attempt) that `host`/`port`/`user`/`database`/`pass` are derived only
- * from the URL's authority/pathname or from the options object this code
- * passes -- never from `url.searchParams` -- so this specific mechanism
- * does not exist in the version this tool actually depends on today.
- * Rejecting query strings anyway is a zero-cost defense: nothing in the
+ * Validated, in order: the value is non-empty; it parses as a URL at
+ * all; its scheme is exactly `postgres:`/`postgresql:` (checked against
+ * the PARSED protocol, not a string prefix -- `new URL()` is the single
+ * source of truth for what the scheme actually is); it carries no query
+ * string; it carries no fragment; it has a non-empty hostname; it has a
+ * non-empty username; its path resolves to a non-empty database name.
+ * These are exactly the identity components `describeUrl`/
+ * `resolveVerificationIdentity`/`computeVerifiedIdentityFingerprint` rely
+ * on -- if any of them were allowed to be empty/absent, those functions'
+ * output would silently omit part of the identity they exist to bind.
+ *
+ * Query strings are rejected as a zero-cost defense, not because this
+ * tool's own identity functions are influenced by one: verified directly
+ * against the actual pinned `postgres` package (`postgres@3.4.8`'s
+ * `parseOptions`/`parseUrl` in `postgres/src/index.js`, both by reading
+ * the source and by running it against a live override attempt) that
+ * `host`/`port`/`user`/`database`/`pass` are derived only from the URL's
+ * authority/pathname or from the options object this code passes --
+ * never from `url.searchParams` -- so a `?host=`/`?database=`/`?user=`
+ * override does not exist in the version this tool depends on today.
+ * Rejecting the query string anyway removes any need to keep
+ * re-verifying that against a future `postgres` version; nothing in the
  * documented credential format (`tenancy-inventory.env.example`) ever
- * needs one, TLS is already forced to `'verify-full'` in code rather than
- * read from the URL (see `withReadOnlyRemoteDb`), and doing so removes
- * any need to keep re-verifying this specific behavior against a future
- * `postgres` version.
+ * needs one, and TLS is already forced to `'verify-full'` in code rather
+ * than read from the URL (see `withReadOnlyRemoteDb`). Fragments are
+ * rejected for the same reason -- structurally never meaningful for a
+ * Postgres connection string, and one more piece of the raw value this
+ * tool has no reason to carry forward unexamined.
  */
 function resolveRemoteUrl(target: RemoteTarget): string {
   // `target` is the closed RemoteTarget union, not a caller-supplied
@@ -97,28 +121,30 @@ function resolveRemoteUrl(target: RemoteTarget): string {
     );
   }
 
-  if (!raw.startsWith('postgres://') && !raw.startsWith('postgresql://')) {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} is not a valid URL. (Value not ` +
+        `shown here -- it may contain credentials.)`,
+    );
+  }
+
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
     throw new Error(
       `[tenancy-inventory] ${envVar} must be a postgres:// or postgresql:// URL. ` +
         `(Value not shown here -- it may contain credentials.)`,
     );
   }
 
-  // ponytail: a blanket "no query string at all" rejection, not an
-  // allowlist of specific safe parameter names -- simpler and strictly
-  // safer given nothing legitimate needs one here. If a real use case for
-  // a specific query parameter (e.g. `application_name`) ever appears,
-  // switch this to an explicit allowlist of that exact key instead of
-  // loosening it wholesale.
-  let parsedForQueryCheck: URL | undefined;
-  try {
-    parsedForQueryCheck = new URL(raw);
-  } catch {
-    // Unparseable -- describeUrl/resolveVerificationIdentity already fail
-    // closed on this via their own sentinel values; nothing further to
-    // check here, this function still returns the raw value as before.
-  }
-  if (parsedForQueryCheck && parsedForQueryCheck.search) {
+  // ponytail: a blanket "no query string/fragment at all" rejection, not
+  // an allowlist of specific safe parameter names -- simpler and
+  // strictly safer given nothing legitimate needs either here. If a real
+  // use case for a specific query parameter (e.g. `application_name`)
+  // ever appears, switch this to an explicit allowlist of that exact key
+  // instead of loosening it wholesale.
+  if (parsed.search) {
     throw new Error(
       `[tenancy-inventory] ${envVar} must not include a query string. ` +
         `The documented ${target} credential format never needs one -- ` +
@@ -127,11 +153,48 @@ function resolveRemoteUrl(target: RemoteTarget): string {
         `shown here -- it may contain credentials.)`,
     );
   }
+  if (parsed.hash) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must not include a fragment. ` +
+        `A Postgres connection URL has no meaningful use for one. ` +
+        `(Value not shown here -- it may contain credentials.)`,
+    );
+  }
 
-  return raw;
+  if (!parsed.hostname) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must include a hostname. (Value ` +
+        `not shown here -- it may contain credentials.)`,
+    );
+  }
+  if (!parsed.username) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must include a username. (Value ` +
+        `not shown here -- it may contain credentials.)`,
+    );
+  }
+  const database = parsed.pathname.replace(/^\//, '');
+  if (!database) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must include a database name in ` +
+        `its path. (Value not shown here -- it may contain credentials.)`,
+    );
+  }
+
+  // The platform parser's own normalized re-serialization, not `raw`:
+  // every caller of `resolveRemoteUrl` -- `postgres()` itself via
+  // `withReadOnlyRemoteDb`, and this module's own `describeUrl`/
+  // `resolveVerificationIdentity` -- now parses this exact string, so
+  // none of them can ever disagree about what it means.
+  return parsed.toString();
 }
 
-/** host:port/database only, via the platform URL parser -- never credentials. */
+/**
+ * host:port/database only, via the platform URL parser -- never
+ * credentials. Only ever called with `resolveRemoteUrl`'s output, which
+ * is already guaranteed parseable -- the `try`/`catch` here is
+ * defense-in-depth, not a path this module's own callers can reach.
+ */
 function describeUrl(raw: string): string {
   try {
     const parsed = new URL(raw);
@@ -176,6 +239,11 @@ const REMOTE_EXPECTED_IDENTITY_ENV_VAR: Record<RemoteTarget, string> = {
  * every project sharing that pooler as identical, silently accepting a
  * staging/production credential swap. Including the username here closes
  * that gap for this and any similarly-shaped provider URL.
+ *
+ * Only ever called with `resolveRemoteUrl`'s output, which is already
+ * guaranteed parseable with a non-empty username/hostname/database path
+ * -- the `try`/`catch` and sentinel here are defense-in-depth, not a
+ * path this module's own callers can reach.
  */
 function resolveVerificationIdentity(raw: string): string {
   try {

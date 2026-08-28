@@ -363,18 +363,24 @@ describe('computeVerifiedIdentityFingerprint', () => {
     expect(fingerprint).not.toContain('production.example');
   });
 
-  it('still produces a stable, well-formed fingerprint for an unparseable URL (fails closed via the sentinel identity, not by throwing)', () => {
+  it('fails closed on an unparseable URL -- resolveRemoteUrl now rejects it outright rather than falling through to a sentinel identity', () => {
+    // Codex review round 12 (self-review): resolveRemoteUrl is now the
+    // single authoritative parse gate (see its own doc comment) -- an
+    // unparseable value never reaches computeVerifiedIdentityFingerprint
+    // at all, let alone produces a silently-computed sentinel-based
+    // hash. See the "resolveRemoteUrl -- single authoritative parse
+    // gate" describe block below for the full matrix.
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      // Passes resolveRemoteUrl's postgres:// prefix check but is not a
-      // valid URL otherwise -- deliberately malformed, not credential-
-      // shaped (no username:password@ syntax at all).
+      // Passes the old prefix-only check but is not a valid URL
+      // otherwise -- deliberately malformed, not credential-shaped (no
+      // username:password@ syntax at all).
       'postgres://[not-a-valid-url',
     );
 
-    const fingerprint = computeVerifiedIdentityFingerprint('staging');
-
-    expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(() => computeVerifiedIdentityFingerprint('staging')).toThrow(
+      /is not a valid URL/,
+    );
   });
 });
 
@@ -575,5 +581,150 @@ describe('remote credential URL query-string rejection', () => {
     );
 
     expect(() => describeRemoteTarget('staging')).not.toThrow();
+  });
+});
+
+/**
+ * OZI-79 Phase B2, Codex review round 12 (self-review, not a Codex
+ * finding): `resolveRemoteUrl` is the single authoritative parse gate a
+ * remote credential URL must pass before ANY downstream consumer --
+ * `postgres()` itself, or this module's own identity functions -- ever
+ * sees it. Every check below proves one component of that gate fails
+ * closed, with `postgres()` never called, before the underlying
+ * connection is ever attempted.
+ */
+describe('resolveRemoteUrl -- single authoritative parse gate', () => {
+  it('rejects a fragment', async () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      `${buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      })}#some-fragment`,
+    );
+
+    expect(() => describeRemoteTarget('staging')).toThrow(
+      /must not include a fragment/,
+    );
+
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_IDENTITY',
+      'u@staging-db.internal:5432/app_staging',
+    );
+    await expect(
+      withReadOnlyRemoteDb('staging', async () => 'should never run'),
+    ).rejects.toThrow(/must not include a fragment/);
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it('rejects a URL with no hostname', async () => {
+    vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', 'postgres:///db');
+
+    expect(() => describeRemoteTarget('staging')).toThrow(
+      /must include a hostname/,
+    );
+
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', '@:5432/db');
+    await expect(
+      withReadOnlyRemoteDb('staging', async () => 'should never run'),
+    ).rejects.toThrow(/must include a hostname/);
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it('rejects a URL with no username', async () => {
+    vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', 'postgres://host/db');
+
+    expect(() => describeRemoteTarget('staging')).toThrow(
+      /must include a username/,
+    );
+
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', '@host:5432/db');
+    await expect(
+      withReadOnlyRemoteDb('staging', async () => 'should never run'),
+    ).rejects.toThrow(/must include a username/);
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it('rejects a URL with no database path', async () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      buildTestPostgresUrl({ username: 'u', password: 'p', host: 'host' }),
+    );
+
+    expect(() => describeRemoteTarget('staging')).toThrow(
+      /must include a database name/,
+    );
+
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', 'u@host:5432/');
+    await expect(
+      withReadOnlyRemoteDb('staging', async () => 'should never run'),
+    ).rejects.toThrow(/must include a database name/);
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it('rejects a scheme other than postgres:/postgresql:, validated against the PARSED protocol, not a string prefix', async () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'mysql://u:p@host:5432/db',
+    );
+
+    expect(() => describeRemoteTarget('staging')).toThrow(
+      /must be a postgres:\/\/ or postgresql:\/\/ URL/,
+    );
+
+    vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', 'u@host:5432/db');
+    await expect(
+      withReadOnlyRemoteDb('staging', async () => 'should never run'),
+    ).rejects.toThrow(/must be a postgres:\/\/ or postgresql:\/\/ URL/);
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it('never echoes the raw value on any parse-gate failure', () => {
+    const rawUrl = 'not-a-url-at-all-but-maybe-a-secret-abc123';
+    vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', rawUrl);
+
+    let thrown: unknown;
+    try {
+      describeRemoteTarget('staging');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).not.toContain(rawUrl);
+  });
+
+  it("returns the platform parser's own normalized re-serialization to postgres(), not the untouched original raw string, so identity checks and the actual connection can never disagree about what the URL means", async () => {
+    // A raw value with a `..` path segment: `new URL()` normalizes dot
+    // segments away at PARSE time (`.pathname` already reflects it), so
+    // the string reaching postgres() is provably the result of
+    // resolveRemoteUrl's own `new URL()` parse -- the same parse
+    // describeRemoteTarget/assertTargetIdentityMatchesExpectation use --
+    // not the byte-for-byte original raw value. Built from the shared
+    // helper, then a `..` segment is spliced into the path afterward --
+    // no single source line ever assembles the complete credential-
+    // shaped URL as one literal.
+    const base = buildTestPostgresUrl({
+      username: 'ozi79-test-only-user',
+      password: 'pw',
+      host: 'staging-db.internal',
+      port: '5432',
+      database: 'app_staging',
+    });
+    const raw = base.replace('/app_staging', '/../app_staging');
+    vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', raw);
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_IDENTITY',
+      'ozi79-test-only-user@staging-db.internal:5432/app_staging',
+    );
+
+    await withReadOnlyRemoteDb('staging', async () => 'ok');
+
+    const normalized = new URL(raw).toString();
+    expect(normalized).not.toBe(raw);
+    expect(postgres).toHaveBeenCalledWith(normalized, expect.anything());
   });
 });

@@ -71,11 +71,17 @@ const BASE_CALLER = {
 // these tests never call `computeVerifiedIdentityFingerprint` (that
 // belongs to `readonly-db-remote.test.ts`); `checkTargetCompatibilityV2`/
 // `checkArtifactIntegrityV2`/`buildExplainPreflightArtifactV2` only ever
-// canonicalize and compare whatever string they are given.
+// canonicalize and compare whatever string they are given. Genuinely
+// 64 lowercase hex characters each (verified via `.length` -- Codex
+// review round 12 self-review caught a prior version of these two
+// constants that were 63 characters, one short of canonical: with only
+// a truthiness check, that off-by-one length went completely unnoticed;
+// with `isCanonicalVerifiedIdentityFingerprint` now enforcing exact
+// format, `buildExplainPreflightArtifactV2` immediately rejected them).
 const FINGERPRINT_A =
-  'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9';
+  'd037f9fbc7f26713523d3600f667144a533acf727ea27c3a959deed3ad51cd21';
 const FINGERPRINT_B =
-  'f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a392817065f4e3d2c1b0';
+  '54fd8164506825605c388a0a8bd71fa24910f9c7b28a1ada029cd2e92a77691e';
 
 const BASE_CALLER_V2 = {
   target: {
@@ -842,6 +848,127 @@ describe('checkTargetCompatibilityV2', () => {
       null,
     );
     expect(result.compatible).toBe(false);
+  });
+
+  /**
+   * Codex review round 12 (self-review): the truthiness-only check this
+   * describe block's earlier tests exercised is not sufficient on its
+   * own -- a malformed value can still be truthy. Every scenario below
+   * proves `isCanonicalVerifiedIdentityFingerprint`'s FORMAT validation
+   * runs independently on each side before any equality comparison, so
+   * two malformed-but-byte-for-byte-identical strings are never treated
+   * as a match.
+   */
+  it('fails closed when both sides carry the identical wrong-length fingerprint -- equal malformed values must never be compatible', () => {
+    const tooShort = FINGERPRINT_A.slice(0, 63);
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: tooShort },
+      {
+        target: { ...artifact.target, verifiedIdentityFingerprint: tooShort },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides carry the identical too-long fingerprint', () => {
+    const tooLong = `${FINGERPRINT_A}a`;
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: tooLong },
+      {
+        target: { ...artifact.target, verifiedIdentityFingerprint: tooLong },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides carry the identical non-hex fingerprint', () => {
+    const nonHex = `Z${FINGERPRINT_A.slice(1)}`;
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: nonHex },
+      {
+        target: { ...artifact.target, verifiedIdentityFingerprint: nonHex },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides carry the identical uppercase-hex fingerprint -- canonical format is lowercase only', () => {
+    const uppercase = FINGERPRINT_A.toUpperCase();
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: uppercase },
+      {
+        target: {
+          ...artifact.target,
+          verifiedIdentityFingerprint: uppercase,
+        },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides are the identical empty string', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: '' },
+      { target: { ...artifact.target, verifiedIdentityFingerprint: '' } },
+    );
+    expect(result.compatible).toBe(false);
+  });
+});
+
+describe('buildExplainPreflightArtifactV2 -- verifiedIdentityFingerprint constructor invariant', () => {
+  it('throws when verifiedIdentityFingerprint is missing/empty', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: '' },
+      }),
+    ).toThrow(/verifiedIdentityFingerprint/);
+  });
+
+  it('throws when verifiedIdentityFingerprint is the wrong length', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: {
+          ...BASE_CALLER_V2.target,
+          verifiedIdentityFingerprint: FINGERPRINT_A.slice(0, 63),
+        },
+      }),
+    ).toThrow(/verifiedIdentityFingerprint/);
+  });
+
+  it('throws when verifiedIdentityFingerprint contains non-hex characters', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: {
+          ...BASE_CALLER_V2.target,
+          verifiedIdentityFingerprint: `Z${FINGERPRINT_A.slice(1)}`,
+        },
+      }),
+    ).toThrow(/verifiedIdentityFingerprint/);
+  });
+
+  it('never produces an artifact from a malformed fingerprint -- the throw happens before any fingerprint computation', () => {
+    let thrown: unknown;
+    try {
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: {
+          ...BASE_CALLER_V2.target,
+          verifiedIdentityFingerprint: 'not-canonical',
+        },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+  });
+
+  it('succeeds for a genuinely canonical fingerprint', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, BASE_CALLER_V2),
+    ).not.toThrow();
   });
 });
 

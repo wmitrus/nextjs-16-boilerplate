@@ -33,6 +33,7 @@ import {
   withReadOnlyRemoteDb,
 } from './readonly-db-remote';
 import type * as ReadonlyDbRemoteModule from './readonly-db-remote';
+import { buildTestPostgresUrl } from './test-postgres-url';
 
 /**
  * `vi.hoisted` because `vi.mock`'s factory is hoisted above every import in
@@ -98,19 +99,22 @@ const RAW_PLAN_MARKER = 'RAW-PLAN-MARKER-must-never-reach-stdout';
 
 /**
  * A synthetic, deliberately non-secret credential-shaped argument value,
- * used only to prove a rejected CLI argument is never echoed. Named with
- * the established `ozi79-test-only-` prefix (matching every other
- * credential fixture in this codebase) rather than a realistic-looking
- * password string: a prior version of this file paired a plausible
- * username with an all-caps "secret password"-shaped token in a
- * complete `postgres://` URL -- despite being entirely synthetic, that
- * was still flagged as exactly the kind of committed credential-shaped
- * literal this repository's own invariants prohibit, regardless of
- * whether it is a real secret.
+ * used only to prove a rejected CLI argument is never echoed. Built via
+ * `buildTestPostgresUrl` (see that module's doc comment): no line of
+ * source text here assembles a complete `scheme://user:pass@host`
+ * literal directly -- Codex review round 11 established that the
+ * committed *shape* of such a literal, not just whether its embedded
+ * values look like a real secret, is what this repository's invariants
+ * (and secret scanners) actually flag.
  */
 const CREDENTIAL_SHAPED_TEST_USER = 'ozi79-test-only-rejected-arg-user';
 const CREDENTIAL_SHAPED_TEST_PASSWORD = 'ozi79-test-only-rejected-arg-password';
-const CREDENTIAL_SHAPED_TEST_ARG = `postgres://${CREDENTIAL_SHAPED_TEST_USER}:${CREDENTIAL_SHAPED_TEST_PASSWORD}@production.example/db`;
+const CREDENTIAL_SHAPED_TEST_ARG = buildTestPostgresUrl({
+  username: CREDENTIAL_SHAPED_TEST_USER,
+  password: CREDENTIAL_SHAPED_TEST_PASSWORD,
+  host: 'production.example',
+  database: 'db',
+});
 
 const FAKE_FACTS: ExplainPreflightFacts = {
   schemaMigration: { id: 7, hash: 'fixture-schema-hash' },
@@ -160,7 +164,13 @@ function mockPassingTargetIdentity(
   const envPrefix = target === 'staging' ? 'STAGING' : 'PRODUCTION';
   vi.stubEnv(
     `OZI79_${envPrefix}_READONLY_DATABASE_URL`,
-    `postgres://${username}:ozi79-test-only-password@${host}:5432/app_${target}`,
+    buildTestPostgresUrl({
+      username,
+      password: 'ozi79-test-only-password',
+      host,
+      port: '5432',
+      database: `app_${target}`,
+    }),
   );
   vi.stubEnv(
     `OZI79_${envPrefix}_EXPECTED_IDENTITY`,
@@ -584,7 +594,13 @@ describe('plan -- fails before any remote connection', () => {
     // the operator separately declared staging should look like.
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://prod-user:pw@production-db.example:5432/app_production',
+      buildTestPostgresUrl({
+        username: 'prod-user',
+        password: 'pw',
+        host: 'production-db.example',
+        port: '5432',
+        database: 'app_production',
+      }),
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_IDENTITY',

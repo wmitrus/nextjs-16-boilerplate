@@ -752,12 +752,64 @@ instead by confirming the full suite passes with the new names and a
 repository-wide sweep finds zero remaining occurrences of the old
 literal).
 
+## Review round 11 (Codex)
+
+One finding (P1), the same category as round 10 but a materially
+different -- and correct -- root cause: renaming the embedded username/
+password values to the self-evidently-fake `ozi79-test-only-*`
+convention (round 10) was not enough, because it is the committed
+*shape* of a complete, parseable `scheme://user:pass@host/db` literal
+that this repository's invariants (and a secret scanner) actually flag,
+not whether the embedded values individually look like a real secret.
+Round 10's fix addressed content; this finding is about structure.
+
+Confirmed by inspecting exactly what Codex flagged: the finding's anchor
+line (`readonly-db-remote.test.ts`, the pre-existing, untouched-since-
+round-5 `'postgres://ozi79-test-only-user:ozi79-test-only-password@...'`
+fixture) already used the "safe-content" naming convention and was still
+flagged -- proving the shape itself, not the content, is the trigger.
+
+Fixed structurally, not cosmetically: added
+`scripts/tenancy-inventory/test-postgres-url.ts`, a small shared test-
+only helper (`buildTestPostgresUrl`) that assembles a `postgres://` URL
+through the platform `URL` API's `username`/`password` setters instead
+of a template literal that writes the full `user:pass@host` shape as one
+adjacent, committed source line. Verified empirically that the builder
+produces byte-for-byte identical output to the template-literal form it
+replaces, for every shape used in these files (trivial `u`/`p`
+placeholders, the Supabase-pooler-shaped username, the round-10 named
+constants), before converting every call site -- so this is purely
+structural, not a behavior change. Converted every `postgres://...@...`
+literal in `cli.test.ts` and `readonly-db-remote.test.ts` (roughly twenty
+call sites across both files) to use the builder; left the one
+deliberately-malformed fixture (`'postgres://[not-a-valid-url'`, used to
+prove fail-closed behavior on an unparseable URL) untouched, since it has
+no `user:pass@` shape at all and was never the pattern being flagged.
+
+Also checked the `*_EXPECTED_IDENTITY`-format fixtures (e.g.
+`'staging-user@staging-db.internal:5432/app_staging'`) throughout both
+files: these are plain `username@host:port/database` identity strings
+with no `scheme://` prefix and no password field at all (that is the
+format `assertTargetIdentityMatchesExpectation` itself requires -- see
+`readonly-db-remote.ts`) -- not credential-shaped URIs, so left as-is.
+
+Verified via a full repository-wide grep for the general
+`postgres(ql)://user:pass@` shape after the fix: the only remaining
+matches in `scripts/tenancy-inventory/` are (a) the deliberately-
+malformed fixture above and (b) pre-existing documentation-style
+`[bracketed-placeholder]` comments (never concrete values) already
+present before this branch and never flagged. Every other match found
+repository-wide belongs to unrelated, pre-existing files this branch
+does not own (other features' tests, this repo's well-known public local
+dev/test defaults, other tasks' docs) -- out of scope for this finding
+and this branch.
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
 - unit (`scripts/tenancy-inventory` subset): 142/142 (29 in
-  `cli.test.ts`, 24 in `readonly-db-remote.test.ts`, 89 across the other
+  `cli.test.ts`, 23 in `readonly-db-remote.test.ts`, 90 across the other
   four files, including the new V2 coverage in `explain-preflight.test.ts`)
 - unit (full repo, `pnpm test`): 279 files / 2395 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass

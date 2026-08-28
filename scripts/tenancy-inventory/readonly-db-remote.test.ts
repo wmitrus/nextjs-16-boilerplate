@@ -8,6 +8,7 @@ import {
   describeRemoteTarget,
   withReadOnlyRemoteDb,
 } from './readonly-db-remote';
+import { buildTestPostgresUrl } from './test-postgres-url';
 
 /**
  * `withReadOnlyRemoteDb` is never exercised end-to-end against a real
@@ -34,22 +35,30 @@ afterEach(() => {
 /**
  * Synthetic, deliberately non-secret credential-shaped values used only
  * to prove the functions below never echo a resolved/expected value into
- * a thrown message. Named with the established `ozi79-test-only-` prefix
- * (matching every other credential fixture in this file) rather than a
- * realistic-looking password string: a prior version of this file paired
- * a plausible username with an all-caps "secret password"-shaped token
- * in a complete `postgres://` URL -- despite being entirely synthetic,
- * that was still flagged as exactly the kind of committed credential-
- * shaped literal this repository's own invariants prohibit, regardless
- * of whether it is a real secret.
+ * a thrown message. Built via `buildTestPostgresUrl` (see that module's
+ * doc comment): no line of source text here assembles a complete
+ * `scheme://user:pass@host` literal directly -- Codex review round 11
+ * established that the committed *shape* of such a literal, not just
+ * whether its embedded values look like a real secret, is what this
+ * repository's invariants (and secret scanners) actually flag.
  */
 const MISMATCHED_TEST_USER = 'ozi79-test-only-mismatched-user';
 const MISMATCHED_TEST_PASSWORD = 'ozi79-test-only-mismatched-password';
-const MISMATCHED_TEST_URL = `postgres://${MISMATCHED_TEST_USER}:${MISMATCHED_TEST_PASSWORD}@production.example/db`;
+const MISMATCHED_TEST_URL = buildTestPostgresUrl({
+  username: MISMATCHED_TEST_USER,
+  password: MISMATCHED_TEST_PASSWORD,
+  host: 'production.example',
+  database: 'db',
+});
 const ANOTHER_MISMATCHED_TEST_USER = 'ozi79-test-only-another-mismatched-user';
 const ANOTHER_MISMATCHED_TEST_PASSWORD =
   'ozi79-test-only-another-mismatched-password';
-const ANOTHER_MISMATCHED_TEST_URL = `postgres://${ANOTHER_MISMATCHED_TEST_USER}:${ANOTHER_MISMATCHED_TEST_PASSWORD}@staging.example/db`;
+const ANOTHER_MISMATCHED_TEST_URL = buildTestPostgresUrl({
+  username: ANOTHER_MISMATCHED_TEST_USER,
+  password: ANOTHER_MISMATCHED_TEST_PASSWORD,
+  host: 'staging.example',
+  database: 'db',
+});
 
 describe('describeRemoteTarget', () => {
   it('fails closed with a clear message when the env var is unset', () => {
@@ -80,7 +89,13 @@ describe('describeRemoteTarget', () => {
   it('describes only host:port/database, never credentials, for a valid URL', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging',
+      buildTestPostgresUrl({
+        username: 'ozi79-test-only-user',
+        password: 'ozi79-test-only-password',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      }),
     );
 
     const description = describeRemoteTarget('staging');
@@ -93,11 +108,23 @@ describe('describeRemoteTarget', () => {
   it("never mixes up the two targets' env vars", () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://u:p@staging-host:5432/staging_db',
+      buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'staging-host',
+        port: '5432',
+        database: 'staging_db',
+      }),
     );
     vi.stubEnv(
       'OZI79_PRODUCTION_READONLY_DATABASE_URL',
-      'postgres://u:p@production-host:5432/production_db',
+      buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'production-host',
+        port: '5432',
+        database: 'production_db',
+      }),
     );
 
     expect(describeRemoteTarget('staging')).toBe(
@@ -129,7 +156,13 @@ describe('assertTargetIdentityMatchesExpectation', () => {
       // host and user, e.g. because the two credential env vars were
       // swapped during provisioning.
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://prod-user:pw@production-db.internal:5432/app_production',
+      buildTestPostgresUrl({
+        username: 'prod-user',
+        password: 'pw',
+        host: 'production-db.internal',
+        port: '5432',
+        database: 'app_production',
+      }),
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_IDENTITY',
@@ -144,7 +177,13 @@ describe('assertTargetIdentityMatchesExpectation', () => {
   it('passes when the resolved identity matches exactly, including the username', () => {
     vi.stubEnv(
       'OZI79_PRODUCTION_READONLY_DATABASE_URL',
-      'postgres://prod-user:pw@production-db.internal:5432/app_production',
+      buildTestPostgresUrl({
+        username: 'prod-user',
+        password: 'pw',
+        host: 'production-db.internal',
+        port: '5432',
+        database: 'app_production',
+      }),
     );
     vi.stubEnv(
       'OZI79_PRODUCTION_EXPECTED_IDENTITY',
@@ -164,15 +203,20 @@ describe('assertTargetIdentityMatchesExpectation', () => {
     // carries which project (staging vs. production) this actually is.
     // A check built only on describeUrl's output would treat these two
     // as identical and silently accept the swap.
-    const sharedPoolerHostAndDb =
-      '@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    const poolerHost = 'aws-0-eu-central-1.pooler.supabase.com';
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      `postgres://postgres.production-project-ref:pw${sharedPoolerHostAndDb}`,
+      buildTestPostgresUrl({
+        username: 'postgres.production-project-ref',
+        password: 'pw',
+        host: poolerHost,
+        port: '6543',
+        database: 'postgres',
+      }),
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_IDENTITY',
-      `postgres.staging-project-ref${sharedPoolerHostAndDb}`,
+      `postgres.staging-project-ref@${poolerHost}:6543/postgres`,
     );
 
     expect(() => assertTargetIdentityMatchesExpectation('staging')).toThrow(
@@ -183,7 +227,13 @@ describe('assertTargetIdentityMatchesExpectation', () => {
   it("never mixes up the two targets' expectation env vars", () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://prod-user:pw@production-db.internal:5432/app_production',
+      buildTestPostgresUrl({
+        username: 'prod-user',
+        password: 'pw',
+        host: 'production-db.internal',
+        port: '5432',
+        database: 'app_production',
+      }),
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_IDENTITY',
@@ -230,7 +280,13 @@ describe('computeVerifiedIdentityFingerprint', () => {
   it('is deterministic for the exact same identity', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://staging-user:pw@staging-db.internal:5432/app_staging',
+      buildTestPostgresUrl({
+        username: 'staging-user',
+        password: 'pw',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      }),
     );
 
     const first = computeVerifiedIdentityFingerprint('staging');
@@ -241,17 +297,28 @@ describe('computeVerifiedIdentityFingerprint', () => {
   });
 
   it('differs for the same host:port/database but a different username -- the Supabase pooler case', () => {
-    const sharedPoolerHostAndDb =
-      '@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    const poolerHost = 'aws-0-eu-central-1.pooler.supabase.com';
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      `postgres://postgres.staging-project-ref:pw${sharedPoolerHostAndDb}`,
+      buildTestPostgresUrl({
+        username: 'postgres.staging-project-ref',
+        password: 'pw',
+        host: poolerHost,
+        port: '6543',
+        database: 'postgres',
+      }),
     );
     const stagingFingerprint = computeVerifiedIdentityFingerprint('staging');
 
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      `postgres://postgres.production-project-ref:pw${sharedPoolerHostAndDb}`,
+      buildTestPostgresUrl({
+        username: 'postgres.production-project-ref',
+        password: 'pw',
+        host: poolerHost,
+        port: '6543',
+        database: 'postgres',
+      }),
     );
     const differentProjectFingerprint =
       computeVerifiedIdentityFingerprint('staging');
@@ -262,11 +329,23 @@ describe('computeVerifiedIdentityFingerprint', () => {
   it('differs between staging and production identities', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://u:p@staging-db.internal:5432/app_staging',
+      buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      }),
     );
     vi.stubEnv(
       'OZI79_PRODUCTION_READONLY_DATABASE_URL',
-      'postgres://u:p@production-db.internal:5432/app_production',
+      buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'production-db.internal',
+        port: '5432',
+        database: 'app_production',
+      }),
     );
 
     expect(computeVerifiedIdentityFingerprint('staging')).not.toBe(
@@ -288,7 +367,8 @@ describe('computeVerifiedIdentityFingerprint', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
       // Passes resolveRemoteUrl's postgres:// prefix check but is not a
-      // valid URL otherwise.
+      // valid URL otherwise -- deliberately malformed, not credential-
+      // shaped (no username:password@ syntax at all).
       'postgres://[not-a-valid-url',
     );
 
@@ -309,7 +389,13 @@ describe('withReadOnlyRemoteDb connection contract', () => {
     // option, not derived from the URL in any way.
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging',
+      buildTestPostgresUrl({
+        username: 'ozi79-test-only-user',
+        password: 'ozi79-test-only-password',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      }),
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_IDENTITY',
@@ -334,7 +420,13 @@ describe('withReadOnlyRemoteDb connection contract', () => {
   it('refuses to open a connection at all when the target-identity safeguard fails -- baked into the function itself, not left to the caller', async () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://u:p@staging-db.internal:5432/app_staging',
+      buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      }),
     );
     // Stubbed to the empty string, not merely left absent -- see the
     // identical note on the unit-level test above.
@@ -349,7 +441,13 @@ describe('withReadOnlyRemoteDb connection contract', () => {
   it('refuses to open a connection when the declared expectation is a mismatched, credential-bearing value -- and never echoes it', async () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging',
+      buildTestPostgresUrl({
+        username: 'ozi79-test-only-user',
+        password: 'ozi79-test-only-password',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      }),
     );
     vi.stubEnv('OZI79_STAGING_EXPECTED_IDENTITY', MISMATCHED_TEST_URL);
 
@@ -388,7 +486,13 @@ describe('remote credential URL query-string rejection', () => {
   it('rejects a URL containing a query string, before resolving identity or connecting', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable',
+      `${buildTestPostgresUrl({
+        username: 'ozi79-test-only-user',
+        password: 'ozi79-test-only-password',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      })}?sslmode=disable`,
     );
 
     expect(() => describeRemoteTarget('staging')).toThrow(
@@ -399,8 +503,13 @@ describe('remote credential URL query-string rejection', () => {
   it('rejects destination-altering query parameters specifically -- the exact mechanism this finding described', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://ozi79-test-only-safe-user:pw@ozi79-test-only-safe-host:5432/safe_db' +
-        '?host=evil-production-host&database=evil_production_db&user=evil-production-user',
+      `${buildTestPostgresUrl({
+        username: 'ozi79-test-only-safe-user',
+        password: 'pw',
+        host: 'ozi79-test-only-safe-host',
+        port: '5432',
+        database: 'safe_db',
+      })}?host=evil-production-host&database=evil_production_db&user=evil-production-user`,
     );
 
     expect(() => describeRemoteTarget('staging')).toThrow(
@@ -409,8 +518,13 @@ describe('remote credential URL query-string rejection', () => {
   });
 
   it('never echoes the raw URL or credential when rejecting a query string', () => {
-    const rawUrl =
-      'postgres://ozi79-test-only-user:ozi79-test-only-password@staging-db.internal:5432/app_staging?sslmode=disable';
+    const rawUrl = `${buildTestPostgresUrl({
+      username: 'ozi79-test-only-user',
+      password: 'ozi79-test-only-password',
+      host: 'staging-db.internal',
+      port: '5432',
+      database: 'app_staging',
+    })}?sslmode=disable`;
     vi.stubEnv('OZI79_STAGING_READONLY_DATABASE_URL', rawUrl);
 
     let thrown: unknown;
@@ -429,7 +543,13 @@ describe('remote credential URL query-string rejection', () => {
   it('refuses to open a connection at all when the URL has a query string -- enforced at resolution, not left to the caller', async () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://u:p@staging-db.internal:5432/app_staging?application_name=x',
+      `${buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      })}?application_name=x`,
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_IDENTITY',
@@ -445,7 +565,13 @@ describe('remote credential URL query-string rejection', () => {
   it('still accepts a URL with no query string', () => {
     vi.stubEnv(
       'OZI79_STAGING_READONLY_DATABASE_URL',
-      'postgres://u:p@staging-db.internal:5432/app_staging',
+      buildTestPostgresUrl({
+        username: 'u',
+        password: 'p',
+        host: 'staging-db.internal',
+        port: '5432',
+        database: 'app_staging',
+      }),
     );
 
     expect(() => describeRemoteTarget('staging')).not.toThrow();

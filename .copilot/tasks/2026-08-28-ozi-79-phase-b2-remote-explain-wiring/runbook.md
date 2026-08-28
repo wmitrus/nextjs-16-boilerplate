@@ -1236,6 +1236,31 @@ claim, and the `scan` behavior claim all still hold).
 No executable TypeScript, test, artifact-contract, Git-guard, or
 remote-DB-wiring code was touched this round.
 
+## Review round 15 (Codex) — documentation only
+
+One finding (P2), docs only, no code change, and the same class as round
+14 applied to the other control artifact: `plan.md`'s `Classification`
+section still asserted that no existing security-reviewed logic had been
+modified, and used that assertion to justify not re-running a full
+specialist review cycle. A reviewer working from `plan.md` could
+therefore under-scope the security read of this PR even though the
+runbook (as of round 14) listed the changed functions correctly.
+
+Fixed in `plan.md` by splitting the classification into explicitly
+unchanged existing logic (`verifyReadOnlyRole`'s privilege semantics, the
+canonical query registry and its SQL, the B1 collector's
+canonicalization/fingerprinting, the V1 artifact contract) versus
+explicitly modified existing credential/connection logic
+(`resolveRemoteUrl`'s round-12 hardening into the authoritative URL
+parse/normalization gate, and `withReadOnlyRemoteDb`'s target-identity
+enforcement plus its use of that gate's normalized URL), with a separate
+statement of the review coverage those changes actually received. The
+`Objective` section gained a one-clause pointer noting it states the
+original objective rather than the delivered scope.
+
+No executable TypeScript, test, artifact-contract, Git-guard, or
+remote-DB-wiring code was touched this round.
+
 ## Validation
 
 - typecheck: clean

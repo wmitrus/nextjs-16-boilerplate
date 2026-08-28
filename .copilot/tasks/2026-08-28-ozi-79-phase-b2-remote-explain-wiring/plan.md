@@ -5,16 +5,37 @@
 Wire the already-reviewed Phase A (`RemoteTarget`, `withReadOnlyRemoteDb`,
 `describeRemoteTarget`) and Phase B1 (`collectExplainPreflightFacts`,
 `buildExplainPreflightArtifact`) components together into one narrowly
-scoped CLI command, build/test/review only. See `runbook.md` for the full
-execution boundary and design detail.
+scoped CLI command, build/test/review only. This states the original
+objective; the review rounds went beyond pure wiring and hardened some of
+those Phase A components -- see `Classification` below and `runbook.md`
+for the full execution boundary and design detail.
 
 ## Classification
 
-- Primary workflow: narrow, additive wiring (one new CLI command + one
-  new test file), no existing security-reviewed logic modified
-  (`verifyReadOnlyRole`, the canonical registry, the collector/artifact
-  fingerprinting logic are all untouched) -- no full specialist review
-  cycle re-run.
+- Primary workflow: originally scoped as narrow, additive wiring (one new
+  CLI command + one new test file). That opening classification no longer
+  describes the delivered change and must not be used to under-scope a
+  security read of this PR -- the review rounds materially hardened
+  existing credential/connection code. Split explicitly:
+  - **Unchanged existing logic:** `verifyReadOnlyRole`'s privilege
+    semantics, the canonical 16-statement query registry and its SQL, and
+    the Phase B1 collector's canonicalization/fingerprinting logic. The
+    V1 artifact contract is likewise untouched (V2 is additive).
+  - **Modified existing credential/connection logic:** `resolveRemoteUrl`
+    was hardened (round 12) into the authoritative credential URL
+    parse/normalization gate, and `withReadOnlyRemoteDb` now enforces
+    target identity before opening a connection and connects using that
+    gate's validated, normalized URL. Both are pre-existing,
+    previously-security-reviewed trust-boundary functions. See
+    `runbook.md`'s "Execution boundary" for the exact Changed/Unchanged
+    breakdown.
+- Review coverage: no full specialist workflow cycle was re-run up front
+  (the original narrow-wiring classification), but the credential and
+  connection boundary above received iterative security review across 14
+  rounds -- Codex findings plus two user-directed hardening/self-review
+  passes -- each verified by temporarily reverting the check and
+  confirming the corresponding test genuinely failed. Treat that as the
+  security evidence for this PR, not the stale opening classification.
 - Severity: N/A (tooling, not an incident)
 - Linear issue: OZI-79 (child of OZI-74, blocks OZI-78)
 - Branch: `feat/ozi-79-phase-b2-remote-explain-wiring`, from `main` @
@@ -255,6 +276,31 @@ against a disposable temp repository (no mocking, no network/DB/remote
 credential) -- proving ordinary `git status` genuinely misses the hidden
 edit and the new guard genuinely catches it. Verified via
 revert-and-confirm-failure.
+
+### 2026-08-28 — Rounds 14–15 (Codex, documentation only)
+
+Two findings of the same class, one per control artifact: a stale
+current-state claim that understated how much existing, previously
+security-reviewed code Phase B2 actually changed.
+
+Round 14 fixed `runbook.md`'s "Execution boundary" section, which still
+said `readonly-db-remote.ts` gained only two functions and that
+"everything else" was untouched -- untrue since round 12 hardened
+`resolveRemoteUrl` into the authoritative URL parse/normalization gate.
+Rewritten into explicit Changed/Unchanged lists; the adjacent Phase A/B1
+bullet that contradicted it by still calling `withReadOnlyRemoteDb`/
+`describeRemoteTarget` "unmodified" was narrowed to match.
+
+Round 15 fixed the same class of claim in this file's own
+`Classification` section, which used a blanket "no existing
+security-reviewed logic modified" to justify not re-running a full
+specialist review cycle -- allowing a reviewer relying on `plan.md` to
+under-scope the security read. Split into explicit unchanged
+role/query/collector logic versus modified credential/connection logic,
+with the actual review coverage stated rather than implied.
+
+No executable TypeScript, test, artifact-contract, Git-guard, or
+remote-DB-wiring code changed in either round.
 
 ## Artifacts
 

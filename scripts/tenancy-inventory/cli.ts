@@ -50,6 +50,24 @@ interface PlanArgs {
 }
 
 /**
+ * Describes a rejected argument WITHOUT reproducing its value: an
+ * operator's mistake (a stray flag, a pasted secret in the wrong place)
+ * must not turn into a credential-bearing string sitting in a thrown
+ * `Error` that `run()`'s top-level handler prints to stderr. A
+ * `--flag=value`-shaped argument is described by its flag name only
+ * (never what follows `=`); anything else -- a bare `--flag`, or a
+ * positional token with no recognizable flag shape -- is described only
+ * by its 1-based position in the argument list.
+ */
+function safeArgumentDescription(arg: string, index: number): string {
+  if (arg.startsWith('--')) {
+    const equalsIndex = arg.indexOf('=');
+    return equalsIndex === -1 ? arg : arg.slice(0, equalsIndex);
+  }
+  return `argument #${index + 1}`;
+}
+
+/**
  * `plan`'s own strict, fail-closed argument parser -- deliberately not
  * `readOption`/`args.includes()` (the permissive style `scan`/`matrix`
  * use, which silently ignores an unrecognized or duplicated flag). A
@@ -64,8 +82,9 @@ function parsePlanArgs(args: readonly string[]): PlanArgs {
 
   if (targetArgs.length > 1) {
     throw new Error(
-      `plan requires exactly one --target argument, got ${targetArgs.length}: ` +
-        `${targetArgs.join(', ')}.`,
+      `plan requires exactly one --target argument, got ` +
+        `${targetArgs.length}. Refusing to guess which one was meant -- ` +
+        `pass --target=staging or --target=production exactly once.`,
     );
   }
 
@@ -74,16 +93,23 @@ function parsePlanArgs(args: readonly string[]): PlanArgs {
     throw new Error('plan requires --target=staging or --target=production.');
   }
 
-  const unrecognized = args.filter(
-    (arg) =>
-      arg !== '--execute-remote-explain' && !arg.startsWith(targetPrefix),
-  );
+  const unrecognized = args
+    .map((arg, index) => ({ arg, index }))
+    .filter(
+      ({ arg }) =>
+        arg !== '--execute-remote-explain' && !arg.startsWith(targetPrefix),
+    );
   if (unrecognized.length > 0) {
+    const described = unrecognized.map(({ arg, index }) =>
+      safeArgumentDescription(arg, index),
+    );
     throw new Error(
-      `plan does not recognize: ${unrecognized.join(', ')}. Allowed ` +
+      `plan does not recognize: ${described.join(', ')}. Allowed ` +
         `arguments are exactly --target=staging|production and ` +
         `--execute-remote-explain -- refusing to guess what an ` +
-        `unrecognized argument to a remote command was meant to do.`,
+        `unrecognized argument to a remote command was meant to do. ` +
+        `(Argument values are never shown here -- one could contain a ` +
+        `credential-bearing string pasted in the wrong place.)`,
     );
   }
 
@@ -339,8 +365,8 @@ async function runRemoteExplainPlan(
   }
 
   const commitSha = resolveCommitShaStrict();
+  assertTargetDescriptorMatchesExpectation(target);
   const descriptor = describeRemoteTarget(target);
-  assertTargetDescriptorMatchesExpectation(target, descriptor);
 
   console.log(
     `[tenancy-inventory] Remote EXPLAIN preflight against ${descriptor} (read-only transaction)…`,

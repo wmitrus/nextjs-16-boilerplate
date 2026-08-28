@@ -48,7 +48,7 @@ execution boundary and design detail.
 ## Validation
 
 typecheck clean · lint clean · unit (`scripts/tenancy-inventory` subset)
-115/115 · unit (full repo) 279 files / 2368 tests · real DB
+117/117 · unit (full repo) 279 files / 2370 tests · real DB
 (`pnpm test:db:local`) 32 files / 297 tests · CI config (`pnpm
 test:db:ci`) 32 files / 297 tests · adversarial falsification pass
 performed on every negative-path invariant across all three review
@@ -130,6 +130,25 @@ rounds' fixes, before push (see runbook.md)
   `ExplainPreflightEnvironment`, `checkTargetCompatibility`,
   `checkArtifactIntegrity`) now that Phase B2 is the current, completed
   phase and did something narrower than originally drafted.
+
+### 2026-08-28 — Review round 5 (Codex)
+
+- Fixed a real gap in round 1's own fix, not a new adjacent issue:
+  `assertTargetDescriptorMatchesExpectation` compared host:port/database
+  only, which this repo's own documented Supabase pooler URL shape
+  shares identically across every project in a region -- only the
+  username differs. Reproduced the silent-swap-acceptance bug in
+  isolation against the pre-fix code, then confirmed the fix rejects it,
+  before trusting either. Fixed by including the username in the
+  comparison (never in anything printed) and simplifying the function to
+  resolve everything itself from `target`, removing the
+  caller-supplied-descriptor parameter both callers had to keep in sync.
+- Fixed a second real gap: `parsePlanArgs` echoed rejected CLI argument
+  values verbatim (e.g. `--database-url=postgres://user:pass@host/db`)
+  into the thrown error the top-level handler prints. Fixed with
+  `safeArgumentDescription` (flag name only, or argument position for a
+  bare positional). Swept the rest of the diff for the same pattern;
+  found nothing else.
 
 ## Artifacts
 

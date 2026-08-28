@@ -121,6 +121,32 @@ function mockCleanGitState(commitSha = 'abc123deadbeef'): void {
   });
 }
 
+/**
+ * `assertTargetDescriptorMatchesExpectation` is NOT mocked in this file
+ * (only `describeRemoteTarget`/`withReadOnlyRemoteDb` are) -- it resolves
+ * everything itself from the real, unmocked `*_READONLY_DATABASE_URL`
+ * env var, independently of whatever `mockedDescribeRemoteTarget` is set
+ * to return. Any test whose scenario is downstream of that check (i.e.
+ * everything except the checks that must fire before it) needs this
+ * stubbed to a consistent, passing pair so the flow can proceed far
+ * enough to reach the thing that test actually means to exercise.
+ */
+function mockPassingTargetIdentity(
+  target: 'staging' | 'production',
+  username = 'ozi79-test-only-user',
+  host = `${target}-db.example`,
+): void {
+  const envPrefix = target === 'staging' ? 'STAGING' : 'PRODUCTION';
+  vi.stubEnv(
+    `OZI79_${envPrefix}_READONLY_DATABASE_URL`,
+    `postgres://${username}:ozi79-test-only-password@${host}:5432/app_${target}`,
+  );
+  vi.stubEnv(
+    `OZI79_${envPrefix}_EXPECTED_DESCRIPTOR`,
+    `${username}@${host}:5432/app_${target}`,
+  );
+}
+
 function mockDirtyGitState(): void {
   mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
     const args = cmdArgs as readonly string[] | undefined;
@@ -242,10 +268,53 @@ describe('plan -- fails before any remote connection', () => {
     },
   );
 
-  it('rejects positional garbage after plan, before any git call', async () => {
+  it('rejects an unrecognized --flag=value argument by name only, never echoing its value', async () => {
+    const rejectedArg =
+      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
+    let thrown: unknown;
+    try {
+      await run([
+        'plan',
+        '--target=staging',
+        '--execute-remote-explain',
+        `--database-url=${rejectedArg}`,
+      ]);
+    } catch (error) {
+      thrown = error;
+    }
+    const message = (thrown as Error).message;
+    expect(message).toContain('plan does not recognize: --database-url');
+    expect(message).not.toContain(rejectedArg);
+    expect(message).not.toContain('VERY-SECRET-PASSWORD');
+    expect(message).not.toContain('oops-user');
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it('rejects positional garbage after plan, before any git call, without echoing its value', async () => {
+    const credentialBearingGarbage =
+      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
     await expect(
-      run(['plan', 'staging', '--target=staging', '--execute-remote-explain']),
-    ).rejects.toThrow(/plan does not recognize: staging/);
+      run([
+        'plan',
+        credentialBearingGarbage,
+        '--target=staging',
+        '--execute-remote-explain',
+      ]),
+    ).rejects.toThrow(/plan does not recognize: argument #1/);
+    let thrown: unknown;
+    try {
+      await run([
+        'plan',
+        credentialBearingGarbage,
+        '--target=staging',
+        '--execute-remote-explain',
+      ]);
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as Error).message).not.toContain(credentialBearingGarbage);
+    expect((thrown as Error).message).not.toContain('VERY-SECRET-PASSWORD');
     expect(mockedExecFileSync).not.toHaveBeenCalled();
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
@@ -305,14 +374,16 @@ describe('plan -- fails before any remote connection', () => {
 
   it('propagates a describeRemoteTarget failure without ever calling withReadOnlyRemoteDb', async () => {
     mockCleanGitState();
+    // The identity check must pass first (it's real, unmocked, and now
+    // runs before describeRemoteTarget) so this test actually exercises
+    // describeRemoteTarget's own failure, not the identity check's.
+    mockPassingTargetIdentity('staging');
     mockedDescribeRemoteTarget.mockImplementation(() => {
-      throw new Error(
-        'OZI79_STAGING_READONLY_DATABASE_URL is required to connect to the staging target and was not provided.',
-      );
+      throw new Error('unexpected describeRemoteTarget failure');
     });
     await expect(
       run(['plan', '--target=staging', '--execute-remote-explain']),
-    ).rejects.toThrow(/OZI79_STAGING_READONLY_DATABASE_URL is required/);
+    ).rejects.toThrow(/unexpected describeRemoteTarget failure/);
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
     expect(mockedWriteEvidence).not.toHaveBeenCalled();
   });
@@ -320,10 +391,7 @@ describe('plan -- fails before any remote connection', () => {
   it('propagates a RemoteRoleNotReadOnlyError as-is (already a safe, deliberately-sanitized message) and does not write evidence', async () => {
     mockCleanGitState();
     mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
-    vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      'staging-db.example:5432/app',
-    );
+    mockPassingTargetIdentity('staging');
     mockedWithReadOnlyRemoteDb.mockRejectedValue(
       new RemoteRoleNotReadOnlyError(
         'Connected role has elevated attribute(s): rolsuper.',
@@ -338,10 +406,7 @@ describe('plan -- fails before any remote connection', () => {
   it('sanitizes a raw Postgres/Drizzle failure instead of letting it reach the top-level handler, and does not write evidence', async () => {
     mockCleanGitState();
     mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
-    vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      'staging-db.example:5432/app',
-    );
+    mockPassingTargetIdentity('staging');
     const rawInfrastructureError = new Error(
       'password authentication failed for user "readonly_prod" at host internal-db-7.example.net',
     );
@@ -369,10 +434,7 @@ describe('plan -- fails before any remote connection', () => {
   it('propagates a writeEvidence failure instead of swallowing it', async () => {
     mockCleanGitState('abc123deadbeef');
     mockedDescribeRemoteTarget.mockReturnValue('staging-db.example:5432/app');
-    vi.stubEnv(
-      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      'staging-db.example:5432/app',
-    );
+    mockPassingTargetIdentity('staging');
     mockedCollectExplainPreflightFacts.mockResolvedValue(FAKE_FACTS);
     mockedWithReadOnlyRemoteDb.mockImplementation(async (_t, fn) =>
       fn({} as never),
@@ -404,18 +466,19 @@ describe('plan -- fails before any remote connection', () => {
     mockCleanGitState();
     // Simulates OZI79_STAGING_READONLY_DATABASE_URL having been pointed
     // at the production host (or the two credential env vars having been
-    // swapped): the resolved descriptor is real, but does not match what
+    // swapped): the resolved identity is real, but does not match what
     // the operator separately declared staging should look like.
-    mockedDescribeRemoteTarget.mockReturnValue(
-      'production-db.example:5432/app_production',
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://prod-user:pw@production-db.example:5432/app_production',
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      'staging-db.example:5432/app_staging',
+      'staging-user@staging-db.example:5432/app_staging',
     );
     await expect(
       run(['plan', '--target=staging', '--execute-remote-explain']),
-    ).rejects.toThrow(/does not match the expected descriptor/);
+    ).rejects.toThrow(/does not match the expected identity/);
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
     expect(mockedWriteEvidence).not.toHaveBeenCalled();
   });
@@ -428,9 +491,10 @@ describe('plan -- exact wiring once every precondition is satisfied', () => {
       mockCleanGitState('abc123deadbeef');
       const descriptor = `${target}-db.example.internal:5432/app_${target}`;
       mockedDescribeRemoteTarget.mockReturnValue(descriptor);
-      vi.stubEnv(
-        `OZI79_${target.toUpperCase()}_EXPECTED_DESCRIPTOR`,
-        descriptor,
+      mockPassingTargetIdentity(
+        target,
+        'ozi79-test-only-user',
+        `${target}-db.example.internal`,
       );
       mockedCollectExplainPreflightFacts.mockResolvedValue(FAKE_FACTS);
       mockedWithReadOnlyRemoteDb.mockImplementation(async (_t, fn) =>

@@ -411,14 +411,74 @@ Two findings, both fixed:
   future-facing, just without the stale "Phase B2" label since Phase B2
   turned out to mean something narrower than originally drafted).
 
+## Review round 5 (Codex)
+
+Two findings. This round is the clearest evidence that round 1's original
+fix was itself incomplete, not just adjacent -- see the honest note at
+the end of this section.
+
+- **Bind target identity to provider-specific destinations (P2, real
+  gap in round 1's own fix).** `assertTargetDescriptorMatchesExpectation`
+  compared `describeUrl()` output (host:port/database, username
+  deliberately stripped for safe display). This repository's own
+  `.env.example` documents Supabase's connection-pooler URL shape,
+  `postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
+  -- every project sharing a region's pooler has an IDENTICAL
+  host:port/database; only the username distinguishes one project from
+  another. A check built on `describeUrl`'s output alone would treat
+  every project sharing that pooler as identical, silently accepting a
+  staging/production credential swap for exactly this provider shape --
+  reproduced and confirmed empirically (see below) before fixing.
+  Fixed by adding `resolveVerificationIdentity`, which includes the
+  username, used only for the internal comparison and never printed
+  (the safe, printable `descriptor` is unchanged and still
+  username-free). `*_EXPECTED_DESCRIPTOR`'s required format changed to
+  `username@host:port/database` accordingly (documented in
+  `tenancy-inventory.env.example`). Also simplified
+  `assertTargetDescriptorMatchesExpectation`'s signature to resolve
+  everything itself from `target` alone (no caller-supplied descriptor
+  parameter), so `cli.ts` and `withReadOnlyRemoteDb` share one
+  computation instead of each assembling and needing to keep in sync
+  its own version.
+- **Stop echoing rejected CLI arguments (P2, real gap).** `parsePlanArgs`
+  interpolated the full rejected argument(s) verbatim into the thrown
+  message for both a duplicated `--target` and any unrecognized
+  argument -- an operator mistake such as
+  `--database-url=postgres://user:password@host/db` would put that
+  entire string into an `Error` the top-level handler prints to stderr.
+  Fixed with `safeArgumentDescription`: a `--flag=value` argument is
+  described by its flag name only (never what follows `=`); anything
+  else (a bare flag, a positional token) is described only by its
+  1-based position in the argument list. Also swept the rest of `cli.ts`
+  and the new `readonly-db-remote.ts` code for the same interpolation
+  pattern (`` `${...}` `` inside a thrown `Error` with anything other
+  than a closed-domain value, a hash, a filesystem path under the
+  evidence root, or an already-sanitized descriptor) -- no other
+  instance found.
+
+**On why this round happened**: round 1 already asked "does the closed
+`RemoteTarget` domain actually bind to the real destination", and the
+answer built then (`describeUrl`-based comparison) was incomplete for a
+provider shape this exact repository already documents. This is exactly
+the kind of gap that should have been caught by asking "what does a real
+provider's URL actually look like" during round 1, not five rounds
+later. Both round-5 fixes were verified two ways before restoring: the
+automated regression tests (verified via temporary revert, as in every
+prior round), and -- for the Supabase-pooler case specifically, since
+the test file's stubbed values made the revert's failure mode partly
+mask itself in one test run -- a standalone script directly reproducing
+the exact swap scenario against the reverted code (confirmed the swap
+was silently accepted) and then against the restored fix (confirmed it
+was correctly rejected).
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 115/115 (25 in
-  `cli.test.ts`, 12 in `readonly-db-remote.test.ts`, 78 across the other
+- unit (`scripts/tenancy-inventory` subset): 117/117 (26 in
+  `cli.test.ts`, 13 in `readonly-db-remote.test.ts`, 78 across the other
   four files)
-- unit (full repo, `pnpm test`): 279 files / 2368 tests, all pass
+- unit (full repo, `pnpm test`): 279 files / 2370 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

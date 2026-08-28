@@ -106,6 +106,38 @@ const REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR: Record<RemoteTarget, string> = {
 };
 
 /**
+ * Unlike `describeUrl`/`describeRemoteTarget` (host:port/database only,
+ * deliberately safe to print), this INCLUDES the username and is never
+ * meant to be printed or logged -- it exists solely to be compared
+ * against a separately-declared expectation, never displayed.
+ *
+ * Some real provider URL shapes carry environment identity in the
+ * username, not the host: this repository's own `.env.example`
+ * documents Supabase's pooler shape,
+ * `postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
+ * -- every project in the same region shares one host:port/database, and
+ * only the username (`postgres.[project-ref]`) distinguishes one project
+ * from another. A check built only on `describeUrl`'s output would treat
+ * every project sharing that pooler as identical, silently accepting a
+ * staging/production credential swap. Including the username here closes
+ * that gap for this and any similarly-shaped provider URL.
+ */
+function resolveVerificationIdentity(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    const database = parsed.pathname.replace(/^\//, '');
+    return `${parsed.username}@${parsed.hostname}:${parsed.port || '5432'}/${database}`;
+  } catch {
+    // Unparseable -- there is no identity to compute. Returning a fixed
+    // sentinel (rather than the raw value) means the comparison below
+    // simply never matches any configured expectation, failing closed
+    // the same way an empty or wrong value would -- and never risks
+    // echoing unparseable, potentially credential-bearing input.
+    return '(unparseable)';
+  }
+}
+
+/**
  * Defense-in-depth against a swapped or misconfigured credential:
  * `resolveRemoteUrl` only validates that the target's env var is set and
  * looks like a `postgres://`/`postgresql://` URL -- it has no way to know
@@ -119,13 +151,15 @@ const REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR: Record<RemoteTarget, string> = {
  * there.
  *
  * This closes that gap by requiring a SECOND, independently-set env var
- * per target declaring the exact expected `describeRemoteTarget` output,
- * and fails closed if it is unset or does not match. An operator must
- * state, in a variable that has no mechanical relationship to the
- * connection URL, what they believe that target looks like -- a swap
- * between the two credential URLs does not also swap the two expectation
- * values, so it surfaces as a loud mismatch here instead of a silent
- * cross-environment connection.
+ * per target declaring the exact expected identity (see
+ * `resolveVerificationIdentity` above for why that includes the
+ * username, not just `describeRemoteTarget`'s safe host:port/database
+ * form), and fails closed if it is unset or does not match. An operator
+ * must state, in a variable that has no mechanical relationship to the
+ * connection URL, what they believe that target's full identity is -- a
+ * swap between the two credential URLs does not also swap the two
+ * expectation values, so it surfaces as a loud mismatch here instead of
+ * a silent cross-environment connection.
  *
  * The expectation value must be sourced independently from authoritative
  * environment/provider metadata -- never generated, derived, or copied
@@ -133,15 +167,22 @@ const REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR: Record<RemoteTarget, string> = {
  * `tenancy-inventory.env.example`). Deriving one from the other would
  * make this check tautological.
  *
+ * Resolves everything itself from `target` -- no descriptor or URL
+ * parameter -- specifically so every caller (this module's own
+ * `withReadOnlyRemoteDb` and `cli.ts`) shares one single computation of
+ * the safe-to-print descriptor and the username-inclusive comparison
+ * value, rather than each caller assembling its own version that could
+ * drift out of sync with the other.
+ *
  * Neither error message below ever interpolates the configured expected
- * value: it is untrusted operator-set input, and an operator could have
- * pasted a real credential into it by mistake. Only the target name, the
- * env var name, and the already-sanitized resolved `descriptor` are
- * safe to include.
+ * value, the resolved username, or the full resolved URL: those are
+ * untrusted/credential-bearing, and an operator could have pasted a real
+ * credential into the expectation variable by mistake. Only the target
+ * name, the env var name, and the already-sanitized `describeUrl` output
+ * (host:port/database, no username) are safe to include.
  */
 export function assertTargetDescriptorMatchesExpectation(
   target: RemoteTarget,
-  descriptor: string,
 ): void {
   // eslint-disable-next-line security/detect-object-injection -- see the identical justification on REMOTE_ENV_VAR's lookup above (SEC-18)
   const envVar = REMOTE_EXPECTED_DESCRIPTOR_ENV_VAR[target];
@@ -157,14 +198,16 @@ export function assertTargetDescriptorMatchesExpectation(
     );
   }
 
-  if (expected !== descriptor) {
+  const url = resolveRemoteUrl(target);
+  if (expected !== resolveVerificationIdentity(url)) {
     throw new Error(
-      `[tenancy-inventory] Resolved ${target} target "${descriptor}" does ` +
-        `not match the expected descriptor declared in ${envVar}. ` +
-        `(${envVar}'s value is not shown here -- an operator could have ` +
-        `accidentally pasted a connection URL or other credential-bearing ` +
-        `value into it.) Refusing to connect -- this usually means the ` +
-        `staging/production credentials were swapped or misconfigured.`,
+      `[tenancy-inventory] Resolved ${target} target "${describeUrl(url)}" ` +
+        `does not match the expected identity declared in ${envVar}. ` +
+        `(The comparison also checks the connection username, and ` +
+        `neither that username nor ${envVar}'s configured value is shown ` +
+        `here -- either could be credential-bearing.) Refusing to ` +
+        `connect -- this usually means the staging/production ` +
+        `credentials were swapped or misconfigured.`,
     );
   }
 }
@@ -451,8 +494,8 @@ export async function withReadOnlyRemoteDb<T>(
   target: RemoteTarget,
   fn: (tx: RemoteDb) => Promise<T>,
 ): Promise<T> {
+  assertTargetDescriptorMatchesExpectation(target);
   const url = resolveRemoteUrl(target);
-  assertTargetDescriptorMatchesExpectation(target, describeUrl(url));
 
   const client = postgres(url, {
     connect_timeout: 10,

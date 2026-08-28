@@ -92,79 +92,112 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
   it('fails closed when the expected-descriptor env var is unset', () => {
     // Stubbed to the empty string, not merely left absent -- this test's
     // scenario must not depend on the operator's real shell not
-    // happening to have this variable exported.
+    // happening to have this variable exported. OZI79_STAGING_READONLY_
+    // DATABASE_URL deliberately left unset too: the unset-expectation
+    // check must fire before this function ever resolves the URL.
     vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', '');
 
-    expect(() =>
-      assertTargetDescriptorMatchesExpectation(
-        'staging',
-        'staging-db.internal:5432/app_staging',
-      ),
-    ).toThrow('OZI79_STAGING_EXPECTED_DESCRIPTOR is required');
+    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR is required',
+    );
   });
 
-  it('fails closed when the resolved descriptor does not match the declared expectation -- the swapped-credential case', () => {
+  it('fails closed when the resolved identity does not match the declared expectation -- the swapped-credential case', () => {
+    vi.stubEnv(
+      // What actually got resolved for "staging" -- the production
+      // host and user, e.g. because the two credential env vars were
+      // swapped during provisioning.
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://prod-user:pw@production-db.internal:5432/app_production',
+    );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      'staging-db.internal:5432/app_staging',
+      'staging-user@staging-db.internal:5432/app_staging',
     );
 
-    expect(() =>
-      assertTargetDescriptorMatchesExpectation(
-        'staging',
-        // What OZI79_STAGING_READONLY_DATABASE_URL actually resolved to
-        // -- the production host, e.g. because the two credential env
-        // vars were swapped during provisioning.
-        'production-db.internal:5432/app_production',
-      ),
-    ).toThrow(/does not match the expected descriptor/);
+    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
+      /does not match the expected identity/,
+    );
   });
 
-  it('passes when the resolved descriptor matches exactly', () => {
+  it('passes when the resolved identity matches exactly, including the username', () => {
+    vi.stubEnv(
+      'OZI79_PRODUCTION_READONLY_DATABASE_URL',
+      'postgres://prod-user:pw@production-db.internal:5432/app_production',
+    );
     vi.stubEnv(
       'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
-      'production-db.internal:5432/app_production',
+      'prod-user@production-db.internal:5432/app_production',
     );
 
     expect(() =>
-      assertTargetDescriptorMatchesExpectation(
-        'production',
-        'production-db.internal:5432/app_production',
-      ),
+      assertTargetDescriptorMatchesExpectation('production'),
     ).not.toThrow();
+  });
+
+  it('rejects a same-host, same-database, different-username pair -- the Supabase pooler case', () => {
+    // This repository's own .env.example documents exactly this shape:
+    // postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+    // -- every project sharing a region's pooler has an IDENTICAL
+    // describeUrl() output (same host:port/database); only the username
+    // carries which project (staging vs. production) this actually is.
+    // A check built only on describeUrl's output would treat these two
+    // as identical and silently accept the swap.
+    const sharedPoolerHostAndDb =
+      '@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      `postgres://postgres.production-project-ref:pw${sharedPoolerHostAndDb}`,
+    );
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      `postgres.staging-project-ref${sharedPoolerHostAndDb}`,
+    );
+
+    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
+      /does not match the expected identity/,
+    );
   });
 
   it("never mixes up the two targets' expectation env vars", () => {
     vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://prod-user:pw@production-db.internal:5432/app_production',
+    );
+    vi.stubEnv(
       'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      'staging-db.internal:5432/app_staging',
+      'staging-user@staging-db.internal:5432/app_staging',
     );
     vi.stubEnv(
       'OZI79_PRODUCTION_EXPECTED_DESCRIPTOR',
-      'production-db.internal:5432/app_production',
+      'prod-user@production-db.internal:5432/app_production',
     );
 
-    // Staging's real descriptor checked against production's expectation
-    // must fail, even though both env vars are set to *something*.
-    expect(() =>
-      assertTargetDescriptorMatchesExpectation(
-        'staging',
-        'production-db.internal:5432/app_production',
-      ),
-    ).toThrow(/does not match the expected descriptor/);
+    // Staging's real (swapped-to-production) identity checked against
+    // production's own expectation would happen to match -- but nothing
+    // here calls assertTargetDescriptorMatchesExpectation('production'),
+    // so that coincidence is irrelevant; staging's own check must still
+    // fail against its own, correctly-declared expectation.
+    expect(() => assertTargetDescriptorMatchesExpectation('staging')).toThrow(
+      /does not match the expected identity/,
+    );
   });
 
-  it('never echoes the declared expectation value on a mismatch, even if it is a credential-bearing connection URL', () => {
-    const credentialBearingValue =
-      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db';
-    vi.stubEnv('OZI79_STAGING_EXPECTED_DESCRIPTOR', credentialBearingValue);
+  it('never echoes the declared expectation value, the resolved username, or the full URL on a mismatch', () => {
+    vi.stubEnv(
+      'OZI79_STAGING_READONLY_DATABASE_URL',
+      'postgres://oops-user:VERY-SECRET-PASSWORD@production.example/db',
+    );
+    const credentialBearingExpectation =
+      'postgres://another-oops-user:ANOTHER-SECRET@staging.example/db';
+    vi.stubEnv(
+      'OZI79_STAGING_EXPECTED_DESCRIPTOR',
+      credentialBearingExpectation,
+    );
 
     let thrown: unknown;
     try {
-      assertTargetDescriptorMatchesExpectation(
-        'staging',
-        'staging-db.internal:5432/app_staging',
-      );
+      assertTargetDescriptorMatchesExpectation('staging');
     } catch (error) {
       thrown = error;
     }
@@ -172,7 +205,9 @@ describe('assertTargetDescriptorMatchesExpectation', () => {
     expect(thrown).toBeInstanceOf(Error);
     const message = (thrown as Error).message;
     expect(message).toContain('OZI79_STAGING_EXPECTED_DESCRIPTOR');
-    expect(message).not.toContain(credentialBearingValue);
+    expect(message).not.toContain(credentialBearingExpectation);
+    expect(message).not.toContain('ANOTHER-SECRET');
+    expect(message).not.toContain('another-oops-user');
     expect(message).not.toContain('VERY-SECRET-PASSWORD');
     expect(message).not.toContain('oops-user');
   });
@@ -188,7 +223,7 @@ describe('withReadOnlyRemoteDb connection contract', () => {
     );
     vi.stubEnv(
       'OZI79_STAGING_EXPECTED_DESCRIPTOR',
-      'staging-db.internal:5432/app_staging',
+      'ozi79-test-only-user@staging-db.internal:5432/app_staging',
     );
 
     await withReadOnlyRemoteDb('staging', async () => 'ok');

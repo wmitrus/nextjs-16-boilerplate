@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -10,13 +12,15 @@ import postgres from 'postgres';
 import { REQUIRED_SELECT_TABLES } from './query-registry';
 
 /**
- * OZI-79 Phase A: connection/verification plumbing only. Nothing in this
- * module is wired into a CLI command yet -- there is no `scan
- * --target=staging|production` this phase, deliberately, so that building
- * and testing this file cannot accidentally reach a real remote database.
- * Execution against either target requires a separate, explicit
- * authorization after this plumbing (and the exact query subset) has been
- * reviewed. See OZI-79.
+ * OZI-79 Phase A built this module's connection/verification plumbing
+ * with nothing wired into a CLI command, deliberately, so that building
+ * and testing it could not accidentally reach a real remote database.
+ * Phase B2 (`cli.ts`'s `plan --target=staging|production
+ * --execute-remote-explain`) is that separate, explicit wiring -- still
+ * only a plain-`EXPLAIN` preflight, still requiring the caller to pass
+ * the acknowledgement flag before any connection opens, and still not the
+ * inventory-scan execution `scan --target=staging|production` continues
+ * to refuse. See OZI-79.
  *
  * Deliberately a separate module from `readonly-db.ts`'s `LocalTarget`,
  * not an extension of it: no shared allowlist, no shared URL-resolution
@@ -53,6 +57,54 @@ const REMOTE_ENV_VAR: Record<RemoteTarget, string> = {
  * NEVER echoes the raw value in an error message -- an externally
  * supplied, potentially secret-bearing, potentially operator-mistyped URL
  * must not be printed just because it failed validation.
+ *
+ * Codex review round 12 (self-review): this is the SINGLE authoritative
+ * parse gate for a remote credential URL. `postgres()` (the actual
+ * connection) and this module's own identity functions
+ * (`describeUrl`/`resolveVerificationIdentity`/
+ * `computeVerifiedIdentityFingerprint`) must never be allowed to
+ * interpret the same configured value *differently* -- e.g. one
+ * accepting it as parseable while the other rejects it, or postgres-js's
+ * own internal URL parser extracting a different host/user/database than
+ * this tool's identity layer computed. Requiring a successful `new
+ * URL(raw)` parse HERE, validating every identity component this tool
+ * actually relies on, and returning the platform parser's own
+ * *normalized* re-serialization (`parsed.toString()`, not the original
+ * `raw` string) closes that gap: every downstream consumer -- `postgres()`
+ * itself, `describeUrl`, `resolveVerificationIdentity` -- receives the
+ * exact same, already-validated string, parsed exactly once by this
+ * function's own `new URL()` call. There is no path left where an
+ * unparseable or identity-incomplete raw string reaches `postgres()` for
+ * its own parser to interpret however it chooses.
+ *
+ * Validated, in order: the value is non-empty; it parses as a URL at
+ * all; its scheme is exactly `postgres:`/`postgresql:` (checked against
+ * the PARSED protocol, not a string prefix -- `new URL()` is the single
+ * source of truth for what the scheme actually is); it carries no query
+ * string; it carries no fragment; it has a non-empty hostname; it has a
+ * non-empty username; its path resolves to a non-empty database name.
+ * These are exactly the identity components `describeUrl`/
+ * `resolveVerificationIdentity`/`computeVerifiedIdentityFingerprint` rely
+ * on -- if any of them were allowed to be empty/absent, those functions'
+ * output would silently omit part of the identity they exist to bind.
+ *
+ * Query strings are rejected as a zero-cost defense, not because this
+ * tool's own identity functions are influenced by one: verified directly
+ * against the actual pinned `postgres` package (`postgres@3.4.8`'s
+ * `parseOptions`/`parseUrl` in `postgres/src/index.js`, both by reading
+ * the source and by running it against a live override attempt) that
+ * `host`/`port`/`user`/`database`/`pass` are derived only from the URL's
+ * authority/pathname or from the options object this code passes --
+ * never from `url.searchParams` -- so a `?host=`/`?database=`/`?user=`
+ * override does not exist in the version this tool depends on today.
+ * Rejecting the query string anyway removes any need to keep
+ * re-verifying that against a future `postgres` version; nothing in the
+ * documented credential format (`tenancy-inventory.env.example`) ever
+ * needs one, and TLS is already forced to `'verify-full'` in code rather
+ * than read from the URL (see `withReadOnlyRemoteDb`). Fragments are
+ * rejected for the same reason -- structurally never meaningful for a
+ * Postgres connection string, and one more piece of the raw value this
+ * tool has no reason to carry forward unexamined.
  */
 function resolveRemoteUrl(target: RemoteTarget): string {
   // `target` is the closed RemoteTarget union, not a caller-supplied
@@ -69,17 +121,80 @@ function resolveRemoteUrl(target: RemoteTarget): string {
     );
   }
 
-  if (!raw.startsWith('postgres://') && !raw.startsWith('postgresql://')) {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} is not a valid URL. (Value not ` +
+        `shown here -- it may contain credentials.)`,
+    );
+  }
+
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
     throw new Error(
       `[tenancy-inventory] ${envVar} must be a postgres:// or postgresql:// URL. ` +
         `(Value not shown here -- it may contain credentials.)`,
     );
   }
 
-  return raw;
+  // ponytail: a blanket "no query string/fragment at all" rejection, not
+  // an allowlist of specific safe parameter names -- simpler and
+  // strictly safer given nothing legitimate needs either here. If a real
+  // use case for a specific query parameter (e.g. `application_name`)
+  // ever appears, switch this to an explicit allowlist of that exact key
+  // instead of loosening it wholesale.
+  if (parsed.search) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must not include a query string. ` +
+        `The documented ${target} credential format never needs one -- ` +
+        `TLS and every other connection option this tool relies on are ` +
+        `always forced in code, never read from the URL. (Value not ` +
+        `shown here -- it may contain credentials.)`,
+    );
+  }
+  if (parsed.hash) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must not include a fragment. ` +
+        `A Postgres connection URL has no meaningful use for one. ` +
+        `(Value not shown here -- it may contain credentials.)`,
+    );
+  }
+
+  if (!parsed.hostname) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must include a hostname. (Value ` +
+        `not shown here -- it may contain credentials.)`,
+    );
+  }
+  if (!parsed.username) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must include a username. (Value ` +
+        `not shown here -- it may contain credentials.)`,
+    );
+  }
+  const database = parsed.pathname.replace(/^\//, '');
+  if (!database) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} must include a database name in ` +
+        `its path. (Value not shown here -- it may contain credentials.)`,
+    );
+  }
+
+  // The platform parser's own normalized re-serialization, not `raw`:
+  // every caller of `resolveRemoteUrl` -- `postgres()` itself via
+  // `withReadOnlyRemoteDb`, and this module's own `describeUrl`/
+  // `resolveVerificationIdentity` -- now parses this exact string, so
+  // none of them can ever disagree about what it means.
+  return parsed.toString();
 }
 
-/** host:port/database only, via the platform URL parser -- never credentials. */
+/**
+ * host:port/database only, via the platform URL parser -- never
+ * credentials. Only ever called with `resolveRemoteUrl`'s output, which
+ * is already guaranteed parseable -- the `try`/`catch` here is
+ * defense-in-depth, not a path this module's own callers can reach.
+ */
 function describeUrl(raw: string): string {
   try {
     const parsed = new URL(raw);
@@ -92,6 +207,159 @@ function describeUrl(raw: string): string {
 
 export function describeRemoteTarget(target: RemoteTarget): string {
   return describeUrl(resolveRemoteUrl(target));
+}
+
+/**
+ * A second, named env var per target, deliberately separate from
+ * `REMOTE_ENV_VAR` above and never derived from it. Named `..._IDENTITY`,
+ * not `..._DESCRIPTOR`: the value it holds is the username-inclusive
+ * verification identity (see `resolveVerificationIdentity` below), not
+ * `describeRemoteTarget`'s safe, username-free printable descriptor --
+ * calling it a "descriptor" would misdescribe the actual required
+ * format.
+ */
+const REMOTE_EXPECTED_IDENTITY_ENV_VAR: Record<RemoteTarget, string> = {
+  staging: 'OZI79_STAGING_EXPECTED_IDENTITY',
+  production: 'OZI79_PRODUCTION_EXPECTED_IDENTITY',
+};
+
+/**
+ * Unlike `describeUrl`/`describeRemoteTarget` (host:port/database only,
+ * deliberately safe to print), this INCLUDES the username and is never
+ * meant to be printed or logged -- it exists solely to be compared
+ * against a separately-declared expectation, never displayed.
+ *
+ * Some real provider URL shapes carry environment identity in the
+ * username, not the host: this repository's own `.env.example`
+ * documents Supabase's pooler shape,
+ * `postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
+ * -- every project in the same region shares one host:port/database, and
+ * only the username (`postgres.[project-ref]`) distinguishes one project
+ * from another. A check built only on `describeUrl`'s output would treat
+ * every project sharing that pooler as identical, silently accepting a
+ * staging/production credential swap. Including the username here closes
+ * that gap for this and any similarly-shaped provider URL.
+ *
+ * Only ever called with `resolveRemoteUrl`'s output, which is already
+ * guaranteed parseable with a non-empty username/hostname/database path
+ * -- the `try`/`catch` and sentinel here are defense-in-depth, not a
+ * path this module's own callers can reach.
+ */
+function resolveVerificationIdentity(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    const database = parsed.pathname.replace(/^\//, '');
+    return `${parsed.username}@${parsed.hostname}:${parsed.port || '5432'}/${database}`;
+  } catch {
+    // Unparseable -- there is no identity to compute. Returning a fixed
+    // sentinel (rather than the raw value) means the comparison below
+    // simply never matches any configured expectation, failing closed
+    // the same way an empty or wrong value would -- and never risks
+    // echoing unparseable, potentially credential-bearing input.
+    return '(unparseable)';
+  }
+}
+
+/**
+ * Defense-in-depth against a swapped or misconfigured credential:
+ * `resolveRemoteUrl` only validates that the target's env var is set and
+ * looks like a `postgres://`/`postgresql://` URL -- it has no way to know
+ * whether `OZI79_STAGING_READONLY_DATABASE_URL` actually points at
+ * staging rather than production. If the two credential env vars were
+ * accidentally swapped during provisioning, or staging's variable was
+ * pointed at the production host, `plan --target=staging` would silently
+ * connect to production while the persisted artifact is stamped
+ * `environment: staging` -- the closed `RemoteTarget` domain constrains
+ * which env var name is *read*, not what value an operator actually put
+ * there.
+ *
+ * This closes that gap by requiring a SECOND, independently-set env var
+ * per target declaring the exact expected identity (see
+ * `resolveVerificationIdentity` above for why that includes the
+ * username, not just `describeRemoteTarget`'s safe host:port/database
+ * form), and fails closed if it is unset or does not match. An operator
+ * must state, in a variable that has no mechanical relationship to the
+ * connection URL, what they believe that target's full identity is -- a
+ * swap between the two credential URLs does not also swap the two
+ * expectation values, so it surfaces as a loud mismatch here instead of
+ * a silent cross-environment connection.
+ *
+ * The expectation value must be sourced independently from authoritative
+ * environment/provider metadata -- never generated, derived, or copied
+ * from the corresponding `*_READONLY_DATABASE_URL` itself (see
+ * `tenancy-inventory.env.example`). Deriving one from the other would
+ * make this check tautological.
+ *
+ * Resolves everything itself from `target` -- no descriptor or URL
+ * parameter -- specifically so every caller (this module's own
+ * `withReadOnlyRemoteDb` and `cli.ts`) shares one single computation of
+ * the safe-to-print descriptor and the username-inclusive comparison
+ * value, rather than each caller assembling its own version that could
+ * drift out of sync with the other.
+ *
+ * Neither error message below ever interpolates the configured expected
+ * value, the resolved username, or the full resolved URL: those are
+ * untrusted/credential-bearing, and an operator could have pasted a real
+ * credential into the expectation variable by mistake. Only the target
+ * name, the env var name, and the already-sanitized `describeUrl` output
+ * (host:port/database, no username) are safe to include.
+ */
+export function assertTargetIdentityMatchesExpectation(
+  target: RemoteTarget,
+): void {
+  // eslint-disable-next-line security/detect-object-injection -- see the identical justification on REMOTE_ENV_VAR's lookup above (SEC-18)
+  const envVar = REMOTE_EXPECTED_IDENTITY_ENV_VAR[target];
+  // eslint-disable-next-line security/detect-object-injection, no-restricted-syntax -- envVar is one of exactly two literal values from the closed record above, never a caller-supplied string (SEC-18)
+  const expected = process.env[envVar]?.trim();
+
+  if (!expected) {
+    throw new Error(
+      `[tenancy-inventory] ${envVar} is required to confirm the ${target} ` +
+        `target's identity and was not provided. This is a separate, ` +
+        `independently-set safeguard against a swapped or misconfigured ` +
+        `remote credential -- refusing to connect without it.`,
+    );
+  }
+
+  const url = resolveRemoteUrl(target);
+  if (expected !== resolveVerificationIdentity(url)) {
+    throw new Error(
+      `[tenancy-inventory] Resolved ${target} target "${describeUrl(url)}" ` +
+        `does not match the expected identity declared in ${envVar}. ` +
+        `(The comparison also checks the connection username, and ` +
+        `neither that username nor ${envVar}'s configured value is shown ` +
+        `here -- either could be credential-bearing.) Refusing to ` +
+        `connect -- this usually means the staging/production ` +
+        `credentials were swapped or misconfigured.`,
+    );
+  }
+}
+
+/**
+ * A non-secret SHA-256 fingerprint of `resolveVerificationIdentity`'s
+ * output, domain-separated (a fixed, versioned prefix under the hash) so
+ * this value can never be confused with a hash of some unrelated
+ * identity-shaped string computed elsewhere in this tool. Safe to
+ * persist in an evidence artifact and print in terminal output -- a
+ * SHA-256 hash does not reveal the username it was computed from -- but
+ * the value it is *computed from* (the raw username-inclusive identity)
+ * never is.
+ *
+ * Exists specifically so a produced artifact records which underlying
+ * database instance was verified, not just its safe printable
+ * `describeRemoteTarget` descriptor: two different database instances
+ * behind the same provider pooler (see `resolveVerificationIdentity`'s
+ * Supabase example) can share an identical descriptor, so an artifact
+ * that only recorded the descriptor could not later prove which of them
+ * was actually reviewed.
+ */
+export function computeVerifiedIdentityFingerprint(
+  target: RemoteTarget,
+): string {
+  const identity = resolveVerificationIdentity(resolveRemoteUrl(target));
+  return createHash('sha256')
+    .update(`ozi79:remote-target-verified-identity:v1:${identity}`, 'utf8')
+    .digest('hex');
 }
 
 type RemoteDb = PostgresJsDatabase<Record<string, never>>;
@@ -364,12 +632,22 @@ const IDLE_IN_TRANSACTION_TIMEOUT_MS = 10_000;
  *   `fn` ever sees the connection. Two independent controls, not one: a
  *   `SELECT`-only DB-role grant (verified live, not just trusted) AND the
  *   read-only transaction.
+ * - `assertTargetIdentityMatchesExpectation` runs before the connection
+ *   is even opened, baked in here rather than left to each caller (the
+ *   same reasoning as `verifyReadOnlyRole`'s placement): `target` only
+ *   constrains which env var *name* `resolveRemoteUrl` reads, not what an
+ *   operator actually put in it, so this is the authoritative point that
+ *   catches a swapped/misconfigured credential regardless of which
+ *   caller invokes this function.
  */
 export async function withReadOnlyRemoteDb<T>(
   target: RemoteTarget,
   fn: (tx: RemoteDb) => Promise<T>,
 ): Promise<T> {
-  const client = postgres(resolveRemoteUrl(target), {
+  assertTargetIdentityMatchesExpectation(target);
+  const url = resolveRemoteUrl(target);
+
+  const client = postgres(url, {
     connect_timeout: 10,
     ssl: 'verify-full',
     connection: {

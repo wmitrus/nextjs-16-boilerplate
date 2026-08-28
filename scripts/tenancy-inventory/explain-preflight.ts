@@ -20,19 +20,29 @@ import {
 } from './topology-queries';
 
 /**
- * OZI-79 Phase B1: a **build-only, local-test-only** plain-`EXPLAIN`
- * preflight core. This module collects `EXPLAIN` plans and relation
- * statistics for the frozen Phase B0 `QUERY_REGISTRY` and assembles them
- * into a versioned, dual-fingerprinted artifact for later human review --
- * it does not decide anything, connect to anything remote, or execute
- * anything beyond `EXPLAIN` (never `EXPLAIN ANALYZE`).
+ * OZI-79 Phase B1 built this as a **build-only, local-test-only**
+ * plain-`EXPLAIN` preflight core: it collects `EXPLAIN` plans and
+ * relation statistics for the frozen Phase B0 `QUERY_REGISTRY` and
+ * assembles them into a versioned, dual-fingerprinted artifact for later
+ * human review -- it does not decide anything or execute anything beyond
+ * `EXPLAIN` (never `EXPLAIN ANALYZE`).
  *
- * Explicit non-goals, enforced by what this file does NOT import or call:
+ * As of OZI-79 Phase B2, `cli.ts`'s `plan --target=staging|production
+ * --execute-remote-explain` command does call `collectExplainPreflightFacts`
+ * against a real remote transaction (`readonly-db-remote.ts`'s
+ * `withReadOnlyRemoteDb`), behind its own fail-closed acknowledgement/
+ * clean-tree/resolvable-commit/target-identity preconditions -- see that
+ * command's doc comment. This module's own code is unchanged by that:
+ * it still imports nothing from `readonly-db-remote.ts` or
+ * `evidence-store.ts`, and still has no concept of which target/
+ * environment a transaction handed to it came from --
+ * `ExplainPreflightTargetMetadata` remains entirely caller-supplied (see
+ * below). The non-goals below describe this module's own code, not
+ * whether some other module has since wired it to a remote transaction:
+ *
  * - no `withReadOnlyRemoteDb`, `describeRemoteTarget`, or any other
- *   `readonly-db-remote.ts` symbol
- * - no `writeEvidence('staging' | 'production', ...)`
- * - no `cli.ts` wiring, no `scan --target=...` command, no remote
- *   credential, no remote connection anywhere in this module
+ *   `readonly-db-remote.ts` symbol is imported here
+ * - no `writeEvidence(...)` call exists here
  * - no automatic production-safe verdict or numeric risk threshold --
  *   `requiresManualReview` is always `true`; this tool produces facts for
  *   a human to read, not a decision
@@ -40,10 +50,9 @@ import {
  * `collectExplainPreflightFacts` accepts an already-open transaction/
  * handle -- exactly the same `Tx` shape `readonly-db.ts`'s
  * `withReadOnlyDb` and `readonly-db-remote.ts`'s `withReadOnlyRemoteDb`
- * both already produce, structurally, with no import from either. Phase
- * B1 does not decide which one a caller uses; a future Phase B2 would be
- * the (separately authorized) decision to actually call this against a
- * remote transaction.
+ * both already produce, structurally, with no import from either. This
+ * module still does not decide which one a caller uses -- that decision
+ * now lives in `cli.ts`.
  *
  * ## Two fingerprints, two different jobs
  *
@@ -300,8 +309,9 @@ export async function collectExplainPreflightFacts(
  * importing `RemoteTarget` from `readonly-db-remote.ts` (or anything else
  * from it): this module stays structurally independent of that one, the
  * same way `LocalTarget` and `RemoteTarget` stay independent of each
- * other. Phase B2 will be the (separately authorized) work of deriving a
- * real value here from `describeRemoteTarget`; nothing here does that.
+ * other. `cli.ts`'s `plan` command (OZI-79 Phase B2) is what derives a
+ * real value here from `describeRemoteTarget`; nothing in this module
+ * does that itself.
  */
 export type ExplainPreflightEnvironment = 'staging' | 'production';
 
@@ -573,9 +583,11 @@ function isPlausibleStatementFingerprintEntry(
  * field itself (it recomputes the scope's constituent fields directly),
  * so an artifact with its `scopeFingerprint` field silently rewritten to
  * an arbitrary value would still pass an `artifactFingerprint`-only
- * check. Since Phase B2 is documented to persist and separately approve
- * `scopeFingerprint`, this function must independently verify it too, or
- * an internally inconsistent approval identity could pass integrity.
+ * check. Whenever a later phase persists and separately approves
+ * `scopeFingerprint` (not built yet -- OZI-79 Phase B2 only writes an
+ * artifact, it does not persist or approve one), this function must
+ * independently verify it too, or an internally inconsistent approval
+ * identity could pass integrity.
  *
  * This does **not** prove the artifact was ever legitimately approved --
  * see the module doc comment. A future scan must additionally compare an
@@ -810,14 +822,17 @@ export function checkSchemaCompatibility(
 
 /**
  * Pure, synchronous, fail-closed. `currentTarget` must be resolved by the
- * caller -- a future Phase B2 would derive it from the real
- * `RemoteTarget`/`describeRemoteTarget` wiring; this function does no I/O
- * and imports nothing from `readonly-db-remote.ts`. Both `environment`
- * and `descriptor` must match exactly: an artifact approved against
- * staging must never be treated as compatible with a production target
- * (or vice versa) merely because the registry and schema migration
- * happen to agree -- two environments can share both while holding
- * materially different data distributions.
+ * caller; this function does no I/O and imports nothing from
+ * `readonly-db-remote.ts`. The real `RemoteTarget`/`describeRemoteTarget`
+ * wiring exists as of OZI-79 Phase B2 (`cli.ts`'s `plan` command), but
+ * nothing calls this function yet -- wiring the four
+ * compatibility/integrity checks into an actual command's preflight gate
+ * remains unbuilt, a later phase's work. Both `environment` and
+ * `descriptor` must match exactly: an artifact approved against staging
+ * must never be treated as compatible with a production target (or vice
+ * versa) merely because the registry and schema migration happen to
+ * agree -- two environments can share both while holding materially
+ * different data distributions.
  */
 export function checkTargetCompatibility(
   currentTarget: ExplainPreflightTargetMetadata,
@@ -860,6 +875,326 @@ export function checkTargetCompatibility(
   return {
     compatible: true,
     reason: 'Current target matches the approved artifact exactly.',
+  };
+}
+
+// ─── V2 artifact contract (OZI-79 Phase B2: verified remote database
+// identity) ──────────────────────────────────────────────────────────
+
+/**
+ * V1 above is frozen and unchanged by any of this: everything in this
+ * section is new and parallel, not a retrofit. It exists because a real
+ * remote artifact now exists (`cli.ts`'s `plan` command actually
+ * produces one), and that artifact must record every identity component
+ * a later approval-compatibility check will need -- including which
+ * underlying database instance was verified, not just its safe
+ * printable descriptor. `describeRemoteTarget`'s descriptor alone is
+ * insufficient for some real provider URL shapes: see
+ * `readonly-db-remote.ts`'s `resolveVerificationIdentity` for the
+ * documented Supabase pooler example (two different projects can share
+ * an identical host:port/database).
+ *
+ * `ExplainPreflightTargetMetadataV2` extends V1's target metadata with
+ * exactly one field, `verifiedIdentityFingerprint` -- a non-secret
+ * SHA-256 fingerprint (see `readonly-db-remote.ts`'s
+ * `computeVerifiedIdentityFingerprint`), never the raw username or
+ * connection string it was computed from. `ExplainPreflightArtifactV2`
+ * otherwise reuses every other field of `ExplainPreflightArtifactV1`
+ * unchanged (via `Omit`, not duplicated by hand) -- only `version` and
+ * `target` differ.
+ */
+export interface ExplainPreflightTargetMetadataV2 extends ExplainPreflightTargetMetadata {
+  readonly verifiedIdentityFingerprint: string;
+}
+
+/**
+ * `verifiedIdentityFingerprint` has exactly one canonical format: the
+ * lowercase 64-character SHA-256 hex digest `computeVerifiedIdentityFingerprint`
+ * (`readonly-db-remote.ts`) emits -- nothing else is ever a valid value
+ * for this field, regardless of truthiness. Shared by both
+ * `buildExplainPreflightArtifactV2` (rejects a malformed caller-supplied
+ * value before it can ever become part of a V2 artifact) and
+ * `checkTargetCompatibilityV2` (rejects a malformed value on either side
+ * as incompatible, never merely "missing" -- two malformed-but-equal
+ * strings, e.g. two empty strings or two truncated hashes, must never be
+ * treated as a match).
+ */
+const VERIFIED_IDENTITY_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
+
+export function isCanonicalVerifiedIdentityFingerprint(
+  value: unknown,
+): value is string {
+  return (
+    typeof value === 'string' &&
+    VERIFIED_IDENTITY_FINGERPRINT_PATTERN.test(value)
+  );
+}
+
+export interface ExplainPreflightCallerMetadataV2 {
+  readonly target: ExplainPreflightTargetMetadataV2;
+  readonly commit: ExplainPreflightCommitMetadata;
+  /** Overridable for deterministic tests; defaults to `new Date().toISOString()`. */
+  readonly generatedAt?: string;
+}
+
+export type ExplainPreflightArtifactV2 = Omit<
+  ExplainPreflightArtifactV1,
+  'version' | 'target'
+> & {
+  readonly version: 2;
+  readonly target: ExplainPreflightTargetMetadataV2;
+};
+
+type ScopeFingerprintPayloadV2 = Pick<
+  ExplainPreflightArtifactV2,
+  | 'version'
+  | 'target'
+  | 'commit'
+  | 'schemaMigration'
+  | 'registryFingerprint'
+  | 'statementFingerprints'
+  | 'priorityManualReviewStatementIds'
+  | 'requiresManualReview'
+>;
+
+/**
+ * V2 counterpart of `computeScopeFingerprint` -- identical algorithm,
+ * over a payload whose `target` includes `verifiedIdentityFingerprint`,
+ * so that field is covered by the stable "what was reviewed" identity
+ * too (the whole `target` object is canonicalized as-is; no special
+ * casing is needed beyond the type change).
+ */
+export function computeScopeFingerprintV2(
+  payload: ScopeFingerprintPayloadV2,
+): string {
+  const canonical = canonicalizeDeep({
+    version: payload.version,
+    target: payload.target,
+    commit: payload.commit,
+    schemaMigration: payload.schemaMigration,
+    statementFingerprints: [...payload.statementFingerprints].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    ),
+    registryFingerprint: payload.registryFingerprint,
+    priorityManualReviewStatementIds: [
+      ...payload.priorityManualReviewStatementIds,
+    ].sort(),
+    requiresManualReview: payload.requiresManualReview,
+  });
+  return sha256(JSON.stringify(canonical));
+}
+
+type ArtifactFingerprintPayloadV2 = ScopeFingerprintPayloadV2 &
+  Pick<
+    ExplainPreflightArtifactV2,
+    'generatedAt' | 'requiredRelationStats' | 'statementPlans'
+  >;
+
+/** V2 counterpart of `computeArtifactFingerprint`. */
+export function computeArtifactFingerprintV2(
+  payload: ArtifactFingerprintPayloadV2,
+): string {
+  const canonical = canonicalizeDeep({
+    version: payload.version,
+    target: payload.target,
+    commit: payload.commit,
+    schemaMigration: payload.schemaMigration,
+    statementFingerprints: [...payload.statementFingerprints].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    ),
+    registryFingerprint: payload.registryFingerprint,
+    priorityManualReviewStatementIds: [
+      ...payload.priorityManualReviewStatementIds,
+    ].sort(),
+    requiresManualReview: payload.requiresManualReview,
+    generatedAt: payload.generatedAt,
+    requiredRelationStats: [...payload.requiredRelationStats].sort((a, b) =>
+      relationStatSortKey(a).localeCompare(relationStatSortKey(b)),
+    ),
+    statementPlans: [...payload.statementPlans].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    ),
+  });
+  return sha256(JSON.stringify(canonical));
+}
+
+/**
+ * V2 counterpart of `buildExplainPreflightArtifact` -- the artifact
+ * contract emitted by OZI-79 Phase B2's real remote `plan` path.
+ *
+ * Fails closed on a malformed `caller.target.verifiedIdentityFingerprint`
+ * (missing, empty, wrong length, non-hex, or otherwise not the canonical
+ * lowercase 64-character SHA-256 hex digest `computeVerifiedIdentityFingerprint`
+ * emits) -- this is the V2 constructor invariant: a V2 artifact must
+ * never be produced carrying an identity fingerprint that later
+ * compatibility/approval checks could not reliably validate.
+ */
+export function buildExplainPreflightArtifactV2(
+  facts: ExplainPreflightFacts,
+  caller: ExplainPreflightCallerMetadataV2,
+): ExplainPreflightArtifactV2 {
+  if (
+    !isCanonicalVerifiedIdentityFingerprint(
+      caller.target.verifiedIdentityFingerprint,
+    )
+  ) {
+    throw new Error(
+      '[tenancy-inventory] Cannot build an ExplainPreflightArtifactV2: ' +
+        'target.verifiedIdentityFingerprint is missing or is not a ' +
+        'canonical lowercase 64-character SHA-256 hex digest.',
+    );
+  }
+
+  const scopePayload: ScopeFingerprintPayloadV2 = {
+    version: 2,
+    target: caller.target,
+    commit: caller.commit,
+    schemaMigration: facts.schemaMigration,
+    registryFingerprint: registryFingerprint(),
+    statementFingerprints: allStatementFingerprints(),
+    priorityManualReviewStatementIds: PRIORITY_MANUAL_REVIEW_STATEMENT_IDS,
+    requiresManualReview: true,
+  };
+  const generatedAt = caller.generatedAt ?? new Date().toISOString();
+  const artifactPayload: ArtifactFingerprintPayloadV2 = {
+    ...scopePayload,
+    generatedAt,
+    requiredRelationStats: facts.requiredRelationStats,
+    statementPlans: facts.statementPlans,
+  };
+
+  return {
+    ...scopePayload,
+    generatedAt,
+    requiredRelationStats: facts.requiredRelationStats,
+    statementPlans: facts.statementPlans,
+    scopeFingerprint: computeScopeFingerprintV2(scopePayload),
+    artifactFingerprint: computeArtifactFingerprintV2(artifactPayload),
+  };
+}
+
+/**
+ * V2 counterpart of `checkTargetCompatibility` -- ALSO requires
+ * `verifiedIdentityFingerprint` to match exactly, closing the gap V1's
+ * version has: two different database instances behind the same
+ * provider pooler can share an identical `environment`+`descriptor` (see
+ * the module-level V2 doc comment above).
+ *
+ * `verifiedIdentityFingerprint` is validated by FORMAT
+ * (`isCanonicalVerifiedIdentityFingerprint`), not merely truthiness, on
+ * both sides, before the equality check ever runs: missing, empty,
+ * wrong-length, non-hex, or otherwise non-canonical is incompatible on
+ * its own, independent of what the other side holds. This specifically
+ * closes a gap a truthiness-only check would have -- two malformed but
+ * byte-for-byte-equal strings (e.g. two empty strings, or two identical
+ * truncated/non-hex values) must never be treated as a match; each is
+ * rejected individually before any comparison between them happens.
+ */
+export function checkTargetCompatibilityV2(
+  currentTarget: ExplainPreflightTargetMetadataV2,
+  artifact: Pick<ExplainPreflightArtifactV2, 'target'>,
+): CompatibilityResult {
+  if (
+    !currentTarget ||
+    !currentTarget.environment ||
+    !currentTarget.descriptor ||
+    !isCanonicalVerifiedIdentityFingerprint(
+      currentTarget.verifiedIdentityFingerprint,
+    )
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Current target is missing environment/descriptor, or verifiedIdentityFingerprint is missing or not a canonical SHA-256 hex digest; cannot prove compatibility.',
+    };
+  }
+  if (
+    !artifact ||
+    !artifact.target ||
+    !artifact.target.environment ||
+    !artifact.target.descriptor ||
+    !isCanonicalVerifiedIdentityFingerprint(
+      artifact.target.verifiedIdentityFingerprint,
+    )
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Approved artifact is missing target metadata, or its verifiedIdentityFingerprint is missing or not a canonical SHA-256 hex digest; cannot prove compatibility.',
+    };
+  }
+  if (
+    currentTarget.environment !== artifact.target.environment ||
+    currentTarget.descriptor !== artifact.target.descriptor ||
+    currentTarget.verifiedIdentityFingerprint !==
+      artifact.target.verifiedIdentityFingerprint
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Current target does not match the target recorded on the approved artifact.',
+      details: { current: currentTarget, approved: artifact.target },
+    };
+  }
+  return {
+    compatible: true,
+    reason: 'Current target matches the approved artifact exactly.',
+  };
+}
+
+/**
+ * V2 counterpart of `checkArtifactIntegrity` -- identical logic, typed
+ * against `ExplainPreflightArtifactV2` and using the V2 fingerprint
+ * functions, so `verifiedIdentityFingerprint` is covered by both the
+ * recomputed scope and artifact fingerprints exactly like every other
+ * target field.
+ */
+export function checkArtifactIntegrityV2(
+  artifact: ExplainPreflightArtifactV2,
+): CompatibilityResult {
+  if (
+    !artifact ||
+    typeof artifact.artifactFingerprint !== 'string' ||
+    !artifact.artifactFingerprint ||
+    typeof artifact.scopeFingerprint !== 'string' ||
+    !artifact.scopeFingerprint
+  ) {
+    return {
+      compatible: false,
+      reason:
+        'Artifact is missing its scope or artifact fingerprint; cannot prove integrity.',
+    };
+  }
+
+  let recomputedScope: string;
+  let recomputedArtifact: string;
+  try {
+    recomputedScope = computeScopeFingerprintV2(artifact);
+    recomputedArtifact = computeArtifactFingerprintV2(artifact);
+  } catch {
+    return {
+      compatible: false,
+      reason:
+        'Artifact contents could not be canonicalized; cannot prove integrity.',
+    };
+  }
+
+  const scopeMismatch = recomputedScope !== artifact.scopeFingerprint;
+  const artifactMismatch = recomputedArtifact !== artifact.artifactFingerprint;
+
+  if (scopeMismatch || artifactMismatch) {
+    return {
+      compatible: false,
+      reason:
+        'Artifact contents do not match its recorded fingerprint(s) -- it may have been mutated since it was produced.',
+      details: { scopeMismatch, artifactMismatch },
+    };
+  }
+
+  return {
+    compatible: true,
+    reason:
+      'Artifact contents match both its recorded scope and artifact fingerprints exactly.',
   };
 }
 

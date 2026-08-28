@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildExplainPreflightArtifact,
+  buildExplainPreflightArtifactV2,
   checkArtifactIntegrity,
+  checkArtifactIntegrityV2,
   checkRegistryCompatibility,
   checkSchemaCompatibility,
   checkTargetCompatibility,
+  checkTargetCompatibilityV2,
   parsePlanNode,
   PRIORITY_MANUAL_REVIEW_STATEMENT_IDS,
   type ExplainPreflightArtifactV1,
+  type ExplainPreflightArtifactV2,
   type ExplainPreflightFacts,
   type RawExplainPlanNode,
 } from './explain-preflight';
@@ -58,6 +62,32 @@ const BASE_CALLER = {
   target: {
     environment: 'staging' as const,
     descriptor: 'staging-db.internal:5432/app_staging',
+  },
+  commit: { commitSha: 'deadbeef', workingTreeDirty: false },
+  generatedAt: '2026-08-27T00:00:00.000Z',
+};
+
+// Fixed, arbitrary hex strings shaped like a real SHA-256 hex digest --
+// these tests never call `computeVerifiedIdentityFingerprint` (that
+// belongs to `readonly-db-remote.test.ts`); `checkTargetCompatibilityV2`/
+// `checkArtifactIntegrityV2`/`buildExplainPreflightArtifactV2` only ever
+// canonicalize and compare whatever string they are given. Genuinely
+// 64 lowercase hex characters each (verified via `.length` -- Codex
+// review round 12 self-review caught a prior version of these two
+// constants that were 63 characters, one short of canonical: with only
+// a truthiness check, that off-by-one length went completely unnoticed;
+// with `isCanonicalVerifiedIdentityFingerprint` now enforcing exact
+// format, `buildExplainPreflightArtifactV2` immediately rejected them).
+const FINGERPRINT_A =
+  'd037f9fbc7f26713523d3600f667144a533acf727ea27c3a959deed3ad51cd21';
+const FINGERPRINT_B =
+  '54fd8164506825605c388a0a8bd71fa24910f9c7b28a1ada029cd2e92a77691e';
+
+const BASE_CALLER_V2 = {
+  target: {
+    environment: 'staging' as const,
+    descriptor: 'staging-db.internal:5432/app_staging',
+    verifiedIdentityFingerprint: FINGERPRINT_A,
   },
   commit: { commitSha: 'deadbeef', workingTreeDirty: false },
   generatedAt: '2026-08-27T00:00:00.000Z',
@@ -680,6 +710,265 @@ describe('checkTargetCompatibility', () => {
       null,
     );
     expect(result.compatible).toBe(false);
+  });
+});
+
+/**
+ * OZI-79 Phase B2, Finding #1: `checkTargetCompatibility` (V1) only ever
+ * compared `environment`/`descriptor` -- two different database instances
+ * behind the same provider connection pooler can share an identical
+ * descriptor (see `readonly-db-remote.ts`'s `resolveVerificationIdentity`
+ * doc comment for the documented Supabase example), so V1 alone cannot
+ * prove which of them a persisted artifact actually reviewed. V2 adds
+ * `verifiedIdentityFingerprint` to both the artifact-assembly and
+ * compatibility-check surface, and every scenario below specifically
+ * proves the fingerprint is a REQUIRED, independently-checked field, not
+ * just decoration alongside the unchanged environment/descriptor checks.
+ */
+describe('buildExplainPreflightArtifactV2', () => {
+  it('stamps version 2 and carries verifiedIdentityFingerprint on target', () => {
+    const artifact = buildExplainPreflightArtifactV2(
+      BASE_FACTS,
+      BASE_CALLER_V2,
+    );
+    expect(artifact.version).toBe(2);
+    expect(artifact.target).toEqual(BASE_CALLER_V2.target);
+  });
+
+  it('passes its own integrity check unmodified', () => {
+    const artifact = buildExplainPreflightArtifactV2(
+      BASE_FACTS,
+      BASE_CALLER_V2,
+    );
+    expect(checkArtifactIntegrityV2(artifact).compatible).toBe(true);
+  });
+
+  it('produces a different scopeFingerprint/artifactFingerprint for a different verifiedIdentityFingerprint, everything else equal', () => {
+    const a = buildExplainPreflightArtifactV2(BASE_FACTS, BASE_CALLER_V2);
+    const b = buildExplainPreflightArtifactV2(BASE_FACTS, {
+      ...BASE_CALLER_V2,
+      target: {
+        ...BASE_CALLER_V2.target,
+        verifiedIdentityFingerprint: FINGERPRINT_B,
+      },
+    });
+    expect(a.scopeFingerprint).not.toBe(b.scopeFingerprint);
+    expect(a.artifactFingerprint).not.toBe(b.artifactFingerprint);
+  });
+});
+
+describe('checkArtifactIntegrityV2', () => {
+  it('is incompatible when verifiedIdentityFingerprint is tampered without recomputing the artifact fingerprint', () => {
+    const artifact = buildExplainPreflightArtifactV2(
+      BASE_FACTS,
+      BASE_CALLER_V2,
+    );
+    const tampered: ExplainPreflightArtifactV2 = {
+      ...artifact,
+      target: {
+        ...artifact.target,
+        verifiedIdentityFingerprint: FINGERPRINT_B,
+      },
+    };
+    expect(checkArtifactIntegrityV2(tampered).compatible).toBe(false);
+  });
+});
+
+describe('checkTargetCompatibilityV2', () => {
+  const artifact = buildExplainPreflightArtifactV2(BASE_FACTS, BASE_CALLER_V2);
+
+  it('is compatible when environment, descriptor, and verifiedIdentityFingerprint all match exactly', () => {
+    const result = checkTargetCompatibilityV2(BASE_CALLER_V2.target, artifact);
+    expect(result.compatible).toBe(true);
+  });
+
+  it('fails closed on a same-descriptor, different-identity target -- the shared-pooler/different-project case, and the reason a V1-only check would have missed it', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: FINGERPRINT_B },
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when the current target is missing verifiedIdentityFingerprint', () => {
+    const { verifiedIdentityFingerprint: _omit, ...incompleteTarget } =
+      BASE_CALLER_V2.target;
+    const result = checkTargetCompatibilityV2(
+      // @ts-expect-error -- intentionally malformed for the test
+      incompleteTarget,
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when verifiedIdentityFingerprint is an empty string (malformed, not merely absent)', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: '' },
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when the approved artifact is missing verifiedIdentityFingerprint', () => {
+    const { verifiedIdentityFingerprint: _omit, ...incompleteArtifactTarget } =
+      artifact.target;
+    const result = checkTargetCompatibilityV2(BASE_CALLER_V2.target, {
+      ...artifact,
+      // @ts-expect-error -- intentionally malformed for the test
+      target: incompleteArtifactTarget,
+    });
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed against a stale artifact recorded under a previous, since-rotated identity', () => {
+    // A credential rotation (new password, new provisioned role under a
+    // different username) changes verifiedIdentityFingerprint even though
+    // environment/descriptor stay identical -- an artifact approved under
+    // the old identity must not be treated as compatible with the new one.
+    const rotatedTarget = {
+      ...BASE_CALLER_V2.target,
+      verifiedIdentityFingerprint: FINGERPRINT_B,
+    };
+    const result = checkTargetCompatibilityV2(rotatedTarget, artifact);
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when environment differs (staging vs. production identity)', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, environment: 'production' },
+      artifact,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed without throwing when the artifact itself is null', () => {
+    const result = checkTargetCompatibilityV2(
+      BASE_CALLER_V2.target,
+      // @ts-expect-error -- intentionally malformed for the test
+      null,
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  /**
+   * Codex review round 12 (self-review): the truthiness-only check this
+   * describe block's earlier tests exercised is not sufficient on its
+   * own -- a malformed value can still be truthy. Every scenario below
+   * proves `isCanonicalVerifiedIdentityFingerprint`'s FORMAT validation
+   * runs independently on each side before any equality comparison, so
+   * two malformed-but-byte-for-byte-identical strings are never treated
+   * as a match.
+   */
+  it('fails closed when both sides carry the identical wrong-length fingerprint -- equal malformed values must never be compatible', () => {
+    const tooShort = FINGERPRINT_A.slice(0, 63);
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: tooShort },
+      {
+        target: { ...artifact.target, verifiedIdentityFingerprint: tooShort },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides carry the identical too-long fingerprint', () => {
+    const tooLong = `${FINGERPRINT_A}a`;
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: tooLong },
+      {
+        target: { ...artifact.target, verifiedIdentityFingerprint: tooLong },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides carry the identical non-hex fingerprint', () => {
+    const nonHex = `Z${FINGERPRINT_A.slice(1)}`;
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: nonHex },
+      {
+        target: { ...artifact.target, verifiedIdentityFingerprint: nonHex },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides carry the identical uppercase-hex fingerprint -- canonical format is lowercase only', () => {
+    const uppercase = FINGERPRINT_A.toUpperCase();
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: uppercase },
+      {
+        target: {
+          ...artifact.target,
+          verifiedIdentityFingerprint: uppercase,
+        },
+      },
+    );
+    expect(result.compatible).toBe(false);
+  });
+
+  it('fails closed when both sides are the identical empty string', () => {
+    const result = checkTargetCompatibilityV2(
+      { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: '' },
+      { target: { ...artifact.target, verifiedIdentityFingerprint: '' } },
+    );
+    expect(result.compatible).toBe(false);
+  });
+});
+
+describe('buildExplainPreflightArtifactV2 -- verifiedIdentityFingerprint constructor invariant', () => {
+  it('throws when verifiedIdentityFingerprint is missing/empty', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: { ...BASE_CALLER_V2.target, verifiedIdentityFingerprint: '' },
+      }),
+    ).toThrow(/verifiedIdentityFingerprint/);
+  });
+
+  it('throws when verifiedIdentityFingerprint is the wrong length', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: {
+          ...BASE_CALLER_V2.target,
+          verifiedIdentityFingerprint: FINGERPRINT_A.slice(0, 63),
+        },
+      }),
+    ).toThrow(/verifiedIdentityFingerprint/);
+  });
+
+  it('throws when verifiedIdentityFingerprint contains non-hex characters', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: {
+          ...BASE_CALLER_V2.target,
+          verifiedIdentityFingerprint: `Z${FINGERPRINT_A.slice(1)}`,
+        },
+      }),
+    ).toThrow(/verifiedIdentityFingerprint/);
+  });
+
+  it('never produces an artifact from a malformed fingerprint -- the throw happens before any fingerprint computation', () => {
+    let thrown: unknown;
+    try {
+      buildExplainPreflightArtifactV2(BASE_FACTS, {
+        ...BASE_CALLER_V2,
+        target: {
+          ...BASE_CALLER_V2.target,
+          verifiedIdentityFingerprint: 'not-canonical',
+        },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+  });
+
+  it('succeeds for a genuinely canonical fingerprint', () => {
+    expect(() =>
+      buildExplainPreflightArtifactV2(BASE_FACTS, BASE_CALLER_V2),
+    ).not.toThrow();
   });
 });
 

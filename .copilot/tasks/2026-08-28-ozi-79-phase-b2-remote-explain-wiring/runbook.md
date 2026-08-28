@@ -1261,6 +1261,36 @@ original objective rather than the delivered scope.
 No executable TypeScript, test, artifact-contract, Git-guard, or
 remote-DB-wiring code was touched this round.
 
+## Review round 16 (Codex) — documentation only
+
+One finding (P2), docs only, on wording introduced by round 15 itself:
+the new `Review coverage` bullet in `plan.md` claimed every one of the
+review rounds was verified by temporary revert-and-confirm-failure. That
+overstated the security evidence. Verified against this runbook before
+correcting: rounds 7, 9 and 14 are labelled documentation-only here, and
+round 10 explicitly records that its credential-fixture rename had no
+separate broken state to revert to (verified instead by a full passing
+suite plus a repository-wide sweep). Round 11's `buildTestPostgresUrl`
+extraction is the same refactor class, and round 15 was itself
+documentation-only.
+
+Corrected by replacing the single blanket claim with three explicit
+categories: executable fixes actually verified by revert-and-confirm-
+failure (rounds 1-6, 8, 10's query-string rejection, 12, 13 -- named as
+the load-bearing security evidence); refactors/renames with no revertable
+state, verified by suite-pass plus repository-wide sweep (round 10's
+fixture rename, round 11); and documentation-only rounds carrying no
+runtime security evidence at all (7, 9, 14, 15). The PR description
+carried the identical blanket claim, with a stale round count, and was
+corrected the same way.
+
+This runbook's own per-round sections already distinguished these cases
+correctly and needed no change; the defect was confined to the summary
+restatements in `plan.md` and the PR description.
+
+No executable TypeScript, test, artifact-contract, Git-guard, or
+remote-DB-wiring code was touched this round.
+
 ## Validation
 
 - typecheck: clean

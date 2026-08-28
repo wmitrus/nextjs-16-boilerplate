@@ -31,11 +31,25 @@ for the full execution boundary and design detail.
     breakdown.
 - Review coverage: no full specialist workflow cycle was re-run up front
   (the original narrow-wiring classification), but the credential and
-  connection boundary above received iterative security review across 14
+  connection boundary above received iterative security review across 15
   rounds -- Codex findings plus two user-directed hardening/self-review
-  passes -- each verified by temporarily reverting the check and
-  confirming the corresponding test genuinely failed. Treat that as the
-  security evidence for this PR, not the stale opening classification.
+  passes. Not every round carried the same class of evidence, so treat
+  them separately rather than as one uniform falsification claim:
+  - **Executable fix, verified by revert-and-confirm-failure** (the check
+    was temporarily removed and the corresponding test confirmed to
+    genuinely fail, then restored): rounds 1-6, 8, 10 (the query-string
+    rejection), 12, 13. This is the load-bearing security evidence.
+  - **Refactor/rename with no revertable broken state**, verified instead
+    by a full passing suite plus a repository-wide sweep confirming zero
+    remaining occurrences of the old shape: round 10 (the credential-
+    fixture rename) and round 11 (the structural `buildTestPostgresUrl`
+    extraction).
+  - **Documentation only, no executable change and therefore no
+    falsification testing**: rounds 7, 9, 14, 15. These corrected
+    control-artifact accuracy and carry no runtime security evidence.
+
+  Treat the first category as the security evidence for this PR, not the
+  stale opening classification and not the round count on its own.
 - Severity: N/A (tooling, not an incident)
 - Linear issue: OZI-79 (child of OZI-74, blocks OZI-78)
 - Branch: `feat/ozi-79-phase-b2-remote-explain-wiring`, from `main` @
@@ -301,6 +315,18 @@ with the actual review coverage stated rather than implied.
 
 No executable TypeScript, test, artifact-contract, Git-guard, or
 remote-DB-wiring code changed in either round.
+
+### 2026-08-28 — Round 16 (Codex, documentation only)
+
+Codex flagged wording introduced by round 15 itself: the new
+`Review coverage` bullet above claimed all review rounds were verified by
+temporary revert-and-confirm-failure, which overstated the evidence --
+rounds 7, 9, 14 and 15 are documentation-only, and rounds 10 (fixture
+rename) and 11 were refactors with no revertable broken state. Verified
+against `runbook.md`'s per-round sections, then replaced the blanket
+claim with three explicit evidence categories. The PR description carried
+the same claim with a stale round count and was corrected identically.
+Docs only.
 
 ## Artifacts
 

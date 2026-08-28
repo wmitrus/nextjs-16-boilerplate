@@ -52,7 +52,7 @@ building this wiring is not that authorization.
 Wires the already-reviewed components together, in this exact order,
 end to end:
 
-```
+```text
 RemoteTarget (--target=staging|production)
   -> describeRemoteTarget(target)          -- safe host:port/database descriptor
   -> withReadOnlyRemoteDb(target, async (tx) => {

@@ -31,6 +31,15 @@ export type RemoteTarget = 'staging' | 'production';
  * concatenated into an env var name. No fallback default exists for
  * either target; an unset credential must fail loudly, not silently
  * resolve to something else.
+ *
+ * Deliberately not part of `src/core/env.ts`/`.env.example` -- that
+ * contract is Next.js-app-scoped (T3-Env, validated by `pnpm env:check`),
+ * and this is a standalone script credential, matching
+ * `scripts/lib/db-guard.mjs`'s existing pattern of reading named env vars
+ * directly. Documented instead in the script-specific template
+ * `scripts/tenancy-inventory/tenancy-inventory.env.example`, mirroring
+ * `scripts/neon/neon.env.example`'s precedent for a script-scoped
+ * credential contract.
  */
 const REMOTE_ENV_VAR: Record<RemoteTarget, string> = {
   staging: 'OZI79_STAGING_READONLY_DATABASE_URL',
@@ -334,11 +343,27 @@ const IDLE_IN_TRANSACTION_TIMEOUT_MS = 10_000;
 /**
  * Mirrors `readonly-db.ts`'s `withReadOnlyDb` exactly (Postgres `READ
  * ONLY` transaction, `default_transaction_read_only`, connection-level
- * timeouts) plus one additional step specific to a remote, externally
- * provisioned credential: `verifyReadOnlyRole` runs first, inside the
- * same transaction, before `fn` ever sees the connection. Two independent
- * controls, not one: a `SELECT`-only DB-role grant (verified live, not
- * just trusted) AND the read-only transaction.
+ * timeouts, `repeatable read` snapshot isolation -- see that module's doc
+ * comment for why a single stable snapshot matters for a multi-query
+ * inventory scan) plus two things specific to a remote, externally
+ * provisioned credential:
+ *
+ * - `ssl: 'verify-full'` is always passed explicitly. postgres-js merges
+ *   its parsed-URL options under any option present in the object passed
+ *   here (`k in o ? o[k] : ...`, see `parseOptions` in `postgres-js`), so
+ *   this unconditionally wins over anything the URL itself claims --
+ *   including `?sslmode=disable` -- rather than trusting the URL to ask
+ *   for encryption. Certificate-validated TLS, not just an encrypted pipe:
+ *   an unauthenticated `require`-only handshake would still let a
+ *   network-level attacker MITM the connection and read the credential
+ *   and every row this tool fetches. If a target's CA is not in Node's
+ *   default trust store, that is a real B2-time provisioning problem to
+ *   solve explicitly (e.g. `ssl: { ca }`), not a reason to weaken this
+ *   default now.
+ * - `verifyReadOnlyRole` runs first, inside the same transaction, before
+ *   `fn` ever sees the connection. Two independent controls, not one: a
+ *   `SELECT`-only DB-role grant (verified live, not just trusted) AND the
+ *   read-only transaction.
  */
 export async function withReadOnlyRemoteDb<T>(
   target: RemoteTarget,
@@ -346,6 +371,7 @@ export async function withReadOnlyRemoteDb<T>(
 ): Promise<T> {
   const client = postgres(resolveRemoteUrl(target), {
     connect_timeout: 10,
+    ssl: 'verify-full',
     connection: {
       default_transaction_read_only: true,
       statement_timeout: STATEMENT_TIMEOUT_MS,
@@ -361,7 +387,7 @@ export async function withReadOnlyRemoteDb<T>(
         await verifyReadOnlyRole(tx);
         return fn(tx);
       },
-      { accessMode: 'read only' },
+      { accessMode: 'read only', isolationLevel: 'repeatable read' },
     );
   } finally {
     await client.end({ timeout: 5 });

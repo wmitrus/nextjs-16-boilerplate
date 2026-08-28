@@ -1,6 +1,11 @@
 /** @vitest-environment node */
+import { randomUUID } from 'node:crypto';
+
 import { sql } from 'drizzle-orm';
+import postgres from 'postgres';
 import { describe, expect, it } from 'vitest';
+
+import { TEST_DEFAULT_URL } from '../lib/db-guard.mjs';
 
 import { describeLocalTarget, withReadOnlyDb } from './readonly-db';
 
@@ -73,6 +78,46 @@ describe('withReadOnlyDb (real DB)', () => {
         await tx.execute(sql`create table ozi_75_should_never_exist (id int)`);
       }),
     );
+  });
+});
+
+describe('withReadOnlyDb snapshot semantics (real DB)', () => {
+  it('holds one stable snapshot for the whole transaction, not a fresh one per statement', async () => {
+    const adminClient = postgres(TEST_DEFAULT_URL, { connect_timeout: 10 });
+    const probeId = randomUUID();
+    try {
+      const observedCounts = await withReadOnlyDb('test', async (tx) => {
+        const [before] = await tx.execute<{ count: string }>(
+          sql`select count(*)::text as count from tenants`,
+        );
+        // A second, real connection commits a brand-new row *while this
+        // transaction is still open*. Whether the next read here sees it
+        // depends entirely on isolation level, not on timing -- proving
+        // the fix, not just its absence of an error.
+        await adminClient.unsafe(
+          `insert into tenants (id, name) values ($1, $2)`,
+          [probeId, 'ozi-75-snapshot-probe'],
+        );
+        const [after] = await tx.execute<{ count: string }>(
+          sql`select count(*)::text as count from tenants`,
+        );
+        return { before: before?.count, after: after?.count };
+      });
+
+      expect(observedCounts.after).toBe(observedCounts.before);
+
+      const [freshCount] = await withReadOnlyDb('test', async (tx) => {
+        return tx.execute<{ count: string }>(
+          sql`select count(*)::text as count from tenants`,
+        );
+      });
+      expect(Number(freshCount?.count)).toBe(Number(observedCounts.before) + 1);
+    } finally {
+      await adminClient
+        .unsafe(`delete from tenants where id = $1`, [probeId])
+        .catch(() => undefined);
+      await adminClient.end({ timeout: 5 });
+    }
   });
 });
 

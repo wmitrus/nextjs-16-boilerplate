@@ -69,6 +69,20 @@ const STATEMENT_TIMEOUT_MS = 5_000;
 const LOCK_TIMEOUT_MS = 2_000;
 const IDLE_IN_TRANSACTION_TIMEOUT_MS = 10_000;
 
+/**
+ * `isolationLevel: 'repeatable read'` (Postgres snapshot isolation): the
+ * transaction takes its snapshot at the first statement and holds it for
+ * every subsequent statement, instead of the driver's default `READ
+ * COMMITTED`, which lets each statement see a fresh snapshot. `fn` here
+ * typically issues several queries (a scan's separate topology/ownership/
+ * identifier-drift queries) against a database that may be receiving
+ * concurrent writes -- without a shared snapshot, one report could
+ * combine counts observed from different moments, silently
+ * misrepresenting the topology it claims to describe. Safe for a
+ * read-only workload: `REPEATABLE READ` only raises a serialization
+ * error on a conflicting *write*, which this transaction, being read
+ * only, never attempts.
+ */
 export async function withReadOnlyDb<T>(
   target: LocalTarget,
   fn: (tx: ReadOnlyDb) => Promise<T>,
@@ -90,7 +104,10 @@ export async function withReadOnlyDb<T>(
   const db = drizzle(client);
 
   try {
-    return await db.transaction((tx) => fn(tx), { accessMode: 'read only' });
+    return await db.transaction((tx) => fn(tx), {
+      accessMode: 'read only',
+      isolationLevel: 'repeatable read',
+    });
   } finally {
     await client.end({ timeout: 5 });
   }

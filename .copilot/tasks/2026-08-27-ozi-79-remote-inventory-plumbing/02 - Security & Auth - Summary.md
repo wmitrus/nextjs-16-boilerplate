@@ -51,8 +51,8 @@
   turned into printable output) extracts host/port/database via the
   platform `URL` parser and explicitly never touches `username`/
   `password` -- proven by `readonly-db-remote.test.ts`'s assertion that a
-  URL containing `readonly_user`/`s3cr3t-password` produces a description
-  containing neither substring.
+  URL containing `ozi79-test-only-user`/`ozi79-test-only-password` produces
+  a description containing neither substring.
 - Confirmed: `verifyReadOnlyRole` runs *inside* the same transaction as
   every subsequent query, before `fn` is ever invoked -- a misconfigured
   role is caught before any diagnostic query can run against it, not

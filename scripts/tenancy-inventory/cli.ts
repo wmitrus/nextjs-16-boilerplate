@@ -225,19 +225,124 @@ function resolveCommitShaStrict(): string {
 }
 
 /**
+ * Codex review round 13: `git status --porcelain` alone is insufficient
+ * to prove the working tree matches HEAD, because Git's index can mark a
+ * tracked file `assume-unchanged` or `skip-worktree` -- either flag makes
+ * ordinary status output (and therefore `isWorkingTreeDirty` below)
+ * silently ignore a real, uncommitted edit to that file. A remote EXPLAIN
+ * preflight's entire claim is "this exact commit, this exact code, was
+ * reviewed against this exact remote database"; a tracked query/control
+ * file hidden behind one of these flags could differ from HEAD on disk
+ * while every existing check reports clean and resolves the unchanged
+ * commit SHA. Reproduced directly before writing this fix: `git
+ * update-index --assume-unchanged <file>`, edit the file, `git status
+ * --porcelain` returns nothing.
+ *
+ * Detected via `git ls-files -v -z` (NUL-delimited output, so a path
+ * containing a newline can never be mis-split): each entry is
+ * `<tag><space><path>`. `S` is the skip-worktree tag; a LOWERCASE tag
+ * letter (of any kind -- `h`, `s`, an entry with both flags set renders
+ * as lowercase `s`) indicates the assume-unchanged bit is set on that
+ * entry. Only the tag character is ever inspected -- the path itself is
+ * never compared, logged, or included in any thrown message.
+ *
+ * Exported directly (not just used internally by
+ * `assertNoHiddenGitIndexState` below), taking an explicit `cwd` rather
+ * than this script's own `REPO_ROOT`, specifically so it can be tested
+ * against a real, disposable Git repository (`git update-index
+ * --assume-unchanged`/`--skip-worktree`, actually run and actually
+ * inspected -- see `cli.git-index.test.ts`) independent of this actual
+ * checkout -- mirrors `readonly-db-remote.ts`'s `verifyReadOnlyRole`
+ * export precedent for the same reason. Returns the raw tag character
+ * for every tracked path carrying hidden state (empty = clean); throws
+ * only on a subprocess failure, with no sanitization of its own -- that
+ * is `assertNoHiddenGitIndexState`'s job, so this function stays a pure,
+ * directly-assertable predicate.
+ */
+export function findHiddenGitIndexStateTags(cwd: string): readonly string[] {
+  const output = execFileSync('git', ['ls-files', '-v', '-z'], {
+    cwd,
+    encoding: 'utf8',
+  });
+  return output
+    .split('\0')
+    .filter((entry) => entry.length > 0)
+    .map((entry) => entry.charAt(0))
+    .filter((tag) => tag.toUpperCase() === 'S' || /^[a-z]$/.test(tag));
+}
+
+/**
+ * This is a VERIFIER, not a Git-state mutator: it never clears either
+ * flag itself, and it never names the affected path in its thrown
+ * message -- only that hidden index state exists somewhere in the
+ * tracked tree and must be cleared before remote planning can proceed.
+ * There is no exception for "but this file matches HEAD right now" --
+ * the flag itself, not its current content, is what defeats the
+ * exact-HEAD claim, since nothing prevents the file differing a moment
+ * later while status keeps reporting clean regardless. Sparse-checkout/
+ * skip-worktree is intentionally incompatible with this security-
+ * sensitive remote-planning path.
+ */
+function assertNoHiddenGitIndexState(): void {
+  let tags: readonly string[];
+  try {
+    tags = findHiddenGitIndexStateTags(REPO_ROOT);
+  } catch (error) {
+    throw new Error(
+      'Could not inspect the Git index for hidden state (git ls-files ' +
+        '-v failed). A remote EXPLAIN preflight run must be able to ' +
+        'prove no tracked file is hidden from the ordinary cleanliness ' +
+        'check before it is trusted -- refusing to proceed without that ' +
+        'proof. The underlying error is not shown here -- inspect this ' +
+        'error\'s "cause" property directly if you need the raw ' +
+        'diagnostic; do not forward it to a shared log.',
+      { cause: error },
+    );
+  }
+
+  if (tags.length > 0) {
+    throw new Error(
+      'The Git index has hidden state (assume-unchanged and/or ' +
+        'skip-worktree) set on at least one tracked path. Either flag ' +
+        'can make the ordinary working-tree cleanliness check silently ' +
+        'miss a real edit to that file, so this tool cannot prove the ' +
+        'commit it is about to resolve actually matches what is on ' +
+        'disk. Clear it first (git update-index --no-assume-unchanged / ' +
+        '--no-skip-worktree on the affected path(s) -- run `git ' +
+        'ls-files -v` locally to find them) -- refusing to connect ' +
+        'without that proof. (The affected path is not named here.)',
+    );
+  }
+}
+
+/**
  * A report claiming to describe "the state at commit X" is misleading if
  * the working tree has uncommitted changes at run time -- `git rev-parse
  * HEAD` alone doesn't detect that. `scan` refuses to run against a dirty
  * tree unless the caller explicitly passes `--allow-dirty` (for local
  * iteration); the report always records `workingTreeDirty` either way, so
  * an `--allow-dirty` report is still self-describing evidence, not silent.
+ *
+ * `--porcelain=v1` (rather than the bare `--porcelain`, which defaults to
+ * the same v1 format today but leaves that implicit) and
+ * `--untracked-files=all` are both explicit on purpose: v1 is guaranteed
+ * stable, and pinning it removes any dependence on Git's current default;
+ * `--untracked-files=all` overrides an operator's local
+ * `status.showUntrackedFiles` config (which can otherwise suppress
+ * untracked files, or collapse them to their containing directory) so
+ * this check's result never silently depends on ambient Git
+ * configuration.
  */
 function isWorkingTreeDirty(): boolean {
   try {
-    const output = execFileSync('git', ['status', '--porcelain'], {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-    });
+    const output = execFileSync(
+      'git',
+      ['status', '--porcelain=v1', '--untracked-files=all'],
+      {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+      },
+    );
     return output.trim().length > 0;
   } catch {
     // Can't determine cleanliness -- fail closed, treat as dirty.
@@ -377,15 +482,19 @@ async function runScan(
  * no other flag, must never open a remote connection:
  *
  * 1. the acknowledgement flag is present;
- * 2. the working tree is clean (unlike `scan`, there is no
+ * 2. the Git index carries no hidden state (`assertNoHiddenGitIndexState`)
+ *    -- checked BEFORE the ordinary cleanliness check, because
+ *    `assume-unchanged`/`skip-worktree` are exactly what could make that
+ *    next check lie;
+ * 3. the working tree is clean (unlike `scan`, there is no
  *    `--allow-dirty` escape hatch here -- a remote target's artifact is
  *    exactly the kind of evidence a human might later approve, and an
  *    ambiguous "which commit does this describe" is not acceptable for
  *    that);
- * 3. the current commit SHA can be resolved (`resolveCommitShaStrict`,
+ * 4. the current commit SHA can be resolved (`resolveCommitShaStrict`,
  *    not the lenient `'unknown'`-falling-back `resolveCommitSha` `scan`
  *    uses);
- * 4. the resolved target's identity matches a separately, independently
+ * 5. the resolved target's identity matches a separately, independently
  *    declared expectation (`assertTargetIdentityMatchesExpectation`) --
  *    defense-in-depth against `OZI79_STAGING_READONLY_DATABASE_URL`/
  *    `OZI79_PRODUCTION_READONLY_DATABASE_URL` being swapped or
@@ -416,6 +525,8 @@ async function runRemoteExplainPlan(
         'oversight to work around.',
     );
   }
+
+  assertNoHiddenGitIndexState();
 
   if (isWorkingTreeDirty()) {
     throw new Error(

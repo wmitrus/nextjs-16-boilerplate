@@ -229,6 +229,33 @@ again. Full self-review report, invariant map, and findings are in
   and fixed a few remaining doc-prose and trivial test-literal instances
   round 11 missed.
 
+### 2026-08-28 — Round 13 (Codex)
+
+One finding (P2), treated as a repository commit-binding invariant, not
+a one-line `git status` patch: `assume-unchanged`/`skip-worktree` Git
+index flags can make `git status --porcelain` silently miss a real edit
+to a tracked file, so `plan` could connect remotely and persist evidence
+stamped with the unchanged HEAD SHA even though different code executed.
+Added `assertNoHiddenGitIndexState` (checked before the ordinary
+cleanliness check) via `git ls-files -v -z`; also made `isWorkingTreeDirty`
+explicit/configuration-independent (`--porcelain=v1 --untracked-files=all`)
+without weakening any existing rejection. A verifier, not a mutator --
+never clears either flag, never names the affected path.
+
+Re-reviewed every Git-based assumption in the commit-binding chain
+(`REPO_ROOT` -> hidden index state -> worktree status ->
+`resolveCommitShaStrict` -> `artifact.commit`) after the fix; confirmed
+sparse-checkout is already covered (uses skip-worktree internally) and
+this repository has no submodules/sparse-checkout configured. Full
+detail in `runbook.md`'s "Review round 13" section.
+
+Tests: mocked coverage in `cli.test.ts` plus a new `cli.git-index.test.ts`
+exercising real `git update-index --assume-unchanged`/`--skip-worktree`
+against a disposable temp repository (no mocking, no network/DB/remote
+credential) -- proving ordinary `git status` genuinely misses the hidden
+edit and the new guard genuinely catches it. Verified via
+revert-and-confirm-failure.
+
 ## Artifacts
 
 - `plan.md` (this file)

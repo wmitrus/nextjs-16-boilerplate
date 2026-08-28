@@ -83,11 +83,12 @@ run(argv)
        - every rejection names the argument by position or by a letters/digits/hyphens-only flag name (SAFE_FLAG_NAME_PATTERN) -- never by echoing a credential-shaped value
   -> runRemoteExplainPlan(target, { executeRemoteExplain })
        1. executeRemoteExplain must be true                          -- plan --target=... alone, with no other flag, never opens a connection
-       2. isWorkingTreeDirty() must be false                          -- no --allow-dirty escape hatch exists for plan at all
-       3. resolveCommitShaStrict()                                    -- throws on any git failure or empty output; never interpolates the raw subprocess error text (see "Output-leak audit" below)
-       4. assertTargetIdentityMatchesExpectation(target)              -- fails closed against OZI79_<T>_EXPECTED_IDENTITY; internally calls resolveRemoteUrl(target), the single authoritative URL parse gate (see below)
-       5. descriptor = describeRemoteTarget(target)                   -- safe host:port/database, never the username
-       6. verifiedIdentityFingerprint = computeVerifiedIdentityFingerprint(target) -- non-secret SHA-256 of the same verified identity
+       2. assertNoHiddenGitIndexState()                               -- no tracked path may carry assume-unchanged/skip-worktree; checked BEFORE the ordinary cleanliness check, because either flag is exactly what could make that next check lie (see below)
+       3. isWorkingTreeDirty() must be false                          -- no --allow-dirty escape hatch exists for plan at all
+       4. resolveCommitShaStrict()                                    -- throws on any git failure or empty output; never interpolates the raw subprocess error text (see "Output-leak audit" below)
+       5. assertTargetIdentityMatchesExpectation(target)              -- fails closed against OZI79_<T>_EXPECTED_IDENTITY; internally calls resolveRemoteUrl(target), the single authoritative URL parse gate (see below)
+       6. descriptor = describeRemoteTarget(target)                   -- safe host:port/database, never the username
+       7. verifiedIdentityFingerprint = computeVerifiedIdentityFingerprint(target) -- non-secret SHA-256 of the same verified identity
        -> withReadOnlyRemoteDb(target, async (tx) => {
             - assertTargetIdentityMatchesExpectation(target) again    -- the authoritative re-check, independent of step 4 above (defense-in-depth: this function's own contract, for any future caller)
             - url = resolveRemoteUrl(target)                          -- re-resolved, same single parse gate, same normalized string
@@ -120,6 +121,56 @@ connection URL, descriptor string, arbitrary SQL, a query id/subset, or
 an environment string outside that closed domain --
 `collectExplainPreflightFacts` always runs the full, frozen
 `QUERY_REGISTRY`.
+
+### `assertNoHiddenGitIndexState` -- reject hidden index state (round 13)
+
+`git status --porcelain` alone is insufficient to prove the working tree
+matches HEAD: Git's index can mark a tracked file `assume-unchanged` or
+`skip-worktree`, and either flag makes ordinary status output -- and
+therefore `isWorkingTreeDirty` -- silently ignore a real, uncommitted
+edit to that file. Reproduced directly before writing the fix: `git
+update-index --assume-unchanged <file>`, edit the file, `git status
+--porcelain` returns nothing. A remote EXPLAIN preflight's entire claim
+is "this exact commit, this exact code, was reviewed against this exact
+remote database"; a tracked query/control file hidden behind one of
+these flags could differ from HEAD on disk while every other check
+reports clean and resolves the unchanged commit SHA.
+
+Detected via `git ls-files -v -z` (NUL-delimited, so a path containing a
+newline can never be mis-split): each entry is `<tag><space><path>`.
+Verified against a real, disposable Git repository (never this actual
+checkout -- `cli.git-index.test.ts`, exercising real `git update-index
+--assume-unchanged`/`--skip-worktree` and real `git status`) before
+relying on it: `S` is the skip-worktree tag; a lowercase tag letter of
+any kind (an entry with both flags set renders as lowercase `s`)
+indicates the assume-unchanged bit. Only the tag character is ever
+inspected -- the path is never compared, logged, or named in any thrown
+message.
+
+`findHiddenGitIndexStateTags(cwd)` is exported specifically for that
+real-repository test, taking an explicit `cwd` rather than this script's
+own `REPO_ROOT` -- mirrors `readonly-db-remote.ts`'s `verifyReadOnlyRole`
+export precedent for the identical reason (testable against a real
+external system, independent of the production entry point).
+
+This is a **verifier, not a Git-state mutator**: it never clears either
+flag itself, and rejects on the flag's mere presence -- there is no
+exception for "but this file matches HEAD right now," since nothing
+prevents the file differing a moment later while status keeps reporting
+clean regardless. Sparse-checkout is intentionally incompatible with
+this path too, without a separate check: `git sparse-checkout` sets the
+skip-worktree bit on excluded paths internally, so it is already caught
+by the same detection. (This repository has no `.gitmodules` and no
+sparse-checkout configured, confirmed directly -- submodule-pointer
+staleness is a separate, currently-inapplicable class of hidden state,
+not fixed here.)
+
+`isWorkingTreeDirty` itself also gained two explicit, non-weakening
+flags this round: `--porcelain=v1` (pinning the format Git already
+defaults to today, removing any dependence on that default persisting)
+and `--untracked-files=all` (so this check's result never silently
+depends on an operator's local `status.showUntrackedFiles` config, which
+can otherwise suppress or collapse untracked files).
 
 ### `resolveRemoteUrl` -- the single authoritative URL parse gate (round 12)
 
@@ -162,21 +213,25 @@ by what it enforces):
    above) -- runs in `run()`, before `runRemoteExplainPlan` exists on
    the call stack at all.
 1. **`--execute-remote-explain` is present.**
-2. **The working tree is clean** -- no `--allow-dirty` escape hatch for
+2. **The Git index carries no hidden state**
+   (`assertNoHiddenGitIndexState`, see above) -- checked BEFORE the
+   ordinary cleanliness check, since `assume-unchanged`/`skip-worktree`
+   are exactly what could make that next check lie.
+3. **The working tree is clean** -- no `--allow-dirty` escape hatch for
    `plan` exists anywhere in this path (rejected at step 0, not merely
    unread here).
-3. **The commit SHA resolves** (`resolveCommitShaStrict`, distinct from
+4. **The commit SHA resolves** (`resolveCommitShaStrict`, distinct from
    `scan`'s lenient `resolveCommitSha`).
-4. **The resolved target's identity matches
+5. **The resolved target's identity matches
    `OZI79_<T>_EXPECTED_IDENTITY`** (`assertTargetIdentityMatchesExpectation`)
    -- checked explicitly here AND again, independently, inside
    `withReadOnlyRemoteDb` itself.
-5. **The credential URL passes `resolveRemoteUrl`'s full parse gate**
+6. **The credential URL passes `resolveRemoteUrl`'s full parse gate**
    (see above) -- both when computing the descriptor/fingerprint and
    again inside `withReadOnlyRemoteDb` before `postgres()` is called.
-6. **`verifyReadOnlyRole` passes**, inside the same `READ ONLY`/
+7. **`verifyReadOnlyRole` passes**, inside the same `READ ONLY`/
    `REPEATABLE READ` transaction, before the caller's function ever runs.
-7. **`buildExplainPreflightArtifactV2` accepts the computed
+8. **`buildExplainPreflightArtifactV2` accepts the computed
    `verifiedIdentityFingerprint`** -- rejects a missing/malformed one
    before an artifact can exist at all.
 
@@ -1028,15 +1083,104 @@ confirming exactly the expected test subset failed and nothing else).
   empirically against the actual Node runtime before being relied on in
   a test, not assumed.
 
+## Review round 13 -- reject hidden Git index state (Codex)
+
+One finding (P2), treated as a repository commit-binding invariant, not
+a one-line `git status` patch. Reproduced by Codex with `git update-index
+--assume-unchanged query.ts`: `git status --porcelain` returned nothing
+after editing the file, so `plan` would connect remotely and persist
+evidence stamped `workingTreeDirty: false` and the unchanged HEAD SHA
+even though different code executed. Full design/rationale is under
+"`assertNoHiddenGitIndexState` -- reject hidden index state (round 13)"
+above; this section covers what was added and how it was verified.
+
+Implemented `assertNoHiddenGitIndexState`, called before the ordinary
+`isWorkingTreeDirty` check (see the updated pipeline/precondition list
+above), and `isWorkingTreeDirty` itself was made explicit/configuration-
+independent (`--porcelain=v1 --untracked-files=all`) without weakening
+any existing rejection. This is a **verifier, not a mutator** -- it
+never clears `assume-unchanged`/`skip-worktree` itself, and never names
+the affected path in its thrown message.
+
+### Re-review of the Git-based commit-binding chain
+
+Per explicit instruction, re-reviewed every Git-based assumption in this
+chain after the fix: `REPO_ROOT` -> hidden index state -> worktree
+status -> `resolveCommitShaStrict` -> `artifact.commit`.
+
+- `REPO_ROOT`: derived from `import.meta.url` (the executing script's
+  own on-disk location) -- not derived from any Git state, so no
+  repository-local metadata can influence it.
+- Hidden index state: now checked (`assertNoHiddenGitIndexState`).
+  Sparse-checkout was considered explicitly -- `git sparse-checkout` sets
+  the skip-worktree bit on excluded paths internally, so it is already
+  caught by the same detection, no separate check needed. Submodule
+  pointer staleness (a stale recorded SHA vs. what is actually checked
+  out) is a different, real class of hidden state -- confirmed this
+  repository has no `.gitmodules` (`ls -la .gitmodules` -> no such file)
+  and no sparse-checkout configured (`git config core.sparseCheckout` ->
+  unset), so it is currently inapplicable, not fixed here per the
+  explicit instruction not to broaden into unrelated/inapplicable cases.
+- Worktree status: `isWorkingTreeDirty`, now with explicit
+  `--porcelain=v1 --untracked-files=all` (see above).
+- `resolveCommitShaStrict`: reflects the actual current `HEAD` ref;
+  cwd-pinned to `REPO_ROOT`. No index-level flag affects `git rev-parse`
+  output -- only direct filesystem tampering with `.git/HEAD` itself
+  could, which is a different class of attack (filesystem integrity, not
+  Git index configuration) outside this finding's scope.
+- `artifact.commit`: a direct pass-through of `{ commitSha,
+  workingTreeDirty: false }` from the checks above -- no additional risk
+  introduced there.
+
+No other repository-local Git metadata was found that could make this
+chain's observations omit an executable tracked change.
+
+### Tests
+
+Mocked (`cli.test.ts`, extending the existing `git ls-files`/`status`/
+`rev-parse` mocking pattern): ordinary clean repository proceeds;
+ordinary dirty tracked file rejects (with the call count updated to
+reflect the new `ls-files` check preceding `status`); an
+assume-unchanged entry rejects before commit resolution and before any
+remote connection; a skip-worktree entry rejects the same way; combined
+hidden state on one entry rejects; the flag alone is enough to reject
+even when `git status` reports the tree fully clean; the affected path
+is never named in the rejection message; a `git ls-files` subprocess
+failure fails closed without leaking its raw output (only as `cause`).
+
+Real Git (`cli.git-index.test.ts`, new file, no mocking of
+`execFileSync` at all): a disposable `mkdtemp` repository is created,
+committed, then exercised with real `git update-index --assume-unchanged`/
+`--skip-worktree` and real `git status --porcelain` -- proving (a)
+ordinary `git status` genuinely returns empty after an edit is hidden
+behind either flag (the actual gap this guard closes, not merely an
+assumption about it), (b) `findHiddenGitIndexStateTags` genuinely detects
+both flags and their combination against real Git output, (c) clearing
+the flag (`--no-assume-unchanged`/`--no-skip-worktree`) genuinely
+restores a clean result. No network, database, or remote credential
+involved -- `git` is the only external process.
+
+`findHiddenGitIndexStateTags` is exported specifically to make this real
+test possible, taking an explicit `cwd` rather than this script's own
+`REPO_ROOT` -- the same export-for-testability precedent
+`readonly-db-remote.ts`'s `verifyReadOnlyRole` already established.
+
+Both the guard call and its detection logic were verified via temporary
+revert-and-confirm-failure: removing the `assertNoHiddenGitIndexState()`
+call left exactly the six new mocked tests (plus the updated dirty-tree
+call-count assertion) failing, nothing else; restored and reconfirmed
+green.
+
 ## Validation
 
 - typecheck: clean
 - lint: clean
-- unit (`scripts/tenancy-inventory` subset): 160/160 (30 in
-  `cli.test.ts`, 30 in `readonly-db-remote.test.ts`, 70 in
-  `explain-preflight.test.ts`, 30 across `evidence-store.test.ts`/
-  `ownership-matrix.test.ts`/`query-registry.test.ts`)
-- unit (full repo, `pnpm test`): 279 files / 2413 tests, all pass
+- unit (`scripts/tenancy-inventory` subset): 172/172 (36 in
+  `cli.test.ts`, 6 in `cli.git-index.test.ts` -- real Git, no mocking --
+  30 in `readonly-db-remote.test.ts`, 70 in `explain-preflight.test.ts`,
+  30 across `evidence-store.test.ts`/`ownership-matrix.test.ts`/
+  `query-registry.test.ts`)
+- unit (full repo, `pnpm test`): 280 files / 2425 tests, all pass
 - real DB (`pnpm test:db:local`): 32 files / 297 tests, all pass
 - CI config (`pnpm test:db:ci`, the same command the required "DB Tests"
   job runs): 32 files / 297 tests, all pass

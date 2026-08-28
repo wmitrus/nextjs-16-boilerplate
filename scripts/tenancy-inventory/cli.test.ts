@@ -137,9 +137,13 @@ const FAKE_FACTS: ExplainPreflightFacts = {
 
 /** Clean tree + resolvable commit -- the baseline every negative test
  * starts from and overrides only the one thing it means to break. */
+/** A `git ls-files -v -z` result with no hidden-index-state entries. */
+const CLEAN_LS_FILES_OUTPUT = 'H some-tracked-file.ts\0';
+
 function mockCleanGitState(commitSha = 'abc123deadbeef'): void {
   mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
     const args = cmdArgs as readonly string[] | undefined;
+    if (args?.includes('ls-files')) return CLEAN_LS_FILES_OUTPUT;
     if (args?.includes('status')) return '';
     if (args?.includes('rev-parse')) return `${commitSha}\n`;
     throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
@@ -182,6 +186,7 @@ function mockPassingTargetIdentity(
 function mockDirtyGitState(): void {
   mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
     const args = cmdArgs as readonly string[] | undefined;
+    if (args?.includes('ls-files')) return CLEAN_LS_FILES_OUTPUT;
     if (args?.includes('status')) return ' M some-file.ts\n';
     if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
     throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
@@ -384,8 +389,9 @@ describe('plan -- fails before any remote connection', () => {
       run(['plan', '--target=staging', '--execute-remote-explain']),
     ).rejects.toThrow(/uncommitted changes/);
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
-    // `status` was checked; `rev-parse` must never have been reached.
-    expect(mockedExecFileSync).toHaveBeenCalledTimes(1);
+    // `ls-files` (hidden-index-state check) then `status` were checked;
+    // `rev-parse` must never have been reached.
+    expect(mockedExecFileSync).toHaveBeenCalledTimes(2);
   });
 
   it("runs every git invocation pinned to this repository's own root, never the launching process's cwd", async () => {
@@ -432,6 +438,7 @@ describe('plan -- fails before any remote connection', () => {
       // invoked from) is reported dirty; the pinned repo root is clean --
       // the two must never be conflated.
       const isPinnedRepoRoot = cwd === expectedRepoRoot;
+      if (args?.includes('ls-files')) return CLEAN_LS_FILES_OUTPUT;
       if (args?.includes('status'))
         return isPinnedRepoRoot ? '' : ' M ambient-cwd-file.ts\n';
       if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
@@ -472,6 +479,7 @@ describe('plan -- fails before any remote connection', () => {
   it('rejects when the commit SHA cannot be resolved (git rev-parse throws)', async () => {
     mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
       const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) return CLEAN_LS_FILES_OUTPUT;
       if (args?.includes('status')) return '';
       if (args?.includes('rev-parse')) {
         throw new Error('fatal: not a git repository');
@@ -494,6 +502,7 @@ describe('plan -- fails before any remote connection', () => {
     );
     mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
       const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) return CLEAN_LS_FILES_OUTPUT;
       if (args?.includes('status')) return '';
       if (args?.includes('rev-parse')) throw rawGitError;
       throw new Error('unexpected git invocation');
@@ -517,6 +526,7 @@ describe('plan -- fails before any remote connection', () => {
   it('rejects when git rev-parse succeeds but returns an empty value', async () => {
     mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
       const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) return CLEAN_LS_FILES_OUTPUT;
       if (args?.includes('status')) return '';
       if (args?.includes('rev-parse')) return '   \n';
       throw new Error('unexpected git invocation');
@@ -524,6 +534,130 @@ describe('plan -- fails before any remote connection', () => {
     await expect(
       run(['plan', '--target=staging', '--execute-remote-explain']),
     ).rejects.toThrow(/returned an empty value/);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Codex review round 13: `git status --porcelain` alone can be made to
+   * silently miss a real edit to a tracked file via
+   * `assume-unchanged`/`skip-worktree` index flags. Every scenario below
+   * proves `assertNoHiddenGitIndexState` rejects before `resolveCommitShaStrict`
+   * or `withReadOnlyRemoteDb` ever runs -- mocked at the `git ls-files -v -z`
+   * boundary here; a real, unmocked Git repository exercises the actual
+   * flag semantics in `cli.git-index.test.ts`.
+   */
+  it('rejects an assume-unchanged entry before resolving a commit or connecting', async () => {
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) return 'h hidden-file.ts\0';
+      if (args?.includes('status')) return '';
+      if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
+      throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
+    });
+
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/hidden state/);
+    // Only `ls-files` was called -- neither `status` nor `rev-parse` was
+    // reached, and no connection was attempted.
+    expect(mockedExecFileSync).toHaveBeenCalledTimes(1);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it('rejects a skip-worktree entry before resolving a commit or connecting', async () => {
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) return 'S hidden-file.ts\0';
+      if (args?.includes('status')) return '';
+      if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
+      throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
+    });
+
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/hidden state/);
+    expect(mockedExecFileSync).toHaveBeenCalledTimes(1);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it('rejects an entry with both assume-unchanged and skip-worktree combined', async () => {
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) return 's hidden-file.ts\0';
+      if (args?.includes('status')) return '';
+      if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
+      throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
+    });
+
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/hidden state/);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it('rejects purely because the hidden-index flag is set, even though ordinary status reports a fully clean tree', async () => {
+    // The whole point of this guard: an assume-unchanged/skip-worktree
+    // file's on-disk content could differ from HEAD at any moment while
+    // `git status --porcelain` keeps reporting clean regardless -- so the
+    // guard must reject on the flag's mere presence, never on whether the
+    // file's content "currently happens to" match HEAD (which this tool
+    // has no way to check for a hidden file, and must not pretend to).
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) return 'h hidden-file.ts\0';
+      if (args?.includes('status')) return ''; // ordinary status: clean
+      if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
+      throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
+    });
+
+    await expect(
+      run(['plan', '--target=staging', '--execute-remote-explain']),
+    ).rejects.toThrow(/hidden state/);
+  });
+
+  it('never names the affected path in the hidden-index-state rejection message', async () => {
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files'))
+        return 'h scripts/tenancy-inventory/query-registry.ts\0';
+      if (args?.includes('status')) return '';
+      if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
+      throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
+    });
+
+    let thrown: unknown;
+    try {
+      await run(['plan', '--target=staging', '--execute-remote-explain']);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).not.toContain('query-registry.ts');
+  });
+
+  it('fails closed and does not leak raw subprocess output when git ls-files itself fails', async () => {
+    const rawLsFilesError = new Error(
+      'fatal: /home/some-operator/repo: not a git repository (or any parent up to mount point)',
+    );
+    mockedExecFileSync.mockImplementation((_cmd, cmdArgs) => {
+      const args = cmdArgs as readonly string[] | undefined;
+      if (args?.includes('ls-files')) throw rawLsFilesError;
+      throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
+    });
+
+    let thrown: unknown;
+    try {
+      await run(['plan', '--target=staging', '--execute-remote-explain']);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).not.toContain(rawLsFilesError.message);
+    expect(message).not.toContain('some-operator');
+    expect((thrown as Error).cause).toBe(rawLsFilesError);
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
 

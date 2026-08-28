@@ -33,8 +33,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+
+      # See preview-deploy.yml's identical step for why this is cached and
+      # keyed this way.
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # actions/cache@v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-chromium-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Chromium OS dependencies (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
 
       - name: Pull Vercel Environment Information
         run: ./node_modules/.bin/vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}

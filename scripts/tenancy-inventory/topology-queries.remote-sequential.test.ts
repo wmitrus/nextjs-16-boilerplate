@@ -7,7 +7,9 @@ describe('collectRemoteInventoryFindingsSequential', () => {
   it('does not invoke a later frozen registry statement until the preceding statement resolves', async () => {
     let releaseFirst!: () => void;
     const first = new Promise<Record<string, string>[]>((resolve) => {
-      releaseFirst = () => resolve([]);
+      releaseFirst = () => {
+        resolve([]);
+      };
     });
     const execute = vi.fn().mockReturnValueOnce(first).mockResolvedValue([]);
 

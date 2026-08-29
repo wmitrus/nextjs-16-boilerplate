@@ -71,7 +71,6 @@ vi.mock('node:child_process', async (importOriginal) => {
   };
   return {
     ...actual,
-    collectRemoteInventoryFindingsSequential: vi.fn(),
     execFileSync: mockExecFileSync,
     default: { ...actual.default, execFileSync: mockExecFileSync },
   };

@@ -83,7 +83,7 @@ artifact values are target-specific.
 
 ---
 
-# OZI-79 Phase B2 — Remote Plain-EXPLAIN Wiring (historical context)
+**Historical context — OZI-79 Phase B2: Remote Plain-EXPLAIN Wiring**
 
 ## Execution boundary — read this first
 

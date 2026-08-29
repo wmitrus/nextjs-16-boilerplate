@@ -199,10 +199,10 @@ function readEvidenceWithinRoot(
   );
 }
 
-export async function readEvidence(
+export function readEvidence(
   environment: Exclude<EvidenceEnvironment, 'local'>,
   fileName: string,
-): Promise<string> {
+): string {
   return readEvidenceWithinRoot(EVIDENCE_ROOT, environment, fileName);
 }
 

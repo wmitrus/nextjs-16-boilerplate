@@ -29,6 +29,20 @@ The production review values supplied for this phase are:
 These values document the completed manual review; they do not grant
 permission to execute the command.
 
+### B3 bootstrap after its final reviewed commit
+
+The production artifact above is bound to commit
+`46e616083cebd0b3318be568b2bc50b6c28c32be`. B3 deliberately requires
+`artifact.commit.commitSha === current clean HEAD`, so that artifact cannot
+authorize an inventory scan from B3's final reviewed and committed HEAD.
+
+After B3 is finalized, a **fresh production plain-EXPLAIN** must receive
+separate explicit authorization. Its resulting V2 artifact must then be
+manually reviewed; that fresh artifact's fingerprint becomes the approved
+`--approved-artifact-fingerprint` input. Only after those steps may a
+production inventory scan receive its own separate execution authorization.
+The exact-commit binding must not be weakened to reuse the older artifact.
+
 ### Exact B3 pipeline
 
 ```text
@@ -49,7 +63,9 @@ run(scan argv)
        -> validated/normalized URL; TLS verify-full; live verifyReadOnlyRole
        -> READ ONLY + REPEATABLE READ with unchanged 5000/2000/10000 ms timeouts
        -> read current schema migration and checkSchemaCompatibility FIRST
-       -> only then run the fixed inventory query set (no arbitrary SQL/subset)
+       -> only then run the fixed 15 data statements sequentially in frozen
+          QUERY_REGISTRY order (with the schema check as statement 1 of 16;
+          no arbitrary SQL/subset or parallel/pipelined execution)
   -> write aggregate-only scan evidence to the same confined, outside-repo store
   -> print only target, approved artifact fingerprint, and evidence path
 ```

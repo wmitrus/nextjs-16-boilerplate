@@ -93,6 +93,34 @@ function assertNoSymlinkInPath(
 }
 
 /**
+ * Remote approval artifacts are addressed by a literal filename, not a
+ * path. Validate that narrow contract before resolving or inspecting any
+ * filesystem path: a rejected traversal must not cause even an `lstat`
+ * probe outside the target-specific evidence directory.
+ */
+function assertApprovedArtifactFileName(
+  fileName: unknown,
+): asserts fileName is string {
+  if (
+    typeof fileName !== 'string' ||
+    fileName.length === 0 ||
+    fileName.trim().length === 0 ||
+    fileName !== fileName.trim() ||
+    fileName === '.' ||
+    fileName === '..' ||
+    path.isAbsolute(fileName) ||
+    fileName.includes('/') ||
+    fileName.includes('\\') ||
+    fileName.includes('\0') ||
+    path.basename(fileName) !== fileName
+  ) {
+    throw new Error(
+      'Security: approved evidence artifact must be a non-empty filename in the target evidence directory.',
+    );
+  }
+}
+
+/**
  * Writes `content` to `<EVIDENCE_ROOT>/<environment>/<fileName>`, confined
  * to `EVIDENCE_ROOT` both lexically (SEC-16, via `assertPathWithinBase`
  * inside the shared helpers) and against symlinks (`assertNoSymlinkInPath`
@@ -145,31 +173,37 @@ export async function writeEvidence(
  * can authorize a scan. Keep the symlink checks on reads too -- confinement
  * is a property of the filesystem sink/source, not merely of writes.
  */
+function readEvidenceWithinRoot(
+  evidenceRoot: string,
+  environment: Exclude<EvidenceEnvironment, 'local'>,
+  fileName: string,
+): string {
+  assertApprovedArtifactFileName(fileName);
+  const targetDir = path.resolve(evidenceRoot, environment);
+  // Prove target-specific lexical confinement before any `lstat` call. The
+  // base is the target directory itself, not merely EVIDENCE_ROOT, so a
+  // sibling-environment filename cannot be inspected or read.
+  const targetFile = assertPathWithinBase(
+    path.resolve(targetDir, fileName),
+    targetDir,
+    'approved evidence artifact',
+  );
+
+  assertNoSymlinkInPath(targetDir, evidenceRoot, 'ozi-75 evidence directory');
+  assertNoSymlinkInPath(targetFile, evidenceRoot, 'ozi-75 evidence file');
+
+  return readTextFileWithinBase(
+    targetFile,
+    evidenceRoot,
+    'ozi-75 evidence file',
+  );
+}
+
 export async function readEvidence(
   environment: Exclude<EvidenceEnvironment, 'local'>,
   fileName: string,
 ): Promise<string> {
-  const targetDir = path.resolve(EVIDENCE_ROOT, environment);
-  const targetFile = path.resolve(targetDir, fileName);
-
-  assertNoSymlinkInPath(targetDir, EVIDENCE_ROOT, 'ozi-75 evidence directory');
-  assertNoSymlinkInPath(targetFile, EVIDENCE_ROOT, 'ozi-75 evidence file');
-
-  const safeTargetDir = path.resolve(targetDir);
-  if (
-    targetFile === safeTargetDir ||
-    !targetFile.startsWith(`${safeTargetDir}${path.sep}`)
-  ) {
-    throw new Error(
-      'Security: approved evidence file must remain within its target evidence directory.',
-    );
-  }
-
-  return readTextFileWithinBase(
-    targetFile,
-    EVIDENCE_ROOT,
-    'ozi-75 evidence file',
-  );
+  return readEvidenceWithinRoot(EVIDENCE_ROOT, environment, fileName);
 }
 
 export function describeEvidenceRoot(): string {
@@ -177,4 +211,4 @@ export function describeEvidenceRoot(): string {
 }
 
 /** Exposed for tests only -- not part of the module's real usage surface. */
-export const __test__ = { assertNoSymlinkInPath };
+export const __test__ = { assertNoSymlinkInPath, readEvidenceWithinRoot };

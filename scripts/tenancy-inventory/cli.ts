@@ -35,6 +35,7 @@ import {
   type RemoteTarget,
 } from './readonly-db-remote';
 import {
+  collectRemoteInventoryFindingsSequential,
   latestSchemaMigration,
   organizationsMissingTenantAttributesCount,
   policiesWithNullOrganizationCount,
@@ -678,49 +679,10 @@ async function runRemoteScan(options: RemoteScanArgs): Promise<void> {
       const schemaMigration = await latestSchemaMigration(tx);
       assertCompatible(checkSchemaCompatibility(schemaMigration, artifact));
 
-      const [
-        tenantOrgCounts,
-        usersInMultipleOrgs,
-        usersInMultipleTenants,
-        orgsMissingTenantAttributes,
-        organizationMappingAnomalies,
-        userMappingAnomalies,
-        waitlistEntriesWithTenantId,
-        policiesWithNullOrganization,
-        quotaSignal,
-        featureFlagTenantIdShape,
-        auditLogSettingsTenantIdShape,
-        auditEventsTenantIdShape,
-      ] = await Promise.all([
-        tenantOrganizationCounts(tx),
-        usersInMultipleOrganizationsCount(tx),
-        usersInMultipleTenantsCount(tx),
-        organizationsMissingTenantAttributesCount(tx),
-        providerOrganizationMappingAnomalies(tx),
-        userProviderMappingAnomalies(tx),
-        waitlistEntriesWithTenantIdCount(tx),
-        policiesWithNullOrganizationCount(tx),
-        quotaEnforcementSignal(tx),
-        tenantIdShapeCounts(tx, 'feature_flags'),
-        tenantIdShapeCounts(tx, 'audit_log_settings'),
-        tenantIdShapeCounts(tx, 'audit_events'),
-      ]);
+      const findings = await collectRemoteInventoryFindingsSequential(tx);
       return {
         schemaMigration,
-        tenantOrgCounts,
-        usersInMultipleOrgs,
-        usersInMultipleTenants,
-        orgsMissingTenantAttributes,
-        organizationMappingAnomalies,
-        userMappingAnomalies,
-        waitlistEntriesWithTenantId,
-        policiesWithNullOrganization,
-        quotaSignal,
-        tenantIdShape: {
-          featureFlags: featureFlagTenantIdShape,
-          auditLogSettings: auditLogSettingsTenantIdShape,
-          auditEvents: auditEventsTenantIdShape,
-        },
+        ...findings,
       };
     });
   } catch (error) {

@@ -1,9 +1,30 @@
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
-import { getStatement } from './query-registry';
+import {
+  DATA_STATEMENTS,
+  getStatement,
+  type StatementId,
+} from './query-registry';
 
 type Tx = PostgresJsDatabase<Record<string, never>>;
+
+export interface RemoteInventoryFindings {
+  readonly tenantOrgCounts: TenantOrgCountBuckets;
+  readonly usersInMultipleOrgs: number;
+  readonly usersInMultipleTenants: number;
+  readonly orgsMissingTenantAttributes: number;
+  readonly organizationMappingAnomalies: ProviderMappingAnomalies;
+  readonly userMappingAnomalies: UserProviderMappingAnomalies;
+  readonly waitlistEntriesWithTenantId: number;
+  readonly policiesWithNullOrganization: number;
+  readonly quotaSignal: QuotaSignal;
+  readonly tenantIdShape: {
+    readonly featureFlags: TenantIdShapeCounts;
+    readonly auditLogSettings: TenantIdShapeCounts;
+    readonly auditEvents: TenantIdShapeCounts;
+  };
+}
 
 export interface LatestSchemaMigration {
   readonly id: number;
@@ -282,5 +303,87 @@ export async function quotaEnforcementSignal(tx: Tx): Promise<QuotaSignal> {
   return {
     tenantsExceedingMaxOrganizations: Number(orgRows[0]?.exceeded ?? 0),
     tenantsExceedingMaxUsers: Number(userRows[0]?.exceeded ?? 0),
+  };
+}
+
+/**
+ * Remote-only inventory execution adapter. Unlike the local scan's existing
+ * helper composition, this executes each of the 15 data statements in
+ * `DATA_STATEMENTS` strictly in frozen `QUERY_REGISTRY` order. The schema
+ * statement is deliberately not repeated here: `cli.ts` invokes
+ * `latestSchemaMigration` first and proves compatibility before entering
+ * this collector, completing the full 16-statement registry in order.
+ *
+ * Keeping this at the raw-registry boundary prevents helper-local
+ * `Promise.all` calls from relying on postgres-js pipeline scheduling while
+ * preserving the local dev/test scan's established parallel behavior.
+ */
+export async function collectRemoteInventoryFindingsSequential(
+  tx: Tx,
+): Promise<RemoteInventoryFindings> {
+  const rowsById = new Map<StatementId, readonly Record<string, string>[]>();
+  for (const statement of DATA_STATEMENTS) {
+    rowsById.set(
+      statement.id,
+      await tx.execute<Record<string, string>>(sql.raw(statement.sql)),
+    );
+  }
+
+  const rowFor = (id: StatementId): Record<string, string> | undefined =>
+    rowsById.get(id)?.[0];
+  const count = (id: StatementId): number => Number(rowFor(id)?.value ?? 0);
+  const exceededCount = (id: StatementId): number =>
+    Number(rowFor(id)?.exceeded ?? 0);
+  const tenantShape = (id: StatementId): TenantIdShapeCounts => {
+    const row = rowFor(id);
+    return {
+      nonNull: Number(row?.non_null ?? 0),
+      matchesInternalTenantUuid: Number(row?.matches_tenant ?? 0),
+      matchesInternalOrganizationUuid: Number(row?.matches_organization ?? 0),
+      matchesNeither: Number(row?.matches_neither ?? 0),
+    };
+  };
+
+  const tenantOrg = rowFor('tenant_organization_counts');
+  return {
+    tenantOrgCounts: {
+      zeroOrganizations: Number(tenantOrg?.zero ?? 0),
+      oneOrganization: Number(tenantOrg?.one ?? 0),
+      multipleOrganizations: Number(tenantOrg?.multiple ?? 0),
+    },
+    usersInMultipleOrgs: count('users_in_multiple_organizations_count'),
+    usersInMultipleTenants: count('users_in_multiple_tenants_count'),
+    orgsMissingTenantAttributes: count(
+      'organizations_missing_tenant_attributes_count',
+    ),
+    organizationMappingAnomalies: {
+      organizationsWithoutProviderMapping: count(
+        'provider_organization_mapping_unmapped',
+      ),
+      organizationsWithMultipleMappingsSameProvider: count(
+        'provider_organization_mapping_duplicated',
+      ),
+    },
+    userMappingAnomalies: {
+      usersWithoutProviderMapping: count('user_provider_mapping_unmapped'),
+      usersWithMultipleMappingsSameProvider: count(
+        'user_provider_mapping_duplicated',
+      ),
+    },
+    waitlistEntriesWithTenantId: count('waitlist_entries_with_tenant_id_count'),
+    policiesWithNullOrganization: count(
+      'policies_with_null_organization_count',
+    ),
+    quotaSignal: {
+      tenantsExceedingMaxOrganizations: exceededCount(
+        'quota_exceeding_max_organizations',
+      ),
+      tenantsExceedingMaxUsers: exceededCount('quota_exceeding_max_users'),
+    },
+    tenantIdShape: {
+      featureFlags: tenantShape('tenant_id_shape_feature_flags'),
+      auditLogSettings: tenantShape('tenant_id_shape_audit_log_settings'),
+      auditEvents: tenantShape('tenant_id_shape_audit_events'),
+    },
   };
 }

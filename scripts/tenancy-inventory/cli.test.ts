@@ -40,17 +40,8 @@ import {
 import type * as ReadonlyDbRemoteModule from './readonly-db-remote';
 import { buildTestPostgresUrl } from './test-postgres-url';
 import {
+  collectRemoteInventoryFindingsSequential,
   latestSchemaMigration,
-  organizationsMissingTenantAttributesCount,
-  policiesWithNullOrganizationCount,
-  providerOrganizationMappingAnomalies,
-  quotaEnforcementSignal,
-  tenantIdShapeCounts,
-  tenantOrganizationCounts,
-  userProviderMappingAnomalies,
-  usersInMultipleOrganizationsCount,
-  usersInMultipleTenantsCount,
-  waitlistEntriesWithTenantIdCount,
 } from './topology-queries';
 import type * as TopologyQueriesModule from './topology-queries';
 
@@ -80,6 +71,7 @@ vi.mock('node:child_process', async (importOriginal) => {
   };
   return {
     ...actual,
+    collectRemoteInventoryFindingsSequential: vi.fn(),
     execFileSync: mockExecFileSync,
     default: { ...actual.default, execFileSync: mockExecFileSync },
   };
@@ -108,6 +100,7 @@ vi.mock('./topology-queries', async (importOriginal) => {
   const actual = await importOriginal<typeof TopologyQueriesModule>();
   return {
     ...actual,
+    collectRemoteInventoryFindingsSequential: vi.fn(),
     latestSchemaMigration: vi.fn(),
     organizationsMissingTenantAttributesCount: vi.fn(),
     policiesWithNullOrganizationCount: vi.fn(),
@@ -131,18 +124,9 @@ const mockedCollectExplainPreflightFacts = vi.mocked(
   collectExplainPreflightFacts,
 );
 const mockedLatestSchemaMigration = vi.mocked(latestSchemaMigration);
-const mockedInventoryQueries = [
-  vi.mocked(organizationsMissingTenantAttributesCount),
-  vi.mocked(policiesWithNullOrganizationCount),
-  vi.mocked(providerOrganizationMappingAnomalies),
-  vi.mocked(quotaEnforcementSignal),
-  vi.mocked(tenantIdShapeCounts),
-  vi.mocked(tenantOrganizationCounts),
-  vi.mocked(userProviderMappingAnomalies),
-  vi.mocked(usersInMultipleOrganizationsCount),
-  vi.mocked(usersInMultipleTenantsCount),
-  vi.mocked(waitlistEntriesWithTenantIdCount),
-];
+const mockedCollectRemoteInventoryFindingsSequential = vi.mocked(
+  collectRemoteInventoryFindingsSequential,
+);
 
 /** A raw plan value with a marker substring, to prove it reaches the
  * persisted evidence file but never the terminal summary. */
@@ -320,9 +304,18 @@ function mockRemoteInventorySuccess(): void {
     id: 23,
     hash: '655e6efd5df662bd745132b7ece5237dce3e6b47c8e0feea75c8636aa171d3a0',
   });
-  for (const query of mockedInventoryQueries) {
-    query.mockResolvedValue({} as never);
-  }
+  mockedCollectRemoteInventoryFindingsSequential.mockResolvedValue({
+    tenantOrgCounts: {} as never,
+    usersInMultipleOrgs: 0,
+    usersInMultipleTenants: 0,
+    orgsMissingTenantAttributes: 0,
+    organizationMappingAnomalies: {} as never,
+    userMappingAnomalies: {} as never,
+    waitlistEntriesWithTenantId: 0,
+    policiesWithNullOrganization: 0,
+    quotaSignal: {} as never,
+    tenantIdShape: {} as never,
+  });
   mockedWriteEvidence.mockResolvedValue('/fake/evidence/inventory.json');
 }
 
@@ -1176,8 +1169,9 @@ describe('scan -- remote inventory approval gate (Phase B3)', () => {
     await expect(
       run(remoteScanArgv('production', artifact.artifactFingerprint)),
     ).rejects.toThrow(/schema migration does not match/);
-    for (const query of mockedInventoryQueries)
-      expect(query).not.toHaveBeenCalled();
+    expect(
+      mockedCollectRemoteInventoryFindingsSequential,
+    ).not.toHaveBeenCalled();
   });
 
   it('fails closed on readonly-role failure and sanitizes raw remote failures', async () => {

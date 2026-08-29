@@ -37,6 +37,8 @@ Use for new features, non-trivial behavior changes, and cross-file changes that 
 
 Do not use for trivial copy/formatting, clearly isolated mechanical changes, read-only audits, or refactors better handled by the refactor workflow.
 
+Evaluate the High-Risk Path classification below before Fast Path eligibility. If any high-risk trigger applies, Fast Path is unavailable regardless of file count — use the High-Risk Path instead. Only evaluate the following criteria for work already determined not to be high-risk.
+
 Use the fast path only when **all** are clearly true:
 
 - few files;
@@ -163,6 +165,19 @@ When `validation-strategy` is used, consume its required/optional/not-required e
 ### 8. Optional Architecture Recheck
 
 Optionally run `architecture-guard` again when implementation materially affects multiple modules, contracts, DI/composition, security enforcement points, runtime placement, or another structural boundary where implementation drift is plausible.
+
+### High-Risk Path
+
+Not a second workflow — an additional sequence layered onto the standard one for high-risk work. A change is high-risk when it materially involves production-facing tooling; security/auth/trust boundaries; credentials or remote connections; persisted evidence, integrity, approval, or compatibility artifacts; migrations or data safety; tenancy/resource isolation; CI/deployment safety gates; external-tool semantics load-bearing for a correctness/security claim; or a broad refactor where preserving existing behavior is itself the main invariant. Do not apply to routine low-risk changes.
+
+For high-risk work: apply Steps 2-4 as applicable; before implementation, produce `implementation-agent`'s compact invariant/trust-boundary map; implement; run focused development tests; perform `implementation-agent`'s pre-close falsification pass; add/fix regression evidence for any discovered gap; perform proportional validation; run a post-implementation `security-auth` recheck against the final delivered behavior when the changed high-risk invariant itself materially affects authentication, authorization, tenancy/resource isolation, trust boundaries, or sensitive-data/security enforcement, OR when one of the production-tooling triggers applies (production-facing tooling, persisted approval/integrity evidence, remote credentials/connections, a future production safety gate) — stay proportional: no second pass for an ordinary low-risk feature, and none for a high-risk change with no actual security invariant merely because it is high-risk for an unrelated reason; inspect the final full diff; reconcile the authoritative current-state documentation where behavior/contracts changed (one canonical current-state source, pointers elsewhere, no mutable review-round count as load-bearing contract); perform one final self-review of the complete diff; only then request external review.
+
+**Review stop condition:** fresh external review is required after executable code changes responding to substantive findings, security/trust-boundary behavior changes, or operator documentation changes that materially change the execution/security contract. Do not force another review cycle when executable/security behavior is already stable and externally reviewed and the remaining changes are self-referential review-history bookkeeping, formatting, or equivalent non-load-bearing documentation cleanup.
+
+**Operational handoff wording** (use on demand, do not copy into every root/skill):
+
+- Implementation handoff: "Before pushing high-risk work, review your own final diff adversarially. Identify the invariants changed by the implementation and try to falsify the complete contract, not only the happy path. Inspect adjacent producers/consumers and add regression tests for any real gap before requesting external review."
+- Review-fix handoff: "Fix the underlying invariant rather than only the cited line. Re-review the full affected contract and applicable adjacent failure modes before pushing the next review revision."
 
 ## Block Conditions
 

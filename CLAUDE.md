@@ -77,6 +77,7 @@ Use risk-based validation appropriate to the change.
 - For security-, auth-, tenancy-, persistence-, runtime-, caching-, deployment-, or cross-layer changes, validate the actual affected boundary rather than relying only on isolated unit tests.
 - When repository-wide phase-close validation applies and the active workflow does not define an exact lint command, run `pnpm lint --fix` (never plain `pnpm lint`) and `pnpm typecheck`; use the validation skill to determine additional gates.
 - Report exactly what was validated, what was not, and any remaining uncertainty.
+- For high-risk implementation, perform a falsification-oriented review of the final behavior before declaring completion; do not limit review to whether the requested happy path passes.
 
 The shared validation contract and live command map are maintained in `docs/ai/general/VALIDATION_AND_QUALITY_GATES.md`.
 

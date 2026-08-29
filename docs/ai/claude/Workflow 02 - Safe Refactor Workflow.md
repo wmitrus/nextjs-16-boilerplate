@@ -14,6 +14,14 @@ Real Claude skill file: [`.claude/skills/safe-refactor-workflow/SKILL.md`](../..
   requires it
 - Preserves protected invariants, then validates the refactor with focused checks
 - Keeps `.copilot/tasks/{task_id}/` artifacts synchronized for non-trivial work
+- For a high-risk refactor (broad enough that behavior preservation is itself
+  the main invariant, or otherwise touching production tooling, trust
+  boundaries, credentials, persisted evidence, tenancy, or CI/deployment
+  gates), layers on a High-Risk Refactor Path: a pre-implementation invariant
+  map, a pre-close falsification pass, a proportional post-implementation
+  Security/Auth recheck, current-state documentation reconciliation, and a
+  final self-review before requesting external review — see the skill file
+  for full detail
 
 ## When to use it
 

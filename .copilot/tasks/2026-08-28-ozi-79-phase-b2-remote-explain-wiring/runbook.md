@@ -1,6 +1,91 @@
-# OZI-79 Phase B2 — Remote Plain-EXPLAIN Wiring (build/test/review only)
+# OZI-79 Phase B3 — Approved Remote Inventory Scan Wiring (build/test/review only)
 
-## Execution boundary — read this first
+## Phase B3 execution boundary — read this first
+
+**Phase B3 is build/test/review only. It does not authorize a real remote
+inventory scan.** No staging or production connection, scan, `EXPLAIN`, or
+`EXPLAIN ANALYZE` was executed while implementing or validating this phase.
+The Phase B2 material below is retained as historical context; this section
+is the current authoritative remote-inventory contract.
+
+The only remote command shape is:
+
+```text
+pnpm tenancy-inventory -- scan --target=staging|production --execute-remote-inventory --approved-artifact=<evidence-file> --approved-artifact-fingerprint=<reviewed-sha256>
+```
+
+`<evidence-file>` is a filename, not a path. It is read only from the
+target-specific, outside-repository evidence store. The SHA-256 is the
+manually transcribed fingerprint of the reviewed V2 artifact, supplied
+separately from the file so artifact integrity is not mistaken for approval.
+The production review values supplied for this phase are:
+
+- artifact fingerprint: `d36aa7df2428ae873be2e47752a2e02fe4c186f4be4d50cace4013c3b87fa20c`
+- scope fingerprint: `04ceae4618ea7b2e02242bb59d479e62bc390e331d7049159d1f0be86f4455cc`
+- registry fingerprint: `f1b4cfddef1325388f9d443abbf3b62a4f07d1a638213906f7a59685898c58b1`
+- commit: `46e616083cebd0b3318be568b2bc50b6c28c32be`
+- schema migration: `#23`, hash `655e6efd5df662bd745132b7ece5237dce3e6b47c8e0feea75c8636aa171d3a0`
+
+These values document the completed manual review; they do not grant
+permission to execute the command.
+
+### B3 bootstrap after its final reviewed commit
+
+The production artifact above is bound to commit
+`46e616083cebd0b3318be568b2bc50b6c28c32be`. B3 deliberately requires
+`artifact.commit.commitSha === current clean HEAD`, so that artifact cannot
+authorize an inventory scan from B3's final reviewed and committed HEAD.
+
+After B3 is finalized, a **fresh production plain-EXPLAIN** must receive
+separate explicit authorization. Its resulting V2 artifact must then be
+manually reviewed; that fresh artifact's fingerprint becomes the approved
+`--approved-artifact-fingerprint` input. Only after those steps may a
+production inventory scan receive its own separate execution authorization.
+The exact-commit binding must not be weakened to reuse the older artifact.
+
+### Exact B3 pipeline
+
+```text
+run(scan argv)
+  -> local dev/test scan remains its existing path
+  -> remote scan strict parser (staging|production only; rejects unknown,
+     duplicate, positional, URL, subset, and --allow-dirty flags)
+  -> require --execute-remote-inventory
+  -> read V2 artifact by filename through confined external evidence storage
+  -> parse V2; checkArtifactIntegrityV2
+  -> compare artifactFingerprint to the separately supplied reviewed value
+  -> checkRegistryCompatibility against the frozen 16-statement registry
+  -> assertNoHiddenGitIndexState
+  -> require a clean tree; resolve the exact current commit; compare it to artifact.commit
+  -> assert independently sourced target identity; derive descriptor and verified identity fingerprint
+  -> checkTargetCompatibilityV2 (environment, descriptor, verified identity fingerprint)
+  -> withReadOnlyRemoteDb(target)
+       -> validated/normalized URL; TLS verify-full; live verifyReadOnlyRole
+       -> READ ONLY + REPEATABLE READ with unchanged 5000/2000/10000 ms timeouts
+       -> read current schema migration and checkSchemaCompatibility FIRST
+       -> only then run the fixed 15 data statements sequentially in frozen
+          QUERY_REGISTRY order (with the schema check as statement 1 of 16;
+          no arbitrary SQL/subset or parallel/pipelined execution)
+  -> write aggregate-only scan evidence to the same confined, outside-repo store
+  -> print only target, approved artifact fingerprint, and evidence path
+```
+
+Every gate through target compatibility happens before a network connection
+can open. A schema mismatch is detected as the first callback query, before
+inventory queries. Timeout, role, connection, and query errors fail closed;
+there is no retry or timeout increase. Raw database errors, connection URLs,
+passwords, usernames, and expected-identity values are never written to
+terminal output or evidence.
+
+The identical B3 implementation serves staging and production. Only their
+credentials, independently sourced expected identity, and human-approved
+artifact values are target-specific.
+
+---
+
+## OZI-79 Phase B2 — Remote Plain-EXPLAIN Wiring (historical context)
+
+### Execution boundary — read this first
 
 **Phase B2 is authorized as build/test/review only. It does NOT authorize
 connecting to staging or production, during implementation, testing, or
@@ -88,7 +173,7 @@ real target is a separate, explicit, not-yet-given authorization, and is
 its own security checkpoint per OZI-79's two-stage execution control —
 building this wiring is not that authorization.
 
-## What was built
+### What was built
 
 **This section is the single authoritative description of the current
 executable path.** It is rewritten in place, not patched around, each
@@ -96,7 +181,7 @@ time the real order changes -- see "Review round 12" below for why this
 mattered enough to do as a full rewrite rather than another incremental
 correction.
 
-### `cli.ts`'s `plan --target=staging|production --execute-remote-explain`
+#### `cli.ts`'s `plan --target=staging|production --execute-remote-explain`
 
 The real, complete, in-order pipeline, from `run()` receiving `argv`
 through evidence being written:
@@ -152,7 +237,7 @@ an environment string outside that closed domain --
 `collectExplainPreflightFacts` always runs the full, frozen
 `QUERY_REGISTRY`.
 
-### `assertNoHiddenGitIndexState` -- reject hidden index state (round 13)
+#### `assertNoHiddenGitIndexState` -- reject hidden index state (round 13)
 
 `git status --porcelain` alone is insufficient to prove the working tree
 matches HEAD: Git's index can mark a tracked file `assume-unchanged` or
@@ -202,7 +287,7 @@ and `--untracked-files=all` (so this check's result never silently
 depends on an operator's local `status.showUntrackedFiles` config, which
 can otherwise suppress or collapse untracked files).
 
-### `resolveRemoteUrl` -- the single authoritative URL parse gate (round 12)
+#### `resolveRemoteUrl` -- the single authoritative URL parse gate (round 12)
 
 Every caller of a remote credential URL -- `postgres()` itself, and this
 module's own `describeUrl`/`resolveVerificationIdentity`/
@@ -233,7 +318,7 @@ query parameter change the connection destination -- rejecting anyway is
 a zero-cost defense against relying on that being true forever, since
 nothing in the documented credential format ever needs either.
 
-### Fail-closed preconditions, checked in this order, before any connection
+#### Fail-closed preconditions, checked in this order, before any connection
 
 Restated as a flat, numbered list for cross-reference (the pipeline
 diagram above is the authoritative sequence; this list names each check
@@ -272,7 +357,7 @@ record, or a value an operator independently transcribes from it) --
 `*_READONLY_DATABASE_URL` itself. Deriving one from the other would make
 the safeguard tautological.
 
-### Verified-identity fingerprint (V2)
+#### Verified-identity fingerprint (V2)
 
 `computeVerifiedIdentityFingerprint(target)` is a non-secret,
 domain-separated SHA-256 of the same username-inclusive identity
@@ -297,7 +382,7 @@ both sides independently, before any equality comparison, so two
 malformed-but-identical values (e.g. two empty strings) are never treated
 as a match.
 
-### Evidence and terminal output
+#### Evidence and terminal output
 
 The full `ExplainPreflightArtifactV2` (every raw `EXPLAIN` plan, every
 relation stat, plus `target.verifiedIdentityFingerprint`) is persisted
@@ -321,7 +406,7 @@ plan). A remote artifact's raw plans are safe to persist as evidence a
 reviewer opens deliberately, but not to print into logs that may be
 captured far more casually than a file someone has to go and read.
 
-### Output-leak audit (round 12)
+#### Output-leak audit (round 12)
 
 Every value this path ever puts into a thrown `Error` message, a
 `console.log`, or a committed evidence filename was classified and
@@ -347,7 +432,7 @@ message -- fixed to a fixed, safe string with the original preserved
 only as `cause`, matching the pattern already used for raw Postgres/
 Drizzle failures.
 
-## Tests
+### Tests
 
 This section describes the test file's original (build-time) shape and
 scenario coverage; it has grown across review rounds since -- see each
@@ -413,7 +498,7 @@ note that an unparseable URL now fails closed by throwing (from
 `resolveRemoteUrl` itself), superseding round 6's original sentinel-hash
 behavior for that one case.
 
-### Adversarial falsification pass (performed before push)
+#### Adversarial falsification pass (performed before push)
 
 Every negative-path test above was verified, by temporarily reverting
 its corresponding check in `cli.ts` and re-running the suite, to
@@ -435,7 +520,7 @@ genuinely fail against the broken code before being restored:
 Each revert was restored immediately after confirming the failure, and
 the full suite was re-run green before continuing.
 
-### A genuine Vitest/Node-builtin mocking gotcha, found and fixed before relying on the tests
+#### A genuine Vitest/Node-builtin mocking gotcha, found and fixed before relying on the tests
 
 Mocking `node:child_process`'s `execFileSync` for this test file initially
 appeared to work (no error, mock applied) but silently ran the **real**
@@ -449,7 +534,7 @@ distinctly-named mock functions, logged which one each side actually
 called) before fixing it — the fix sets both `execFileSync` and
 `default.execFileSync` to the exact same function reference.
 
-## Review round 1 (Codex)
+### Review round 1 (Codex)
 
 Three findings, all fixed on the same branch:
 
@@ -475,7 +560,7 @@ Three findings, all fixed on the same branch:
   Both updated; `tenancy-inventory.env.example` also documents the two
   new `*_EXPECTED_DESCRIPTOR` variables the round-1 fix requires.
 
-### A test-isolation gap found while falsifying the round-1 fix
+#### A test-isolation gap found while falsifying the round-1 fix
 
 While reverting `cli.ts`'s explicit `assertTargetDescriptorMatchesExpectation`
 call to confirm its two new tests genuinely fail without it, they instead
@@ -493,7 +578,7 @@ the fix doesn't break anything: full suite re-run green after the
 switch, and the round-1 tests were re-verified to still correctly fail
 against the reverted code afterward.
 
-## Review round 2 (Codex)
+### Review round 2 (Codex)
 
 One finding: **redact the expected descriptor from mismatch errors
 (P2, real gap).** `assertTargetDescriptorMatchesExpectation`'s mismatch
@@ -514,7 +599,7 @@ via temporary revert to genuinely fail against the pre-fix code before
 being restored. Grepped the rest of the file for the same interpolation
 pattern (`${expected}`/`${raw}`) afterward; no other instance exists.
 
-## Review round 3 (user-directed hardening pass)
+### Review round 3 (user-directed hardening pass)
 
 Not a Codex finding this round -- a directed final invariant-oriented
 pass before the next review, covering four areas:
@@ -567,7 +652,7 @@ tree, unresolved commit, role verification failure, evidence write
 failure) -- each already had, or received, a regression test verified by
 temporary revert.
 
-## Review round 4 (Codex)
+### Review round 4 (Codex)
 
 Two findings, both fixed:
 
@@ -605,7 +690,7 @@ Two findings, both fixed:
   future-facing, just without the stale "Phase B2" label since Phase B2
   turned out to mean something narrower than originally drafted).
 
-## Review round 5 (Codex)
+### Review round 5 (Codex)
 
 Two findings. This round is the clearest evidence that round 1's original
 fix was itself incomplete, not just adjacent -- see the honest note at
@@ -666,7 +751,7 @@ the exact swap scenario against the reverted code (confirmed the swap
 was silently accepted) and then against the restored fix (confirmed it
 was correctly rejected).
 
-## Review round 6 (user-directed hardening pass)
+### Review round 6 (user-directed hardening pass)
 
 Two findings, both implemented in the same pass per the user's explicit
 instruction not to defer Finding #1 to a later phase: this is the first
@@ -762,7 +847,7 @@ identity, execution from an unrelated `cwd`, and the pinned-repo-root
 `cwd` producing the correct clean/dirty result independent of whatever
 the ambient launching process's own `cwd` git state looks like.
 
-## Review round 7 (Codex) — documentation only
+### Review round 7 (Codex) — documentation only
 
 One finding, docs only, no code change: the "What was built" current-
 state section above still named the removed V1 builder and
@@ -774,7 +859,7 @@ would actually follow. Fixed in `31f505e0` (pipeline diagram, precondition
 evidence/terminal-output section, and the Tests section's stale
 references). No code changed.
 
-## Review round 8 (Codex)
+### Review round 8 (Codex)
 
 Two findings.
 
@@ -807,7 +892,7 @@ Two findings.
   `describeRemoteTarget`/`computeVerifiedIdentityFingerprint`) and noting
   `withReadOnlyRemoteDb`'s own internal re-assertion (defense-in-depth).
 
-## Review round 9 (Codex) — documentation only
+### Review round 9 (Codex) — documentation only
 
 One finding (P1), docs only, no code change: this runbook and `plan.md`
 committed a complete, realistic-looking PostgreSQL credential shape (a
@@ -828,7 +913,7 @@ placeholder shape `postgres://[username]:[REDACTED]@[host]/[database]`,
 which still documents exactly the same redaction scenario without
 committing anything credential-shaped.
 
-## Review round 10 (Codex)
+### Review round 10 (Codex)
 
 Two findings, both real -- reviewed against the full history of prior
 findings on this PR before implementing, per explicit user direction to
@@ -901,7 +986,7 @@ instead by confirming the full suite passes with the new names and a
 repository-wide sweep finds zero remaining occurrences of the old
 literal).
 
-## Review round 11 (Codex)
+### Review round 11 (Codex)
 
 One finding (P1), the same category as round 10 but a materially
 different -- and correct -- root cause: renaming the embedded username/
@@ -954,7 +1039,7 @@ does not own (other features' tests, this repo's well-known public local
 dev/test defaults, other tasks' docs) -- out of scope for this finding
 and this branch.
 
-## Codacy Static Code Analysis (SonarSource S2068), not a Codex round
+### Codacy Static Code Analysis (SonarSource S2068), not a Codex round
 
 After round 11 pushed, the required "Codacy Static Code Analysis" PR
 check started failing with 3 new annotations (`"Hardcoded passwords are
@@ -981,7 +1066,7 @@ pre-existing, unrelated case (`secretLookingValue` in
 branch) that Codacy's actual check run did not flag -- left untouched,
 not part of this fix.
 
-## Review round 12 -- self-review invariant pass (not a Codex round)
+### Review round 12 -- self-review invariant pass (not a Codex round)
 
 User-directed: stop responding to individual cited lines one at a time
 and review the complete Phase B2 trust boundary as one invariant before
@@ -989,7 +1074,7 @@ pushing again. This section is that review's report -- built BEFORE any
 code changed, then used to find the fixes below, rather than waiting for
 an external tool to enumerate them one at a time.
 
-### The invariant
+#### The invariant
 
 A remote EXPLAIN preflight may execute only after an explicit
 unambiguous operator decision, against the intended verified database
@@ -1000,7 +1085,7 @@ credential-bearing or untrusted value may leak into source, docs,
 errors, or logs; current-state documentation must exactly describe the
 executable path.
 
-### Invariant map
+#### Invariant map
 
 | Stage | Trust | Authoritative validation | Authoritative enforcement | Persisted representation | Safe printable representation | Negative regression proof |
 |---|---|---|---|---|---|---|
@@ -1020,7 +1105,7 @@ executable path.
 | Future compatibility checks | not yet wired to any command | `checkTargetCompatibilityV2` | format-validates `verifiedIdentityFingerprint` on both sides independently before comparing | reads the artifact, does not persist | n/a (pure function) | malformed-but-equal-fingerprint tests (round 12) |
 | Runbook/PR description | must describe the executable path exactly | this document | manual review | n/a | n/a | this section; the "What was built" rewrite above |
 
-### Findings and fixes
+#### Findings and fixes
 
 1. **`resolveRemoteUrl` was not the single authoritative parse gate.**
    It validated the query-string rejection via its own ad hoc `new
@@ -1069,7 +1154,7 @@ executable path.
    one fixture that genuinely needs no path) or are built by string-
    splicing the builder's own output rather than a hand-written literal.
 
-### Adversarial matrix covered this round
+#### Adversarial matrix covered this round
 
 In addition to every prior round's coverage (still passing, unmodified
 in logic): fragment rejected; missing hostname/username/database path
@@ -1086,7 +1171,7 @@ verified via temporary revert-and-confirm-failure before being restored
 (see the three falsification passes performed during this round, each
 confirming exactly the expected test subset failed and nothing else).
 
-### Self-review answers (required before push)
+#### Self-review answers (required before push)
 
 - **Core invariants:** see "The invariant" and "Invariant map" above.
 - **Authoritative enforcement:** see the "Invariant map" table's
@@ -1113,7 +1198,7 @@ confirming exactly the expected test subset failed and nothing else).
   empirically against the actual Node runtime before being relied on in
   a test, not assumed.
 
-## Review round 13 -- reject hidden Git index state (Codex)
+### Review round 13 -- reject hidden Git index state (Codex)
 
 One finding (P2), treated as a repository commit-binding invariant, not
 a one-line `git status` patch. Reproduced by Codex with `git update-index
@@ -1132,7 +1217,7 @@ any existing rejection. This is a **verifier, not a mutator** -- it
 never clears `assume-unchanged`/`skip-worktree` itself, and never names
 the affected path in its thrown message.
 
-### Re-review of the Git-based commit-binding chain
+#### Re-review of the Git-based commit-binding chain
 
 Per explicit instruction, re-reviewed every Git-based assumption in this
 chain after the fix: `REPO_ROOT` -> hidden index state -> worktree
@@ -1165,7 +1250,7 @@ status -> `resolveCommitShaStrict` -> `artifact.commit`.
 No other repository-local Git metadata was found that could make this
 chain's observations omit an executable tracked change.
 
-### Tests
+#### Tests
 
 Mocked (`cli.test.ts`, extending the existing `git ls-files`/`status`/
 `rev-parse` mocking pattern): ordinary clean repository proceeds;
@@ -1201,7 +1286,7 @@ call left exactly the six new mocked tests (plus the updated dirty-tree
 call-count assertion) failing, nothing else; restored and reconfirmed
 green.
 
-## Review round 14 (Codex) — documentation only
+### Review round 14 (Codex) — documentation only
 
 One finding (P2), docs only, no code change: the "Execution boundary —
 read this first" section's `readonly-db-remote.ts` bullet still said the
@@ -1236,7 +1321,7 @@ claim, and the `scan` behavior claim all still hold).
 No executable TypeScript, test, artifact-contract, Git-guard, or
 remote-DB-wiring code was touched this round.
 
-## Review round 15 (Codex) — documentation only
+### Review round 15 (Codex) — documentation only
 
 One finding (P2), docs only, no code change, and the same class as round
 14 applied to the other control artifact: `plan.md`'s `Classification`
@@ -1261,7 +1346,7 @@ original objective rather than the delivered scope.
 No executable TypeScript, test, artifact-contract, Git-guard, or
 remote-DB-wiring code was touched this round.
 
-## Review round 16 (Codex) — documentation only
+### Review round 16 (Codex) — documentation only
 
 One finding (P2), docs only, on wording introduced by round 15 itself:
 the new `Review coverage` bullet in `plan.md` claimed every one of the
@@ -1291,7 +1376,7 @@ restatements in `plan.md` and the PR description.
 No executable TypeScript, test, artifact-contract, Git-guard, or
 remote-DB-wiring code was touched this round.
 
-## Validation
+### Validation
 
 - typecheck: clean
 - lint: clean
@@ -1308,7 +1393,7 @@ remote-DB-wiring code was touched this round.
   (not trusting round 11's result), zero remaining matches in any file
   this branch owns
 
-## What Phase B2 explicitly does NOT do
+### What Phase B2 explicitly does NOT do
 
 Listed so the boundary stays visible for whoever scopes the next phase:
 

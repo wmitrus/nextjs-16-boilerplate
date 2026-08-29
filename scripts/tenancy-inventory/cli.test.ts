@@ -22,9 +22,14 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { run } from './cli';
-import { writeEvidence } from './evidence-store';
+import { readEvidence, writeEvidence } from './evidence-store';
 import type * as EvidenceStoreModule from './evidence-store';
-import { collectExplainPreflightFacts } from './explain-preflight';
+import {
+  buildExplainPreflightArtifactV2,
+  collectExplainPreflightFacts,
+  computeArtifactFingerprintV2,
+  computeScopeFingerprintV2,
+} from './explain-preflight';
 import type * as ExplainPreflightModule from './explain-preflight';
 import type { ExplainPreflightFacts } from './explain-preflight';
 import {
@@ -34,6 +39,11 @@ import {
 } from './readonly-db-remote';
 import type * as ReadonlyDbRemoteModule from './readonly-db-remote';
 import { buildTestPostgresUrl } from './test-postgres-url';
+import {
+  collectRemoteInventoryFindingsSequential,
+  latestSchemaMigration,
+} from './topology-queries';
+import type * as TopologyQueriesModule from './topology-queries';
 
 /**
  * `vi.hoisted` because `vi.mock`'s factory is hoisted above every import in
@@ -68,7 +78,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 vi.mock('./evidence-store', async (importOriginal) => {
   const actual = await importOriginal<typeof EvidenceStoreModule>();
-  return { ...actual, writeEvidence: vi.fn() };
+  return { ...actual, readEvidence: vi.fn(), writeEvidence: vi.fn() };
 });
 
 vi.mock('./readonly-db-remote', async (importOriginal) => {
@@ -85,12 +95,36 @@ vi.mock('./explain-preflight', async (importOriginal) => {
   return { ...actual, collectExplainPreflightFacts: vi.fn() };
 });
 
+vi.mock('./topology-queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof TopologyQueriesModule>();
+  return {
+    ...actual,
+    collectRemoteInventoryFindingsSequential: vi.fn(),
+    latestSchemaMigration: vi.fn(),
+    organizationsMissingTenantAttributesCount: vi.fn(),
+    policiesWithNullOrganizationCount: vi.fn(),
+    providerOrganizationMappingAnomalies: vi.fn(),
+    quotaEnforcementSignal: vi.fn(),
+    tenantIdShapeCounts: vi.fn(),
+    tenantOrganizationCounts: vi.fn(),
+    userProviderMappingAnomalies: vi.fn(),
+    usersInMultipleOrganizationsCount: vi.fn(),
+    usersInMultipleTenantsCount: vi.fn(),
+    waitlistEntriesWithTenantIdCount: vi.fn(),
+  };
+});
+
 const mockedExecFileSync = mockExecFileSync;
 const mockedWriteEvidence = vi.mocked(writeEvidence);
+const mockedReadEvidence = vi.mocked(readEvidence);
 const mockedDescribeRemoteTarget = vi.mocked(describeRemoteTarget);
 const mockedWithReadOnlyRemoteDb = vi.mocked(withReadOnlyRemoteDb);
 const mockedCollectExplainPreflightFacts = vi.mocked(
   collectExplainPreflightFacts,
+);
+const mockedLatestSchemaMigration = vi.mocked(latestSchemaMigration);
+const mockedCollectRemoteInventoryFindingsSequential = vi.mocked(
+  collectRemoteInventoryFindingsSequential,
 );
 
 /** A raw plan value with a marker substring, to prove it reaches the
@@ -191,6 +225,97 @@ function mockDirtyGitState(): void {
     if (args?.includes('rev-parse')) return 'abc123deadbeef\n';
     throw new Error(`unexpected git invocation: ${JSON.stringify(args)}`);
   });
+}
+
+function makeApprovedArtifact(
+  target: 'staging' | 'production',
+  options: {
+    commitSha?: string;
+    descriptor?: string;
+    verifiedIdentityFingerprint?: string;
+    schemaMigration?: { id: number; hash: string } | null;
+  } = {},
+) {
+  const username = 'ozi79-test-only-user';
+  const host = `${target}-db.example.internal`;
+  const descriptor = options.descriptor ?? `${host}:5432/app_${target}`;
+  const verifiedIdentityFingerprint =
+    options.verifiedIdentityFingerprint ??
+    createHash('sha256')
+      .update(
+        `ozi79:remote-target-verified-identity:v1:${username}@${host}:5432/app_${target}`,
+        'utf8',
+      )
+      .digest('hex');
+  return buildExplainPreflightArtifactV2(
+    {
+      ...FAKE_FACTS,
+      schemaMigration: options.schemaMigration ?? {
+        id: 23,
+        hash: '655e6efd5df662bd745132b7ece5237dce3e6b47c8e0feea75c8636aa171d3a0',
+      },
+    },
+    {
+      target: { environment: target, descriptor, verifiedIdentityFingerprint },
+      commit: {
+        commitSha: options.commitSha ?? 'abc123deadbeef',
+        workingTreeDirty: false,
+      },
+      generatedAt: '2026-08-29T00:00:00.000Z',
+    },
+  );
+}
+
+function remoteScanArgv(
+  target: 'staging' | 'production',
+  artifactFingerprint: string,
+): string[] {
+  return [
+    'scan',
+    `--target=${target}`,
+    '--execute-remote-inventory',
+    '--approved-artifact=approved-explain.json',
+    `--approved-artifact-fingerprint=${artifactFingerprint}`,
+  ];
+}
+
+function mockRemoteScanLocalGates(
+  target: 'staging' | 'production',
+  artifact = makeApprovedArtifact(target),
+): void {
+  mockCleanGitState();
+  mockPassingTargetIdentity(
+    target,
+    'ozi79-test-only-user',
+    `${target}-db.example.internal`,
+  );
+  mockedDescribeRemoteTarget.mockReturnValue(
+    `${target}-db.example.internal:5432/app_${target}`,
+  );
+  mockedReadEvidence.mockResolvedValue(JSON.stringify(artifact));
+}
+
+function mockRemoteInventorySuccess(): void {
+  mockedWithReadOnlyRemoteDb.mockImplementation(async (_target, fn) =>
+    fn({} as never),
+  );
+  mockedLatestSchemaMigration.mockResolvedValue({
+    id: 23,
+    hash: '655e6efd5df662bd745132b7ece5237dce3e6b47c8e0feea75c8636aa171d3a0',
+  });
+  mockedCollectRemoteInventoryFindingsSequential.mockResolvedValue({
+    tenantOrgCounts: {} as never,
+    usersInMultipleOrgs: 0,
+    usersInMultipleTenants: 0,
+    orgsMissingTenantAttributes: 0,
+    organizationMappingAnomalies: {} as never,
+    userMappingAnomalies: {} as never,
+    waitlistEntriesWithTenantId: 0,
+    policiesWithNullOrganization: 0,
+    quotaSignal: {} as never,
+    tenantIdShape: {} as never,
+  });
+  mockedWriteEvidence.mockResolvedValue('/fake/evidence/inventory.json');
 }
 
 function captureConsoleLog(): { logs: string[]; restore: () => void } {
@@ -871,18 +996,238 @@ describe('plan -- exact wiring once every precondition is satisfied', () => {
   );
 });
 
-describe('plan -- does not add remote scan support', () => {
-  it('scan --target=staging still fails, without reaching any remote wiring', async () => {
+describe('scan -- remote inventory remains acknowledgement-gated', () => {
+  it('scan --target=staging alone fails without reaching any remote wiring', async () => {
     await expect(run(['scan', '--target=staging'])).rejects.toThrow(
-      /scan requires --target=dev or --target=test/,
+      /--execute-remote-inventory/,
     );
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
 
-  it('scan --target=production still fails, without reaching any remote wiring', async () => {
+  it('scan --target=production alone fails without reaching any remote wiring', async () => {
     await expect(run(['scan', '--target=production'])).rejects.toThrow(
-      /scan requires --target=dev or --target=test/,
+      /--execute-remote-inventory/,
     );
     expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
   });
+});
+
+describe('scan -- remote inventory approval gate (Phase B3)', () => {
+  it('requires explicit acknowledgement before reading evidence, Git state, or opening a remote connection', async () => {
+    await expect(run(['scan', '--target=production'])).rejects.toThrow(
+      /--execute-remote-inventory/,
+    );
+    expect(mockedReadEvidence).not.toHaveBeenCalled();
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it.each(['--allow-dirty', '--dry-run', '--database-url=ignored'])(
+    'rejects arbitrary or bypass flag %s before reading evidence or connecting',
+    async (flag) => {
+      await expect(
+        run([
+          'scan',
+          '--target=staging',
+          '--execute-remote-inventory',
+          '--approved-artifact=approved-explain.json',
+          `--approved-artifact-fingerprint=${'a'.repeat(64)}`,
+          flag,
+        ]),
+      ).rejects.toThrow(/scan does not recognize/);
+      expect(mockedReadEvidence).not.toHaveBeenCalled();
+      expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects malformed or tampered persisted artifacts before any Git or network call', async () => {
+    mockedReadEvidence.mockResolvedValue('{ definitely not JSON');
+    await expect(
+      run(remoteScanArgv('staging', 'a'.repeat(64))),
+    ).rejects.toThrow(/malformed or is not V2/);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+
+    vi.resetAllMocks();
+    const artifact = makeApprovedArtifact('staging');
+    mockedReadEvidence.mockResolvedValue(
+      JSON.stringify({ ...artifact, scopeFingerprint: 'a'.repeat(64) }),
+    );
+    await expect(
+      run(remoteScanArgv('staging', artifact.artifactFingerprint)),
+    ).rejects.toThrow(/contents do not match/);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it('rejects a fingerprint different from the separately reviewed artifact identity before Git or network calls', async () => {
+    const artifact = makeApprovedArtifact('production');
+    mockedReadEvidence.mockResolvedValue(JSON.stringify(artifact));
+    await expect(
+      run(remoteScanArgv('production', 'a'.repeat(64))),
+    ).rejects.toThrow(
+      /does not match the separately supplied reviewed fingerprint/,
+    );
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['dirty tree', () => mockDirtyGitState(), /uncommitted changes/],
+    [
+      'hidden Git index state',
+      () => {
+        mockedExecFileSync.mockImplementation((_cmd, commandArgs) => {
+          const gitArgs = commandArgs as readonly string[] | undefined;
+          if (gitArgs?.includes('ls-files')) return 'h hidden.ts\0';
+          throw new Error('unexpected Git call');
+        });
+      },
+      /hidden state/,
+    ],
+  ] as const)(
+    'rejects %s before any remote connection',
+    async (_name, arrange, message) => {
+      const artifact = makeApprovedArtifact('staging');
+      mockedReadEvidence.mockResolvedValue(JSON.stringify(artifact));
+      arrange();
+      await expect(
+        run(remoteScanArgv('staging', artifact.artifactFingerprint)),
+      ).rejects.toThrow(message);
+      expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'wrong commit',
+      makeApprovedArtifact('staging', { commitSha: 'different-commit' }),
+      /exact clean current commit/,
+    ],
+    [
+      'wrong target',
+      makeApprovedArtifact('production'),
+      /Current target does not match/,
+    ],
+  ] as const)(
+    'rejects %s before any remote connection',
+    async (_name, artifact, message) => {
+      mockRemoteScanLocalGates('staging', artifact);
+      await expect(
+        run(remoteScanArgv('staging', artifact.artifactFingerprint)),
+      ).rejects.toThrow(message);
+      expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a self-consistent changed registry and a wrong verified identity before any remote connection', async () => {
+    const artifact = makeApprovedArtifact('staging');
+    const registryChanged = {
+      ...artifact,
+      registryFingerprint: 'a'.repeat(64),
+    };
+    const registryChangedWithScope = {
+      ...registryChanged,
+      scopeFingerprint: computeScopeFingerprintV2(registryChanged),
+    };
+    const selfConsistentRegistryChanged = {
+      ...registryChangedWithScope,
+      artifactFingerprint: computeArtifactFingerprintV2(
+        registryChangedWithScope,
+      ),
+    };
+    mockRemoteScanLocalGates('staging', selfConsistentRegistryChanged);
+    await expect(
+      run(
+        remoteScanArgv(
+          'staging',
+          selfConsistentRegistryChanged.artifactFingerprint,
+        ),
+      ),
+    ).rejects.toThrow(/QUERY_REGISTRY does not match/);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+
+    vi.resetAllMocks();
+    const wrongIdentity = makeApprovedArtifact('staging', {
+      verifiedIdentityFingerprint: 'b'.repeat(64),
+    });
+    mockRemoteScanLocalGates('staging', wrongIdentity);
+    await expect(
+      run(remoteScanArgv('staging', wrongIdentity.artifactFingerprint)),
+    ).rejects.toThrow(/Current target does not match/);
+    expect(mockedWithReadOnlyRemoteDb).not.toHaveBeenCalled();
+  });
+
+  it('verifies the live schema migration before any inventory query runs', async () => {
+    const artifact = makeApprovedArtifact('production');
+    mockRemoteScanLocalGates('production', artifact);
+    mockedWithReadOnlyRemoteDb.mockImplementation(async (_target, fn) =>
+      fn({} as never),
+    );
+    mockedLatestSchemaMigration.mockResolvedValue({ id: 24, hash: 'changed' });
+    await expect(
+      run(remoteScanArgv('production', artifact.artifactFingerprint)),
+    ).rejects.toThrow(/schema migration does not match/);
+    expect(
+      mockedCollectRemoteInventoryFindingsSequential,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on readonly-role failure and sanitizes raw remote failures', async () => {
+    const artifact = makeApprovedArtifact('production');
+    mockRemoteScanLocalGates('production', artifact);
+    mockedWithReadOnlyRemoteDb.mockRejectedValue(
+      new RemoteRoleNotReadOnlyError(
+        'Connected role has elevated attribute(s): rolsuper.',
+      ),
+    );
+    await expect(
+      run(remoteScanArgv('production', artifact.artifactFingerprint)),
+    ).rejects.toThrow(/elevated attribute/);
+    expect(mockedWriteEvidence).not.toHaveBeenCalled();
+
+    vi.resetAllMocks();
+    mockRemoteScanLocalGates('production', artifact);
+    const rawError = new Error(
+      'password rejected for readonly_prod at internal-db.example',
+    );
+    mockedWithReadOnlyRemoteDb.mockRejectedValue(rawError);
+    let thrown: unknown;
+    try {
+      await run(remoteScanArgv('production', artifact.artifactFingerprint));
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as Error).message).not.toContain('readonly_prod');
+    expect((thrown as Error).message).not.toContain('internal-db.example');
+    expect((thrown as Error).cause).toBe(rawError);
+  });
+
+  it.each(['staging', 'production'] as const)(
+    'uses the same approved-artifact pipeline for %s and writes only outside-repository evidence',
+    async (target) => {
+      const artifact = makeApprovedArtifact(target);
+      mockRemoteScanLocalGates(target, artifact);
+      mockRemoteInventorySuccess();
+      await expect(
+        run(remoteScanArgv(target, artifact.artifactFingerprint)),
+      ).resolves.toBeUndefined();
+      expect(mockedWithReadOnlyRemoteDb).toHaveBeenCalledWith(
+        target,
+        expect.any(Function),
+      );
+      const [, evidenceFileName, evidenceContents] =
+        mockedWriteEvidence.mock.calls[0]!;
+      expect(mockedWriteEvidence).toHaveBeenCalledWith(
+        target,
+        expect.any(String),
+        expect.not.stringContaining('ozi79-test-only-user'),
+      );
+      expect(
+        typeof evidenceFileName === 'string' &&
+          evidenceFileName.startsWith(`${target}-inventory-`),
+      ).toBe(true);
+      expect(evidenceContents).not.toContain('ozi79-test-only-user');
+    },
+  );
 });

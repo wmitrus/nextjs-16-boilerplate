@@ -4,7 +4,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 import {
+  assertPathWithinBase,
   ensureDirectoryWithinBase,
+  readTextFileWithinBase,
   writeTextFileWithinBase,
 } from '../lib/fs-guards-shared';
 
@@ -91,6 +93,34 @@ function assertNoSymlinkInPath(
 }
 
 /**
+ * Remote approval artifacts are addressed by a literal filename, not a
+ * path. Validate that narrow contract before resolving or inspecting any
+ * filesystem path: a rejected traversal must not cause even an `lstat`
+ * probe outside the target-specific evidence directory.
+ */
+function assertApprovedArtifactFileName(
+  fileName: unknown,
+): asserts fileName is string {
+  if (
+    typeof fileName !== 'string' ||
+    fileName.length === 0 ||
+    fileName.trim().length === 0 ||
+    fileName !== fileName.trim() ||
+    fileName === '.' ||
+    fileName === '..' ||
+    path.isAbsolute(fileName) ||
+    fileName.includes('/') ||
+    fileName.includes('\\') ||
+    fileName.includes('\0') ||
+    path.basename(fileName) !== fileName
+  ) {
+    throw new Error(
+      'Security: approved evidence artifact must be a non-empty filename in the target evidence directory.',
+    );
+  }
+}
+
+/**
  * Writes `content` to `<EVIDENCE_ROOT>/<environment>/<fileName>`, confined
  * to `EVIDENCE_ROOT` both lexically (SEC-16, via `assertPathWithinBase`
  * inside the shared helpers) and against symlinks (`assertNoSymlinkInPath`
@@ -106,7 +136,13 @@ export async function writeEvidence(
   content: string,
 ): Promise<string> {
   const targetDir = path.resolve(EVIDENCE_ROOT, environment);
-  const targetFile = path.resolve(targetDir, fileName);
+  // Constrain before inspecting symlinks: a filename that lexically escapes
+  // the evidence root must not make even an `lstat` call outside it.
+  const targetFile = assertPathWithinBase(
+    path.resolve(targetDir, fileName),
+    EVIDENCE_ROOT,
+    'ozi-75 evidence file',
+  );
 
   assertNoSymlinkInPath(targetDir, EVIDENCE_ROOT, 'ozi-75 evidence directory');
   assertNoSymlinkInPath(targetFile, EVIDENCE_ROOT, 'ozi-75 evidence file');
@@ -129,9 +165,50 @@ export async function writeEvidence(
   return written;
 }
 
+/**
+ * Reads a previously persisted evidence file from the same confined,
+ * environment-specific store `writeEvidence` owns. Remote inventory scans
+ * deliberately accept an evidence *file name*, never an arbitrary path: the
+ * approved EXPLAIN artifact must already have crossed this boundary before it
+ * can authorize a scan. Keep the symlink checks on reads too -- confinement
+ * is a property of the filesystem sink/source, not merely of writes.
+ */
+function readEvidenceWithinRoot(
+  evidenceRoot: string,
+  environment: Exclude<EvidenceEnvironment, 'local'>,
+  fileName: string,
+): string {
+  assertApprovedArtifactFileName(fileName);
+  const targetDir = path.resolve(evidenceRoot, environment);
+  // Prove target-specific lexical confinement before any `lstat` call. The
+  // base is the target directory itself, not merely EVIDENCE_ROOT, so a
+  // sibling-environment filename cannot be inspected or read.
+  const targetFile = assertPathWithinBase(
+    path.resolve(targetDir, fileName),
+    targetDir,
+    'approved evidence artifact',
+  );
+
+  assertNoSymlinkInPath(targetDir, evidenceRoot, 'ozi-75 evidence directory');
+  assertNoSymlinkInPath(targetFile, evidenceRoot, 'ozi-75 evidence file');
+
+  return readTextFileWithinBase(
+    targetFile,
+    evidenceRoot,
+    'ozi-75 evidence file',
+  );
+}
+
+export function readEvidence(
+  environment: Exclude<EvidenceEnvironment, 'local'>,
+  fileName: string,
+): string {
+  return readEvidenceWithinRoot(EVIDENCE_ROOT, environment, fileName);
+}
+
 export function describeEvidenceRoot(): string {
   return EVIDENCE_ROOT;
 }
 
 /** Exposed for tests only -- not part of the module's real usage surface. */
-export const __test__ = { assertNoSymlinkInPath };
+export const __test__ = { assertNoSymlinkInPath, readEvidenceWithinRoot };

@@ -2,10 +2,19 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describeEvidenceRoot, writeEvidence } from './evidence-store';
+import {
+  describeEvidenceRoot,
+  readEvidence,
+  writeEvidence,
+} from './evidence-store';
 import {
   buildExplainPreflightArtifactV2,
+  checkArtifactIntegrityV2,
+  checkRegistryCompatibility,
+  checkSchemaCompatibility,
+  checkTargetCompatibilityV2,
   collectExplainPreflightFacts,
+  type ExplainPreflightArtifactV2,
 } from './explain-preflight';
 import {
   summarizeOwnership,
@@ -26,6 +35,7 @@ import {
   type RemoteTarget,
 } from './readonly-db-remote';
 import {
+  collectRemoteInventoryFindingsSequential,
   latestSchemaMigration,
   organizationsMissingTenantAttributesCount,
   policiesWithNullOrganizationCount,
@@ -69,6 +79,13 @@ function readOption(args: string[], name: string): string | undefined {
 interface PlanArgs {
   readonly target: RemoteTarget;
   readonly executeRemoteExplain: boolean;
+}
+
+interface RemoteScanArgs {
+  readonly target: RemoteTarget;
+  readonly executeRemoteInventory: boolean;
+  readonly approvedArtifactFileName: string;
+  readonly approvedArtifactFingerprint: string;
 }
 
 /**
@@ -161,6 +178,99 @@ function parsePlanArgs(args: readonly string[]): PlanArgs {
   return {
     target,
     executeRemoteExplain: args.includes('--execute-remote-explain'),
+  };
+}
+
+/**
+ * Remote inventory execution deliberately has a separate, closed argument
+ * contract from local `scan --target=dev|test`. In particular, an operator
+ * supplies only a filename in the existing target-specific evidence store,
+ * never an arbitrary path or a connection URL. The fingerprint is the
+ * separately transcribed, human-reviewed identity of that exact artifact;
+ * the artifact's self-reported fingerprint alone would prove integrity, not
+ * that this particular artifact was the one approved for execution.
+ */
+function parseRemoteScanArgs(args: readonly string[]): RemoteScanArgs {
+  const acknowledgement = '--execute-remote-inventory';
+  let target: string | undefined;
+  let approvedArtifactFileName: string | undefined;
+  let approvedArtifactFingerprint: string | undefined;
+
+  for (const [index, arg] of args.entries()) {
+    if (arg === acknowledgement) continue;
+    const equalsIndex = arg.indexOf('=');
+    const flag = equalsIndex === -1 ? arg : arg.slice(0, equalsIndex);
+    if (equalsIndex === -1) {
+      throw new Error(
+        `scan does not recognize: ${safeArgumentDescription(arg, index)}. ` +
+          'Remote scan arguments are exactly --target=staging|production, ' +
+          '--execute-remote-inventory, --approved-artifact=<evidence-file>, ' +
+          'and --approved-artifact-fingerprint=<sha256>. Argument values are never shown.',
+      );
+    }
+    const value = arg.slice(equalsIndex + 1);
+    switch (flag) {
+      case '--target':
+        if (target !== undefined) {
+          throw new Error(
+            'scan requires exactly one --target argument for a remote scan. Refusing to guess which one was meant.',
+          );
+        }
+        target = value;
+        break;
+      case '--approved-artifact':
+        if (approvedArtifactFileName !== undefined) {
+          throw new Error(
+            'scan requires exactly one --approved-artifact argument for a remote scan. Refusing to guess which one was meant.',
+          );
+        }
+        approvedArtifactFileName = value;
+        break;
+      case '--approved-artifact-fingerprint':
+        if (approvedArtifactFingerprint !== undefined) {
+          throw new Error(
+            'scan requires exactly one --approved-artifact-fingerprint argument for a remote scan. Refusing to guess which one was meant.',
+          );
+        }
+        approvedArtifactFingerprint = value;
+        break;
+      default:
+        throw new Error(
+          `scan does not recognize: ${safeArgumentDescription(arg, index)}. ` +
+            'Remote scan arguments are exactly --target=staging|production, ' +
+            '--execute-remote-inventory, --approved-artifact=<evidence-file>, ' +
+            'and --approved-artifact-fingerprint=<sha256>. Argument values are never shown.',
+        );
+    }
+  }
+
+  if (target !== 'staging' && target !== 'production') {
+    throw new Error('scan requires --target=staging or --target=production.');
+  }
+  if (!args.includes(acknowledgement)) {
+    throw new Error(
+      'scan --target=staging|production requires the explicit --execute-remote-inventory acknowledgement before it will read an approval artifact or open any remote connection.',
+    );
+  }
+  if (!approvedArtifactFileName) {
+    throw new Error(
+      'Remote scan requires --approved-artifact=<evidence-file>; refusing to connect without the persisted, manually approved V2 EXPLAIN artifact.',
+    );
+  }
+  if (
+    !approvedArtifactFingerprint ||
+    !/^[a-f0-9]{64}$/.test(approvedArtifactFingerprint)
+  ) {
+    throw new Error(
+      'Remote scan requires --approved-artifact-fingerprint=<canonical lowercase SHA-256>; refusing to connect without the reviewed artifact identity.',
+    );
+  }
+
+  return {
+    target,
+    executeRemoteInventory: args.includes(acknowledgement),
+    approvedArtifactFileName,
+    approvedArtifactFingerprint,
   };
 }
 
@@ -457,6 +567,170 @@ async function runScan(
   console.log(`[tenancy-inventory] Evidence root: ${describeEvidenceRoot()}`);
 }
 
+function assertCompatible(result: {
+  compatible: boolean;
+  reason: string;
+}): void {
+  if (!result.compatible) {
+    throw new Error(
+      `[tenancy-inventory] Approved EXPLAIN artifact rejected: ${result.reason}`,
+    );
+  }
+}
+
+function assertCommitCompatibility(
+  currentCommitSha: string,
+  artifact: Pick<ExplainPreflightArtifactV2, 'commit'>,
+): void {
+  if (
+    !artifact?.commit ||
+    artifact.commit.workingTreeDirty !== false ||
+    artifact.commit.commitSha !== currentCommitSha
+  ) {
+    throw new Error(
+      '[tenancy-inventory] Approved EXPLAIN artifact does not match the exact clean current commit; refusing to connect.',
+    );
+  }
+}
+
+async function loadApprovedArtifact(
+  target: RemoteTarget,
+  fileName: string,
+): Promise<ExplainPreflightArtifactV2> {
+  let raw: string;
+  try {
+    raw = await readEvidence(target, fileName);
+  } catch (error) {
+    throw new Error(
+      '[tenancy-inventory] Could not read the approved EXPLAIN artifact from the confined evidence store. The underlying error is not shown here.',
+      { cause: error },
+    );
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      (parsed as { version?: unknown }).version !== 2
+    ) {
+      throw new Error('not a V2 artifact');
+    }
+    return parsed as ExplainPreflightArtifactV2;
+  } catch (error) {
+    throw new Error(
+      '[tenancy-inventory] Approved EXPLAIN artifact is malformed or is not V2; refusing to connect.',
+      { cause: error },
+    );
+  }
+}
+
+/**
+ * Phase B3 remote inventory path. Every artifact, Git, and credential
+ * identity gate runs before `withReadOnlyRemoteDb` can open a connection.
+ * Inside its already-verified READ ONLY / REPEATABLE READ transaction the
+ * schema migration is read and compared first; only an exact match permits
+ * the frozen inventory query set to execute.
+ */
+async function runRemoteScan(options: RemoteScanArgs): Promise<void> {
+  if (!options.executeRemoteInventory) {
+    throw new Error(
+      'scan --target=staging|production requires the explicit --execute-remote-inventory acknowledgement before it will open any remote connection.',
+    );
+  }
+
+  const artifact = await loadApprovedArtifact(
+    options.target,
+    options.approvedArtifactFileName,
+  );
+  assertCompatible(checkArtifactIntegrityV2(artifact));
+  if (artifact.artifactFingerprint !== options.approvedArtifactFingerprint) {
+    throw new Error(
+      '[tenancy-inventory] Approved EXPLAIN artifact fingerprint does not match the separately supplied reviewed fingerprint; refusing to connect.',
+    );
+  }
+  assertCompatible(checkRegistryCompatibility(artifact));
+  assertNoHiddenGitIndexState();
+  if (isWorkingTreeDirty()) {
+    throw new Error(
+      'Working tree has uncommitted changes. A remote inventory scan must be tied to an exact, clean, committed state; there is no --allow-dirty escape hatch.',
+    );
+  }
+  const commitSha = resolveCommitShaStrict();
+  assertCommitCompatibility(commitSha, artifact);
+  assertTargetIdentityMatchesExpectation(options.target);
+  const descriptor = describeRemoteTarget(options.target);
+  const verifiedIdentityFingerprint = computeVerifiedIdentityFingerprint(
+    options.target,
+  );
+  assertCompatible(
+    checkTargetCompatibilityV2(
+      {
+        environment: options.target,
+        descriptor,
+        verifiedIdentityFingerprint,
+      },
+      artifact,
+    ),
+  );
+
+  let findings;
+  try {
+    findings = await withReadOnlyRemoteDb(options.target, async (tx) => {
+      const schemaMigration = await latestSchemaMigration(tx);
+      assertCompatible(checkSchemaCompatibility(schemaMigration, artifact));
+
+      const findings = await collectRemoteInventoryFindingsSequential(tx);
+      return {
+        schemaMigration,
+        ...findings,
+      };
+    });
+  } catch (error) {
+    if (error instanceof RemoteRoleNotReadOnlyError) throw error;
+    if (
+      error instanceof Error &&
+      error.message.startsWith(
+        '[tenancy-inventory] Approved EXPLAIN artifact rejected:',
+      )
+    ) {
+      throw error;
+    }
+    throw new Error(
+      `[tenancy-inventory] Remote inventory scan against ${options.target} failed during connection, authorization, schema validation, or an inventory query. The underlying error is not shown here.`,
+      { cause: error },
+    );
+  }
+
+  const report = {
+    tool: 'tenancy-inventory',
+    toolVersion: TOOL_VERSION,
+    environment: options.target,
+    commitSha,
+    generatedAt: new Date().toISOString(),
+    readOnlyEnforced: true,
+    approvedExplain: {
+      scopeFingerprint: artifact.scopeFingerprint,
+      artifactFingerprint: artifact.artifactFingerprint,
+      registryFingerprint: artifact.registryFingerprint,
+      verifiedIdentityFingerprint: artifact.target.verifiedIdentityFingerprint,
+      schemaMigration: artifact.schemaMigration,
+    },
+    findings,
+  };
+  const fileName = `${options.target}-inventory-${report.generatedAt.replace(/[:.]/g, '-')}-${artifact.artifactFingerprint.slice(0, 12)}.json`;
+  const writtenPath = await writeEvidence(
+    options.target,
+    fileName,
+    JSON.stringify(report, null, 2),
+  );
+  console.log('[tenancy-inventory] Remote inventory scan complete');
+  console.log(`  target:                       ${options.target}`);
+  console.log(
+    `  approvedArtifactFingerprint:  ${artifact.artifactFingerprint}`,
+  );
+  console.log(`  evidence:                     ${writtenPath}`);
+}
+
 /**
  * OZI-79 Phase B2: wires the already-reviewed Phase A (`RemoteTarget`,
  * `withReadOnlyRemoteDb`, `describeRemoteTarget`) and Phase B1
@@ -650,6 +924,10 @@ export async function run(
 
   if (command === 'scan') {
     const target = readOption(args, '--target');
+    if (target === 'staging' || target === 'production') {
+      await runRemoteScan(parseRemoteScanArgs(args.slice(1)));
+      return;
+    }
     if (target !== 'dev' && target !== 'test') {
       throw new Error(
         'scan requires --target=dev or --target=test. No other target is authorized this pass.',
@@ -668,7 +946,7 @@ export async function run(
   }
 
   throw new Error(
-    'Usage: tenancy-inventory <matrix|scan --target=dev|test [--allow-dirty]|plan --target=staging|production --execute-remote-explain>.',
+    'Usage: tenancy-inventory <matrix|scan --target=dev|test [--allow-dirty]|scan --target=staging|production --execute-remote-inventory --approved-artifact=<evidence-file> --approved-artifact-fingerprint=<sha256>|plan --target=staging|production --execute-remote-explain>.',
   );
 }
 

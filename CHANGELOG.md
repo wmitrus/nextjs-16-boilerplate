@@ -1,3 +1,17 @@
+# [2.8.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.7.0...v2.8.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **ozi-79:** harden B3 evidence and scan sequencing ([df2cd24](https://github.com/wmitrus/nextjs-16-boilerplate/commit/df2cd2464304c225cb6f6d1d101c2ad473898c61))
+* **ozi-79:** remove misplaced test mock ([b1ad70b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b1ad70b0e6085549bacb14c06dafeb7b2290ffcf))
+
+
+### Features
+
+* **tenancy-inventory:** add evidence file reading functionality ([dcb89ab](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dcb89abcaeef077298d61b628f830bc6de70fa9f))
+* **tenancy-inventory:** implement remote inventory execution ([de0cbb1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/de0cbb1757262b9603c5a999f740cf96dc995d72))
+
 # [2.7.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.6.1...v2.7.0) (2026-08-28)
 
 

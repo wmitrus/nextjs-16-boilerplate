@@ -1,4 +1,73 @@
-# OZI-79 Phase B2 — Remote Plain-EXPLAIN Wiring (build/test/review only)
+# OZI-79 Phase B3 — Approved Remote Inventory Scan Wiring (build/test/review only)
+
+## Phase B3 execution boundary — read this first
+
+**Phase B3 is build/test/review only. It does not authorize a real remote
+inventory scan.** No staging or production connection, scan, `EXPLAIN`, or
+`EXPLAIN ANALYZE` was executed while implementing or validating this phase.
+The Phase B2 material below is retained as historical context; this section
+is the current authoritative remote-inventory contract.
+
+The only remote command shape is:
+
+```text
+pnpm tenancy-inventory -- scan --target=staging|production --execute-remote-inventory --approved-artifact=<evidence-file> --approved-artifact-fingerprint=<reviewed-sha256>
+```
+
+`<evidence-file>` is a filename, not a path. It is read only from the
+target-specific, outside-repository evidence store. The SHA-256 is the
+manually transcribed fingerprint of the reviewed V2 artifact, supplied
+separately from the file so artifact integrity is not mistaken for approval.
+The production review values supplied for this phase are:
+
+- artifact fingerprint: `d36aa7df2428ae873be2e47752a2e02fe4c186f4be4d50cace4013c3b87fa20c`
+- scope fingerprint: `04ceae4618ea7b2e02242bb59d479e62bc390e331d7049159d1f0be86f4455cc`
+- registry fingerprint: `f1b4cfddef1325388f9d443abbf3b62a4f07d1a638213906f7a59685898c58b1`
+- commit: `46e616083cebd0b3318be568b2bc50b6c28c32be`
+- schema migration: `#23`, hash `655e6efd5df662bd745132b7ece5237dce3e6b47c8e0feea75c8636aa171d3a0`
+
+These values document the completed manual review; they do not grant
+permission to execute the command.
+
+### Exact B3 pipeline
+
+```text
+run(scan argv)
+  -> local dev/test scan remains its existing path
+  -> remote scan strict parser (staging|production only; rejects unknown,
+     duplicate, positional, URL, subset, and --allow-dirty flags)
+  -> require --execute-remote-inventory
+  -> read V2 artifact by filename through confined external evidence storage
+  -> parse V2; checkArtifactIntegrityV2
+  -> compare artifactFingerprint to the separately supplied reviewed value
+  -> checkRegistryCompatibility against the frozen 16-statement registry
+  -> assertNoHiddenGitIndexState
+  -> require a clean tree; resolve the exact current commit; compare it to artifact.commit
+  -> assert independently sourced target identity; derive descriptor and verified identity fingerprint
+  -> checkTargetCompatibilityV2 (environment, descriptor, verified identity fingerprint)
+  -> withReadOnlyRemoteDb(target)
+       -> validated/normalized URL; TLS verify-full; live verifyReadOnlyRole
+       -> READ ONLY + REPEATABLE READ with unchanged 5000/2000/10000 ms timeouts
+       -> read current schema migration and checkSchemaCompatibility FIRST
+       -> only then run the fixed inventory query set (no arbitrary SQL/subset)
+  -> write aggregate-only scan evidence to the same confined, outside-repo store
+  -> print only target, approved artifact fingerprint, and evidence path
+```
+
+Every gate through target compatibility happens before a network connection
+can open. A schema mismatch is detected as the first callback query, before
+inventory queries. Timeout, role, connection, and query errors fail closed;
+there is no retry or timeout increase. Raw database errors, connection URLs,
+passwords, usernames, and expected-identity values are never written to
+terminal output or evidence.
+
+The identical B3 implementation serves staging and production. Only their
+credentials, independently sourced expected identity, and human-approved
+artifact values are target-specific.
+
+---
+
+# OZI-79 Phase B2 — Remote Plain-EXPLAIN Wiring (historical context)
 
 ## Execution boundary — read this first
 

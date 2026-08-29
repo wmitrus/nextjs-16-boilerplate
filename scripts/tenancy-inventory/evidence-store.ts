@@ -4,7 +4,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 import {
+  assertPathWithinBase,
   ensureDirectoryWithinBase,
+  readTextFileWithinBase,
   writeTextFileWithinBase,
 } from '../lib/fs-guards-shared';
 
@@ -106,7 +108,13 @@ export async function writeEvidence(
   content: string,
 ): Promise<string> {
   const targetDir = path.resolve(EVIDENCE_ROOT, environment);
-  const targetFile = path.resolve(targetDir, fileName);
+  // Constrain before inspecting symlinks: a filename that lexically escapes
+  // the evidence root must not make even an `lstat` call outside it.
+  const targetFile = assertPathWithinBase(
+    path.resolve(targetDir, fileName),
+    EVIDENCE_ROOT,
+    'ozi-75 evidence file',
+  );
 
   assertNoSymlinkInPath(targetDir, EVIDENCE_ROOT, 'ozi-75 evidence directory');
   assertNoSymlinkInPath(targetFile, EVIDENCE_ROOT, 'ozi-75 evidence file');
@@ -127,6 +135,41 @@ export async function writeEvidence(
   await chmodAsync(written, FILE_MODE);
 
   return written;
+}
+
+/**
+ * Reads a previously persisted evidence file from the same confined,
+ * environment-specific store `writeEvidence` owns. Remote inventory scans
+ * deliberately accept an evidence *file name*, never an arbitrary path: the
+ * approved EXPLAIN artifact must already have crossed this boundary before it
+ * can authorize a scan. Keep the symlink checks on reads too -- confinement
+ * is a property of the filesystem sink/source, not merely of writes.
+ */
+export async function readEvidence(
+  environment: Exclude<EvidenceEnvironment, 'local'>,
+  fileName: string,
+): Promise<string> {
+  const targetDir = path.resolve(EVIDENCE_ROOT, environment);
+  const targetFile = path.resolve(targetDir, fileName);
+
+  assertNoSymlinkInPath(targetDir, EVIDENCE_ROOT, 'ozi-75 evidence directory');
+  assertNoSymlinkInPath(targetFile, EVIDENCE_ROOT, 'ozi-75 evidence file');
+
+  const safeTargetDir = path.resolve(targetDir);
+  if (
+    targetFile === safeTargetDir ||
+    !targetFile.startsWith(`${safeTargetDir}${path.sep}`)
+  ) {
+    throw new Error(
+      'Security: approved evidence file must remain within its target evidence directory.',
+    );
+  }
+
+  return readTextFileWithinBase(
+    targetFile,
+    EVIDENCE_ROOT,
+    'ozi-75 evidence file',
+  );
 }
 
 export function describeEvidenceRoot(): string {

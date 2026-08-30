@@ -8,19 +8,42 @@ import {
 } from './cli';
 
 describe('assertDatabaseUrlBelongsToPreviewEndpoints', () => {
-  it('requires the database host to be an endpoint resolved for the named Preview branch', () => {
+  const endpoint = 'ep-test.us-east-2.aws.neon.tech';
+
+  it('accepts the direct endpoint host', () => {
     expect(() =>
       assertDatabaseUrlBelongsToPreviewEndpoints(
-        ['ep-ozi78.neon.tech'],
-        'postgres://user:password@ep-ozi78.neon.tech/database',
+        [endpoint],
+        `postgres://user:password@${endpoint}/database`,
       ),
     ).not.toThrow();
+  });
+
+  it('accepts the corresponding pooled endpoint host', () => {
     expect(() =>
       assertDatabaseUrlBelongsToPreviewEndpoints(
-        ['ep-ozi78.neon.tech'],
-        'postgres://user:password@ep-other.neon.tech/database',
+        [endpoint],
+        'postgresql://user:password@ep-test-pooler.us-east-2.aws.neon.tech/database',
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a different endpoint host', () => {
+    expect(() =>
+      assertDatabaseUrlBelongsToPreviewEndpoints(
+        [endpoint],
+        'postgres://user:password@ep-other.us-east-2.aws.neon.tech/database',
       ),
     ).toThrow('does not belong');
+  });
+
+  it.each([
+    'https://ep-test.us-east-2.aws.neon.tech/database',
+    'mysql://ep-test.us-east-2.aws.neon.tech/database',
+  ])('rejects a non-Postgres URL: %s', (databaseUrl) => {
+    expect(() =>
+      assertDatabaseUrlBelongsToPreviewEndpoints([endpoint], databaseUrl),
+    ).toThrow('postgres or postgresql protocol');
   });
 });
 

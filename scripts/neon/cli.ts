@@ -85,18 +85,37 @@ export function assertDatabaseUrlBelongsToPreviewEndpoints(
     throw new Error('Expected Neon Preview branch has no verifiable endpoint.');
   }
 
-  let host: string;
+  let parsed: URL;
   try {
-    host = new URL(databaseUrl).hostname;
+    parsed = new URL(databaseUrl);
   } catch {
     throw new Error('DATABASE_URL is not a valid connection URL.');
   }
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    throw new Error(
+      'DATABASE_URL must use the postgres or postgresql protocol.',
+    );
+  }
+  const databaseHost = canonicalNeonEndpointHost(parsed.hostname);
 
-  if (!endpointHosts.includes(host)) {
+  const canonicalEndpointHosts = new Set(
+    endpointHosts.map(canonicalNeonEndpointHost),
+  );
+  if (!canonicalEndpointHosts.has(databaseHost)) {
     throw new Error(
       'DATABASE_URL does not belong to the expected Neon Preview branch.',
     );
   }
+}
+
+function canonicalNeonEndpointHost(host: string): string {
+  const [firstLabel, ...remainingLabels] = host.split('.');
+  if (!firstLabel || remainingLabels.length === 0) return host;
+
+  const canonicalFirstLabel = firstLabel.endsWith('-pooler')
+    ? firstLabel.slice(0, -'-pooler'.length)
+    : firstLabel;
+  return [canonicalFirstLabel, ...remainingLabels].join('.');
 }
 
 async function getBranchEndpointHosts(

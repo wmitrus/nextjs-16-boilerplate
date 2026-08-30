@@ -17,7 +17,7 @@ const input = [
 
 describe('Preview canary fail-closed guards', () => {
   const expectedDeployment = {
-    target: 'preview',
+    target: null,
     ownerId: 'team_expected',
     projectId: 'prj_expected',
     meta: {
@@ -65,7 +65,52 @@ describe('Preview canary fail-closed guards', () => {
     ],
     [
       {
+        target: 'staging',
+        ownerId: 'team_expected',
+        projectId: 'prj_expected',
+        meta: {
+          githubDeployment: '1',
+          githubCommitOrg: 'wmitrus',
+          githubCommitRef: 'ozi-78',
+          githubCommitSha: 'a'.repeat(40),
+          githubCommitRepo: 'nextjs-16-boilerplate',
+        },
+      },
+      'staging',
+    ],
+    [
+      {
+        target: undefined,
+        ownerId: 'team_expected',
+        projectId: 'prj_expected',
+        meta: {
+          githubDeployment: '1',
+          githubCommitOrg: 'wmitrus',
+          githubCommitRef: 'ozi-78',
+          githubCommitSha: 'a'.repeat(40),
+          githubCommitRepo: 'nextjs-16-boilerplate',
+        },
+      },
+      'missing target',
+    ],
+    [
+      {
         target: 'preview',
+        ownerId: 'team_expected',
+        projectId: 'prj_expected',
+        meta: {
+          githubDeployment: '1',
+          githubCommitOrg: 'wmitrus',
+          githubCommitRef: 'ozi-78',
+          githubCommitSha: 'a'.repeat(40),
+          githubCommitRepo: 'nextjs-16-boilerplate',
+        },
+      },
+      'unsupported literal Preview target',
+    ],
+    [
+      {
+        target: null,
         ownerId: 'team_expected',
         projectId: 'prj_expected',
         meta: {
@@ -80,7 +125,7 @@ describe('Preview canary fail-closed guards', () => {
     ],
     [
       {
-        target: 'preview',
+        target: null,
         ownerId: 'team_expected',
         projectId: 'prj_expected',
         meta: {
@@ -95,7 +140,7 @@ describe('Preview canary fail-closed guards', () => {
     ],
     [
       {
-        target: 'preview',
+        target: null,
         ownerId: 'team_expected',
         projectId: 'prj_expected',
         meta: {
@@ -110,7 +155,7 @@ describe('Preview canary fail-closed guards', () => {
     ],
     [
       {
-        target: 'preview',
+        target: null,
         ownerId: 'team_expected',
         projectId: 'prj_other',
         meta: {
@@ -125,7 +170,7 @@ describe('Preview canary fail-closed guards', () => {
     ],
     [
       {
-        target: 'preview',
+        target: null,
         ownerId: 'team_other',
         projectId: 'prj_expected',
         meta: {
@@ -138,7 +183,7 @@ describe('Preview canary fail-closed guards', () => {
       },
       'deployment organization',
     ],
-  ])('rejects a %s mismatch', (deployment) => {
+  ])('rejects a %s mismatch', (deployment, _reason) => {
     expect(() => assertPreviewDeployment(deployment, expectedIdentity)).toThrow(
       'Refusing deployment',
     );

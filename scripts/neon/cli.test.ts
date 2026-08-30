@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   assertDatabaseHostBelongsToPreviewEndpoints,
+  readOption,
   assertDatabaseUrlBelongsToPreviewEndpoints,
   assertTrustedProviderUrl,
   findOldestObsoletePreviewBranch,
@@ -72,6 +73,30 @@ describe('assertDatabaseHostBelongsToPreviewEndpoints', () => {
     expect(() =>
       assertDatabaseHostBelongsToPreviewEndpoints([endpoint], host),
     ).toThrow('does not belong');
+  });
+});
+
+describe('readOption', () => {
+  it('accepts single inline and separated values', () => {
+    expect(readOption(['--database-host=a'], '--database-host')).toBe('a');
+    expect(readOption(['--database-host', 'a'], '--database-host')).toBe('a');
+  });
+
+  it.each([
+    ['--database-host=a', '--database-host=b'],
+    ['--database-host=a', '--database-host', 'b'],
+    ['--git-branch=a', '--git-branch=b'],
+  ])('rejects duplicate options: %s', (...args) => {
+    const name = args[0].startsWith('--git-branch')
+      ? '--git-branch'
+      : '--database-host';
+    expect(() => readOption(args, name)).toThrow('must not be specified twice');
+  });
+
+  it('rejects a missing separated value', () => {
+    expect(() => readOption(['--database-host'], '--database-host')).toThrow(
+      'requires a value',
+    );
   });
 });
 

@@ -58,18 +58,22 @@ export function runVercelOperation(
   executor: VercelExecutor = execFileSync,
 ): string {
   const cli = path.resolve(process.cwd(), 'node_modules/.bin/vercel');
+  const token = requiredEnv('VERCEL_TOKEN');
   try {
-    const output = executor(
-      cli,
-      [...args, `--token=${requiredEnv('VERCEL_TOKEN')}`],
-      {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
+    const output = executor(cli, [...args, `--token=${token}`], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     return output.toString();
-  } catch {
-    throw new Error(`Vercel ${operation} failed.`);
+  } catch (error: unknown) {
+    const exitCode =
+      typeof error === 'object' &&
+      error !== null &&
+      'status' in error &&
+      typeof error.status === 'number'
+        ? ` (exit code ${error.status})`
+        : '';
+    throw new Error(`Vercel ${operation} failed${exitCode}.`);
   }
 }
 

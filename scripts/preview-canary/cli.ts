@@ -6,6 +6,7 @@ import { readTextFileWithinBase } from '../lib/fs-guards-shared';
 import {
   assertClerkTestKeys,
   assertPreviewDeployment,
+  assertVercelProjectLink,
   parseCanaryArgs,
   redactedEvidence,
 } from './guards';
@@ -13,14 +14,26 @@ import {
 type VercelDeployment = {
   id?: string;
   meta?: Record<string, unknown>;
+  ownerId?: string;
+  projectId?: string;
   target?: string;
 };
 
-function requiredEnv(name: 'GITHUB_REPOSITORY' | 'VERCEL_TOKEN'): string {
+function requiredEnv(
+  name:
+    | 'GITHUB_REPOSITORY'
+    | 'VERCEL_ORG_ID'
+    | 'VERCEL_PROJECT_ID'
+    | 'VERCEL_TOKEN',
+): string {
   const value =
     name === 'GITHUB_REPOSITORY'
       ? process.env.GITHUB_REPOSITORY?.trim()
-      : process.env.VERCEL_TOKEN?.trim();
+      : name === 'VERCEL_ORG_ID'
+        ? process.env.VERCEL_ORG_ID?.trim()
+        : name === 'VERCEL_PROJECT_ID'
+          ? process.env.VERCEL_PROJECT_ID?.trim()
+          : process.env.VERCEL_TOKEN?.trim();
   if (!value) throw new Error(`${name} is required.`);
   return value;
 }
@@ -33,16 +46,61 @@ function parseRepository(value: string): { owner: string; repository: string } {
   return { owner, repository };
 }
 
-function vercel(args: string[]): string {
+type VercelExecutor = (
+  file: string,
+  args: string[],
+  options: Parameters<typeof execFileSync>[2],
+) => string | Buffer;
+
+export function runVercelOperation(
+  operation: 'inspect' | 'deployment metadata' | 'pull',
+  args: string[],
+  executor: VercelExecutor = execFileSync,
+): string {
   const cli = path.resolve(process.cwd(), 'node_modules/.bin/vercel');
-  return execFileSync(
-    cli,
-    [...args, `--token=${requiredEnv('VERCEL_TOKEN')}`],
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
+  try {
+    const output = executor(
+      cli,
+      [...args, `--token=${requiredEnv('VERCEL_TOKEN')}`],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    return output.toString();
+  } catch {
+    throw new Error(`Vercel ${operation} failed.`);
+  }
+}
+
+export function parseVercelProjectLink(parsed: unknown): {
+  orgId: string;
+  projectId: string;
+} {
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    !('projectId' in parsed) ||
+    !('orgId' in parsed) ||
+    typeof parsed.projectId !== 'string' ||
+    typeof parsed.orgId !== 'string'
+  ) {
+    throw new Error('Vercel project link is missing or malformed.');
+  }
+  return { orgId: parsed.orgId, projectId: parsed.projectId };
+}
+
+function readVercelProjectLink(): { orgId: string; projectId: string } {
+  const file = path.resolve(process.cwd(), '.vercel/project.json');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      readTextFileWithinBase(file, process.cwd(), 'Vercel project link'),
+    );
+  } catch {
+    throw new Error('Vercel project link is missing or malformed.');
+  }
+  return parseVercelProjectLink(parsed);
 }
 
 function readPreviewEnv(): Record<string, string> {
@@ -101,30 +159,38 @@ function readPreviewValue(
 export function run(argv = process.argv): void {
   const args = parseCanaryArgs(argv.slice(2));
   const inspected = JSON.parse(
-    vercel(['inspect', args.previewUrl, '--json']),
+    runVercelOperation('inspect', ['inspect', args.previewUrl, '--json']),
   ) as VercelDeployment;
   if (!inspected.id)
     throw new Error('Vercel inspect did not return a deployment ID.');
   const deployment = JSON.parse(
-    vercel([
+    runVercelOperation('deployment metadata', [
       'api',
       `/v13/deployments/${encodeURIComponent(inspected.id)}`,
       '--raw',
     ]),
   ) as VercelDeployment;
   const repository = parseRepository(requiredEnv('GITHUB_REPOSITORY'));
+  const vercelIdentity = {
+    orgId: requiredEnv('VERCEL_ORG_ID'),
+    projectId: requiredEnv('VERCEL_PROJECT_ID'),
+  };
   assertPreviewDeployment(deployment, {
     ...repository,
     branch: args.branch,
     sha: args.sha,
+    ...vercelIdentity,
   });
 
-  vercel([
+  assertVercelProjectLink(readVercelProjectLink(), vercelIdentity);
+
+  runVercelOperation('pull', [
     'pull',
     '--yes',
     '--environment=preview',
     `--git-branch=${args.branch}`,
   ]);
+  assertVercelProjectLink(readVercelProjectLink(), vercelIdentity);
   const previewEnv = readPreviewEnv();
   const provider = readPreviewValue(previewEnv, 'AUTH_PROVIDER');
   const databaseUrl = readPreviewValue(previewEnv, 'DATABASE_URL');

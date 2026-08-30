@@ -2,11 +2,22 @@ import { z } from 'zod';
 
 const shaSchema = z.string().regex(/^[0-9a-f]{40}$/i);
 const branchSchema = z.string().min(1).max(255);
-const previewUrlSchema = z
-  .url()
-  .refine((value) => new URL(value).protocol === 'https:', {
-    message: 'Preview URL must use HTTPS.',
-  });
+const previewUrlSchema = z.url().refine(
+  (value) => {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.username === '' &&
+      parsed.password === '' &&
+      parsed.search === '' &&
+      parsed.hash === ''
+    );
+  },
+  {
+    message:
+      'Preview URL must be HTTPS without credentials, query, or fragment.',
+  },
+);
 
 export const canaryArgsSchema = z.object({
   branch: branchSchema,
@@ -19,9 +30,12 @@ export type CanaryArgs = z.infer<typeof canaryArgsSchema>;
 
 export type DeploymentMetadata = {
   meta?: Record<string, unknown>;
+  ownerId?: string;
+  projectId?: string;
   target?: string;
-  url?: string;
 };
+
+export type VercelProjectLink = { orgId: string; projectId: string };
 
 export function parseCanaryArgs(args: string[]): CanaryArgs {
   const option = (name: string): string | undefined => {
@@ -47,7 +61,14 @@ export function assertExecute(args: CanaryArgs): void {
 
 export function assertPreviewDeployment(
   deployment: DeploymentMetadata,
-  expected: { branch: string; owner: string; repository: string; sha: string },
+  expected: {
+    branch: string;
+    orgId: string;
+    owner: string;
+    projectId: string;
+    repository: string;
+    sha: string;
+  },
 ): void {
   const meta = deployment.meta ?? {};
   if (
@@ -56,10 +77,23 @@ export function assertPreviewDeployment(
     meta.githubCommitRef !== expected.branch ||
     meta.githubCommitSha !== expected.sha ||
     meta.githubCommitOrg !== expected.owner ||
-    meta.githubCommitRepo !== expected.repository
+    meta.githubCommitRepo !== expected.repository ||
+    deployment.projectId !== expected.projectId ||
+    deployment.ownerId !== expected.orgId
   ) {
     throw new Error(
       'Refusing deployment that is not this repository’s exact Preview branch and SHA.',
+    );
+  }
+}
+
+export function assertVercelProjectLink(
+  link: VercelProjectLink,
+  expected: Pick<VercelProjectLink, 'orgId' | 'projectId'>,
+): void {
+  if (link.projectId !== expected.projectId || link.orgId !== expected.orgId) {
+    throw new Error(
+      'Vercel project link does not match the expected project and organization.',
     );
   }
 }

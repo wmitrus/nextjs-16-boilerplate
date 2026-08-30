@@ -17,6 +17,7 @@ type VercelDeployment = {
   ownerId?: string;
   projectId?: string;
   target?: string | null;
+  url?: string;
 };
 
 function requiredEnv(
@@ -181,6 +182,36 @@ export function parseRuntimeDatabaseHost(output: string): string {
   return value.databaseHost;
 }
 
+export function parseImmutableDeploymentUrl(
+  deployment: VercelDeployment,
+): string {
+  const hostname = deployment.url;
+  if (
+    typeof hostname !== 'string' ||
+    hostname.length === 0 ||
+    /[\s\u0000-\u001f\u007f/:?#@]/.test(hostname)
+  ) {
+    throw new Error('Vercel deployment did not return a valid immutable URL.');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(`https://${hostname}`);
+  } catch {
+    throw new Error('Vercel deployment did not return a valid immutable URL.');
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.pathname !== '/' ||
+    parsed.search !== '' ||
+    parsed.hash !== ''
+  ) {
+    throw new Error('Vercel deployment did not return a valid immutable URL.');
+  }
+  return parsed.origin;
+}
+
 export function run(argv = process.argv): void {
   const args = parseCanaryArgs(argv.slice(2));
   const inspected = JSON.parse(
@@ -206,6 +237,7 @@ export function run(argv = process.argv): void {
     sha: args.sha,
     ...vercelIdentity,
   });
+  const immutableDeploymentUrl = parseImmutableDeploymentUrl(deployment);
 
   assertVercelProjectLink(readVercelProjectLink(), vercelIdentity);
 
@@ -236,7 +268,7 @@ export function run(argv = process.argv): void {
       'curl',
       '/api/preview-canary/database-binding',
       '--deployment',
-      args.previewUrl,
+      immutableDeploymentUrl,
     ]),
   );
 

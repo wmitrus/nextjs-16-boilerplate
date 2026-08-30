@@ -53,7 +53,7 @@ type VercelExecutor = (
 ) => string | Buffer;
 
 export function runVercelOperation(
-  operation: 'inspect' | 'deployment metadata' | 'pull',
+  operation: 'inspect' | 'deployment metadata' | 'pull' | 'runtime probe',
   args: string[],
   executor: VercelExecutor = execFileSync,
 ): string {
@@ -160,6 +160,27 @@ function readPreviewValue(
   }
 }
 
+export function parseRuntimeDatabaseHost(output: string): string {
+  let value: unknown;
+  try {
+    value = JSON.parse(output);
+  } catch {
+    throw new Error('Preview runtime probe returned invalid evidence.');
+  }
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Object.keys(value).length !== 1 ||
+    !('databaseHost' in value) ||
+    typeof value.databaseHost !== 'string' ||
+    value.databaseHost.length === 0 ||
+    /[\s\u0000-\u001f\u007f/:?#@]/.test(value.databaseHost)
+  ) {
+    throw new Error('Preview runtime probe returned invalid evidence.');
+  }
+  return value.databaseHost;
+}
+
 export function run(argv = process.argv): void {
   const args = parseCanaryArgs(argv.slice(2));
   const inspected = JSON.parse(
@@ -197,11 +218,8 @@ export function run(argv = process.argv): void {
   assertVercelProjectLink(readVercelProjectLink(), vercelIdentity);
   const previewEnv = readPreviewEnv();
   const provider = readPreviewValue(previewEnv, 'AUTH_PROVIDER');
-  const databaseUrl = readPreviewValue(previewEnv, 'DATABASE_URL');
-  if (!provider || !databaseUrl) {
-    throw new Error(
-      'Preview environment must define AUTH_PROVIDER and DATABASE_URL.',
-    );
+  if (!provider) {
+    throw new Error('Preview environment must define AUTH_PROVIDER.');
   }
   if (provider !== 'authjs' && provider !== 'clerk') {
     throw new Error('Preview AUTH_PROVIDER is not supported by the canary.');
@@ -213,16 +231,25 @@ export function run(argv = process.argv): void {
     );
   }
 
+  const runtimeDatabaseHost = parseRuntimeDatabaseHost(
+    runVercelOperation('runtime probe', [
+      'curl',
+      '/api/preview-canary/database-binding',
+      '--deployment',
+      args.previewUrl,
+    ]),
+  );
+
   execFileSync(
     'pnpm',
-    ['neon', '--', 'verify-preview-endpoint', `--git-branch=${args.branch}`],
-    {
-      env: {
-        ...process.env,
-        DATABASE_URL: databaseUrl,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
+    [
+      'neon',
+      '--',
+      'verify-preview-endpoint',
+      `--git-branch=${args.branch}`,
+      `--database-host=${runtimeDatabaseHost}`,
+    ],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
   console.log(
@@ -233,6 +260,7 @@ export function run(argv = process.argv): void {
         ? 'refused: A3b owns fixture mutation'
         : 'not requested',
       neonPreviewBranch: `preview/${args.branch}`,
+      runtimeDatabaseHost,
     }),
   );
 }

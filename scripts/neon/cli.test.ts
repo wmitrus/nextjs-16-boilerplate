@@ -1,10 +1,28 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  assertDatabaseUrlBelongsToPreviewEndpoints,
   assertTrustedProviderUrl,
   findOldestObsoletePreviewBranch,
   readNeonConfig,
 } from './cli';
+
+describe('assertDatabaseUrlBelongsToPreviewEndpoints', () => {
+  it('requires the database host to be an endpoint resolved for the named Preview branch', () => {
+    expect(() =>
+      assertDatabaseUrlBelongsToPreviewEndpoints(
+        ['ep-ozi78.neon.tech'],
+        'postgres://user:password@ep-ozi78.neon.tech/database',
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertDatabaseUrlBelongsToPreviewEndpoints(
+        ['ep-ozi78.neon.tech'],
+        'postgres://user:password@ep-other.neon.tech/database',
+      ),
+    ).toThrow('does not belong');
+  });
+});
 
 describe('assertTrustedProviderUrl', () => {
   it('accepts only the exact HTTPS provider endpoint', () => {

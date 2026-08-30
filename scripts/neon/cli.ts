@@ -13,7 +13,7 @@ const TRUSTED_PROVIDER_ENDPOINTS = {
     origin: NEON_API_ORIGIN,
     pathname:
       // eslint-disable-next-line security/detect-unsafe-regex -- anchored, both quantifiers are bounded ({1,60}) with no nested/overlapping repetition, so this cannot backtrack catastrophically.
-      /^\/api\/v2\/projects\/[a-z0-9-]{1,60}\/branches(?:\/[a-z0-9-]{1,60})?$/,
+      /^\/api\/v2\/projects\/[a-z0-9-]{1,60}\/branches(?:\/[a-z0-9-]{1,60}(?:\/endpoints)?)?$/,
   },
 } as const;
 
@@ -32,6 +32,10 @@ interface NeonBranch {
 
 interface NeonBranchesResponse {
   branches: NeonBranch[];
+}
+
+interface NeonEndpointsResponse {
+  endpoints: Array<{ host?: string }>;
 }
 
 interface NeonConfig {
@@ -71,6 +75,49 @@ export function readNeonConfig(): NeonConfig {
     branchLimit,
     projectId,
   };
+}
+
+export function assertDatabaseUrlBelongsToPreviewEndpoints(
+  endpointHosts: readonly string[],
+  databaseUrl: string,
+): void {
+  if (endpointHosts.length === 0) {
+    throw new Error('Expected Neon Preview branch has no verifiable endpoint.');
+  }
+
+  let host: string;
+  try {
+    host = new URL(databaseUrl).hostname;
+  } catch {
+    throw new Error('DATABASE_URL is not a valid connection URL.');
+  }
+
+  if (!endpointHosts.includes(host)) {
+    throw new Error(
+      'DATABASE_URL does not belong to the expected Neon Preview branch.',
+    );
+  }
+}
+
+async function getBranchEndpointHosts(
+  config: NeonConfig,
+  branchId: string,
+): Promise<string[]> {
+  if (!RESOURCE_ID_PATTERN.test(branchId)) {
+    throw new Error('Neon returned an invalid branch ID.');
+  }
+  const result = await neonRequest<NeonEndpointsResponse>(
+    config,
+    new URL(
+      `/api/v2/projects/${config.projectId}/branches/${branchId}/endpoints`,
+      NEON_API_ORIGIN,
+    ),
+  );
+  return (result?.endpoints ?? [])
+    .map((endpoint) => endpoint.host)
+    .filter(
+      (host): host is string => typeof host === 'string' && host.length > 0,
+    );
 }
 
 export function assertTrustedProviderUrl(
@@ -310,6 +357,33 @@ async function previewCheck(config: NeonConfig, args: string[]): Promise<void> {
   );
 }
 
+async function verifyPreviewEndpoint(
+  config: NeonConfig,
+  args: string[],
+): Promise<void> {
+  const gitBranch = readOption(args, '--git-branch')?.trim();
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!gitBranch || !databaseUrl) {
+    throw new Error(
+      'verify-preview-endpoint requires --git-branch and DATABASE_URL.',
+    );
+  }
+
+  const expectedName = `preview/${gitBranch}`;
+  const branch = (await listBranches(config)).find(
+    (candidate) => candidate.name === expectedName,
+  );
+  if (!branch) {
+    throw new Error('Expected Neon Preview branch was not found.');
+  }
+
+  assertDatabaseUrlBelongsToPreviewEndpoints(
+    await getBranchEndpointHosts(config, branch.id),
+    databaseUrl,
+  );
+  console.log('[neon] Preview database endpoint verified.');
+}
+
 async function run(): Promise<void> {
   const args = process.argv.slice(2).filter((arg) => arg !== '--');
   const command = args[0];
@@ -322,6 +396,11 @@ async function run(): Promise<void> {
 
   if (command === 'preview-check') {
     await previewCheck(config, args.slice(1));
+    return;
+  }
+
+  if (command === 'verify-preview-endpoint') {
+    await verifyPreviewEndpoint(config, args.slice(1));
     return;
   }
 
@@ -341,7 +420,9 @@ async function run(): Promise<void> {
     return;
   }
 
-  throw new Error('Usage: neon <list|preview-check|delete>.');
+  throw new Error(
+    'Usage: neon <list|preview-check|verify-preview-endpoint|delete>.',
+  );
 }
 
 const isMain = process.argv[1]?.endsWith('/scripts/neon/cli.ts');

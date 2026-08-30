@@ -37,6 +37,8 @@ const EXEMPT_ROUTES: Record<string, string> = {
     'health probe consumed by external uptime monitors that expect a flat, stable body',
   'src/app/api/internal/env-check/route.ts':
     'diagnostics payload consumed by deployment scripts, not by app clients',
+  'src/app/api/preview-canary/database-binding/route.ts':
+    'Preview-only deployment probe exposes a deliberately bounded hostname evidence payload, not an application response envelope',
   'src/app/api/logs/route.ts':
     'log ingest endpoint: returns bare acknowledgements to a transport, not an app client',
   'src/app/api/sentry-example-api/route.ts':

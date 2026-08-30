@@ -32,7 +32,7 @@ export type DeploymentMetadata = {
   meta?: Record<string, unknown>;
   ownerId?: string;
   projectId?: string;
-  target?: string;
+  target?: string | null;
 };
 
 export type VercelProjectLink = { orgId: string; projectId: string };
@@ -72,7 +72,7 @@ export function assertPreviewDeployment(
 ): void {
   const meta = deployment.meta ?? {};
   if (
-    deployment.target !== 'preview' ||
+    deployment.target !== null ||
     meta.githubDeployment !== '1' ||
     meta.githubCommitRef !== expected.branch ||
     meta.githubCommitSha !== expected.sha ||

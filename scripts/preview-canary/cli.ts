@@ -70,15 +70,6 @@ function readPreviewEnv(): Record<string, string> {
       case 'DATABASE_URL':
         values.DATABASE_URL = value;
         break;
-      case 'NEON_API_KEY':
-        values.NEON_API_KEY = value;
-        break;
-      case 'NEON_BRANCH_LIMIT':
-        values.NEON_BRANCH_LIMIT = value;
-        break;
-      case 'NEON_PROJECT_ID':
-        values.NEON_PROJECT_ID = value;
-        break;
       case 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY':
         values.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = value;
         break;
@@ -93,9 +84,6 @@ function readPreviewValue(
     | 'AUTH_PROVIDER'
     | 'CLERK_SECRET_KEY'
     | 'DATABASE_URL'
-    | 'NEON_API_KEY'
-    | 'NEON_BRANCH_LIMIT'
-    | 'NEON_PROJECT_ID'
     | 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
 ): string | undefined {
   switch (key) {
@@ -105,12 +93,6 @@ function readPreviewValue(
       return values.CLERK_SECRET_KEY?.trim() || undefined;
     case 'DATABASE_URL':
       return values.DATABASE_URL?.trim() || undefined;
-    case 'NEON_API_KEY':
-      return values.NEON_API_KEY?.trim() || undefined;
-    case 'NEON_BRANCH_LIMIT':
-      return values.NEON_BRANCH_LIMIT?.trim() || undefined;
-    case 'NEON_PROJECT_ID':
-      return values.NEON_PROJECT_ID?.trim() || undefined;
     case 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY':
       return values.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() || undefined;
   }
@@ -168,9 +150,6 @@ export function run(argv = process.argv): void {
       env: {
         ...process.env,
         DATABASE_URL: databaseUrl,
-        NEON_API_KEY: readPreviewValue(previewEnv, 'NEON_API_KEY'),
-        NEON_BRANCH_LIMIT: readPreviewValue(previewEnv, 'NEON_BRANCH_LIMIT'),
-        NEON_PROJECT_ID: readPreviewValue(previewEnv, 'NEON_PROJECT_ID'),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },

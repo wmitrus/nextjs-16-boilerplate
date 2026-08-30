@@ -6,13 +6,24 @@ import type { AuthorizationService } from '@/core/contracts/authorization';
 import { ACTIONS } from '@/core/contracts/resources-actions';
 import type { getAppContainer } from '@/core/runtime/bootstrap';
 
+import {
+  getOrganizationActionFamily,
+  recordOrganizationBoundaryDecision,
+  type OrganizationBoundarySurface,
+} from './_telemetry';
+
 import type { AdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
 import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
+import type {
+  DrizzleAdminOrganizationsReadService,
+  OrganizationDetailDto,
+} from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
+import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
+
 export type {
   OrganizationDetailDto,
   OrganizationSummaryDto,
 } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
-import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
 export const organizationsQuerySchema = z.object({
   limit: z.coerce
@@ -44,6 +55,12 @@ export async function checkOrganizationsActionAccess(
   action: Action,
 ): Promise<OrganizationsAdminAccess> {
   if (isEnvBasedPlatformAdmin(email)) {
+    recordOrganizationBoundaryDecision({
+      stage: 'action',
+      decision: 'allowed',
+      scopeKind: 'active-tenant',
+      actionFamily: getOrganizationActionFamily(action),
+    });
     return { allowed: true, isPlatformAdmin: true };
   }
 
@@ -57,6 +74,12 @@ export async function checkOrganizationsActionAccess(
     subject: { id: userId },
     resource: { type: resource, id: 'admin-panel' },
     action,
+  });
+  recordOrganizationBoundaryDecision({
+    stage: 'action',
+    decision: allowed ? 'allowed' : 'denied',
+    scopeKind: 'organization',
+    actionFamily: getOrganizationActionFamily(action),
   });
 
   return { allowed, isPlatformAdmin: false };
@@ -85,6 +108,27 @@ export function toAdminOrganizationsScope(
     activeOrganizationId,
     isPlatformAdmin: access.isPlatformAdmin,
   });
+}
+
+export async function getOrganizationDetailInActiveScope(
+  service: DrizzleAdminOrganizationsReadService,
+  scope: AdminOrganizationsScope,
+  organizationId: string,
+  surface: OrganizationBoundarySurface,
+): Promise<OrganizationDetailDto | null> {
+  const organization = await service.getDetailInActiveScope({
+    scope,
+    organizationId,
+  });
+
+  recordOrganizationBoundaryDecision({
+    stage: 'scope',
+    decision: organization ? 'hit' : 'miss',
+    scopeKind: scope.kind,
+    surface,
+  });
+
+  return organization;
 }
 
 // Moved to shared/lib/api so non-admin API families can use it too.

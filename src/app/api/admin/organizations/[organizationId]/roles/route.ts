@@ -15,6 +15,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import {
   checkOrganizationsAdminAccess,
   getFieldErrors,
+  getOrganizationDetailInActiveScope,
   organizationIdSchema,
   toAdminOrganizationsScope,
 } from '../../_lib';
@@ -79,13 +80,12 @@ export const POST = withErrorHandler(
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
       const readService = new DrizzleAdminOrganizationsReadService(db);
-      const organization = await readService.getDetailInActiveScope({
-        scope: toAdminOrganizationsScope(
-          adminAccess,
-          access.tenant.organizationId,
-        ),
-        organizationId: paramsResult.data.id,
-      });
+      const organization = await getOrganizationDetailInActiveScope(
+        readService,
+        toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+        paramsResult.data.id,
+        'roles',
+      );
 
       if (!organization) {
         return createServerErrorResponse(

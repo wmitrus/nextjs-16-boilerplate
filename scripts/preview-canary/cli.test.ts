@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { parseVercelProjectLink, runVercelOperation } from './cli';
+import {
+  parseRuntimeDatabaseHost,
+  parseVercelProjectLink,
+  runVercelOperation,
+} from './cli';
 
 describe('Preview canary Vercel boundary', () => {
   it('reports a missing Vercel token before spawning Vercel', () => {
@@ -76,6 +80,23 @@ describe('Preview canary Vercel boundary', () => {
         projectId: 'prj_expected',
       }),
     ).toEqual({ orgId: 'team_expected', projectId: 'prj_expected' });
+  });
+
+  it('accepts only a bounded runtime database hostname', () => {
+    expect(
+      parseRuntimeDatabaseHost(
+        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech"}',
+      ),
+    ).toBe('ep-test.us-east-2.aws.neon.tech');
+  });
+
+  it.each([
+    'not json',
+    '{}',
+    '{"databaseHost":"https://example.test"}',
+    '{"databaseHost":"host/path"}',
+  ])('rejects malformed runtime evidence: %s', (output) => {
+    expect(() => parseRuntimeDatabaseHost(output)).toThrow('invalid evidence');
   });
 
   it.each([

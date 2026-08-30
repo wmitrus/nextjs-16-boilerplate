@@ -304,14 +304,27 @@ export async function findOldestObsoletePreviewBranch(
   return undefined;
 }
 
-function readOption(args: string[], name: string): string | undefined {
+export function readOption(args: string[], name: string): string | undefined {
   const prefix = `${name}=`;
-  const inline = args.find((arg) => arg.startsWith(prefix));
-  if (inline) {
-    return inline.slice(prefix.length);
+  const values: string[] = [];
+  let expectsSeparatedValue = false;
+  for (const arg of args) {
+    if (expectsSeparatedValue) {
+      if (arg.startsWith('--')) throw new Error(`${name} requires a value.`);
+      values.push(arg);
+      expectsSeparatedValue = false;
+      continue;
+    }
+    if (arg.startsWith(prefix)) {
+      values.push(arg.slice(prefix.length));
+    } else if (arg === name) {
+      expectsSeparatedValue = true;
+    }
   }
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : undefined;
+  if (expectsSeparatedValue) throw new Error(`${name} requires a value.`);
+  if (values.length > 1)
+    throw new Error(`${name} must not be specified twice.`);
+  return values[0];
 }
 
 function printBranches(branches: NeonBranch[], branchLimit: number): void {

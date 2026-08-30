@@ -96,12 +96,17 @@ export function assertDatabaseUrlBelongsToPreviewEndpoints(
       'DATABASE_URL must use the postgres or postgresql protocol.',
     );
   }
-  const databaseHost = canonicalNeonEndpointHost(parsed.hostname);
+  assertDatabaseHostBelongsToPreviewEndpoints(endpointHosts, parsed.hostname);
+}
 
+export function assertDatabaseHostBelongsToPreviewEndpoints(
+  endpointHosts: readonly string[],
+  databaseHost: string,
+): void {
   const canonicalEndpointHosts = new Set(
     endpointHosts.map(canonicalNeonEndpointHost),
   );
-  if (!canonicalEndpointHosts.has(databaseHost)) {
+  if (!canonicalEndpointHosts.has(canonicalNeonEndpointHost(databaseHost))) {
     throw new Error(
       'DATABASE_URL does not belong to the expected Neon Preview branch.',
     );
@@ -381,10 +386,11 @@ async function verifyPreviewEndpoint(
   args: string[],
 ): Promise<void> {
   const gitBranch = readOption(args, '--git-branch')?.trim();
+  const databaseHost = readOption(args, '--database-host')?.trim();
   const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!gitBranch || !databaseUrl) {
+  if (!gitBranch || (!databaseHost && !databaseUrl)) {
     throw new Error(
-      'verify-preview-endpoint requires --git-branch and DATABASE_URL.',
+      'verify-preview-endpoint requires --git-branch and a database host.',
     );
   }
 
@@ -396,10 +402,12 @@ async function verifyPreviewEndpoint(
     throw new Error('Expected Neon Preview branch was not found.');
   }
 
-  assertDatabaseUrlBelongsToPreviewEndpoints(
-    await getBranchEndpointHosts(config, branch.id),
-    databaseUrl,
-  );
+  const endpointHosts = await getBranchEndpointHosts(config, branch.id);
+  if (databaseHost) {
+    assertDatabaseHostBelongsToPreviewEndpoints(endpointHosts, databaseHost);
+  } else {
+    assertDatabaseUrlBelongsToPreviewEndpoints(endpointHosts, databaseUrl!);
+  }
   console.log('[neon] Preview database endpoint verified.');
 }
 

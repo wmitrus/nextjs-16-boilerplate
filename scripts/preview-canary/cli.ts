@@ -16,7 +16,7 @@ type VercelDeployment = {
   meta?: Record<string, unknown>;
   ownerId?: string;
   projectId?: string;
-  target?: string;
+  target?: string | null;
 };
 
 function requiredEnv(

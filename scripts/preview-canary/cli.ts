@@ -11,6 +11,8 @@ import {
   redactedEvidence,
 } from './guards';
 
+const RUNTIME_PROBE_TIMEOUT_MS = 10_000;
+
 type VercelDeployment = {
   id?: string;
   meta?: Record<string, unknown>;
@@ -175,26 +177,39 @@ export async function probeRuntimeDatabaseBinding(input: {
   deploymentUrl: string;
   internalApiKey: string;
 }): Promise<string> {
-  const response = await fetch(
-    new URL(
-      '/api/internal/preview-canary/database-binding',
-      input.deploymentUrl,
-    ),
-    {
-      cache: 'no-store',
-      headers: {
-        accept: 'application/json',
-        'x-internal-key': input.internalApiKey,
-        'x-vercel-protection-bypass': input.deploymentProtectionBypass,
+  const signal = AbortSignal.timeout(RUNTIME_PROBE_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(
+      new URL(
+        '/api/internal/preview-canary/database-binding',
+        input.deploymentUrl,
+      ),
+      {
+        cache: 'no-store',
+        headers: {
+          accept: 'application/json',
+          'x-internal-key': input.internalApiKey,
+          'x-vercel-protection-bypass': input.deploymentProtectionBypass,
+        },
+        method: 'GET',
+        redirect: 'error',
+        signal,
       },
-      method: 'GET',
-      redirect: 'error',
-    },
-  );
+    );
+  } catch {
+    if (signal.aborted) throw new Error('Preview runtime probe timed out.');
+    throw new Error('Preview runtime probe failed.');
+  }
   if (response.status !== 200) {
     throw new Error(`Preview runtime probe failed (HTTP ${response.status}).`);
   }
-  return parseRuntimeDatabaseHost(await readBoundedResponseBody(response));
+  try {
+    return parseRuntimeDatabaseHost(await readBoundedResponseBody(response));
+  } catch (error) {
+    if (signal.aborted) throw new Error('Preview runtime probe timed out.');
+    throw error;
+  }
 }
 
 export async function readBoundedResponseBody(

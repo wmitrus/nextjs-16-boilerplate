@@ -62,6 +62,7 @@
     "e2e:ci": "pnpm build && pnpm e2e:matrix",
     "prepare": "husky",
     "commit": "cz",
+    "codex:review": "PR=$(gh pr view --json number --jq '.number') && echo \"Triggering Codex review for PR #$PR\" && gh pr comment \"$PR\" --body '@codex review'",
     "skott:check:only": "skott --cwd=src --showCircularDependencies --displayMode=raw",
     "depcheck": "depcheck",
     "madge": "madge --circular --extensions ts,tsx src",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  assertDatabaseHostBelongsToPreviewEndpoints,
   assertDatabaseUrlBelongsToPreviewEndpoints,
   assertTrustedProviderUrl,
   findOldestObsoletePreviewBranch,
@@ -44,6 +45,33 @@ describe('assertDatabaseUrlBelongsToPreviewEndpoints', () => {
     expect(() =>
       assertDatabaseUrlBelongsToPreviewEndpoints([endpoint], databaseUrl),
     ).toThrow('postgres or postgresql protocol');
+  });
+});
+
+describe('assertDatabaseHostBelongsToPreviewEndpoints', () => {
+  const endpoint = 'ep-test.us-east-2.aws.neon.tech';
+
+  it('accepts exact and pooled endpoint hosts only', () => {
+    expect(() =>
+      assertDatabaseHostBelongsToPreviewEndpoints([endpoint], endpoint),
+    ).not.toThrow();
+    expect(() =>
+      assertDatabaseHostBelongsToPreviewEndpoints(
+        [endpoint],
+        'ep-test-pooler.us-east-2.aws.neon.tech',
+      ),
+    ).not.toThrow();
+  });
+
+  it.each([
+    'ep-main.us-east-2.aws.neon.tech',
+    'ep-test.us-east-2.aws.neon.tech.attacker.test',
+    'prefix-ep-test.us-east-2.aws.neon.tech',
+    'anything.neon.tech',
+  ])('rejects non-matching host: %s', (host) => {
+    expect(() =>
+      assertDatabaseHostBelongsToPreviewEndpoints([endpoint], host),
+    ).toThrow('does not belong');
   });
 });
 

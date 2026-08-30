@@ -25,7 +25,8 @@ function requiredEnv(
     | 'GITHUB_REPOSITORY'
     | 'VERCEL_ORG_ID'
     | 'VERCEL_PROJECT_ID'
-    | 'VERCEL_TOKEN',
+    | 'VERCEL_TOKEN'
+    | 'VERCEL_AUTOMATION_BYPASS_SECRET',
 ): string {
   const value =
     name === 'GITHUB_REPOSITORY'
@@ -34,7 +35,9 @@ function requiredEnv(
         ? process.env.VERCEL_ORG_ID?.trim()
         : name === 'VERCEL_PROJECT_ID'
           ? process.env.VERCEL_PROJECT_ID?.trim()
-          : process.env.VERCEL_TOKEN?.trim();
+          : name === 'VERCEL_TOKEN'
+            ? process.env.VERCEL_TOKEN?.trim()
+            : process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
   if (!value) throw new Error(`${name} is required.`);
   return value;
 }
@@ -54,7 +57,7 @@ type VercelExecutor = (
 ) => string | Buffer;
 
 export function runVercelOperation(
-  operation: 'inspect' | 'deployment metadata' | 'pull' | 'runtime probe',
+  operation: 'inspect' | 'deployment metadata' | 'pull',
   args: string[],
   executor: VercelExecutor = execFileSync,
 ): string {
@@ -133,6 +136,9 @@ function readPreviewEnv(): Record<string, string> {
       case 'DATABASE_URL':
         values.DATABASE_URL = value;
         break;
+      case 'INTERNAL_API_KEY':
+        values.INTERNAL_API_KEY = value;
+        break;
       case 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY':
         values.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = value;
         break;
@@ -147,6 +153,7 @@ function readPreviewValue(
     | 'AUTH_PROVIDER'
     | 'CLERK_SECRET_KEY'
     | 'DATABASE_URL'
+    | 'INTERNAL_API_KEY'
     | 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
 ): string | undefined {
   switch (key) {
@@ -156,9 +163,69 @@ function readPreviewValue(
       return values.CLERK_SECRET_KEY?.trim() || undefined;
     case 'DATABASE_URL':
       return values.DATABASE_URL?.trim() || undefined;
+    case 'INTERNAL_API_KEY':
+      return values.INTERNAL_API_KEY?.trim() || undefined;
     case 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY':
       return values.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() || undefined;
   }
+}
+
+export async function probeRuntimeDatabaseBinding(input: {
+  deploymentProtectionBypass: string;
+  deploymentUrl: string;
+  internalApiKey: string;
+}): Promise<string> {
+  const response = await fetch(
+    new URL(
+      '/api/internal/preview-canary/database-binding',
+      input.deploymentUrl,
+    ),
+    {
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        'x-internal-key': input.internalApiKey,
+        'x-vercel-protection-bypass': input.deploymentProtectionBypass,
+      },
+      method: 'GET',
+      redirect: 'error',
+    },
+  );
+  if (response.status !== 200) {
+    throw new Error(`Preview runtime probe failed (HTTP ${response.status}).`);
+  }
+  return parseRuntimeDatabaseHost(await readBoundedResponseBody(response));
+}
+
+export async function readBoundedResponseBody(
+  response: Response,
+): Promise<string> {
+  if (!response.body)
+    throw new Error('Preview runtime probe returned invalid evidence.');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > 4096) {
+        await reader.cancel();
+        throw new Error('Preview runtime probe returned invalid evidence.');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 export function parseRuntimeDatabaseHost(output: string): string {
@@ -212,7 +279,7 @@ export function parseImmutableDeploymentUrl(
   return parsed.origin;
 }
 
-export function run(argv = process.argv): void {
+export async function run(argv = process.argv): Promise<void> {
   const args = parseCanaryArgs(argv.slice(2));
   const inspected = JSON.parse(
     runVercelOperation('inspect', ['inspect', args.previewUrl, '--json']),
@@ -250,8 +317,14 @@ export function run(argv = process.argv): void {
   assertVercelProjectLink(readVercelProjectLink(), vercelIdentity);
   const previewEnv = readPreviewEnv();
   const provider = readPreviewValue(previewEnv, 'AUTH_PROVIDER');
+  const internalApiKey = readPreviewValue(previewEnv, 'INTERNAL_API_KEY');
   if (!provider) {
     throw new Error('Preview environment must define AUTH_PROVIDER.');
+  }
+  if (!internalApiKey) {
+    throw new Error(
+      'Preview environment must define INTERNAL_API_KEY for the read-only canary.',
+    );
   }
   if (provider !== 'authjs' && provider !== 'clerk') {
     throw new Error('Preview AUTH_PROVIDER is not supported by the canary.');
@@ -263,14 +336,11 @@ export function run(argv = process.argv): void {
     );
   }
 
-  const runtimeDatabaseHost = parseRuntimeDatabaseHost(
-    runVercelOperation('runtime probe', [
-      'curl',
-      '/api/preview-canary/database-binding',
-      '--deployment',
-      immutableDeploymentUrl,
-    ]),
-  );
+  const runtimeDatabaseHost = await probeRuntimeDatabaseBinding({
+    deploymentProtectionBypass: requiredEnv('VERCEL_AUTOMATION_BYPASS_SECRET'),
+    deploymentUrl: immutableDeploymentUrl,
+    internalApiKey,
+  });
 
   execFileSync(
     'pnpm',
@@ -299,12 +369,10 @@ export function run(argv = process.argv): void {
 
 const isMain = process.argv[1]?.endsWith('/scripts/preview-canary/cli.ts');
 if (isMain) {
-  try {
-    run();
-  } catch (error: unknown) {
+  void run().catch((error: unknown) => {
     console.error(
       `[preview-canary] ${error instanceof Error ? error.message : String(error)}`,
     );
     process.exitCode = 1;
-  }
+  });
 }

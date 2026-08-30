@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   parseRuntimeDatabaseHost,
+  readBoundedResponseBody,
   parseImmutableDeploymentUrl,
   parseVercelProjectLink,
   runVercelOperation,
@@ -117,6 +118,30 @@ describe('Preview canary Vercel boundary', () => {
     '{"databaseHost":"host/path"}',
   ])('rejects malformed runtime evidence: %s', (output) => {
     expect(() => parseRuntimeDatabaseHost(output)).toThrow('invalid evidence');
+  });
+
+  it.each([4096, 4097])(
+    'enforces the byte response cap at %i bytes',
+    async (size) => {
+      const response = new Response('a'.repeat(size));
+      if (size === 4096)
+        await expect(readBoundedResponseBody(response)).resolves.toHaveLength(
+          size,
+        );
+      else
+        await expect(readBoundedResponseBody(response)).rejects.toThrow(
+          'invalid evidence',
+        );
+    },
+  );
+
+  it('counts multibyte data by bytes and rejects a null body', async () => {
+    await expect(
+      readBoundedResponseBody(new Response('€'.repeat(1366))),
+    ).rejects.toThrow('invalid evidence');
+    await expect(readBoundedResponseBody(new Response(null))).rejects.toThrow(
+      'invalid evidence',
+    );
   });
 
   it.each([

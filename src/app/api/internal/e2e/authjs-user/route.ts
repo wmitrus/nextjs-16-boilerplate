@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { asc, eq, inArray, ne } from 'drizzle-orm';
 import { connection } from 'next/server';
 import { z } from 'zod';
 
@@ -12,6 +12,14 @@ import {
   createSuccessResponse,
 } from '@/shared/lib/api/response-service';
 
+import {
+  CONTAINMENT_FIXTURE,
+  findCanonicalOrganizationWithOwner,
+  isLocalContainmentFixtureTarget,
+  type ContainmentTopology,
+  verifyContainmentTopology,
+} from './containment-fixture';
+
 import { hashPassword } from '@/modules/auth/infrastructure/credentials/password-hasher';
 import { passwordSchema } from '@/modules/auth/infrastructure/credentials/password-policy';
 import {
@@ -21,12 +29,12 @@ import {
 import {
   membershipsTable,
   organizationsTable,
-  rolesTable,
 } from '@/modules/authorization/infrastructure/drizzle/schema';
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
 
 const requestSchema = z.object({
   email: z.email(),
+  organizationContainmentFixture: z.boolean().default(false),
   password: passwordSchema,
   onboardingComplete: z.boolean().default(true),
 });
@@ -49,15 +57,28 @@ export async function POST(request: Request): Promise<Response> {
       409,
     );
   }
+  const defaultTenantId = env.DEFAULT_TENANT_ID;
+
+  const {
+    email,
+    password,
+    onboardingComplete,
+    organizationContainmentFixture,
+  } = parsedBody.data;
+
+  if (organizationContainmentFixture && !isLocalContainmentFixtureTarget()) {
+    return createServerErrorResponse(
+      'Containment fixture requires the local test database.',
+      403,
+    );
+  }
 
   const db = getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-  const { email, password, onboardingComplete } = parsedBody.data;
 
-  const [organization] = await db
-    .select({ id: organizationsTable.id })
-    .from(organizationsTable)
-    .where(eq(organizationsTable.tenantId, env.DEFAULT_TENANT_ID))
-    .limit(1);
+  const organization = await findCanonicalOrganizationWithOwner(
+    db,
+    defaultTenantId,
+  );
 
   if (!organization) {
     return createServerErrorResponse(
@@ -66,27 +87,69 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const [role] = await db
-    .select({ id: rolesTable.id })
-    .from(rolesTable)
-    .where(
-      and(
-        eq(rolesTable.organizationId, organization.id),
-        eq(rolesTable.name, 'owner'),
-      ),
-    )
-    .limit(1);
+  const role = { id: organization.ownerRoleId };
 
-  if (!role) {
+  const [outsideTenantOrganization] = organizationContainmentFixture
+    ? await db
+        .select({
+          id: organizationsTable.id,
+          tenantId: organizationsTable.tenantId,
+        })
+        .from(organizationsTable)
+        .where(ne(organizationsTable.tenantId, defaultTenantId))
+        .orderBy(asc(organizationsTable.id))
+        .limit(1)
+    : [];
+
+  if (organizationContainmentFixture && !outsideTenantOrganization) {
     return createServerErrorResponse(
-      'Default tenant owner role is missing.',
+      'Containment fixture topology could not be verified.',
       409,
     );
   }
 
   const hashedPassword = await hashPassword(password);
+  let containmentTopology: ContainmentTopology | undefined;
 
   await db.transaction(async (tx) => {
+    if (organizationContainmentFixture) {
+      await tx
+        .insert(organizationsTable)
+        .values({
+          id: CONTAINMENT_FIXTURE.siblingOrganizationId,
+          tenantId: defaultTenantId,
+          name: 'AuthJS E2E Containment Sibling',
+          slug: 'authjs-e2e-containment-sibling',
+        })
+        .onConflictDoNothing();
+
+      const topologyOrganizations = await tx
+        .select({
+          id: organizationsTable.id,
+          tenantId: organizationsTable.tenantId,
+        })
+        .from(organizationsTable)
+        .where(
+          inArray(organizationsTable.id, [
+            organization.id,
+            CONTAINMENT_FIXTURE.siblingOrganizationId,
+            outsideTenantOrganization!.id,
+          ]),
+        )
+        .orderBy(asc(organizationsTable.id));
+      const verifiedTopology = verifyContainmentTopology(
+        topologyOrganizations,
+        defaultTenantId,
+        organization.id,
+        outsideTenantOrganization!.id,
+      );
+
+      if (!verifiedTopology) {
+        throw new Error('Containment fixture topology could not be verified.');
+      }
+      containmentTopology = verifiedTopology;
+    }
+
     const [existingUser] = await tx
       .select({ id: usersTable.id })
       .from(usersTable)
@@ -151,5 +214,17 @@ export async function POST(request: Request): Promise<Response> {
       .onConflictDoNothing();
   });
 
-  return createSuccessResponse({ success: true }, 201);
+  if (organizationContainmentFixture && !containmentTopology) {
+    return createServerErrorResponse(
+      'Containment fixture topology could not be verified.',
+      409,
+    );
+  }
+
+  return createSuccessResponse(
+    containmentTopology
+      ? { ...containmentTopology, success: true }
+      : { success: true },
+    201,
+  );
 }

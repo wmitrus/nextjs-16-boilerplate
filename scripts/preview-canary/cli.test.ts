@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   parseRuntimeDatabaseHost,
+  parseImmutableDeploymentUrl,
   parseVercelProjectLink,
   runVercelOperation,
 } from './cli';
@@ -88,6 +89,25 @@ describe('Preview canary Vercel boundary', () => {
         '{"databaseHost":"ep-test.us-east-2.aws.neon.tech"}',
       ),
     ).toBe('ep-test.us-east-2.aws.neon.tech');
+  });
+
+  it('derives the immutable runtime target from deployment metadata', () => {
+    expect(
+      parseImmutableDeploymentUrl({
+        url: 'project-immutable-abc123-team.vercel.app',
+      }),
+    ).toBe('https://project-immutable-abc123-team.vercel.app');
+  });
+
+  it.each([
+    undefined,
+    'user@host.vercel.app',
+    'host.vercel.app/path',
+    'host.vercel.app?query',
+    'host.vercel.app#hash',
+    'host vercel.app',
+  ])('rejects malformed immutable deployment URLs', (url) => {
+    expect(() => parseImmutableDeploymentUrl({ url })).toThrow('immutable URL');
   });
 
   it.each([

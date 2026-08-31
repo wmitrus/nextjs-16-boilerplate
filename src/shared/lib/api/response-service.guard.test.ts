@@ -39,6 +39,8 @@ const EXEMPT_ROUTES: Record<string, string> = {
     'diagnostics payload consumed by deployment scripts, not by app clients',
   'src/app/api/internal/preview-canary/database-binding/route.ts':
     'Preview-only deployment probe exposes a deliberately bounded hostname evidence payload, not an application response envelope',
+  'src/app/api/internal/rollback-assessment/environment-contract/route.ts':
+    'Production-only deployment-bound attestation consumed by the rollback-assessment CLI, exposing a deliberately bounded non-secret evidence payload, not an application response envelope',
   'src/app/api/logs/route.ts':
     'log ingest endpoint: returns bare acknowledgements to a transport, not an app client',
   'src/app/api/sentry-example-api/route.ts':

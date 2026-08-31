@@ -48,19 +48,26 @@ describe('rollback assessment candidate parsing', () => {
     },
   );
 
+  const localOnlyResult = {
+    deploymentId,
+    executeProductionEnvironmentRead: false,
+    executeProductionSchemaRead: false,
+    executeRemoteCandidateRead: false,
+  };
+
   it('accepts one explicitly nominated deployment ID', () => {
     expect(
       parseRollbackAssessmentArgs([`--deployment-id=${deploymentId}`]),
-    ).toEqual({ deploymentId, executeRemoteCandidateRead: false });
+    ).toEqual(localOnlyResult);
     expect(
       parseRollbackAssessmentArgs(['--', `--deployment-id=${deploymentId}`]),
-    ).toEqual({ deploymentId, executeRemoteCandidateRead: false });
+    ).toEqual(localOnlyResult);
     expect(
       parseRollbackAssessmentArgs([
         `--deployment-id=${deploymentId}`,
         '--execute-remote-candidate-read',
       ]),
-    ).toEqual({ deploymentId, executeRemoteCandidateRead: true });
+    ).toEqual({ ...localOnlyResult, executeRemoteCandidateRead: true });
   });
 
   it('rejects a duplicate remote-read acknowledgement', () => {
@@ -72,6 +79,53 @@ describe('rollback assessment candidate parsing', () => {
       ]),
     ).toThrow('may appear only once');
   });
+
+  it('accepts the two A4.2b Production-read acknowledgements independently', () => {
+    expect(
+      parseRollbackAssessmentArgs([
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]),
+    ).toEqual({
+      ...localOnlyResult,
+      executeProductionEnvironmentRead: true,
+      executeRemoteCandidateRead: true,
+    });
+    expect(
+      parseRollbackAssessmentArgs([
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-schema-read',
+      ]),
+    ).toEqual({
+      ...localOnlyResult,
+      executeProductionSchemaRead: true,
+      executeRemoteCandidateRead: true,
+    });
+  });
+
+  it.each([
+    '--execute-production-environment-read',
+    '--execute-production-schema-read',
+  ])('rejects a duplicate %s acknowledgement', (flag) => {
+    expect(() =>
+      parseRollbackAssessmentArgs([
+        `--deployment-id=${deploymentId}`,
+        flag,
+        flag,
+      ]),
+    ).toThrow('may appear only once');
+  });
+
+  it.each(['--remote', '--execute', '--production'])(
+    'rejects the generic flag %s',
+    (flag) => {
+      expect(() =>
+        parseRollbackAssessmentArgs([`--deployment-id=${deploymentId}`, flag]),
+      ).toThrow();
+    },
+  );
 });
 
 describe('production deployment DETAIL guard', () => {

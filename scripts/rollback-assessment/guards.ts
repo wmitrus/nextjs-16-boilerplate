@@ -62,11 +62,15 @@ export interface TrustedProductionCandidate {
 
 export function parseRollbackAssessmentArgs(args: readonly string[]): {
   deploymentId: string;
+  executeProductionEnvironmentRead: boolean;
+  executeProductionSchemaRead: boolean;
   executeRemoteCandidateRead: boolean;
 } {
   const tokens = args.filter((arg, index) => !(index === 0 && arg === '--'));
   const values: string[] = [];
   let executeRemoteCandidateRead = false;
+  let executeProductionEnvironmentRead = false;
+  let executeProductionSchemaRead = false;
   let expectingValue = false;
   for (const arg of tokens) {
     if (expectingValue) {
@@ -94,6 +98,27 @@ export function parseRollbackAssessmentArgs(args: readonly string[]): {
       executeRemoteCandidateRead = true;
       continue;
     }
+    // A4.2b: each remote/Production read category is authorized by its own
+    // narrow, one-shot flag -- never a shared/generic --remote, --execute,
+    // or --production toggle, and no flag authorizes more than one read.
+    if (arg === '--execute-production-environment-read') {
+      if (executeProductionEnvironmentRead) {
+        throw new Error(
+          '--execute-production-environment-read may appear only once.',
+        );
+      }
+      executeProductionEnvironmentRead = true;
+      continue;
+    }
+    if (arg === '--execute-production-schema-read') {
+      if (executeProductionSchemaRead) {
+        throw new Error(
+          '--execute-production-schema-read may appear only once.',
+        );
+      }
+      executeProductionSchemaRead = true;
+      continue;
+    }
     throw new Error('Rollback assessment accepts only one --deployment-id.');
   }
   if (expectingValue) throw new Error('--deployment-id requires a value.');
@@ -105,7 +130,12 @@ export function parseRollbackAssessmentArgs(args: readonly string[]): {
   const parsed = deploymentIdSchema.safeParse(values[0]);
   if (!parsed.success)
     throw new Error('Rollback assessment deployment ID is malformed.');
-  return { deploymentId: parsed.data, executeRemoteCandidateRead };
+  return {
+    deploymentId: parsed.data,
+    executeProductionEnvironmentRead,
+    executeProductionSchemaRead,
+    executeRemoteCandidateRead,
+  };
 }
 
 function parseImmutableDeploymentUrl(value: unknown): string | undefined {

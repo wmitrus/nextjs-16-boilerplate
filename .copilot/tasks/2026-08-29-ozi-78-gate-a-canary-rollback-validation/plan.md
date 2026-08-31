@@ -18,8 +18,12 @@ behavior. This task must preserve the current authorization semantics:
 - Current phase: A1/A2 complete and validated; A3a read-only complete with
   historical Preview PASS; A3b unstarted; A4.1 (local-only rollback
   assessment) COMPLETE; A4.2a (operator-controlled remote candidate DETAIL
-  read) implemented and locally validated; full A4 remains blocked on
-  separately authorized Production evidence and smoke
+  read) COMPLETE -- executed once, read-only, against the live Production
+  rollback candidate (PASS, see below); A4.2b (read-only environment-contract
+  and Production migration-journal compatibility evidence) implemented and
+  locally validated, remote reads NOT YET exercised; A4.2c (candidate smoke)
+  and rollback/promote execution remain unstarted and separately gated; full
+  A4 is not complete
 - Current baseline: `main@7e4b3eddd07f27a060c40616a0d7f130925a6b48`
 - Containment floor: `2450d410f4617f9b0e415f2b4d47bcde748b1cbc`
 
@@ -163,15 +167,158 @@ This slice is local-only to implement/test. Candidate inspection and smoke are
 remote access and require separate approval; traffic switching always requires
 separate production authorization.
 
-**Status: A4.2a controlled remote candidate DETAIL read implemented and locally
-validated; full A4 remains blocked on separately authorized candidate/Production
-evidence and smoke.** Default `rollback:assess` remains local-only and makes no
-provider call. The explicit `--execute-remote-candidate-read` acknowledgement
-permits exactly one bounded Vercel DETAIL GET for the already schema-validated,
-operator-nominated deployment ID. Provider data is untrusted until the existing
-production identity guard accepts it; environment, schema, smoke, and all
-traffic-changing gates remain blocked/not authorized. No remote operation was
-performed during implementation; Production remains untouched / not authorized.
+**Status: A4.2a COMPLETE.** The operator-controlled remote candidate DETAIL
+read has been executed once, read-only, against the live Production rollback
+candidate, with the following authoritative evidence:
+
+| Field | Value |
+|---|---|
+| `deploymentId` | `dpl_7wuoSfmfnp9GTauaxWMVpQ7NFZRb` |
+| `gitRef` | `main` |
+| `gitSha` | `f2d57d52d10c7685df40b57b7d4aa9ab21778a67` |
+| `immutableUrl` | `https://nextjs-16-boilerplate-qgsv3lkg6-wojciech-mitruss-projects.vercel.app` |
+| `candidateIdentity` | `PASS` |
+| `containmentFloorAncestry` | `PASS` |
+| `remoteCandidateEvidence` | `READ_AND_VALIDATED` |
+| `rollbackAction` | `NOT_AUTHORIZED` |
+| `rollbackExecutable` | `false` |
+
+That operation was a single bounded Vercel DETAIL `GET`; it performed no
+Production mutation, no rollback, no promote, and no traffic change.
+
+**Status: A4.2b (environment-contract and Production migration-journal
+read-only compatibility evidence) implemented and locally validated; its
+remote/Production reads have NOT been exercised in this pass.** Default
+`rollback:assess` remains zero-network/local-only. Two further narrow,
+independent acknowledgements were added, each authorizing exactly one read
+category and requiring the same-invocation `--execute-remote-candidate-read`
+to have already established the trusted candidate:
+
+- `--execute-production-environment-read` -- one bounded GET, from the
+  operator's machine, against the trusted candidate's own immutable
+  deployment URL, at a new internal-API-guarded, Production-only endpoint
+  (`/api/internal/rollback-assessment/environment-contract`) that returns
+  only `{authProvider, contractVersion, fingerprint}` -- a SHA-256
+  fingerprint over the enumerated dimensions `AUTH_PROVIDER`, `TENANCY_MODE`,
+  `TENANT_CONTEXT_SOURCE`. The GET carries `x-internal-key` (this
+  application's own auth) and, independently, `x-vercel-protection-bypass`
+  / `x-vercel-set-bypass-cookie: true` -- the same
+  `VERCEL_AUTOMATION_BYPASS_SECRET` contract `prod-deploy.yml`'s own
+  Production smoke step already relies on, required for an immutable
+  Production URL that Vercel Standard/Deployment Protection covers. Both
+  secrets are resolved lazily, only at the one call site about to read,
+  and fail closed before any `fetch` if either is absent. **This endpoint
+  is instrumentation for future rollback candidates only.** A candidate is
+  an immutable deployment built from a fixed Git commit; this route is
+  added by this same PR, so it cannot retroactively exist on any candidate
+  already deployed before this PR merges. Before ever attempting the GET,
+  `run()` runs a purely local, deterministic check
+  (`checkCandidateEnvironmentContractInstrumentation`, `git cat-file -e`,
+  no fetch) with three distinct outcomes: shallow history (its own BLOCKED
+  reason), the commit object itself not locally resolvable (its own
+  distinct BLOCKED reason -- never conflated with "predates"), and the
+  commit resolvable but lacking the route path (BLOCKED, "Rollback
+  candidate predates deployment-bound environment-contract
+  instrumentation"). **The currently validated A4.2a candidate
+  (`dpl_7wuoSfmfnp9GTauaxWMVpQ7NFZRb`, SHA
+  `f2d57d52d10c7685df40b57b7d4aa9ab21778a67`) is exactly such a candidate:
+  it predates this PR, so `environmentContract` for it is BLOCKED FOR
+  LEGACY CANDIDATE / instrumentation unavailable, and can never reach
+  PASS, no matter which A4.2b flags are authorized.** This is proven by a
+  regression test that runs the real (unmocked) Git check against that
+  exact SHA in this repository: it first establishes, from this actual
+  checkout's own shallow/non-shallow state, which BLOCKED reason applies,
+  then -- in the non-shallow case this repository actually has -- asserts
+  the precise "predates instrumentation" reason specifically (not merely
+  "any BLOCKED status"). The candidate's own reported evidence, once
+  instrumentation exists on a future candidate, is compared against an
+  **expected** contract sourced from explicit `PRODUCTION_AUTH_PROVIDER`/
+  `PRODUCTION_TENANCY_MODE`/`PRODUCTION_TENANT_CONTEXT_SOURCE` local trust
+  anchors (`readOperatorDeclaredProductionContractDimensions()`, provenance
+  LOCAL_OPERATOR_DECLARED) -- never the operator's own ambient
+  `AUTH_PROVIDER`/`TENANCY_MODE`/`TENANT_CONTEXT_SOURCE`, which could
+  legitimately resolve to Preview or development. Every dimension must be
+  an explicit declaration, including the null case: an *absent*
+  `PRODUCTION_TENANT_CONTEXT_SOURCE` is undetermined (BLOCKED), not
+  silently `null` -- the bounded sentinel `none` is the only way to
+  declare that value (`db`/`provider`/`none`; anything else undetermined).
+- `--execute-production-schema-read` -- candidate-side migration evidence is
+  derived from local Git object access at the exact trusted candidate SHA
+  (`git show <sha>:<path>`, never the working tree, never a fetch; shallow
+  history fails closed to BLOCKED). Production-side evidence is one bounded,
+  explicitly read-only `SELECT hash FROM drizzle.__drizzle_migrations LIMIT
+  candidateCount + 1` (explicit connect/statement timeouts,
+  `default_transaction_read_only` plus an explicit `BEGIN ... READ ONLY`
+  transaction, at most one connection; the `+ 1` row and an absolute
+  1000-entry ceiling exist so a Postgres `LIMIT` -- which always returns
+  `min(actualRowCount, limit)` rows regardless of which specific rows are
+  selected -- reliably reveals when Production has *more* migrations than
+  the candidate, via the returned row count alone, without claiming
+  anything about which extra row that is). **The connection is never
+  opened until Production database identity is proven on two independent
+  dimensions**: `resolveVerifiedProductionDatabaseUrl()` requires the
+  resolved `DATABASE_URL`/`DATABASE_URL_UNPOOLED` to be a PostgreSQL URI
+  whose hostname *and* decoded database name both exactly equal two
+  explicit local trust anchors, `PRODUCTION_DATABASE_HOST` and
+  `PRODUCTION_DATABASE_NAME` -- a Postgres/Neon host alone does not
+  identify a database; one endpoint can serve several. Both anchors are
+  **LOCAL_OPERATOR_DECLARED, not independently provider-verified** --
+  exactly like `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`/`GITHUB_REPOSITORY` are
+  pins the operator declares rather than a live provider identity check;
+  this slice authorizes no additional remote provider read to verify
+  either pin. Both values must come from a trusted Production source held
+  independently of the connection string being checked (e.g. how
+  Production's database was provisioned, or a separately-read Vercel/Neon
+  Production config) -- copying either out of the very `DATABASE_URL` this
+  check validates would defeat the pin entirely, agreeing a Preview/dev/
+  stale URL with itself. This check fails closed to `BLOCKED` (or `ERROR`
+  for a non-PostgreSQL scheme / unparseable URI) before any SQL executes.
+  A `client.end()` failure is folded into the same bounded evidence
+  contract as a query failure -- even after an otherwise-successful
+  SELECT, a close failure still produces the generic `ERROR` result,
+  because deterministic cleanup was never established; no raw driver
+  error ever escapes.
+  **The comparison this evidence supports is exact applied-migration
+  *hash-set* equality -- never positional/tag equality.**
+  `drizzle.__drizzle_migrations` never stored a `tag`, and its
+  `created_at` column is populated from `_journal.json.entries[].when`;
+  this repository's real journal contains non-monotonic `when` values
+  (e.g. `0005_generic_profile_fields`'s `when` is earlier than
+  `0004_cool_morgan_stark`'s), and the existing migration-repair tooling
+  can insert rows stamped with `Date.now()` later still -- so
+  `created_at` ordering cannot honestly be read as `_journal.entries`
+  order in this repository. An earlier design paired Production hashes
+  positionally with the candidate's own tags under an assumed
+  `created_at`-as-journal-order equivalence; that assumption does not
+  hold here and could have produced a false BLOCKED for a genuinely
+  compatible Production database. `assessAppliedMigrationHashSetCompatibility()`
+  replaces it: candidate and Production hash sets (each independently
+  validated for well-formedness and uniqueness -- a duplicate or
+  malformed hash on either side is INVALID) must be exactly equal as
+  *sets*; order never participates in the result. Never imports the
+  existing migration-repair helper (`repairKnownMigrationJournalDrift`).
+
+Both A4.2b reads require candidate identity to already be established in the
+same invocation; neither flag can reach a Vercel DETAIL read or a Production
+connection on its own. Provenance for all three evidence categories
+(candidate, environment, schema) is structurally unforgeable: the exported,
+always-local `buildLocalRollbackAssessment()` has no way to source
+`REMOTE_READ` provenance for any of them, so a caller supplying matching
+fixtures directly can never observe a `PASS` labeled as remotely verified.
+
+`environmentContract`/`schemaCompatibility` may reach `PASS` once their
+respective reads are authorized, target-bound, and match -- but not for the
+current legacy candidate's `environmentContract`, which is architecturally
+blocked as described above regardless of authorization; no legacy bypass or
+compatibility exception exists in code, and none is planned as part of this
+implementation slice. `smoke` remains `BLOCKED` (A4.2c), and
+`rollbackAction`/`rollbackExecutable` remain `NOT_AUTHORIZED`/`false`
+regardless. No A4.2b remote or Production read was performed during this
+implementation pass; Production DB/runtime state was not accessed by this
+change, and full A4 is not complete. Whether/how to bootstrap the legacy
+candidate onto A4.2b coverage (e.g. nominating a newer, already-instrumented
+candidate once one exists) is a rollout-policy decision left to the operator,
+separate from and after this implementation.
 
 ## Candidate File Set — To Confirm Before Implementation
 

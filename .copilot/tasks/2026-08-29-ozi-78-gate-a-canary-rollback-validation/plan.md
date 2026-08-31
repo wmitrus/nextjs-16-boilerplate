@@ -15,7 +15,8 @@ behavior. This task must preserve the current authorization semantics:
 - Primary workflow: Safe Feature Workflow, high-risk path
 - Linear issue: OZI-78
 - Execution control: manual-handoff
-- Current phase: Gate A Slice A1 complete locally; A2–A4 remain unstarted
+- Current phase: A1/A2 complete and validated; A3a read-only complete with
+  historical Preview PASS; A3b/A4 remain unstarted
 - Current baseline: `main@7e4b3eddd07f27a060c40616a0d7f130925a6b48`
 - Containment floor: `2450d410f4617f9b0e415f2b4d47bcde748b1cbc`
 
@@ -105,6 +106,8 @@ Fixture mutation is fail-closed to the local `app_test` PostgreSQL profile.
 
 This slice is local-only to implement and test.
 
+**Status: completed and validated.**
+
 ### Slice A3 — Manual Preview canary tooling
 
 1. Prefer a guarded repository script/CLI invoked manually against an approved
@@ -123,6 +126,18 @@ This slice is local-only to implement and test.
 
 This slice may be implemented locally but must not be executed remotely without
 operator approval.
+
+**A3a status: read-only complete and historically passed.** The evidence is
+bound only to branch `ozi-78-gate-a-slice-a1`, SHA
+`77f37e5895982ac77ca14e04bf3323271b902f3e`, and immutable Preview
+`https://nextjs-16-boilerplate-araoqcd0m-wojciech-mitruss-projects.vercel.app`.
+It ran with mutation not requested, verified Neon branch
+`preview/ozi-78-gate-a-slice-a1` and runtime host
+`ep-wandering-wave-agb6mck0-pooler.c-2.eu-central-1.aws.neon.tech`, and
+resulted in PASS. This evidence does not apply to a future HEAD. `--auto` is
+implemented and validated locally; not remotely exercised.
+
+**A3b status: not authorized / not executed.**
 
 ### Slice A4 — Rollback assessment and runbook
 
@@ -144,6 +159,8 @@ operator approval.
 This slice is local-only to implement/test. Candidate inspection and smoke are
 remote access and require separate approval; traffic switching always requires
 separate production authorization.
+
+**Status: not started.** Production remains untouched / not authorized.
 
 ## Candidate File Set — To Confirm Before Implementation
 

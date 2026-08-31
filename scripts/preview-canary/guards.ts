@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-const shaSchema = z.string().regex(/^[0-9a-f]{40}$/i);
-const branchSchema = z.string().min(1).max(255);
+export const gitShaSchema = z.string().regex(/^[0-9a-f]{40}$/i);
+export const gitBranchSchema = z.string().min(1).max(255);
 const previewUrlSchema = z.url().refine(
   (value) => {
     const parsed = new URL(value);
@@ -19,13 +19,33 @@ const previewUrlSchema = z.url().refine(
   },
 );
 
-export const canaryArgsSchema = z.object({
-  branch: branchSchema,
+const explicitCanaryArgsSchema = z.object({
+  branch: gitBranchSchema,
+  debug: z.boolean(),
   execute: z.boolean(),
+  mode: z.literal('explicit'),
   previewUrl: previewUrlSchema,
-  sha: shaSchema,
+  sha: gitShaSchema,
+});
+const autoCanaryArgsSchema = z.object({
+  debug: z.boolean(),
+  execute: z.boolean(),
+  mode: z.literal('auto'),
 });
 
+export const canaryArgsSchema = z.discriminatedUnion('mode', [
+  explicitCanaryArgsSchema,
+  autoCanaryArgsSchema,
+]);
+
+export type CanaryIdentityRequest =
+  | {
+      branch: string;
+      mode: 'explicit';
+      previewUrl: string;
+      sha: string;
+    }
+  | { mode: 'auto' };
 export type CanaryArgs = z.infer<typeof canaryArgsSchema>;
 
 export type DeploymentMetadata = {
@@ -39,17 +59,60 @@ export type VercelProjectLink = { orgId: string; projectId: string };
 
 export function parseCanaryArgs(args: string[]): CanaryArgs {
   const option = (name: string): string | undefined => {
-    const inline = args.find((value) => value.startsWith(`${name}=`));
-    if (inline) return inline.slice(name.length + 1);
-    const index = args.indexOf(name);
-    return index >= 0 ? args[index + 1] : undefined;
+    const prefix = `${name}=`;
+    const values: string[] = [];
+    let expectsSeparatedValue = false;
+    for (const arg of args) {
+      if (expectsSeparatedValue) {
+        if (arg.startsWith('--')) throw new Error(`${name} requires a value.`);
+        values.push(arg);
+        expectsSeparatedValue = false;
+      } else if (arg.startsWith(prefix)) {
+        values.push(arg.slice(prefix.length));
+      } else if (arg === name) {
+        expectsSeparatedValue = true;
+      }
+    }
+    if (expectsSeparatedValue) throw new Error(`${name} requires a value.`);
+    if (values.length > 1)
+      throw new Error(`${name} must not be specified twice.`);
+    return values[0];
+  };
+  const flag = (name: '--auto' | '--debug' | '--execute'): boolean => {
+    if (args.filter((arg) => arg === name).length > 1)
+      throw new Error(`${name} must not be specified twice.`);
+    return args.includes(name);
   };
 
+  const auto = flag('--auto');
+  const debug = flag('--debug');
+  const execute = flag('--execute');
+  const branch = option('--git-branch');
+  const previewUrl = option('--preview-url');
+  const sha = option('--git-sha');
+  const hasExplicitIdentity =
+    branch !== undefined || previewUrl !== undefined || sha !== undefined;
+
+  if (auto) {
+    if (hasExplicitIdentity) {
+      throw new Error(
+        '--auto cannot be combined with explicit identity options.',
+      );
+    }
+    return canaryArgsSchema.parse({ debug, execute, mode: 'auto' });
+  }
+  if (branch === undefined || previewUrl === undefined || sha === undefined) {
+    throw new Error(
+      'Provide either --auto or complete --preview-url, --git-branch, and --git-sha options.',
+    );
+  }
   return canaryArgsSchema.parse({
-    branch: option('--git-branch'),
-    execute: args.includes('--execute'),
-    previewUrl: option('--preview-url'),
-    sha: option('--git-sha'),
+    branch,
+    debug,
+    execute,
+    mode: 'explicit',
+    previewUrl,
+    sha,
   });
 }
 

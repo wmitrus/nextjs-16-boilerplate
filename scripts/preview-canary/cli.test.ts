@@ -2,13 +2,299 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   parseRuntimeDatabaseHost,
+  probeRuntimeDatabaseBinding,
   readBoundedResponseBody,
   parseImmutableDeploymentUrl,
   parseVercelProjectLink,
+  resolveAutoPreviewIdentity,
   runVercelOperation,
 } from './cli';
 
+const identity = { branch: 'ozi-78', sha: 'a'.repeat(40) };
+const expectedMeta = {
+  githubDeployment: '1',
+  githubCommitOrg: 'wmitrus',
+  githubCommitRef: identity.branch,
+  githubCommitRepo: 'nextjs-16-boilerplate',
+  githubCommitSha: identity.sha,
+};
+
+function deployment(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id: 'dpl_expected',
+    meta: expectedMeta,
+    ownerId: 'team_expected',
+    projectId: 'prj_expected',
+    readyState: 'READY',
+    target: null,
+    url: 'project-immutable-abc123-team.vercel.app',
+    ...overrides,
+  };
+}
+
+function listCandidate(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const { id, ownerId: _ownerId, ...reduced } = deployment(overrides);
+  return { uid: id, ...reduced };
+}
+
+function resolveCandidates(
+  candidates: unknown[],
+  details: Record<string, unknown> = {},
+) {
+  vi.stubEnv('GITHUB_REPOSITORY', 'wmitrus/nextjs-16-boilerplate');
+  vi.stubEnv('VERCEL_ORG_ID', 'team_expected');
+  vi.stubEnv('VERCEL_PROJECT_ID', 'prj_expected');
+  vi.stubEnv('VERCEL_TOKEN', 'sentinel-vercel-token');
+  const executor = vi.fn((_: string, args: string[]) => {
+    if (args[1]?.startsWith('/v6/deployments?'))
+      return JSON.stringify(candidates);
+    const id = args[1]?.split('/').at(-1);
+    return JSON.stringify(details[id ?? ''] ?? deployment());
+  });
+  return resolveAutoPreviewIdentity(identity, executor);
+}
+
 describe('Preview canary Vercel boundary', () => {
+  it('reports a runtime probe timeout without retrying', async () => {
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(AbortSignal.abort());
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network failure'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(
+        probeRuntimeDatabaseBinding({
+          deploymentProtectionBypass: 'bypass-secret',
+          deploymentUrl: 'https://project-immutable-abc123-team.vercel.app',
+          internalApiKey: 'internal-key',
+        }),
+      ).rejects.toThrow('Preview runtime probe timed out.');
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      timeout.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('selects exactly one exact READY Preview deployment by immutable URL', () => {
+    try {
+      expect(resolveCandidates([listCandidate()])).toEqual({
+        ...identity,
+        previewUrl: 'https://project-immutable-abc123-team.vercel.app',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not use reduced LIST metadata as final security evidence', () => {
+    try {
+      expect(
+        resolveCandidates(
+          [
+            listCandidate({
+              meta: { ...expectedMeta, githubCommitSha: 'b'.repeat(40) },
+            }),
+          ],
+          { dpl_expected: deployment() },
+        ),
+      ).toEqual({
+        ...identity,
+        previewUrl: 'https://project-immutable-abc123-team.vercel.app',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('uses uid, the provider identifier field in the LIST response, for DETAIL', () => {
+    vi.stubEnv('GITHUB_REPOSITORY', 'wmitrus/nextjs-16-boilerplate');
+    vi.stubEnv('VERCEL_ORG_ID', 'team_expected');
+    vi.stubEnv('VERCEL_PROJECT_ID', 'prj_expected');
+    vi.stubEnv('VERCEL_TOKEN', 'sentinel-vercel-token');
+    const executor = vi.fn((_: string, args: string[]) =>
+      args[1]?.startsWith('/v6/deployments?')
+        ? JSON.stringify([listCandidate({ id: 'dpl_from_uid' })])
+        : JSON.stringify(deployment()),
+    );
+    try {
+      resolveAutoPreviewIdentity(identity, executor);
+      expect(executor.mock.calls[1]?.[1]).toEqual(
+        expect.arrayContaining([
+          'api',
+          '/v13/deployments/dpl_from_uid',
+          '--method=GET',
+          '--raw',
+        ]),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each([{}, { uid: 'invalid/id' }])(
+    'fails closed for a missing or malformed LIST provider identifier',
+    (candidate) => {
+      try {
+        expect(() => resolveCandidates([candidate])).toThrow(
+          'Vercel deployment discovery returned malformed data.',
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it('fails closed when no LIST candidates are discovered', () => {
+    try {
+      expect(() => resolveCandidates([])).toThrow(
+        'No exact READY Preview deployment found',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('uses an explicitly read-only, exact metadata-filtered deployment list', () => {
+    vi.stubEnv('GITHUB_REPOSITORY', 'wmitrus/nextjs-16-boilerplate');
+    vi.stubEnv('VERCEL_ORG_ID', 'team_expected');
+    vi.stubEnv('VERCEL_PROJECT_ID', 'prj_expected');
+    vi.stubEnv('VERCEL_TOKEN', 'sentinel-vercel-token');
+    const executor = vi.fn((_: string, args: string[]) =>
+      args[1]?.startsWith('/v6/deployments?')
+        ? JSON.stringify([listCandidate()])
+        : JSON.stringify(deployment()),
+    );
+
+    try {
+      resolveAutoPreviewIdentity(identity, executor);
+      expect(executor).toHaveBeenCalledTimes(2);
+      const args = executor.mock.calls[0]?.[1] as string[];
+      expect(args).toContain('--method=GET');
+      expect(args).toContain('--raw');
+      expect(args[0]).toBe('api');
+      expect(args[1]).toContain('projectId=prj_expected');
+      expect(args[1]).toContain('teamId=team_expected');
+      expect(args[1]).toContain('meta-githubCommitRef=ozi-78');
+      expect(args[1]).toContain(`meta-githubCommitSha=${identity.sha}`);
+      expect(args[1]).toContain('limit=100');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('emits allowlisted debug reasons without changing fail-closed selection', () => {
+    vi.stubEnv('GITHUB_REPOSITORY', 'wmitrus/nextjs-16-boilerplate');
+    vi.stubEnv('VERCEL_ORG_ID', 'team_expected');
+    vi.stubEnv('VERCEL_PROJECT_ID', 'prj_expected');
+    vi.stubEnv('VERCEL_TOKEN', 'secret-vercel-token');
+    const candidate = listCandidate({
+      meta: { ...expectedMeta, githubCommitSha: 'b'.repeat(40) },
+      rawProviderSecret: 'raw-provider-secret',
+    });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const executor = vi.fn((_: string, args: string[]) =>
+      args[1]?.startsWith('/v6/deployments?')
+        ? JSON.stringify([candidate])
+        : JSON.stringify(
+            deployment({
+              meta: { ...expectedMeta, githubCommitSha: 'b'.repeat(40) },
+              rawProviderSecret: 'raw-provider-secret',
+            }),
+          ),
+    );
+
+    try {
+      expect(() =>
+        resolveAutoPreviewIdentity(identity, executor, true),
+      ).toThrow('No exact READY Preview deployment found');
+      const output = JSON.stringify(log.mock.calls);
+      expect(output).toContain('git SHA mismatch');
+      expect(output).toContain('"gitSha":"fail"');
+      expect(output).not.toContain('secret-vercel-token');
+      expect(output).not.toContain('raw-provider-secret');
+      expect(executor).toHaveBeenCalledTimes(2);
+    } finally {
+      log.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each([
+    [
+      'wrong branch',
+      { meta: { ...expectedMeta, githubCommitRef: 'other-branch' } },
+    ],
+    [
+      'wrong SHA',
+      { meta: { ...expectedMeta, githubCommitSha: 'b'.repeat(40) } },
+    ],
+    [
+      'wrong repository owner',
+      { meta: { ...expectedMeta, githubCommitOrg: 'other-owner' } },
+    ],
+    [
+      'wrong repository name',
+      { meta: { ...expectedMeta, githubCommitRepo: 'other-repository' } },
+    ],
+    ['wrong Vercel project', { projectId: 'prj_other' }],
+    ['wrong Vercel organization', { ownerId: 'team_other' }],
+    ['missing owner', { ownerId: undefined }],
+    ['non-null target', { target: 'production' }],
+    [
+      'missing GitHub deployment marker',
+      { meta: { ...expectedMeta, githubDeployment: undefined } },
+    ],
+    [
+      'wrong GitHub deployment marker',
+      { meta: { ...expectedMeta, githubDeployment: '0' } },
+    ],
+    ['non-READY deployment', { readyState: 'BUILDING' }],
+  ])('rejects %s DETAIL candidates', (_reason, detailOverrides) => {
+    try {
+      expect(() =>
+        resolveCandidates([listCandidate()], {
+          dpl_expected: deployment(detailOverrides),
+        }),
+      ).toThrow('No exact READY Preview deployment found');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('rejects a malformed immutable deployment URL', () => {
+    try {
+      expect(() =>
+        resolveCandidates([listCandidate()], {
+          dpl_expected: deployment({ url: 'host.vercel.app/path' }),
+        }),
+      ).toThrow('No exact READY Preview deployment found');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each([
+    [[listCandidate(), listCandidate({ id: 'dpl_second' })]],
+    [[listCandidate({ id: 'dpl_second' }), listCandidate()]],
+  ])(
+    'rejects multiple valid candidates regardless of result order',
+    (candidates) => {
+      try {
+        expect(() => resolveCandidates(candidates)).toThrow(
+          'Multiple exact READY Preview deployments found',
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('reports a missing Vercel token before spawning Vercel', () => {
     vi.stubEnv('VERCEL_TOKEN', '');
     const executor = vi.fn();

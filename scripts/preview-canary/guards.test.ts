@@ -16,6 +16,55 @@ const input = [
 ];
 
 describe('Preview canary fail-closed guards', () => {
+  it('accepts a complete explicit identity', () => {
+    expect(parseCanaryArgs(input)).toEqual({
+      branch: 'ozi-78',
+      debug: false,
+      execute: false,
+      mode: 'explicit',
+      previewUrl: 'https://preview.example.vercel.app',
+      sha: 'a'.repeat(40),
+    });
+  });
+
+  it('accepts auto mode', () => {
+    expect(parseCanaryArgs(['--auto'])).toEqual({
+      debug: false,
+      execute: false,
+      mode: 'auto',
+    });
+  });
+
+  it('rejects auto mode combined with explicit identity', () => {
+    expect(() => parseCanaryArgs(['--auto', ...input])).toThrow(
+      'cannot be combined',
+    );
+  });
+
+  it('rejects incomplete explicit identity', () => {
+    expect(() => parseCanaryArgs(input.slice(0, 2))).toThrow(
+      'Provide either --auto or complete',
+    );
+  });
+
+  it('rejects a missing identity mode', () => {
+    expect(() => parseCanaryArgs([])).toThrow(
+      'Provide either --auto or complete',
+    );
+  });
+
+  it('rejects duplicate options', () => {
+    expect(() =>
+      parseCanaryArgs([...input, `--git-sha=${'b'.repeat(40)}`]),
+    ).toThrow('must not be specified twice');
+  });
+
+  it('rejects duplicate debug flags', () => {
+    expect(() => parseCanaryArgs(['--auto', '--debug', '--debug'])).toThrow(
+      '--debug must not be specified twice',
+    );
+  });
+
   const expectedDeployment = {
     target: null,
     ownerId: 'team_expected',

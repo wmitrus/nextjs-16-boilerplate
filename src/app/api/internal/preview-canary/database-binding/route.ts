@@ -1,5 +1,7 @@
 import { connection, NextResponse } from 'next/server';
 
+import { env } from '@/core/env';
+
 const noStoreHeaders = { 'Cache-Control': 'private, no-store' };
 
 function unavailable(status: 404 | 500) {
@@ -11,8 +13,8 @@ function unavailable(status: 404 | 500) {
 
 export async function GET() {
   await connection();
-  if (process.env.VERCEL_ENV !== 'preview') return unavailable(404);
-  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (env.VERCEL_ENV !== 'preview') return unavailable(404);
+  const databaseUrl = env.DATABASE_URL?.trim();
   if (!databaseUrl) return unavailable(500);
   try {
     const parsed = new URL(databaseUrl);

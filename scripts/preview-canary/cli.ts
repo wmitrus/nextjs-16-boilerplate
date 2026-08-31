@@ -3,12 +3,14 @@ import path from 'node:path';
 
 import { readTextFileWithinBase } from '../lib/fs-guards-shared';
 
+import { resolveLocalGitIdentity } from './git-identity';
 import {
   assertClerkTestKeys,
   assertPreviewDeployment,
   assertVercelProjectLink,
   parseCanaryArgs,
   redactedEvidence,
+  type CanaryArgs,
 } from './guards';
 
 const RUNTIME_PROBE_TIMEOUT_MS = 10_000;
@@ -18,8 +20,22 @@ type VercelDeployment = {
   meta?: Record<string, unknown>;
   ownerId?: string;
   projectId?: string;
+  readyState?: string;
   target?: string | null;
   url?: string;
+};
+
+type VercelListCandidate = {
+  deploymentId?: string;
+  identifierField?: 'id' | 'uid';
+  identifierFieldsPresent: string[];
+  deployment: VercelDeployment;
+};
+
+export type CanaryIdentity = {
+  branch: string;
+  previewUrl: string;
+  sha: string;
 };
 
 function requiredEnv(
@@ -59,7 +75,11 @@ type VercelExecutor = (
 ) => string | Buffer;
 
 export function runVercelOperation(
-  operation: 'inspect' | 'deployment metadata' | 'pull',
+  operation:
+    | 'deployment discovery'
+    | 'inspect'
+    | 'deployment metadata'
+    | 'pull',
   args: string[],
   executor: VercelExecutor = execFileSync,
 ): string {
@@ -81,6 +101,373 @@ export function runVercelOperation(
         : '';
     throw new Error(`Vercel ${operation} failed${exitCode}.`);
   }
+}
+
+function normalizeVercelDeployment(value: unknown): VercelDeployment {
+  if (!value || typeof value !== 'object') return {};
+  const candidate = value as Record<string, unknown>;
+  return {
+    ...(typeof candidate.id === 'string' ? { id: candidate.id } : {}),
+    ...(candidate.meta && typeof candidate.meta === 'object'
+      ? { meta: candidate.meta as Record<string, unknown> }
+      : {}),
+    ...(typeof candidate.ownerId === 'string'
+      ? { ownerId: candidate.ownerId }
+      : {}),
+    ...(typeof candidate.projectId === 'string'
+      ? { projectId: candidate.projectId }
+      : {}),
+    ...(typeof candidate.readyState === 'string'
+      ? { readyState: candidate.readyState }
+      : {}),
+    ...(typeof candidate.target === 'string' || candidate.target === null
+      ? { target: candidate.target }
+      : {}),
+    ...(typeof candidate.url === 'string' ? { url: candidate.url } : {}),
+  };
+}
+
+function parseVercelDeploymentPage(output: string): {
+  candidates: VercelListCandidate[];
+  next?: number;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    throw new Error('Vercel deployment discovery returned malformed data.');
+  }
+  const candidates = Array.isArray(parsed)
+    ? parsed
+    : parsed &&
+        typeof parsed === 'object' &&
+        'deployments' in parsed &&
+        Array.isArray(parsed.deployments)
+      ? parsed.deployments
+      : undefined;
+  if (!candidates) {
+    throw new Error('Vercel deployment discovery returned malformed data.');
+  }
+  const next =
+    parsed &&
+    typeof parsed === 'object' &&
+    !Array.isArray(parsed) &&
+    'pagination' in parsed &&
+    parsed.pagination &&
+    typeof parsed.pagination === 'object' &&
+    'next' in parsed.pagination &&
+    typeof parsed.pagination.next === 'number' &&
+    parsed.pagination.next > 0
+      ? parsed.pagination.next
+      : undefined;
+  return {
+    candidates: candidates.map((candidate): VercelListCandidate => {
+      const record =
+        candidate && typeof candidate === 'object'
+          ? (candidate as Record<string, unknown>)
+          : {};
+      const identifierFieldsPresent = [
+        ...(typeof record.uid === 'string' ? ['uid'] : []),
+        ...(typeof record.id === 'string' ? ['id'] : []),
+      ];
+      const identifierField =
+        typeof record.uid === 'string'
+          ? 'uid'
+          : typeof record.id === 'string'
+            ? 'id'
+            : undefined;
+      const deploymentId =
+        identifierField === 'uid'
+          ? typeof record.uid === 'string'
+            ? record.uid
+            : undefined
+          : identifierField === 'id'
+            ? typeof record.id === 'string'
+              ? record.id
+              : undefined
+            : undefined;
+      return {
+        deployment: normalizeVercelDeployment(candidate),
+        deploymentId,
+        identifierField,
+        identifierFieldsPresent,
+      };
+    }),
+    next,
+  };
+}
+
+type DebugCheck = 'fail' | 'pass';
+
+function debugLog(enabled: boolean, event: string, value: object): void {
+  if (enabled) console.log(`[preview-canary:debug] ${event}`, value);
+}
+
+function safeCandidate(candidate: VercelDeployment): Record<string, unknown> {
+  const meta = candidate.meta ?? {};
+  let deploymentUrl: string | null = null;
+  try {
+    deploymentUrl = parseImmutableDeploymentUrl(candidate);
+  } catch {
+    deploymentUrl = '[invalid]';
+  }
+  return {
+    id: candidate.id ?? '[missing]',
+    meta: {
+      githubCommitOrg:
+        typeof meta.githubCommitOrg === 'string' ? meta.githubCommitOrg : null,
+      githubCommitRef:
+        typeof meta.githubCommitRef === 'string' ? meta.githubCommitRef : null,
+      githubCommitRepo:
+        typeof meta.githubCommitRepo === 'string'
+          ? meta.githubCommitRepo
+          : null,
+      githubCommitSha:
+        typeof meta.githubCommitSha === 'string' ? meta.githubCommitSha : null,
+      githubDeployment:
+        typeof meta.githubDeployment === 'string'
+          ? meta.githubDeployment
+          : null,
+    },
+    ownerId: candidate.ownerId ?? '[missing]',
+    projectId: candidate.projectId ?? '[missing]',
+    readyState: candidate.readyState ?? '[missing]',
+    target: candidate.target === undefined ? '[missing]' : candidate.target,
+    url: deploymentUrl,
+  };
+}
+
+function safeListCandidate(
+  candidate: VercelListCandidate,
+): Record<string, unknown> {
+  return {
+    deploymentId: candidate.deploymentId ?? '[missing]',
+    identifierField: candidate.identifierField ?? '[missing]',
+    identifierFieldsPresent: candidate.identifierFieldsPresent,
+    ...safeCandidate(candidate.deployment),
+  };
+}
+
+function isProviderDeploymentIdentifier(
+  value: string | undefined,
+): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
+}
+
+function evaluateCandidate(
+  candidate: VercelDeployment,
+  expected: {
+    branch: string;
+    orgId: string;
+    owner: string;
+    projectId: string;
+    repository: string;
+    sha: string;
+  },
+): {
+  checks: Record<string, DebugCheck>;
+  reasons: string[];
+  valid: boolean;
+} {
+  const meta = candidate.meta ?? {};
+  let immutableUrlValid = true;
+  try {
+    parseImmutableDeploymentUrl(candidate);
+  } catch {
+    immutableUrlValid = false;
+  }
+  const checks = {
+    gitBranch: meta.githubCommitRef === expected.branch ? 'pass' : 'fail',
+    gitOwner: meta.githubCommitOrg === expected.owner ? 'pass' : 'fail',
+    gitRepo: meta.githubCommitRepo === expected.repository ? 'pass' : 'fail',
+    gitSha: meta.githubCommitSha === expected.sha ? 'pass' : 'fail',
+    githubDeployment: meta.githubDeployment === '1' ? 'pass' : 'fail',
+    immutableUrl: immutableUrlValid ? 'pass' : 'fail',
+    owner: candidate.ownerId === expected.orgId ? 'pass' : 'fail',
+    previewTarget: candidate.target === null ? 'pass' : 'fail',
+    project: candidate.projectId === expected.projectId ? 'pass' : 'fail',
+    ready: candidate.readyState === 'READY' ? 'pass' : 'fail',
+  } satisfies Record<string, DebugCheck>;
+  const reasons: string[] = [
+    ...(checks.ready === 'fail' ? ['deployment is not READY'] : []),
+    ...(checks.previewTarget === 'fail' ? ['target is not Preview'] : []),
+    ...(checks.project === 'fail' ? ['Vercel project mismatch'] : []),
+    ...(checks.owner === 'fail' ? ['Vercel organization mismatch'] : []),
+    ...(checks.githubDeployment === 'fail'
+      ? ['githubDeployment marker mismatch']
+      : []),
+    ...(checks.gitBranch === 'fail' ? ['git branch mismatch'] : []),
+    ...(checks.gitSha === 'fail' ? ['git SHA mismatch'] : []),
+    ...(checks.gitOwner === 'fail' ? ['GitHub owner mismatch'] : []),
+    ...(checks.gitRepo === 'fail' ? ['GitHub repository mismatch'] : []),
+    ...(checks.immutableUrl === 'fail'
+      ? ['immutable deployment URL invalid']
+      : []),
+  ];
+  let valid = reasons.length === 0;
+  if (valid) {
+    try {
+      assertPreviewDeployment(candidate, expected);
+    } catch {
+      valid = false;
+      reasons.push('deployment identity validation failed');
+    }
+  }
+  return { checks, reasons, valid };
+}
+
+export function resolveAutoPreviewIdentity(
+  identity: { branch: string; sha: string },
+  executor: VercelExecutor = execFileSync,
+  debug = false,
+): { branch: string; previewUrl: string; sha: string } {
+  const repository = parseRepository(requiredEnv('GITHUB_REPOSITORY'));
+  const vercelIdentity = {
+    orgId: requiredEnv('VERCEL_ORG_ID'),
+    projectId: requiredEnv('VERCEL_PROJECT_ID'),
+  };
+  const expected = { ...repository, ...vercelIdentity, ...identity };
+  const candidates: VercelListCandidate[] = [];
+  const seenPages = new Set<number>();
+  let next: number | undefined;
+  let pagesFetched = 0;
+  do {
+    const query = new URLSearchParams({
+      'meta-githubCommitRef': identity.branch,
+      'meta-githubCommitSha': identity.sha,
+      limit: '100',
+      projectId: vercelIdentity.projectId,
+      state: 'READY',
+      teamId: vercelIdentity.orgId,
+    });
+    if (next !== undefined) query.set('until', String(next));
+    const page = parseVercelDeploymentPage(
+      runVercelOperation(
+        'deployment discovery',
+        ['api', `/v6/deployments?${query.toString()}`, '--method=GET', '--raw'],
+        executor,
+      ),
+    );
+    pagesFetched += 1;
+    candidates.push(...page.candidates);
+    next = page.next;
+    if (next !== undefined && (seenPages.has(next) || seenPages.size >= 100)) {
+      throw new Error('Vercel deployment discovery returned malformed data.');
+    }
+    if (next !== undefined) seenPages.add(next);
+  } while (next !== undefined);
+
+  let detailResponsesFetched = 0;
+  const matches: Array<{ deployment: VercelDeployment; id: string }> = [];
+  let malformedListIdentifier = false;
+  for (const candidate of candidates) {
+    if (!isProviderDeploymentIdentifier(candidate.deploymentId)) {
+      malformedListIdentifier = true;
+      debugLog(debug, 'candidate', {
+        ...safeListCandidate(candidate),
+        detailFetched: false,
+        detailMetadataValidated: false,
+        listDiscovered: true,
+        reasons: ['deployment identifier missing or malformed'],
+        result: 'rejected',
+      });
+      continue;
+    }
+
+    let detail: VercelDeployment;
+    try {
+      detail = normalizeVercelDeployment(
+        JSON.parse(
+          runVercelOperation(
+            'deployment metadata',
+            [
+              'api',
+              `/v13/deployments/${encodeURIComponent(candidate.deploymentId)}`,
+              '--method=GET',
+              '--raw',
+            ],
+            executor,
+          ),
+        ),
+      );
+      detailResponsesFetched += 1;
+    } catch {
+      debugLog(debug, 'candidate', {
+        ...safeListCandidate(candidate),
+        detailFetched: false,
+        detailMetadataValidated: false,
+        listDiscovered: true,
+        reasons: ['deployment detail could not be read'],
+        result: 'rejected',
+      });
+      continue;
+    }
+    const evaluation = evaluateCandidate(detail, expected);
+    debugLog(debug, 'candidate', {
+      ...safeListCandidate(candidate),
+      checks: evaluation.checks,
+      detailFetched: true,
+      detailMetadata: safeCandidate(detail),
+      detailMetadataValidated: evaluation.valid,
+      listDiscovered: true,
+      reasons: evaluation.reasons,
+      result: evaluation.valid ? 'accepted' : 'rejected',
+    });
+    if (evaluation.valid) {
+      matches.push({ deployment: detail, id: candidate.deploymentId });
+    }
+  }
+  debugLog(debug, 'discovery summary', {
+    candidateIdsDiscovered: new Set(
+      candidates
+        .map((candidate) => candidate.deploymentId)
+        .filter(isProviderDeploymentIdentifier),
+    ).size,
+    deploymentListEntriesExamined: candidates.length,
+    detailResponsesFetched,
+    fullyValidCandidates: matches.length,
+    pagesFetched,
+  });
+  if (malformedListIdentifier) {
+    throw new Error('Vercel deployment discovery returned malformed data.');
+  }
+  if (matches.length === 0) {
+    throw new Error(
+      'No exact READY Preview deployment found for current branch and SHA.',
+    );
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      'Multiple exact READY Preview deployments found for current branch and SHA.',
+    );
+  }
+  const selected = matches[0];
+  if (!selected) {
+    throw new Error('Vercel deployment discovery returned malformed data.');
+  }
+  const previewUrl = parseImmutableDeploymentUrl(selected.deployment);
+  debugLog(debug, 'discovery selected', {
+    id: selected.id,
+    immutableUrl: previewUrl,
+  });
+  return {
+    branch: identity.branch,
+    previewUrl,
+    sha: identity.sha,
+  };
+}
+
+export function resolveCanaryIdentity(args: CanaryArgs): CanaryIdentity {
+  if (args.mode === 'auto') {
+    const identity = resolveLocalGitIdentity();
+    debugLog(args.debug, 'local identity', identity);
+    return resolveAutoPreviewIdentity(identity, execFileSync, args.debug);
+  }
+  return {
+    branch: args.branch,
+    previewUrl: args.previewUrl,
+    sha: args.sha,
+  };
 }
 
 export function parseVercelProjectLink(parsed: unknown): {
@@ -294,10 +681,12 @@ export function parseImmutableDeploymentUrl(
   return parsed.origin;
 }
 
-export async function run(argv = process.argv): Promise<void> {
-  const args = parseCanaryArgs(argv.slice(2));
+export async function executeReadOnlyCanary(
+  identity: CanaryIdentity,
+  execute: boolean,
+): Promise<void> {
   const inspected = JSON.parse(
-    runVercelOperation('inspect', ['inspect', args.previewUrl, '--json']),
+    runVercelOperation('inspect', ['inspect', identity.previewUrl, '--json']),
   ) as VercelDeployment;
   if (!inspected.id)
     throw new Error('Vercel inspect did not return a deployment ID.');
@@ -315,8 +704,8 @@ export async function run(argv = process.argv): Promise<void> {
   };
   assertPreviewDeployment(deployment, {
     ...repository,
-    branch: args.branch,
-    sha: args.sha,
+    branch: identity.branch,
+    sha: identity.sha,
     ...vercelIdentity,
   });
   const immutableDeploymentUrl = parseImmutableDeploymentUrl(deployment);
@@ -327,7 +716,7 @@ export async function run(argv = process.argv): Promise<void> {
     'pull',
     '--yes',
     '--environment=preview',
-    `--git-branch=${args.branch}`,
+    `--git-branch=${identity.branch}`,
   ]);
   assertVercelProjectLink(readVercelProjectLink(), vercelIdentity);
   const previewEnv = readPreviewEnv();
@@ -363,7 +752,7 @@ export async function run(argv = process.argv): Promise<void> {
       'neon',
       '--',
       'verify-preview-endpoint',
-      `--git-branch=${args.branch}`,
+      `--git-branch=${identity.branch}`,
       `--database-host=${runtimeDatabaseHost}`,
     ],
     { stdio: ['ignore', 'pipe', 'pipe'] },
@@ -371,15 +760,21 @@ export async function run(argv = process.argv): Promise<void> {
 
   console.log(
     JSON.stringify({
-      ...redactedEvidence({ ...args, provider }),
+      ...redactedEvidence({ ...identity, provider }),
       mode: 'read-only',
-      mutation: args.execute
+      mutation: execute
         ? 'refused: A3b owns fixture mutation'
         : 'not requested',
-      neonPreviewBranch: `preview/${args.branch}`,
+      neonPreviewBranch: `preview/${identity.branch}`,
       runtimeDatabaseHost,
     }),
   );
+}
+
+export async function run(argv = process.argv): Promise<void> {
+  const args = parseCanaryArgs(argv.slice(2));
+  const identity = resolveCanaryIdentity(args);
+  await executeReadOnlyCanary(identity, args.execute);
 }
 
 const isMain = process.argv[1]?.endsWith('/scripts/preview-canary/cli.ts');

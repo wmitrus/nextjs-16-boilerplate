@@ -23,10 +23,12 @@ import { run } from './cli';
 const identity = { branch: 'ozi-78', sha: 'a'.repeat(40) };
 const immutableUrl = 'project-immutable-abc123-team.vercel.app';
 const databaseHost = 'ep-test.us-east-2.aws.neon.tech';
+const databaseName = 'app_preview';
 const authjsRuntimeEvidence = {
   authProvider: 'authjs',
   clerkKeysTest: null,
   databaseHost,
+  databaseName,
 };
 const deployment = {
   id: 'dpl_expected',
@@ -167,8 +169,71 @@ describe('Preview canary shared execution', () => {
       'verify-preview-endpoint',
       `--git-branch=${identity.branch}`,
       `--database-host=${databaseHost}`,
+      `--database-name=${databaseName}`,
     ]);
     expect(explicitEvidence).toEqual(autoEvidence);
+  });
+
+  it('reports the runtime database name as verified once Neon confirms both host and name, passing --database-name to the verifier', async () => {
+    setupSuccessfulDependencies();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await run(['node', 'cli.ts', '--auto']);
+
+    const evidence = JSON.parse(log.mock.calls[0]?.[0] as string);
+    expect(evidence).toMatchObject({
+      runtimeDatabaseHost: databaseHost,
+      runtimeDatabaseName: databaseName,
+      runtimeDatabaseNameVerified: true,
+    });
+    const neonCall = commandCalls().find(({ file }) => file === 'pnpm');
+    expect(neonCall?.args).toEqual([
+      'neon',
+      '--',
+      'verify-preview-endpoint',
+      `--git-branch=${identity.branch}`,
+      `--database-host=${databaseHost}`,
+      `--database-name=${databaseName}`,
+    ]);
+    // Bounded, secret-free evidence: no connection string, credentials, or
+    // raw provider JSON ever reaches the final logged evidence.
+    const serialized = JSON.stringify(evidence);
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('postgresql://');
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('databaseUrl');
+  });
+
+  it('fails closed when Neon rejects the runtime database name (mismatch, ambiguous, or missing)', async () => {
+    setupSuccessfulDependencies();
+    mockExecFileSync.mockImplementation((file: string, args: string[]) => {
+      if (file === 'pnpm') {
+        throw new Error(
+          'Runtime database name does not match the expected Neon Preview database.',
+        );
+      }
+      if (file === 'git' && args.join(' ') === 'branch --show-current') {
+        return `${identity.branch}\n`;
+      }
+      if (file === 'git' && args.join(' ') === 'rev-parse HEAD') {
+        return `${identity.sha}\n`;
+      }
+      if (file.endsWith('/node_modules/.bin/vercel')) {
+        if (args[0] === 'api' && args[1]?.startsWith('/v6/deployments?')) {
+          return JSON.stringify([{ ...deployment, uid: deployment.id }]);
+        }
+        if (args[0] === 'inspect') return JSON.stringify({ id: deployment.id });
+        if (args[0] === 'api' && args[1]?.includes(deployment.id)) {
+          return JSON.stringify(deployment);
+        }
+        if (args[0] === 'pull') return '';
+      }
+      throw new Error(`unexpected command: ${file} ${args.join(' ')}`);
+    });
+
+    await expect(run(['node', 'cli.ts', '--auto'])).rejects.toThrow(
+      'does not match the expected Neon Preview database',
+    );
   });
 
   it('uses the auto provider immutable deployment URL as the runtime probe target', async () => {
@@ -205,6 +270,7 @@ describe('Preview canary shared execution', () => {
         authProvider: 'clerk',
         clerkKeysTest: true,
         databaseHost,
+        databaseName,
       },
     });
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -277,15 +343,30 @@ describe('Preview canary shared execution', () => {
   it.each([
     [
       'Clerk non-test keys',
-      { authProvider: 'clerk', clerkKeysTest: false, databaseHost },
+      {
+        authProvider: 'clerk',
+        clerkKeysTest: false,
+        databaseHost,
+        databaseName,
+      },
     ],
     [
       'authjs with Clerk evidence',
-      { authProvider: 'authjs', clerkKeysTest: true, databaseHost },
+      {
+        authProvider: 'authjs',
+        clerkKeysTest: true,
+        databaseHost,
+        databaseName,
+      },
     ],
     [
       'unsupported provider',
-      { authProvider: 'supabase', clerkKeysTest: null, databaseHost },
+      {
+        authProvider: 'supabase',
+        clerkKeysTest: null,
+        databaseHost,
+        databaseName,
+      },
     ],
   ])(
     'fails closed for invalid immutable runtime %s',

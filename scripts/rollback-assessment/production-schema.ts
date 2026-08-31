@@ -273,6 +273,17 @@ type PostgresFactory = typeof postgres;
  * client was actually established to close). Neither the connection
  * string nor any host/database value nor a raw driver error is ever
  * included in a returned message.
+ *
+ * `ssl: 'verify-full'` is always passed explicitly, unconditionally,
+ * mirroring `scripts/tenancy-inventory/readonly-db-remote.ts`'s existing
+ * remote-credential pattern: `postgres-js` merges its parsed-URL options
+ * under any option present in the object passed here, so this
+ * unconditionally wins over anything the URL itself claims -- including
+ * `?sslmode=disable` -- rather than trusting the connection string to ask
+ * for encryption. Certificate-validated TLS, not just an encrypted pipe:
+ * an unauthenticated `require`-only handshake would still let a
+ * network-level attacker MITM the connection and read the Production
+ * migration-hash evidence this read exists to prove.
  */
 export async function readProductionAppliedMigrationHashes(
   expectedCount: number,
@@ -308,6 +319,7 @@ export async function readProductionAppliedMigrationHashes(
       },
       max: 1,
       prepare: false,
+      ssl: 'verify-full',
     });
   } catch {
     // Construction itself threw -- no client was established, so there is

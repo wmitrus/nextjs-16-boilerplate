@@ -354,8 +354,27 @@ describe('Production applied-migration-hash read', () => {
         statement_timeout: 5000,
       }) as unknown,
       max: 1,
+      ssl: 'verify-full',
     });
     expect(wasEnded()).toBe(true);
+  });
+
+  it("passes ssl: 'verify-full' unconditionally even when the connection string itself asks for ?sslmode=disable", async () => {
+    const insecureUrl = `postgres://user:pass@${productionHost}/${productionDatabaseName}?sslmode=disable`;
+    vi.stubEnv('DATABASE_URL', insecureUrl);
+    vi.stubEnv('DATABASE_URL_UNPOOLED', '');
+    vi.stubEnv('PRODUCTION_DATABASE_HOST', productionHost);
+    vi.stubEnv('PRODUCTION_DATABASE_NAME', productionDatabaseName);
+    const { calls, factory } = fakeFactory({
+      rows: [{ hash: 'a'.repeat(64) }],
+    });
+    const result = await readProductionAppliedMigrationHashes(1, factory);
+    expect(result).toMatchObject({ status: 'OK' });
+    // The explicit option object -- not the URL's own ?sslmode= -- is what
+    // this asserts: `postgres-js` merges its parsed-URL options under
+    // whatever is present here, so passing 'verify-full' unconditionally
+    // wins regardless of what the connection string itself claims.
+    expect(calls.connectOptions).toMatchObject({ ssl: 'verify-full' });
   });
 
   it('rejects an out-of-bound expectedCount before ever connecting', async () => {

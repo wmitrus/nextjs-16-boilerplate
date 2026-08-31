@@ -29,13 +29,22 @@ beforeEach(() => {
 });
 
 describe('Preview canary database binding route', () => {
-  it('returns only the runtime database hostname in Preview', async () => {
+  it('returns the runtime database hostname and database name in Preview', async () => {
     const response = await GET();
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(await response.json()).toEqual({
       authProvider: 'authjs',
       clerkKeysTest: null,
       databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+      databaseName: 'database',
+    });
+  });
+
+  it('correctly decodes a percent-encoded database name', async () => {
+    mocks.env.DATABASE_URL =
+      'postgresql://user:password@ep-test.us-east-2.aws.neon.tech/preview%2Fozi-78';
+    expect(await (await GET()).json()).toMatchObject({
+      databaseName: 'preview/ozi-78',
     });
   });
 
@@ -59,6 +68,7 @@ describe('Preview canary database binding route', () => {
       authProvider: 'authjs',
       clerkKeysTest: null,
       databaseHost: 'ep-test-pooler.us-east-2.aws.neon.tech',
+      databaseName: 'database',
     });
   });
 
@@ -72,6 +82,7 @@ describe('Preview canary database binding route', () => {
       authProvider: 'clerk',
       clerkKeysTest: true,
       databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+      databaseName: 'database',
     });
     expect(body).not.toContain('sk_test_runtime-secret');
     expect(body).not.toContain('pk_test_runtime-public');
@@ -97,6 +108,13 @@ describe('Preview canary database binding route', () => {
     'https://user:password@example.test/database',
     'postgresql:///db',
     'postgres:///db',
+    'postgresql://ep-test.us-east-2.aws.neon.tech/',
+    'postgresql://ep-test.us-east-2.aws.neon.tech',
+    'postgresql://ep-test.us-east-2.aws.neon.tech/%',
+    `postgresql://ep-test.us-east-2.aws.neon.tech/${'a'.repeat(64)}`,
+    // 32 * 'ą' (2 UTF-8 bytes each) = 32 JS characters but 64 UTF-8 bytes --
+    // must fail closed on byte length, not JS .length.
+    `postgresql://ep-test.us-east-2.aws.neon.tech/${'ą'.repeat(32)}`,
   ])('fails safely for invalid database configuration', async (databaseUrl) => {
     mocks.env.DATABASE_URL = databaseUrl;
     const response = await GET();

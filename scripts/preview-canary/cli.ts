@@ -13,6 +13,20 @@ import {
 } from './guards';
 
 const RUNTIME_PROBE_TIMEOUT_MS = 10_000;
+// PostgreSQL's identifier limit (NAMEDATALEN - 1) is a *byte* limit, not a
+// JS-character count -- mirrors isValidDatabaseName in scripts/neon/cli.ts
+// so runtime-reported evidence is bounded identically to the
+// Neon-authoritative name it will later be compared against.
+const MAX_DATABASE_NAME_BYTES = 63;
+
+function isValidDatabaseName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !/[\s\u0000-\u001f\u007f]/.test(value) &&
+    Buffer.byteLength(value, 'utf8') <= MAX_DATABASE_NAME_BYTES
+  );
+}
 
 type VercelDeployment = {
   id?: string;
@@ -542,6 +556,7 @@ export type RuntimeCanaryEvidence = {
   authProvider: 'authjs' | 'clerk';
   clerkKeysTest: boolean | null;
   databaseHost: string;
+  databaseName: string;
 };
 
 export async function probeRuntimeDatabaseBinding(input: {
@@ -655,13 +670,15 @@ export function parseRuntimeCanaryEvidence(
   if (
     !value ||
     typeof value !== 'object' ||
-    Object.keys(value).length !== 3 ||
+    Object.keys(value).length !== 4 ||
     !('databaseHost' in value) ||
+    !('databaseName' in value) ||
     !('authProvider' in value) ||
     !('clerkKeysTest' in value) ||
     typeof value.databaseHost !== 'string' ||
     value.databaseHost.length === 0 ||
     /[\s\u0000-\u001f\u007f/:?#@]/.test(value.databaseHost) ||
+    !isValidDatabaseName(value.databaseName) ||
     (value.authProvider !== 'authjs' && value.authProvider !== 'clerk') ||
     (value.clerkKeysTest !== null &&
       typeof value.clerkKeysTest !== 'boolean') ||
@@ -674,6 +691,7 @@ export function parseRuntimeCanaryEvidence(
     authProvider: value.authProvider,
     clerkKeysTest: value.clerkKeysTest,
     databaseHost: value.databaseHost,
+    databaseName: value.databaseName,
   };
 }
 
@@ -766,6 +784,14 @@ export async function executeReadOnlyCanary(
     internalApiKeys,
   });
 
+  // `verify-preview-endpoint` proves both that the runtime-reported host
+  // belongs to the expected Neon Preview branch's endpoints AND that the
+  // runtime-reported database name exactly equals that branch's single
+  // authoritative database -- both checked against Neon's own Management
+  // API, an authoritative source independent of the runtime's own
+  // DATABASE_URL. The expected database name is never derived from
+  // `runtimeEvidence` itself (that would be self-validation, not proof); a
+  // Preview branch with zero or multiple databases fails this step closed.
   execFileSync(
     'pnpm',
     [
@@ -774,6 +800,7 @@ export async function executeReadOnlyCanary(
       'verify-preview-endpoint',
       `--git-branch=${identity.branch}`,
       `--database-host=${runtimeEvidence.databaseHost}`,
+      `--database-name=${runtimeEvidence.databaseName}`,
     ],
     { stdio: ['ignore', 'pipe', 'pipe'] },
   );
@@ -790,6 +817,8 @@ export async function executeReadOnlyCanary(
         : 'not requested',
       neonPreviewBranch: `preview/${identity.branch}`,
       runtimeDatabaseHost: runtimeEvidence.databaseHost,
+      runtimeDatabaseName: runtimeEvidence.databaseName,
+      runtimeDatabaseNameVerified: true,
     }),
   );
 }

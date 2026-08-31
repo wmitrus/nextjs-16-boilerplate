@@ -22,6 +22,7 @@ const runtimeEvidence = JSON.stringify({
   authProvider: 'authjs',
   clerkKeysTest: null,
   databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+  databaseName: 'app_preview',
 });
 
 function deployment(
@@ -498,22 +499,53 @@ describe('Preview canary Vercel boundary', () => {
     ).toEqual({ orgId: 'team_expected', projectId: 'prj_expected' });
   });
 
-  it('accepts only a bounded runtime database hostname', () => {
+  it('accepts only a bounded runtime database hostname and database name', () => {
     expect(
       parseRuntimeCanaryEvidence(
-        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech","authProvider":"authjs","clerkKeysTest":null}',
+        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech","databaseName":"app_preview","authProvider":"authjs","clerkKeysTest":null}',
       ),
     ).toEqual({
       authProvider: 'authjs',
       clerkKeysTest: null,
       databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+      databaseName: 'app_preview',
     });
+  });
+
+  it('accepts a database name of exactly 63 ASCII bytes', () => {
+    const name = 'a'.repeat(63);
+    expect(
+      parseRuntimeCanaryEvidence(
+        JSON.stringify({
+          authProvider: 'authjs',
+          clerkKeysTest: null,
+          databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+          databaseName: name,
+        }),
+      ),
+    ).toMatchObject({ databaseName: name });
+  });
+
+  it('accepts a multi-byte UTF-8 database name that is exactly 63 bytes', () => {
+    // 31 * 'ą' (2 UTF-8 bytes each, 62 bytes) + 1 ASCII byte = 63 bytes, 32 JS characters.
+    const name = `${'ą'.repeat(31)}a`;
+    expect(Buffer.byteLength(name, 'utf8')).toBe(63);
+    expect(
+      parseRuntimeCanaryEvidence(
+        JSON.stringify({
+          authProvider: 'authjs',
+          clerkKeysTest: null,
+          databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+          databaseName: name,
+        }),
+      ),
+    ).toMatchObject({ databaseName: name });
   });
 
   it('accepts Clerk runtime evidence only when deployed keys are test keys', () => {
     expect(
       parseRuntimeCanaryEvidence(
-        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech","authProvider":"clerk","clerkKeysTest":true}',
+        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech","databaseName":"app_preview","authProvider":"clerk","clerkKeysTest":true}',
       ),
     ).toMatchObject({ authProvider: 'clerk', clerkKeysTest: true });
   });
@@ -540,14 +572,28 @@ describe('Preview canary Vercel boundary', () => {
   it.each([
     'not json',
     '{}',
-    '{"databaseHost":"https://example.test","authProvider":"authjs","clerkKeysTest":null}',
-    '{"databaseHost":"host/path","authProvider":"authjs","clerkKeysTest":null}',
-    '{"databaseHost":"host","authProvider":"authjs","clerkKeysTest":true}',
-    '{"databaseHost":"host","authProvider":"clerk","clerkKeysTest":false}',
-    '{"databaseHost":"host","authProvider":"supabase","clerkKeysTest":null}',
-    '{"databaseHost":"host","authProvider":"authjs","clerkKeysTest":null,"extra":true}',
-    '{"databaseHost":"host","authProvider":"clerk","clerkKeysTest":true,"clerkSecretKey":"sk_test_not-allowed"}',
-    '{"databaseHost":"host","authProvider":"authjs","clerkKeysTest":null,"databaseUrl":"postgresql://not-allowed"}',
+    '{"databaseHost":"https://example.test","databaseName":"db","authProvider":"authjs","clerkKeysTest":null}',
+    '{"databaseHost":"host/path","databaseName":"db","authProvider":"authjs","clerkKeysTest":null}',
+    '{"databaseHost":"host","databaseName":"db","authProvider":"authjs","clerkKeysTest":true}',
+    '{"databaseHost":"host","databaseName":"db","authProvider":"clerk","clerkKeysTest":false}',
+    '{"databaseHost":"host","databaseName":"db","authProvider":"supabase","clerkKeysTest":null}',
+    '{"databaseHost":"host","databaseName":"db","authProvider":"authjs","clerkKeysTest":null,"extra":true}',
+    '{"databaseHost":"host","databaseName":"db","authProvider":"clerk","clerkKeysTest":true,"clerkSecretKey":"sk_test_not-allowed"}',
+    '{"databaseHost":"host","databaseName":"db","authProvider":"authjs","clerkKeysTest":null,"databaseUrl":"postgresql://not-allowed"}',
+    // databaseName-specific malformations
+    '{"databaseHost":"host","authProvider":"authjs","clerkKeysTest":null}',
+    '{"databaseHost":"host","databaseName":"","authProvider":"authjs","clerkKeysTest":null}',
+    '{"databaseHost":"host","databaseName":"has space","authProvider":"authjs","clerkKeysTest":null}',
+    '{"databaseHost":"host","databaseName":123,"authProvider":"authjs","clerkKeysTest":null}',
+    `{"databaseHost":"host","databaseName":"${'a'.repeat(64)}","authProvider":"authjs","clerkKeysTest":null}`,
+    // 32 * 'ą' (2 UTF-8 bytes each) = 32 JS characters (well under 63) but 64
+    // UTF-8 bytes -- must be rejected by byte length, not JS .length.
+    JSON.stringify({
+      databaseHost: 'host',
+      databaseName: 'ą'.repeat(32),
+      authProvider: 'authjs',
+      clerkKeysTest: null,
+    }),
   ])('rejects malformed runtime evidence: %s', (output) => {
     expect(() => parseRuntimeCanaryEvidence(output)).toThrow(
       'invalid evidence',

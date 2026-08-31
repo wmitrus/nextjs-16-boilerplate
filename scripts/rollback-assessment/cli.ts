@@ -344,11 +344,23 @@ function buildRemoteVerifiedRollbackAssessment(
  * reads never proceed and their gates stay BLOCKED -- there is no path from
  * either flag alone to a Vercel DETAIL read or a Production connection.
  *
+ * Trust order is IDENTITY -> ANCESTRY -> EVIDENCE: candidate DETAIL identity
+ * proves this is the exact nominated Production deployment, but proves
+ * nothing about whether its commit belongs to the trusted containment
+ * lineage. Neither Production evidence path may acquire anything -- not the
+ * secret-bearing environment probe (which transmits `INTERNAL_API_KEY` and
+ * `VERCEL_AUTOMATION_BYPASS_SECRET`), nor the candidate migration-journal/
+ * Production DB schema read -- until `assessContainmentFloorAncestry()`
+ * has been checked against the trusted candidate and returned PASS. An
+ * ancestry BLOCKED/ERROR/INVALID candidate gets neither read, regardless of
+ * how exact its DETAIL identity is.
+ *
  * The environment read additionally never fires until a purely local Git
  * check (`checkCandidateEnvironmentContractInstrumentation`) has confirmed
  * the trusted candidate's own commit actually contains the attestation
  * route -- a candidate built before this instrumentation existed can never
  * serve it, and that must fail closed to BLOCKED, not a 404 read as ERROR.
+ * This check only runs after the ancestry gate above has already passed.
  */
 export async function run(argv = process.argv): Promise<void> {
   const flags = parseRollbackAssessmentArgs(argv.slice(2));
@@ -384,6 +396,21 @@ export async function run(argv = process.argv): Promise<void> {
     }
   }
 
+  // Trust order: candidate DETAIL identity, THEN containment-floor ancestry,
+  // THEN any Production evidence read. Computed once for Production evidence
+  // acquisition gating, here, before either evidence-acquisition block below.
+  // evidence-acquisition block below -- neither may run against a candidate
+  // whose ancestry is not PASS, even though `buildAssessment()` below
+  // independently recomputes the same authoritative check for the final
+  // displayed `containmentFloorAncestry` field. A candidate outside the
+  // containment floor (or one ancestry cannot yet prove) must never receive
+  // the secret-bearing environment probe, and must never trigger a
+  // Production schema/DB read, regardless of candidate DETAIL identity or
+  // environment-contract-route instrumentation.
+  const trustedCandidateAncestry = trustedCandidate
+    ? assessContainmentFloorAncestry(trustedCandidate.gitSha)
+    : undefined;
+
   let environmentContractEvidence: unknown;
   let environmentAcquisitionFailure: AcquisitionFailure | undefined;
 
@@ -393,6 +420,13 @@ export async function run(argv = process.argv): Promise<void> {
         reason:
           'Production environment read requires a validated rollback candidate.',
         status: 'BLOCKED',
+      };
+    } else if (trustedCandidateAncestry?.status !== 'PASS') {
+      environmentAcquisitionFailure = {
+        reason:
+          'Production environment read requires containment-floor ancestry to pass.',
+        status:
+          trustedCandidateAncestry?.status === 'ERROR' ? 'ERROR' : 'BLOCKED',
       };
     } else {
       const instrumentation = checkCandidateEnvironmentContractInstrumentation(
@@ -429,6 +463,13 @@ export async function run(argv = process.argv): Promise<void> {
         reason:
           'Production schema read requires a validated rollback candidate.',
         status: 'BLOCKED',
+      };
+    } else if (trustedCandidateAncestry?.status !== 'PASS') {
+      schemaAcquisitionFailure = {
+        reason:
+          'Production schema read requires containment-floor ancestry to pass.',
+        status:
+          trustedCandidateAncestry?.status === 'ERROR' ? 'ERROR' : 'BLOCKED',
       };
     } else {
       const candidateResult = readCandidateMigrationJournal(

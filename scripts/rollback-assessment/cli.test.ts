@@ -22,6 +22,9 @@ const productionSchemaMocks = vi.hoisted(() => ({
   readCandidateMigrationJournal: vi.fn(),
   readProductionAppliedMigrationHashes: vi.fn(),
 }));
+const gitAncestryMocks = vi.hoisted(() => ({
+  assessContainmentFloorAncestry: vi.fn(),
+}));
 
 // Module-boundary mocks: run() is structurally bound to the real remote/
 // local-Git modules with no caller-controlled dependency bag, so CLI-level
@@ -30,8 +33,15 @@ const productionSchemaMocks = vi.hoisted(() => ({
 // left unmocked -- cli.ts only uses its pure `buildEnvironmentContractEvidence`
 // from there now; the "expected Production contract" source moved to the
 // explicit, LOCAL_OPERATOR_DECLARED anchors in `./remote-environment`.
+// `./git-ancestry` is mocked so tests can control the pre-read trust-order
+// gate (candidate identity -> ancestry PASS -> Production evidence) with a
+// synthetic candidate SHA, rather than depending on this checkout's real
+// Git history; `assessContainmentFloorAncestry`'s own real-Git behavior is
+// covered independently by `git-ancestry.test.ts`, which this pass does not
+// touch.
 vi.mock('./remote-candidate', () => remoteCandidateMocks);
 vi.mock('./remote-environment', () => remoteEnvironmentMocks);
+vi.mock('./git-ancestry', () => gitAncestryMocks);
 vi.mock('./production-schema', async () => {
   const actual = await vi.importActual<typeof ProductionSchemaModule>(
     './production-schema',
@@ -125,6 +135,11 @@ beforeEach(() => {
   );
   productionSchemaMocks.readCandidateMigrationJournal.mockReset();
   productionSchemaMocks.readProductionAppliedMigrationHashes.mockReset();
+  gitAncestryMocks.assessContainmentFloorAncestry.mockReset();
+  gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+    reason: 'Candidate commit descends from the containment floor.',
+    status: 'PASS',
+  });
 });
 
 describe('local rollback assessment CLI (A4.1/A4.2a)', () => {
@@ -300,15 +315,13 @@ describe('local rollback assessment CLI (A4.1/A4.2a)', () => {
   });
 
   it('keeps locally supplied candidate + ancestry PASS as NOT_REQUESTED provenance', () => {
-    const gitExecutor = vi
-      .fn()
-      .mockReturnValueOnce('false\n')
-      .mockReturnValueOnce('');
+    // `./git-ancestry` is mocked at the module boundary (see the top of this
+    // file) -- the real `assessContainmentFloorAncestry`/`gitExecutor`
+    // integration is covered independently by `git-ancestry.test.ts`.
     const assessment = buildLocalRollbackAssessment({
       candidateDetail: authoritativeDetail(),
       deploymentId,
       expectedIdentity,
-      gitExecutor,
     });
     expect(assessment.containmentFloorAncestry).toMatchObject({
       status: 'PASS',
@@ -746,6 +759,287 @@ describe('A4.2b environment-contract compatibility', () => {
       ).not.toHaveBeenCalled();
       expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
         environmentContract: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe('Trust ordering: containment-floor ancestry gates Production evidence (Codex P1)', () => {
+  it('environment: ancestry BLOCKED -> no instrumentation check, no secret-bearing GET, environmentContract BLOCKED', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Candidate commit does not descend from the containment floor.',
+      status: 'BLOCKED',
+    });
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]);
+      expect(
+        remoteEnvironmentMocks.checkCandidateEnvironmentContractInstrumentation,
+      ).not.toHaveBeenCalled();
+      expect(
+        remoteEnvironmentMocks.readCandidateEnvironmentContract,
+      ).not.toHaveBeenCalled();
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('environment: ancestry ERROR -> no instrumentation check, no secret-bearing GET, environmentContract ERROR (never downgraded to BLOCKED)', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Could not prove containment-floor ancestry locally.',
+      status: 'ERROR',
+    });
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]);
+      expect(
+        remoteEnvironmentMocks.checkCandidateEnvironmentContractInstrumentation,
+      ).not.toHaveBeenCalled();
+      expect(
+        remoteEnvironmentMocks.readCandidateEnvironmentContract,
+      ).not.toHaveBeenCalled();
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'ERROR' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('environment: ancestry PASS -> instrumentation is checked, then (only then) the probe runs -- ordering identity -> ancestry -> instrumentation -> GET', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
+      matchingEnvironmentEvidence,
+    );
+    const callOrder: string[] = [];
+    gitAncestryMocks.assessContainmentFloorAncestry.mockImplementation(() => {
+      callOrder.push('ancestry');
+      return {
+        reason: 'Candidate commit descends from the containment floor.',
+        status: 'PASS',
+      };
+    });
+    remoteEnvironmentMocks.checkCandidateEnvironmentContractInstrumentation.mockImplementation(
+      () => {
+        callOrder.push('instrumentation');
+        return { status: 'PRESENT' };
+      },
+    );
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockImplementation(
+      async () => {
+        callOrder.push('probe');
+        return matchingEnvironmentEvidence;
+      },
+    );
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]);
+      // A second 'ancestry' entry is expected: `buildAssessment()` separately
+      // recomputes the same authoritative check for the final displayed
+      // `containmentFloorAncestry` field (see cli.ts's trust-order doc
+      // comment) -- what matters here is that it comes AFTER the probe, not
+      // before it.
+      expect(callOrder).toEqual([
+        'ancestry',
+        'instrumentation',
+        'probe',
+        'ancestry',
+      ]);
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'PASS' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('schema: ancestry BLOCKED -> no candidate migration-journal read, no Production DB read, schemaCompatibility BLOCKED', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Candidate commit does not descend from the containment floor.',
+      status: 'BLOCKED',
+    });
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-schema-read',
+      ]);
+      expect(
+        productionSchemaMocks.readCandidateMigrationJournal,
+      ).not.toHaveBeenCalled();
+      expect(
+        productionSchemaMocks.readProductionAppliedMigrationHashes,
+      ).not.toHaveBeenCalled();
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        schemaCompatibility: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('schema: ancestry ERROR -> no candidate migration-journal read, no Production DB read, schemaCompatibility ERROR', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Could not prove containment-floor ancestry locally.',
+      status: 'ERROR',
+    });
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-schema-read',
+      ]);
+      expect(
+        productionSchemaMocks.readCandidateMigrationJournal,
+      ).not.toHaveBeenCalled();
+      expect(
+        productionSchemaMocks.readProductionAppliedMigrationHashes,
+      ).not.toHaveBeenCalled();
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        schemaCompatibility: { status: 'ERROR' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('combined: both flags requested, ancestry BLOCKED -> zero reads across environment AND schema, both gates BLOCKED, rollback still non-executable', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Candidate commit does not descend from the containment floor.',
+      status: 'BLOCKED',
+    });
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+        '--execute-production-schema-read',
+      ]);
+      expect(
+        remoteEnvironmentMocks.readCandidateEnvironmentContract,
+      ).not.toHaveBeenCalled();
+      expect(
+        remoteEnvironmentMocks.checkCandidateEnvironmentContractInstrumentation,
+      ).not.toHaveBeenCalled();
+      expect(
+        productionSchemaMocks.readCandidateMigrationJournal,
+      ).not.toHaveBeenCalled();
+      expect(
+        productionSchemaMocks.readProductionAppliedMigrationHashes,
+      ).not.toHaveBeenCalled();
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'BLOCKED' },
+        schemaCompatibility: { status: 'BLOCKED' },
+        rollbackAction: 'NOT_AUTHORIZED',
+        rollbackExecutable: false,
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('candidate identity failure wins first: ancestry mock is never consulted to authorize anything when DETAIL identity is invalid', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    remoteCandidateMocks.readExpectedProductionIdentity.mockReturnValue(
+      expectedIdentity,
+    );
+    remoteCandidateMocks.readRemoteCandidateDetail.mockReturnValue(
+      authoritativeDetail({ ownerId: 'team_other' }),
+    );
+    // Even if the ancestry mock were told to PASS, an invalid DETAIL
+    // identity must never establish a trusted candidate to check ancestry
+    // against, and must never authorize either evidence read.
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Candidate commit descends from the containment floor.',
+      status: 'PASS',
+    });
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+        '--execute-production-schema-read',
+      ]);
+      expect(
+        gitAncestryMocks.assessContainmentFloorAncestry,
+      ).not.toHaveBeenCalled();
+      expect(
+        remoteEnvironmentMocks.readCandidateEnvironmentContract,
+      ).not.toHaveBeenCalled();
+      expect(
+        productionSchemaMocks.readCandidateMigrationJournal,
+      ).not.toHaveBeenCalled();
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        candidateIdentity: { status: 'INVALID' },
+        environmentContract: { status: 'BLOCKED' },
+        schemaCompatibility: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('default CLI (no execution flags) remains unchanged: zero Vercel reads, zero environment reads, zero Production DB reads', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      await run(['node', 'cli.ts', `--deployment-id=${deploymentId}`]);
+      expect(
+        remoteCandidateMocks.readRemoteCandidateDetail,
+      ).not.toHaveBeenCalled();
+      expect(
+        remoteEnvironmentMocks.readCandidateEnvironmentContract,
+      ).not.toHaveBeenCalled();
+      expect(
+        productionSchemaMocks.readCandidateMigrationJournal,
+      ).not.toHaveBeenCalled();
+      expect(
+        productionSchemaMocks.readProductionAppliedMigrationHashes,
+      ).not.toHaveBeenCalled();
+      expect(
+        gitAncestryMocks.assessContainmentFloorAncestry,
+      ).not.toHaveBeenCalled();
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'BLOCKED' },
+        schemaCompatibility: { status: 'BLOCKED' },
       });
     } finally {
       log.mockRestore();

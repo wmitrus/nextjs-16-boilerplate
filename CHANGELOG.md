@@ -1,3 +1,42 @@
+# [2.9.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.8.0...v2.9.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **canary:** bind preview verifier to Vercel project ([b2f1634](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b2f16348e8700f81d4dd5b6459cbd58c27d8d8db))
+* **canary:** keep Neon credentials outside preview env ([cbcbdba](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cbcbdbac39d17cf3edd57269e3d39c36dcb4e674))
+* **neon:** support explicit database host and unify preview‑endpoint validation ([a8c561d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a8c561d2b9c22e2cb03079e6d66db1a1c5b84529))
+* **neon:** verify pooled preview endpoints strictly ([41dd119](https://github.com/wmitrus/nextjs-16-boilerplate/commit/41dd119ff538da249a0fe3d29555deac3a09fecb))
+* **ozi-78:** bind safeguards to effective db runtime ([3df58f6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3df58f633eb030058b0425d4d8f3a6f4cd1fe497))
+* **ozi-78:** harden preview database binding ([8b4cfbb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8b4cfbb6b92f9cb29c7cbdc4ab6ae4b3035e5b0e))
+* **ozi-78:** harden rollback candidate evidence ([87426a1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/87426a1e10ff84a0b649026907518f25af32829f))
+* **ozi-78:** harden rollback environment attestation ([ad59ee4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ad59ee4a5783e6cdfae748e6af3ab8f4c6146a40))
+* **preview-canary:** accept null target and update preview‑deployment guard ([0a68162](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0a6816269ebed561f7a91b06a6333170999f357a))
+* **preview-canary:** add runtime DB host parser tests ([cba7102](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cba71022defa90aa8968943a6657cbc73091bff7))
+* **preview-canary:** add timeout handling for runtime database probe ([cd17620](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cd17620c46805930e07249b90689210dd34e3970))
+* **preview-canary:** allow null target in VercelDeployment type ([a3418a9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a3418a9188b4f64f1db2a2d6c5a9e8525ca8ee1a))
+* **preview-canary:** bind auth evidence to runtime ([d1155af](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d1155af6a969f32935313c93105643d8aec3a9e3))
+* **preview-canary:** enhance runtime database binding validation ([3074ddb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3074ddbe76ee79053a2860070811918a1bc339a9))
+* **preview-canary:** include Vercel CLI exit code in failure message ([3671840](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3671840dad4064ea6443560cbbef766b75906d02))
+* **preview-canary:** secure runtime database probe ([249865e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/249865ecd9cc64bd04b85895346b03001d2b5f01))
+* **rollback-assessment:** correct compatibility evidence section ([ad7ad5d](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ad7ad5d9d7952ada09341122e82bad189bad970d))
+* **rollback-assessment:** enhance ancestry checks for production evidence ([c060758](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c060758a14a63f1a6ff0f169fec5159d7a03f49d))
+
+
+### Features
+
+* **canary:** add automatic preview deployment discovery ([95611d9](https://github.com/wmitrus/nextjs-16-boilerplate/commit/95611d9be998c7d602121f35818a900172d72fd6))
+* **canary:** add read-only preview verifier ([1abf84f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1abf84fb8e689e23142b52345d578b853a58d4b0))
+* **git:** add full diff script for untracked files ([8a8a7e4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8a8a7e4a4795e35af462d299ef333407841d71fc))
+* **neon:** add strict multi‑form option parser to readOption ([1d7d184](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1d7d184553d18b0fc9fa9e65405c9af783667e86))
+* **observability:** add organization boundary telemetry ([72f55c5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/72f55c52cf4ee499a84f6ef92737235b6fc98b91))
+* **ozi-78:** add rollback compatibility evidence ([dfc159f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dfc159f0bb643622a2765738abe078158d60c8ca))
+* **preview-canary:** add database-binding preview route ([b3a7324](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b3a7324545b75c0cd113ba431ba4dddfa59d3bc8))
+* **preview-canary:** add immutable deployment URL parser ([254eb9f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/254eb9f1e9c555eff62b70a48f55377feb68eaae))
+* **preview-canary:** add runtime database-host probe and route verification through Neon ([5f7a7fb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/5f7a7fb51b6e3e4352c14c2a60aa676fc61c734d))
+* **rollback-assessment:** implement local rollback assessment CLI ([af016de](https://github.com/wmitrus/nextjs-16-boilerplate/commit/af016dea4fed6cc62bb7b9267972504556381d2b))
+* **rollback-assessment:** implement remote candidate detail read ([2622aef](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2622aef6e45d1093607ab1b0aa3b9ac76f828adc))
+
 # [2.8.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.7.0...v2.8.0) (2026-08-29)
 
 

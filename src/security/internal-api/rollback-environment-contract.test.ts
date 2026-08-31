@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
     // at all (it is not part of the zod schema), so this exists purely to
     // prove the reader would ignore it even if it were present.
     DATABASE_URL_UNPOOLED: undefined as string | undefined,
+    DB_DRIVER: 'postgres' as 'pglite' | 'postgres' | undefined,
+    DB_PROVIDER: 'drizzle' as 'drizzle' | 'prisma' | undefined,
     DEFAULT_TENANT_ID: undefined as string | undefined,
+    NODE_ENV: 'production' as string | undefined,
     TENANCY_MODE: 'single' as 'org' | 'personal' | 'single',
     TENANT_CONTEXT_SOURCE: undefined as 'db' | 'provider' | undefined,
   },
@@ -34,13 +37,17 @@ beforeEach(() => {
   mocks.env.AUTH_PROVIDER = 'authjs';
   mocks.env.DATABASE_URL =
     'postgresql://user:password@ep-prod.us-east-2.aws.neon.tech/app_production';
+  mocks.env.DATABASE_URL_UNPOOLED = undefined;
+  mocks.env.DB_DRIVER = 'postgres';
+  mocks.env.DB_PROVIDER = 'drizzle';
   mocks.env.DEFAULT_TENANT_ID = validTenantId;
+  mocks.env.NODE_ENV = 'production';
   mocks.env.TENANCY_MODE = 'single';
   mocks.env.TENANT_CONTEXT_SOURCE = undefined;
 });
 
 describe('rollback environment-contract dimensions', () => {
-  it('reads the enumerated security-critical dimensions, including database identity and single-tenant ID', () => {
+  it('reads the enumerated security-critical dimensions, including database identity, DB runtime, and single-tenant ID', () => {
     mocks.env.AUTH_PROVIDER = 'clerk';
     mocks.env.TENANCY_MODE = 'single';
     mocks.env.TENANT_CONTEXT_SOURCE = 'provider';
@@ -51,6 +58,8 @@ describe('rollback environment-contract dimensions', () => {
       authProvider: 'clerk',
       databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
       databaseName: 'app_production',
+      dbDriver: 'postgres',
+      dbProvider: 'drizzle',
       defaultTenantId: validTenantId,
       tenancyMode: 'single',
       tenantContextSource: 'provider',
@@ -114,6 +123,53 @@ describe('rollback environment-contract dimensions', () => {
     });
   });
 
+  describe('candidate DB runtime provider/driver (Codex findings 1 & 2: pglite/prisma false PASS)', () => {
+    it('resolves the effective drizzle/postgres runtime via the shared resolver', () => {
+      mocks.env.DB_PROVIDER = 'drizzle';
+      mocks.env.DB_DRIVER = 'postgres';
+      expect(readCurrentEnvironmentContractDimensions()).toMatchObject({
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
+      });
+    });
+
+    it('resolves an explicit pglite driver rather than fingerprinting the raw env value blindly', () => {
+      mocks.env.DB_DRIVER = 'pglite';
+      expect(readCurrentEnvironmentContractDimensions()).toMatchObject({
+        dbDriver: 'pglite',
+      });
+    });
+
+    it('resolves the same default as bootstrap when DB_DRIVER is unset (production -> postgres)', () => {
+      mocks.env.DB_DRIVER = undefined;
+      mocks.env.NODE_ENV = 'production';
+      expect(readCurrentEnvironmentContractDimensions()).toMatchObject({
+        dbDriver: 'postgres',
+      });
+    });
+
+    it('resolves the same default as bootstrap when DB_DRIVER is unset (non-production -> pglite)', () => {
+      mocks.env.DB_DRIVER = undefined;
+      mocks.env.NODE_ENV = 'development';
+      expect(readCurrentEnvironmentContractDimensions()).toMatchObject({
+        dbDriver: 'pglite',
+      });
+    });
+
+    it('resolves an explicit prisma provider', () => {
+      mocks.env.DB_PROVIDER = 'prisma';
+      expect(readCurrentEnvironmentContractDimensions()).toMatchObject({
+        dbProvider: 'prisma',
+      });
+    });
+
+    it('fails closed when the resolver itself throws (e.g. prisma + pglite)', () => {
+      mocks.env.DB_PROVIDER = 'prisma';
+      mocks.env.DB_DRIVER = 'pglite';
+      expect(readCurrentEnvironmentContractDimensions()).toBeUndefined();
+    });
+  });
+
   describe('candidate single-tenant identity (FINDING 2)', () => {
     it('includes a valid single-mode DEFAULT_TENANT_ID in the dimensions', () => {
       mocks.env.TENANCY_MODE = 'single';
@@ -170,6 +226,8 @@ describe('rollback environment-contract fingerprint', () => {
     authProvider: 'authjs' as const,
     databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
     databaseName: 'app_production',
+    dbDriver: 'postgres' as const,
+    dbProvider: 'drizzle' as const,
     defaultTenantId: validTenantId,
     tenancyMode: 'single' as const,
     tenantContextSource: null,
@@ -200,10 +258,24 @@ describe('rollback environment-contract fingerprint', () => {
     ],
     ['databaseName', { ...dimensions, databaseName: 'other_db' }],
     ['defaultTenantId', { ...dimensions, defaultTenantId: otherValidTenantId }],
+    ['dbProvider', { ...dimensions, dbProvider: 'prisma' as const }],
+    ['dbDriver', { ...dimensions, dbDriver: 'pglite' as const }],
   ])('changes when %s changes', (_field, changed) => {
     expect(fingerprintEnvironmentContract(changed)).not.toBe(
       fingerprintEnvironmentContract(dimensions),
     );
+  });
+
+  it('a candidate with the same host/name but pglite produces a different fingerprint than postgres', () => {
+    expect(
+      fingerprintEnvironmentContract({ ...dimensions, dbDriver: 'pglite' }),
+    ).not.toBe(fingerprintEnvironmentContract(dimensions));
+  });
+
+  it('a candidate with the same host/name but prisma produces a different fingerprint than drizzle', () => {
+    expect(
+      fingerprintEnvironmentContract({ ...dimensions, dbProvider: 'prisma' }),
+    ).not.toBe(fingerprintEnvironmentContract(dimensions));
   });
 
   it('same host but a different database name changes the fingerprint', () => {
@@ -228,16 +300,18 @@ describe('rollback environment-contract fingerprint', () => {
     });
   });
 
-  it('version is exactly v2', () => {
-    expect(ROLLBACK_ENVIRONMENT_CONTRACT_VERSION).toBe('v2');
+  it('version is exactly v3', () => {
+    expect(ROLLBACK_ENVIRONMENT_CONTRACT_VERSION).toBe('v3');
   });
 
-  it('bounded evidence never exposes databaseHost/databaseName/defaultTenantId/DATABASE_URL', () => {
+  it('bounded evidence never exposes databaseHost/databaseName/dbProvider/dbDriver/defaultTenantId/DATABASE_URL', () => {
     const evidence = buildEnvironmentContractEvidence(dimensions);
     const serialized = JSON.stringify(evidence);
     expect(serialized).not.toContain(dimensions.databaseHost);
     expect(serialized).not.toContain(dimensions.databaseName);
     expect(serialized).not.toContain(dimensions.defaultTenantId!);
-    expect(serialized).not.toMatch(/database|DATABASE_URL/i);
+    expect(serialized).not.toMatch(
+      /database|DATABASE_URL|dbProvider|dbDriver|drizzle|prisma|postgres|pglite/i,
+    );
   });
 });

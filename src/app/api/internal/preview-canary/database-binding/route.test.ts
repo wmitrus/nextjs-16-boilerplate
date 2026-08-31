@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
     AUTH_PROVIDER: 'authjs' as 'authjs' | 'clerk',
     CLERK_SECRET_KEY: undefined as string | undefined,
     DATABASE_URL: undefined as string | undefined,
+    DB_DRIVER: undefined as 'pglite' | 'postgres' | undefined,
+    DB_PROVIDER: undefined as 'drizzle' | 'prisma' | undefined,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: undefined as string | undefined,
+    NODE_ENV: 'production' as string | undefined,
     VERCEL_ENV: undefined as string | undefined,
   },
 }));
@@ -22,14 +25,17 @@ import { GET } from './route';
 beforeEach(() => {
   mocks.env.AUTH_PROVIDER = 'authjs';
   mocks.env.CLERK_SECRET_KEY = undefined;
+  mocks.env.DB_DRIVER = 'postgres';
+  mocks.env.DB_PROVIDER = 'drizzle';
   mocks.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = undefined;
+  mocks.env.NODE_ENV = 'production';
   mocks.env.VERCEL_ENV = 'preview';
   mocks.env.DATABASE_URL =
     'postgresql://user:password@ep-test.us-east-2.aws.neon.tech/database?sslmode=require';
 });
 
 describe('Preview canary database binding route', () => {
-  it('returns the runtime database hostname and database name in Preview', async () => {
+  it('returns the runtime database hostname, database name, and resolved DB provider/driver in Preview', async () => {
     const response = await GET();
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(await response.json()).toEqual({
@@ -37,7 +43,42 @@ describe('Preview canary database binding route', () => {
       clerkKeysTest: null,
       databaseHost: 'ep-test.us-east-2.aws.neon.tech',
       databaseName: 'database',
+      dbDriver: 'postgres',
+      dbProvider: 'drizzle',
     });
+  });
+
+  it('resolves dbDriver via the same defaulting bootstrap uses, not a raw env read', async () => {
+    // DB_DRIVER unset + production -> postgres (bootstrap's default rule),
+    // proving this route uses the shared resolver rather than reading
+    // DB_DRIVER directly (which would be undefined here).
+    mocks.env.DB_DRIVER = undefined;
+    expect(await (await GET()).json()).toMatchObject({
+      dbDriver: 'postgres',
+    });
+  });
+
+  it('resolves dbDriver to pglite outside production when unset', async () => {
+    mocks.env.DB_DRIVER = undefined;
+    mocks.env.NODE_ENV = 'development';
+    expect(await (await GET()).json()).toMatchObject({
+      dbDriver: 'pglite',
+    });
+  });
+
+  it('reports an explicit prisma provider', async () => {
+    mocks.env.DB_PROVIDER = 'prisma';
+    expect(await (await GET()).json()).toMatchObject({
+      dbProvider: 'prisma',
+    });
+  });
+
+  it('fails closed for an invalid provider/driver combination (prisma + pglite)', async () => {
+    mocks.env.DB_PROVIDER = 'prisma';
+    mocks.env.DB_DRIVER = 'pglite';
+    const response = await GET();
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe('{"error":"Unavailable"}');
   });
 
   it('correctly decodes a percent-encoded database name', async () => {
@@ -69,6 +110,8 @@ describe('Preview canary database binding route', () => {
       clerkKeysTest: null,
       databaseHost: 'ep-test-pooler.us-east-2.aws.neon.tech',
       databaseName: 'database',
+      dbDriver: 'postgres',
+      dbProvider: 'drizzle',
     });
   });
 
@@ -83,6 +126,8 @@ describe('Preview canary database binding route', () => {
       clerkKeysTest: true,
       databaseHost: 'ep-test.us-east-2.aws.neon.tech',
       databaseName: 'database',
+      dbDriver: 'postgres',
+      dbProvider: 'drizzle',
     });
     expect(body).not.toContain('sk_test_runtime-secret');
     expect(body).not.toContain('pk_test_runtime-public');

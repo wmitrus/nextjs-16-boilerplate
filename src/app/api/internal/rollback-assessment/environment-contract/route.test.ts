@@ -4,7 +4,10 @@ const mocks = vi.hoisted(() => ({
   env: {
     AUTH_PROVIDER: 'authjs' as string,
     DATABASE_URL: undefined as string | undefined,
+    DB_DRIVER: 'postgres' as 'pglite' | 'postgres' | undefined,
+    DB_PROVIDER: 'drizzle' as 'drizzle' | 'prisma' | undefined,
     DEFAULT_TENANT_ID: undefined as string | undefined,
+    NODE_ENV: 'production' as string | undefined,
     TENANCY_MODE: 'single' as 'org' | 'personal' | 'single',
     TENANT_CONTEXT_SOURCE: undefined as 'db' | 'provider' | undefined,
     VERCEL_ENV: undefined as string | undefined,
@@ -26,7 +29,10 @@ beforeEach(() => {
   mocks.env.AUTH_PROVIDER = 'authjs';
   mocks.env.DATABASE_URL =
     'postgresql://user:password@ep-prod.us-east-2.aws.neon.tech/app_production';
+  mocks.env.DB_DRIVER = 'postgres';
+  mocks.env.DB_PROVIDER = 'drizzle';
   mocks.env.DEFAULT_TENANT_ID = validTenantId;
+  mocks.env.NODE_ENV = 'production';
   mocks.env.TENANCY_MODE = 'single';
   mocks.env.TENANT_CONTEXT_SOURCE = undefined;
   mocks.env.VERCEL_ENV = 'production';
@@ -44,7 +50,7 @@ describe('Rollback candidate environment-contract route', () => {
     ]);
     expect(body).toMatchObject({
       authProvider: 'authjs',
-      contractVersion: 'v2',
+      contractVersion: 'v3',
     });
     expect(body.fingerprint).toMatch(/^[a-f0-9]{64}$/);
   });
@@ -95,15 +101,24 @@ describe('Rollback candidate environment-contract route', () => {
     expect(response.status).toBe(200);
   });
 
+  it('fails closed for an invalid DB provider/driver combination (prisma + pglite)', async () => {
+    mocks.env.DB_PROVIDER = 'prisma';
+    mocks.env.DB_DRIVER = 'pglite';
+    const response = await GET();
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe('{"error":"Unavailable"}');
+  });
+
   it('never contains raw env keys, secrets, or database identifiers', async () => {
     const body = await (await GET()).text();
     expect(body).not.toMatch(/database|secret|token|key|url/i);
   });
 
-  it('never exposes databaseHost/databaseName/defaultTenantId/DATABASE_URL', async () => {
+  it('never exposes databaseHost/databaseName/dbProvider/dbDriver/defaultTenantId/DATABASE_URL', async () => {
     const body = await (await GET()).text();
     expect(body).not.toContain('ep-prod.us-east-2.aws.neon.tech');
     expect(body).not.toContain('app_production');
     expect(body).not.toContain(validTenantId);
+    expect(body).not.toMatch(/drizzle|prisma|postgres|pglite/i);
   });
 });

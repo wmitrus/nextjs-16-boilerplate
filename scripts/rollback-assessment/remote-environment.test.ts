@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   checkCandidateEnvironmentContractInstrumentation,
@@ -180,6 +180,178 @@ describe('candidate environment-contract remote read', () => {
   });
 });
 
+describe('candidate environment-contract read: INTERNAL_API_KEY rotation (Codex finding 3)', () => {
+  const evidence = {
+    authProvider: 'authjs',
+    contractVersion: 'v3',
+    fingerprint: 'a'.repeat(64),
+  };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('current key -> 200: exactly one request', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'previous-key');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(evidence));
+    const result = await readCandidateEnvironmentContract(
+      immutableUrl,
+      fetchMock,
+    );
+    expect(result).toEqual(evidence);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit)
+      .headers as Record<string, string>;
+    expect(headers['x-internal-key']).toBe('current-key');
+  });
+
+  it('current key -> 403, previous key -> 200: exactly two requests, success', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'previous-key');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({}, 403))
+      .mockResolvedValueOnce(jsonResponse(evidence));
+    const result = await readCandidateEnvironmentContract(
+      immutableUrl,
+      fetchMock,
+    );
+    expect(result).toEqual(evidence);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      fetchMock.mock.calls.map(([, init]) => {
+        const headers = (init as RequestInit).headers as Record<string, string>;
+        return headers['x-internal-key'];
+      }),
+    ).toEqual(['current-key', 'previous-key']);
+  });
+
+  it('current key -> 403, no previous key configured: fails as before', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, 403));
+    await expect(
+      readCandidateEnvironmentContract(immutableUrl, fetchMock),
+    ).rejects.toThrow(/HTTP 403/);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['401', 401],
+    ['404', 404],
+    ['429', 429],
+    ['500', 500],
+  ])(
+    'current key -> %s with a previous key configured: NO fallback',
+    async (_label, status) => {
+      setRequiredReadSecrets();
+      vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+      vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'previous-key');
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, status));
+      await expect(
+        readCandidateEnvironmentContract(immutableUrl, fetchMock),
+      ).rejects.toThrow(`HTTP ${status}`);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('network error: NO fallback', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'previous-key');
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+    await expect(
+      readCandidateEnvironmentContract(immutableUrl, fetchMock),
+    ).rejects.toThrow('read failed');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('timeout: NO fallback', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'previous-key');
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(
+        new DOMException('The signal timed out', 'TimeoutError'),
+      );
+    await expect(
+      readCandidateEnvironmentContract(immutableUrl, fetchMock),
+    ).rejects.toThrow('read failed');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('malformed 200 body: NO fallback', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'previous-key');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('not json', { status: 200 }));
+    await expect(
+      readCandidateEnvironmentContract(immutableUrl, fetchMock),
+    ).rejects.toThrow(/malformed/);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('current and previous keys equal: deduplicated, no duplicate retry attempted on 403', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'same-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'same-key');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, 403));
+    await expect(
+      readCandidateEnvironmentContract(immutableUrl, fetchMock),
+    ).rejects.toThrow(/HTTP 403/);
+    // Deduplicated to a single key, so there is nothing to fall back to.
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('never sends more than two requests', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'current-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'previous-key');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, 403));
+    await expect(
+      readCandidateEnvironmentContract(immutableUrl, fetchMock),
+    ).rejects.toThrow(/HTTP 403/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('neither key value ever appears in returned evidence or a thrown error', async () => {
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'sentinel-current-key');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'sentinel-previous-key');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({}, 403))
+      .mockResolvedValueOnce(jsonResponse(evidence));
+    const result = await readCandidateEnvironmentContract(
+      immutableUrl,
+      fetchMock,
+    );
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('sentinel-current-key');
+    expect(serialized).not.toContain('sentinel-previous-key');
+
+    vi.unstubAllEnvs();
+    setRequiredReadSecrets();
+    vi.stubEnv('INTERNAL_API_KEY', 'sentinel-current-key-2');
+    vi.stubEnv('INTERNAL_API_KEY_PREVIOUS', 'sentinel-previous-key-2');
+    const failingFetch = vi.fn().mockResolvedValue(jsonResponse({}, 403));
+    let caught: unknown;
+    try {
+      await readCandidateEnvironmentContract(immutableUrl, failingFetch);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).message).not.toContain('sentinel-current-key-2');
+    expect((caught as Error).message).not.toContain('sentinel-previous-key-2');
+  });
+});
+
 describe('candidate environment-contract instrumentation check', () => {
   it('is PRESENT only when the trusted candidate commit actually contains the route, with no fetch', () => {
     const executor = vi
@@ -312,6 +484,8 @@ function stubSingleModeAnchors(): void {
     'ep-prod.us-east-2.aws.neon.tech',
   );
   vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+  vi.stubEnv('PRODUCTION_DB_PROVIDER', 'drizzle');
+  vi.stubEnv('PRODUCTION_DB_DRIVER', 'postgres');
   vi.stubEnv('PRODUCTION_DEFAULT_TENANT_ID', validTenantId);
 }
 
@@ -320,16 +494,21 @@ describe('operator-declared expected Production environment contract', () => {
     expect(readOperatorDeclaredProductionContractDimensions()).toBeUndefined();
   });
 
-  it('reads only the explicit PRODUCTION_* trust anchors, never AUTH_PROVIDER/TENANCY_MODE/DATABASE_URL/DEFAULT_TENANT_ID directly', () => {
+  it('reads only the explicit PRODUCTION_* trust anchors, never AUTH_PROVIDER/TENANCY_MODE/DATABASE_URL/DEFAULT_TENANT_ID/DB_PROVIDER/DB_DRIVER/NODE_ENV directly', () => {
     vi.stubEnv('AUTH_PROVIDER', 'clerk');
     vi.stubEnv('TENANCY_MODE', 'org');
     vi.stubEnv('DATABASE_URL', 'postgresql://ambient-host/ambient_db');
     vi.stubEnv('DEFAULT_TENANT_ID', otherValidTenantId);
+    vi.stubEnv('DB_PROVIDER', 'prisma');
+    vi.stubEnv('DB_DRIVER', 'pglite');
+    vi.stubEnv('NODE_ENV', 'development');
     stubSingleModeAnchors();
     expect(readOperatorDeclaredProductionContractDimensions()).toEqual({
       authProvider: 'authjs',
       databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
       databaseName: 'app_production',
+      dbDriver: 'postgres',
+      dbProvider: 'drizzle',
       defaultTenantId: validTenantId,
       tenancyMode: 'single',
       tenantContextSource: null,
@@ -351,10 +530,14 @@ describe('operator-declared expected Production environment contract', () => {
         'ep-prod.us-east-2.aws.neon.tech',
       );
       vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+      vi.stubEnv('PRODUCTION_DB_PROVIDER', 'drizzle');
+      vi.stubEnv('PRODUCTION_DB_DRIVER', 'postgres');
       expect(readOperatorDeclaredProductionContractDimensions()).toEqual({
         authProvider: 'clerk',
         databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
         databaseName: 'app_production',
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
         defaultTenantId: null,
         tenancyMode: 'org',
         tenantContextSource: expected,
@@ -472,6 +655,8 @@ describe('operator-declared expected Production environment contract', () => {
           'ep-prod-direct.us-east-2.aws.neon.tech',
         );
         vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        vi.stubEnv('PRODUCTION_DB_PROVIDER', 'drizzle');
+        vi.stubEnv('PRODUCTION_DB_DRIVER', 'postgres');
         expect(
           readOperatorDeclaredProductionContractDimensions(),
         ).toMatchObject({
@@ -583,6 +768,8 @@ describe('operator-declared expected Production environment contract', () => {
           'ep-prod.us-east-2.aws.neon.tech',
         );
         vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        vi.stubEnv('PRODUCTION_DB_PROVIDER', 'drizzle');
+        vi.stubEnv('PRODUCTION_DB_DRIVER', 'postgres');
         expect(
           readOperatorDeclaredProductionContractDimensions(),
         ).toMatchObject({ defaultTenantId: null });
@@ -603,11 +790,129 @@ describe('operator-declared expected Production environment contract', () => {
           'ep-prod.us-east-2.aws.neon.tech',
         );
         vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        vi.stubEnv('PRODUCTION_DB_PROVIDER', 'drizzle');
+        vi.stubEnv('PRODUCTION_DB_DRIVER', 'postgres');
         vi.stubEnv('PRODUCTION_DEFAULT_TENANT_ID', validTenantId);
         expect(
           readOperatorDeclaredProductionContractDimensions(),
         ).toMatchObject({ defaultTenantId: null });
       },
     );
+  });
+
+  describe('expected DB runtime provider/driver (Codex finding 2: pglite/prisma false PASS)', () => {
+    function stubOrgAnchorsWithout(
+      overrides: Partial<
+        Record<'PRODUCTION_DB_DRIVER' | 'PRODUCTION_DB_PROVIDER', string>
+      >,
+    ): void {
+      vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+      vi.stubEnv('PRODUCTION_TENANCY_MODE', 'org');
+      vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'provider');
+      vi.stubEnv(
+        'PRODUCTION_RUNTIME_DATABASE_HOST',
+        'ep-prod.us-east-2.aws.neon.tech',
+      );
+      vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+      if (overrides.PRODUCTION_DB_PROVIDER !== undefined) {
+        vi.stubEnv('PRODUCTION_DB_PROVIDER', overrides.PRODUCTION_DB_PROVIDER);
+      }
+      if (overrides.PRODUCTION_DB_DRIVER !== undefined) {
+        vi.stubEnv('PRODUCTION_DB_DRIVER', overrides.PRODUCTION_DB_DRIVER);
+      }
+    }
+
+    it('the intended currently-supported Production runtime (drizzle/postgres) is accepted', () => {
+      stubOrgAnchorsWithout({
+        PRODUCTION_DB_DRIVER: 'postgres',
+        PRODUCTION_DB_PROVIDER: 'drizzle',
+      });
+      expect(readOperatorDeclaredProductionContractDimensions()).toMatchObject({
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
+      });
+    });
+
+    it('requires PRODUCTION_DB_PROVIDER', () => {
+      stubOrgAnchorsWithout({ PRODUCTION_DB_DRIVER: 'postgres' });
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('requires PRODUCTION_DB_DRIVER', () => {
+      stubOrgAnchorsWithout({ PRODUCTION_DB_PROVIDER: 'drizzle' });
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('rejects PRODUCTION_DB_PROVIDER=prisma even with a supported driver -- prisma is not implemented by createDb()', () => {
+      stubOrgAnchorsWithout({
+        PRODUCTION_DB_DRIVER: 'postgres',
+        PRODUCTION_DB_PROVIDER: 'prisma',
+      });
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('rejects PRODUCTION_DB_DRIVER=pglite even with a supported provider -- pglite is not the Production runtime', () => {
+      stubOrgAnchorsWithout({
+        PRODUCTION_DB_DRIVER: 'pglite',
+        PRODUCTION_DB_PROVIDER: 'drizzle',
+      });
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('rejects an unsupported prisma/pglite pair', () => {
+      stubOrgAnchorsWithout({
+        PRODUCTION_DB_DRIVER: 'pglite',
+        PRODUCTION_DB_PROVIDER: 'prisma',
+      });
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('ambient DB_PROVIDER/DB_DRIVER/NODE_ENV never determine the expected contract', () => {
+      vi.stubEnv('DB_PROVIDER', 'prisma');
+      vi.stubEnv('DB_DRIVER', 'pglite');
+      vi.stubEnv('NODE_ENV', 'development');
+      stubSingleModeAnchors();
+      expect(readOperatorDeclaredProductionContractDimensions()).toMatchObject({
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
+      });
+    });
+
+    it('changing only ambient DB_PROVIDER/DB_DRIVER leaves the expected dimensions unchanged', () => {
+      stubSingleModeAnchors();
+      const first = readOperatorDeclaredProductionContractDimensions();
+      vi.stubEnv('DB_PROVIDER', 'prisma');
+      vi.stubEnv('DB_DRIVER', 'pglite');
+      const second = readOperatorDeclaredProductionContractDimensions();
+      expect(second).toEqual(first);
+    });
+
+    it('an unsupported PRODUCTION_DB_PROVIDER makes the expected contract unavailable rather than producing an alternate fingerprint', () => {
+      stubSingleModeAnchors();
+      expect(readOperatorDeclaredProductionContractDimensions()).toBeDefined();
+      vi.stubEnv('PRODUCTION_DB_PROVIDER', 'prisma');
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('an unsupported PRODUCTION_DB_DRIVER makes the expected contract unavailable rather than producing an alternate fingerprint', () => {
+      stubSingleModeAnchors();
+      expect(readOperatorDeclaredProductionContractDimensions()).toBeDefined();
+      vi.stubEnv('PRODUCTION_DB_DRIVER', 'pglite');
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
   });
 });

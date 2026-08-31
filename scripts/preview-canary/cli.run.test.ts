@@ -29,6 +29,8 @@ const authjsRuntimeEvidence = {
   clerkKeysTest: null,
   databaseHost,
   databaseName,
+  dbDriver: 'postgres',
+  dbProvider: 'drizzle',
 };
 const deployment = {
   id: 'dpl_expected',
@@ -185,6 +187,8 @@ describe('Preview canary shared execution', () => {
       runtimeDatabaseHost: databaseHost,
       runtimeDatabaseName: databaseName,
       runtimeDatabaseNameVerified: true,
+      runtimeDbDriver: 'postgres',
+      runtimeDbProvider: 'drizzle',
     });
     const neonCall = commandCalls().find(({ file }) => file === 'pnpm');
     expect(neonCall?.args).toEqual([
@@ -271,6 +275,8 @@ describe('Preview canary shared execution', () => {
         clerkKeysTest: true,
         databaseHost,
         databaseName,
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
       },
     });
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -348,6 +354,8 @@ describe('Preview canary shared execution', () => {
         clerkKeysTest: false,
         databaseHost,
         databaseName,
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
       },
     ],
     [
@@ -357,6 +365,8 @@ describe('Preview canary shared execution', () => {
         clerkKeysTest: true,
         databaseHost,
         databaseName,
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
       },
     ],
     [
@@ -366,6 +376,8 @@ describe('Preview canary shared execution', () => {
         clerkKeysTest: null,
         databaseHost,
         databaseName,
+        dbDriver: 'postgres',
+        dbProvider: 'drizzle',
       },
     ],
   ])(
@@ -376,6 +388,31 @@ describe('Preview canary shared execution', () => {
       await expect(run(['node', 'cli.ts', '--auto'])).rejects.toThrow(
         'invalid evidence',
       );
+      expect(commandCalls().some(({ file }) => file === 'pnpm')).toBe(false);
+    },
+  );
+
+  it.each([
+    [
+      'drizzle + pglite (correct-looking Neon DATABASE_URL, wrong runtime driver)',
+      { dbDriver: 'pglite', dbProvider: 'drizzle' },
+    ],
+    [
+      'prisma + postgres (correct-looking Neon DATABASE_URL, wrong provider)',
+      { dbDriver: 'postgres', dbProvider: 'prisma' },
+    ],
+  ])(
+    'fails closed before any Neon verification when the resolved DB runtime is %s',
+    async (_label, override) => {
+      setupSuccessfulDependencies({
+        runtimeEvidence: { ...authjsRuntimeEvidence, ...override },
+      });
+
+      await expect(run(['node', 'cli.ts', '--auto'])).rejects.toThrow(
+        'drizzle/postgres',
+      );
+      // The host/database-name Neon proof must never even be attempted --
+      // the gate is a hard stop, not a warning.
       expect(commandCalls().some(({ file }) => file === 'pnpm')).toBe(false);
     },
   );

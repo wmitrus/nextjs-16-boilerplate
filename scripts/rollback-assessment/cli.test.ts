@@ -87,6 +87,8 @@ const expectedDimensions = {
   authProvider: 'authjs' as const,
   databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
   databaseName: 'app_production',
+  dbDriver: 'postgres' as const,
+  dbProvider: 'drizzle' as const,
   defaultTenantId: '11111111-1111-4111-8111-111111111111',
   tenancyMode: 'single' as const,
   tenantContextSource: null,
@@ -532,6 +534,12 @@ describe('A4.2b environment-contract compatibility', () => {
         'PRODUCTION_DATABASE_NAME',
       );
       expect(output.environmentContract.reason).toContain(
+        'PRODUCTION_DB_PROVIDER',
+      );
+      expect(output.environmentContract.reason).toContain(
+        'PRODUCTION_DB_DRIVER',
+      );
+      expect(output.environmentContract.reason).toContain(
         'PRODUCTION_DEFAULT_TENANT_ID',
       );
       // Must not imply PRODUCTION_DATABASE_HOST (the separate schema-compat
@@ -590,6 +598,83 @@ describe('A4.2b environment-contract compatibility', () => {
     remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
       mismatchedTenantEvidence,
     );
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]);
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('candidate with pglite does NOT match expected postgres, even with identical host/name -> BLOCKED', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    const pgliteEvidence =
+      RollbackEnvironmentContractModule.buildEnvironmentContractEvidence({
+        ...expectedDimensions,
+        dbDriver: 'pglite',
+      });
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
+      pgliteEvidence,
+    );
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]);
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('candidate with prisma does NOT match expected drizzle, even with identical host/name -> BLOCKED', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    const prismaEvidence =
+      RollbackEnvironmentContractModule.buildEnvironmentContractEvidence({
+        ...expectedDimensions,
+        dbProvider: 'prisma',
+      });
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
+      prismaEvidence,
+    );
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]);
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('a v2-shaped candidate contractVersion vs the real v3 expected contract -> BLOCKED', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue({
+      ...matchingEnvironmentEvidence,
+      contractVersion: 'v2',
+    });
     try {
       await run([
         'node',

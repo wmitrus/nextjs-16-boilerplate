@@ -158,10 +158,14 @@ export function checkCandidateEnvironmentContractInstrumentation(
  * remains the single shared anchor for both proofs -- there is exactly one
  * logical Production database, so no `PRODUCTION_RUNTIME_DATABASE_NAME` is
  * introduced. `PRODUCTION_RUNTIME_DATABASE_HOST` and `PRODUCTION_DATABASE_NAME`
- * are always required. `PRODUCTION_DEFAULT_TENANT_ID` is required, and must
- * be a valid UUID, only when `PRODUCTION_TENANCY_MODE=single`; for
- * `org`/`personal` it is never read, even if set, and the expected
- * `defaultTenantId` is always `null`.
+ * are always required. `PRODUCTION_DB_PROVIDER` and `PRODUCTION_DB_DRIVER`
+ * are also always required -- the expected effective DB runtime, never
+ * inferred from ambient `DB_PROVIDER`/`DB_DRIVER`/`NODE_ENV`. A correct
+ * database host/name proves nothing if the candidate is actually routing to
+ * a different DB runtime (e.g. PGlite instead of Postgres). `PRODUCTION_DEFAULT_TENANT_ID`
+ * is required, and must be a valid UUID, only when
+ * `PRODUCTION_TENANCY_MODE=single`; for `org`/`personal` it is never read,
+ * even if set, and the expected `defaultTenantId` is always `null`.
  */
 export function readOperatorDeclaredProductionContractDimensions():
   | EnvironmentContractDimensions
@@ -207,6 +211,23 @@ export function readOperatorDeclaredProductionContractDimensions():
     return undefined;
   }
 
+  // Expected effective DB runtime -- always explicit, never inferred from
+  // ambient DB_PROVIDER/DB_DRIVER/NODE_ENV/DATABASE_URL. Unlike the
+  // candidate-side resolver (which models every DB runtime the application
+  // configuration can select, so it can truthfully attest whatever is
+  // actually configured, including prisma/pglite), the expected Production
+  // contract answers a stricter question: what is the currently supported
+  // Production DB runtime? Prisma is not implemented by `createDb()`, and
+  // PGlite is not the Production Neon/Postgres runtime this contract
+  // proves -- so only the exact pair below is accepted here. Anything else
+  // (including prisma/pglite themselves) leaves the expected contract
+  // undefined, never a matching alternate fingerprint.
+  const dbProvider = process.env.PRODUCTION_DB_PROVIDER?.trim();
+  if (dbProvider !== 'drizzle') return undefined;
+
+  const dbDriver = process.env.PRODUCTION_DB_DRIVER?.trim();
+  if (dbDriver !== 'postgres') return undefined;
+
   let defaultTenantId: string | null;
   if (tenancyMode === 'single') {
     const rawTenantId = process.env.PRODUCTION_DEFAULT_TENANT_ID?.trim();
@@ -224,6 +245,8 @@ export function readOperatorDeclaredProductionContractDimensions():
     authProvider,
     databaseHost,
     databaseName,
+    dbDriver,
+    dbProvider,
     defaultTenantId,
     tenancyMode,
     tenantContextSource,
@@ -234,6 +257,18 @@ function requiredInternalApiKey(): string {
   const value = process.env.INTERNAL_API_KEY?.trim();
   if (!value) throw new Error('INTERNAL_API_KEY is required.');
   return value;
+}
+
+/**
+ * The repository's existing SEC-44 one-generation internal-API-key rotation
+ * model, mirrored from the Preview canary's own runtime probe: the current
+ * key is required, the previous key is optional and deduplicated against
+ * the current one, and at most two keys are ever produced.
+ */
+function resolveInternalApiKeys(): string[] {
+  const current = requiredInternalApiKey();
+  const previous = process.env.INTERNAL_API_KEY_PREVIOUS?.trim();
+  return previous && previous !== current ? [current, previous] : [current];
 }
 
 /**
@@ -324,51 +359,76 @@ function parseEnvironmentContractEvidence(
 /**
  * The one authorized "production environment" read: a single bounded GET
  * against the trusted candidate's own immutable deployment URL, at the
- * internal-API-guarded environment-contract endpoint. No LIST, no retry, no
- * redirect, no fallback URL/candidate. Both the application's own
+ * internal-API-guarded environment-contract endpoint. No LIST, no generic
+ * retry, no redirect, no fallback URL/candidate. Both the application's own
  * `INTERNAL_API_KEY` and, independently, `VERCEL_AUTOMATION_BYPASS_SECRET`
  * (required for Standard/Deployment-Protected immutable Production URLs,
  * matching this repository's existing Production smoke contract) are
  * resolved and validated -- failing closed before any `fetch` -- rather
  * than read eagerly at import time or module load. Neither secret is ever
  * logged, returned, or included in a thrown message.
+ *
+ * The ONE exception to "no retry" is the repository's existing SEC-44
+ * one-generation `INTERNAL_API_KEY_PREVIOUS` rotation fallback, mirrored
+ * exactly from the Preview canary's own runtime probe
+ * (`probeRuntimeDatabaseBinding`): a first response that is exactly HTTP 403
+ * triggers exactly one retry with the previous key, if one is configured and
+ * distinct from the current key. Every other status (400/401/404/429/5xx),
+ * a network error, a timeout, or a malformed 200 body is never retried --
+ * this is not a general retry mechanism.
  */
 export async function readCandidateEnvironmentContract(
   immutableUrl: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<EnvironmentContractEvidence> {
-  const internalApiKey = requiredInternalApiKey();
+  const internalApiKeys = resolveInternalApiKeys();
   const protectionBypassSecret = requiredVercelProtectionBypassSecret();
   const signal = AbortSignal.timeout(ENVIRONMENT_CONTRACT_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetchImpl(
-      new URL(
-        '/api/internal/rollback-assessment/environment-contract',
-        immutableUrl,
-      ),
-      {
-        cache: 'no-store',
-        headers: {
-          accept: 'application/json',
-          'x-internal-key': internalApiKey,
-          'x-vercel-protection-bypass': protectionBypassSecret,
-          'x-vercel-set-bypass-cookie': 'true',
+  for (const [index, internalApiKey] of internalApiKeys.entries()) {
+    let response: Response;
+    try {
+      response = await fetchImpl(
+        new URL(
+          '/api/internal/rollback-assessment/environment-contract',
+          immutableUrl,
+        ),
+        {
+          cache: 'no-store',
+          headers: {
+            accept: 'application/json',
+            'x-internal-key': internalApiKey,
+            'x-vercel-protection-bypass': protectionBypassSecret,
+            'x-vercel-set-bypass-cookie': 'true',
+          },
+          method: 'GET',
+          redirect: 'error',
+          signal,
         },
-        method: 'GET',
-        redirect: 'error',
-        signal,
-      },
+      );
+    } catch {
+      throw new Error('Candidate environment-contract read failed.');
+    }
+    if (
+      response.status === 403 &&
+      index === 0 &&
+      internalApiKeys.length === 2
+    ) {
+      // SEC-44's one-generation key rotation fallback, not a transient retry.
+      try {
+        await response.body?.cancel();
+      } catch {
+        // A rejected response body is never evidence and must not change fallback.
+      }
+      continue;
+    }
+    if (response.status !== 200) {
+      throw new Error(
+        `Candidate environment-contract read failed (HTTP ${response.status}).`,
+      );
+    }
+    return parseEnvironmentContractEvidence(
+      await readBoundedResponseBody(response),
     );
-  } catch {
-    throw new Error('Candidate environment-contract read failed.');
   }
-  if (response.status !== 200) {
-    throw new Error(
-      `Candidate environment-contract read failed (HTTP ${response.status}).`,
-    );
-  }
-  return parseEnvironmentContractEvidence(
-    await readBoundedResponseBody(response),
-  );
+  throw new Error('Candidate environment-contract read failed (HTTP 403).');
 }

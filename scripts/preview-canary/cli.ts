@@ -557,6 +557,8 @@ export type RuntimeCanaryEvidence = {
   clerkKeysTest: boolean | null;
   databaseHost: string;
   databaseName: string;
+  dbDriver: 'pglite' | 'postgres';
+  dbProvider: 'drizzle' | 'prisma';
 };
 
 export async function probeRuntimeDatabaseBinding(input: {
@@ -670,11 +672,13 @@ export function parseRuntimeCanaryEvidence(
   if (
     !value ||
     typeof value !== 'object' ||
-    Object.keys(value).length !== 4 ||
+    Object.keys(value).length !== 6 ||
     !('databaseHost' in value) ||
     !('databaseName' in value) ||
     !('authProvider' in value) ||
     !('clerkKeysTest' in value) ||
+    !('dbDriver' in value) ||
+    !('dbProvider' in value) ||
     typeof value.databaseHost !== 'string' ||
     value.databaseHost.length === 0 ||
     /[\s\u0000-\u001f\u007f/:?#@]/.test(value.databaseHost) ||
@@ -683,7 +687,9 @@ export function parseRuntimeCanaryEvidence(
     (value.clerkKeysTest !== null &&
       typeof value.clerkKeysTest !== 'boolean') ||
     (value.authProvider === 'authjs' && value.clerkKeysTest !== null) ||
-    (value.authProvider === 'clerk' && value.clerkKeysTest !== true)
+    (value.authProvider === 'clerk' && value.clerkKeysTest !== true) ||
+    (value.dbDriver !== 'postgres' && value.dbDriver !== 'pglite') ||
+    (value.dbProvider !== 'drizzle' && value.dbProvider !== 'prisma')
   ) {
     throw new Error('Preview runtime probe returned invalid evidence.');
   }
@@ -692,6 +698,8 @@ export function parseRuntimeCanaryEvidence(
     clerkKeysTest: value.clerkKeysTest,
     databaseHost: value.databaseHost,
     databaseName: value.databaseName,
+    dbDriver: value.dbDriver,
+    dbProvider: value.dbProvider,
   };
 }
 
@@ -784,6 +792,22 @@ export async function executeReadOnlyCanary(
     internalApiKeys,
   });
 
+  // A correct-looking Neon DATABASE_URL proves nothing if the runtime isn't
+  // actually using it -- e.g. DB_DRIVER=pglite would still leave a valid
+  // Neon-shaped DATABASE_URL sitting in the environment unused. Gate on the
+  // resolved (not raw) runtime provider/driver, using the same evidence the
+  // application's own bootstrap resolver produces, BEFORE ever attempting
+  // Neon host/database verification -- anything other than exactly
+  // drizzle/postgres fails closed here without a Neon API call.
+  if (
+    runtimeEvidence.dbProvider !== 'drizzle' ||
+    runtimeEvidence.dbDriver !== 'postgres'
+  ) {
+    throw new Error(
+      `Preview runtime does not use the drizzle/postgres DB runtime (dbProvider=${runtimeEvidence.dbProvider}, dbDriver=${runtimeEvidence.dbDriver}); refusing Neon database-binding verification.`,
+    );
+  }
+
   // `verify-preview-endpoint` proves both that the runtime-reported host
   // belongs to the expected Neon Preview branch's endpoints AND that the
   // runtime-reported database name exactly equals that branch's single
@@ -819,6 +843,8 @@ export async function executeReadOnlyCanary(
       runtimeDatabaseHost: runtimeEvidence.databaseHost,
       runtimeDatabaseName: runtimeEvidence.databaseName,
       runtimeDatabaseNameVerified: true,
+      runtimeDbDriver: runtimeEvidence.dbDriver,
+      runtimeDbProvider: runtimeEvidence.dbProvider,
     }),
   );
 }

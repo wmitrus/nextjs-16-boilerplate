@@ -41,7 +41,6 @@
 - No Clerk API, Neon, Vercel, Preview, production, Linear update, commit, or
   push was used.
 - Existing A1/A2/B1 application-boundary assertions remain intact.
-# OZI-78 — Implementation Summary
 
 ## A4.2a Controlled Remote Candidate DETAIL Read
 

@@ -2,13 +2,12 @@ import { execFileSync } from 'node:child_process';
 
 import { gitBranchSchema, gitShaSchema } from './guards';
 
-type GitExecutor = (
-  file: string,
-  args: string[],
-  options: Parameters<typeof execFileSync>[2],
-) => string | Buffer;
+type GitExecutor = typeof execFileSync;
 
-export type LocalGitIdentity = { branch: string; sha: string };
+export interface LocalGitIdentity {
+  branch: string;
+  sha: string;
+}
 
 export function resolveLocalGitIdentity(
   executor: GitExecutor = execFileSync,

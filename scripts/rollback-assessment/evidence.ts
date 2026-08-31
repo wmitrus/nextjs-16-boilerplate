@@ -10,6 +10,16 @@ export interface LocalRollbackAssessment {
   containmentFloorAncestry: AssessmentGate;
   environmentContract: AssessmentGate;
   nominatedDeploymentId: string;
+  remoteCandidateEvidence:
+    | { status: 'NOT_REQUESTED' }
+    | {
+        deploymentId: string;
+        gitRef: string;
+        gitSha: string;
+        immutableUrl: string;
+        status: 'READ_AND_VALIDATED';
+      }
+    | { status: 'ERROR' };
   rollbackAction: 'NOT_AUTHORIZED';
   rollbackExecutable: false;
   schemaCompatibility: AssessmentGate;

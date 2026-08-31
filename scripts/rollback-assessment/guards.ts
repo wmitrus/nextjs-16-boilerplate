@@ -51,9 +51,11 @@ export interface TrustedProductionCandidate {
 
 export function parseRollbackAssessmentArgs(args: readonly string[]): {
   deploymentId: string;
+  executeRemoteCandidateRead: boolean;
 } {
   const tokens = args.filter((arg, index) => !(index === 0 && arg === '--'));
   const values: string[] = [];
+  let executeRemoteCandidateRead = false;
   let expectingValue = false;
   for (const arg of tokens) {
     if (expectingValue) {
@@ -72,6 +74,15 @@ export function parseRollbackAssessmentArgs(args: readonly string[]): {
       values.push(arg.slice('--deployment-id='.length));
       continue;
     }
+    if (arg === '--execute-remote-candidate-read') {
+      if (executeRemoteCandidateRead) {
+        throw new Error(
+          '--execute-remote-candidate-read may appear only once.',
+        );
+      }
+      executeRemoteCandidateRead = true;
+      continue;
+    }
     throw new Error('Rollback assessment accepts only one --deployment-id.');
   }
   if (expectingValue) throw new Error('--deployment-id requires a value.');
@@ -83,7 +94,7 @@ export function parseRollbackAssessmentArgs(args: readonly string[]): {
   const parsed = deploymentIdSchema.safeParse(values[0]);
   if (!parsed.success)
     throw new Error('Rollback assessment deployment ID is malformed.');
-  return { deploymentId: parsed.data };
+  return { deploymentId: parsed.data, executeRemoteCandidateRead };
 }
 
 function parseImmutableDeploymentUrl(value: unknown): string | undefined {

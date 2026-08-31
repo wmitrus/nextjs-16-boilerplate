@@ -41,3 +41,33 @@
 - No Clerk API, Neon, Vercel, Preview, production, Linear update, commit, or
   push was used.
 - Existing A1/A2/B1 application-boundary assertions remain intact.
+# OZI-78 — Implementation Summary
+
+## A4.2a Controlled Remote Candidate DETAIL Read
+
+- Added a rollback-assessment-local adapter for the sole authorized provider
+  operation: `vercel api /v13/deployments/<nominated-id> --method=GET --raw`.
+- Default `pnpm rollback:assess -- --deployment-id=<id>` remains local-only;
+  it does not read anchors, invoke Vercel, or make a network call.
+- Remote access requires the one-time explicit
+  `--execute-remote-candidate-read` flag. Duplicate flags and malformed IDs
+  fail before the provider subprocess.
+- The adapter checks local expected identity anchors and local Vercel project
+  linkage, bounds stdout, suppresses provider stderr, parses JSON as untrusted,
+  and delegates all deployment acceptance to `assertProductionDeployment()`.
+- A successful remote identity proof permits only the existing local Git
+  ancestry check. No Git fetch/GitHub fallback, environment read, DB access,
+  smoke, promotion, rollback, or traffic change was added.
+- REMOTE_READ evidence provenance is structurally unforgeable: the exported
+  `buildLocalRollbackAssessment()` has no provenance parameter in its type at
+  all, so it can never produce `READ_AND_VALIDATED`; only a private helper
+  used exclusively by `run()` after it has actually executed
+  `readRemoteCandidateDetail()` may establish that provenance.
+- The single Vercel DETAIL subprocess now also carries an explicit 15s
+  timeout alongside the existing 128 KiB bounded output, with no retries.
+
+## Validation
+
+- Focused rollback-assessment Vitest suite: 76 tests passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check` passed.
+- No remote Vercel operation was run during implementation.

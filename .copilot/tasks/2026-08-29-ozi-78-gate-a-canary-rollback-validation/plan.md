@@ -16,7 +16,10 @@ behavior. This task must preserve the current authorization semantics:
 - Linear issue: OZI-78
 - Execution control: manual-handoff
 - Current phase: A1/A2 complete and validated; A3a read-only complete with
-  historical Preview PASS; A3b/A4 remain unstarted
+  historical Preview PASS; A3b unstarted; A4.1 (local-only rollback
+  assessment) COMPLETE; A4.2a (operator-controlled remote candidate DETAIL
+  read) implemented and locally validated; full A4 remains blocked on
+  separately authorized Production evidence and smoke
 - Current baseline: `main@7e4b3eddd07f27a060c40616a0d7f130925a6b48`
 - Containment floor: `2450d410f4617f9b0e415f2b4d47bcde748b1cbc`
 
@@ -160,10 +163,15 @@ This slice is local-only to implement/test. Candidate inspection and smoke are
 remote access and require separate approval; traffic switching always requires
 separate production authorization.
 
-**Status: A4.1 local-only foundation implemented; full A4 remains blocked on
-separately authorized candidate/Production evidence and smoke.** A4.1 has no
-remote reads, smoke, rollback, promotion, or traffic change. Production remains
-untouched / not authorized.
+**Status: A4.2a controlled remote candidate DETAIL read implemented and locally
+validated; full A4 remains blocked on separately authorized candidate/Production
+evidence and smoke.** Default `rollback:assess` remains local-only and makes no
+provider call. The explicit `--execute-remote-candidate-read` acknowledgement
+permits exactly one bounded Vercel DETAIL GET for the already schema-validated,
+operator-nominated deployment ID. Provider data is untrusted until the existing
+production identity guard accepts it; environment, schema, smoke, and all
+traffic-changing gates remain blocked/not authorized. No remote operation was
+performed during implementation; Production remains untouched / not authorized.
 
 ## Candidate File Set — To Confirm Before Implementation
 

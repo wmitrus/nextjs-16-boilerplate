@@ -50,10 +50,26 @@ describe('rollback assessment candidate parsing', () => {
   it('accepts one explicitly nominated deployment ID', () => {
     expect(
       parseRollbackAssessmentArgs([`--deployment-id=${deploymentId}`]),
-    ).toEqual({ deploymentId });
+    ).toEqual({ deploymentId, executeRemoteCandidateRead: false });
     expect(
       parseRollbackAssessmentArgs(['--', `--deployment-id=${deploymentId}`]),
-    ).toEqual({ deploymentId });
+    ).toEqual({ deploymentId, executeRemoteCandidateRead: false });
+    expect(
+      parseRollbackAssessmentArgs([
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+      ]),
+    ).toEqual({ deploymentId, executeRemoteCandidateRead: true });
+  });
+
+  it('rejects a duplicate remote-read acknowledgement', () => {
+    expect(() =>
+      parseRollbackAssessmentArgs([
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-remote-candidate-read',
+      ]),
+    ).toThrow('may appear only once');
   });
 });
 

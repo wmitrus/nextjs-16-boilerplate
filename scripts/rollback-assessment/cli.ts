@@ -1,3 +1,5 @@
+import type { execFileSync } from 'node:child_process';
+
 import { gate, type LocalRollbackAssessment } from './evidence';
 import { assessContainmentFloorAncestry } from './git-ancestry';
 import {
@@ -6,6 +8,11 @@ import {
   type ProductionDeploymentDetail,
 } from './guards';
 import { assessMigrationCompatibility } from './migration-compatibility';
+import {
+  readExpectedProductionIdentity,
+  readRemoteCandidateDetail,
+  type ExpectedProductionIdentity,
+} from './remote-candidate';
 
 interface EnvironmentContractEvidence {
   authProvider: 'authjs' | 'clerk';
@@ -86,7 +93,7 @@ function assessSmoke(evidence: unknown): ReturnType<typeof gate> {
   );
 }
 
-export function buildLocalRollbackAssessment(input: {
+interface RollbackAssessmentInput {
   candidateDetail?: ProductionDeploymentDetail;
   candidateMigrationJournal?: unknown;
   deploymentId: string;
@@ -97,8 +104,22 @@ export function buildLocalRollbackAssessment(input: {
     projectId: string;
     repository: string;
   };
+  gitExecutor?: typeof execFileSync;
   productionAppliedMigrationJournal?: unknown;
-}): LocalRollbackAssessment {
+}
+
+/**
+ * Shared assessment builder. `candidateEvidenceSource` is a module-private
+ * parameter — it is intentionally NOT part of either exported builder's
+ * public signature, so no external caller can source `REMOTE_READ`
+ * provenance. Only `buildRemoteVerifiedRollbackAssessment()` below (used
+ * exclusively by `run()` after it has actually executed
+ * `readRemoteCandidateDetail()`) may request it.
+ */
+function buildAssessment(
+  input: RollbackAssessmentInput,
+  candidateEvidenceSource: 'LOCAL_SUPPLIED' | 'REMOTE_READ',
+): LocalRollbackAssessment {
   let candidateIdentity = gate(
     'BLOCKED',
     'Authoritative candidate DETAIL evidence is required.',
@@ -107,6 +128,10 @@ export function buildLocalRollbackAssessment(input: {
     'BLOCKED',
     'Authoritative candidate DETAIL evidence is required.',
   );
+  let remoteCandidateEvidence: LocalRollbackAssessment['remoteCandidateEvidence'] =
+    candidateEvidenceSource === 'REMOTE_READ'
+      ? { status: 'ERROR' }
+      : { status: 'NOT_REQUESTED' };
   if (
     input.candidateDetail !== undefined &&
     input.expectedIdentity !== undefined
@@ -123,7 +148,17 @@ export function buildLocalRollbackAssessment(input: {
       );
       containmentFloorAncestry = assessContainmentFloorAncestry(
         candidate.gitSha,
+        input.gitExecutor,
       );
+      if (candidateEvidenceSource === 'REMOTE_READ') {
+        remoteCandidateEvidence = {
+          deploymentId: candidate.deploymentId,
+          gitRef: candidate.gitRef,
+          gitSha: candidate.gitSha,
+          immutableUrl: candidate.immutableUrl,
+          status: 'READ_AND_VALIDATED',
+        };
+      }
     } catch {
       candidateIdentity = gate(
         'INVALID',
@@ -133,6 +168,8 @@ export function buildLocalRollbackAssessment(input: {
         'BLOCKED',
         'Candidate identity must pass before ancestry assessment.',
       );
+      // remoteCandidateEvidence already reflects ERROR for REMOTE_READ and
+      // stays NOT_REQUESTED for LOCAL_SUPPLIED.
     }
   }
   return {
@@ -140,6 +177,7 @@ export function buildLocalRollbackAssessment(input: {
     containmentFloorAncestry,
     environmentContract: assessEnvironmentContract(input.environmentContract),
     nominatedDeploymentId: input.deploymentId,
+    remoteCandidateEvidence,
     rollbackAction: 'NOT_AUTHORIZED',
     rollbackExecutable: false,
     schemaCompatibility: assessMigrationCompatibility({
@@ -151,10 +189,76 @@ export function buildLocalRollbackAssessment(input: {
   };
 }
 
-export function run(argv = process.argv): void {
-  const { deploymentId } = parseRollbackAssessmentArgs(argv.slice(2));
+/**
+ * Public local-only assessment builder. Always represents locally supplied
+ * or missing evidence — it can never produce
+ * `remoteCandidateEvidence.status === 'READ_AND_VALIDATED'`, regardless of
+ * inputs, because it has no way to request `REMOTE_READ` provenance.
+ */
+export function buildLocalRollbackAssessment(
+  input: RollbackAssessmentInput,
+): LocalRollbackAssessment {
+  return buildAssessment(input, 'LOCAL_SUPPLIED');
+}
+
+/**
+ * Not exported. Used only by `run()`, and only after it has actually
+ * executed `readRemoteCandidateDetail()` for the exact nominated deployment
+ * ID — this is the sole path that may establish REMOTE_READ provenance.
+ */
+function buildRemoteVerifiedRollbackAssessment(
+  input: RollbackAssessmentInput,
+): LocalRollbackAssessment {
+  return buildAssessment(input, 'REMOTE_READ');
+}
+
+export function run(
+  argv = process.argv,
+  dependencies: {
+    gitExecutor?: typeof execFileSync;
+    readExpectedIdentity?: () => ExpectedProductionIdentity;
+    vercelExecutor?: typeof execFileSync;
+  } = {},
+): void {
+  const { deploymentId, executeRemoteCandidateRead } =
+    parseRollbackAssessmentArgs(argv.slice(2));
+  if (!executeRemoteCandidateRead) {
+    console.log(
+      JSON.stringify(buildLocalRollbackAssessment({ deploymentId }), null, 2),
+    );
+    return;
+  }
+  let candidateDetail: ProductionDeploymentDetail;
+  let expectedIdentity: ExpectedProductionIdentity;
+  try {
+    expectedIdentity = (
+      dependencies.readExpectedIdentity ?? readExpectedProductionIdentity
+    )();
+    candidateDetail = readRemoteCandidateDetail(
+      deploymentId,
+      dependencies.vercelExecutor,
+    );
+  } catch {
+    console.log(
+      JSON.stringify(
+        buildRemoteVerifiedRollbackAssessment({ deploymentId }),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   console.log(
-    JSON.stringify(buildLocalRollbackAssessment({ deploymentId }), null, 2),
+    JSON.stringify(
+      buildRemoteVerifiedRollbackAssessment({
+        candidateDetail,
+        deploymentId,
+        expectedIdentity,
+        gitExecutor: dependencies.gitExecutor,
+      }),
+      null,
+      2,
+    ),
   );
 }
 

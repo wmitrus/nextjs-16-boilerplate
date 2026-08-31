@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertProductionDeployment,
+  gitRefSchema,
   parseRollbackAssessmentArgs,
 } from './guards';
 
@@ -137,6 +138,24 @@ describe('production deployment DETAIL guard', () => {
       ),
     ).toThrow('production identity requirements');
   });
+
+  it.each([
+    ['leading-dot component', '.hidden'],
+    ['leading-dot non-first component', 'foo/.hidden'],
+    ['reserved .lock suffix', 'foo.lock'],
+    ['reserved .lock suffix on a component', 'foo/bar.lock'],
+    ['bare @', '@'],
+    ['leading dash', '-feature'],
+  ])('rejects a Git ref that is %s', (_reason, gitRef) => {
+    expect(gitRefSchema.safeParse(gitRef).success).toBe(false);
+  });
+
+  it.each(['main', 'release/2026-08', 'feature/ozi-78', 'feature/name]'])(
+    'accepts a valid Git branch name %s',
+    (gitRef) => {
+      expect(gitRefSchema.safeParse(gitRef).success).toBe(true);
+    },
+  );
 
   it.each([
     ['NUL', 'host\u0000.vercel.app'],

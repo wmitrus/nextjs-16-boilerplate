@@ -66,8 +66,34 @@
 - The single Vercel DETAIL subprocess now also carries an explicit 15s
   timeout alongside the existing 128 KiB bounded output, with no retries.
 
+## PR #89 Full Review Corrective Pass
+
+- Removed `run()`'s caller-controlled dependency bag (`vercelExecutor`,
+  `readExpectedIdentity`, `gitExecutor`). `run()` is now
+  `run(argv = process.argv)` only, structurally bound to the real
+  `readExpectedProductionIdentity()`, `readRemoteCandidateDetail()`, and
+  local ancestry implementations — no importing module can inject a fake
+  Vercel executor to fabricate `READ_AND_VALIDATED` provenance. CLI tests use
+  a Vitest module mock of `./remote-candidate` instead.
+- `src/app/api/internal/preview-canary/database-binding/route.ts` now also
+  requires a non-empty `URL#hostname` after the protocol check, so
+  `postgresql:///db` fails closed to the existing bounded 500
+  `{"error":"Unavailable"}` instead of returning 200 with `databaseHost: ''`.
+- `gitRefSchema` gained the remaining Git branch/ref-format predicates:
+  no path component may start with `.` or end with `.lock`, the value may
+  not be exactly `@`, and a branch name may not start with `-`. The existing
+  character-class exclusions (control chars, whitespace, `~^:?*\[`, no
+  trailing `]` restriction) were preserved unchanged.
+- `src/app/api/internal/e2e/authjs-user/containment-fixture.ts` (`[::1]`) and
+  the `gitRefSchema` character class were confirmed correct and left
+  untouched; `scripts/git/full-diff.sh` (user-owned) was not modified.
+
+A4.2a remains implemented and locally validated only — no remote Vercel
+operation has been performed against Preview or Production. Full A4 is not
+complete.
+
 ## Validation
 
-- Focused rollback-assessment Vitest suite: 76 tests passed.
+- Focused rollback-assessment Vitest suite: 85 tests passed.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check` passed.
 - No remote Vercel operation was run during implementation.

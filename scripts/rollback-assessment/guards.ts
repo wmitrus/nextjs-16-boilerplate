@@ -26,8 +26,19 @@ export const gitRefSchema = z
         value.endsWith('.') ||
         value.includes('..') ||
         value.includes('@{') ||
+        value === '@' ||
+        // A branch name may not begin with '-' (it must not be mistakable
+        // for a command-line flag).
+        value.startsWith('-') ||
         /[\s~^:?*\\[\\]/.test(value) ||
-        value.split('/').some((part) => part.length === 0 || part === '.')
+        value.split('/').some(
+          (part) =>
+            part.length === 0 ||
+            // No slash-separated component may start with '.' or end
+            // with the reserved '.lock' suffix.
+            part.startsWith('.') ||
+            part.endsWith('.lock'),
+        )
       ),
     'Git ref is malformed.',
   );

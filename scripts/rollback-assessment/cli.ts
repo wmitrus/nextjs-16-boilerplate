@@ -212,14 +212,15 @@ function buildRemoteVerifiedRollbackAssessment(
   return buildAssessment(input, 'REMOTE_READ');
 }
 
-export function run(
-  argv = process.argv,
-  dependencies: {
-    gitExecutor?: typeof execFileSync;
-    readExpectedIdentity?: () => ExpectedProductionIdentity;
-    vercelExecutor?: typeof execFileSync;
-  } = {},
-): void {
+/**
+ * Not caller-configurable by design: an importing module must not be able to
+ * inject a fake Vercel executor or a fake expected-identity resolver and
+ * obtain REMOTE_READ provenance without performing the real
+ * `readRemoteCandidateDetail()` call. The remote branch is structurally
+ * bound to the real `readExpectedProductionIdentity()`,
+ * `readRemoteCandidateDetail()`, and local ancestry implementations.
+ */
+export function run(argv = process.argv): void {
   const { deploymentId, executeRemoteCandidateRead } =
     parseRollbackAssessmentArgs(argv.slice(2));
   if (!executeRemoteCandidateRead) {
@@ -231,13 +232,8 @@ export function run(
   let candidateDetail: ProductionDeploymentDetail;
   let expectedIdentity: ExpectedProductionIdentity;
   try {
-    expectedIdentity = (
-      dependencies.readExpectedIdentity ?? readExpectedProductionIdentity
-    )();
-    candidateDetail = readRemoteCandidateDetail(
-      deploymentId,
-      dependencies.vercelExecutor,
-    );
+    expectedIdentity = readExpectedProductionIdentity();
+    candidateDetail = readRemoteCandidateDetail(deploymentId);
   } catch {
     console.log(
       JSON.stringify(
@@ -254,7 +250,6 @@ export function run(
         candidateDetail,
         deploymentId,
         expectedIdentity,
-        gitExecutor: dependencies.gitExecutor,
       }),
       null,
       2,

@@ -25,7 +25,10 @@ export async function GET() {
   if (!databaseUrl) return unavailable(500);
   try {
     const parsed = new URL(databaseUrl);
-    if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    if (
+      (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') ||
+      parsed.hostname.length === 0
+    ) {
       return unavailable(500);
     }
     return NextResponse.json(

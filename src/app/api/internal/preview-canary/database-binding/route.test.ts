@@ -95,9 +95,14 @@ describe('Preview canary database binding route', () => {
     'not a URL',
     'http://user:password@example.test/database',
     'https://user:password@example.test/database',
+    'postgresql:///db',
+    'postgres:///db',
   ])('fails safely for invalid database configuration', async (databaseUrl) => {
     mocks.env.DATABASE_URL = databaseUrl;
-    const body = await (await GET()).text();
+    const response = await GET();
+    const body = await response.text();
+    expect(response.status).toBe(500);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(body).toBe('{"error":"Unavailable"}');
     expect(body).not.toContain('password');
     expect(body).not.toContain('database');

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  parseRuntimeDatabaseHost,
+  parseRuntimeCanaryEvidence,
   probeRuntimeDatabaseBinding,
   readBoundedResponseBody,
   parseImmutableDeploymentUrl,
@@ -372,10 +372,22 @@ describe('Preview canary Vercel boundary', () => {
 
   it('accepts only a bounded runtime database hostname', () => {
     expect(
-      parseRuntimeDatabaseHost(
-        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech"}',
+      parseRuntimeCanaryEvidence(
+        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech","authProvider":"authjs","clerkKeysTest":null}',
       ),
-    ).toBe('ep-test.us-east-2.aws.neon.tech');
+    ).toEqual({
+      authProvider: 'authjs',
+      clerkKeysTest: null,
+      databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+    });
+  });
+
+  it('accepts Clerk runtime evidence only when deployed keys are test keys', () => {
+    expect(
+      parseRuntimeCanaryEvidence(
+        '{"databaseHost":"ep-test.us-east-2.aws.neon.tech","authProvider":"clerk","clerkKeysTest":true}',
+      ),
+    ).toMatchObject({ authProvider: 'clerk', clerkKeysTest: true });
   });
 
   it('derives the immutable runtime target from deployment metadata', () => {
@@ -400,10 +412,18 @@ describe('Preview canary Vercel boundary', () => {
   it.each([
     'not json',
     '{}',
-    '{"databaseHost":"https://example.test"}',
-    '{"databaseHost":"host/path"}',
+    '{"databaseHost":"https://example.test","authProvider":"authjs","clerkKeysTest":null}',
+    '{"databaseHost":"host/path","authProvider":"authjs","clerkKeysTest":null}',
+    '{"databaseHost":"host","authProvider":"authjs","clerkKeysTest":true}',
+    '{"databaseHost":"host","authProvider":"clerk","clerkKeysTest":false}',
+    '{"databaseHost":"host","authProvider":"supabase","clerkKeysTest":null}',
+    '{"databaseHost":"host","authProvider":"authjs","clerkKeysTest":null,"extra":true}',
+    '{"databaseHost":"host","authProvider":"clerk","clerkKeysTest":true,"clerkSecretKey":"sk_test_not-allowed"}',
+    '{"databaseHost":"host","authProvider":"authjs","clerkKeysTest":null,"databaseUrl":"postgresql://not-allowed"}',
   ])('rejects malformed runtime evidence: %s', (output) => {
-    expect(() => parseRuntimeDatabaseHost(output)).toThrow('invalid evidence');
+    expect(() => parseRuntimeCanaryEvidence(output)).toThrow(
+      'invalid evidence',
+    );
   });
 
   it.each([4096, 4097])(

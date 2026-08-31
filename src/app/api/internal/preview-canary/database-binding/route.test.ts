@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   env: {
+    AUTH_PROVIDER: 'authjs' as 'authjs' | 'clerk',
+    CLERK_SECRET_KEY: undefined as string | undefined,
     DATABASE_URL: undefined as string | undefined,
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: undefined as string | undefined,
     VERCEL_ENV: undefined as string | undefined,
   },
 }));
@@ -17,6 +20,9 @@ vi.mock('@/core/env', () => ({ env: mocks.env }));
 import { GET } from './route';
 
 beforeEach(() => {
+  mocks.env.AUTH_PROVIDER = 'authjs';
+  mocks.env.CLERK_SECRET_KEY = undefined;
+  mocks.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = undefined;
   mocks.env.VERCEL_ENV = 'preview';
   mocks.env.DATABASE_URL =
     'postgresql://user:password@ep-test.us-east-2.aws.neon.tech/database?sslmode=require';
@@ -27,6 +33,8 @@ describe('Preview canary database binding route', () => {
     const response = await GET();
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(await response.json()).toEqual({
+      authProvider: 'authjs',
+      clerkKeysTest: null,
       databaseHost: 'ep-test.us-east-2.aws.neon.tech',
     });
   });
@@ -48,7 +56,36 @@ describe('Preview canary database binding route', () => {
     mocks.env.DATABASE_URL =
       'postgres://user:password@ep-test-pooler.us-east-2.aws.neon.tech/database';
     expect(await (await GET()).json()).toEqual({
+      authProvider: 'authjs',
+      clerkKeysTest: null,
       databaseHost: 'ep-test-pooler.us-east-2.aws.neon.tech',
+    });
+  });
+
+  it('returns only Clerk test-key status, never key material', async () => {
+    mocks.env.AUTH_PROVIDER = 'clerk';
+    mocks.env.CLERK_SECRET_KEY = 'sk_test_runtime-secret';
+    mocks.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_test_runtime-public';
+
+    const body = await (await GET()).text();
+    expect(JSON.parse(body)).toEqual({
+      authProvider: 'clerk',
+      clerkKeysTest: true,
+      databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+    });
+    expect(body).not.toContain('sk_test_runtime-secret');
+    expect(body).not.toContain('pk_test_runtime-public');
+    expect(body).not.toContain('postgresql://');
+  });
+
+  it('reports false for missing or non-test Clerk keys', async () => {
+    mocks.env.AUTH_PROVIDER = 'clerk';
+    mocks.env.CLERK_SECRET_KEY = 'sk_live_runtime-secret';
+    mocks.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = undefined;
+
+    expect(await (await GET()).json()).toMatchObject({
+      authProvider: 'clerk',
+      clerkKeysTest: false,
     });
   });
 

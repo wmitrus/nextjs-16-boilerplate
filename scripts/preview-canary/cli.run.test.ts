@@ -23,6 +23,11 @@ import { run } from './cli';
 const identity = { branch: 'ozi-78', sha: 'a'.repeat(40) };
 const immutableUrl = 'project-immutable-abc123-team.vercel.app';
 const databaseHost = 'ep-test.us-east-2.aws.neon.tech';
+const authjsRuntimeEvidence = {
+  authProvider: 'authjs',
+  clerkKeysTest: null,
+  databaseHost,
+};
 const deployment = {
   id: 'dpl_expected',
   meta: {
@@ -47,7 +52,10 @@ function setRequiredEnvironment(): void {
   vi.stubEnv('VERCEL_TOKEN', 'vercel-token');
 }
 
-function setupSuccessfulDependencies(input?: { previewEnv?: string }): void {
+function setupSuccessfulDependencies(input?: {
+  previewEnv?: string;
+  runtimeEvidence?: unknown;
+}): void {
   setRequiredEnvironment();
   mockReadTextFileWithinBase.mockImplementation((file: string) => {
     if (file.endsWith('/.vercel/project.json')) {
@@ -57,10 +65,7 @@ function setupSuccessfulDependencies(input?: { previewEnv?: string }): void {
       });
     }
     if (file.endsWith('/.vercel/.env.preview.local')) {
-      return (
-        input?.previewEnv ??
-        'AUTH_PROVIDER=authjs\nINTERNAL_API_KEY=internal-key\n'
-      );
+      return input?.previewEnv ?? 'INTERNAL_API_KEY=internal-key\n';
     }
     throw new Error(`unexpected file: ${file}`);
   });
@@ -90,7 +95,10 @@ function setupSuccessfulDependencies(input?: { previewEnv?: string }): void {
       .fn()
       .mockImplementation(() =>
         Promise.resolve(
-          new Response(JSON.stringify({ databaseHost }), { status: 200 }),
+          new Response(
+            JSON.stringify(input?.runtimeEvidence ?? authjsRuntimeEvidence),
+            { status: 200 },
+          ),
         ),
       ),
   );
@@ -177,10 +185,38 @@ describe('Preview canary shared execution', () => {
     );
   });
 
-  it.each([
-    ['missing AUTH_PROVIDER', 'INTERNAL_API_KEY=internal-key\n'],
-    ['missing INTERNAL_API_KEY', 'AUTH_PROVIDER=authjs\n'],
-  ])(
+  it('does not use pulled branch provider or Clerk values as runtime evidence', async () => {
+    setupSuccessfulDependencies({
+      previewEnv:
+        'AUTH_PROVIDER=clerk\nCLERK_SECRET_KEY=sk_live_branch\nNEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_branch\nINTERNAL_API_KEY=internal-key\n',
+    });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await run(['node', 'cli.ts', '--auto']);
+
+    expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+      provider: 'authjs',
+    });
+  });
+
+  it('accepts Clerk only when immutable runtime evidence confirms test keys', async () => {
+    setupSuccessfulDependencies({
+      runtimeEvidence: {
+        authProvider: 'clerk',
+        clerkKeysTest: true,
+        databaseHost,
+      },
+    });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await run(['node', 'cli.ts', '--auto']);
+
+    expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+      provider: 'clerk',
+    });
+  });
+
+  it.each([['missing INTERNAL_API_KEY', 'AUTH_PROVIDER=authjs\n']])(
     'fails closed for %s before runtime probing or Neon verification',
     async (_, previewEnv) => {
       setupSuccessfulDependencies({ previewEnv });
@@ -197,7 +233,10 @@ describe('Preview canary shared execution', () => {
     ['runtime HTTP failure', new Response('', { status: 500 }), 'HTTP 500'],
     [
       'invalid runtime evidence',
-      new Response('{"databaseHost":"host/path"}', { status: 200 }),
+      new Response(
+        '{"databaseHost":"host/path","authProvider":"authjs","clerkKeysTest":null}',
+        { status: 200 },
+      ),
       'invalid evidence',
     ],
   ])(
@@ -207,6 +246,31 @@ describe('Preview canary shared execution', () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
 
       await expect(run(['node', 'cli.ts', '--auto'])).rejects.toThrow(message);
+      expect(commandCalls().some(({ file }) => file === 'pnpm')).toBe(false);
+    },
+  );
+
+  it.each([
+    [
+      'Clerk non-test keys',
+      { authProvider: 'clerk', clerkKeysTest: false, databaseHost },
+    ],
+    [
+      'authjs with Clerk evidence',
+      { authProvider: 'authjs', clerkKeysTest: true, databaseHost },
+    ],
+    [
+      'unsupported provider',
+      { authProvider: 'supabase', clerkKeysTest: null, databaseHost },
+    ],
+  ])(
+    'fails closed for invalid immutable runtime %s',
+    async (_, runtimeEvidence) => {
+      setupSuccessfulDependencies({ runtimeEvidence });
+
+      await expect(run(['node', 'cli.ts', '--auto'])).rejects.toThrow(
+        'invalid evidence',
+      );
       expect(commandCalls().some(({ file }) => file === 'pnpm')).toBe(false);
     },
   );

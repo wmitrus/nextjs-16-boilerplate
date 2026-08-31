@@ -5,7 +5,6 @@ import { readTextFileWithinBase } from '../lib/fs-guards-shared';
 
 import { resolveLocalGitIdentity } from './git-identity';
 import {
-  assertClerkTestKeys,
   assertPreviewDeployment,
   assertVercelProjectLink,
   parseCanaryArgs,
@@ -516,20 +515,8 @@ function readPreviewEnv(): Record<string, string> {
       .trim()
       .replace(/^(['"])([\s\S]*)\1$/, '$2');
     switch (key) {
-      case 'AUTH_PROVIDER':
-        values.AUTH_PROVIDER = value;
-        break;
-      case 'CLERK_SECRET_KEY':
-        values.CLERK_SECRET_KEY = value;
-        break;
-      case 'DATABASE_URL':
-        values.DATABASE_URL = value;
-        break;
       case 'INTERNAL_API_KEY':
         values.INTERNAL_API_KEY = value;
-        break;
-      case 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY':
-        values.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = value;
         break;
     }
   }
@@ -538,32 +525,25 @@ function readPreviewEnv(): Record<string, string> {
 
 function readPreviewValue(
   values: Record<string, string>,
-  key:
-    | 'AUTH_PROVIDER'
-    | 'CLERK_SECRET_KEY'
-    | 'DATABASE_URL'
-    | 'INTERNAL_API_KEY'
-    | 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
+  key: 'INTERNAL_API_KEY',
 ): string | undefined {
   switch (key) {
-    case 'AUTH_PROVIDER':
-      return values.AUTH_PROVIDER?.trim() || undefined;
-    case 'CLERK_SECRET_KEY':
-      return values.CLERK_SECRET_KEY?.trim() || undefined;
-    case 'DATABASE_URL':
-      return values.DATABASE_URL?.trim() || undefined;
     case 'INTERNAL_API_KEY':
       return values.INTERNAL_API_KEY?.trim() || undefined;
-    case 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY':
-      return values.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() || undefined;
   }
 }
+
+export type RuntimeCanaryEvidence = {
+  authProvider: 'authjs' | 'clerk';
+  clerkKeysTest: boolean | null;
+  databaseHost: string;
+};
 
 export async function probeRuntimeDatabaseBinding(input: {
   deploymentProtectionBypass: string;
   deploymentUrl: string;
   internalApiKey: string;
-}): Promise<string> {
+}): Promise<RuntimeCanaryEvidence> {
   const signal = AbortSignal.timeout(RUNTIME_PROBE_TIMEOUT_MS);
   let response: Response;
   try {
@@ -592,7 +572,7 @@ export async function probeRuntimeDatabaseBinding(input: {
     throw new Error(`Preview runtime probe failed (HTTP ${response.status}).`);
   }
   try {
-    return parseRuntimeDatabaseHost(await readBoundedResponseBody(response));
+    return parseRuntimeCanaryEvidence(await readBoundedResponseBody(response));
   } catch (error) {
     if (signal.aborted) throw new Error('Preview runtime probe timed out.');
     throw error;
@@ -630,7 +610,9 @@ export async function readBoundedResponseBody(
   return new TextDecoder().decode(bytes);
 }
 
-export function parseRuntimeDatabaseHost(output: string): string {
+export function parseRuntimeCanaryEvidence(
+  output: string,
+): RuntimeCanaryEvidence {
   let value: unknown;
   try {
     value = JSON.parse(output);
@@ -640,15 +622,26 @@ export function parseRuntimeDatabaseHost(output: string): string {
   if (
     !value ||
     typeof value !== 'object' ||
-    Object.keys(value).length !== 1 ||
+    Object.keys(value).length !== 3 ||
     !('databaseHost' in value) ||
+    !('authProvider' in value) ||
+    !('clerkKeysTest' in value) ||
     typeof value.databaseHost !== 'string' ||
     value.databaseHost.length === 0 ||
-    /[\s\u0000-\u001f\u007f/:?#@]/.test(value.databaseHost)
+    /[\s\u0000-\u001f\u007f/:?#@]/.test(value.databaseHost) ||
+    (value.authProvider !== 'authjs' && value.authProvider !== 'clerk') ||
+    (value.clerkKeysTest !== null &&
+      typeof value.clerkKeysTest !== 'boolean') ||
+    (value.authProvider === 'authjs' && value.clerkKeysTest !== null) ||
+    (value.authProvider === 'clerk' && value.clerkKeysTest !== true)
   ) {
     throw new Error('Preview runtime probe returned invalid evidence.');
   }
-  return value.databaseHost;
+  return {
+    authProvider: value.authProvider,
+    clerkKeysTest: value.clerkKeysTest,
+    databaseHost: value.databaseHost,
+  };
 }
 
 export function parseImmutableDeploymentUrl(
@@ -720,27 +713,13 @@ export async function executeReadOnlyCanary(
   ]);
   assertVercelProjectLink(readVercelProjectLink(), vercelIdentity);
   const previewEnv = readPreviewEnv();
-  const provider = readPreviewValue(previewEnv, 'AUTH_PROVIDER');
   const internalApiKey = readPreviewValue(previewEnv, 'INTERNAL_API_KEY');
-  if (!provider) {
-    throw new Error('Preview environment must define AUTH_PROVIDER.');
-  }
   if (!internalApiKey) {
     throw new Error(
       'Preview environment must define INTERNAL_API_KEY for the read-only canary.',
     );
   }
-  if (provider !== 'authjs' && provider !== 'clerk') {
-    throw new Error('Preview AUTH_PROVIDER is not supported by the canary.');
-  }
-  if (provider === 'clerk') {
-    assertClerkTestKeys(
-      readPreviewValue(previewEnv, 'CLERK_SECRET_KEY'),
-      readPreviewValue(previewEnv, 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'),
-    );
-  }
-
-  const runtimeDatabaseHost = await probeRuntimeDatabaseBinding({
+  const runtimeEvidence = await probeRuntimeDatabaseBinding({
     deploymentProtectionBypass: requiredEnv('VERCEL_AUTOMATION_BYPASS_SECRET'),
     deploymentUrl: immutableDeploymentUrl,
     internalApiKey,
@@ -753,20 +732,23 @@ export async function executeReadOnlyCanary(
       '--',
       'verify-preview-endpoint',
       `--git-branch=${identity.branch}`,
-      `--database-host=${runtimeDatabaseHost}`,
+      `--database-host=${runtimeEvidence.databaseHost}`,
     ],
     { stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
   console.log(
     JSON.stringify({
-      ...redactedEvidence({ ...identity, provider }),
+      ...redactedEvidence({
+        ...identity,
+        provider: runtimeEvidence.authProvider,
+      }),
       mode: 'read-only',
       mutation: execute
         ? 'refused: A3b owns fixture mutation'
         : 'not requested',
       neonPreviewBranch: `preview/${identity.branch}`,
-      runtimeDatabaseHost,
+      runtimeDatabaseHost: runtimeEvidence.databaseHost,
     }),
   );
 }

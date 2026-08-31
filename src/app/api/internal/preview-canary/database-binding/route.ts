@@ -4,6 +4,13 @@ import { env } from '@/core/env';
 
 const noStoreHeaders = { 'Cache-Control': 'private, no-store' };
 
+function clerkKeysTest(): boolean {
+  return (
+    env.CLERK_SECRET_KEY?.startsWith('sk_test_') === true &&
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith('pk_test_') === true
+  );
+}
+
 function unavailable(status: 404 | 500) {
   return NextResponse.json(
     { error: 'Unavailable' },
@@ -22,7 +29,11 @@ export async function GET() {
       return unavailable(500);
     }
     return NextResponse.json(
-      { databaseHost: parsed.hostname },
+      {
+        authProvider: env.AUTH_PROVIDER,
+        clerkKeysTest: env.AUTH_PROVIDER === 'clerk' ? clerkKeysTest() : null,
+        databaseHost: parsed.hostname,
+      },
       { headers: noStoreHeaders },
     );
   } catch {

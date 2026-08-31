@@ -9,6 +9,16 @@ import {
 } from '@/testing';
 
 describe('Route Classification', () => {
+  it('classifies the Preview canary probe as a non-public internal API', () => {
+    const ctx = classifyRequest(
+      createMockRequest({
+        path: '/api/internal/preview-canary/database-binding',
+      }),
+    );
+    expect(ctx.isApi).toBe(true);
+    expect(ctx.isInternalApi).toBe(true);
+    expect(ctx.isPublicRoute).toBe(false);
+  });
   beforeEach(() => {
     resetAllInfrastructureMocks();
   });

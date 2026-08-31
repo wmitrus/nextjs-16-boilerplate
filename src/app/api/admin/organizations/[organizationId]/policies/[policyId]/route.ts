@@ -18,6 +18,7 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import {
   checkOrganizationsAdminAccess,
   getFieldErrors,
+  getOrganizationDetailInActiveScope,
   organizationIdSchema,
   toAdminOrganizationsScope,
 } from '../../../_lib';
@@ -240,13 +241,12 @@ export const PATCH = withErrorHandler(
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
       const readService = new DrizzleAdminOrganizationsReadService(db);
-      const organization = await readService.getDetailInActiveScope({
-        scope: toAdminOrganizationsScope(
-          adminAccess,
-          access.tenant.organizationId,
-        ),
-        organizationId: update.organizationId,
-      });
+      const organization = await getOrganizationDetailInActiveScope(
+        readService,
+        toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+        update.organizationId,
+        'policies',
+      );
 
       if (!organization) {
         return createServerErrorResponse(
@@ -343,13 +343,12 @@ export const DELETE = withErrorHandler(
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
       const readService = new DrizzleAdminOrganizationsReadService(db);
-      const organization = await readService.getDetailInActiveScope({
-        scope: toAdminOrganizationsScope(
-          adminAccess,
-          access.tenant.organizationId,
-        ),
-        organizationId: organizationResult.data.id,
-      });
+      const organization = await getOrganizationDetailInActiveScope(
+        readService,
+        toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+        organizationResult.data.id,
+        'policies',
+      );
 
       if (!organization) {
         return createServerErrorResponse(

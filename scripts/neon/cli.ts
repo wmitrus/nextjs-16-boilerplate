@@ -13,7 +13,7 @@ const TRUSTED_PROVIDER_ENDPOINTS = {
     origin: NEON_API_ORIGIN,
     pathname:
       // eslint-disable-next-line security/detect-unsafe-regex -- anchored, both quantifiers are bounded ({1,60}) with no nested/overlapping repetition, so this cannot backtrack catastrophically.
-      /^\/api\/v2\/projects\/[a-z0-9-]{1,60}\/branches(?:\/[a-z0-9-]{1,60})?$/,
+      /^\/api\/v2\/projects\/[a-z0-9-]{1,60}\/branches(?:\/[a-z0-9-]{1,60}(?:\/(?:endpoints|databases))?)?$/,
   },
 } as const;
 
@@ -32,6 +32,67 @@ interface NeonBranch {
 
 interface NeonBranchesResponse {
   branches: NeonBranch[];
+}
+
+interface NeonEndpointsResponse {
+  endpoints: Array<{ host?: string }>;
+}
+
+interface NeonDatabasesResponse {
+  databases: unknown;
+}
+
+// PostgreSQL's identifier limit (NAMEDATALEN - 1) is a *byte* limit, not a
+// JS-character count -- a multi-byte UTF-8 name can exceed this in bytes
+// while staying under it in `.length`. Bound on encoded byte length.
+const MAX_DATABASE_NAME_BYTES = 63;
+
+function isValidDatabaseName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !/[\s\u0000-\u001f\u007f]/.test(value) &&
+    Buffer.byteLength(value, 'utf8') <= MAX_DATABASE_NAME_BYTES
+  );
+}
+
+// Provider JSON is untrusted input: bound the raw response body before
+// parsing it as JSON, rather than only bounding the parsed structure
+// afterward. Read incrementally and stop as soon as the limit is exceeded.
+const MAX_NEON_DATABASES_RESPONSE_BYTES = 512 * 1024;
+const MAX_NEON_BRANCH_DATABASES = 500;
+
+async function readBoundedResponseBody(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  if (!response.body) {
+    throw new Error('Neon API returned an empty response body.');
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maxBytes) {
+        await reader.cancel();
+        throw new Error('Neon API response exceeded the bounded size limit.');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 interface NeonConfig {
@@ -73,6 +134,157 @@ export function readNeonConfig(): NeonConfig {
   };
 }
 
+export function assertDatabaseUrlBelongsToPreviewEndpoints(
+  endpointHosts: readonly string[],
+  databaseUrl: string,
+): void {
+  if (endpointHosts.length === 0) {
+    throw new Error('Expected Neon Preview branch has no verifiable endpoint.');
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error('DATABASE_URL is not a valid connection URL.');
+  }
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    throw new Error(
+      'DATABASE_URL must use the postgres or postgresql protocol.',
+    );
+  }
+  assertDatabaseHostBelongsToPreviewEndpoints(endpointHosts, parsed.hostname);
+}
+
+export function assertDatabaseHostBelongsToPreviewEndpoints(
+  endpointHosts: readonly string[],
+  databaseHost: string,
+): void {
+  const canonicalEndpointHosts = new Set(
+    endpointHosts.map(canonicalNeonEndpointHost),
+  );
+  if (!canonicalEndpointHosts.has(canonicalNeonEndpointHost(databaseHost))) {
+    throw new Error(
+      'DATABASE_URL does not belong to the expected Neon Preview branch.',
+    );
+  }
+}
+
+function canonicalNeonEndpointHost(host: string): string {
+  const [firstLabel, ...remainingLabels] = host.split('.');
+  if (!firstLabel || remainingLabels.length === 0) return host;
+
+  const canonicalFirstLabel = firstLabel.endsWith('-pooler')
+    ? firstLabel.slice(0, -'-pooler'.length)
+    : firstLabel;
+  return [canonicalFirstLabel, ...remainingLabels].join('.');
+}
+
+async function getBranchEndpointHosts(
+  config: NeonConfig,
+  branchId: string,
+): Promise<string[]> {
+  if (!RESOURCE_ID_PATTERN.test(branchId)) {
+    throw new Error('Neon returned an invalid branch ID.');
+  }
+  const result = await neonRequest<NeonEndpointsResponse>(
+    config,
+    new URL(
+      `/api/v2/projects/${config.projectId}/branches/${branchId}/endpoints`,
+      NEON_API_ORIGIN,
+    ),
+  );
+  return (result?.endpoints ?? [])
+    .map((endpoint) => endpoint.host)
+    .filter(
+      (host): host is string => typeof host === 'string' && host.length > 0,
+    );
+}
+
+export async function getBranchDatabaseNames(
+  config: NeonConfig,
+  branchId: string,
+): Promise<string[]> {
+  if (!RESOURCE_ID_PATTERN.test(branchId)) {
+    throw new Error('Neon returned an invalid branch ID.');
+  }
+  const result = await neonRequest<NeonDatabasesResponse>(
+    config,
+    new URL(
+      `/api/v2/projects/${config.projectId}/branches/${branchId}/databases`,
+      NEON_API_ORIGIN,
+    ),
+    { method: 'GET' },
+    MAX_NEON_DATABASES_RESPONSE_BYTES,
+  );
+  if (!result || !Array.isArray(result.databases)) {
+    throw new Error('Neon API returned an invalid databases response.');
+  }
+  if (result.databases.length > MAX_NEON_BRANCH_DATABASES) {
+    throw new Error('Neon API returned too many databases.');
+  }
+
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const database of result.databases) {
+    if (!database || typeof database !== 'object') {
+      throw new Error('Neon API returned a malformed database entry.');
+    }
+    const record = database as { branch_id?: unknown; name?: unknown };
+    if (typeof record.branch_id !== 'string') {
+      throw new Error(
+        'Neon API returned a database with a missing or malformed branch_id.',
+      );
+    }
+    if (record.branch_id !== branchId) {
+      throw new Error(
+        'Neon API returned a database that does not belong to the expected branch.',
+      );
+    }
+    if (!isValidDatabaseName(record.name)) {
+      throw new Error('Neon API returned a malformed database name.');
+    }
+    if (seen.has(record.name)) {
+      throw new Error('Neon API returned duplicate database names.');
+    }
+    seen.add(record.name);
+    names.push(record.name);
+  }
+  return names;
+}
+
+/**
+ * Resolves the single authoritative expected Preview database name for a
+ * Neon branch. Fails closed when the branch has zero databases (nothing to
+ * verify against) or more than one (this repository has no independent,
+ * authoritative selector for which of several databases the application is
+ * meant to use -- introducing one is a separate architecture decision).
+ */
+export function resolveExpectedPreviewDatabaseName(
+  databaseNames: readonly string[],
+): string {
+  if (databaseNames.length === 0) {
+    throw new Error('Expected Neon Preview branch has no verifiable database.');
+  }
+  if (databaseNames.length > 1) {
+    throw new Error(
+      'Expected Neon Preview branch has multiple databases; an explicit application-database selector is required and is a separate architecture decision.',
+    );
+  }
+  return databaseNames[0]!;
+}
+
+export function assertDatabaseNameMatchesExpectedPreviewDatabase(
+  expectedDatabaseName: string,
+  runtimeDatabaseName: string,
+): void {
+  if (runtimeDatabaseName !== expectedDatabaseName) {
+    throw new Error(
+      'Runtime database name does not match the expected Neon Preview database.',
+    );
+  }
+}
+
 export function assertTrustedProviderUrl(
   url: URL,
   scope: TrustedProviderScope,
@@ -101,10 +313,17 @@ export function assertTrustedProviderUrl(
   }
 }
 
+/**
+ * `maxResponseBytes`, when passed, opts a call into reading the successful
+ * response body incrementally and bounding it BEFORE JSON parsing, instead
+ * of the default unrestricted `response.json()`. This is narrow and
+ * additive: callers that omit it keep the exact prior behavior.
+ */
 async function neonRequest<T>(
   config: NeonConfig,
   url: URL,
   init: RequestInit = {},
+  maxResponseBytes?: number,
 ): Promise<T | undefined> {
   assertTrustedProviderUrl(url, {
     projectId: config.projectId,
@@ -129,6 +348,15 @@ async function neonRequest<T>(
 
   if (response.status === 204) {
     return undefined;
+  }
+
+  if (maxResponseBytes !== undefined) {
+    const body = await readBoundedResponseBody(response, maxResponseBytes);
+    try {
+      return JSON.parse(body) as T;
+    } catch {
+      throw new Error('Neon API returned malformed JSON.');
+    }
   }
 
   return (await response.json()) as T;
@@ -233,14 +461,27 @@ export async function findOldestObsoletePreviewBranch(
   return undefined;
 }
 
-function readOption(args: string[], name: string): string | undefined {
+export function readOption(args: string[], name: string): string | undefined {
   const prefix = `${name}=`;
-  const inline = args.find((arg) => arg.startsWith(prefix));
-  if (inline) {
-    return inline.slice(prefix.length);
+  const values: string[] = [];
+  let expectsSeparatedValue = false;
+  for (const arg of args) {
+    if (expectsSeparatedValue) {
+      if (arg.startsWith('--')) throw new Error(`${name} requires a value.`);
+      values.push(arg);
+      expectsSeparatedValue = false;
+      continue;
+    }
+    if (arg.startsWith(prefix)) {
+      values.push(arg.slice(prefix.length));
+    } else if (arg === name) {
+      expectsSeparatedValue = true;
+    }
   }
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : undefined;
+  if (expectsSeparatedValue) throw new Error(`${name} requires a value.`);
+  if (values.length > 1)
+    throw new Error(`${name} must not be specified twice.`);
+  return values[0];
 }
 
 function printBranches(branches: NeonBranch[], branchLimit: number): void {
@@ -310,6 +551,61 @@ async function previewCheck(config: NeonConfig, args: string[]): Promise<void> {
   );
 }
 
+/**
+ * Verifies that the runtime-reported host AND database name both belong to
+ * the expected Neon Preview branch, against Neon's own Management API --
+ * an authoritative source independent of the runtime's own DATABASE_URL.
+ *
+ * Host: the runtime host must be one of the branch's own endpoints.
+ * Database name: the branch's single authoritative database (from Neon's
+ * "list databases for a branch" API) must exactly equal the runtime-reported
+ * name. The expected name is never derived from the runtime's own
+ * DATABASE_URL/evidence -- that would be self-validation, not proof -- and
+ * a branch with zero or multiple databases fails closed rather than guessing
+ * or picking the runtime-reported name out of the list.
+ */
+export async function verifyPreviewEndpoint(
+  config: NeonConfig,
+  args: string[],
+): Promise<void> {
+  const gitBranch = readOption(args, '--git-branch')?.trim();
+  const databaseHost = readOption(args, '--database-host')?.trim();
+  const databaseName = readOption(args, '--database-name')?.trim();
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!gitBranch || (!databaseHost && !databaseUrl) || !databaseName) {
+    throw new Error(
+      'verify-preview-endpoint requires --git-branch, a database host, and --database-name.',
+    );
+  }
+
+  const expectedName = `preview/${gitBranch}`;
+  const branch = (await listBranches(config)).find(
+    (candidate) => candidate.name === expectedName,
+  );
+  if (!branch) {
+    throw new Error('Expected Neon Preview branch was not found.');
+  }
+
+  const endpointHosts = await getBranchEndpointHosts(config, branch.id);
+  if (databaseHost) {
+    assertDatabaseHostBelongsToPreviewEndpoints(endpointHosts, databaseHost);
+  } else {
+    assertDatabaseUrlBelongsToPreviewEndpoints(endpointHosts, databaseUrl!);
+  }
+
+  const databaseNames = await getBranchDatabaseNames(config, branch.id);
+  const expectedDatabaseName =
+    resolveExpectedPreviewDatabaseName(databaseNames);
+  assertDatabaseNameMatchesExpectedPreviewDatabase(
+    expectedDatabaseName,
+    databaseName,
+  );
+
+  console.log(
+    '[neon] Preview database endpoint (host) and database name both verified.',
+  );
+}
+
 async function run(): Promise<void> {
   const args = process.argv.slice(2).filter((arg) => arg !== '--');
   const command = args[0];
@@ -322,6 +618,11 @@ async function run(): Promise<void> {
 
   if (command === 'preview-check') {
     await previewCheck(config, args.slice(1));
+    return;
+  }
+
+  if (command === 'verify-preview-endpoint') {
+    await verifyPreviewEndpoint(config, args.slice(1));
     return;
   }
 
@@ -341,7 +642,9 @@ async function run(): Promise<void> {
     return;
   }
 
-  throw new Error('Usage: neon <list|preview-check|delete>.');
+  throw new Error(
+    'Usage: neon <list|preview-check|verify-preview-endpoint|delete>.',
+  );
 }
 
 const isMain = process.argv[1]?.endsWith('/scripts/neon/cli.ts');

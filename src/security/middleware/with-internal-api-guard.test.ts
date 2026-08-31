@@ -67,6 +67,26 @@ describe('Internal API Guard', () => {
     expect(mockHandler).toHaveBeenCalled();
   });
 
+  it.each([
+    [undefined, 403],
+    ['wrong', 403],
+    ['test-secret', 200],
+  ])(
+    'enforces the current key for the Preview canary route',
+    async (key, status) => {
+      const req = createMockRequest({
+        headers: key ? { 'x-internal-key': key } : {},
+        path: '/api/internal/preview-canary/database-binding',
+      });
+      const response = await withInternalApiGuard(mockHandler)(
+        req,
+        createMockRouteContext({ isApi: true, isInternalApi: true }),
+      );
+      expect(response.status).toBe(status);
+      expect(mockHandler).toHaveBeenCalledTimes(key === 'test-secret' ? 1 : 0);
+    },
+  );
+
   describe('SEC-44 hardening', () => {
     it('accepts the previous key during a rotation', async () => {
       // The point of the second slot: callers can cut over without a

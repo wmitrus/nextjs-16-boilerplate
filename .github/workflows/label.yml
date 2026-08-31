@@ -14,7 +14,7 @@ jobs:
     steps:
       # Removed unnecessary checkout step
       # - name: Checkout repository
-      #   uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # actions/checkout@v5
+      #   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
       - name: Auto-label PRs
         uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # actions/labeler@v6

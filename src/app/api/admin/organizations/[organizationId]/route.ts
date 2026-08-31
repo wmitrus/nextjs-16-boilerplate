@@ -17,6 +17,7 @@ import {
   checkOrganizationsActionAccess,
   checkOrganizationsAdminAccess,
   getFieldErrors,
+  getOrganizationDetailInActiveScope,
   organizationIdSchema,
   toAdminOrganizationsScope,
 } from '../_lib';
@@ -59,13 +60,12 @@ export const GET = withErrorHandler(
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
     const service = new DrizzleAdminOrganizationsReadService(db);
-    const organization = await service.getDetailInActiveScope({
-      scope: toAdminOrganizationsScope(
-        adminAccess,
-        access.tenant.organizationId,
-      ),
-      organizationId: parseResult.data.id,
-    });
+    const organization = await getOrganizationDetailInActiveScope(
+      service,
+      toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+      parseResult.data.id,
+      'organization',
+    );
 
     if (!organization) {
       return createServerErrorResponse(
@@ -128,10 +128,12 @@ export const PATCH = withErrorHandler(
         access.tenant.organizationId,
       );
       const readService = new DrizzleAdminOrganizationsReadService(db);
-      const organization = await readService.getDetailInActiveScope({
+      const organization = await getOrganizationDetailInActiveScope(
+        readService,
         scope,
-        organizationId: parseResult.data.id,
-      });
+        parseResult.data.id,
+        'organization',
+      );
 
       if (!organization) {
         return createServerErrorResponse(

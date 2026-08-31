@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import {
   checkClerkRedirectUrls,
   getMissingKeys,
@@ -116,5 +119,62 @@ describe('checkClerkRedirectUrls', () => {
     };
     const { warnings } = checkClerkRedirectUrls(env, 'development');
     expect(warnings).toEqual([]);
+  });
+});
+
+describe('rollback assessment operator trust-anchor template', () => {
+  const exampleEnv = fs.readFileSync(
+    path.resolve(process.cwd(), '.env.example'),
+    'utf8',
+  );
+
+  const requiredRollbackTrustAnchors = [
+    'PRODUCTION_AUTH_PROVIDER',
+    'PRODUCTION_TENANCY_MODE',
+    'PRODUCTION_TENANT_CONTEXT_SOURCE',
+    'PRODUCTION_DB_PROVIDER',
+    'PRODUCTION_DB_DRIVER',
+    'PRODUCTION_RUNTIME_DATABASE_HOST',
+    'PRODUCTION_DATABASE_HOST',
+    'PRODUCTION_DATABASE_NAME',
+    'PRODUCTION_DEFAULT_TENANT_ID',
+  ] as const;
+
+  it('documents every rollback assessment Production trust anchor', () => {
+    const lines = exampleEnv.split(/\r?\n/);
+
+    for (const key of requiredRollbackTrustAnchors) {
+      expect(lines.some((line) => line.startsWith(`${key}=`))).toBe(true);
+    }
+  });
+
+  it('documents the only currently supported Production DB runtime', () => {
+    expect(exampleEnv).toMatch(/^PRODUCTION_DB_PROVIDER=drizzle$/m);
+    expect(exampleEnv).toMatch(/^PRODUCTION_DB_DRIVER=postgres$/m);
+  });
+
+  it('documents the explicit none sentinel for tenant-context source', () => {
+    expect(exampleEnv).toContain('none | provider | db');
+    expect(exampleEnv).toContain(
+      '`none` is the explicit sentinel representing a null tenant-context source.',
+    );
+  });
+
+  it('documents the conditional single-tenant ID requirement', () => {
+    expect(exampleEnv).toContain(
+      'Required only when PRODUCTION_TENANCY_MODE=single.',
+    );
+    expect(exampleEnv).toContain(
+      'Leave empty/unset for org and personal tenancy modes.',
+    );
+  });
+
+  it('documents the separate runtime and schema database host pins', () => {
+    expect(exampleEnv).toContain('PRODUCTION_RUNTIME_DATABASE_HOST=');
+    expect(exampleEnv).toContain('PRODUCTION_DATABASE_HOST=');
+
+    expect(exampleEnv).toContain(
+      'This is deliberately independent from PRODUCTION_DATABASE_HOST below.',
+    );
   });
 });

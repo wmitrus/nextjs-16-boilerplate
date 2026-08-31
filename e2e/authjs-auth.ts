@@ -20,6 +20,13 @@ const authjsCredentialsSchema = z.object({
 
 const authjsProvisioningSchema = authjsCredentialsSchema.extend({
   onboardingComplete: z.boolean().default(true),
+  organizationContainmentFixture: z.boolean().default(false),
+});
+
+const organizationContainmentFixtureSchema = z.object({
+  activeOrganizationId: z.uuid(),
+  siblingOrganizationId: z.uuid(),
+  outsideTenantOrganizationId: z.uuid(),
 });
 
 const AUTHJS_SIGN_IN_TIMEOUT_MS = 30_000;
@@ -37,7 +44,12 @@ type SessionStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 
 type AuthjsE2EProvisioningOptions = {
   onboardingComplete?: boolean;
+  organizationContainmentFixture?: boolean;
 };
+
+export type OrganizationContainmentFixture = z.infer<
+  typeof organizationContainmentFixtureSchema
+>;
 
 function getInternalApiHeaders(): Record<string, string> {
   return {
@@ -186,10 +198,12 @@ export async function provisionAuthjsE2EUser(
   request: APIRequestContext,
   credentials: AuthjsE2ECredentials,
   options?: AuthjsE2EProvisioningOptions,
-): Promise<void> {
+): Promise<OrganizationContainmentFixture | undefined> {
   const parsed = authjsProvisioningSchema.parse({
     ...credentials,
     onboardingComplete: options?.onboardingComplete ?? true,
+    organizationContainmentFixture:
+      options?.organizationContainmentFixture ?? false,
   });
   await waitForAuthjsProvisioningRouteReady(request);
 
@@ -199,7 +213,12 @@ export async function provisionAuthjsE2EUser(
   });
 
   if (response.ok()) {
-    return;
+    if (!parsed.organizationContainmentFixture) {
+      return undefined;
+    }
+
+    const body = (await response.json()) as { data: unknown };
+    return organizationContainmentFixtureSchema.parse(body.data);
   }
 
   throw new Error(

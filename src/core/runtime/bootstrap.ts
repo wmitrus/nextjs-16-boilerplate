@@ -23,6 +23,10 @@ import {
   recordContainerCreated,
   withContainerCreationSpan,
 } from '@/core/observability/new-relic';
+import {
+  resolveEffectiveDbRuntime,
+  type EffectiveDbRuntime,
+} from '@/core/runtime/db-runtime';
 import { getInfrastructure } from '@/core/runtime/infrastructure';
 
 import { createAuditLogService } from '@/modules/audit-log/factory';
@@ -45,33 +49,13 @@ export interface AppConfig {
   };
 }
 
-function resolveDbProvider(): DbConfig['provider'] {
-  return env.DB_PROVIDER ?? 'drizzle';
-}
-
-function resolveDbDriver(): DbConfig['driver'] {
-  const provider = resolveDbProvider();
-  const configuredDriver = env.DB_DRIVER;
-
-  if (provider === 'prisma' && configuredDriver === 'pglite') {
-    throw new Error(
-      '[bootstrap] DB_PROVIDER=prisma cannot be used with DB_DRIVER=pglite. Use postgres or leave DB_DRIVER unset.',
-    );
-  }
-
-  if (
-    provider === 'prisma' &&
-    env.NODE_ENV === 'production' &&
-    !env.DATABASE_URL
-  ) {
-    throw new Error(
-      '[bootstrap] DB_PROVIDER=prisma in production requires DATABASE_URL.',
-    );
-  }
-
-  return (
-    configuredDriver ?? (env.NODE_ENV === 'production' ? 'postgres' : 'pglite')
-  );
+function resolveDbRuntime(): EffectiveDbRuntime {
+  return resolveEffectiveDbRuntime({
+    databaseUrl: env.DATABASE_URL,
+    dbDriver: env.DB_DRIVER,
+    dbProvider: env.DB_PROVIDER,
+    nodeEnv: env.NODE_ENV,
+  });
 }
 
 export function createRequestContainer(config: AppConfig): Container {
@@ -163,10 +147,11 @@ export function createRequestContainer(config: AppConfig): Container {
 }
 
 function buildConfig(): AppConfig {
+  const dbRuntime = resolveDbRuntime();
   return {
     db: {
-      provider: resolveDbProvider(),
-      driver: resolveDbDriver(),
+      provider: dbRuntime.provider,
+      driver: dbRuntime.driver,
       url: env.DATABASE_URL,
     },
     auth: {

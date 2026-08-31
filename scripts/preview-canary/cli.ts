@@ -518,6 +518,9 @@ function readPreviewEnv(): Record<string, string> {
       case 'INTERNAL_API_KEY':
         values.INTERNAL_API_KEY = value;
         break;
+      case 'INTERNAL_API_KEY_PREVIOUS':
+        values.INTERNAL_API_KEY_PREVIOUS = value;
+        break;
     }
   }
   return values;
@@ -525,11 +528,13 @@ function readPreviewEnv(): Record<string, string> {
 
 function readPreviewValue(
   values: Record<string, string>,
-  key: 'INTERNAL_API_KEY',
+  key: 'INTERNAL_API_KEY' | 'INTERNAL_API_KEY_PREVIOUS',
 ): string | undefined {
   switch (key) {
     case 'INTERNAL_API_KEY':
       return values.INTERNAL_API_KEY?.trim() || undefined;
+    case 'INTERNAL_API_KEY_PREVIOUS':
+      return values.INTERNAL_API_KEY_PREVIOUS?.trim() || undefined;
   }
 }
 
@@ -542,41 +547,69 @@ export type RuntimeCanaryEvidence = {
 export async function probeRuntimeDatabaseBinding(input: {
   deploymentProtectionBypass: string;
   deploymentUrl: string;
-  internalApiKey: string;
+  internalApiKeys: readonly string[];
 }): Promise<RuntimeCanaryEvidence> {
+  const internalApiKeys = [...new Set(input.internalApiKeys)];
+  if (
+    internalApiKeys.length < 1 ||
+    internalApiKeys.length > 2 ||
+    internalApiKeys.some((key) => key.trim().length === 0)
+  ) {
+    throw new Error('Preview runtime probe credentials are invalid.');
+  }
   const signal = AbortSignal.timeout(RUNTIME_PROBE_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetch(
-      new URL(
-        '/api/internal/preview-canary/database-binding',
-        input.deploymentUrl,
-      ),
-      {
-        cache: 'no-store',
-        headers: {
-          accept: 'application/json',
-          'x-internal-key': input.internalApiKey,
-          'x-vercel-protection-bypass': input.deploymentProtectionBypass,
+  for (const [index, internalApiKey] of internalApiKeys.entries()) {
+    let response: Response;
+    try {
+      response = await fetch(
+        new URL(
+          '/api/internal/preview-canary/database-binding',
+          input.deploymentUrl,
+        ),
+        {
+          cache: 'no-store',
+          headers: {
+            accept: 'application/json',
+            'x-internal-key': internalApiKey,
+            'x-vercel-protection-bypass': input.deploymentProtectionBypass,
+          },
+          method: 'GET',
+          redirect: 'error',
+          signal,
         },
-        method: 'GET',
-        redirect: 'error',
-        signal,
-      },
-    );
-  } catch {
-    if (signal.aborted) throw new Error('Preview runtime probe timed out.');
-    throw new Error('Preview runtime probe failed.');
+      );
+    } catch {
+      if (signal.aborted) throw new Error('Preview runtime probe timed out.');
+      throw new Error('Preview runtime probe failed.');
+    }
+    if (
+      response.status === 403 &&
+      index === 0 &&
+      internalApiKeys.length === 2
+    ) {
+      // SEC-44's one-generation key rotation fallback, not a transient retry.
+      try {
+        await response.body?.cancel();
+      } catch {
+        // A rejected response body is never evidence and must not change fallback.
+      }
+      continue;
+    }
+    if (response.status !== 200) {
+      throw new Error(
+        `Preview runtime probe failed (HTTP ${response.status}).`,
+      );
+    }
+    try {
+      return parseRuntimeCanaryEvidence(
+        await readBoundedResponseBody(response),
+      );
+    } catch (error) {
+      if (signal.aborted) throw new Error('Preview runtime probe timed out.');
+      throw error;
+    }
   }
-  if (response.status !== 200) {
-    throw new Error(`Preview runtime probe failed (HTTP ${response.status}).`);
-  }
-  try {
-    return parseRuntimeCanaryEvidence(await readBoundedResponseBody(response));
-  } catch (error) {
-    if (signal.aborted) throw new Error('Preview runtime probe timed out.');
-    throw error;
-  }
+  throw new Error('Preview runtime probe failed (HTTP 403).');
 }
 
 export async function readBoundedResponseBody(
@@ -719,10 +752,18 @@ export async function executeReadOnlyCanary(
       'Preview environment must define INTERNAL_API_KEY for the read-only canary.',
     );
   }
+  const internalApiKeyPrevious = readPreviewValue(
+    previewEnv,
+    'INTERNAL_API_KEY_PREVIOUS',
+  );
+  const internalApiKeys = [internalApiKey];
+  if (internalApiKeyPrevious && internalApiKeyPrevious !== internalApiKey) {
+    internalApiKeys.push(internalApiKeyPrevious);
+  }
   const runtimeEvidence = await probeRuntimeDatabaseBinding({
     deploymentProtectionBypass: requiredEnv('VERCEL_AUTOMATION_BYPASS_SECRET'),
     deploymentUrl: immutableDeploymentUrl,
-    internalApiKey,
+    internalApiKeys,
   });
 
   execFileSync(

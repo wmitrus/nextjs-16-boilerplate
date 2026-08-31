@@ -127,15 +127,15 @@ This slice is local-only to implement and test.
 This slice may be implemented locally but must not be executed remotely without
 operator approval.
 
-**A3a status: read-only complete and historically passed.** The evidence is
-bound only to branch `ozi-78-gate-a-slice-a1`, SHA
-`77f37e5895982ac77ca14e04bf3323271b902f3e`, and immutable Preview
-`https://nextjs-16-boilerplate-araoqcd0m-wojciech-mitruss-projects.vercel.app`.
-It ran with mutation not requested, verified Neon branch
-`preview/ozi-78-gate-a-slice-a1` and runtime host
-`ep-wandering-wave-agb6mck0-pooler.c-2.eu-central-1.aws.neon.tech`, and
-resulted in PASS. This evidence does not apply to a future HEAD. `--auto` is
-implemented and validated locally; not remotely exercised.
+**A3a status: COMPLETE / PASS.** The auto live read-only flow exercised branch
+`ozi-78-gate-a-slice-a1`, SHA `ca8b31b15e0cd8ac395e7266496b4e12781d8607`,
+deployment ID `dpl_6viFav6cmpTS3DKSNhv1ANmY5TtB`, and immutable Preview
+`https://nextjs-16-boilerplate-3k0s8g461-wojciech-mitruss-projects.vercel.app`.
+Runtime auth evidence was bound to that deployment (`authjs`), and runtime DB
+plus Neon verification passed for `preview/ozi-78-gate-a-slice-a1` and
+`ep-wandering-wave-agb6mck0-pooler.c-2.eu-central-1.aws.neon.tech`. It ran
+read-only with mutation not requested. This evidence does not authorize A3b
+or any Production action.
 
 **A3b status: not authorized / not executed.**
 
@@ -160,7 +160,10 @@ This slice is local-only to implement/test. Candidate inspection and smoke are
 remote access and require separate approval; traffic switching always requires
 separate production authorization.
 
-**Status: not started.** Production remains untouched / not authorized.
+**Status: A4.1 local-only foundation implemented; full A4 remains blocked on
+separately authorized candidate/Production evidence and smoke.** A4.1 has no
+remote reads, smoke, rollback, promotion, or traffic change. Production remains
+untouched / not authorized.
 
 ## Candidate File Set — To Confirm Before Implementation
 

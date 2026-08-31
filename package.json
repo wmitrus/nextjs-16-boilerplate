@@ -76,6 +76,7 @@
     "neon:branches:list": "pnpm neon -- list",
     "neon:preview:check": "pnpm neon -- preview-check",
     "preview:canary": "node --env-file-if-exists=.env.vercel --env-file-if-exists=.env.neon --import tsx scripts/preview-canary/cli.ts",
+    "rollback:assess": "node --import tsx scripts/rollback-assessment/cli.ts",
     "neon:branch:delete": "pnpm neon -- delete",
     "tenancy-inventory": "tsx scripts/tenancy-inventory/cli.ts",
     "tenancy-inventory:matrix": "pnpm tenancy-inventory -- matrix",

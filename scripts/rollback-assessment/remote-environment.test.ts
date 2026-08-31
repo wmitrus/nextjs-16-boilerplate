@@ -300,19 +300,37 @@ describe('candidate environment-contract instrumentation check', () => {
   });
 });
 
+const validTenantId = '11111111-1111-4111-8111-111111111111';
+const otherValidTenantId = '22222222-2222-4222-8222-222222222222';
+
+function stubSingleModeAnchors(): void {
+  vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+  vi.stubEnv('PRODUCTION_TENANCY_MODE', 'single');
+  vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'none');
+  vi.stubEnv(
+    'PRODUCTION_RUNTIME_DATABASE_HOST',
+    'ep-prod.us-east-2.aws.neon.tech',
+  );
+  vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+  vi.stubEnv('PRODUCTION_DEFAULT_TENANT_ID', validTenantId);
+}
+
 describe('operator-declared expected Production environment contract', () => {
   it('is undefined when not explicitly declared -- ambient env is never used', () => {
     expect(readOperatorDeclaredProductionContractDimensions()).toBeUndefined();
   });
 
-  it('reads only the explicit PRODUCTION_* trust anchors, never AUTH_PROVIDER/TENANCY_MODE directly', () => {
+  it('reads only the explicit PRODUCTION_* trust anchors, never AUTH_PROVIDER/TENANCY_MODE/DATABASE_URL/DEFAULT_TENANT_ID directly', () => {
     vi.stubEnv('AUTH_PROVIDER', 'clerk');
     vi.stubEnv('TENANCY_MODE', 'org');
-    vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
-    vi.stubEnv('PRODUCTION_TENANCY_MODE', 'single');
-    vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'none');
+    vi.stubEnv('DATABASE_URL', 'postgresql://ambient-host/ambient_db');
+    vi.stubEnv('DEFAULT_TENANT_ID', otherValidTenantId);
+    stubSingleModeAnchors();
     expect(readOperatorDeclaredProductionContractDimensions()).toEqual({
       authProvider: 'authjs',
+      databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
+      databaseName: 'app_production',
+      defaultTenantId: validTenantId,
       tenancyMode: 'single',
       tenantContextSource: null,
     });
@@ -328,8 +346,16 @@ describe('operator-declared expected Production environment contract', () => {
       vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'clerk');
       vi.stubEnv('PRODUCTION_TENANCY_MODE', 'org');
       vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', raw);
+      vi.stubEnv(
+        'PRODUCTION_RUNTIME_DATABASE_HOST',
+        'ep-prod.us-east-2.aws.neon.tech',
+      );
+      vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
       expect(readOperatorDeclaredProductionContractDimensions()).toEqual({
         authProvider: 'clerk',
+        databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
+        databaseName: 'app_production',
+        defaultTenantId: null,
         tenancyMode: 'org',
         tenantContextSource: expected,
       });
@@ -368,5 +394,220 @@ describe('operator-declared expected Production environment contract', () => {
       vi.stubEnv(key, value);
     }
     expect(readOperatorDeclaredProductionContractDimensions()).toBeUndefined();
+  });
+
+  describe('expected database identity (FINDING 1)', () => {
+    it('is undefined when PRODUCTION_RUNTIME_DATABASE_HOST is missing', () => {
+      vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+      vi.stubEnv('PRODUCTION_TENANCY_MODE', 'org');
+      vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'none');
+      vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('is undefined when PRODUCTION_DATABASE_NAME is missing', () => {
+      vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+      vi.stubEnv('PRODUCTION_TENANCY_MODE', 'org');
+      vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'none');
+      vi.stubEnv(
+        'PRODUCTION_RUNTIME_DATABASE_HOST',
+        'ep-prod.us-east-2.aws.neon.tech',
+      );
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it('the expected host/name come only from the PRODUCTION_* pins, never ambient DATABASE_URL', () => {
+      vi.stubEnv('DATABASE_URL', 'postgresql://ambient-host/ambient_db');
+      stubSingleModeAnchors();
+      expect(readOperatorDeclaredProductionContractDimensions()).toMatchObject({
+        databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
+        databaseName: 'app_production',
+      });
+    });
+
+    it('changing only the ambient DATABASE_URL leaves the expected fingerprint dimensions unchanged', () => {
+      stubSingleModeAnchors();
+      const first = readOperatorDeclaredProductionContractDimensions();
+      vi.stubEnv('DATABASE_URL', 'postgresql://some-other-host/some_other_db');
+      const second = readOperatorDeclaredProductionContractDimensions();
+      expect(second).toEqual(first);
+    });
+
+    it('changing PRODUCTION_RUNTIME_DATABASE_HOST changes the expected dimensions', () => {
+      stubSingleModeAnchors();
+      const first = readOperatorDeclaredProductionContractDimensions();
+      vi.stubEnv(
+        'PRODUCTION_RUNTIME_DATABASE_HOST',
+        'ep-different.us-east-2.aws.neon.tech',
+      );
+      const second = readOperatorDeclaredProductionContractDimensions();
+      expect(second?.databaseHost).not.toBe(first?.databaseHost);
+    });
+
+    it('changing PRODUCTION_DATABASE_NAME changes the expected dimensions', () => {
+      stubSingleModeAnchors();
+      const first = readOperatorDeclaredProductionContractDimensions();
+      vi.stubEnv('PRODUCTION_DATABASE_NAME', 'other_production_db');
+      const second = readOperatorDeclaredProductionContractDimensions();
+      expect(second?.databaseName).not.toBe(first?.databaseName);
+    });
+
+    describe('pooled runtime host vs direct/unpooled schema host (host-surface separation)', () => {
+      it('uses the pooled PRODUCTION_RUNTIME_DATABASE_HOST, independent of the direct/unpooled PRODUCTION_DATABASE_HOST schema pin', () => {
+        vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+        vi.stubEnv('PRODUCTION_TENANCY_MODE', 'org');
+        vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'provider');
+        vi.stubEnv(
+          'PRODUCTION_RUNTIME_DATABASE_HOST',
+          'ep-prod-pooler.us-east-2.aws.neon.tech',
+        );
+        // The direct/unpooled schema-compat pin, deliberately different --
+        // this is the legitimate pooled-vs-direct Neon endpoint split.
+        vi.stubEnv(
+          'PRODUCTION_DATABASE_HOST',
+          'ep-prod-direct.us-east-2.aws.neon.tech',
+        );
+        vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        expect(
+          readOperatorDeclaredProductionContractDimensions(),
+        ).toMatchObject({
+          databaseHost: 'ep-prod-pooler.us-east-2.aws.neon.tech',
+        });
+      });
+
+      it('changing only PRODUCTION_DATABASE_HOST (the schema/direct-host pin) does not change the expected environment-contract dimensions', () => {
+        stubSingleModeAnchors();
+        const first = readOperatorDeclaredProductionContractDimensions();
+        vi.stubEnv(
+          'PRODUCTION_DATABASE_HOST',
+          'ep-completely-different-direct-host.us-east-2.aws.neon.tech',
+        );
+        const second = readOperatorDeclaredProductionContractDimensions();
+        expect(second).toEqual(first);
+      });
+
+      it('ambient DATABASE_URL_UNPOOLED does not influence expected environment-contract dimensions', () => {
+        vi.stubEnv(
+          'DATABASE_URL_UNPOOLED',
+          'postgresql://ambient-direct-host/ambient_db',
+        );
+        stubSingleModeAnchors();
+        const withUnpooled = readOperatorDeclaredProductionContractDimensions();
+        vi.stubEnv(
+          'DATABASE_URL_UNPOOLED',
+          'postgresql://some-other-direct-host/other_db',
+        );
+        const changedUnpooled =
+          readOperatorDeclaredProductionContractDimensions();
+        expect(changedUnpooled).toEqual(withUnpooled);
+      });
+
+      it('is undefined when PRODUCTION_RUNTIME_DATABASE_HOST is missing even though PRODUCTION_DATABASE_HOST is present', () => {
+        vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+        vi.stubEnv('PRODUCTION_TENANCY_MODE', 'org');
+        vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'provider');
+        vi.stubEnv(
+          'PRODUCTION_DATABASE_HOST',
+          'ep-prod-direct.us-east-2.aws.neon.tech',
+        );
+        vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        expect(
+          readOperatorDeclaredProductionContractDimensions(),
+        ).toBeUndefined();
+      });
+    });
+  });
+
+  describe('expected single-tenant identity (FINDING 2)', () => {
+    it('requires PRODUCTION_DEFAULT_TENANT_ID when PRODUCTION_TENANCY_MODE=single', () => {
+      vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+      vi.stubEnv('PRODUCTION_TENANCY_MODE', 'single');
+      vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'none');
+      vi.stubEnv(
+        'PRODUCTION_RUNTIME_DATABASE_HOST',
+        'ep-prod.us-east-2.aws.neon.tech',
+      );
+      vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+      expect(
+        readOperatorDeclaredProductionContractDimensions(),
+      ).toBeUndefined();
+    });
+
+    it.each([
+      ['missing', undefined],
+      ['empty', ''],
+      ['malformed', 'not-a-uuid'],
+    ])(
+      'is undefined for single mode with a %s PRODUCTION_DEFAULT_TENANT_ID',
+      (_label, value) => {
+        vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+        vi.stubEnv('PRODUCTION_TENANCY_MODE', 'single');
+        vi.stubEnv('PRODUCTION_TENANT_CONTEXT_SOURCE', 'none');
+        vi.stubEnv(
+          'PRODUCTION_RUNTIME_DATABASE_HOST',
+          'ep-prod.us-east-2.aws.neon.tech',
+        );
+        vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        if (value !== undefined) {
+          vi.stubEnv('PRODUCTION_DEFAULT_TENANT_ID', value);
+        }
+        expect(
+          readOperatorDeclaredProductionContractDimensions(),
+        ).toBeUndefined();
+      },
+    );
+
+    it('a different PRODUCTION_DEFAULT_TENANT_ID changes the expected dimensions', () => {
+      stubSingleModeAnchors();
+      const first = readOperatorDeclaredProductionContractDimensions();
+      vi.stubEnv('PRODUCTION_DEFAULT_TENANT_ID', otherValidTenantId);
+      const second = readOperatorDeclaredProductionContractDimensions();
+      expect(second?.defaultTenantId).not.toBe(first?.defaultTenantId);
+    });
+
+    it.each(['org', 'personal'] as const)(
+      'never requires PRODUCTION_DEFAULT_TENANT_ID in %s mode -- expected defaultTenantId is null',
+      (tenancyMode) => {
+        vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+        vi.stubEnv('PRODUCTION_TENANCY_MODE', tenancyMode);
+        vi.stubEnv(
+          'PRODUCTION_TENANT_CONTEXT_SOURCE',
+          tenancyMode === 'org' ? 'provider' : 'none',
+        );
+        vi.stubEnv(
+          'PRODUCTION_RUNTIME_DATABASE_HOST',
+          'ep-prod.us-east-2.aws.neon.tech',
+        );
+        vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        expect(
+          readOperatorDeclaredProductionContractDimensions(),
+        ).toMatchObject({ defaultTenantId: null });
+      },
+    );
+
+    it.each(['org', 'personal'] as const)(
+      'ignores an ambient PRODUCTION_DEFAULT_TENANT_ID in %s mode for the fingerprint', // and never requires it
+      (tenancyMode) => {
+        vi.stubEnv('PRODUCTION_AUTH_PROVIDER', 'authjs');
+        vi.stubEnv('PRODUCTION_TENANCY_MODE', tenancyMode);
+        vi.stubEnv(
+          'PRODUCTION_TENANT_CONTEXT_SOURCE',
+          tenancyMode === 'org' ? 'provider' : 'none',
+        );
+        vi.stubEnv(
+          'PRODUCTION_RUNTIME_DATABASE_HOST',
+          'ep-prod.us-east-2.aws.neon.tech',
+        );
+        vi.stubEnv('PRODUCTION_DATABASE_NAME', 'app_production');
+        vi.stubEnv('PRODUCTION_DEFAULT_TENANT_ID', validTenantId);
+        expect(
+          readOperatorDeclaredProductionContractDimensions(),
+        ).toMatchObject({ defaultTenantId: null });
+      },
+    );
   });
 });

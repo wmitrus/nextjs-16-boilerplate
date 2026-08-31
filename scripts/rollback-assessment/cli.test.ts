@@ -85,6 +85,9 @@ function authoritativeDetail(overrides: Record<string, unknown> = {}) {
 
 const expectedDimensions = {
   authProvider: 'authjs' as const,
+  databaseHost: 'ep-prod.us-east-2.aws.neon.tech',
+  databaseName: 'app_production',
+  defaultTenantId: '11111111-1111-4111-8111-111111111111',
   tenancyMode: 'single' as const,
   tenantContextSource: null,
 };
@@ -522,6 +525,20 @@ describe('A4.2b environment-contract compatibility', () => {
       expect(output.environmentContract.reason).toContain(
         'PRODUCTION_TENANT_CONTEXT_SOURCE',
       );
+      expect(output.environmentContract.reason).toContain(
+        'PRODUCTION_RUNTIME_DATABASE_HOST',
+      );
+      expect(output.environmentContract.reason).toContain(
+        'PRODUCTION_DATABASE_NAME',
+      );
+      expect(output.environmentContract.reason).toContain(
+        'PRODUCTION_DEFAULT_TENANT_ID',
+      );
+      // Must not imply PRODUCTION_DATABASE_HOST (the separate schema-compat
+      // pin) is required for environment-contract comparison.
+      expect(output.environmentContract.reason).not.toMatch(
+        /(?<!RUNTIME_)PRODUCTION_DATABASE_HOST/,
+      );
     } finally {
       log.mockRestore();
     }
@@ -534,7 +551,7 @@ describe('A4.2b environment-contract compatibility', () => {
     ],
     [
       '7. contract version mismatch',
-      { ...matchingEnvironmentEvidence, contractVersion: 'v2' },
+      { ...matchingEnvironmentEvidence, contractVersion: 'v1' },
     ],
     [
       '8. fingerprint mismatch',
@@ -545,6 +562,33 @@ describe('A4.2b environment-contract compatibility', () => {
     stubHappyCandidatePath();
     remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
       evidence,
+    );
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+      ]);
+      expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+        environmentContract: { status: 'BLOCKED' },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('26. candidate single-tenant ID mismatch -> environment contract is BLOCKED, never PASS', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    stubHappyCandidatePath();
+    const mismatchedTenantEvidence =
+      RollbackEnvironmentContractModule.buildEnvironmentContractEvidence({
+        ...expectedDimensions,
+        defaultTenantId: '22222222-2222-4222-8222-222222222222',
+      });
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
+      mismatchedTenantEvidence,
     );
     try {
       await run([

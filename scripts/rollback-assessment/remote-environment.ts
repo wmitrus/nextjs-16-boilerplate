@@ -1,9 +1,41 @@
 import { execFileSync } from 'node:child_process';
 
+import { z } from 'zod';
+
 import type {
   EnvironmentContractDimensions,
   EnvironmentContractEvidence,
 } from '@/security/internal-api/rollback-environment-contract';
+
+// Bounded expected-side validators for the two new v2 dimensions. Kept as a
+// narrow local duplicate of the equivalent candidate-side checks in
+// `@/security/internal-api/rollback-environment-contract` rather than a
+// shared cross-layer import, so scripts/ and src/ stay independently
+// verifiable -- but semantics (UUID form, host/name shape) are identical, so
+// candidate and expected sides accept/reject the same values.
+const MAX_PRODUCTION_DATABASE_HOST_LENGTH = 255;
+const MAX_PRODUCTION_DATABASE_NAME_BYTES = 63;
+const PRODUCTION_DATABASE_HOST_PATTERN = /^[a-zA-Z0-9.-]{1,255}$/;
+const productionTenantIdSchema = z.uuid();
+
+function isValidProductionDatabaseHost(value: string): boolean {
+  return (
+    value.length <= MAX_PRODUCTION_DATABASE_HOST_LENGTH &&
+    PRODUCTION_DATABASE_HOST_PATTERN.test(value)
+  );
+}
+
+function isValidProductionDatabaseName(value: string): boolean {
+  return (
+    value.length > 0 &&
+    !/[\s\u0000-\u001f\u007f]/.test(value) &&
+    Buffer.byteLength(value, 'utf8') <= MAX_PRODUCTION_DATABASE_NAME_BYTES
+  );
+}
+
+function isValidProductionTenantId(value: string): boolean {
+  return productionTenantIdSchema.safeParse(value).success;
+}
 
 const ENVIRONMENT_CONTRACT_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 4096;
@@ -93,20 +125,43 @@ export function checkCandidateEnvironmentContractInstrumentation(
  * The authoritative EXPECTED Production environment contract is NOT the
  * operator's own ambient local environment -- `@/core/env` in the shell
  * running `rollback:assess` could just as easily resolve to a Preview or
- * development configuration. These three env vars are explicit,
- * LOCAL_OPERATOR_DECLARED trust anchors dedicated to this comparison,
- * mirroring the existing `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`/
- * `GITHUB_REPOSITORY` local-anchor pattern -- never sourced from the
- * ambient `AUTH_PROVIDER`/`TENANCY_MODE`/`TENANT_CONTEXT_SOURCE` the
- * running process happens to have.
+ * development configuration, and its `DATABASE_URL` is never used here
+ * either. These env vars are explicit, LOCAL_OPERATOR_DECLARED trust
+ * anchors dedicated to this comparison, mirroring the existing
+ * `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`/`GITHUB_REPOSITORY` and
+ * `PRODUCTION_DATABASE_HOST`/`PRODUCTION_DATABASE_NAME` (schema-compat)
+ * local-anchor patterns -- never sourced from the ambient
+ * `AUTH_PROVIDER`/`TENANCY_MODE`/`TENANT_CONTEXT_SOURCE`/`DATABASE_URL`/
+ * `DEFAULT_TENANT_ID` the running process happens to have.
  *
- * Every dimension, including the legitimately-null one, must be an
+ * Every dimension, including the legitimately-null ones, must be an
  * explicit declaration: an *absent* `PRODUCTION_TENANT_CONTEXT_SOURCE` is
  * not evidence of anything and must not silently become `null` -- that
  * would let an operator who simply forgot to set it pass the comparison
  * for the wrong reason. The bounded sentinel `none` is the only way to
  * declare the null case; anything else absent/empty/unrecognized makes the
  * whole expected contract undetermined.
+ *
+ * `databaseHost` here is deliberately pinned by `PRODUCTION_RUNTIME_DATABASE_HOST`,
+ * NOT `PRODUCTION_DATABASE_HOST`: Neon (and this repository's own
+ * `DATABASE_URL` vs `DATABASE_URL_UNPOOLED`) intentionally exposes distinct
+ * pooled-runtime and direct/unpooled hostnames for the same logical
+ * database. The candidate-side dimension being compared here is derived
+ * from the candidate's own pooled `env.DATABASE_URL` (see
+ * `rollback-environment-contract.ts`), so its expected counterpart must be
+ * the pooled-runtime pin, not the direct/unpooled pin
+ * `resolveVerifiedProductionDatabaseUrl()` uses for the separate schema
+ * proof -- reusing one pin for both would fail closed on a perfectly valid
+ * Production configuration whenever the two Neon endpoints legitimately
+ * differ. No `-pooler`-suffix heuristic or other host canonicalization is
+ * applied; both pins are independent, exact string pins. `PRODUCTION_DATABASE_NAME`
+ * remains the single shared anchor for both proofs -- there is exactly one
+ * logical Production database, so no `PRODUCTION_RUNTIME_DATABASE_NAME` is
+ * introduced. `PRODUCTION_RUNTIME_DATABASE_HOST` and `PRODUCTION_DATABASE_NAME`
+ * are always required. `PRODUCTION_DEFAULT_TENANT_ID` is required, and must
+ * be a valid UUID, only when `PRODUCTION_TENANCY_MODE=single`; for
+ * `org`/`personal` it is never read, even if set, and the expected
+ * `defaultTenantId` is always `null`.
  */
 export function readOperatorDeclaredProductionContractDimensions():
   | EnvironmentContractDimensions
@@ -139,7 +194,40 @@ export function readOperatorDeclaredProductionContractDimensions():
     return undefined;
   }
 
-  return { authProvider, tenancyMode, tenantContextSource };
+  // Pooled-runtime pin, independent of PRODUCTION_DATABASE_HOST (the
+  // direct/unpooled pin `resolveVerifiedProductionDatabaseUrl()` uses for
+  // the separate schema proof) -- see the doc comment above.
+  const databaseHost = process.env.PRODUCTION_RUNTIME_DATABASE_HOST?.trim();
+  if (!databaseHost || !isValidProductionDatabaseHost(databaseHost)) {
+    return undefined;
+  }
+
+  const databaseName = process.env.PRODUCTION_DATABASE_NAME?.trim();
+  if (!databaseName || !isValidProductionDatabaseName(databaseName)) {
+    return undefined;
+  }
+
+  let defaultTenantId: string | null;
+  if (tenancyMode === 'single') {
+    const rawTenantId = process.env.PRODUCTION_DEFAULT_TENANT_ID?.trim();
+    if (!rawTenantId || !isValidProductionTenantId(rawTenantId)) {
+      return undefined;
+    }
+    defaultTenantId = rawTenantId;
+  } else {
+    // org/personal: never read PRODUCTION_DEFAULT_TENANT_ID, even if an
+    // operator happens to have it set -- it is not applicable in this mode.
+    defaultTenantId = null;
+  }
+
+  return {
+    authProvider,
+    databaseHost,
+    databaseName,
+    defaultTenantId,
+    tenancyMode,
+    tenantContextSource,
+  };
 }
 
 function requiredInternalApiKey(): string {

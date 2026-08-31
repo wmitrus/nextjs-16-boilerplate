@@ -210,6 +210,39 @@ describe('Production database identity binding (host + database name)', () => {
     expect(result).toMatchObject({ status: 'ERROR' });
     expect(JSON.stringify(result)).not.toContain(malformed);
   });
+
+  it('host-surface separation: PRODUCTION_RUNTIME_DATABASE_HOST (the environment-contract pin) does not affect schema target verification', () => {
+    stubProductionDatabaseAnchors();
+    // Set to something that would fail this function's own comparison if it
+    // were ever accidentally consulted -- proving it genuinely is not read.
+    vi.stubEnv(
+      'PRODUCTION_RUNTIME_DATABASE_HOST',
+      'ep-pooler-runtime-host.us-east-2.aws.neon.tech',
+    );
+    expect(resolveVerifiedProductionDatabaseUrl()).toEqual({
+      connectionString: productionUrl,
+      status: 'OK',
+    });
+  });
+
+  it('accepts a legitimate pooled-runtime/direct-schema host split: DATABASE_URL_UNPOOLED (direct) matches PRODUCTION_DATABASE_HOST while DATABASE_URL (pooled) and PRODUCTION_RUNTIME_DATABASE_HOST differ, independently of the environment-contract pin', () => {
+    const pooledUrl = `postgres://user:pass@ep-prod-pooler.us-east-2.aws.neon.tech/${productionDatabaseName}`;
+    const directUrl = `postgres://user:pass@${productionHost}/${productionDatabaseName}`;
+    vi.stubEnv('DATABASE_URL', pooledUrl);
+    vi.stubEnv('DATABASE_URL_UNPOOLED', directUrl);
+    vi.stubEnv(
+      'PRODUCTION_RUNTIME_DATABASE_HOST',
+      'ep-prod-pooler.us-east-2.aws.neon.tech',
+    );
+    vi.stubEnv('PRODUCTION_DATABASE_HOST', productionHost);
+    vi.stubEnv('PRODUCTION_DATABASE_NAME', productionDatabaseName);
+    // The schema proof uses DATABASE_URL_UNPOOLED (direct) against
+    // PRODUCTION_DATABASE_HOST (direct) -- unaffected by the pooled pair.
+    expect(resolveVerifiedProductionDatabaseUrl()).toEqual({
+      connectionString: directUrl,
+      status: 'OK',
+    });
+  });
 });
 
 describe('Production applied-migration-hash read', () => {

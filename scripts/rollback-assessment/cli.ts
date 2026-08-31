@@ -116,7 +116,7 @@ function assessEnvironmentContract(
   if (!expectedDimensions) {
     return gate(
       'BLOCKED',
-      'Expected Production environment contract is not declared locally (PRODUCTION_AUTH_PROVIDER/PRODUCTION_TENANCY_MODE/PRODUCTION_TENANT_CONTEXT_SOURCE).',
+      'Expected Production environment contract is not declared locally (PRODUCTION_AUTH_PROVIDER/PRODUCTION_TENANCY_MODE/PRODUCTION_TENANT_CONTEXT_SOURCE/PRODUCTION_RUNTIME_DATABASE_HOST/PRODUCTION_DATABASE_NAME, and PRODUCTION_DEFAULT_TENANT_ID when PRODUCTION_TENANCY_MODE=single).',
     );
   }
   const expected = buildEnvironmentContractEvidence(expectedDimensions);

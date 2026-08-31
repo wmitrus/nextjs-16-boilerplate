@@ -55,7 +55,10 @@ describe('containment-floor ancestry', () => {
       reason: 'Could not determine whether local Git history is shallow.',
     });
     expect(
-      assessContainmentFloorAncestry(candidateSha, () => 'unknown\n'),
+      assessContainmentFloorAncestry(
+        candidateSha,
+        vi.fn().mockReturnValue(Buffer.from('unknown\n')),
+      ),
     ).toMatchObject({ status: 'ERROR' });
   });
 });

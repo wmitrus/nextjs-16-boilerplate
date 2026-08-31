@@ -3,9 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { gate, type AssessmentGate } from './evidence';
 import { containmentFloorSha, gitShaSchema } from './guards';
 
-type GitExecutor = (
-  ...parameters: Parameters<typeof execFileSync>
-) => string | Buffer;
+type GitExecutor = typeof execFileSync;
 
 const options: NonNullable<Parameters<typeof execFileSync>[2]> = {
   encoding: 'utf8',

@@ -216,6 +216,30 @@ describe('Preview canary shared execution', () => {
     });
   });
 
+  it('uses the pulled previous internal key only after selected runtime rejects current', async () => {
+    setupSuccessfulDependencies({
+      previewEnv:
+        'INTERNAL_API_KEY=current-key\nINTERNAL_API_KEY_PREVIOUS=previous-key\n',
+    });
+    const runtimeFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('', { status: 403 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(authjsRuntimeEvidence), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', runtimeFetch);
+
+    await run(['node', 'cli.ts', '--auto']);
+
+    expect(runtimeFetch).toHaveBeenCalledTimes(2);
+    expect(
+      runtimeFetch.mock.calls.map(([, init]) => {
+        const headers = init?.headers as Record<string, string>;
+        return headers['x-internal-key'];
+      }),
+    ).toEqual(['current-key', 'previous-key']);
+  });
+
   it.each([['missing INTERNAL_API_KEY', 'AUTH_PROVIDER=authjs\n']])(
     'fails closed for %s before runtime probing or Neon verification',
     async (_, previewEnv) => {

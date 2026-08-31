@@ -18,6 +18,11 @@ const expectedMeta = {
   githubCommitRepo: 'nextjs-16-boilerplate',
   githubCommitSha: identity.sha,
 };
+const runtimeEvidence = JSON.stringify({
+  authProvider: 'authjs',
+  clerkKeysTest: null,
+  databaseHost: 'ep-test.us-east-2.aws.neon.tech',
+});
 
 function deployment(
   overrides: Record<string, unknown> = {},
@@ -71,7 +76,7 @@ describe('Preview canary Vercel boundary', () => {
         probeRuntimeDatabaseBinding({
           deploymentProtectionBypass: 'bypass-secret',
           deploymentUrl: 'https://project-immutable-abc123-team.vercel.app',
-          internalApiKey: 'internal-key',
+          internalApiKeys: ['internal-key', 'previous-key'],
         }),
       ).rejects.toThrow('Preview runtime probe timed out.');
       expect(fetchMock).toHaveBeenCalledOnce();
@@ -80,6 +85,129 @@ describe('Preview canary Vercel boundary', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('uses the current internal key first and falls back once to previous on 403', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('forbidden', { status: 403 }))
+      .mockResolvedValueOnce(new Response(runtimeEvidence, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(
+        probeRuntimeDatabaseBinding({
+          deploymentProtectionBypass: 'bypass-secret',
+          deploymentUrl: 'https://project-immutable-abc123-team.vercel.app',
+          internalApiKeys: ['current-key', 'previous-key'],
+        }),
+      ).resolves.toMatchObject({ authProvider: 'authjs' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(timeout).toHaveBeenCalledOnce();
+      expect(
+        fetchMock.mock.calls.map(([, init]) => {
+          const headers = init?.headers as Record<string, string>;
+          return headers['x-internal-key'];
+        }),
+      ).toEqual(['current-key', 'previous-key']);
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+        'https://project-immutable-abc123-team.vercel.app/api/internal/preview-canary/database-binding',
+        'https://project-immutable-abc123-team.vercel.app/api/internal/preview-canary/database-binding',
+      ]);
+    } finally {
+      timeout.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('deduplicates identical current and previous internal keys', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(runtimeEvidence));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await probeRuntimeDatabaseBinding({
+        deploymentProtectionBypass: 'bypass-secret',
+        deploymentUrl: 'https://project-immutable-abc123-team.vercel.app',
+        internalApiKeys: ['same-key', 'same-key'],
+      });
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([[[]], [['']], [['  ']], [['current-key', '  ']], [['a', 'b', 'c']]])(
+    'rejects invalid bounded runtime probe credentials without fetching: %j',
+    async (internalApiKeys) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        await expect(
+          probeRuntimeDatabaseBinding({
+            deploymentProtectionBypass: 'bypass-secret',
+            deploymentUrl: 'https://project-immutable-abc123-team.vercel.app',
+            internalApiKeys,
+          }),
+        ).rejects.toThrow('Preview runtime probe credentials are invalid.');
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it.each([
+    ['no previous key', [new Response('', { status: 403 })], ['current-key']],
+    [
+      'previous key also forbidden',
+      [new Response('', { status: 403 }), new Response('', { status: 403 })],
+      ['current-key', 'previous-key'],
+    ],
+    [
+      'network failure',
+      [new Error('network failure')],
+      ['current-key', 'previous-key'],
+    ],
+    [
+      'HTTP 500',
+      [new Response('', { status: 500 })],
+      ['current-key', 'previous-key'],
+    ],
+    [
+      'HTTP 401',
+      [new Response('', { status: 401 })],
+      ['current-key', 'previous-key'],
+    ],
+    [
+      'malformed successful evidence',
+      [new Response('{"unexpected":true}')],
+      ['current-key', 'previous-key'],
+    ],
+  ])(
+    'fails closed without an inappropriate fallback for %s',
+    async (_, outcomes, internalApiKeys) => {
+      const fetchMock = vi.fn();
+      for (const outcome of outcomes) {
+        if (outcome instanceof Error) fetchMock.mockRejectedValueOnce(outcome);
+        else fetchMock.mockResolvedValueOnce(outcome);
+      }
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        await expect(
+          probeRuntimeDatabaseBinding({
+            deploymentProtectionBypass: 'bypass-secret',
+            deploymentUrl: 'https://project-immutable-abc123-team.vercel.app',
+            internalApiKeys,
+          }),
+        ).rejects.toThrow();
+        expect(fetchMock).toHaveBeenCalledTimes(outcomes.length);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 
   it('selects exactly one exact READY Preview deployment by immutable URL', () => {
     try {

@@ -248,8 +248,10 @@ after this route exists can. Full A4 is not complete.
 - Corrected the earlier "A4.2b Read-Only Compatibility Evidence" section
   above, which still described positional Production-hash-to-candidate-
   tag pairing and only `PRODUCTION_DATABASE_HOST` -- both superseded by
-  the "A4.2b Schema Evidence Final Pass" section. `plan.md` had the same
-  stale wording, corrected likewise; there is now only one described
+  the "A4.2b Schema Evidence Final Pass" section. `plan.md` was checked as well;
+  its remaining positional-pairing mention is
+  explicitly historical/superseded by the current hash-set architecture, so no
+  additional correction was required there.; there is now only one described
   architecture: exact applied-migration hash-set equality, `ORDER BY
   hash` for deterministic retrieval only, `PRODUCTION_DATABASE_HOST` +
   `PRODUCTION_DATABASE_NAME`, both LOCAL_OPERATOR_DECLARED.

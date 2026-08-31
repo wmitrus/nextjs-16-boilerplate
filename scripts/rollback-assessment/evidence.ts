@@ -1,11 +1,11 @@
 export type AssessmentStatus = 'PASS' | 'BLOCKED' | 'ERROR' | 'INVALID';
 
-export type AssessmentGate = {
+export interface AssessmentGate {
   reason: string;
   status: AssessmentStatus;
-};
+}
 
-export type LocalRollbackAssessment = {
+export interface LocalRollbackAssessment {
   candidateIdentity: AssessmentGate;
   containmentFloorAncestry: AssessmentGate;
   environmentContract: AssessmentGate;
@@ -14,7 +14,7 @@ export type LocalRollbackAssessment = {
   rollbackExecutable: false;
   schemaCompatibility: AssessmentGate;
   smoke: AssessmentGate;
-};
+}
 
 export function gate(status: AssessmentStatus, reason: string): AssessmentGate {
   return { reason, status };

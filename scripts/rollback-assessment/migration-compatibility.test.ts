@@ -5,7 +5,7 @@ import { assessMigrationCompatibility } from './migration-compatibility';
 const journal = [{ tag: '0000_rainy_lenny_balinger', hash: 'a'.repeat(64) }];
 
 describe('rollback migration compatibility', () => {
-  it('passes only exact candidate and production journals', () => {
+  it('passes exact candidate and production journals', () => {
     expect(
       assessMigrationCompatibility({
         candidateMigrationJournal: journal,
@@ -15,18 +15,26 @@ describe('rollback migration compatibility', () => {
   });
 
   it.each([
+    ['length mismatch', [], journal],
     [
-      {
-        candidateMigrationJournal: [],
-        productionAppliedMigrationJournal: journal,
-      },
+      'tag mismatch',
+      [{ ...journal[0], tag: '0001_sunny_lenny_balinger' }],
+      journal,
     ],
-    [
-      {
-        candidateMigrationJournal: journal,
-        productionAppliedMigrationJournal: [],
-      },
-    ],
+    ['hash mismatch', [{ ...journal[0], hash: 'b'.repeat(64) }], journal],
+  ])(
+    'blocks a %s',
+    (_reason, candidateMigrationJournal, productionAppliedMigrationJournal) => {
+      expect(
+        assessMigrationCompatibility({
+          candidateMigrationJournal,
+          productionAppliedMigrationJournal,
+        }),
+      ).toMatchObject({ status: 'BLOCKED' });
+    },
+  );
+
+  it.each([
     [{}],
     [
       {
@@ -34,7 +42,7 @@ describe('rollback migration compatibility', () => {
         productionAppliedMigrationJournal: journal,
       },
     ],
-  ])('blocks missing, different, or malformed evidence', (input) => {
+  ])('does not pass missing or malformed evidence', (input) => {
     expect(assessMigrationCompatibility(input)).not.toMatchObject({
       status: 'PASS',
     });

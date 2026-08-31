@@ -4,6 +4,15 @@ export const containmentFloorSha = '2450d410f4617f9b0e415f2b4d47bcde748b1cbc';
 
 export const deploymentIdSchema = z.string().regex(/^dpl_[A-Za-z0-9]{1,64}$/);
 export const gitShaSchema = z.string().regex(/^[0-9a-f]{40}$/i);
+
+function hasAsciiControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export const gitRefSchema = z
   .string()
   .min(1)
@@ -11,18 +20,19 @@ export const gitRefSchema = z
   .refine(
     (value) =>
       !(
+        hasAsciiControlCharacter(value) ||
         value.startsWith('/') ||
         value.endsWith('/') ||
         value.endsWith('.') ||
         value.includes('..') ||
         value.includes('@{') ||
-        /[\s\u0000-\u001f\u007f~^:?*\\[\\]/.test(value) ||
+        /[\s~^:?*\\[\\]/.test(value) ||
         value.split('/').some((part) => part.length === 0 || part === '.')
       ),
     'Git ref is malformed.',
   );
 
-export type ProductionDeploymentDetail = {
+export interface ProductionDeploymentDetail {
   id?: unknown;
   meta?: unknown;
   ownerId?: unknown;
@@ -30,14 +40,14 @@ export type ProductionDeploymentDetail = {
   readyState?: unknown;
   target?: unknown;
   url?: unknown;
-};
+}
 
-export type TrustedProductionCandidate = {
+export interface TrustedProductionCandidate {
   deploymentId: string;
   gitRef: string;
   gitSha: string;
   immutableUrl: string;
-};
+}
 
 export function parseRollbackAssessmentArgs(args: readonly string[]): {
   deploymentId: string;
@@ -80,7 +90,8 @@ function parseImmutableDeploymentUrl(value: unknown): string | undefined {
   if (
     typeof value !== 'string' ||
     value.length === 0 ||
-    /[\s\u0000-\u001f\u007f/:?#@]/.test(value)
+    hasAsciiControlCharacter(value) ||
+    /[\s/:?#@]/.test(value)
   ) {
     return undefined;
   }

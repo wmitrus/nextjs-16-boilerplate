@@ -46,20 +46,24 @@ export function assessMigrationCompatibility(input: {
   if (!candidate.success || !production.success) {
     return gate('INVALID', 'Migration-journal evidence is malformed.');
   }
-  if (
-    candidate.data.length !== production.data.length ||
-    candidate.data.some((entry, index) => {
-      const productionEntry = production.data.at(index);
-      return (
-        entry.tag !== productionEntry?.tag ||
-        entry.hash !== productionEntry?.hash
-      );
-    })
-  ) {
+  if (candidate.data.length !== production.data.length) {
     return gate(
       'BLOCKED',
       'Candidate migration journal does not exactly match production evidence.',
     );
+  }
+  for (const [index, entry] of candidate.data.entries()) {
+    const productionEntry = production.data.at(index);
+    if (
+      !productionEntry ||
+      entry.tag !== productionEntry.tag ||
+      entry.hash !== productionEntry.hash
+    ) {
+      return gate(
+        'BLOCKED',
+        'Candidate migration journal does not exactly match production evidence.',
+      );
+    }
   }
   return gate(
     'PASS',

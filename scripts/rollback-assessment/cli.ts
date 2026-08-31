@@ -7,11 +7,11 @@ import {
 } from './guards';
 import { assessMigrationCompatibility } from './migration-compatibility';
 
-type EnvironmentContractEvidence = {
+interface EnvironmentContractEvidence {
   authProvider: 'authjs' | 'clerk';
   contractVersion: string;
   fingerprint: string;
-};
+}
 
 function assessEnvironmentContract(evidence: unknown): ReturnType<typeof gate> {
   if (evidence === undefined) {

@@ -33,7 +33,7 @@ function detail(overrides: Record<string, unknown> = {}) {
 }
 
 describe('rollback assessment candidate parsing', () => {
-  const invalidArgumentCases: Array<[string[]]> = [
+  const invalidArgumentCases: [string[]][] = [
     [[]],
     [['--deployment-id', deploymentId, `--deployment-id=${deploymentId}`]],
     [['--deployment-id=latest']],
@@ -99,4 +99,45 @@ describe('production deployment DETAIL guard', () => {
       assertProductionDeployment(detail(overrides), expected, deploymentId),
     ).toThrow('production identity requirements');
   });
+
+  it.each([
+    ['NUL', 'main\u0000branch'],
+    ['control character', 'main\u001fbranch'],
+    ['DEL', 'main\u007fbranch'],
+    ['whitespace', 'main branch'],
+    ['tilde', 'main~branch'],
+    ['caret', 'main^branch'],
+    ['colon', 'main:branch'],
+    ['question mark', 'main?branch'],
+    ['asterisk', 'main*branch'],
+    ['opening bracket', 'main[branch'],
+    ['backslash', 'main\\branch'],
+  ])('rejects a Git ref containing %s', (_reason, gitRef) => {
+    expect(() =>
+      assertProductionDeployment(
+        detail({ meta: { ...detail().meta, githubCommitRef: gitRef } }),
+        expected,
+        deploymentId,
+      ),
+    ).toThrow('production identity requirements');
+  });
+
+  it.each([
+    ['NUL', 'host\u0000.vercel.app'],
+    ['control character', 'host\u001f.vercel.app'],
+    ['DEL', 'host\u007f.vercel.app'],
+    ['whitespace', 'host name.vercel.app'],
+    ['slash', 'host.vercel.app/path'],
+    ['colon', 'host.vercel.app:443'],
+    ['question mark', 'host.vercel.app?query=value'],
+    ['hash', 'host.vercel.app#fragment'],
+    ['at sign', 'user@host.vercel.app'],
+  ])(
+    'rejects an immutable deployment hostname containing %s',
+    (_reason, url) => {
+      expect(() =>
+        assertProductionDeployment(detail({ url }), expected, deploymentId),
+      ).toThrow('production identity requirements');
+    },
+  );
 });

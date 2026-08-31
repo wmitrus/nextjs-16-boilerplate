@@ -4,9 +4,7 @@ import { gate, type AssessmentGate } from './evidence';
 import { containmentFloorSha, gitShaSchema } from './guards';
 
 type GitExecutor = (
-  file: string,
-  args: string[],
-  options: Parameters<typeof execFileSync>[2],
+  ...parameters: Parameters<typeof execFileSync>
 ) => string | Buffer;
 
 const options: NonNullable<Parameters<typeof execFileSync>[2]> = {

@@ -1,3 +1,17 @@
+# [2.12.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.11.0...v2.12.0) (2026-09-01)
+
+
+### Bug Fixes
+
+* **ozi-71:** harden scope classification checks ([7d08ff8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7d08ff8afc48f4f6952b10e9f37434938d007028))
+* **ozi-71:** preserve access scope boundaries ([d7c79c5](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d7c79c52d1bc3102c937a0f3b88c973c1de58c8e))
+
+
+### Features
+
+* **ozi-71:** add canonical scope derivation ([9b71b66](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9b71b6609ff317424edb532dcc93297ac82bdb82))
+* **ozi-71:** add canonical scope derivation ([249d457](https://github.com/wmitrus/nextjs-16-boilerplate/commit/249d4572ad26067602c86b53bb6e362757005270))
+
 # [2.11.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.10.1...v2.11.0) (2026-09-01)
 
 

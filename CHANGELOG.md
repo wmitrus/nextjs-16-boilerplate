@@ -1,3 +1,10 @@
+## [2.10.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.10.0...v2.10.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **deploy:** harden production migration validation ([8e552a2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8e552a22dc1a85fd5f8bb2136a2de7428249c448))
+
 # [2.10.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.9.1...v2.10.0) (2026-09-01)
 
 

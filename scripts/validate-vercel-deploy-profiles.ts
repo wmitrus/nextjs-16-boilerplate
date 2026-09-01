@@ -93,6 +93,139 @@ export function assertVercelProductionMigrationOwnershipValid(
   }
 }
 
+/**
+ * Two pushes/merges to `main` must not run overlapping Production deployment
+ * pipelines. This enforces the self-validating half of that contract: the
+ * real `prod-deploy.yml` must carry exactly one TOP-LEVEL `concurrency:`
+ * block whose DIRECT children include exactly one `group` (`production-
+ * deployment`) and exactly one `cancel-in-progress` (`false`) -- a later
+ * Production deployment waits for the active one; it never cancels it.
+ *
+ * Deterministic, indentation-aware line parser (no YAML dependency). It
+ * preserves each line's indentation, derives the concurrency block's
+ * direct-child indent from its body, and only lines at that exact indent may
+ * satisfy `group` / `cancel-in-progress`. Nested descendants (e.g. under an
+ * intervening key), duplicate `group` / `cancel-in-progress` keys, and
+ * multiple top-level `concurrency:` blocks all fail closed.
+ */
+export function assertVercelProductionConcurrencyContractValid(
+  workflowContent: string,
+): void {
+  const stripComment = (value: string): string => {
+    const hashIndex = value.indexOf('#');
+    return (hashIndex === -1 ? value : value.slice(0, hashIndex)).trim();
+  };
+  const unquote = (value: string): string => {
+    const quoted =
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")));
+    return quoted ? value.slice(1, -1) : value;
+  };
+  const indentOf = (line: string): number =>
+    line.length - line.trimStart().length;
+
+  // One record per line: indentation from the raw line, content with any
+  // trailing/whole-line comment removed and trimmed. Blank / comment-only
+  // lines have content === ''.
+  const parsed = workflowContent.split(/\r?\n/).map((raw, index) => ({
+    content: stripComment(raw),
+    indent: indentOf(raw),
+    index,
+  }));
+
+  const topLevelConcurrency = parsed.filter(
+    (line) => line.indent === 0 && line.content === 'concurrency:',
+  );
+
+  if (topLevelConcurrency.length === 0) {
+    const nested = parsed.some(
+      (line) => line.indent > 0 && line.content === 'concurrency:',
+    );
+    throw new Error(
+      nested
+        ? '[vercel-deploy] Production workflow concurrency must be a TOP-LEVEL block; an indented/job-level concurrency does not serialize Production deployments.'
+        : '[vercel-deploy] Production workflow must declare a top-level concurrency block (group: production-deployment, cancel-in-progress: false) so overlapping Production deployments serialize.',
+    );
+  }
+
+  if (topLevelConcurrency.length > 1) {
+    throw new Error(
+      '[vercel-deploy] Production workflow must declare exactly one top-level concurrency block.',
+    );
+  }
+
+  const [header] = topLevelConcurrency;
+
+  // Block body: every subsequent line until the next column-0 key. Blank /
+  // comment-only lines are skipped, not treated as terminators.
+  const body: Array<{ content: string; indent: number }> = [];
+  for (const line of parsed.slice(header.index + 1)) {
+    if (line.content === '') {
+      continue;
+    }
+    if (line.indent === 0) {
+      break;
+    }
+    body.push(line);
+  }
+
+  if (body.length === 0) {
+    throw new Error(
+      '[vercel-deploy] Production workflow concurrency block must declare direct group and cancel-in-progress children.',
+    );
+  }
+
+  // Direct children share the shallowest indentation in the body; anything
+  // deeper is a nested descendant and cannot satisfy the contract.
+  const childIndent = Math.min(...body.map((line) => line.indent));
+  const directChildValues = (key: string): string[] =>
+    body
+      .filter((line) => line.indent === childIndent)
+      .map((line) => {
+        const colon = line.content.indexOf(':');
+        return colon === -1
+          ? undefined
+          : {
+              key: line.content.slice(0, colon).trim(),
+              value: unquote(line.content.slice(colon + 1).trim()),
+            };
+      })
+      .filter(
+        (entry): entry is { key: string; value: string } =>
+          entry !== undefined && entry.key === key,
+      )
+      .map((entry) => entry.value);
+
+  const groupValues = directChildValues('group');
+  const cancelValues = directChildValues('cancel-in-progress');
+
+  if (groupValues.length !== 1) {
+    throw new Error(
+      '[vercel-deploy] Production workflow concurrency must declare exactly one direct "group" key.',
+    );
+  }
+  if (cancelValues.length !== 1) {
+    throw new Error(
+      '[vercel-deploy] Production workflow concurrency must declare exactly one direct "cancel-in-progress" key.',
+    );
+  }
+
+  const [groupValue] = groupValues;
+  const [cancelValue] = cancelValues;
+
+  if (groupValue !== 'production-deployment') {
+    throw new Error(
+      '[vercel-deploy] Production workflow concurrency group must be exactly "production-deployment".',
+    );
+  }
+  if (cancelValue !== 'false') {
+    throw new Error(
+      '[vercel-deploy] Production workflow concurrency cancel-in-progress must be exactly false; a later Production deployment must wait for the active one, never cancel it.',
+    );
+  }
+}
+
 export function assertVercelProductionReadinessVerificationValid(
   workflowContent: string,
 ): void {
@@ -347,6 +480,12 @@ function main(): void {
     ),
   );
   assertVercelProductionReadinessVerificationValid(
+    readAllowedFile(
+      path.resolve(repositoryRoot, '.github/workflows/prod-deploy.yml'),
+      'production deployment workflow',
+    ),
+  );
+  assertVercelProductionConcurrencyContractValid(
     readAllowedFile(
       path.resolve(repositoryRoot, '.github/workflows/prod-deploy.yml'),
       'production deployment workflow',

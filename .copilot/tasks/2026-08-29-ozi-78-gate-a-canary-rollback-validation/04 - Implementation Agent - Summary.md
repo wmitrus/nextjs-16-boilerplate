@@ -362,6 +362,62 @@ for accurate status. This A4.2c implementation pass performed no remote
 Vercel/Production/Neon/Clerk operation, ran no network smoke, and
 authorized no rollback.
 
+## Production Migration & Deployment Hardening (post-live-validation follow-up)
+
+Branch `fix/ozi-78-production-migration-deploy-hardening`. Preventive
+hardening only; no Production operation, migration run, remote command,
+commit, or push was performed in this pass.
+
+- **Live Production validation exposed duplicate + retired/unknown migration
+  journal state.** `scripts/validate-migration-journal.ts` already *detected*
+  `missing` / `duplicateHashes` / `unknownHashes`, but
+  `assertMigrationJournalComplete()` failed only on `missing` -- so a
+  database holding every expected migration PLUS duplicate journal rows or
+  retired/historical hashes still passed. The controlled repair of that exact
+  drift was already completed separately (see the A4.2b live-execution note
+  above: retired pending-invitation index row + one duplicate
+  `0009_authjs_credentials` row removed; 21 unique hashes verified).
+- **`assertMigrationJournalComplete()` now fails closed on all three
+  categories.** A valid journal requires
+  `missing.length === 0 && duplicateHashes.length === 0 &&
+  unknownHashes.length === 0`. The thrown message names each violated
+  category (`missing:` / `duplicate:` / `unknown:`) with counts (and the
+  missing tags), and contains no connection string, credential, or other
+  environment value. No duplicate/unknown hash is silently repaired and no
+  new Production mutation behavior was added; the exported API
+  (`assertMigrationJournalComplete(summary)`) is unchanged.
+  `scripts/validate-migration-journal.test.ts` adds regressions: exact
+  journal does not throw; missing-only throws; **duplicate-only with every
+  expected migration present throws**; **unknown-only with every expected
+  migration present throws**; duplicate + unknown together throws and names
+  both. The real `_journal.json` coverage tests are unchanged.
+- **Production GitHub Actions are now serialized.**
+  `.github/workflows/prod-deploy.yml` gains a top-level
+  `concurrency: { group: production-deployment, cancel-in-progress: false }`
+  so two pushes/merges to `main` cannot run overlapping Production
+  deployment pipelines -- a later deployment WAITS for the active one and
+  never cancels it. **This is preventive hardening, NOT a proven root cause**
+  of the historical duplicate `0009_authjs_credentials` row; that root cause
+  remains unproven.
+- **The concurrency contract is self-validating.**
+  `scripts/validate-vercel-deploy-profiles.ts` gains
+  `assertVercelProductionConcurrencyContractValid()` -- a small deterministic
+  line/block parser (no YAML dependency, no substring-only check) requiring a
+  TOP-LEVEL `concurrency:` block with `group` exactly `production-deployment`
+  and `cancel-in-progress` exactly `false`. It rejects a missing block, a
+  wrong group, `cancel-in-progress: true`, a missing `cancel-in-progress`,
+  and an only-indented/job-level `concurrency:`. It is invoked from the
+  validator CLI, so `pnpm vercel:deploy:validate` enforces it against the
+  real `prod-deploy.yml` (which passes).
+  `scripts/validate-vercel-deploy-profiles.test.ts` adds the matching
+  accept/reject cases.
+- **Out of scope for this follow-up** (unchanged, still deferred):
+  PostgreSQL advisory locks / DB-level migration serialization,
+  `rollback:assess` env-loading changes, trust-anchor automation, candidate
+  auto-selection, A4.2c Production smoke execution, rollback, promote, schema
+  repair, and any Production read/write. DB-level advisory locking remains a
+  separate future defense-in-depth item.
+
 ## Validation
 
 - Focused rollback-assessment Vitest suite

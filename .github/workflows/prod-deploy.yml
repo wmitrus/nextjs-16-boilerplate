@@ -8,6 +8,14 @@ on:
       - 'docs/**'
       - '*.md'
 
+# Serialize Production deployments: two pushes/merges to main must not run
+# overlapping Production pipelines. A later deployment WAITS for the active
+# one; it must never cancel it (cancel-in-progress: false). Preventive
+# hardening -- not a proven root cause of any historical journal drift.
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

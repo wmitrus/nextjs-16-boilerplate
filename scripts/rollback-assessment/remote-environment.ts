@@ -398,7 +398,6 @@ export async function readCandidateEnvironmentContract(
             accept: 'application/json',
             'x-internal-key': internalApiKey,
             'x-vercel-protection-bypass': protectionBypassSecret,
-            'x-vercel-set-bypass-cookie': 'true',
           },
           method: 'GET',
           redirect: 'error',

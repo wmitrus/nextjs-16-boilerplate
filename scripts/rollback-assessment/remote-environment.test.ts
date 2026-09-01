@@ -37,7 +37,7 @@ function setRequiredReadSecrets(): void {
 }
 
 describe('candidate environment-contract remote read', () => {
-  it('performs one bounded GET with both the internal-auth and Vercel protection-bypass headers', async () => {
+  it('performs one bounded GET with the internal-auth and Vercel protection-bypass headers, and never the bypass-cookie header', async () => {
     setRequiredReadSecrets();
     const evidence = {
       authProvider: 'authjs',
@@ -63,7 +63,10 @@ describe('candidate environment-contract remote read', () => {
       expect(headers['x-vercel-protection-bypass']).toBe(
         'sentinel-bypass-secret',
       );
-      expect(headers['x-vercel-set-bypass-cookie']).toBe('true');
+      // The optional Vercel bypass-cookie header itself provokes a 307 on the
+      // immutable Production deployment, which `redirect: 'error'` correctly
+      // rejects. This single GET needs no persistent bypass cookie.
+      expect('x-vercel-set-bypass-cookie' in headers).toBe(false);
     } finally {
       vi.unstubAllEnvs();
     }

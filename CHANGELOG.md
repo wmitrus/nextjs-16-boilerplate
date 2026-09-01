@@ -1,3 +1,15 @@
+# [2.10.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.9.1...v2.10.0) (2026-09-01)
+
+
+### Bug Fixes
+
+* **rollback:** verify AuthJS sign-in surface ([6389604](https://github.com/wmitrus/nextjs-16-boilerplate/commit/638960457794d50562a559e852b67ab322aef361))
+
+
+### Features
+
+* **rollback:** add AuthJS read-only smoke gate ([870a6d3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/870a6d3931cf7c8fe6229c36622fec14b3d6c520))
+
 ## [2.9.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.9.0...v2.9.1) (2026-09-01)
 
 

@@ -20,9 +20,10 @@
  *     - `internalOrganizationId` — a proven `organizations.id`
  *       (membership-verified / provider-mapped / personal-org lookup);
  *     - `parentTenantId` — obtained by an INDEPENDENT authoritative read of
- *       `organizations.tenant_id` for that organization (see
- *       `readParentTenantId` in `./organization-tenant-read`). NEVER the
- *       legacy `TenantContext.tenantId`.
+ *       `organizations.tenant_id` for that organization (the
+ *       `OrganizationScopeAuthority` port in
+ *       `@/core/contracts/access-scope-authority`). NEVER the legacy
+ *       `TenantContext.tenantId`.
  * - `isPlatformAdmin`  — a server-verified capability (`isEnvBasedPlatformAdmin`
  *   today). A capability, not a scope.
  *

@@ -32,15 +32,16 @@
  */
 
 import type { AccessContext, DataScope } from '@/core/contracts/access-context';
+import type {
+  OrganizationScopeAuthority,
+  TenantExistenceReader,
+} from '@/core/contracts/access-scope-authority';
 import {
   internalOrganizationIdFromOrgRow,
   isCanonicalIdRepresentation,
   parentTenantIdFromOrgRow,
   tenantIdFromTenantsRow,
 } from '@/core/contracts/canonical-ids.provenance';
-
-import type { OrganizationScopeAuthority } from './organization-tenant-read';
-import type { TenantExistenceReader } from './tenant-existence-read';
 
 export type ScopeDenialReason =
   | 'not-an-internal-organization'

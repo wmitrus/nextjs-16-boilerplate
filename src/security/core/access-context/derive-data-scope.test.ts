@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AccessContext } from '@/core/contracts/access-context';
+import type {
+  OrganizationScopeAuthority,
+  TenantExistenceReader,
+} from '@/core/contracts/access-scope-authority';
 
 import { buildAccessContext } from './build-access-context';
 import {
@@ -8,8 +12,6 @@ import {
   deriveOrganizationScope,
   deriveTenantScopeAsPlatformAdmin,
 } from './derive-data-scope';
-import type { OrganizationScopeAuthority } from './organization-tenant-read';
-import type { TenantExistenceReader } from './tenant-existence-read';
 
 /**
  * OZI-71 Slice 2 — security-negative proofs for per-operation `DataScope`
@@ -58,11 +60,11 @@ function fakeOrgAuthority(data: {
   const parents = new Map(Object.entries(data.parentTenantByOrg));
   const members = new Map(Object.entries(data.membersByOrg));
   return {
-    readParentTenantId: vi.fn(
-      async (organizationId: string) => parents.get(organizationId) ?? null,
+    readParentTenantId: vi.fn((organizationId: string) =>
+      Promise.resolve(parents.get(organizationId) ?? null),
     ),
-    isMember: vi.fn(async (userId: string, organizationId: string) =>
-      (members.get(organizationId) ?? []).includes(userId),
+    isMember: vi.fn((userId: string, organizationId: string) =>
+      Promise.resolve((members.get(organizationId) ?? []).includes(userId)),
     ),
   };
 }
@@ -71,8 +73,8 @@ function fakeTenantExistence(
   existingTenantIds: string[],
 ): TenantExistenceReader & { exists: ReturnType<typeof vi.fn> } {
   return {
-    exists: vi.fn(async (tenantId: string) =>
-      existingTenantIds.includes(tenantId),
+    exists: vi.fn((tenantId: string) =>
+      Promise.resolve(existingTenantIds.includes(tenantId)),
     ),
   };
 }

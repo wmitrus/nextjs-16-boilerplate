@@ -13,15 +13,12 @@ import {
   deriveOrganizationScope,
   deriveTenantScopeAsPlatformAdmin,
 } from './derive-data-scope';
-import {
-  createDrizzleOrganizationScopeAuthority,
-  readParentTenantId,
-} from './organization-tenant-read';
-import { createDrizzleTenantExistenceReader } from './tenant-existence-read';
 
 import { DrizzleInternalIdentityLookup } from '@/modules/auth/infrastructure/drizzle/DrizzleInternalIdentityLookup';
 import { authOrganizationIdentitiesTable } from '@/modules/auth/infrastructure/drizzle/schema';
 import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
+import { DrizzleOrganizationScopeAuthority } from '@/modules/authorization/infrastructure/drizzle/DrizzleOrganizationScopeAuthority';
+import { DrizzleTenantExistenceReader } from '@/modules/authorization/infrastructure/drizzle/DrizzleTenantExistenceReader';
 import { organizationsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
 import { seedAuthorization } from '@/modules/authorization/infrastructure/drizzle/seed';
 import { OrgDbOrganizationResolver } from '@/modules/provisioning/infrastructure/OrgDbOrganizationResolver';
@@ -63,11 +60,11 @@ let globexOrgId: string;
 const stubActiveTenantSource = (
   activeTenantId: string | null,
 ): ActiveTenantContextSource => ({
-  getActiveTenantId: async () => activeTenantId,
+  getActiveTenantId: () => Promise.resolve(activeTenantId),
 });
 
 const stubIdentitySource = (orgExternalId: string): RequestIdentitySource => ({
-  get: async () => ({ orgExternalId }),
+  get: () => Promise.resolve({ orgExternalId }),
 });
 
 const identity = (id: string): Identity => ({ id });
@@ -119,10 +116,9 @@ async function assertCanonicalMatchesLegacy(params: {
   const { legacy, expectedInternalUserId, expectedParentTenantId } = params;
 
   // Independent authoritative read — NOT `legacy.tenantId`.
-  const parentTenantId = await readParentTenantId(
+  const parentTenantId = await new DrizzleOrganizationScopeAuthority(
     testDb.db,
-    legacy.organizationId,
-  );
+  ).readParentTenantId(legacy.organizationId);
   expect(parentTenantId).toBe(expectedParentTenantId);
 
   const ctx = buildAccessContext({
@@ -245,7 +241,9 @@ describe('OZI-71 Slice 2 — canonical AccessContext differential vs legacy reso
       userId: aliceId,
     };
 
-    const parentTenantId = await readParentTenantId(testDb.db, ORG_A);
+    const parentTenantId = await new DrizzleOrganizationScopeAuthority(
+      testDb.db,
+    ).readParentTenantId(ORG_A);
     const ctx = buildAccessContext({
       internalUserId: legacy.userId,
       activeOrganization: {
@@ -264,7 +262,7 @@ describe('OZI-71 Slice 2 — canonical AccessContext differential vs legacy reso
 });
 
 describe('OZI-71 Slice 2 — organization-scope derivation with real membership FKs', () => {
-  const authority = () => createDrizzleOrganizationScopeAuthority(testDb.db);
+  const authority = () => new DrizzleOrganizationScopeAuthority(testDb.db);
 
   const ctxFor = (userId: string) =>
     buildAccessContext({
@@ -366,7 +364,7 @@ describe('OZI-71 Slice 2 — organization-scope derivation with real membership 
 });
 
 describe('OZI-71 Slice 2 — tenant-scope derivation proves tenant EXISTENCE (real Postgres)', () => {
-  const tenants = () => createDrizzleTenantExistenceReader(testDb.db);
+  const tenants = () => new DrizzleTenantExistenceReader(testDb.db);
 
   const platformAdminCtx = () =>
     buildAccessContext({

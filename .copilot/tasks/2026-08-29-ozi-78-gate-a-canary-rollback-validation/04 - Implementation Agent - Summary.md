@@ -334,10 +334,16 @@ Production migration repair). Full A4 is not complete.
   smoke stays BLOCKED. Clerk smoke remains BLOCKED. `rollbackAction` stays
   `NOT_AUTHORIZED` and `rollbackExecutable` stays `false` even when all four
   evidence categories PASS.
-- No A4.2c remote or Production read was performed during this
-  implementation pass, and the A4.2c network smoke has **not** been
-  executed. No rollback was authorized or executed. Full A4 is not
-  complete.
+- No A4.2c remote or Production read was performed during the A4.2c
+  *implementation* pass. The final authorized A4.2c Production read-only
+  verification was subsequently run once by the operator and **passed all
+  five gates** -- see "A4.2c final Production read-only verification" below.
+  The A4.2c verification performed no rollback, promote, or traffic change;
+  no operator-triggered rollback-assessment traffic switch was authorized or
+  performed. (The normal Production Deployment workflow's own standard
+  "Promote verified deployment to Production" step is unaffected by this and
+  ran as usual.) **A4.2c is COMPLETE / PASS**, and the Production
+  rollback-readiness assessment path is complete.
 
 ### Prior A4.2b live execution (operator, outside this pass)
 
@@ -358,15 +364,61 @@ separately executed the authorized A4.2b live reads against deployment
 - The subsequent rollback assessment returned `schemaCompatibility` PASS.
 
 These were operator actions taken separately; they are recorded here only
-for accurate status. This A4.2c implementation pass performed no remote
-Vercel/Production/Neon/Clerk operation, ran no network smoke, and
-authorized no rollback.
+for accurate status. The A4.2c *implementation* pass itself performed no
+remote Vercel/Production/Neon/Clerk operation, ran no network smoke, and
+authorized no rollback -- the A4.2c network smoke was first exercised in the
+separate authorized verification recorded next.
+
+### A4.2c final Production read-only verification (operator, authorized)
+
+Run once by the operator after the post-live-validation hardening below was
+merged. Final state:
+
+| Field | Value |
+|---|---|
+| `deploymentId` | `dpl_8FCKKvjZL11muPvhHuLrrq7AEE3w` |
+| `gitRef` | `main` |
+| `gitSha` | `4b274899f4b3218389991747ebfc0b63a307a0dc` |
+| `immutableUrl` | `https://nextjs-16-boilerplate-njo4yadtw-wojciech-mitruss-projects.vercel.app` |
+| `candidateIdentity` | `PASS` |
+| `containmentFloorAncestry` | `PASS` |
+| `environmentContract` | `PASS` |
+| `schemaCompatibility` | `PASS` |
+| `smoke` | `PASS` |
+| `smokeEvidence` | `{ provider: authjs, signIn: PASS, session: PASS, status: READ_AND_VALIDATED }` |
+| `remoteCandidateEvidence` | `{ status: READ_AND_VALIDATED }` |
+| `rollbackAction` | `NOT_AUTHORIZED` |
+| `rollbackExecutable` | `false` |
+
+The final invocation performed **only**:
+
+- one bounded Vercel candidate DETAIL read;
+- one read-only deployment-bound Production environment-contract read;
+- one bounded, read-only Production migration-journal `SELECT`;
+- `GET /auth/signin`;
+- `GET /api/auth/session`.
+
+The A4.2c verification performed no rollback, promote, or traffic change. No
+operator-triggered rollback-assessment traffic switch was authorized or
+performed. No mutation, login, credential submission, or fixture creation
+occurred. `rollbackAction` stayed `NOT_AUTHORIZED` and `rollbackExecutable`
+stayed `false` with all five gates `PASS`. (This says nothing about the
+normal Production Deployment workflow, which legitimately ran its own
+standard "Promote verified deployment to Production" step for this release.)
+
+**A4.2c is COMPLETE / PASS. The Production rollback-readiness assessment
+path (A4.1 + A4.2a + A4.2b + A4.2c) is COMPLETE.** The A4 rollback-assessment
+path never triggers `vercel rollback` / `vercel promote`; an
+operator-triggered rollback-assessment traffic switch remains separately
+gated, `NOT_AUTHORIZED`, and was not performed. A3b remains not authorized /
+not executed.
 
 ## Production Migration & Deployment Hardening (post-live-validation follow-up)
 
 Branch `fix/ozi-78-production-migration-deploy-hardening`. Preventive
 hardening only; no Production operation, migration run, remote command,
-commit, or push was performed in this pass.
+commit, or push was performed in this pass. This hardening was merged before
+the A4.2c final Production read-only verification recorded above.
 
 - **Live Production validation exposed duplicate + retired/unknown migration
   journal state.** `scripts/validate-migration-journal.ts` already *detected*

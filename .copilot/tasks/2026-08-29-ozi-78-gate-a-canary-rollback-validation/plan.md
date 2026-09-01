@@ -16,22 +16,31 @@ behavior. This task must preserve the current authorization semantics:
 - Linear issue: OZI-78
 - Execution control: manual-handoff
 - Current phase: A1/A2 complete and validated; A3a read-only complete with
-  historical Preview PASS; A3b unstarted; A4.1 (local-only rollback
-  assessment) COMPLETE; A4.2a (operator-controlled remote candidate DETAIL
-  read) COMPLETE -- executed once, read-only, against the live Production
-  rollback candidate (PASS, see below); A4.2b (read-only environment-contract
-  and Production migration-journal compatibility evidence) implemented and
-  locally validated, and its live reads subsequently executed by the
-  operator against `dpl_FntevQ2meXxpesZ4x2XYbWwQWWAo`
+  historical Preview PASS; A3b unstarted (not authorized / not executed);
+  A4.1 (local-only rollback assessment) COMPLETE; A4.2a
+  (operator-controlled remote candidate DETAIL read) COMPLETE -- executed
+  once, read-only, against the live Production rollback candidate (PASS, see
+  below); A4.2b (read-only environment-contract and Production
+  migration-journal compatibility evidence) implemented and locally
+  validated, and its live reads subsequently executed by the operator
+  against `dpl_FntevQ2meXxpesZ4x2XYbWwQWWAo`
   (candidateIdentity/containmentFloorAncestry/environmentContract PASS;
   Production migration drift found and repaired under separate
   authorization; post-repair `schemaCompatibility` PASS with 21 unique
   migration hashes -- see A4.2b status below); A4.2c (deployment-bound
-  AuthJS read-only rollback smoke) implemented and locally validated behind
-  the new `--execute-authjs-smoke-read` acknowledgement, its network smoke
-  NOT YET exercised; rollback/promote execution remains unstarted and
-  separately gated; full A4 is not complete
-- Current baseline: `main@7e4b3eddd07f27a060c40616a0d7f130925a6b48`
+  AuthJS read-only rollback smoke) **COMPLETE / PASS** -- implemented,
+  locally validated, then executed once by the operator as a bounded
+  read-only verification against `dpl_8FCKKvjZL11muPvhHuLrrq7AEE3w`
+  (all five gates PASS; see the A4.2c final-verification status below).
+  The Production rollback-readiness assessment path is therefore complete;
+  the A4.2c verification performed no rollback, promote, or traffic change,
+  and no operator-triggered rollback-assessment traffic switch was
+  authorized or performed (`rollbackAction: NOT_AUTHORIZED`,
+  `rollbackExecutable: false`). The normal Production Deployment workflow's
+  standard promote step is separate and unaffected.
+- Current baseline: `main@e931886670ee8806ebd49645aafecef6e1181eda`
+  (verified Production rollback candidate SHA
+  `4b274899f4b3218389991747ebfc0b63a307a0dc`, recorded separately below)
 - Containment floor: `2450d410f4617f9b0e415f2b4d47bcde748b1cbc`
 
 ## Gate A Constraints
@@ -344,9 +353,11 @@ assessment returned `schemaCompatibility` PASS. Those were operator actions
 taken outside this task's implementation passes; no rollback was authorized
 or executed.
 
-**Status: A4.2c (deployment-bound AuthJS read-only rollback smoke)
-implemented and locally validated; its network smoke has NOT been exercised
-in this pass.** A fourth independent acknowledgement,
+**Status: A4.2c (deployment-bound AuthJS read-only rollback smoke) —
+COMPLETE / PASS.** Implemented, locally validated, and then executed once by
+the operator as a bounded, read-only Production verification (final state
+recorded below under "A4.2c final Production read-only verification"). A
+fourth independent acknowledgement,
 `--execute-authjs-smoke-read`, was added (accepted at most once, never
 satisfied by a generic `--remote`/`--execute`/`--production` flag). It
 authorizes only a bounded, read-only smoke against the *already validated*
@@ -380,13 +391,58 @@ smoke gate is unreachable through `buildLocalRollbackAssessment()` or
 caller-supplied fixture evidence -- only `run()`, after the real smoke
 returned `OK`, may establish `REMOTE_READ` provenance for it. Clerk smoke
 remains `BLOCKED`; `rollbackAction`/`rollbackExecutable` remain
-`NOT_AUTHORIZED`/`false` even when all four evidence categories `PASS`. No
-A4.2c remote or Production read was performed during this implementation
-pass; full A4 is not complete.
+`NOT_AUTHORIZED`/`false` even when all four evidence categories `PASS`.
+
+### A4.2c final Production read-only verification (operator, authorized)
+
+The final authorized A4.2c invocation was run once by the operator, after
+the post-live-validation hardening below was merged, against:
+
+| Field | Value |
+|---|---|
+| `deploymentId` | `dpl_8FCKKvjZL11muPvhHuLrrq7AEE3w` |
+| `gitRef` | `main` |
+| `gitSha` | `4b274899f4b3218389991747ebfc0b63a307a0dc` |
+| `immutableUrl` | `https://nextjs-16-boilerplate-njo4yadtw-wojciech-mitruss-projects.vercel.app` |
+| `candidateIdentity` | `PASS` |
+| `containmentFloorAncestry` | `PASS` |
+| `environmentContract` | `PASS` |
+| `schemaCompatibility` | `PASS` |
+| `smoke` | `PASS` |
+| `smokeEvidence` | `{ provider: authjs, signIn: PASS, session: PASS, status: READ_AND_VALIDATED }` |
+| `remoteCandidateEvidence` | `{ status: READ_AND_VALIDATED }` |
+| `rollbackAction` | `NOT_AUTHORIZED` |
+| `rollbackExecutable` | `false` |
+
+That invocation performed only:
+
+- one bounded Vercel candidate DETAIL read;
+- one read-only deployment-bound Production environment-contract read;
+- one bounded, read-only Production migration-journal `SELECT`;
+- `GET /auth/signin`;
+- `GET /api/auth/session`.
+
+The A4.2c verification performed no rollback, promote, or traffic change. No
+operator-triggered rollback-assessment traffic switch was authorized or
+performed. No mutation, login, credential submission, or fixture creation
+occurred. `rollbackAction` stayed `NOT_AUTHORIZED` and `rollbackExecutable`
+stayed `false` with all five gates `PASS` -- the assessment path proves
+readiness; it never authorizes the switch. (This is scoped to the A4
+rollback-assessment path only; the normal Production Deployment workflow
+legitimately ran its own standard "Promote verified deployment to
+Production" step for this release.)
+
+**The Production rollback-readiness assessment path (A4.1 + A4.2a + A4.2b +
+A4.2c) is COMPLETE.** The A4 rollback-assessment path never triggers
+`vercel rollback` / `vercel promote`; an operator-triggered
+rollback-assessment traffic switch remains separately gated,
+`NOT_AUTHORIZED`, and was not performed. A3b remains not authorized / not
+executed.
 
 **Status: Production migration & deployment hardening
 (`fix/ozi-78-production-migration-deploy-hardening`) — preventive follow-up,
-implemented locally.** The OZI-78 live Production validation exposed
+implemented locally and merged before the A4.2c final Production read-only
+verification above.** The OZI-78 live Production validation exposed
 duplicate + retired/unknown migration-journal state; that drift's controlled
 repair was already completed separately (see the A4.2b live-execution note
 above). This follow-up prevents it from passing future Production

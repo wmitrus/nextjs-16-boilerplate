@@ -65,6 +65,7 @@ overrides:
   'path-to-regexp@>=8.0.0 <8.4.0': 8.4.0
   'smol-toml@<1.6.1': 1.6.1
   'tar@>=7.0.0 <7.5.21': 7.5.21
+  'browserslist@<4.28.7': '>=4.28.7'
 
 audit:
   # --- GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq (image-size@2.0.2) ---
@@ -188,9 +189,3 @@ minimumReleaseAgeExclude:
   - '@next/swc-win32-x64-msvc@16.3.2'
   - eslint-config-next@16.3.2
   - next@16.3.2
-
-auditConfig:
-  ignoreGhsas:
-    - GHSA-w3rx-r6r6-pgpr
-    - GHSA-5p2g-fcmc-qvqq
-    - GHSA-jmr9-qjv8-65gv

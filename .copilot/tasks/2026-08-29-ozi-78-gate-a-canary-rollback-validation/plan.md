@@ -351,7 +351,12 @@ in this pass.** A fourth independent acknowledgement,
 satisfied by a generic `--remote`/`--execute`/`--production` flag). It
 authorizes only a bounded, read-only smoke against the *already validated*
 candidate's exact `immutableUrl` -- two GETs, `GET /auth/signin` (HTTP 200 /
-`text/html` / bounded non-empty body) and `GET /api/auth/session` (HTTP 200 /
+media type exactly `text/html` / fully-read bounded body that is non-empty
+AND, once complete, contains all four stable SignInClient credentials-form
+markers `<form`, `name="email"`, `name="password"`, `type="submit"`
+independently and order-agnostically -- a generic shell or PPR "Loading sign
+in..." fallback fails closed; the body and the missing marker are never
+surfaced) and `GET /api/auth/session` (HTTP 200 / media type exactly
 `application/json` / bounded body parsing to a non-null non-array object;
 anonymous `{}` needs no fixture). Each request is `method: GET`,
 `cache: no-store`, `redirect: error`, no retries, one

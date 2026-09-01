@@ -276,13 +276,24 @@ Production migration repair). Full A4 is not complete.
   candidate's exact `immutableUrl` (from `TrustedProductionCandidate`). Two
   bounded GETs, mirroring the surfaces `e2e/vercel-runtime-smoke.spec.ts`
   covers without touching login/fixture code:
-  - `GET /auth/signin` -- expects HTTP 200, `content-type` containing
-    `text/html`, a fully-read bounded non-empty body (512 KiB ceiling).
-  - `GET /api/auth/session` -- expects HTTP 200, `content-type` containing
-    `application/json`, a bounded body (64 KiB ceiling) that parses as JSON
-    to a non-null, non-array object. Anonymous `{}` passes with no fixture;
-    `null`/arrays/scalars do not. This matches the least-permissive truthful
-    contract the hosted smoke already asserts (`expect.any(Object)`).
+  - `GET /auth/signin` -- expects HTTP 200, a `content-type` whose media
+    type (portion before the first `;`, trimmed/lowercased) is exactly
+    `text/html`, and a fully-read bounded body (512 KiB ceiling) that is
+    non-empty AND, once the complete bounded body is in hand, contains all
+    four stable SignInClient credentials-form markers -- `<form`,
+    `name="email"`, `name="password"`, `type="submit"` -- independently and
+    order-agnostically (no CSS-class / generated-markup / attribute-order /
+    whitespace dependence). A generic app shell or a PPR "Loading sign
+    in..." fallback contains none of them and fails closed to the generic
+    sign-in smoke ERROR; neither the body nor the missing marker is ever
+    surfaced in evidence/output. The bare heading text "Sign In" is
+    deliberately not used.
+  - `GET /api/auth/session` -- expects HTTP 200, a `content-type` whose
+    media type is exactly `application/json`, and a bounded body (64 KiB
+    ceiling) that parses as JSON to a non-null, non-array object. Anonymous
+    `{}` passes with no fixture; `null`/arrays/scalars do not. This matches
+    the least-permissive truthful contract the hosted smoke already asserts
+    (`expect.any(Object)`).
   Each request: `method: 'GET'`, `cache: 'no-store'`, `redirect: 'error'`,
   no retries, one `AbortSignal.timeout(10_000)` per request. Only two
   headers are sent -- an endpoint-appropriate `accept` and
@@ -354,14 +365,18 @@ authorized no rollback.
 ## Validation
 
 - Focused rollback-assessment Vitest suite
-  (`scripts/rollback-assessment/`): 311 tests passed across 8 files
+  (`scripts/rollback-assessment/`): 321 tests passed across 8 files
   (includes the new `authjs-smoke.test.ts` and the new `guards.test.ts` /
   `cli.test.ts` A4.2c trust-ordering and corrective-pass regression
   cases: exact-media-type Content-Type matching, best-effort rejected-body
-  cancellation, and strict `isValidAuthjsSmokeEvidence` key-set checks).
+  cancellation, strict `isValidAuthjsSmokeEvidence` key-set checks, and the
+  Codex P2 sign-in credentials-form-marker checks -- happy fixture carries
+  all four markers, each marker missing individually -> ERROR, generic HTML
+  shell -> ERROR, PPR "Loading sign in..." fallback -> ERROR, marker
+  order / unrelated attributes irrelevant, and no body/marker leakage).
 - `pnpm typecheck`: passed.
 - `pnpm lint` (with `--fix`): passed; `git diff --check`: clean.
-- `pnpm test`: 299 files / 3057 tests passed; coverage above thresholds.
+- `pnpm test`: 299 files / 3067 tests passed; coverage above thresholds.
 - No remote Vercel or Production operation was run during this
   implementation pass.
 

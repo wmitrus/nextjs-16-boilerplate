@@ -5,8 +5,20 @@ import { runAuthjsReadOnlySmoke } from './authjs-smoke';
 const immutableUrl = 'https://project-immutable-abc123-team.vercel.app';
 const BYPASS_SECRET = 'sentinel-bypass-secret';
 
+// A minimal but realistic sign-in surface: a heading that also says "Sign In"
+// (so the smoke must not key on that text) plus the four stable SignInClient
+// credentials-form markers -- deliberately with unrelated attributes and a
+// non-canonical child order to prove neither matters.
+const SIGNIN_FORM_BODY =
+  '<!doctype html><html><body><h1>Sign In</h1>' +
+  '<form data-testid="signin" method="post" action="/api/auth/callback/credentials">' +
+  '<button type="submit">Sign In</button>' +
+  '<input aria-label="Password" name="password" type="password" />' +
+  '<input autocomplete="email" name="email" type="email" />' +
+  '</form></body></html>';
+
 function htmlResponse(
-  body = '<!doctype html><html><body>Sign In</body></html>',
+  body = SIGNIN_FORM_BODY,
   init: { contentType?: string | null; status?: number } = {},
 ): Response {
   const headers: Record<string, string> = {};
@@ -246,7 +258,7 @@ describe('runAuthjsReadOnlySmoke', () => {
       'TEXT/HTML; charset=UTF-8',
     ])('sign-in accepts %s', async (contentType) => {
       const fetchMock = sequenceFetch(
-        htmlResponse('<html></html>', { contentType }),
+        htmlResponse(SIGNIN_FORM_BODY, { contentType }),
         jsonResponse('{}'),
       );
       const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
@@ -261,7 +273,7 @@ describe('runAuthjsReadOnlySmoke', () => {
       'text/plain; charset=utf-8',
     ])('sign-in rejects lookalike %s -> ERROR', async (contentType) => {
       const fetchMock = sequenceFetch(
-        htmlResponse('<html></html>', { contentType }),
+        htmlResponse(SIGNIN_FORM_BODY, { contentType }),
       );
       const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
       expect(result.status).toBe('ERROR');
@@ -293,6 +305,86 @@ describe('runAuthjsReadOnlySmoke', () => {
       );
       const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
       expect(result.status).toBe('ERROR');
+    });
+  });
+
+  describe('sign-in body must contain the AuthJS credentials-form surface', () => {
+    it('the happy fixture carries all four stable markers', () => {
+      for (const marker of [
+        '<form',
+        'name="email"',
+        'name="password"',
+        'type="submit"',
+      ]) {
+        expect(SIGNIN_FORM_BODY).toContain(marker);
+      }
+    });
+
+    it('passes on a completed body that contains every marker', async () => {
+      const fetchMock = sequenceFetch(
+        htmlResponse(SIGNIN_FORM_BODY),
+        jsonResponse('{}'),
+      );
+      const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
+      expect(result.status).toBe('OK');
+    });
+
+    it.each([
+      ['<form', '<form', '<section'],
+      ['name="email"', 'name="email"', 'name="user"'],
+      ['name="password"', 'name="password"', 'name="pass"'],
+      ['type="submit"', 'type="submit"', 'type="button"'],
+    ])(
+      'a body missing %s alone -> ERROR',
+      async (_marker, present, replacement) => {
+        const body = SIGNIN_FORM_BODY.replace(present, replacement);
+        const fetchMock = sequenceFetch(htmlResponse(body));
+        const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
+        expect(result.status).toBe('ERROR');
+      },
+    );
+
+    it('a generic non-empty HTML shell -> ERROR', async () => {
+      const shell =
+        '<!doctype html><html><body><header>App</header><main>Welcome back</main></body></html>';
+      const fetchMock = sequenceFetch(htmlResponse(shell));
+      const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
+      expect(result.status).toBe('ERROR');
+    });
+
+    it('a PPR-style loading fallback -> ERROR', async () => {
+      const fallback = '<html><body><p>Loading sign in...</p></body></html>';
+      const fetchMock = sequenceFetch(htmlResponse(fallback));
+      const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
+      expect(result.status).toBe('ERROR');
+    });
+
+    it('marker order and unrelated attributes do not matter', async () => {
+      const reordered =
+        '<!doctype html><html><body>' +
+        '<form novalidate class="x" data-foo="bar">' +
+        '<input type="submit" value="Go" />' +
+        '<input name="password" required minlength="8" />' +
+        '<input name="email" inputmode="email" />' +
+        '</form></body></html>';
+      const fetchMock = sequenceFetch(
+        htmlResponse(reordered),
+        jsonResponse('{}'),
+      );
+      const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
+      expect(result.status).toBe('OK');
+    });
+
+    it('never reveals body content or the missing marker in the result', async () => {
+      const shell =
+        '<!doctype html><html><body>super-secret-shell-token</body></html>';
+      const fetchMock = sequenceFetch(htmlResponse(shell));
+      const result = await runAuthjsReadOnlySmoke(immutableUrl, fetchMock);
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('super-secret-shell-token');
+      expect(serialized).not.toMatch(
+        /name="email"|name="password"|type="submit"/,
+      );
     });
   });
 
@@ -379,7 +471,7 @@ describe('runAuthjsReadOnlySmoke', () => {
     });
 
     it('a fully consumed successful body is not cancelled', async () => {
-      const signIn = trackedResponse('<html>ok</html>', {
+      const signIn = trackedResponse(SIGNIN_FORM_BODY, {
         contentType: 'text/html',
       });
       const session = trackedResponse('{}', {

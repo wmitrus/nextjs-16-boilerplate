@@ -34,6 +34,24 @@ const SMOKE_TIMEOUT_MS = 10_000;
 const MAX_SIGNIN_BODY_BYTES = 512 * 1024;
 const MAX_SESSION_BODY_BYTES = 64 * 1024;
 
+/**
+ * Stable semantic markers of this repository's own SignInClient credentials
+ * form (`src/app/auth/signin/sign-in-client.tsx`): a `<form`, the `email`
+ * and `password` named inputs, and a submit control. A generic app shell,
+ * an error page, or a PPR "Loading sign in..." fallback contains none of
+ * them, so requiring all four (independently, order-agnostic, no CSS-class
+ * / generated-markup / attribute-order / whitespace dependence) rejects a
+ * 200 text/html document that is not actually the sign-in surface. The bare
+ * text "Sign In" is deliberately NOT used -- it also appears in the page
+ * heading.
+ */
+const SIGNIN_FORM_MARKERS = [
+  '<form',
+  'name="email"',
+  'name="password"',
+  'type="submit"',
+] as const;
+
 export interface AuthjsSmokeEvidence {
   provider: 'authjs';
   session: 'PASS';
@@ -169,6 +187,15 @@ async function smokeSignIn(
   const body = await readBoundedText(response, MAX_SIGNIN_BODY_BYTES);
   if (body.length === 0) {
     throw new Error('AuthJS sign-in smoke returned an empty body.');
+  }
+  // The complete bounded body must contain the actual credentials-form
+  // surface, not merely be a non-empty HTML document. Checked only after the
+  // whole bounded body is in hand. Neither the body nor the missing marker
+  // is ever surfaced.
+  if (!SIGNIN_FORM_MARKERS.every((marker) => body.includes(marker))) {
+    throw new Error(
+      'AuthJS sign-in smoke body did not contain the credentials-form surface.',
+    );
   }
 }
 

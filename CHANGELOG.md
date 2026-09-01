@@ -1,3 +1,10 @@
+## [2.9.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.9.0...v2.9.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **ozi-78:** avoid redirect in environment probe ([cf2bad4](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cf2bad432232039859a82ad148da65e599c6c9ef))
+
 # [2.9.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.8.0...v2.9.0) (2026-08-31)
 
 

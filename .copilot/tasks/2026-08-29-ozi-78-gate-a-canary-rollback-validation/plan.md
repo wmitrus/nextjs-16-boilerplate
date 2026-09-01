@@ -21,9 +21,16 @@ behavior. This task must preserve the current authorization semantics:
   read) COMPLETE -- executed once, read-only, against the live Production
   rollback candidate (PASS, see below); A4.2b (read-only environment-contract
   and Production migration-journal compatibility evidence) implemented and
-  locally validated, remote reads NOT YET exercised; A4.2c (candidate smoke)
-  and rollback/promote execution remain unstarted and separately gated; full
-  A4 is not complete
+  locally validated, and its live reads subsequently executed by the
+  operator against `dpl_FntevQ2meXxpesZ4x2XYbWwQWWAo`
+  (candidateIdentity/containmentFloorAncestry/environmentContract PASS;
+  Production migration drift found and repaired under separate
+  authorization; post-repair `schemaCompatibility` PASS with 21 unique
+  migration hashes -- see A4.2b status below); A4.2c (deployment-bound
+  AuthJS read-only rollback smoke) implemented and locally validated behind
+  the new `--execute-authjs-smoke-read` acknowledgement, its network smoke
+  NOT YET exercised; rollback/promote execution remains unstarted and
+  separately gated; full A4 is not complete
 - Current baseline: `main@7e4b3eddd07f27a060c40616a0d7f130925a6b48`
 - Containment floor: `2450d410f4617f9b0e415f2b4d47bcde748b1cbc`
 
@@ -319,6 +326,58 @@ change, and full A4 is not complete. Whether/how to bootstrap the legacy
 candidate onto A4.2b coverage (e.g. nominating a newer, already-instrumented
 candidate once one exists) is a rollout-policy decision left to the operator,
 separate from and after this implementation.
+
+**Update — A4.2b live reads subsequently executed by the operator.** The
+paragraphs above describe the A4.2b *implementation* pass, during which no
+remote/Production read was performed. Separately, and before/outside the
+A4.2c local implementation pass below, the operator executed the authorized
+A4.2b live reads against deployment `dpl_FntevQ2meXxpesZ4x2XYbWwQWWAo`.
+Confirmed final state: `candidateIdentity` PASS; `containmentFloorAncestry`
+PASS; `environmentContract` PASS in its authorized deployment-bound read.
+Production migration drift was discovered during schema evidence
+collection; a separately authorized, atomic Production repair removed the
+retired pending-invitation index and its `drizzle.__drizzle_migrations`
+journal row plus one duplicate `0009_authjs_credentials` journal row.
+Independent post-commit verification passed with exactly 21 current unique
+migration hashes and the retired index absent, and the subsequent rollback
+assessment returned `schemaCompatibility` PASS. Those were operator actions
+taken outside this task's implementation passes; no rollback was authorized
+or executed.
+
+**Status: A4.2c (deployment-bound AuthJS read-only rollback smoke)
+implemented and locally validated; its network smoke has NOT been exercised
+in this pass.** A fourth independent acknowledgement,
+`--execute-authjs-smoke-read`, was added (accepted at most once, never
+satisfied by a generic `--remote`/`--execute`/`--production` flag). It
+authorizes only a bounded, read-only smoke against the *already validated*
+candidate's exact `immutableUrl` -- two GETs, `GET /auth/signin` (HTTP 200 /
+`text/html` / bounded non-empty body) and `GET /api/auth/session` (HTTP 200 /
+`application/json` / bounded body parsing to a non-null non-array object;
+anonymous `{}` needs no fixture). Each request is `method: GET`,
+`cache: no-store`, `redirect: error`, no retries, one
+`AbortSignal.timeout(10s)`; the only headers sent are an
+endpoint-appropriate `accept` and `x-vercel-protection-bypass`
+(`x-vercel-set-bypass-cookie` deliberately NOT sent -- it previously
+provoked a 307 on this immutable URL). No user authentication, no
+credentials, no fixtures, no mutation endpoint, no `INTERNAL_API_KEY`.
+`VERCEL_AUTOMATION_BYPASS_SECRET` is resolved lazily only when the smoke is
+about to run and is never logged or returned; every failure mode collapses
+to a generic `ERROR` with no body/URL/header/secret content. The network
+smoke fires only when, in the SAME `run()`, candidate identity,
+containment-floor ancestry, the remotely read environment contract, and the
+remotely read schema compatibility have all been acquired and assessed
+`PASS` and the environment evidence names `authjs`; the final executable
+invocation therefore requires
+`--execute-remote-candidate-read --execute-production-environment-read
+--execute-production-schema-read --execute-authjs-smoke-read`. A dedicated
+`smoke` provenance category and a `smokeEvidence` field were added: a `PASS`
+smoke gate is unreachable through `buildLocalRollbackAssessment()` or
+caller-supplied fixture evidence -- only `run()`, after the real smoke
+returned `OK`, may establish `REMOTE_READ` provenance for it. Clerk smoke
+remains `BLOCKED`; `rollbackAction`/`rollbackExecutable` remain
+`NOT_AUTHORIZED`/`false` even when all four evidence categories `PASS`. No
+A4.2c remote or Production read was performed during this implementation
+pass; full A4 is not complete.
 
 ## Candidate File Set — To Confirm Before Implementation
 

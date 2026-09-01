@@ -155,11 +155,13 @@ COMPLETE. Full A4 is not complete.
 - `smoke` remains BLOCKED (A4.2c); `rollbackAction`/`rollbackExecutable`
   remain NOT_AUTHORIZED/false regardless of environment/schema outcome.
 
-A4.2b is implemented and locally validated; its remote/Production reads were
-NOT exercised in this pass. **The currently deployed A4.2a legacy candidate
-cannot reach `environmentContract: PASS`** — it predates the attestation
-route, and no authorization can change that; only a future candidate built
-after this route exists can. Full A4 is not complete.
+A4.2b is implemented and locally validated. Its remote/Production reads were
+NOT exercised during the A4.2b implementation pass. **They were subsequently
+executed by the operator — separately, and before/outside the A4.2c local
+implementation pass documented in "A4.2c AuthJS Read-Only Rollback Smoke"
+below — against deployment `dpl_FntevQ2meXxpesZ4x2XYbWwQWWAo`** (see that
+section for the confirmed final state and the separately authorized
+Production migration repair). Full A4 is not complete.
 
 ## A4.2b Final Corrective Pass
 
@@ -260,7 +262,110 @@ after this route exists can. Full A4 is not complete.
   `PRODUCTION_TENANT_CONTEXT_SOURCE`), not just the first two -- values
   are never included, only the variable names.
 
+## A4.2c AuthJS Read-Only Rollback Smoke
+
+- New fourth acknowledgement `--execute-authjs-smoke-read`
+  (`scripts/rollback-assessment/guards.ts`): accepted at most once,
+  independent of the three existing read flags, never satisfied by a generic
+  `--remote`/`--execute`/`--production` toggle. It authorizes only the
+  bounded read-only AuthJS smoke -- not the candidate DETAIL read, the
+  environment read, the schema read, a rollback, a promote, or any mutation.
+  The local-only parse result now carries `executeAuthjsSmokeRead: false`.
+- New module `scripts/rollback-assessment/authjs-smoke.ts`
+  (`runAuthjsReadOnlySmoke`). READ-ONLY, targets only the already validated
+  candidate's exact `immutableUrl` (from `TrustedProductionCandidate`). Two
+  bounded GETs, mirroring the surfaces `e2e/vercel-runtime-smoke.spec.ts`
+  covers without touching login/fixture code:
+  - `GET /auth/signin` -- expects HTTP 200, `content-type` containing
+    `text/html`, a fully-read bounded non-empty body (512 KiB ceiling).
+  - `GET /api/auth/session` -- expects HTTP 200, `content-type` containing
+    `application/json`, a bounded body (64 KiB ceiling) that parses as JSON
+    to a non-null, non-array object. Anonymous `{}` passes with no fixture;
+    `null`/arrays/scalars do not. This matches the least-permissive truthful
+    contract the hosted smoke already asserts (`expect.any(Object)`).
+  Each request: `method: 'GET'`, `cache: 'no-store'`, `redirect: 'error'`,
+  no retries, one `AbortSignal.timeout(10_000)` per request. Only two
+  headers are sent -- an endpoint-appropriate `accept` and
+  `x-vercel-protection-bypass`. `x-vercel-set-bypass-cookie` is deliberately
+  NOT sent (it previously provoked a 307 on this immutable Production URL and
+  was removed from the A4.2b probe). No cookies, no credentials, no
+  `INTERNAL_API_KEY`, no user identifiers. `VERCEL_AUTOMATION_BYPASS_SECRET`
+  is resolved lazily only when the smoke is actually about to run, and is
+  never logged or returned. Any deviation (missing secret, network/redirect
+  failure, non-200, wrong content-type, oversized body, unparseable or
+  wrong-shape JSON, timeout) collapses to a generic `ERROR` result whose
+  message never contains a body, URL, headers, or a secret; sign-in is
+  proven before the session request is made.
+- Provenance: `RemoteProvenance` gains a dedicated `smoke` category
+  (`scripts/rollback-assessment/cli.ts`); `LocalRollbackAssessment` gains a
+  `smokeEvidence` field (`scripts/rollback-assessment/evidence.ts`). A PASS
+  smoke gate is only produced when `provenance.smoke === 'REMOTE_READ'` and
+  the real evidence is structurally valid. `run()` is the only caller that
+  may set that provenance, and only after `runAuthjsReadOnlySmoke()`
+  returned `OK` in the same invocation.
+  `buildLocalRollbackAssessment()` always uses `LOCAL_SUPPLIED` for smoke,
+  so a caller handing a well-formed `{provider,signIn,session}` object to
+  the exported builder is told BLOCKED, never PASS.
+- Fail-closed acquisition ordering in `run()`, all within one invocation:
+  candidate DETAIL identity PASS -> containment-floor ancestry PASS ->
+  deployment-bound environment contract PASS (remotely read) -> schema
+  compatibility PASS (remotely read) -> environment provider is `authjs`
+  -> only then one bounded network smoke. The environment/schema PASS checks
+  reuse the exact assessment functions `buildAssessment()` recomputes for
+  the displayed gates, so the smoke can never run against evidence that
+  would not itself display PASS. The final executable A4.2c invocation
+  requires all four flags:
+  `--execute-remote-candidate-read --execute-production-environment-read
+  --execute-production-schema-read --execute-authjs-smoke-read`.
+- Provider gate: `authProvider === 'authjs'` -> eligible;
+  `authProvider === 'clerk'` -> smoke BLOCKED, no smoke request;
+  malformed/unknown environment evidence never reaches PASS upstream, so the
+  smoke stays BLOCKED. Clerk smoke remains BLOCKED. `rollbackAction` stays
+  `NOT_AUTHORIZED` and `rollbackExecutable` stays `false` even when all four
+  evidence categories PASS.
+- No A4.2c remote or Production read was performed during this
+  implementation pass, and the A4.2c network smoke has **not** been
+  executed. No rollback was authorized or executed. Full A4 is not
+  complete.
+
+### Prior A4.2b live execution (operator, outside this pass)
+
+Before and outside this A4.2c local implementation pass, the operator
+separately executed the authorized A4.2b live reads against deployment
+`dpl_FntevQ2meXxpesZ4x2XYbWwQWWAo`. Confirmed final state:
+
+- `candidateIdentity` PASS.
+- `containmentFloorAncestry` PASS.
+- `environmentContract` PASS in its authorized deployment-bound read.
+- Production migration drift was discovered during schema evidence
+  collection.
+- A separately authorized, atomic Production repair removed the retired
+  pending-invitation index / its `drizzle.__drizzle_migrations` journal row
+  and one duplicate `0009_authjs_credentials` journal row.
+- Independent post-commit verification passed: exactly 21 current unique
+  migration hashes, retired index absent.
+- The subsequent rollback assessment returned `schemaCompatibility` PASS.
+
+These were operator actions taken separately; they are recorded here only
+for accurate status. This A4.2c implementation pass performed no remote
+Vercel/Production/Neon/Clerk operation, ran no network smoke, and
+authorized no rollback.
+
 ## Validation
+
+- Focused rollback-assessment Vitest suite
+  (`scripts/rollback-assessment/`): 311 tests passed across 8 files
+  (includes the new `authjs-smoke.test.ts` and the new `guards.test.ts` /
+  `cli.test.ts` A4.2c trust-ordering and corrective-pass regression
+  cases: exact-media-type Content-Type matching, best-effort rejected-body
+  cancellation, and strict `isValidAuthjsSmokeEvidence` key-set checks).
+- `pnpm typecheck`: passed.
+- `pnpm lint` (with `--fix`): passed; `git diff --check`: clean.
+- `pnpm test`: 299 files / 3057 tests passed; coverage above thresholds.
+- No remote Vercel or Production operation was run during this
+  implementation pass.
+
+### Earlier A4.2a/A4.2b validation (unchanged)
 
 - Focused rollback-assessment Vitest suite: 184 tests passed (includes
   the five new client-construction error-boundary cases and fixtures

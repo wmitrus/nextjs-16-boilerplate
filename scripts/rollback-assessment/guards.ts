@@ -62,6 +62,7 @@ export interface TrustedProductionCandidate {
 
 export function parseRollbackAssessmentArgs(args: readonly string[]): {
   deploymentId: string;
+  executeAuthjsSmokeRead: boolean;
   executeProductionEnvironmentRead: boolean;
   executeProductionSchemaRead: boolean;
   executeRemoteCandidateRead: boolean;
@@ -71,6 +72,7 @@ export function parseRollbackAssessmentArgs(args: readonly string[]): {
   let executeRemoteCandidateRead = false;
   let executeProductionEnvironmentRead = false;
   let executeProductionSchemaRead = false;
+  let executeAuthjsSmokeRead = false;
   let expectingValue = false;
   for (const arg of tokens) {
     if (expectingValue) {
@@ -119,6 +121,20 @@ export function parseRollbackAssessmentArgs(args: readonly string[]): {
       executeProductionSchemaRead = true;
       continue;
     }
+    // A4.2c: the AuthJS read-only smoke acknowledgement. Independent of the
+    // three reads above -- it authorizes only the bounded read-only smoke
+    // (GET /auth/signin, GET /api/auth/session) against the already validated
+    // candidate, and nothing else: not the candidate DETAIL read, the
+    // environment read, the schema read, a rollback, a promote, or any
+    // mutation. It is never satisfied by a generic --remote/--execute/
+    // --production toggle.
+    if (arg === '--execute-authjs-smoke-read') {
+      if (executeAuthjsSmokeRead) {
+        throw new Error('--execute-authjs-smoke-read may appear only once.');
+      }
+      executeAuthjsSmokeRead = true;
+      continue;
+    }
     throw new Error('Rollback assessment accepts only one --deployment-id.');
   }
   if (expectingValue) throw new Error('--deployment-id requires a value.');
@@ -132,6 +148,7 @@ export function parseRollbackAssessmentArgs(args: readonly string[]): {
     throw new Error('Rollback assessment deployment ID is malformed.');
   return {
     deploymentId: parsed.data,
+    executeAuthjsSmokeRead,
     executeProductionEnvironmentRead,
     executeProductionSchemaRead,
     executeRemoteCandidateRead,

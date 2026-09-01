@@ -1,3 +1,11 @@
+# [2.11.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.10.1...v2.11.0) (2026-09-01)
+
+
+### Features
+
+* **ozi-71:** add canonical access contracts ([a47e0fb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a47e0fbcc01eda6ae5b95600bc706ecb44df1533))
+* **ozi-71:** add canonical access contracts ([ed3b048](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ed3b048e1af54d2fbbce8c9427a11e714ab4473d))
+
 ## [2.10.1](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.10.0...v2.10.1) (2026-09-01)
 
 

@@ -55,6 +55,17 @@ export type ScopeDerivation<S extends DataScope = DataScope> =
   | { readonly outcome: 'granted'; readonly scope: S }
   | { readonly outcome: 'denied'; readonly reason: ScopeDenialReason };
 
+/**
+ * The closed set of privileged, per-operation scope classifications a caller
+ * may request. It is deliberately a CLOSED union local to this policy module:
+ * each derivation function checks it received its own expected classification
+ * and fails closed on any other legitimate member — defense-in-depth against
+ * a caller wiring the wrong operation to the wrong derivation.
+ */
+export type PrivilegedScopeOperationClassification =
+  | { readonly kind: 'tenant-administration' }
+  | { readonly kind: 'platform-global' };
+
 type OrganizationScope = Extract<DataScope, { kind: 'organization' }>;
 type TenantScope = Extract<DataScope, { kind: 'tenant' }>;
 type PlatformGlobalScope = Extract<DataScope, { kind: 'platform-global' }>;
@@ -137,11 +148,12 @@ export interface DeriveTenantScopeAsPlatformAdminInput {
   /** The tenant id the operation targets — a *requested* id. */
   readonly requestedTenantId: string;
   /**
-   * Explicit operation classification. `tenant` scope is produced ONLY for
-   * an operation the caller has classified as tenant administration — there
-   * is no implicit path and no ordinary-user path.
+   * Explicit operation classification. `tenant` scope is produced ONLY when
+   * this is `tenant-administration` — any other member of the closed union
+   * (e.g. `platform-global`) fails closed. There is no implicit path and no
+   * ordinary-user path.
    */
-  readonly operation: { readonly kind: 'tenant-administration' };
+  readonly operation: PrivilegedScopeOperationClassification;
   /**
    * Read-only proof boundary that `requestedTenantId` is an actual internal
    * `tenants.id` row. UUID syntax alone is never sufficient.
@@ -184,10 +196,10 @@ export interface DerivePlatformGlobalScopeInput {
   readonly accessContext: AccessContext;
   /**
    * Explicit operation classification. Platform-admin capability alone does
-   * NOT make a call unbounded — the operation must be one explicitly
-   * classified as platform-global (e.g. the waitlist).
+   * NOT make a call unbounded — this must be `platform-global`; any other
+   * member of the closed union (e.g. `tenant-administration`) fails closed.
    */
-  readonly operation: { readonly kind: 'platform-global' };
+  readonly operation: PrivilegedScopeOperationClassification;
 }
 
 /**

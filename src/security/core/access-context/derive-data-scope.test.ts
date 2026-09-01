@@ -53,30 +53,32 @@ function platformAdmin(): AccessContext {
 function fakeOrgAuthority(data: {
   parentTenantByOrg: Record<string, string>;
   membersByOrg: Record<string, string[]>;
-}): OrganizationScopeAuthority & {
-  readParentTenantId: ReturnType<typeof vi.fn>;
-  isMember: ReturnType<typeof vi.fn>;
-} {
+}) {
   const parents = new Map(Object.entries(data.parentTenantByOrg));
   const members = new Map(Object.entries(data.membersByOrg));
-  return {
+
+  const authority = {
     readParentTenantId: vi.fn((organizationId: string) =>
       Promise.resolve(parents.get(organizationId) ?? null),
     ),
     isMember: vi.fn((userId: string, organizationId: string) =>
       Promise.resolve((members.get(organizationId) ?? []).includes(userId)),
     ),
-  };
+  } satisfies OrganizationScopeAuthority;
+
+  return authority;
 }
 
-function fakeTenantExistence(
-  existingTenantIds: string[],
-): TenantExistenceReader & { exists: ReturnType<typeof vi.fn> } {
-  return {
+function fakeTenantExistence(existingTenantIds: string[]) {
+  const existing = new Set(existingTenantIds);
+
+  const tenants = {
     exists: vi.fn((tenantId: string) =>
-      Promise.resolve(existingTenantIds.includes(tenantId)),
+      Promise.resolve(existing.has(tenantId)),
     ),
-  };
+  } satisfies TenantExistenceReader;
+
+  return tenants;
 }
 
 describe('deriveOrganizationScope', () => {
@@ -261,14 +263,13 @@ describe('tenant scope is unreachable for ordinary organization membership', () 
     });
   });
 
-  it('a platform admin still needs the explicit tenant-administration classification', async () => {
+  it('a platform admin with the other valid classification (platform-global) is denied tenant scope', async () => {
     const tenants = fakeTenantExistence([TENANT_A]);
 
     const result = await deriveTenantScopeAsPlatformAdmin({
       accessContext: platformAdmin(),
       requestedTenantId: TENANT_A,
-      // @ts-expect-error - only 'tenant-administration' is accepted
-      operation: { kind: 'read-something-else' },
+      operation: { kind: 'platform-global' },
       tenants,
     });
 
@@ -327,11 +328,11 @@ describe('derivePlatformGlobalScope', () => {
     });
   });
 
-  it('(6) platform-admin capability alone does not produce platform-global scope without an explicit classification', () => {
+  it('(6) platform admin with the other valid classification is denied platform-global scope', () => {
     const result = derivePlatformGlobalScope({
       accessContext: platformAdmin(),
-      // @ts-expect-error - only 'platform-global' is accepted
-      operation: { kind: 'organization-read' },
+      // The other valid member of the closed classification union.
+      operation: { kind: 'tenant-administration' },
     });
 
     expect(result).toEqual({

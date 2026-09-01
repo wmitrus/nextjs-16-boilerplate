@@ -125,7 +125,7 @@ async function assertCanonicalMatchesLegacy(params: {
     internalUserId: legacy.userId,
     activeOrganization: {
       internalOrganizationId: legacy.organizationId,
-      parentTenantId: parentTenantId as string,
+      parentTenantId: parentTenantId!,
     },
     isPlatformAdmin: false,
   });
@@ -248,7 +248,7 @@ describe('OZI-71 Slice 2 — canonical AccessContext differential vs legacy reso
       internalUserId: legacy.userId,
       activeOrganization: {
         internalOrganizationId: legacy.organizationId,
-        parentTenantId: parentTenantId as string,
+        parentTenantId: parentTenantId!,
       },
       isPlatformAdmin: false,
     });
@@ -425,12 +425,11 @@ describe('OZI-71 Slice 2 — tenant-scope derivation proves tenant EXISTENCE (re
     });
   });
 
-  it('(D) a platform admin without the explicit tenant-administration classification is denied', async () => {
+  it('(D) a platform admin with the other valid classification (platform-global) is denied tenant scope', async () => {
     const result = await deriveTenantScopeAsPlatformAdmin({
       accessContext: platformAdminCtx(),
       requestedTenantId: acmeTenantId,
-      // @ts-expect-error - only 'tenant-administration' is accepted
-      operation: { kind: 'read-something-else' },
+      operation: { kind: 'platform-global' },
       tenants: tenants(),
     });
 

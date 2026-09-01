@@ -25,7 +25,11 @@ const UUID_GENERIC_REGEX =
  * NOT wired into any runtime path in this slice.
  */
 export class DrizzleTenantExistenceReader implements TenantExistenceReader {
-  constructor(private readonly db: DrizzleDb) {}
+  private readonly db: DrizzleDb;
+
+  constructor(db: DrizzleDb) {
+    this.db = db;
+  }
 
   async exists(tenantId: string): Promise<boolean> {
     if (!UUID_GENERIC_REGEX.test(tenantId)) {

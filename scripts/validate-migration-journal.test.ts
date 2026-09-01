@@ -46,10 +46,72 @@ describe('summarizeMigrationJournal', () => {
 });
 
 describe('assertMigrationJournalComplete', () => {
+  // A. Exact journal -> no throw.
+  it('does not throw for an exact expected journal', () => {
+    const summary = summarizeMigrationJournal(EXPECTED, [
+      'hash-0000',
+      'hash-0001',
+    ]);
+
+    expect(() => assertMigrationJournalComplete(summary)).not.toThrow();
+  });
+
+  // B. Missing only -> throw (identifies the "missing" category and tag).
   it('throws when expected migrations are missing', () => {
     const summary = summarizeMigrationJournal(EXPECTED, ['hash-0000']);
 
     expect(() => assertMigrationJournalComplete(summary)).toThrow('0001_next');
+    expect(() => assertMigrationJournalComplete(summary)).toThrow('missing:');
+  });
+
+  // C. Duplicate only, every expected migration otherwise present -> throw.
+  // Regression for the exact OZI-78 Production gap: a full-but-duplicated
+  // journal previously passed.
+  it('throws on duplicate journal rows even when every expected migration is present', () => {
+    const summary = summarizeMigrationJournal(EXPECTED, [
+      'hash-0000',
+      'hash-0001',
+      'hash-0000',
+    ]);
+
+    expect(summary.missing).toEqual([]);
+    expect(summary.duplicateHashes).toEqual(['hash-0000']);
+    expect(() => assertMigrationJournalComplete(summary)).toThrow('duplicate:');
+  });
+
+  // D. Unknown only, every expected migration otherwise present -> throw.
+  // Regression for retired/historical hashes left in the journal.
+  it('throws on unknown/historical journal hashes even when every expected migration is present', () => {
+    const summary = summarizeMigrationJournal(EXPECTED, [
+      'hash-0000',
+      'hash-0001',
+      'hash-retired',
+    ]);
+
+    expect(summary.missing).toEqual([]);
+    expect(summary.unknownHashes).toEqual(['hash-retired']);
+    expect(() => assertMigrationJournalComplete(summary)).toThrow('unknown:');
+  });
+
+  // E. Duplicate + unknown together -> throw, naming both categories.
+  it('throws and names every violated category when duplicate and unknown drift coexist', () => {
+    const summary = summarizeMigrationJournal(EXPECTED, [
+      'hash-0000',
+      'hash-0000',
+      'hash-0001',
+      'hash-retired',
+    ]);
+
+    expect(summary.missing).toEqual([]);
+    let message = '';
+    try {
+      assertMigrationJournalComplete(summary);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('duplicate:');
+    expect(message).toContain('unknown:');
+    expect(message).not.toMatch(/postgres:|DATABASE_URL|password/i);
   });
 });
 

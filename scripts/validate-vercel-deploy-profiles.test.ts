@@ -11,6 +11,7 @@ import {
   assertNextRuntimeTraceGuardValid,
   assertVercelRuntimeSmokeConfigValid,
   assertVercelPreviewSourceUploadValid,
+  assertVercelProductionConcurrencyContractValid,
   assertVercelProductionMigrationOwnershipValid,
   assertVercelProductionReadinessVerificationValid,
   assertVercelToolingAndProvenanceValid,
@@ -129,6 +130,164 @@ describe('assertVercelProductionMigrationOwnershipValid', () => {
         'pnpm db:migrate:prod\npnpm exec vercel build --prod',
       ),
     ).toThrow('must not run pnpm db:migrate:prod separately');
+  });
+});
+
+describe('assertVercelProductionConcurrencyContractValid', () => {
+  const validBlock = [
+    'concurrency:',
+    '  group: production-deployment',
+    '  cancel-in-progress: false',
+  ].join('\n');
+
+  it('accepts the real prod-deploy.yml', () => {
+    const workflowContent = readFileSync(
+      path.resolve(process.cwd(), '.github/workflows/prod-deploy.yml'),
+      'utf8',
+    );
+
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(workflowContent),
+    ).not.toThrow();
+  });
+
+  it('accepts a minimal top-level concurrency block (order and comments tolerated)', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        [
+          'name: Production Deployment',
+          'concurrency:',
+          '  cancel-in-progress: false # never cancel an in-flight deploy',
+          "  group: 'production-deployment'",
+          'jobs:',
+          '  deploy:',
+          '    runs-on: ubuntu-latest',
+        ].join('\n'),
+      ),
+    ).not.toThrow();
+  });
+
+  it('accepts an unrelated direct sibling key that does not affect the contract', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        [
+          'concurrency:',
+          '  group: production-deployment',
+          '  cancel-in-progress: false',
+          '  future-note: ignored',
+          'jobs: {}',
+        ].join('\n'),
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a workflow with no concurrency block', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        'name: Production Deployment\njobs:\n  deploy:\n    runs-on: ubuntu-latest',
+      ),
+    ).toThrow('top-level concurrency block');
+  });
+
+  it('rejects a wrong concurrency group', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        'concurrency:\n  group: prod\n  cancel-in-progress: false',
+      ),
+    ).toThrow('group must be exactly');
+  });
+
+  it('rejects cancel-in-progress: true', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        'concurrency:\n  group: production-deployment\n  cancel-in-progress: true',
+      ),
+    ).toThrow('must be exactly false');
+  });
+
+  it('rejects a missing cancel-in-progress key', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        'concurrency:\n  group: production-deployment',
+      ),
+    ).toThrow('exactly one direct "cancel-in-progress"');
+  });
+
+  it('rejects an only job-level / indented concurrency block', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        [
+          'jobs:',
+          '  deploy-production:',
+          '    concurrency:',
+          '      group: production-deployment',
+          '      cancel-in-progress: false',
+          '    runs-on: ubuntu-latest',
+        ].join('\n'),
+      ),
+    ).toThrow('must be a TOP-LEVEL block');
+  });
+
+  // Corrective pass: the required keys must be DIRECT children of the
+  // top-level concurrency block, not nested descendants.
+  it('rejects group/cancel-in-progress nested under an intervening child key', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        [
+          'concurrency:',
+          '  bogus:',
+          '    group: production-deployment',
+          '    cancel-in-progress: false',
+        ].join('\n'),
+      ),
+    ).toThrow('exactly one direct "group"');
+  });
+
+  it('rejects a duplicate direct group key', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        [
+          'concurrency:',
+          '  group: production-deployment',
+          '  group: production-deployment',
+          '  cancel-in-progress: false',
+        ].join('\n'),
+      ),
+    ).toThrow('exactly one direct "group"');
+  });
+
+  it('rejects a duplicate direct cancel-in-progress key', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        [
+          'concurrency:',
+          '  group: production-deployment',
+          '  cancel-in-progress: false',
+          '  cancel-in-progress: false',
+        ].join('\n'),
+      ),
+    ).toThrow('exactly one direct "cancel-in-progress"');
+  });
+
+  it('rejects multiple top-level concurrency blocks', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(
+        [
+          'concurrency:',
+          '  group: production-deployment',
+          '  cancel-in-progress: false',
+          'concurrency:',
+          '  group: production-deployment',
+          '  cancel-in-progress: false',
+        ].join('\n'),
+      ),
+    ).toThrow('exactly one top-level concurrency block');
+  });
+
+  it('validBlock fixture is itself accepted', () => {
+    expect(() =>
+      assertVercelProductionConcurrencyContractValid(validBlock),
+    ).not.toThrow();
   });
 });
 

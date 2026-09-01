@@ -384,6 +384,37 @@ remains `BLOCKED`; `rollbackAction`/`rollbackExecutable` remain
 A4.2c remote or Production read was performed during this implementation
 pass; full A4 is not complete.
 
+**Status: Production migration & deployment hardening
+(`fix/ozi-78-production-migration-deploy-hardening`) — preventive follow-up,
+implemented locally.** The OZI-78 live Production validation exposed
+duplicate + retired/unknown migration-journal state; that drift's controlled
+repair was already completed separately (see the A4.2b live-execution note
+above). This follow-up prevents it from passing future Production
+validation:
+
+1. `assertMigrationJournalComplete()` in
+   `scripts/validate-migration-journal.ts` now fails closed when *any* of
+   `missing` / `duplicateHashes` / `unknownHashes` is non-empty (previously
+   only `missing`), naming each violated category; it repairs nothing and
+   adds no Production mutation, and never emits a connection string,
+   credential, or environment value.
+2. `.github/workflows/prod-deploy.yml` gains a top-level
+   `concurrency: { group: production-deployment, cancel-in-progress: false }`
+   so overlapping Production deployment pipelines serialize (a later
+   deployment waits; it never cancels the active one). **Preventive
+   hardening, NOT a proven root cause** of the historical duplicate
+   `0009_authjs_credentials` row — that root cause remains unproven.
+3. `scripts/validate-vercel-deploy-profiles.ts` gains
+   `assertVercelProductionConcurrencyContractValid()` (deterministic
+   line/block parser, no YAML dependency), invoked from
+   `pnpm vercel:deploy:validate`, enforcing that top-level contract against
+   the real `prod-deploy.yml`.
+
+DB-level advisory locking / migration serialization remains a separate
+future defense-in-depth item and was not implemented. No Production
+operation, migration run, remote command, commit, or push occurred in this
+hardening pass.
+
 ## Candidate File Set — To Confirm Before Implementation
 
 | Path | Change | Necessity after correction | Validation remote-write risk |

@@ -151,19 +151,57 @@ export function summarizeMigrationJournal(
   };
 }
 
+/**
+ * A valid Production migration journal must be *exact*: every expected
+ * migration recorded, and nothing else. Fails closed on any of the three
+ * drift categories `summarizeMigrationJournal` detects -- not just `missing`.
+ *
+ * `duplicateHashes` (a migration recorded more than once) and `unknownHashes`
+ * (a recorded hash with no local journal entry, e.g. a retired/historical
+ * migration) are exactly the drift discovered during the OZI-78 live
+ * Production validation. A database that contains every expected migration
+ * PLUS extra rows previously passed this assertion; it no longer does.
+ *
+ * This never repairs anything -- it only reports which invariant category
+ * failed (missing / duplicate / unknown) and by how much. No connection
+ * string, credential, or other environment value is included.
+ */
 export function assertMigrationJournalComplete(
   summary: MigrationJournalSummary,
 ): void {
-  if (summary.missing.length === 0) {
+  const violations: string[] = [];
+
+  if (summary.missing.length > 0) {
+    const missingTags = summary.missing
+      .map((migration) => migration.tag)
+      .join(', ');
+    violations.push(
+      `missing: database is missing local migration(s): ${missingTags} ` +
+        '(the schema may be behind even if drizzle-kit reported success)',
+    );
+  }
+
+  if (summary.duplicateHashes.length > 0) {
+    violations.push(
+      `duplicate: ${summary.duplicateHashes.length} recorded migration hash(es) ` +
+        'appear more than once in drizzle.__drizzle_migrations',
+    );
+  }
+
+  if (summary.unknownHashes.length > 0) {
+    violations.push(
+      `unknown: ${summary.unknownHashes.length} recorded migration hash(es) ` +
+        'are not present in the local journal (retired/historical drift)',
+    );
+  }
+
+  if (violations.length === 0) {
     return;
   }
 
-  const missingTags = summary.missing
-    .map((migration) => migration.tag)
-    .join(', ');
   throw new Error(
-    `[migration-journal] Database migration journal is missing local migration(s): ${missingTags}. ` +
-      'The database schema may be behind even if drizzle-kit reported success.',
+    '[migration-journal] Database migration journal is not exact:\n' +
+      violations.map((violation) => `  - ${violation}`).join('\n'),
   );
 }
 

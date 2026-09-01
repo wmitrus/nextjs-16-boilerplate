@@ -50,6 +50,7 @@ describe('rollback assessment candidate parsing', () => {
 
   const localOnlyResult = {
     deploymentId,
+    executeAuthjsSmokeRead: false,
     executeProductionEnvironmentRead: false,
     executeProductionSchemaRead: false,
     executeRemoteCandidateRead: false,
@@ -108,6 +109,7 @@ describe('rollback assessment candidate parsing', () => {
   it.each([
     '--execute-production-environment-read',
     '--execute-production-schema-read',
+    '--execute-authjs-smoke-read',
   ])('rejects a duplicate %s acknowledgement', (flag) => {
     expect(() =>
       parseRollbackAssessmentArgs([
@@ -118,8 +120,32 @@ describe('rollback assessment candidate parsing', () => {
     ).toThrow('may appear only once');
   });
 
-  it.each(['--remote', '--execute', '--production'])(
-    'rejects the generic flag %s',
+  it('accepts the A4.2c AuthJS smoke acknowledgement independently of the three reads', () => {
+    expect(
+      parseRollbackAssessmentArgs([
+        `--deployment-id=${deploymentId}`,
+        '--execute-authjs-smoke-read',
+      ]),
+    ).toEqual({ ...localOnlyResult, executeAuthjsSmokeRead: true });
+    expect(
+      parseRollbackAssessmentArgs([
+        `--deployment-id=${deploymentId}`,
+        '--execute-remote-candidate-read',
+        '--execute-production-environment-read',
+        '--execute-production-schema-read',
+        '--execute-authjs-smoke-read',
+      ]),
+    ).toEqual({
+      deploymentId,
+      executeAuthjsSmokeRead: true,
+      executeProductionEnvironmentRead: true,
+      executeProductionSchemaRead: true,
+      executeRemoteCandidateRead: true,
+    });
+  });
+
+  it.each(['--remote', '--execute', '--production', '--execute-smoke'])(
+    'rejects the generic flag %s and never treats it as the AuthJS smoke acknowledgement',
     (flag) => {
       expect(() =>
         parseRollbackAssessmentArgs([`--deployment-id=${deploymentId}`, flag]),

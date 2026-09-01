@@ -24,6 +24,16 @@ export interface LocalRollbackAssessment {
   rollbackExecutable: false;
   schemaCompatibility: AssessmentGate;
   smoke: AssessmentGate;
+  smokeEvidence:
+    | { status: 'NOT_REQUESTED' }
+    | {
+        provider: 'authjs';
+        session: 'PASS';
+        signIn: 'PASS';
+        status: 'READ_AND_VALIDATED';
+      }
+    | { status: 'BLOCKED' }
+    | { status: 'ERROR' };
 }
 
 export function gate(status: AssessmentStatus, reason: string): AssessmentGate {

@@ -1,5 +1,9 @@
 import type { execFileSync } from 'node:child_process';
 
+import {
+  runAuthjsReadOnlySmoke,
+  type AuthjsSmokeEvidence,
+} from './authjs-smoke';
 import { gate, type LocalRollbackAssessment } from './evidence';
 import { assessContainmentFloorAncestry } from './git-ancestry';
 import {
@@ -39,12 +43,14 @@ interface RemoteProvenance {
   candidate: EvidenceSource;
   environment: EvidenceSource;
   schema: EvidenceSource;
+  smoke: EvidenceSource;
 }
 
 const LOCAL_PROVENANCE: RemoteProvenance = {
   candidate: 'LOCAL_SUPPLIED',
   environment: 'LOCAL_SUPPLIED',
   schema: 'LOCAL_SUPPLIED',
+  smoke: 'LOCAL_SUPPLIED',
 };
 
 /**
@@ -165,31 +171,126 @@ function assessSchemaCompatibility(
   return result;
 }
 
-function assessSmoke(evidence: unknown): ReturnType<typeof gate> {
+const AUTHJS_SMOKE_EVIDENCE_KEY_SIGNATURE = ['provider', 'session', 'signIn']
+  .sort()
+  .join(',');
+
+/**
+ * Exactly `{provider:'authjs', session:'PASS', signIn:'PASS'}` and nothing
+ * else: the own enumerable key set must equal `provider`/`session`/`signIn`
+ * with no missing, extra, substituted, or inherited-only property. Anything
+ * else is malformed smoke evidence, never PASS.
+ */
+function isValidAuthjsSmokeEvidence(
+  evidence: unknown,
+): evidence is AuthjsSmokeEvidence {
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
+    return false;
+  }
+  const ownKeys = Object.keys(evidence);
+  if (
+    ownKeys.length !== 3 ||
+    ownKeys.slice().sort().join(',') !== AUTHJS_SMOKE_EVIDENCE_KEY_SIGNATURE
+  ) {
+    return false;
+  }
+  const typed = evidence as Record<string, unknown>;
+  return (
+    typed.provider === 'authjs' &&
+    typed.signIn === 'PASS' &&
+    typed.session === 'PASS'
+  );
+}
+
+/**
+ * A PASS smoke result is only reachable when `run()` has actually executed
+ * the real `runAuthjsReadOnlySmoke()` against the trusted candidate in this
+ * same invocation: that is the sole caller that may pass
+ * `provenance === 'REMOTE_READ'` for smoke. `buildLocalRollbackAssessment()`
+ * always uses `LOCAL_PROVENANCE` (smoke `LOCAL_SUPPLIED`), so a caller
+ * handing a well-formed `{provider,signIn,session}` object straight to the
+ * exported builder is told BLOCKED, never PASS. Clerk stays BLOCKED; any
+ * acquisition/upstream failure (`acquisitionFailure`) is surfaced verbatim
+ * as the generic BLOCKED/ERROR `run()` decided.
+ */
+function assessSmoke(
+  environmentContract: unknown,
+  smokeEvidence: unknown,
+  provenance: EvidenceSource,
+  acquisitionFailure?: AcquisitionFailure,
+): ReturnType<typeof gate> {
+  if (acquisitionFailure) {
+    return gate(acquisitionFailure.status, acquisitionFailure.reason);
+  }
+  if (smokeEvidence === undefined) {
+    if (
+      !environmentContract ||
+      typeof environmentContract !== 'object' ||
+      Array.isArray(environmentContract)
+    ) {
+      return gate(
+        'BLOCKED',
+        'Smoke requires deployment-bound environment evidence.',
+      );
+    }
+    const provider = (
+      environmentContract as Partial<EnvironmentContractEvidence>
+    ).authProvider;
+    if (provider === 'authjs') {
+      return gate(
+        'BLOCKED',
+        'AuthJS read-only smoke was not requested (--execute-authjs-smoke-read).',
+      );
+    }
+    if (provider === 'clerk') {
+      return gate(
+        'BLOCKED',
+        'Clerk smoke is blocked pending separately approved provider-specific coverage.',
+      );
+    }
     return gate(
       'BLOCKED',
-      'Smoke requires deployment-bound environment evidence.',
+      'Smoke is blocked for an unsupported or unknown provider.',
     );
   }
-  const provider = (evidence as Partial<EnvironmentContractEvidence>)
-    .authProvider;
-  if (provider === 'authjs') {
+  if (provenance !== 'REMOTE_READ') {
     return gate(
       'BLOCKED',
-      'AuthJS read-only smoke is future-supported but not executed in A4.2b.',
+      'AuthJS read-only smoke evidence is not remotely verified.',
     );
   }
-  if (provider === 'clerk') {
-    return gate(
-      'BLOCKED',
-      'Clerk smoke is blocked pending separately approved provider-specific coverage.',
-    );
+  if (!isValidAuthjsSmokeEvidence(smokeEvidence)) {
+    return gate('ERROR', 'AuthJS read-only smoke evidence is malformed.');
   }
   return gate(
-    'BLOCKED',
-    'Smoke is blocked for an unsupported or unknown provider.',
+    'PASS',
+    'AuthJS read-only smoke passed against the trusted candidate.',
   );
+}
+
+function smokeEvidenceField(
+  smokeEvidence: unknown,
+  provenance: EvidenceSource,
+  acquisitionFailure?: AcquisitionFailure,
+): LocalRollbackAssessment['smokeEvidence'] {
+  if (acquisitionFailure) {
+    return { status: acquisitionFailure.status };
+  }
+  if (
+    provenance === 'REMOTE_READ' &&
+    isValidAuthjsSmokeEvidence(smokeEvidence)
+  ) {
+    return {
+      provider: 'authjs',
+      session: 'PASS',
+      signIn: 'PASS',
+      status: 'READ_AND_VALIDATED',
+    };
+  }
+  if (provenance === 'REMOTE_READ' && smokeEvidence !== undefined) {
+    return { status: 'ERROR' };
+  }
+  return { status: 'NOT_REQUESTED' };
 }
 
 interface RollbackAssessmentInput {
@@ -205,11 +306,13 @@ interface RollbackAssessmentInput {
   };
   gitExecutor?: typeof execFileSync;
   productionAppliedMigrationHashes?: unknown;
+  smokeEvidence?: unknown;
 }
 
 interface AcquisitionFailures {
   environment?: AcquisitionFailure;
   schema?: AcquisitionFailure;
+  smoke?: AcquisitionFailure;
 }
 
 /**
@@ -300,7 +403,17 @@ function buildAssessment(
           acquisitionFailures.schema.reason,
         )
       : assessSchemaCompatibility(input, provenance.schema),
-    smoke: assessSmoke(input.environmentContract),
+    smoke: assessSmoke(
+      input.environmentContract,
+      input.smokeEvidence,
+      provenance.smoke,
+      acquisitionFailures?.smoke,
+    ),
+    smokeEvidence: smokeEvidenceField(
+      input.smokeEvidence,
+      provenance.smoke,
+      acquisitionFailures?.smoke,
+    ),
   };
 }
 
@@ -361,6 +474,20 @@ function buildRemoteVerifiedRollbackAssessment(
  * route -- a candidate built before this instrumentation existed can never
  * serve it, and that must fail closed to BLOCKED, not a 404 read as ERROR.
  * This check only runs after the ancestry gate above has already passed.
+ *
+ * A4.2c adds `--execute-authjs-smoke-read`, a fourth independent
+ * acknowledgement. It authorizes only the bounded read-only AuthJS smoke
+ * (GET /auth/signin, GET /api/auth/session) against the trusted candidate's
+ * own immutable URL -- never a candidate/environment/schema read, a
+ * rollback, a promote, or any mutation, and never satisfied by a generic
+ * --remote/--execute/--production flag. The smoke network request is made
+ * only when, in THIS same `run()`, candidate identity, containment-floor
+ * ancestry, the remotely read deployment-bound environment contract, and the
+ * remotely read schema compatibility have all been acquired and assessed
+ * PASS, and the environment evidence names `authjs`. Any earlier miss (or a
+ * `clerk`/unknown provider) yields smoke BLOCKED with no smoke request;
+ * `rollbackAction`/`rollbackExecutable` remain NOT_AUTHORIZED/false even when
+ * all four evidence categories PASS.
  */
 export async function run(argv = process.argv): Promise<void> {
   const flags = parseRollbackAssessmentArgs(argv.slice(2));
@@ -369,7 +496,8 @@ export async function run(argv = process.argv): Promise<void> {
   if (
     !flags.executeRemoteCandidateRead &&
     !flags.executeProductionEnvironmentRead &&
-    !flags.executeProductionSchemaRead
+    !flags.executeProductionSchemaRead &&
+    !flags.executeAuthjsSmokeRead
   ) {
     console.log(
       JSON.stringify(buildLocalRollbackAssessment({ deploymentId }), null, 2),
@@ -499,16 +627,121 @@ export async function run(argv = process.argv): Promise<void> {
     }
   }
 
+  const environmentProvenance: EvidenceSource =
+    flags.executeProductionEnvironmentRead && trustedCandidate
+      ? 'REMOTE_READ'
+      : 'LOCAL_SUPPLIED';
+  const schemaProvenance: EvidenceSource =
+    flags.executeProductionSchemaRead && trustedCandidate
+      ? 'REMOTE_READ'
+      : 'LOCAL_SUPPLIED';
+
+  // A4.2c smoke acquisition. Fail-closed ordering, all within THIS run():
+  //   candidate DETAIL identity PASS
+  //     -> containment-floor ancestry PASS
+  //     -> deployment-bound environment contract PASS (remotely read)
+  //     -> schema compatibility PASS (remotely read)
+  //     -> provider is authjs
+  //     -> only then, one bounded read-only network smoke.
+  // The environment/schema PASS checks reuse the exact assessment functions
+  // `buildAssessment()` will independently recompute for the displayed
+  // gates, so the smoke can never run against evidence that would not itself
+  // display as PASS. Any earlier miss yields smoke BLOCKED (or ERROR for an
+  // ancestry ERROR) and makes no smoke network request.
+  const environmentGateForSmoke = environmentAcquisitionFailure
+    ? undefined
+    : assessEnvironmentContract(
+        environmentContractEvidence,
+        environmentProvenance,
+      );
+  const schemaGateForSmoke = schemaAcquisitionFailure
+    ? undefined
+    : assessSchemaCompatibility(
+        { candidateMigrationHashes, productionAppliedMigrationHashes },
+        schemaProvenance,
+      );
+
+  let smokeEvidence: AuthjsSmokeEvidence | undefined;
+  let smokeAcquisitionFailure: AcquisitionFailure | undefined;
+
+  if (flags.executeAuthjsSmokeRead) {
+    const blocked = (reason: string): AcquisitionFailure => ({
+      reason,
+      status: 'BLOCKED',
+    });
+    if (!trustedCandidate) {
+      smokeAcquisitionFailure = blocked(
+        'AuthJS read-only smoke requires a validated rollback candidate.',
+      );
+    } else if (trustedCandidateAncestry?.status !== 'PASS') {
+      smokeAcquisitionFailure = {
+        reason:
+          'AuthJS read-only smoke requires containment-floor ancestry to pass.',
+        status:
+          trustedCandidateAncestry?.status === 'ERROR' ? 'ERROR' : 'BLOCKED',
+      };
+    } else if (!flags.executeProductionEnvironmentRead) {
+      smokeAcquisitionFailure = blocked(
+        'AuthJS read-only smoke requires --execute-production-environment-read.',
+      );
+    } else if (environmentGateForSmoke?.status !== 'PASS') {
+      smokeAcquisitionFailure = blocked(
+        'AuthJS read-only smoke requires a passing deployment-bound environment contract.',
+      );
+    } else if (!flags.executeProductionSchemaRead) {
+      smokeAcquisitionFailure = blocked(
+        'AuthJS read-only smoke requires --execute-production-schema-read.',
+      );
+    } else if (schemaGateForSmoke?.status !== 'PASS') {
+      smokeAcquisitionFailure = blocked(
+        'AuthJS read-only smoke requires passing schema compatibility.',
+      );
+    } else {
+      const provider = (
+        environmentContractEvidence as Partial<EnvironmentContractEvidence>
+      ).authProvider;
+      if (provider === 'clerk') {
+        smokeAcquisitionFailure = blocked(
+          'Clerk smoke is blocked pending separately approved provider-specific coverage.',
+        );
+      } else if (provider !== 'authjs') {
+        smokeAcquisitionFailure = blocked(
+          'AuthJS read-only smoke is blocked for an unsupported or unknown provider.',
+        );
+      } else {
+        try {
+          const smokeResult = await runAuthjsReadOnlySmoke(
+            trustedCandidate.immutableUrl,
+          );
+          if (smokeResult.status === 'OK') {
+            smokeEvidence = smokeResult.evidence;
+          } else {
+            smokeAcquisitionFailure = {
+              reason: smokeResult.reason,
+              status: smokeResult.status,
+            };
+          }
+        } catch {
+          // The real smoke never throws (it is fully wrapped), but a
+          // defensive boundary here guarantees a raw error/stack can never
+          // escape to the CLI's top-level printer.
+          smokeAcquisitionFailure = {
+            reason: 'AuthJS read-only smoke could not be acquired.',
+            status: 'ERROR',
+          };
+        }
+      }
+    }
+  }
+
   const provenance: RemoteProvenance = {
     candidate: flags.executeRemoteCandidateRead
       ? 'REMOTE_READ'
       : 'LOCAL_SUPPLIED',
-    environment:
-      flags.executeProductionEnvironmentRead && trustedCandidate
-        ? 'REMOTE_READ'
-        : 'LOCAL_SUPPLIED',
-    schema:
-      flags.executeProductionSchemaRead && trustedCandidate
+    environment: environmentProvenance,
+    schema: schemaProvenance,
+    smoke:
+      flags.executeAuthjsSmokeRead && smokeEvidence !== undefined
         ? 'REMOTE_READ'
         : 'LOCAL_SUPPLIED',
   };
@@ -523,11 +756,13 @@ export async function run(argv = process.argv): Promise<void> {
           environmentContract: environmentContractEvidence,
           expectedIdentity,
           productionAppliedMigrationHashes,
+          smokeEvidence,
         },
         provenance,
         {
           environment: environmentAcquisitionFailure,
           schema: schemaAcquisitionFailure,
+          smoke: smokeAcquisitionFailure,
         },
       ),
       null,

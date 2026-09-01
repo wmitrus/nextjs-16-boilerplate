@@ -25,6 +25,9 @@ const productionSchemaMocks = vi.hoisted(() => ({
 const gitAncestryMocks = vi.hoisted(() => ({
   assessContainmentFloorAncestry: vi.fn(),
 }));
+const authjsSmokeMocks = vi.hoisted(() => ({
+  runAuthjsReadOnlySmoke: vi.fn(),
+}));
 
 // Module-boundary mocks: run() is structurally bound to the real remote/
 // local-Git modules with no caller-controlled dependency bag, so CLI-level
@@ -42,6 +45,7 @@ const gitAncestryMocks = vi.hoisted(() => ({
 vi.mock('./remote-candidate', () => remoteCandidateMocks);
 vi.mock('./remote-environment', () => remoteEnvironmentMocks);
 vi.mock('./git-ancestry', () => gitAncestryMocks);
+vi.mock('./authjs-smoke', () => authjsSmokeMocks);
 vi.mock('./production-schema', async () => {
   const actual = await vi.importActual<typeof ProductionSchemaModule>(
     './production-schema',
@@ -139,6 +143,11 @@ beforeEach(() => {
   gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
     reason: 'Candidate commit descends from the containment floor.',
     status: 'PASS',
+  });
+  authjsSmokeMocks.runAuthjsReadOnlySmoke.mockReset();
+  authjsSmokeMocks.runAuthjsReadOnlySmoke.mockResolvedValue({
+    evidence: { provider: 'authjs', session: 'PASS', signIn: 'PASS' },
+    status: 'OK',
   });
 });
 
@@ -1417,19 +1426,386 @@ describe('A4.2b global gates', () => {
   });
 
   it.each([
-    ['authjs', 'AuthJS read-only smoke is future-supported'],
+    ['authjs', 'AuthJS read-only smoke was not requested'],
     ['clerk', 'Clerk smoke is blocked'],
     ['unknown', 'unsupported or unknown provider'],
-  ])('keeps %s smoke non-executing', (authProvider, reason) => {
-    const assessment = buildLocalRollbackAssessment({
-      deploymentId,
-      environmentContract: {
-        authProvider,
-        contractVersion: 'v1',
-        fingerprint: 'a'.repeat(64),
+  ])(
+    'keeps %s smoke non-executing without the A4.2c flag',
+    (authProvider, reason) => {
+      const assessment = buildLocalRollbackAssessment({
+        deploymentId,
+        environmentContract: {
+          authProvider,
+          contractVersion: 'v1',
+          fingerprint: 'a'.repeat(64),
+        },
+      });
+      expect(assessment.smoke).toMatchObject({ status: 'BLOCKED' });
+      expect(assessment.smoke.reason).toContain(reason);
+    },
+  );
+});
+
+describe('A4.2c AuthJS read-only rollback smoke trust ordering', () => {
+  const ALL_FLAGS = [
+    '--execute-remote-candidate-read',
+    '--execute-production-environment-read',
+    '--execute-production-schema-read',
+    '--execute-authjs-smoke-read',
+  ];
+
+  function stubUpstreamPass(): void {
+    stubHappyCandidatePath();
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
+      matchingEnvironmentEvidence,
+    );
+    productionSchemaMocks.readCandidateMigrationJournal.mockReturnValue({
+      journal: candidateJournal,
+      status: 'OK',
+    });
+    productionSchemaMocks.readProductionAppliedMigrationHashes.mockResolvedValue(
+      { hashes: candidateJournal.map((entry) => entry.hash), status: 'OK' },
+    );
+  }
+
+  async function runFlags(flags: string[]): Promise<Record<string, unknown>> {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      await run([
+        'node',
+        'cli.ts',
+        `--deployment-id=${deploymentId}`,
+        ...flags,
+      ]);
+      return JSON.parse(log.mock.calls[0]?.[0] as string) as Record<
+        string,
+        unknown
+      >;
+    } finally {
+      log.mockRestore();
+    }
+  }
+
+  it('smoke flag alone performs no candidate/environment/schema/smoke remote read', async () => {
+    const output = await runFlags(['--execute-authjs-smoke-read']);
+    expect(
+      remoteCandidateMocks.readRemoteCandidateDetail,
+    ).not.toHaveBeenCalled();
+    expect(
+      remoteEnvironmentMocks.readCandidateEnvironmentContract,
+    ).not.toHaveBeenCalled();
+    expect(
+      productionSchemaMocks.readCandidateMigrationJournal,
+    ).not.toHaveBeenCalled();
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      smoke: { status: 'BLOCKED' },
+      smokeEvidence: { status: 'BLOCKED' },
+      rollbackAction: 'NOT_AUTHORIZED',
+      rollbackExecutable: false,
+    });
+  });
+
+  it('candidate identity failure blocks the smoke, with no smoke request', async () => {
+    remoteCandidateMocks.readExpectedProductionIdentity.mockReturnValue(
+      expectedIdentity,
+    );
+    remoteCandidateMocks.readRemoteCandidateDetail.mockReturnValue(
+      authoritativeDetail({ ownerId: 'team_other' }),
+    );
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      candidateIdentity: { status: 'INVALID' },
+      smoke: { status: 'BLOCKED' },
+    });
+  });
+
+  it('containment-floor ancestry failure blocks the environment, schema, and smoke reads', async () => {
+    stubUpstreamPass();
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Candidate commit does not descend from the containment floor.',
+      status: 'BLOCKED',
+    });
+    const output = await runFlags(ALL_FLAGS);
+    expect(
+      remoteEnvironmentMocks.readCandidateEnvironmentContract,
+    ).not.toHaveBeenCalled();
+    expect(
+      productionSchemaMocks.readCandidateMigrationJournal,
+    ).not.toHaveBeenCalled();
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      environmentContract: { status: 'BLOCKED' },
+      schemaCompatibility: { status: 'BLOCKED' },
+      smoke: { status: 'BLOCKED' },
+    });
+  });
+
+  it('ancestry ERROR surfaces as smoke ERROR, still no smoke request', async () => {
+    stubUpstreamPass();
+    gitAncestryMocks.assessContainmentFloorAncestry.mockReturnValue({
+      reason: 'Could not prove containment-floor ancestry locally.',
+      status: 'ERROR',
+    });
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({ smoke: { status: 'ERROR' } });
+  });
+
+  it('missing --execute-production-environment-read blocks the smoke', async () => {
+    stubUpstreamPass();
+    const output = await runFlags([
+      '--execute-remote-candidate-read',
+      '--execute-production-schema-read',
+      '--execute-authjs-smoke-read',
+    ]);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output.smoke).toMatchObject({ status: 'BLOCKED' });
+    expect((output.smoke as { reason: string }).reason).toContain(
+      '--execute-production-environment-read',
+    );
+  });
+
+  it('environment acquisition failure blocks the smoke', async () => {
+    stubHappyCandidatePath();
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockRejectedValue(
+      new Error('sentinel-internal-key transport failure'),
+    );
+    productionSchemaMocks.readCandidateMigrationJournal.mockReturnValue({
+      journal: candidateJournal,
+      status: 'OK',
+    });
+    productionSchemaMocks.readProductionAppliedMigrationHashes.mockResolvedValue(
+      { hashes: candidateJournal.map((entry) => entry.hash), status: 'OK' },
+    );
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      environmentContract: { status: 'ERROR' },
+      smoke: { status: 'BLOCKED' },
+    });
+  });
+
+  it('environment contract mismatch blocks the smoke', async () => {
+    stubUpstreamPass();
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue({
+      ...matchingEnvironmentEvidence,
+      fingerprint: 'b'.repeat(64),
+    });
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      environmentContract: { status: 'BLOCKED' },
+      smoke: { status: 'BLOCKED' },
+    });
+  });
+
+  it('a Clerk environment contract blocks the smoke without calling the AuthJS smoke', async () => {
+    const clerkDimensions = {
+      ...expectedDimensions,
+      authProvider: 'clerk' as const,
+    };
+    const clerkEvidence =
+      RollbackEnvironmentContractModule.buildEnvironmentContractEvidence(
+        clerkDimensions,
+      );
+    stubHappyCandidatePath();
+    remoteEnvironmentMocks.readOperatorDeclaredProductionContractDimensions.mockReturnValue(
+      clerkDimensions,
+    );
+    remoteEnvironmentMocks.readCandidateEnvironmentContract.mockResolvedValue(
+      clerkEvidence,
+    );
+    productionSchemaMocks.readCandidateMigrationJournal.mockReturnValue({
+      journal: candidateJournal,
+      status: 'OK',
+    });
+    productionSchemaMocks.readProductionAppliedMigrationHashes.mockResolvedValue(
+      { hashes: candidateJournal.map((entry) => entry.hash), status: 'OK' },
+    );
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output.environmentContract).toMatchObject({ status: 'PASS' });
+    expect(output.smoke).toMatchObject({ status: 'BLOCKED' });
+    expect((output.smoke as { reason: string }).reason).toContain('Clerk');
+  });
+
+  it('missing --execute-production-schema-read blocks the smoke', async () => {
+    stubUpstreamPass();
+    const output = await runFlags([
+      '--execute-remote-candidate-read',
+      '--execute-production-environment-read',
+      '--execute-authjs-smoke-read',
+    ]);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output.smoke).toMatchObject({ status: 'BLOCKED' });
+    expect((output.smoke as { reason: string }).reason).toContain(
+      '--execute-production-schema-read',
+    );
+  });
+
+  it('schema compatibility mismatch blocks the smoke', async () => {
+    stubUpstreamPass();
+    productionSchemaMocks.readProductionAppliedMigrationHashes.mockResolvedValue(
+      { hashes: [], status: 'OK' },
+    );
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      schemaCompatibility: { status: 'BLOCKED' },
+      smoke: { status: 'BLOCKED' },
+    });
+  });
+
+  it('schema acquisition failure blocks the smoke', async () => {
+    stubUpstreamPass();
+    productionSchemaMocks.readProductionAppliedMigrationHashes.mockResolvedValue(
+      { reason: 'Production migration-journal read failed.', status: 'ERROR' },
+    );
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      schemaCompatibility: { status: 'ERROR' },
+      smoke: { status: 'BLOCKED' },
+    });
+  });
+
+  it('exact upstream PASS invokes the smoke exactly once with the trusted immutable URL', async () => {
+    stubUpstreamPass();
+    const output = await runFlags(ALL_FLAGS);
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).toHaveBeenCalledOnce();
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).toHaveBeenCalledWith(
+      immutableUrl,
+    );
+    expect(output).toMatchObject({
+      environmentContract: { status: 'PASS' },
+      schemaCompatibility: { status: 'PASS' },
+      smoke: { status: 'PASS' },
+      smokeEvidence: {
+        provider: 'authjs',
+        session: 'PASS',
+        signIn: 'PASS',
+        status: 'READ_AND_VALIDATED',
       },
     });
-    expect(assessment.smoke).toMatchObject({ status: 'BLOCKED' });
-    expect(assessment.smoke.reason).toContain(reason);
+  });
+
+  it.each([
+    [
+      'extra key',
+      { extra: 'x', provider: 'authjs', session: 'PASS', signIn: 'PASS' },
+    ],
+    ['missing key', { provider: 'authjs', session: 'PASS' }],
+    [
+      'case-substituted key',
+      { provider: 'authjs', session: 'PASS', signin: 'PASS' },
+    ],
+    [
+      'wrong provider value',
+      { provider: 'clerk', session: 'PASS', signIn: 'PASS' },
+    ],
+    [
+      'wrong session value',
+      { provider: 'authjs', session: 'FAIL', signIn: 'PASS' },
+    ],
+    ['array', ['authjs', 'PASS', 'PASS']],
+  ])(
+    'a structurally malformed OK smoke result (%s) never reaches PASS',
+    async (_label, evidence) => {
+      stubUpstreamPass();
+      authjsSmokeMocks.runAuthjsReadOnlySmoke.mockResolvedValue({
+        evidence,
+        status: 'OK',
+      });
+      const output = await runFlags(ALL_FLAGS);
+      expect(output).toMatchObject({
+        smoke: { status: 'ERROR' },
+        smokeEvidence: { status: 'ERROR' },
+        rollbackAction: 'NOT_AUTHORIZED',
+        rollbackExecutable: false,
+      });
+    },
+  );
+
+  it('an inherited-only provider/session/signIn shape never reaches PASS', async () => {
+    stubUpstreamPass();
+    const inherited = Object.create({
+      provider: 'authjs',
+      session: 'PASS',
+      signIn: 'PASS',
+    }) as Record<string, unknown>;
+    authjsSmokeMocks.runAuthjsReadOnlySmoke.mockResolvedValue({
+      evidence: inherited,
+      status: 'OK',
+    });
+    const output = await runFlags(ALL_FLAGS);
+    expect(output).toMatchObject({ smoke: { status: 'ERROR' } });
+  });
+
+  it('a smoke acquisition error surfaces as smoke ERROR, with no secret leakage', async () => {
+    stubUpstreamPass();
+    authjsSmokeMocks.runAuthjsReadOnlySmoke.mockResolvedValue({
+      reason: 'AuthJS sign-in read-only smoke did not satisfy its contract.',
+      status: 'ERROR',
+    });
+    const output = await runFlags(ALL_FLAGS);
+    const serialized = JSON.stringify(output);
+    expect(serialized).not.toMatch(/token|secret|bypass|x-internal-key/i);
+    expect(output).toMatchObject({
+      smoke: { status: 'ERROR' },
+      smokeEvidence: { status: 'ERROR' },
+      rollbackAction: 'NOT_AUTHORIZED',
+      rollbackExecutable: false,
+    });
+  });
+
+  it('a thrown smoke implementation is contained as smoke ERROR', async () => {
+    stubUpstreamPass();
+    authjsSmokeMocks.runAuthjsReadOnlySmoke.mockRejectedValue(
+      new Error('sentinel-bypass-secret raw failure'),
+    );
+    const output = await runFlags(ALL_FLAGS);
+    expect(JSON.stringify(output)).not.toContain('sentinel-bypass-secret');
+    expect(output).toMatchObject({ smoke: { status: 'ERROR' } });
+  });
+
+  it('valid remote smoke evidence reaches smoke PASS only through run(), never the local builder', () => {
+    const forged = buildLocalRollbackAssessment({
+      deploymentId,
+      environmentContract: matchingEnvironmentEvidence,
+      smokeEvidence: { provider: 'authjs', session: 'PASS', signIn: 'PASS' },
+    });
+    expect(forged.smoke.status).not.toBe('PASS');
+    expect(forged.smoke).toMatchObject({ status: 'BLOCKED' });
+    expect(forged.smokeEvidence).toEqual({ status: 'NOT_REQUESTED' });
+  });
+
+  it('even with all four evidence categories PASS, rollback stays non-executable', async () => {
+    stubUpstreamPass();
+    const output = await runFlags(ALL_FLAGS);
+    expect(output).toMatchObject({
+      candidateIdentity: { status: 'PASS' },
+      containmentFloorAncestry: { status: 'PASS' },
+      environmentContract: { status: 'PASS' },
+      schemaCompatibility: { status: 'PASS' },
+      smoke: { status: 'PASS' },
+      rollbackAction: 'NOT_AUTHORIZED',
+      rollbackExecutable: false,
+    });
+  });
+
+  it('the smoke flag never triggers a Vercel DETAIL, environment, or schema read on its own', async () => {
+    await runFlags(['--execute-authjs-smoke-read']);
+    expect(
+      remoteCandidateMocks.readRemoteCandidateDetail,
+    ).not.toHaveBeenCalled();
+    expect(
+      remoteEnvironmentMocks.readCandidateEnvironmentContract,
+    ).not.toHaveBeenCalled();
+    expect(
+      productionSchemaMocks.readProductionAppliedMigrationHashes,
+    ).not.toHaveBeenCalled();
+    expect(authjsSmokeMocks.runAuthjsReadOnlySmoke).not.toHaveBeenCalled();
   });
 });

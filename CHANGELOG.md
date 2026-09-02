@@ -1,3 +1,10 @@
+# [2.13.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.12.0...v2.13.0) (2026-09-02)
+
+
+### Features
+
+* **ozi-71:** migrate organizations admin to canonical scope ([5282571](https://github.com/wmitrus/nextjs-16-boilerplate/commit/528257117891ff4a093d094416e577d2b37ad588))
+
 # [2.12.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.11.0...v2.12.0) (2026-09-01)
 
 

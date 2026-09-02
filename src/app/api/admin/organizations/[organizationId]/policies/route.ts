@@ -23,9 +23,9 @@ import {
   getFieldErrors,
   getOrganizationDetailInActiveScope,
   organizationIdSchema,
-  toAdminOrganizationsScope,
 } from '../../_lib';
 
+import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import {
   DuplicatePolicyError,
   RoleNotFoundError,
@@ -124,10 +124,20 @@ export const POST = withErrorHandler(
       }
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const scope = await resolveOrganizationsAdminScope(access, db);
+
+      if (!scope) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
       const readService = new DrizzleAdminOrganizationsReadService(db);
       const organization = await getOrganizationDetailInActiveScope(
         readService,
-        toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+        scope,
         paramsResult.data.id,
         'policies',
       );

@@ -11,10 +11,9 @@ import { getServerRequestLogContext } from '@/shared/lib/observability/server-re
 
 import { OrganizationStatusActions } from './OrganizationStatusActions';
 
-import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
+import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
-import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
 export const metadata: Metadata = {
   title: 'Organization Details — Administration',
@@ -178,15 +177,15 @@ async function loadOrganizationDetail(organizationId: string) {
   }
 
   const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+  const scope = await resolveOrganizationsAdminScope(access, db);
+
+  if (!scope) {
+    return null;
+  }
+
   const service = new DrizzleAdminOrganizationsReadService(db);
 
-  return await service.getDetailInActiveScope({
-    scope: createAdminOrganizationsScope({
-      activeOrganizationId: access.tenant.organizationId,
-      isPlatformAdmin: isEnvBasedPlatformAdmin(access.identity.email),
-    }),
-    organizationId,
-  });
+  return await service.getDetailInActiveScope({ scope, organizationId });
 }
 
 function formatDate(value: string): string {

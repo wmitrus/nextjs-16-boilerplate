@@ -15,9 +15,9 @@ import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 import {
   checkOrganizationsAdminAccess,
   organizationsQuerySchema,
-  toAdminOrganizationsScope,
 } from './_lib';
 
+import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
@@ -57,12 +57,24 @@ export const GET = withErrorHandler(
     }
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+    const scope = await resolveOrganizationsAdminScope(access, db);
+
+    if (!scope) {
+      // Legitimate fail-closed authorization denial: same shape as an
+      // in-scope organization set that happens to be empty.
+      return createSuccessResponse({
+        organizations: [],
+        total: 0,
+        limit: queryResult.data.limit,
+        offset: queryResult.data.offset,
+      });
+    }
+
     const service = new DrizzleAdminOrganizationsReadService(db);
     const result = await service.listInActiveScope({
-      scope: toAdminOrganizationsScope(
-        adminAccess,
-        access.tenant.organizationId,
-      ),
+      scope,
+      // Presentation-only working context; never a containment input.
+      activeOrganizationId: access.tenant.organizationId,
       ...queryResult.data,
     });
 

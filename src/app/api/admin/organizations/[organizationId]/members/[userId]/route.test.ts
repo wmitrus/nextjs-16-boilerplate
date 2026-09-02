@@ -15,6 +15,7 @@ const ROLE_ID = '35000000-0000-4000-8000-000000000001';
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
+  resolveOrganizationsAdminScope: vi.fn(),
   isEnvAdmin: vi.fn(),
   authzService: {
     can: vi.fn(),
@@ -38,6 +39,10 @@ vi.mock('next/server', async () => {
 
 vi.mock('@/security/core/node-provisioning-runtime', () => ({
   resolveNodeProvisioningAccess: mocks.resolveAccess,
+}));
+
+vi.mock('@/app/admin/organizations/organizations-admin-scope', () => ({
+  resolveOrganizationsAdminScope: mocks.resolveOrganizationsAdminScope,
 }));
 
 vi.mock('@/security/core/platform-admin', () => ({
@@ -98,6 +103,11 @@ describe('PATCH /api/admin/organizations/[organizationId]/members/[userId]', () 
     mocks.connection.mockResolvedValue(undefined);
     mocks.container.resolve.mockReturnValue(mocks.authzService);
     mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'organization',
+      organizationId: ORG_ID,
+      tenantId: '10000000-0000-4000-8000-000000000001',
+    });
     mocks.authzService.can.mockResolvedValue(true);
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
@@ -183,6 +193,20 @@ describe('PATCH /api/admin/organizations/[organizationId]/members/[userId]', () 
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it('returns 404 and never reaches the memberships mutation service when the canonical scope gate denies', async () => {
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest({ roleId: ROLE_ID }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
+    expect(mocks.mutationService.updateMemberRole).not.toHaveBeenCalled();
   });
 
   it('updates the member role when authorized', async () => {

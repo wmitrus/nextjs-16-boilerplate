@@ -9,10 +9,12 @@ import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const ORG_ID = '15000000-0000-4000-8000-000000000001';
+const TENANT_ID = '10000000-0000-4000-8000-000000000001';
 
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
+  resolveOrganizationsAdminScope: vi.fn(),
   isEnvAdmin: vi.fn(),
   authzService: { can: vi.fn() },
   readService: { getDetailInActiveScope: vi.fn() },
@@ -32,6 +34,10 @@ vi.mock('next/server', async () => {
 
 vi.mock('@/security/core/node-provisioning-runtime', () => ({
   resolveNodeProvisioningAccess: mocks.resolveAccess,
+}));
+
+vi.mock('@/app/admin/organizations/organizations-admin-scope', () => ({
+  resolveOrganizationsAdminScope: mocks.resolveOrganizationsAdminScope,
 }));
 
 vi.mock('@/security/core/platform-admin', () => ({
@@ -123,6 +129,11 @@ describe('POST /api/admin/organizations/[organizationId]/roles', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'organization',
+      organizationId: ORG_ID,
+      tenantId: TENANT_ID,
+    });
     mocks.readService.getDetailInActiveScope.mockResolvedValue({
       organization: {
         id: ORG_ID,
@@ -161,6 +172,20 @@ describe('POST /api/admin/organizations/[organizationId]/roles', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(mocks.createCustomRole).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 and never calls the roles mutation service when the canonical scope gate denies', async () => {
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue(null);
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      makeRequest({ name: 'auditor' }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
     expect(mocks.createCustomRole).not.toHaveBeenCalled();
   });
 

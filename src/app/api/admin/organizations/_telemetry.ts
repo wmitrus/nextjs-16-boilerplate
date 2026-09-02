@@ -2,7 +2,7 @@ import type { Action } from '@/core/contracts/authorization';
 import { ACTIONS } from '@/core/contracts/resources-actions';
 import { logger } from '@/core/logger/server';
 
-type ScopeKind = 'organization' | 'active-tenant';
+type ScopeKind = 'organization' | 'tenant';
 export type OrganizationBoundarySurface =
   | 'organization'
   | 'members'

@@ -10,10 +10,9 @@ import { getAppContainer } from '@/core/runtime/bootstrap';
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
 
 import { InvitationsClient } from '@/app/admin/invitations/InvitationsClient';
-import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
+import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
-import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
 export const metadata: Metadata = {
   title: 'Organization Invitations — Administration',
@@ -107,12 +106,15 @@ async function loadOrganizationInvitations(organizationId: string) {
   }
 
   const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+  const scope = await resolveOrganizationsAdminScope(access, db);
+
+  if (!scope) {
+    return null;
+  }
+
   const readService = new DrizzleAdminOrganizationsReadService(db);
   return await readService.getInvitationsInActiveScope({
-    scope: createAdminOrganizationsScope({
-      activeOrganizationId: access.tenant.organizationId,
-      isPlatformAdmin: isEnvBasedPlatformAdmin(access.identity.email),
-    }),
+    scope,
     organizationId,
   });
 }

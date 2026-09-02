@@ -9,10 +9,12 @@ import '@/security/api/with-admin-step-up.mock';
 import '@/testing/infrastructure/logger';
 
 const ORG_ID = '15000000-0000-4000-8000-000000000001';
+const TENANT_ID = '10000000-0000-4000-8000-000000000001';
 
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
+  resolveOrganizationsAdminScope: vi.fn(),
   isEnvAdmin: vi.fn(),
   authzService: {
     can: vi.fn(),
@@ -36,6 +38,10 @@ vi.mock('next/server', async () => {
 
 vi.mock('@/security/core/node-provisioning-runtime', () => ({
   resolveNodeProvisioningAccess: mocks.resolveAccess,
+}));
+
+vi.mock('@/app/admin/organizations/organizations-admin-scope', () => ({
+  resolveOrganizationsAdminScope: mocks.resolveOrganizationsAdminScope,
 }));
 
 vi.mock('@/security/core/platform-admin', () => ({
@@ -90,6 +96,11 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
     mocks.connection.mockResolvedValue(undefined);
     mocks.container.resolve.mockReturnValue(mocks.authzService);
     mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'organization',
+      organizationId: ORG_ID,
+      tenantId: TENANT_ID,
+    });
     mocks.authzService.can.mockResolvedValue(true);
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
@@ -161,6 +172,22 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
     expect(response.status).toBe(404);
   });
 
+  it('returns 404 and never reads or mutates when the canonical scope gate denies', async () => {
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      makePatchRequest({ status: 'archived' }),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
+    expect(
+      mocks.mutationService.updateOrganizationStatus,
+    ).not.toHaveBeenCalled();
+  });
+
   it('updates the organization status when authorized', async () => {
     const { PATCH } = await import('./route');
     const response = await PATCH(
@@ -173,7 +200,8 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
       {
         scope: {
           kind: 'organization',
-          organizationId: 'tenant_test_1',
+          organizationId: ORG_ID,
+          tenantId: TENANT_ID,
         },
         organizationId: ORG_ID,
         status: 'archived',
@@ -190,8 +218,12 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
     );
   });
 
-  it('preserves active-tenant scope for an explicit environment platform admin', async () => {
+  it('passes a canonical tenant scope through for an explicit environment platform admin', async () => {
     mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'tenant',
+      tenantId: TENANT_ID,
+    });
 
     const { PATCH } = await import('./route');
     const response = await PATCH(
@@ -202,18 +234,12 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
     expect(response.status).toBe(200);
     expect(mocks.authzService.can).not.toHaveBeenCalled();
     expect(mocks.readService.getDetailInActiveScope).toHaveBeenCalledWith({
-      scope: {
-        kind: 'active-tenant',
-        activeOrganizationId: 'tenant_test_1',
-      },
+      scope: { kind: 'tenant', tenantId: TENANT_ID },
       organizationId: ORG_ID,
     });
     expect(mocks.mutationService.updateOrganizationStatus).toHaveBeenCalledWith(
       {
-        scope: {
-          kind: 'active-tenant',
-          activeOrganizationId: 'tenant_test_1',
-        },
+        scope: { kind: 'tenant', tenantId: TENANT_ID },
         organizationId: ORG_ID,
         status: 'archived',
       },

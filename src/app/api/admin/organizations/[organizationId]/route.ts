@@ -19,9 +19,9 @@ import {
   getFieldErrors,
   getOrganizationDetailInActiveScope,
   organizationIdSchema,
-  toAdminOrganizationsScope,
 } from '../_lib';
 
+import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import { OrganizationNotFoundError } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsMutationService';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
@@ -59,10 +59,20 @@ export const GET = withErrorHandler(
     }
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+    const scope = await resolveOrganizationsAdminScope(access, db);
+
+    if (!scope) {
+      return createServerErrorResponse(
+        'Organization not found',
+        404,
+        'NOT_FOUND',
+      );
+    }
+
     const service = new DrizzleAdminOrganizationsReadService(db);
     const organization = await getOrganizationDetailInActiveScope(
       service,
-      toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+      scope,
       parseResult.data.id,
       'organization',
     );
@@ -123,10 +133,16 @@ export const PATCH = withErrorHandler(
       }
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-      const scope = toAdminOrganizationsScope(
-        adminAccess,
-        access.tenant.organizationId,
-      );
+      const scope = await resolveOrganizationsAdminScope(access, db);
+
+      if (!scope) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
       const readService = new DrizzleAdminOrganizationsReadService(db);
       const organization = await getOrganizationDetailInActiveScope(
         readService,

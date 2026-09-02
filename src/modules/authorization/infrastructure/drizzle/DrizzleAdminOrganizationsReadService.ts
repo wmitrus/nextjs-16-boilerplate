@@ -1,8 +1,7 @@
-import { and, count, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, count, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 
+import type { DataScope } from '@/core/contracts/access-context';
 import type { DrizzleDb } from '@/core/db/types';
-
-import type { AdminOrganizationsScope } from '../../domain/AdminOrganizationsScope';
 
 import {
   invitationsTable,
@@ -13,6 +12,42 @@ import {
 } from './schema';
 
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
+
+/**
+ * OZI-71 Slice 3 — the organizations admin surface consumes ONLY canonical
+ * `organization` / `tenant` `DataScope`. `platform-global` is deliberately
+ * excluded from this union, so passing one is a COMPILE-TIME error at the
+ * organizations service boundary: this surface has no legitimate
+ * platform-global behaviour.
+ */
+export type OrganizationsAdminDataScope = Extract<
+  DataScope,
+  { readonly kind: 'organization' | 'tenant' }
+>;
+
+/**
+ * Canonical scope predicate for the `organizations` table.
+ *
+ * - `organization` — binds BOTH the organization id AND its parent tenant id
+ *   (defence in depth: the canonical `organization` variant deliberately
+ *   carries both, so a forged `organizationId` + wrong `tenantId` pair
+ *   matches no row).
+ * - `tenant` — binds the parent tenant id.
+ *
+ * Callers AND this with the requested organization id in the SAME statement;
+ * there is no unscoped branch.
+ */
+export function organizationsAdminScopeFilter(
+  scope: OrganizationsAdminDataScope,
+): SQL {
+  const tenantMatch = eq(organizationsTable.tenantId, scope.tenantId);
+
+  if (scope.kind === 'tenant') {
+    return tenantMatch;
+  }
+
+  return and(eq(organizationsTable.id, scope.organizationId), tenantMatch)!;
+}
 
 export interface OrganizationSummaryDto {
   id: string;
@@ -141,11 +176,21 @@ export interface OrganizationInvitationsPageDto {
 }
 
 export interface ListOrganizationsInActiveScopeInput {
-  scope: AdminOrganizationsScope;
-  limit: number;
-  offset: number;
-  search?: string;
-  status?: 'active' | 'archived';
+  /** Canonical authorization / SQL containment. Sole determinant of the row set. */
+  readonly scope: OrganizationsAdminDataScope;
+  /**
+   * PRESENTATION-ONLY working-context id (the caller's already server-resolved
+   * `AccessContext.activeOrganization.organizationId`). It ONLY decides which
+   * returned row carries `isActive: true`. It MUST NOT reach
+   * `organizationsAdminScopeFilter`, any `WHERE`/`count` clause, tenant
+   * derivation, or membership derivation — the returned set stays determined
+   * solely by `scope`.
+   */
+  readonly activeOrganizationId: string;
+  readonly limit: number;
+  readonly offset: number;
+  readonly search?: string;
+  readonly status?: 'active' | 'archived';
 }
 
 export class DrizzleAdminOrganizationsReadService {
@@ -154,15 +199,6 @@ export class DrizzleAdminOrganizationsReadService {
   async listInActiveScope(
     input: ListOrganizationsInActiveScopeInput,
   ): Promise<{ organizations: OrganizationSummaryDto[]; total: number }> {
-    const resolvedScope = await this.resolveScope(input.scope);
-
-    if (!resolvedScope) {
-      return {
-        organizations: [],
-        total: 0,
-      };
-    }
-
     const searchFilter = input.search
       ? or(
           ilike(organizationsTable.name, `%${input.search}%`),
@@ -174,10 +210,7 @@ export class DrizzleAdminOrganizationsReadService {
       ? eq(organizationsTable.status, input.status)
       : undefined;
 
-    const scopeFilter =
-      resolvedScope.kind === 'organization'
-        ? eq(organizationsTable.id, resolvedScope.organizationId)
-        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
+    const scopeFilter = organizationsAdminScopeFilter(input.scope);
 
     const whereClause =
       searchFilter && statusFilter
@@ -271,30 +304,19 @@ export class DrizzleAdminOrganizationsReadService {
         roleCount: roleCountByOrganization.get(organization.id) ?? 0,
         pendingInvitationCount:
           invitationCountByOrganization.get(organization.id) ?? 0,
-        isActive:
-          organization.id ===
-          (input.scope.kind === 'organization'
-            ? input.scope.organizationId
-            : input.scope.activeOrganizationId),
+        // Presentation-only: which of the scope-authorized rows is the
+        // caller's working-context organization. Never a containment fact.
+        isActive: organization.id === input.activeOrganizationId,
       })),
       total: countRows[0]?.total ?? 0,
     };
   }
 
   async getDetailInActiveScope(input: {
-    scope: AdminOrganizationsScope;
+    scope: OrganizationsAdminDataScope;
     organizationId: string;
   }): Promise<OrganizationDetailDto | null> {
-    const resolvedScope = await this.resolveScope(input.scope);
-
-    if (!resolvedScope) {
-      return null;
-    }
-
-    const scopeFilter =
-      resolvedScope.kind === 'organization'
-        ? eq(organizationsTable.id, resolvedScope.organizationId)
-        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
+    const scopeFilter = organizationsAdminScopeFilter(input.scope);
 
     const organizationRows = await this.db
       .select({
@@ -356,19 +378,10 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getRolesInActiveScope(input: {
-    scope: AdminOrganizationsScope;
+    scope: OrganizationsAdminDataScope;
     organizationId: string;
   }): Promise<OrganizationRolesPageDto | null> {
-    const resolvedScope = await this.resolveScope(input.scope);
-
-    if (!resolvedScope) {
-      return null;
-    }
-
-    const scopeFilter =
-      resolvedScope.kind === 'organization'
-        ? eq(organizationsTable.id, resolvedScope.organizationId)
-        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
+    const scopeFilter = organizationsAdminScopeFilter(input.scope);
 
     const organizationRows = await this.db
       .select({
@@ -450,19 +463,10 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getPoliciesInActiveScope(input: {
-    scope: AdminOrganizationsScope;
+    scope: OrganizationsAdminDataScope;
     organizationId: string;
   }): Promise<OrganizationPoliciesPageDto | null> {
-    const resolvedScope = await this.resolveScope(input.scope);
-
-    if (!resolvedScope) {
-      return null;
-    }
-
-    const scopeFilter =
-      resolvedScope.kind === 'organization'
-        ? eq(organizationsTable.id, resolvedScope.organizationId)
-        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
+    const scopeFilter = organizationsAdminScopeFilter(input.scope);
 
     const organizationRows = await this.db
       .select({
@@ -544,19 +548,10 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getInvitationsInActiveScope(input: {
-    scope: AdminOrganizationsScope;
+    scope: OrganizationsAdminDataScope;
     organizationId: string;
   }): Promise<OrganizationInvitationsPageDto | null> {
-    const resolvedScope = await this.resolveScope(input.scope);
-
-    if (!resolvedScope) {
-      return null;
-    }
-
-    const scopeFilter =
-      resolvedScope.kind === 'organization'
-        ? eq(organizationsTable.id, resolvedScope.organizationId)
-        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
+    const scopeFilter = organizationsAdminScopeFilter(input.scope);
 
     const organizationRows = await this.db
       .select({
@@ -617,19 +612,10 @@ export class DrizzleAdminOrganizationsReadService {
   }
 
   async getMembersInActiveScope(input: {
-    scope: AdminOrganizationsScope;
+    scope: OrganizationsAdminDataScope;
     organizationId: string;
   }): Promise<OrganizationMembersPageDto | null> {
-    const resolvedScope = await this.resolveScope(input.scope);
-
-    if (!resolvedScope) {
-      return null;
-    }
-
-    const scopeFilter =
-      resolvedScope.kind === 'organization'
-        ? eq(organizationsTable.id, resolvedScope.organizationId)
-        : eq(organizationsTable.tenantId, resolvedScope.tenantId);
+    const scopeFilter = organizationsAdminScopeFilter(input.scope);
 
     const organizationRows = await this.db
       .select({
@@ -689,26 +675,5 @@ export class DrizzleAdminOrganizationsReadService {
         deactivatedAt: membership.deactivatedAt?.toISOString() ?? null,
       })),
     };
-  }
-
-  private async resolveScope(
-    scope: AdminOrganizationsScope,
-  ): Promise<
-    | { kind: 'organization'; organizationId: string }
-    | { kind: 'tenant'; tenantId: string }
-    | null
-  > {
-    if (scope.kind === 'organization') {
-      return scope;
-    }
-
-    const rows = await this.db
-      .select({ tenantId: organizationsTable.tenantId })
-      .from(organizationsTable)
-      .where(eq(organizationsTable.id, scope.activeOrganizationId))
-      .limit(1);
-
-    const tenantId = rows[0]?.tenantId;
-    return tenantId ? { kind: 'tenant', tenantId } : null;
   }
 }

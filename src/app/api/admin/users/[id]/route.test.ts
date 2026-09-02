@@ -11,10 +11,25 @@ import '@/testing/infrastructure/logger';
 
 const USER_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
+const ORG_SCOPE = {
+  kind: 'organization' as const,
+  organizationId: '15000000-0000-4000-8000-000000000001',
+  tenantId: '10000000-0000-4000-8000-000000000001',
+};
+const GLOBAL_SCOPE = { kind: 'platform-global' as const };
+
+class AdminUsersScopeInvariantError extends Error {
+  constructor() {
+    super('Admin users canonical scope invariant violated.');
+    this.name = 'AdminUsersScopeInvariantError';
+  }
+}
+
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
+  resolveScope: vi.fn(),
   findById: vi.fn(),
   updateProfile: vi.fn(),
   deactivate: vi.fn(),
@@ -52,6 +67,11 @@ vi.mock('@/core/env', () => ({
 
 vi.mock('@/security/actions/record-admin-audit-event', () => ({
   recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+}));
+
+vi.mock('../users-admin-scope', () => ({
+  resolveAdminUsersScope: mocks.resolveScope,
+  AdminUsersScopeInvariantError,
 }));
 
 vi.mock(
@@ -97,6 +117,7 @@ describe('GET /api/admin/users/[id]', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
+    mocks.resolveScope.mockResolvedValue(GLOBAL_SCOPE);
     setupService();
   });
 
@@ -114,7 +135,7 @@ describe('GET /api/admin/users/[id]', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
+  it('returns 400 for a malformed (non-UUID) id before touching scope or the DB (SEC-23)', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'admin-1', email: 'admin@test.dev' },
@@ -125,10 +146,11 @@ describe('GET /api/admin/users/[id]', () => {
     const { GET } = await import('./route');
     const res = await GET(makeRequest('GET'), makeContext('not-a-uuid'));
     expect(res.status).toBe(400);
+    expect(mocks.resolveScope).not.toHaveBeenCalled();
     expect(mocks.findById).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when not admin', async () => {
+  it('returns 403 when not admin (before scope resolution)', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'user-1', email: 'notadmin@test.dev' },
@@ -142,6 +164,7 @@ describe('GET /api/admin/users/[id]', () => {
     const { GET } = await import('./route');
     const res = await GET(makeRequest('GET'), makeContext());
     expect(res.status).toBe(403);
+    expect(mocks.resolveScope).not.toHaveBeenCalled();
   });
 
   it('returns 404 when user not found', async () => {
@@ -158,7 +181,7 @@ describe('GET /api/admin/users/[id]', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns 200 with user data when found', async () => {
+  it('returns 200 and forwards the platform-global scope when found', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'admin-1', email: 'admin@test.dev' },
@@ -172,14 +195,13 @@ describe('GET /api/admin/users/[id]', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { user: { id: string } } };
     expect(body.data.user.id).toBe(USER_ID);
-    expect(mocks.findById).toHaveBeenCalledWith(USER_ID, null);
+    expect(mocks.findById).toHaveBeenCalledWith(USER_ID, GLOBAL_SCOPE);
   });
 
   it(
-    "SEC-26 regression: an ABAC-authorized non-platform-admin's lookup is " +
-      'scoped to their own tenant, and a user outside that tenant 404s ' +
-      "exactly like a nonexistent id -- never a distinguishing 403 that'd " +
-      'leak cross-tenant existence',
+    'SEC-26 regression: an ABAC-authorized non-platform-admin lookup is ' +
+      'scoped to the canonical organization scope, and an out-of-scope user ' +
+      '404s exactly like a nonexistent id -- never a distinguishing 403',
     async () => {
       mocks.resolveAccess.mockResolvedValue(
         makeAllowedProvisioningAccess({
@@ -190,25 +212,57 @@ describe('GET /api/admin/users/[id]', () => {
       mocks.registry.set(AUTHORIZATION.SERVICE, {
         can: vi.fn().mockResolvedValue(true),
       });
-      // The scoped service call itself returns null for an out-of-tenant
-      // user -- the route must not distinguish this from "doesn't exist".
+      mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
       mocks.findById.mockResolvedValue(null);
 
       const { GET } = await import('./route');
       const res = await GET(makeRequest('GET'), makeContext());
 
-      expect(mocks.findById).toHaveBeenCalledWith(USER_ID, {
-        tenantId: 'tenant_test_1',
-      });
+      expect(mocks.findById).toHaveBeenCalledWith(USER_ID, ORG_SCOPE);
       expect(res.status).toBe(404);
     },
   );
+
+  it('an ordinary canonical scope denial (null) returns the same 404 as a nonexistent user and never calls the service', async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'owner-1', email: 'owner@test.dev' },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { GET } = await import('./route');
+    const res = await GET(makeRequest('GET'), makeContext());
+
+    expect(res.status).toBe(404);
+    expect(mocks.findById).not.toHaveBeenCalled();
+  });
+
+  it('a scope invariant failure surfaces as a generic 500', async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'admin-1', email: 'admin@test.dev' },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveScope.mockRejectedValue(new AdminUsersScopeInvariantError());
+
+    const { GET } = await import('./route');
+    const res = await GET(makeRequest('GET'), makeContext());
+    expect(res.status).toBe(500);
+    expect(mocks.findById).not.toHaveBeenCalled();
+  });
 });
 
 describe('PATCH /api/admin/users/[id] — update displayName', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
+    mocks.resolveScope.mockResolvedValue(GLOBAL_SCOPE);
     setupService();
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
@@ -218,13 +272,14 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
     mocks.isEnvAdmin.mockReturnValue(true);
   });
 
-  it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
+  it('returns 400 for a malformed (non-UUID) id before touching scope or the DB (SEC-23)', async () => {
     const { PATCH } = await import('./route');
     const res = await PATCH(
       makeRequest('PATCH', { displayName: 'New Name' }),
       makeContext('not-a-uuid'),
     );
     expect(res.status).toBe(400);
+    expect(mocks.resolveScope).not.toHaveBeenCalled();
     expect(mocks.updateProfile).not.toHaveBeenCalled();
   });
 
@@ -255,7 +310,7 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns 200 and updates displayName', async () => {
+  it('returns 200, forwards the canonical scope, and records the audit event with the unchanged legacy tenantId', async () => {
     mocks.updateProfile.mockResolvedValue({
       ...MOCK_USER,
       displayName: 'New Name',
@@ -270,7 +325,7 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
     expect(mocks.updateProfile).toHaveBeenCalledWith(
       USER_ID,
       { displayName: 'New Name' },
-      null,
+      GLOBAL_SCOPE,
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -283,11 +338,12 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
     );
   });
 
-  it("SEC-26 regression: scopes the update to the caller's own tenant for an ABAC-authorized non-platform-admin, and a foreign-tenant target 404s", async () => {
+  it('SEC-26 regression: forwards the canonical organization scope for an ABAC-authorized non-platform-admin, and a foreign-scope target 404s', async () => {
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
     mocks.updateProfile.mockResolvedValue(null);
 
     const { PATCH } = await import('./route');
@@ -299,9 +355,26 @@ describe('PATCH /api/admin/users/[id] — update displayName', () => {
     expect(mocks.updateProfile).toHaveBeenCalledWith(
       USER_ID,
       { displayName: 'New Name' },
-      { tenantId: 'tenant_test_1' },
+      ORG_SCOPE,
     );
     expect(res.status).toBe(404);
+  });
+
+  it('an ordinary canonical scope denial (null) 404s and never calls the service', async () => {
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { displayName: 'New Name' }),
+      makeContext(),
+    );
+
+    expect(res.status).toBe(404);
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
   });
 });
 
@@ -309,6 +382,7 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.connection.mockResolvedValue(undefined);
+    mocks.resolveScope.mockResolvedValue(GLOBAL_SCOPE);
     setupService();
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
@@ -318,13 +392,14 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
     mocks.isEnvAdmin.mockReturnValue(true);
   });
 
-  it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
+  it('returns 400 for a malformed (non-UUID) id before touching scope or the DB (SEC-23)', async () => {
     const { PATCH } = await import('./route');
     const res = await PATCH(
       makeRequest('PATCH', { action: 'deactivate' }),
       makeContext('not-a-uuid'),
     );
     expect(res.status).toBe(400);
+    expect(mocks.resolveScope).not.toHaveBeenCalled();
     expect(mocks.deactivate).not.toHaveBeenCalled();
   });
 
@@ -339,7 +414,7 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns 200 and calls deactivate when user found', async () => {
+  it('returns 200, forwards the canonical scope, and records the audit event unchanged', async () => {
     mocks.deactivate.mockResolvedValue({
       ...MOCK_USER,
       deactivatedAt: new Date(),
@@ -354,7 +429,7 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
     expect(mocks.deactivate).toHaveBeenCalledWith(
       USER_ID,
       expect.any(Date),
-      null,
+      GLOBAL_SCOPE,
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -367,11 +442,12 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
     );
   });
 
-  it("SEC-26 regression: scopes the deactivate to the caller's own tenant for an ABAC-authorized non-platform-admin, and a foreign-tenant target 404s", async () => {
+  it('SEC-26 regression: forwards the canonical organization scope for an ABAC-authorized non-platform-admin, and a foreign-scope target 404s', async () => {
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
     mocks.deactivate.mockResolvedValue(null);
 
     const { PATCH } = await import('./route');
@@ -380,10 +456,29 @@ describe('PATCH /api/admin/users/[id] — deactivate', () => {
       makeContext(),
     );
 
-    expect(mocks.deactivate).toHaveBeenCalledWith(USER_ID, expect.any(Date), {
-      tenantId: 'tenant_test_1',
-    });
+    expect(mocks.deactivate).toHaveBeenCalledWith(
+      USER_ID,
+      expect.any(Date),
+      ORG_SCOPE,
+    );
     expect(res.status).toBe(404);
+  });
+
+  it('an ordinary canonical scope denial (null) 404s and never calls the service', async () => {
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { action: 'deactivate' }),
+      makeContext(),
+    );
+
+    expect(res.status).toBe(404);
+    expect(mocks.deactivate).not.toHaveBeenCalled();
   });
 
   it('returns 401 when unauthenticated', async () => {

@@ -14,6 +14,8 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveAdminUsersScope } from './users-admin-scope';
+
 import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
@@ -39,10 +41,11 @@ const querySchema = z.object({
 type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
 
 /**
- * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
- * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
- * authorization to reach users outside their own tenant -- check
- * `isPlatformAdmin` before allowing anything unscoped. See SEC-26 in
+ * The ABAC business-action gate (SEC-26): whether this actor may perform
+ * `user:read` in the admin panel at all. It does NOT decide which rows are in
+ * reach -- that is the canonical per-operation `DataScope` from
+ * `resolveAdminUsersScope`, AND-ed into the same SQL statement as the query.
+ * `allowed: true` alone is never sufficient to reach a user. See SEC-26 in
  * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
  */
 async function checkAdminAccess(
@@ -106,13 +109,18 @@ export const GET = withErrorHandler(
     const { limit, offset, search } = queryResult.data;
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+    // Canonical per-operation scope (OZI-71 Slice 4B): `organization` for an
+    // ordinary ABAC admin, explicit `platform-global` for an env platform
+    // admin. `null` is a legitimate fail-closed ordinary membership denial --
+    // never a legacy `{ tenantId }` fallback, never an unscoped query.
+    const scope = await resolveAdminUsersScope(access, db);
+
+    if (!scope) {
+      return createSuccessResponse({ users: [], total: 0, limit, offset });
+    }
+
     const service = new DrizzleAdminUsersService(db);
-    // An ABAC-authorized (non-platform-admin) caller only ever sees users
-    // who hold a membership in their own tenant -- never another tenant's
-    // users (SEC-26).
-    const scope = adminAccess.isPlatformAdmin
-      ? null
-      : { tenantId: access.tenant.tenantId };
     const { users, total } = await service.listAll(
       { limit, offset, search },
       scope,

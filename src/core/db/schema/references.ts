@@ -8,8 +8,21 @@ export const tenantsReferenceTable = pgTable('tenants', {
   id: uuid('id').primaryKey(),
 });
 
+/**
+ * Read-only reference to the `organizations` table (owned by the
+ * `authorization` module). Carries `id` (for FK targets) plus `tenant_id`,
+ * the authoritative strict-1:N parent tenant of an organization
+ * (`organizations.tenant_id`, `NOT NULL`, immutable — OZI-71). `tenant_id` is
+ * here so another module can bind the full canonical organization scope tuple
+ * (`organizationId` AND `tenantId`) inside a single SQL statement without
+ * importing `authorization`'s real Drizzle schema — the `user` module's admin
+ * surface uses it to reject an internally inconsistent `DataScope`
+ * (OZI-71 Slice 4B; see SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`).
+ * Never migrated (excluded from the `drizzle-kit` schema glob), only queried.
+ */
 export const organizationsReferenceTable = pgTable('organizations', {
   id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
 });
 
 /**

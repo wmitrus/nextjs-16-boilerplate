@@ -1,9 +1,12 @@
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
+import type { OrganizationId, TenantId } from '@/core/contracts/canonical-ids';
 import type { DrizzleDb } from '@/core/db';
+import { organizationsReferenceTable } from '@/core/db/schema/references';
 
 import {
   DuplicateFeatureFlagError,
+  FeatureFlagCanonicalWriteInvariantError,
   FeatureFlagNotFoundError,
 } from '../../domain/errors';
 
@@ -25,6 +28,35 @@ export type CreateFeatureFlagInput = {
   enabled: boolean;
   description?: string | null;
 };
+
+/**
+ * OZI-71 FF·B — the canonical ownership facts a create must persist ALONGSIDE
+ * the legacy `tenant_id` (which is still written verbatim from
+ * {@link CreateFeatureFlagInput.tenantId} and stays authoritative for every
+ * read until FF·D).
+ *
+ * - `organization` — an authoritatively-resolved organization override. BOTH
+ *   ids are load-bearing: the INSERT proves
+ *   `organizations.id = organizationId AND organizations.tenant_id = tenantId`
+ *   in the same statement (invariant #11), so a server-derived tuple that is
+ *   internally inconsistent, or whose organization was deleted/reparented
+ *   between resolution and write, inserts zero rows and fails closed.
+ * - `global` — an explicitly platform-global create: `organization_id = NULL`,
+ *   `ownership_state = 'intentional_global'`. Never the fallback for a failed
+ *   organization resolution.
+ *
+ * Branded ids: the crossing from raw string happens upstream through the
+ * audited provenance constructors (`@/core/contracts/canonical-ids.provenance`)
+ * in the composition seam — this type only carries the already-branded result
+ * so the two ids can never be passed in the wrong order (invariant #9).
+ */
+export type CanonicalFeatureFlagWriteFacts =
+  | {
+      readonly kind: 'organization';
+      readonly organizationId: OrganizationId;
+      readonly tenantId: TenantId;
+    }
+  | { readonly kind: 'global' };
 
 export type UpdateFeatureFlagInput = {
   enabled?: boolean;
@@ -163,34 +195,155 @@ export class DrizzleFeatureFlagAdminService {
     return rows.map(mapFlagRow);
   }
 
-  async create(input: CreateFeatureFlagInput): Promise<FeatureFlagDto> {
+  /**
+   * OZI-71 FF·B — canonical dual-write. `input.tenantId` is still written to
+   * `feature_flags.tenant_id` VERBATIM (legacy authoritative read key,
+   * unchanged rollback semantics — never normalized to the canonical id);
+   * `canonical` additionally populates `organization_id` + `ownership_state`.
+   * Reads are untouched and still legacy until FF·D.
+   */
+  async create(
+    input: CreateFeatureFlagInput,
+    canonical: CanonicalFeatureFlagWriteFacts,
+  ): Promise<FeatureFlagDto> {
+    // Defense in depth for the canonical `ownership_state` invariant: this
+    // service protects its own migration-period contract rather than trusting
+    // the one route caller. Until FF·D every read still uses the LEGACY
+    // `tenant_id` contract, where `tenant_id IS NULL` == platform-global. So
+    // the legacy scoped/global classification and the canonical
+    // organization/global classification MUST agree, symmetrically:
+    //
+    //   canonical organization + tenant_id NON-NULL -> OK (the non-null legacy
+    //     key is preserved VERBATIM and may be a legacy org id / tenant id /
+    //     provider external id -- FF·B proves canonical ownership separately;
+    //     this guard never requires the two identities to be equal);
+    //   canonical global       + tenant_id NULL     -> OK;
+    //   canonical organization + tenant_id NULL     -> contradiction (a row
+    //     that legacy reads treat as global but canonical treats as org-only);
+    //   canonical global       + tenant_id NON-NULL -> contradiction.
+    //
+    // Fail closed: never normalize the legacy key, never reclassify ownership.
+    const legacyIsGlobal = input.tenantId === null;
+    const canonicalIsGlobal = canonical.kind === 'global';
+    if (legacyIsGlobal !== canonicalIsGlobal) {
+      throw new FeatureFlagCanonicalWriteInvariantError();
+    }
+
     try {
-      const [row] = await this.db
-        .insert(featureFlagsTable)
-        .values({
-          key: input.key,
-          tenantId: input.tenantId,
-          enabled: input.enabled,
-          description: input.description ?? null,
-        })
-        .returning();
-
-      if (!row) {
-        throw new Error('Failed to create feature flag');
-      }
-
-      return mapFlagRow(row);
+      return canonical.kind === 'organization'
+        ? await this.createOrganizationOwned(input, canonical)
+        : await this.createIntentionalGlobal(input);
     } catch (error) {
-      // Relying on the DB's own `uq_feature_flags_key_tenant` unique
-      // constraint (rather than a preliminary select-then-insert check)
-      // keeps duplicate detection atomic under concurrent creates for the
-      // same (key, tenantId) pair.
+      // Relying on the DB's own unique constraints (rather than a preliminary
+      // select-then-insert check) keeps duplicate detection atomic under
+      // concurrent creates -- both the legacy `uq_feature_flags_key_tenant`
+      // and the FF·A canonical `uq_feature_flags_key_organization_canonical`
+      // partial unique surface here as `23505` (the latter catches an
+      // alias/collision where two legacy identities resolve to the same
+      // canonical organization for one key).
       if (isUniqueViolation(error)) {
         throw new DuplicateFeatureFlagError();
       }
 
       throw error;
     }
+  }
+
+  private async createIntentionalGlobal(
+    input: CreateFeatureFlagInput,
+  ): Promise<FeatureFlagDto> {
+    const [row] = await this.db
+      .insert(featureFlagsTable)
+      .values({
+        key: input.key,
+        tenantId: input.tenantId,
+        organizationId: null,
+        ownershipState: 'intentional_global',
+        enabled: input.enabled,
+        description: input.description ?? null,
+      })
+      .returning();
+
+    if (!row) {
+      throw new Error('Failed to create feature flag');
+    }
+
+    return mapFlagRow(row);
+  }
+
+  /**
+   * The same-statement `(organization_id, tenant_id)` tuple proof (invariant
+   * #11): `organization_id` is taken from the joined `organizations` row
+   * itself (`o.id`), never the parameter, and the row is selected ONLY when
+   * `o.id` AND `o.tenant_id` both match the resolved canonical tuple. A
+   * mismatch / deleted / reparented organization yields zero inserted rows ->
+   * {@link FeatureFlagCanonicalWriteInvariantError} (fail closed; no
+   * `organization_id = NULL` row, no `intentional_global` reclassification).
+   * Uses the neutral `organizationsReferenceTable` (never `authorization`'s
+   * real schema), so the feature-flags module gains no cross-module edge.
+   */
+  private async createOrganizationOwned(
+    input: CreateFeatureFlagInput,
+    canonical: Extract<
+      CanonicalFeatureFlagWriteFacts,
+      { kind: 'organization' }
+    >,
+  ): Promise<FeatureFlagDto> {
+    const inserted = await this.db.execute(sql`
+      INSERT INTO ${featureFlagsTable}
+        (key, tenant_id, organization_id, ownership_state, enabled, description)
+      SELECT
+        ${input.key},
+        ${input.tenantId},
+        o.id,
+        'canonical_organization',
+        ${input.enabled},
+        ${input.description ?? null}
+      FROM ${organizationsReferenceTable} o
+      WHERE o.id = ${canonical.organizationId}
+        AND o.tenant_id = ${canonical.tenantId}
+      RETURNING
+        id,
+        key,
+        tenant_id AS "tenantId",
+        enabled,
+        description,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `);
+
+    const rows = (
+      Array.isArray(inserted)
+        ? inserted
+        : (inserted as { rows?: unknown[] }).rows
+    ) as
+      | Array<{
+          id: string;
+          key: string;
+          tenantId: string | null;
+          enabled: boolean;
+          description: string | null;
+          createdAt: Date | string;
+          updatedAt: Date | string;
+        }>
+      | undefined;
+
+    const row = rows?.[0];
+    if (!row) {
+      // Zero rows from the tuple proof: the resolved organization no longer
+      // exists / was reparented / the server-derived tuple is inconsistent.
+      throw new FeatureFlagCanonicalWriteInvariantError();
+    }
+
+    return mapFlagRow({
+      id: row.id,
+      key: row.key,
+      tenantId: row.tenantId,
+      enabled: row.enabled,
+      description: row.description,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+    });
   }
 
   async update(

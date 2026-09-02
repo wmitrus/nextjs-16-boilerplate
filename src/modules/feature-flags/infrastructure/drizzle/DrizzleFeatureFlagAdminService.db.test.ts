@@ -1,12 +1,18 @@
 /** @vitest-environment node */
+import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   DuplicateFeatureFlagError,
+  FeatureFlagCanonicalWriteInvariantError,
   FeatureFlagNotFoundError,
 } from '../../domain/errors';
 
-import { DrizzleFeatureFlagAdminService } from './DrizzleFeatureFlagAdminService';
+import {
+  type CanonicalFeatureFlagWriteFacts,
+  type CreateFeatureFlagInput,
+  DrizzleFeatureFlagAdminService,
+} from './DrizzleFeatureFlagAdminService';
 import { featureFlagsTable } from './schema';
 
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
@@ -14,9 +20,52 @@ import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 let testDb: TestDb;
 let svc: DrizzleFeatureFlagAdminService;
 
+// A real organization for the one test that needs the canonical create path to
+// hit the *legacy* `(key, tenant_id)` unique (the row carries a legacy
+// `tenant_id` string independent of this org's real tenant — the legal FF·B
+// migration state, §10).
+const TENANT_LEG = '9e9e9e9e-9e9e-4e9e-8e9e-9e9e9e9e9e9e';
+const ORG_LEG = '9d9d9d9d-9d9d-4d9d-8d9d-9d9d9d9d9d9d';
+const orgLegFacts = {
+  kind: 'organization',
+  organizationId: ORG_LEG,
+  tenantId: TENANT_LEG,
+} as CanonicalFeatureFlagWriteFacts;
+
+/**
+ * Seed a *historical / compatibility-period* legacy-shaped row directly, the
+ * way pre-FF·B rows and any un-migrated legacy writer look: a legacy
+ * `tenant_id`, no `organization_id`, and the FF·A fail-closed
+ * `ownership_state = 'unresolved_legacy'` default. These fixtures exist for the
+ * legacy `tenant_id` key / scoping / uniqueness regressions below and are
+ * deliberately NOT routed through the FF·B canonical create service. The
+ * canonical dual-write + same-statement tuple proof has its own suite
+ * (`DrizzleFeatureFlagAdminService.canonical.db.test.ts`).
+ */
+async function insertLegacyFlag(input: CreateFeatureFlagInput) {
+  const [row] = await testDb.db
+    .insert(featureFlagsTable)
+    .values({
+      key: input.key,
+      tenantId: input.tenantId,
+      enabled: input.enabled,
+      description: input.description ?? null,
+      // organizationId + ownershipState omitted -> NULL + 'unresolved_legacy'
+    })
+    .returning();
+  if (!row) throw new Error('insertLegacyFlag: no row returned');
+  return row;
+}
+
 beforeAll(async () => {
   testDb = await resolveTestDb();
   svc = new DrizzleFeatureFlagAdminService(testDb.db);
+  await testDb.db.execute(
+    sql`INSERT INTO tenants (id, name) VALUES (${TENANT_LEG}, 'Tenant Leg')`,
+  );
+  await testDb.db.execute(
+    sql`INSERT INTO organizations (id, tenant_id, name) VALUES (${ORG_LEG}, ${TENANT_LEG}, 'Org Leg')`,
+  );
 });
 
 afterEach(async () => {
@@ -24,14 +73,16 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  await testDb.db.execute(sql`DELETE FROM organizations WHERE id = ${ORG_LEG}`);
+  await testDb.db.execute(sql`DELETE FROM tenants WHERE id = ${TENANT_LEG}`);
   await testDb.cleanup();
 });
 
-describe('DrizzleFeatureFlagAdminService (real DB)', () => {
+describe('DrizzleFeatureFlagAdminService — legacy tenant_id regressions (real DB)', () => {
   it('lists all rows, global and tenant-scoped, ordered by key then tenantId', async () => {
-    await svc.create({ key: 'beta', tenantId: null, enabled: true });
-    await svc.create({ key: 'alpha', tenantId: null, enabled: false });
-    await svc.create({ key: 'alpha', tenantId: 'acme', enabled: true });
+    await insertLegacyFlag({ key: 'beta', tenantId: null, enabled: true });
+    await insertLegacyFlag({ key: 'alpha', tenantId: null, enabled: false });
+    await insertLegacyFlag({ key: 'alpha', tenantId: 'acme', enabled: true });
 
     const flags = await svc.listAll();
 
@@ -46,27 +97,14 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     ]);
   });
 
-  it('creates a global flag', async () => {
-    const created = await svc.create({
-      key: 'new-flag',
+  it('two legacy rows with the same key and different tenant_id coexist', async () => {
+    await insertLegacyFlag({
+      key: 'shared-key',
       tenantId: null,
       enabled: true,
-      description: 'a test flag',
     });
 
-    expect(created).toMatchObject({
-      key: 'new-flag',
-      tenantId: null,
-      enabled: true,
-      description: 'a test flag',
-    });
-    expect(created.id).toEqual(expect.any(String));
-  });
-
-  it('creates a tenant-scoped flag with the same key as an existing global flag', async () => {
-    await svc.create({ key: 'shared-key', tenantId: null, enabled: true });
-
-    const scoped = await svc.create({
+    const scoped = await insertLegacyFlag({
       key: 'shared-key',
       tenantId: 'acme',
       enabled: false,
@@ -76,24 +114,29 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     expect(await svc.listAll()).toHaveLength(2);
   });
 
-  it('rejects a duplicate (key, tenantId) pair with a typed error', async () => {
-    await svc.create({ key: 'dup', tenantId: 'acme', enabled: true });
+  it('the legacy (key, tenant_id) unique still fires through the canonical create path as DuplicateFeatureFlagError', async () => {
+    await insertLegacyFlag({ key: 'dup', tenantId: 'acme', enabled: true });
 
+    // A canonical org-owned create whose VERBATIM legacy tenant_id ('acme')
+    // collides with the historical row above on `uq_feature_flags_key_tenant` --
+    // the legacy unique stays authoritative and still maps to the typed error.
     await expect(
-      svc.create({ key: 'dup', tenantId: 'acme', enabled: false }),
+      svc.create({ key: 'dup', tenantId: 'acme', enabled: false }, orgLegFacts),
     ).rejects.toThrow(DuplicateFeatureFlagError);
   });
 
-  it('rejects a duplicate global (key, null tenantId) pair', async () => {
-    await svc.create({ key: 'dup-global', tenantId: null, enabled: true });
-
+  it('throws FeatureFlagNotFoundError when updating a nonexistent id', async () => {
     await expect(
-      svc.create({ key: 'dup-global', tenantId: null, enabled: false }),
-    ).rejects.toThrow(DuplicateFeatureFlagError);
+      svc.update(
+        '00000000-0000-4000-8000-000000000000',
+        { enabled: true },
+        null,
+      ),
+    ).rejects.toThrow(FeatureFlagNotFoundError);
   });
 
   it('updates enabled and description independently (unscoped / platform admin)', async () => {
-    const created = await svc.create({
+    const created = await insertLegacyFlag({
       key: 'togglable',
       tenantId: null,
       enabled: false,
@@ -113,18 +156,8 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     expect(described.description).toBe('updated');
   });
 
-  it('throws FeatureFlagNotFoundError when updating a nonexistent id', async () => {
-    await expect(
-      svc.update(
-        '00000000-0000-4000-8000-000000000000',
-        { enabled: true },
-        null,
-      ),
-    ).rejects.toThrow(FeatureFlagNotFoundError);
-  });
-
   it('deletes a flag (unscoped / platform admin)', async () => {
-    const created = await svc.create({
+    const created = await insertLegacyFlag({
       key: 'deletable',
       tenantId: null,
       enabled: true,
@@ -143,9 +176,17 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
 
   describe('tenant scoping (SEC-26 regression coverage)', () => {
     it('listForTenant returns global rows plus only the given tenant’s own rows', async () => {
-      await svc.create({ key: 'global-flag', tenantId: null, enabled: true });
-      await svc.create({ key: 'acme-flag', tenantId: 'acme', enabled: true });
-      await svc.create({
+      await insertLegacyFlag({
+        key: 'global-flag',
+        tenantId: null,
+        enabled: true,
+      });
+      await insertLegacyFlag({
+        key: 'acme-flag',
+        tenantId: 'acme',
+        enabled: true,
+      });
+      await insertLegacyFlag({
         key: 'globex-flag',
         tenantId: 'globex',
         enabled: true,
@@ -163,7 +204,7 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     });
 
     it('rejects updating another tenant’s row when scoped to a different tenant', async () => {
-      const created = await svc.create({
+      const created = await insertLegacyFlag({
         key: 'scoped-update',
         tenantId: 'acme',
         enabled: false,
@@ -175,7 +216,7 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     });
 
     it('rejects updating a global row when scoped to any tenant', async () => {
-      const created = await svc.create({
+      const created = await insertLegacyFlag({
         key: 'scoped-update-global',
         tenantId: null,
         enabled: false,
@@ -187,7 +228,7 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     });
 
     it('allows updating a row scoped to the caller’s own tenant', async () => {
-      const created = await svc.create({
+      const created = await insertLegacyFlag({
         key: 'scoped-update-own',
         tenantId: 'acme',
         enabled: false,
@@ -202,7 +243,7 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     });
 
     it('rejects deleting another tenant’s row when scoped to a different tenant', async () => {
-      const created = await svc.create({
+      const created = await insertLegacyFlag({
         key: 'scoped-delete',
         tenantId: 'acme',
         enabled: false,
@@ -217,7 +258,7 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
     });
 
     it('allows deleting a row scoped to the caller’s own tenant', async () => {
-      const created = await svc.create({
+      const created = await insertLegacyFlag({
         key: 'scoped-delete-own',
         tenantId: 'acme',
         enabled: false,
@@ -227,5 +268,60 @@ describe('DrizzleFeatureFlagAdminService (real DB)', () => {
 
       expect(await svc.listForTenant('acme')).toHaveLength(0);
     });
+  });
+});
+
+describe('DrizzleFeatureFlagAdminService — FF·B explicit platform-global create (real DB)', () => {
+  it('creates an intentional_global row with organization_id NULL for tenantId: null', async () => {
+    const created = await svc.create(
+      { key: 'g', tenantId: null, enabled: true, description: 'a test flag' },
+      { kind: 'global' },
+    );
+
+    expect(created).toMatchObject({
+      key: 'g',
+      tenantId: null,
+      enabled: true,
+      description: 'a test flag',
+    });
+
+    const rows = await testDb.db.select().from(featureFlagsTable);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+    });
+  });
+
+  it('rejects {kind:"global"} with a non-null legacy tenant_id (invariant, zero rows)', async () => {
+    await expect(
+      svc.create(
+        { key: 'bad', tenantId: 'acme', enabled: true },
+        {
+          kind: 'global',
+        },
+      ),
+    ).rejects.toBeInstanceOf(FeatureFlagCanonicalWriteInvariantError);
+
+    expect(await testDb.db.select().from(featureFlagsTable)).toHaveLength(0);
+  });
+
+  it('the legacy (key, NULL tenant_id) unique still rejects a duplicate intentional_global', async () => {
+    await svc.create(
+      { key: 'dg', tenantId: null, enabled: true },
+      {
+        kind: 'global',
+      },
+    );
+
+    await expect(
+      svc.create(
+        { key: 'dg', tenantId: null, enabled: false },
+        {
+          kind: 'global',
+        },
+      ),
+    ).rejects.toThrow(DuplicateFeatureFlagError);
   });
 });

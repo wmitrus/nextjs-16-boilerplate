@@ -15,6 +15,8 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveCanonicalFeatureFlagWrite } from './feature-flags-canonical-write';
+
 import { DuplicateFeatureFlagError } from '@/modules/feature-flags/domain/errors';
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
@@ -174,15 +176,43 @@ export const POST = withErrorHandler(
         : access.tenant.tenantId;
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+      // OZI-71 FF·B — resolve the canonical ownership facts written alongside
+      // (never instead of) the legacy `tenant_id`. Authorization is already
+      // settled above; this only answers "which internal organization?".
+      // Ordinary org-context writer: resolution failure fails closed (generic
+      // 500 via withErrorHandler). Platform admin: `tenantId: null` -> explicit
+      // global; an unresolvable organization target -> 422, no row written.
+      const canonical = await resolveCanonicalFeatureFlagWrite({
+        isPlatformAdmin: adminAccess.isPlatformAdmin,
+        ordinaryActiveOrganizationId: access.tenant.organizationId,
+        platformTargetOrganizationId: adminAccess.isPlatformAdmin
+          ? (parseResult.data.tenantId ?? null)
+          : null,
+        db,
+        authProvider: env.AUTH_PROVIDER,
+      });
+
+      if (canonical.outcome === 'unresolvable-organization-target') {
+        return createServerErrorResponse(
+          'The target organization could not be resolved to an internal organization',
+          422,
+          'ORGANIZATION_NOT_RESOLVED',
+        );
+      }
+
       const service = new DrizzleFeatureFlagAdminService(db);
 
       try {
-        const flag = await service.create({
-          key: parseResult.data.key,
-          tenantId: requestedTenantId,
-          enabled: parseResult.data.enabled,
-          description: parseResult.data.description ?? null,
-        });
+        const flag = await service.create(
+          {
+            key: parseResult.data.key,
+            tenantId: requestedTenantId,
+            enabled: parseResult.data.enabled,
+            description: parseResult.data.description ?? null,
+          },
+          canonical.facts,
+        );
 
         logger.info(
           {

@@ -20,13 +20,17 @@ vi.mock('@/security/core/platform-admin', () => ({
 import {
   checkOrganizationsActionAccess,
   getOrganizationDetailInActiveScope,
-  toAdminOrganizationsScope,
 } from './_lib';
+
+import type { OrganizationsAdminDataScope } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 
 const adminAccess = { allowed: true, isPlatformAdmin: false };
 const platformAdminAccess = { allowed: true, isPlatformAdmin: true };
-const activeOrganizationId = '15000000-0000-4000-8000-000000000001';
 const organizationId = '15000000-0000-4000-8000-000000000002';
+const tenantScope = {
+  kind: 'tenant',
+  tenantId: '10000000-0000-4000-8000-000000000001',
+} as OrganizationsAdminDataScope;
 
 describe('organization boundary telemetry', () => {
   beforeEach(() => {
@@ -94,7 +98,7 @@ describe('organization boundary telemetry', () => {
       event: 'security:organization_boundary_decision',
       stage: 'action',
       decision: 'allowed',
-      scopeKind: 'active-tenant',
+      scopeKind: 'tenant',
       actionFamily: 'tenant-update',
     });
   });
@@ -130,7 +134,7 @@ describe('organization boundary telemetry', () => {
     await expect(
       getOrganizationDetailInActiveScope(
         service as never,
-        toAdminOrganizationsScope(platformAdminAccess, activeOrganizationId),
+        tenantScope,
         organizationId,
         'organization',
       ),
@@ -140,7 +144,7 @@ describe('organization boundary telemetry', () => {
       event: 'security:organization_boundary_decision',
       stage: 'scope',
       decision,
-      scopeKind: 'active-tenant',
+      scopeKind: 'tenant',
       surface: 'organization',
     });
   });

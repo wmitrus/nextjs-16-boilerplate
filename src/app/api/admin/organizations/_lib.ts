@@ -12,11 +12,10 @@ import {
   type OrganizationBoundarySurface,
 } from './_telemetry';
 
-import type { AdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
-import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
 import type {
   DrizzleAdminOrganizationsReadService,
   OrganizationDetailDto,
+  OrganizationsAdminDataScope,
 } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
@@ -58,7 +57,7 @@ export async function checkOrganizationsActionAccess(
     recordOrganizationBoundaryDecision({
       stage: 'action',
       decision: 'allowed',
-      scopeKind: 'active-tenant',
+      scopeKind: 'tenant',
       actionFamily: getOrganizationActionFamily(action),
     });
     return { allowed: true, isPlatformAdmin: true };
@@ -100,19 +99,9 @@ export async function checkOrganizationsAdminAccess(
   );
 }
 
-export function toAdminOrganizationsScope(
-  access: OrganizationsAdminAccess,
-  activeOrganizationId: string,
-): AdminOrganizationsScope {
-  return createAdminOrganizationsScope({
-    activeOrganizationId,
-    isPlatformAdmin: access.isPlatformAdmin,
-  });
-}
-
 export async function getOrganizationDetailInActiveScope(
   service: DrizzleAdminOrganizationsReadService,
-  scope: AdminOrganizationsScope,
+  scope: OrganizationsAdminDataScope,
   organizationId: string,
   surface: OrganizationBoundarySurface,
 ): Promise<OrganizationDetailDto | null> {

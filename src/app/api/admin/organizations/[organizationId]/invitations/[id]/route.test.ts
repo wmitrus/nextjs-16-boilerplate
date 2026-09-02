@@ -16,6 +16,7 @@ const INVITATION_ID = '35000000-0000-4000-8000-000000000001';
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
+  resolveOrganizationsAdminScope: vi.fn(),
   isEnvAdmin: vi.fn(),
   authzService: {
     can: vi.fn(),
@@ -43,6 +44,10 @@ vi.mock('next/server', async () => {
 
 vi.mock('@/security/core/node-provisioning-runtime', () => ({
   resolveNodeProvisioningAccess: mocks.resolveAccess,
+}));
+
+vi.mock('@/app/admin/organizations/organizations-admin-scope', () => ({
+  resolveOrganizationsAdminScope: mocks.resolveOrganizationsAdminScope,
 }));
 
 vi.mock('@/security/core/platform-admin', () => ({
@@ -120,6 +125,11 @@ describe('DELETE /api/admin/organizations/[organizationId]/invitations/[id]', ()
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'organization',
+      organizationId: ORG_ID,
+      tenantId: '10000000-0000-4000-8000-000000000001',
+    });
     mocks.readService.getDetailInActiveScope.mockResolvedValue({
       organization: {
         id: ORG_ID,
@@ -179,6 +189,22 @@ describe('DELETE /api/admin/organizations/[organizationId]/invitations/[id]', ()
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it('returns 404 and never reaches the invitation service when the canonical scope gate denies', async () => {
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue(null);
+
+    const { DELETE } = await import('./route');
+    const response = await DELETE(
+      new NextRequest(
+        'http://localhost/api/admin/organizations/acme/invitations/inv-1',
+      ),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
+    expect(mocks.revokeInvitation).not.toHaveBeenCalled();
   });
 
   it('returns 409 when the organization is archived', async () => {

@@ -20,9 +20,9 @@ import {
   getFieldErrors,
   getOrganizationDetailInActiveScope,
   organizationIdSchema,
-  toAdminOrganizationsScope,
 } from '../../../_lib';
 
+import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import {
   DuplicatePolicyError,
   PolicyNotFoundError,
@@ -240,10 +240,20 @@ export const PATCH = withErrorHandler(
       const update = parsed.data;
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const scope = await resolveOrganizationsAdminScope(access, db);
+
+      if (!scope) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
       const readService = new DrizzleAdminOrganizationsReadService(db);
       const organization = await getOrganizationDetailInActiveScope(
         readService,
-        toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+        scope,
         update.organizationId,
         'policies',
       );
@@ -342,10 +352,20 @@ export const DELETE = withErrorHandler(
       }
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+      const scope = await resolveOrganizationsAdminScope(access, db);
+
+      if (!scope) {
+        return createServerErrorResponse(
+          'Organization not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
       const readService = new DrizzleAdminOrganizationsReadService(db);
       const organization = await getOrganizationDetailInActiveScope(
         readService,
-        toAdminOrganizationsScope(adminAccess, access.tenant.organizationId),
+        scope,
         organizationResult.data.id,
         'policies',
       );

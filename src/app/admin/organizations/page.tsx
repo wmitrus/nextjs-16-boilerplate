@@ -14,10 +14,9 @@ import {
   type OrganizationSummary,
 } from './OrganizationsClient';
 
-import { createAdminOrganizationsScope } from '@/modules/authorization/domain/AdminOrganizationsScope';
+import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
-import { isEnvBasedPlatformAdmin } from '@/security/core/platform-admin';
 
 export const metadata: Metadata = {
   title: 'Organizations — Administration',
@@ -76,12 +75,16 @@ async function loadOrganizationsInTrustedScope(): Promise<
   }
 
   const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+  const scope = await resolveOrganizationsAdminScope(access, db);
+
+  if (!scope) {
+    return [];
+  }
+
   const service = new DrizzleAdminOrganizationsReadService(db);
   const result = await service.listInActiveScope({
-    scope: createAdminOrganizationsScope({
-      activeOrganizationId: access.tenant.organizationId,
-      isPlatformAdmin: isEnvBasedPlatformAdmin(access.identity.email),
-    }),
+    scope,
+    activeOrganizationId: access.tenant.organizationId,
     limit: 100,
     offset: 0,
   });

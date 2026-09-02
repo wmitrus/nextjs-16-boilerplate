@@ -2,9 +2,12 @@ import { and, eq } from 'drizzle-orm';
 
 import type { DrizzleDb } from '@/core/db/types';
 
-import type { AdminOrganizationsScope } from '../../domain/AdminOrganizationsScope';
 import { OrganizationNotFoundError } from '../../domain/errors';
 
+import {
+  organizationsAdminScopeFilter,
+  type OrganizationsAdminDataScope,
+} from './DrizzleAdminOrganizationsReadService';
 import { organizationsTable } from './schema';
 
 export type OrganizationStatus = 'active' | 'archived';
@@ -40,20 +43,21 @@ export class DrizzleAdminOrganizationsMutationService {
   constructor(private readonly db: DrizzleDb) {}
 
   async updateOrganizationStatus(input: {
-    scope: AdminOrganizationsScope;
+    scope: OrganizationsAdminDataScope;
     organizationId: string;
     status: OrganizationStatus;
   }): Promise<OrganizationStatusDto> {
-    const scopeFilter = await this.resolveScopeFilter(input.scope);
-
-    if (!scopeFilter) {
-      throw new OrganizationNotFoundError();
-    }
-
+    // Canonical scope AND requested id meet in the SAME statement — no
+    // authorization pre-check followed by an unscoped write.
     const rows = await this.db
       .update(organizationsTable)
       .set({ status: input.status })
-      .where(and(eq(organizationsTable.id, input.organizationId), scopeFilter))
+      .where(
+        and(
+          eq(organizationsTable.id, input.organizationId),
+          organizationsAdminScopeFilter(input.scope),
+        ),
+      )
       .returning();
 
     const row = rows[0];
@@ -63,20 +67,5 @@ export class DrizzleAdminOrganizationsMutationService {
     }
 
     return mapOrganizationRow(row);
-  }
-
-  private async resolveScopeFilter(scope: AdminOrganizationsScope) {
-    if (scope.kind === 'organization') {
-      return eq(organizationsTable.id, scope.organizationId);
-    }
-
-    const rows = await this.db
-      .select({ tenantId: organizationsTable.tenantId })
-      .from(organizationsTable)
-      .where(eq(organizationsTable.id, scope.activeOrganizationId))
-      .limit(1);
-
-    const tenantId = rows[0]?.tenantId;
-    return tenantId ? eq(organizationsTable.tenantId, tenantId) : null;
   }
 }

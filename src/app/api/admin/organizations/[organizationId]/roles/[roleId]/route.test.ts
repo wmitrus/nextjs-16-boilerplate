@@ -14,6 +14,7 @@ const ROLE_ID = '20000000-0000-4000-8000-000000000001';
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
+  resolveOrganizationsAdminScope: vi.fn(),
   isEnvAdmin: vi.fn(),
   authzService: { can: vi.fn() },
   readService: { getDetailInActiveScope: vi.fn() },
@@ -34,6 +35,10 @@ vi.mock('next/server', async () => {
 
 vi.mock('@/security/core/node-provisioning-runtime', () => ({
   resolveNodeProvisioningAccess: mocks.resolveAccess,
+}));
+
+vi.mock('@/app/admin/organizations/organizations-admin-scope', () => ({
+  resolveOrganizationsAdminScope: mocks.resolveOrganizationsAdminScope,
 }));
 
 vi.mock('@/security/core/platform-admin', () => ({
@@ -139,6 +144,11 @@ describe('role mutation routes reject archived organizations', () => {
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'organization',
+      organizationId: '15000000-0000-4000-8000-000000000001',
+      tenantId: '10000000-0000-4000-8000-000000000001',
+    });
     mocks.readService.getDetailInActiveScope.mockResolvedValue({
       organization: {
         id: ORG_ID,
@@ -172,6 +182,28 @@ describe('role mutation routes reject archived organizations', () => {
 
     expect(response.status).toBe(409);
     expect(mocks.renameCustomRole).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 and never reaches the roles mutation service when the canonical scope gate denies', async () => {
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const response = await PATCH(
+      new NextRequest(
+        `http://localhost/api/admin/organizations/${ORG_ID}/roles/${ROLE_ID}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'auditor' }),
+        },
+      ),
+      makeContext(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(mocks.readService.getDetailInActiveScope).not.toHaveBeenCalled();
+    expect(mocks.renameCustomRole).not.toHaveBeenCalled();
+    expect(mocks.deleteCustomRole).not.toHaveBeenCalled();
   });
 
   it('returns 409 for DELETE', async () => {
@@ -213,6 +245,11 @@ describe('PATCH /api/admin/organizations/[organizationId]/roles/[roleId]', () =>
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'organization',
+      organizationId: '15000000-0000-4000-8000-000000000001',
+      tenantId: '10000000-0000-4000-8000-000000000001',
+    });
     mocks.readService.getDetailInActiveScope.mockResolvedValue(ACTIVE_ORG);
   });
 
@@ -298,6 +335,11 @@ describe('DELETE /api/admin/organizations/[organizationId]/roles/[roleId]', () =
       }),
     );
     mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.resolveOrganizationsAdminScope.mockResolvedValue({
+      kind: 'organization',
+      organizationId: '15000000-0000-4000-8000-000000000001',
+      tenantId: '10000000-0000-4000-8000-000000000001',
+    });
     mocks.readService.getDetailInActiveScope.mockResolvedValue(ACTIVE_ORG);
   });
 

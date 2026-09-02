@@ -26,16 +26,29 @@ export interface SafeInvitation {
 interface InvitationsClientProps {
   invitations: SafeInvitation[];
   roles: Array<{ id: string; name: string }>;
-  createEndpoint?: string;
+  /**
+   * Full path for the create (POST) call, e.g.
+   * `/api/admin/organizations/<id>/invitations`.
+   *
+   * REQUIRED, and deliberately without a default. It used to fall back to a
+   * removed legacy flat admin invitation endpoint that created against the
+   * caller's ambient organization as standalone authority, with no canonical
+   * organization gate -- so a component that simply forgot the prop silently
+   * selected that legacy authorization path. That endpoint is gone (OZI-71
+   * Slice 4A) and this prop is now a compile-time obligation, mirroring
+   * `revokeEndpointBase`.
+   */
+  createEndpoint: string;
   /**
    * Base path for the revoke call, e.g.
    * `/api/admin/organizations/<id>/invitations`.
    *
-   * REQUIRED, and deliberately without a default. It used to default to the
-   * flat `/api/admin/invitations`, which revoked by global invitation id
-   * with no organization in the predicate -- so a component that simply
-   * forgot the prop silently used the unscoped path. That route is gone and
-   * this prop is now a compile-time obligation. See SEC-41.
+   * REQUIRED, and deliberately without a default. It used to fall back to a
+   * removed legacy flat admin invitation endpoint that revoked by global
+   * invitation id with no organization in the predicate -- so a component
+   * that simply forgot the prop silently used that unscoped path. That
+   * endpoint is gone and this prop is now a compile-time obligation. See
+   * SEC-41.
    */
   revokeEndpointBase: string;
 }
@@ -116,7 +129,7 @@ function formatDate(d: Date | string | null): string {
 export function InvitationsClient({
   invitations,
   roles,
-  createEndpoint = '/api/admin/invitations',
+  createEndpoint,
   revokeEndpointBase,
 }: InvitationsClientProps) {
   const stepUpFetch = useStepUpFetch();

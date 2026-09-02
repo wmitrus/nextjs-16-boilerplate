@@ -34,6 +34,7 @@ describe('InvitationsClient', () => {
       <InvitationsClient
         invitations={[]}
         roles={[{ id: 'role-1', name: 'Owner' }]}
+        createEndpoint="/api/admin/organizations/org-1/invitations"
         revokeEndpointBase="/api/admin/organizations/org-1/invitations"
       />,
     );
@@ -71,6 +72,7 @@ describe('InvitationsClient', () => {
       <InvitationsClient
         invitations={[]}
         roles={[{ id: 'role-1', name: 'Owner' }]}
+        createEndpoint="/api/admin/organizations/org-1/invitations"
         revokeEndpointBase="/api/admin/organizations/org-1/invitations"
       />,
     );
@@ -84,5 +86,9 @@ describe('InvitationsClient', () => {
       expect(refreshMock).toHaveBeenCalledTimes(1);
     });
     await screen.findByText('Invitation sent to alice@example.com');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/admin/organizations/org-1/invitations',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });

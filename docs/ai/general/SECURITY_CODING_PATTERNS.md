@@ -1779,12 +1779,15 @@ only the authorization check forgot to compare it.
 **New technique this occurrence required — membership-join scoping for tables with
 no direct tenant column**: unlike `feature_flags` (which has its own `tenant_id`
 column, so the SEC-26 fix could scope with a plain `eq()`), the `users` table has no
-`tenant_id`/`organization_id` column. A user's tenant membership lives in a separate
+`tenant_id`/`organization_id` column. A user's membership lives in a separate
 `memberships` table (`user_id`, `organization_id`), owned by a different module
-(`authorization`, not `user`). Scoping therefore requires a cross-table predicate:
+(`authorization`, not `user`). Scoping therefore requires a cross-table predicate.
+The **legacy (2026-08-22) fix** looked like this — note it scoped on a single id
+named `tenantId` that actually held the _organization_ UUID (`TenantContext`
+identity collapse):
 
 ```typescript
-// src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.ts
+// LEGACY — superseded by the OZI-71 Slice 4B canonical DataScope below.
 function membershipScopePredicate(db: DrizzleDb, tenantId: string) {
   return exists(
     db
@@ -1793,31 +1796,92 @@ function membershipScopePredicate(db: DrizzleDb, tenantId: string) {
       .where(
         and(
           eq(membershipsReferenceTable.userId, usersTable.id),
-          eq(membershipsReferenceTable.organizationId, tenantId),
+          eq(membershipsReferenceTable.organizationId, tenantId), // org UUID
         ),
       ),
   );
 }
-
-// used directly in the same WHERE as the read/mutation, e.g.:
-await db
-  .update(usersTable)
-  .set(updatePayload)
-  .where(
-    and(eq(usersTable.id, id), membershipScopePredicate(db, scope.tenantId)),
-  )
-  .returning();
+// legacy AdminUserScope = { tenantId: string } | null;  // null = unrestricted
 ```
 
-`membershipsReferenceTable` is a new core-level join reference
+`membershipsReferenceTable` is a core-level join reference
 (`src/core/db/schema/references.ts`), mirroring the existing `usersReferenceTable` /
 `organizationsReferenceTable` pattern: a minimal-column `pgTable` pointing at the
 real `memberships` table, letting the `user` module build this predicate **without
 importing `authorization`'s real Drizzle schema** (would otherwise create a
-`user -> authorization` module dependency the architecture doesn't allow). This
-reference table is deliberately excluded from `drizzle-kit generate`'s schema glob
-(`./src/modules/**/infrastructure/drizzle/schema.ts` only) — it must never be
+`user -> authorization` module dependency the architecture doesn't allow). These
+reference tables are deliberately excluded from `drizzle-kit generate`'s schema glob
+(`./src/modules/**/infrastructure/drizzle/schema.ts` only) — they must never be
 migrated, only queried.
+
+**Current implementation (OZI-71 Slice 4B).** `DrizzleAdminUsersService` no longer
+takes `AdminUserScope = { tenantId } | null`. It takes a canonical
+`AdminUsersDataScope = Extract<DataScope, { kind: 'organization' | 'platform-global' }>`
+(compile-time: no `null`, no `tenant`), resolved once per request — _after_ the
+ABAC action check — by the shared seam
+`src/app/api/admin/users/users-admin-scope.ts`:
+
+- ordinary ABAC admin → `{ kind: 'organization', organizationId, tenantId }` for
+  the server-resolved active organization. `organizationId` is membership-proven;
+  `tenantId` is read independently from `organizations.tenant_id` (**never**
+  `access.tenant.tenantId`).
+- env platform admin → `{ kind: 'platform-global' }` via `derivePlatformGlobalScope`
+  with an explicit `operation: { kind: 'platform-global' }` classification — the
+  historical unrestricted cross-tenant reach, now expressed as an explicit
+  classification instead of `null`.
+- an ordinary membership denial returns `null` **from the seam**, mapped to an
+  empty list / `404` at the route — it never reaches the service, so the service
+  boundary is never `null`.
+
+For an `organization` scope, containment binds **both** tuple members in the same
+statement, which gives two distinct guarantees:
+
+- **Cross-tenant tuple integrity** — `scope.tenantId` is load-bearing: an
+  internally inconsistent tuple (`organizationId` of `ORG_A`, which really
+  belongs to `TENANT_A`, paired with a different `TENANT_B`) matches no row.
+- **Same-tenant organization isolation** — `scope.organizationId` is
+  load-bearing: a **valid** `{ ORG_A, TENANT_A }` scope cannot reach a user
+  whose membership is only in `ORG_SIBLING`, even though
+  `ORG_A.tenant_id === ORG_SIBLING.tenant_id === TENANT_A`, because the
+  predicate requires `memberships.organization_id = scope.organizationId`. A
+  valid `{ ORG_SIBLING, TENANT_A }` scope is a consistent tuple (not a
+  mismatch) and correctly reaches `ORG_SIBLING` members.
+
+```typescript
+// CURRENT — src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.ts
+exists(
+  db
+    .select({ one: sql`1` })
+    .from(membershipsReferenceTable)
+    .innerJoin(
+      organizationsReferenceTable,
+      eq(
+        organizationsReferenceTable.id,
+        membershipsReferenceTable.organizationId,
+      ),
+    )
+    .where(
+      and(
+        eq(membershipsReferenceTable.userId, usersTable.id),
+        eq(membershipsReferenceTable.organizationId, scope.organizationId),
+        eq(organizationsReferenceTable.tenantId, scope.tenantId),
+      ),
+    ),
+);
+// platform-global: no row-containment predicate (the explicit classification
+// already granted it). Exhaustive switch on scope.kind, no `default`.
+```
+
+`organizationsReferenceTable` gained a read-only `tenant_id` column (still outside
+the `drizzle-kit` glob, still never migrated) for the join above. Legacy
+`access.tenant.tenantId` remains in the **transitional ABAC policy selector**
+(`AuthorizationService.can`) and in existing audit/logging metadata
+(`recordAdminAuditEvent(...)` and the by-id route's `logger.info(...)` calls,
+both unchanged by this slice). It is **not** canonical `DataScope` authority,
+**not** parent-`TenantId` provenance, **not** organization-membership evidence,
+and **not** an SQL containment input — it never reaches the canonical Admin
+Users scope predicate. Canonicalising it now would select different policy
+records / require a policy migration and is out of scope for Slice 4B.
 
 **DO** treat "the domain repository has no tenant/scope parameter at all" as the same
 class of defect as "the scope parameter exists but isn't checked" — both let an
@@ -1836,13 +1900,18 @@ retrofit a scope parameter onto a repository whose other callers are legitimate
 unscoped self-service lookups, since every one of those call sites would then need
 to remember to keep passing `null`/no-scope correctly forever.
 
-**Required validation for this occurrence**: `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.db.test.ts`
-proves, against a real Postgres-compatible DB, that a tenant-scoped caller cannot
-list, read, rename, or deactivate a real user seeded only into a different tenant —
-and that the unscoped (platform-admin) path is unaffected. Route-handler unit tests
-in `src/app/api/admin/users/route.test.ts` and
-`src/app/api/admin/users/[id]/route.test.ts` prove the route derives and forwards
-the correct scope for both grant paths.
+**Required validation (current)**: `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.db.test.ts`
+proves, against real PostgreSQL, three separate things: (a) **cross-tenant tuple
+integrity** — a tuple whose `tenantId` does not own its `organizationId`
+authorises nothing; (b) **same-tenant organization isolation** — a valid
+`{ ORG_A, TENANT_A }` scope cannot list, read, rename, or deactivate a user
+whose membership is only in a sibling organization `ORG_SIBLING` of the same
+tenant, while a valid `{ ORG_SIBLING, TENANT_A }` scope (positive control)
+does reach that user; (c) the `platform-global` path reaches across tenants. `src/app/api/admin/users/users-admin-scope.test.ts`
+covers the seam; `users-admin-scope.type-test.ts` is the compile-time proof that
+`tenant` / wide `DataScope` / `null` are rejected at the service boundary.
+Route-handler unit tests prove the route forwards the canonical scope for both
+grant paths and maps an ordinary denial to an empty list / `404`.
 
 **Update 2026-08-23 — third and fourth occurrences.** The same defect was
 found again in `/api/admin/waitlist/**` and in the invitation revoke path.
@@ -4083,9 +4152,11 @@ async revokePendingScoped(id: string, organizationId: string | null) {
 `status = 'pending'` is in the predicate for the same reason as the
 organization: it makes the revoke single-shot instead of re-writing a row
 that was already accepted. `organizationId: null` is the explicit unscoped
-platform-admin path, mirroring `AdminUserScope` in `DrizzleAdminUsersService`.
-The route maps `null` back to the same 404 whether the invitation is absent,
-another organization's, or already revoked.
+platform-admin path for this invitations helper. (The Admin Users surface no
+longer models its platform path as `null` — since OZI-71 Slice 4B it uses an
+explicitly-classified `platform-global` `DataScope`; see the SEC-26 "Current
+implementation" note above.) The route maps `null` back to the same 404
+whether the invitation is absent, another organization's, or already revoked.
 
 ### Audit Of The Whole Class
 
@@ -4095,8 +4166,8 @@ authorized scope appear in the SQL that reads or writes the row?_
 
 No further instances. Users, feature flags, audit logs, audit-log settings
 and the whole `organizations/**` family already pass a scope down
-(`AdminUserScope`, `MutationScope`, `getDetailInActiveScope`) and carry it in
-the predicate. Worth naming as the reference shape:
+(`AdminUsersDataScope` — canonical `DataScope` since OZI-71 Slice 4B —
+`MutationScope`, `getDetailInActiveScope`) and carry it in the predicate. Worth naming as the reference shape:
 `DrizzleFeatureFlagAdminService.scopePredicate(id, scope)` and
 `DrizzleAdminRolesMutationService`, where the pre-check `SELECT` exists only
 for a business rule (`isSystem`) and the authoritative `UPDATE`/`DELETE`

@@ -8,10 +8,25 @@ import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning'
 
 import '@/testing/infrastructure/logger';
 
+const ORG_SCOPE = {
+  kind: 'organization' as const,
+  organizationId: '15000000-0000-4000-8000-000000000001',
+  tenantId: '10000000-0000-4000-8000-000000000001',
+};
+const GLOBAL_SCOPE = { kind: 'platform-global' as const };
+
+class AdminUsersScopeInvariantError extends Error {
+  constructor() {
+    super('Admin users canonical scope invariant violated.');
+    this.name = 'AdminUsersScopeInvariantError';
+  }
+}
+
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
+  resolveScope: vi.fn(),
   listAll: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
@@ -42,6 +57,11 @@ vi.mock('@/core/env', () => ({
     ADMIN_USER_EMAILS: 'admin@test.dev',
     NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
   },
+}));
+
+vi.mock('./users-admin-scope', () => ({
+  resolveAdminUsersScope: mocks.resolveScope,
+  AdminUsersScopeInvariantError,
 }));
 
 vi.mock(
@@ -77,6 +97,7 @@ describe('GET /api/admin/users', () => {
     mocks.connection.mockResolvedValue(undefined);
     mocks.registry.clear();
     mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+    mocks.resolveScope.mockResolvedValue(GLOBAL_SCOPE);
     vi.mocked(DrizzleAdminUsersService).mockImplementation(function () {
       return {
         listAll: mocks.listAll,
@@ -97,9 +118,10 @@ describe('GET /api/admin/users', () => {
     const { GET } = await import('./route');
     const res = await GET(makeRequest(), mockContext);
     expect(res.status).toBe(401);
+    expect(mocks.resolveScope).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when authenticated but not admin', async () => {
+  it('returns 403 when authenticated but not admin (before any scope resolution)', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'user-1', email: 'notadmin@test.dev' },
@@ -113,9 +135,11 @@ describe('GET /api/admin/users', () => {
     const { GET } = await import('./route');
     const res = await GET(makeRequest(), mockContext);
     expect(res.status).toBe(403);
+    expect(mocks.resolveScope).not.toHaveBeenCalled();
+    expect(mocks.listAll).not.toHaveBeenCalled();
   });
 
-  it('returns 200 with user list for env-based admin', async () => {
+  it('returns 200 with user list for env-based admin and forwards the platform-global scope', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'admin-1', email: 'admin@test.dev' },
@@ -133,6 +157,7 @@ describe('GET /api/admin/users', () => {
     };
     expect(body.data.users).toHaveLength(1);
     expect(body.data.total).toBe(1);
+    expect(mocks.listAll).toHaveBeenCalledWith(expect.anything(), GLOBAL_SCOPE);
   });
 
   it('clamps limit to maximum of 100', async () => {
@@ -149,7 +174,7 @@ describe('GET /api/admin/users', () => {
 
     expect(mocks.listAll).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 100 }),
-      null,
+      GLOBAL_SCOPE,
     );
   });
 
@@ -167,25 +192,11 @@ describe('GET /api/admin/users', () => {
 
     expect(mocks.listAll).toHaveBeenCalledWith(
       expect.objectContaining({ search: 'alice' }),
-      null,
+      GLOBAL_SCOPE,
     );
   });
 
-  it('env-based platform admin gets an unscoped (null) listAll scope', async () => {
-    mocks.resolveAccess.mockResolvedValue(
-      makeAllowedProvisioningAccess({
-        identity: { id: 'admin-1', email: 'admin@test.dev' },
-      }),
-    );
-    mocks.isEnvAdmin.mockReturnValue(true);
-
-    const { GET } = await import('./route');
-    await GET(makeRequest(), mockContext);
-
-    expect(mocks.listAll).toHaveBeenCalledWith(expect.anything(), null);
-  });
-
-  it("SEC-26 regression: an ABAC-authorized non-platform-admin only sees their own tenant's users, never a global/cross-tenant list", async () => {
+  it('SEC-26 regression: an ABAC-authorized non-platform-admin gets the canonical organization scope forwarded, never null or a legacy { tenantId }', async () => {
     mocks.resolveAccess.mockResolvedValue(
       makeAllowedProvisioningAccess({
         identity: { id: 'owner-1', email: 'owner@test.dev' },
@@ -195,12 +206,50 @@ describe('GET /api/admin/users', () => {
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
 
     const { GET } = await import('./route');
     await GET(makeRequest(), mockContext);
 
-    expect(mocks.listAll).toHaveBeenCalledWith(expect.anything(), {
-      tenantId: 'tenant_test_1',
+    expect(mocks.listAll).toHaveBeenCalledWith(expect.anything(), ORG_SCOPE);
+  });
+
+  it('an ordinary canonical scope denial (null) returns the existing empty-list shape and never calls the service', async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'owner-1', email: 'owner@test.dev' },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
     });
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { GET } = await import('./route');
+    const res = await GET(makeRequest(undefined, 25, 0), mockContext);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { users: unknown[]; total: number; limit: number; offset: number };
+    };
+    expect(body.data).toEqual({ users: [], total: 0, limit: 25, offset: 0 });
+    expect(mocks.listAll).not.toHaveBeenCalled();
+  });
+
+  it('a scope invariant failure surfaces as a generic 500 and never calls the service', async () => {
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        identity: { id: 'admin-1', email: 'admin@test.dev' },
+      }),
+    );
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveScope.mockRejectedValue(new AdminUsersScopeInvariantError());
+
+    const { GET } = await import('./route');
+    const res = await GET(makeRequest(), mockContext);
+
+    expect(res.status).toBe(500);
+    expect(mocks.listAll).not.toHaveBeenCalled();
   });
 });

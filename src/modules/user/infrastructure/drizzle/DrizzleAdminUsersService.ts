@@ -1,7 +1,11 @@
 import { and, count, eq, exists, ilike, or, sql } from 'drizzle-orm';
 
+import type { DataScope } from '@/core/contracts/access-context';
 import type { DrizzleDb } from '@/core/db';
-import { membershipsReferenceTable } from '@/core/db/schema/references';
+import {
+  membershipsReferenceTable,
+  organizationsReferenceTable,
+} from '@/core/db/schema/references';
 
 import { usersTable } from './schema';
 
@@ -17,23 +21,19 @@ export type AdminUserDto = {
 };
 
 /**
- * The tenant scope a caller is authorized to operate within.
- *
- * `null` means "no additional scope restriction" and must only be passed for
- * an unscoped platform admin (`isEnvBasedPlatformAdmin`). An ABAC-authorized
- * caller (ordinary tenant/organization owner) must always pass `{ tenantId }`
- * so every read and mutation is constrained -- in the same SQL predicate as
- * the read/mutation itself, never as a separate check-then-act step -- to
- * users who hold a `memberships` row in that tenant's organization. Never
- * another tenant's users.
- *
- * `tenantId` here is the organization UUID: `TenantContext.tenantId` and
- * `TenantContext.organizationId` hold the same value (see
- * `src/core/contracts/tenancy.ts`), and `memberships.organizationId` is the
- * column that actually ties a user to that scope. See SEC-26 in
- * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ * OZI-71 Slice 4B — the canonical per-operation scope this admin surface
+ * accepts. Deliberately narrowed: `organization` (ordinary ABAC admin) and
+ * `platform-global` (env-based platform admin, an explicitly-classified
+ * operation). `tenant` is EXCLUDED at compile time — passing one is a type
+ * error — because Admin Users has no legitimate tenant-wide behaviour.
+ * `null` is no longer a member: an ordinary membership denial is handled at
+ * the composition seam / route layer, never forwarded here, so there is no
+ * `null = unrestricted` path inside this boundary.
  */
-export type AdminUserScope = { tenantId: string } | null;
+export type AdminUsersDataScope = Extract<
+  DataScope,
+  { readonly kind: 'organization' | 'platform-global' }
+>;
 
 type UserRow = {
   id: string;
@@ -70,43 +70,75 @@ const USER_COLUMNS = {
   createdAt: usersTable.createdAt,
 } as const;
 
+type OrganizationScope = Extract<AdminUsersDataScope, { kind: 'organization' }>;
+
 /**
- * `EXISTS (SELECT 1 FROM memberships WHERE memberships.user_id = users.id
- * AND memberships.organization_id = :tenantId)` -- a correlated subquery
- * against the cross-module `memberships` reference table, so tenant scoping
- * is enforced inside the very same SQL statement as the read/mutation
- * instead of a separate "check membership, then act on id" round trip
- * (TOCTOU).
+ * Canonical `organization`-scope containment for `users`, which has no direct
+ * tenant/organization column: the target user must hold a `memberships` row in
+ * `scope.organizationId` AND that organization's `organizations.tenant_id`
+ * must equal `scope.tenantId`. BOTH members of the canonical tuple are
+ * load-bearing (OZI-71 Slice 3 invariant, generalised): an internally
+ * inconsistent scope (`organizationId` of ORG_A + `tenantId` of a different
+ * tenant) matches no row. Expressed as a correlated `EXISTS` so the check
+ * runs inside the very same statement as the read/mutation — never a
+ * separate "check membership, then act on id" round trip (TOCTOU).
+ *
+ * Uses the neutral cross-module reference tables in
+ * `@/core/db/schema/references` (never `authorization`'s real schema), so the
+ * `user` module gains no dependency on `authorization`.
  */
-function membershipScopePredicate(db: DrizzleDb, tenantId: string) {
+function organizationScopePredicate(db: DrizzleDb, scope: OrganizationScope) {
   return exists(
     db
       .select({ one: sql`1` })
       .from(membershipsReferenceTable)
+      .innerJoin(
+        organizationsReferenceTable,
+        eq(
+          organizationsReferenceTable.id,
+          membershipsReferenceTable.organizationId,
+        ),
+      )
       .where(
         and(
           eq(membershipsReferenceTable.userId, usersTable.id),
-          eq(membershipsReferenceTable.organizationId, tenantId),
+          eq(membershipsReferenceTable.organizationId, scope.organizationId),
+          eq(organizationsReferenceTable.tenantId, scope.tenantId),
         ),
       ),
   );
 }
 
 /**
- * The WHERE clause for an admin user listing: an optional case-insensitive
- * search over email and display name, intersected with the caller's tenant
- * scope.
+ * The scope half of every Admin Users `WHERE` clause. Exhaustive over
+ * {@link AdminUsersDataScope}:
  *
- * Separated from `listAll` because assembling the predicate and running the
- * query are different concerns -- and because the scope half is the SEC-26
- * invariant, which is easier to review on its own than interleaved with
- * pagination arithmetic. `undefined` means no WHERE clause at all, which is
- * only reachable for an unscoped platform admin searching for nothing.
+ * - `organization`    → the canonical tuple `EXISTS` predicate above;
+ * - `platform-global` → `undefined` (no row containment) — legitimate ONLY
+ *   because an explicitly-classified `derivePlatformGlobalScope` grant
+ *   already authorised it upstream. There is no `default` branch, so a new
+ *   `DataScope` variant reaching here is a compile error, never a silent
+ *   "unrestricted".
+ */
+function adminUsersScopePredicate(db: DrizzleDb, scope: AdminUsersDataScope) {
+  switch (scope.kind) {
+    case 'organization':
+      return organizationScopePredicate(db, scope);
+    case 'platform-global':
+      return undefined;
+  }
+}
+
+/**
+ * The WHERE clause for an admin user listing: an optional case-insensitive
+ * search over email and display name, intersected with the caller's canonical
+ * scope. `undefined` (no WHERE clause) is only reachable for a
+ * `platform-global` scope searching for nothing.
  */
 function adminUserListPredicate(
   db: DrizzleDb,
   search: string | undefined,
-  scope: AdminUserScope,
+  scope: AdminUsersDataScope,
 ) {
   const searchPredicate = search
     ? or(
@@ -115,8 +147,7 @@ function adminUserListPredicate(
       )
     : undefined;
 
-  const scopePredicate =
-    scope === null ? undefined : membershipScopePredicate(db, scope.tenantId);
+  const scopePredicate = adminUsersScopePredicate(db, scope);
 
   if (searchPredicate && scopePredicate) {
     return and(searchPredicate, scopePredicate);
@@ -131,20 +162,21 @@ function adminUserListPredicate(
  * Deliberately NOT `UserRepository` / `DrizzleUserRepository` -- that
  * DI-registered repository is used for self-service lookups (a user
  * reading or updating their own record by their own verified id), where no
- * additional tenant scoping is needed or correct, and stays untouched by
- * this class. This service is only for the admin panel's cross-user listing
- * and mutation surface, where the caller (unless an unscoped platform admin)
- * may only ever see or touch users who belong to their own tenant. Directly
- * instantiated at the route-handler call site, not registered in DI --
- * mirrors `DrizzleFeatureFlagAdminService`.
+ * additional scoping is needed or correct, and stays untouched by this class.
+ * This service is only for the admin panel's cross-user listing and mutation
+ * surface, where the caller may only ever see or touch users reachable within
+ * their canonical {@link AdminUsersDataScope}. Directly instantiated at the
+ * route-handler call site, not registered in DI -- mirrors
+ * `DrizzleFeatureFlagAdminService`.
  *
- * Every method takes an `AdminUserScope`: callers authorized only via ABAC
- * (not an unscoped platform admin) must pass their own `tenantId` so the DB
- * predicate itself enforces tenant isolation, rather than trusting that the
- * caller already validated the target user's membership. This closed a
- * cross-tenant IDOR/BOLA: the previous implementation reused
- * `DrizzleUserRepository`'s global, unscoped queries for every admin caller
- * regardless of tenant.
+ * Every method takes an {@link AdminUsersDataScope}. For an `organization`
+ * scope the DB predicate itself enforces the full canonical tuple
+ * (`organizationId` AND `tenantId`) in the same statement as the
+ * read/mutation, rather than trusting that the caller validated the target
+ * user's membership. `platform-global` is unrestricted by design and reached
+ * only through an explicit upstream classification. This closed a
+ * cross-tenant IDOR/BOLA (SEC-26): the previous implementation reused
+ * `DrizzleUserRepository`'s global, unscoped queries for every admin caller.
  */
 export class DrizzleAdminUsersService {
   constructor(private readonly db: DrizzleDb) {}
@@ -155,7 +187,7 @@ export class DrizzleAdminUsersService {
       readonly offset?: number;
       readonly search?: string;
     },
-    scope: AdminUserScope,
+    scope: AdminUsersDataScope,
   ): Promise<{ users: AdminUserDto[]; total: number }> {
     const limit = Math.min(options.limit ?? 50, 100);
     const offset = Math.max(options.offset ?? 0, 0);
@@ -183,14 +215,14 @@ export class DrizzleAdminUsersService {
   }
 
   async findById(
-    id: string,
-    scope: AdminUserScope,
+    requestedUserId: string,
+    scope: AdminUsersDataScope,
   ): Promise<AdminUserDto | null> {
-    const idPredicate = eq(usersTable.id, id);
-    const whereClause =
-      scope === null
-        ? idPredicate
-        : and(idPredicate, membershipScopePredicate(this.db, scope.tenantId));
+    const idPredicate = eq(usersTable.id, requestedUserId);
+    const scopePredicate = adminUsersScopePredicate(this.db, scope);
+    const whereClause = scopePredicate
+      ? and(idPredicate, scopePredicate)
+      : idPredicate;
 
     const rows = await this.db
       .select(USER_COLUMNS)
@@ -203,25 +235,25 @@ export class DrizzleAdminUsersService {
   }
 
   /**
-   * Returns the updated row, or `null` when no row matched `id` within
-   * `scope` -- either the id doesn't exist, or (for a tenant-scoped caller)
-   * it names a real user outside the caller's tenant. Both cases must map to
-   * the same 404 at the route layer to avoid leaking cross-tenant existence.
+   * Returns the updated row, or `null` when no row matched `requestedUserId`
+   * within `scope` -- either the id doesn't exist, or it names a real user
+   * outside the caller's scope. Both cases must map to the same 404 at the
+   * route layer to avoid leaking cross-tenant existence.
    */
   async updateProfile(
-    id: string,
+    requestedUserId: string,
     profile: {
       readonly displayName?: string;
       readonly locale?: string;
       readonly timezone?: string;
     },
-    scope: AdminUserScope,
+    scope: AdminUsersDataScope,
   ): Promise<AdminUserDto | null> {
-    const idPredicate = eq(usersTable.id, id);
-    const whereClause =
-      scope === null
-        ? idPredicate
-        : and(idPredicate, membershipScopePredicate(this.db, scope.tenantId));
+    const idPredicate = eq(usersTable.id, requestedUserId);
+    const scopePredicate = adminUsersScopePredicate(this.db, scope);
+    const whereClause = scopePredicate
+      ? and(idPredicate, scopePredicate)
+      : idPredicate;
 
     const updatePayload: {
       displayName?: string;
@@ -253,15 +285,15 @@ export class DrizzleAdminUsersService {
 
   /** See `updateProfile` for the `null` (not found / out of scope) contract. */
   async deactivate(
-    id: string,
+    requestedUserId: string,
     deactivatedAt: Date,
-    scope: AdminUserScope,
+    scope: AdminUsersDataScope,
   ): Promise<AdminUserDto | null> {
-    const idPredicate = eq(usersTable.id, id);
-    const whereClause =
-      scope === null
-        ? idPredicate
-        : and(idPredicate, membershipScopePredicate(this.db, scope.tenantId));
+    const idPredicate = eq(usersTable.id, requestedUserId);
+    const scopePredicate = adminUsersScopePredicate(this.db, scope);
+    const whereClause = scopePredicate
+      ? and(idPredicate, scopePredicate)
+      : idPredicate;
 
     const [row] = await this.db
       .update(usersTable)

@@ -2,45 +2,113 @@
 
 ## Overview
 
-Adds a protected admin panel at `/admin/users` that allows platform administrators to list, search, update display names, and deactivate registered users.
+Adds a protected admin panel at `/admin/users` that allows authorized administrators (env-based platform admins and ABAC-authorized organization admins — see **Access Control**) to list, search, update display names, and deactivate registered users.
 
 ## Access Control
 
-Access is restricted to platform administrators via **two complementary mechanisms**:
+Two distinct actor classes can reach `/admin/users`, with **different authority
+and different data scope** (see **Data scoping — canonical per-operation
+`DataScope`** below):
 
-1. **Env-based**: `ADMIN_USER_EMAILS` environment variable — comma-separated list of email addresses that are unconditionally granted admin access. Unscoped: full cross-tenant reach by design.
-2. **ABAC-based**: `AuthorizationService.can()` with `RESOURCES.USER` resource and the relevant action (`USER_READ`, `USER_UPDATE`, `USER_DEACTIVATE`). Scoped: the grant only proves the action type is allowed, never which tenant's users it applies to (see **Tenant Scoping** below).
+1. **Env-based platform admin** — email listed in `ADMIN_USER_EMAILS`. This is
+   a **platform-admin capability**; combined with an explicit operation
+   classification it yields a `platform-global` `DataScope` (full cross-tenant
+   reach by design).
+2. **Ordinary ABAC-authorized organization admin** — holds the relevant
+   `USER_*` business-action grant (`USER_READ` / `USER_UPDATE` /
+   `USER_DEACTIVATE` on `RESOURCES.USER`) via `AuthorizationService.can()`. The
+   grant only proves the **action type** is allowed. Separately, after that
+   business-action check succeeds, `resolveAdminUsersScope(...)` derives an
+   `organization` `DataScope` for the caller's verified active organization.
+   This actor is **not** a platform admin.
 
 Non-admin authenticated users receive **403 Forbidden**. Unauthenticated requests are rejected by `withNodeProvisioning` before the admin check runs.
 
-### Tenant Scoping (cross-tenant IDOR fix)
+### Data scoping — canonical per-operation `DataScope` (OZI-71 Slice 4B)
 
-`checkAdminAccess()` returns `{ allowed, isPlatformAdmin }`, mirroring the Feature
-Flags admin surface (SEC-26). All three route handlers derive a scope from this:
+`checkAdminAccess()` returns `{ allowed, isPlatformAdmin }` and performs the ABAC
+**business-action** check only — whether the actor may run `user:read` /
+`user:update` / `user:deactivate` in the admin panel at all. It does **not**
+decide which rows are in reach.
 
-```typescript
-const scope = adminAccess.isPlatformAdmin
-  ? null
-  : { tenantId: access.tenant.tenantId };
+Which rows are in reach is a **canonical per-operation `DataScope`**, resolved
+(once per request, after the ABAC check) by the shared server-only seam
+`src/app/api/admin/users/users-admin-scope.ts`
+(`resolveAdminUsersScope(access, db)`):
+
+- **ordinary ABAC admin → `organization` `DataScope`**
+  `{ kind: 'organization', organizationId, tenantId }` for the caller's
+  server-resolved active organization. `organizationId` is proven by a
+  membership check; `tenantId` is read **independently** from
+  `organizations.tenant_id` (never from `access.tenant.tenantId`).
+- **env-based platform admin → `platform-global` `DataScope`**
+  `{ kind: 'platform-global' }`, derived through the shipped
+  `derivePlatformGlobalScope(...)` with an explicit
+  `operation: { kind: 'platform-global' }` classification. This preserves the
+  historical unrestricted cross-tenant reach — but through an explicit
+  canonical classification, **not** through `null`.
+- **`tenant` `DataScope` is not accepted** by this surface — it is excluded
+  from `AdminUsersDataScope` at compile time (`users-admin-scope.type-test.ts`).
+- The `DrizzleAdminUsersService` boundary **never receives `null`**. An
+  ordinary membership denial is handled in the seam / route layer (empty list
+  for `GET /api/admin/users`, `404` for the by-id routes), never forwarded as
+  an unscoped call.
+
+For an `organization` `DataScope`, containment is enforced **inside the same
+SQL statement** as the read/mutation — never a separate "check membership,
+then act on id" step — as a correlated `EXISTS`:
+
+```sql
+EXISTS (SELECT 1
+        FROM memberships m
+        JOIN organizations o ON o.id = m.organization_id
+        WHERE m.user_id = users.id
+          AND m.organization_id = scope.organizationId
+          AND o.tenant_id       = scope.tenantId)
 ```
 
-`null` means unrestricted (platform admin only). A non-null `{ tenantId }` is passed
-into every `DrizzleAdminUsersService` call and is enforced **inside the same SQL
-statement** as the read or mutation, via a correlated `EXISTS` against `memberships`
-(`memberships.organization_id = tenantId AND memberships.user_id = users.id`) — not as
-a separate "check membership, then act on id" step. `tenantId` here is the
-organization UUID; `TenantContext.tenantId` and `TenantContext.organizationId` hold
-the same value (see `src/core/contracts/tenancy.ts`).
+This gives two separate guarantees:
 
-An ABAC-authorized (non-platform-admin) caller who requests a user outside their own
-tenant gets exactly the same `404` as a nonexistent id — never a distinguishing `403`,
-which would leak cross-tenant existence.
+- **A. Cross-tenant tuple integrity.** `scope.tenantId` is load-bearing, so an
+  internally inconsistent tuple — `organizationId` of `ORG_A` paired with the
+  `tenantId` of a _different_ tenant (`ORG_A` really belongs to `TENANT_A`,
+  the scope carries `TENANT_B`) — matches no row. The scope is not a bearer
+  token: possession of a well-shaped object is not authority.
+- **B. Same-tenant organization isolation.** `scope.organizationId` is
+  load-bearing, so a **valid** `{ ORG_A, TENANT_A }` scope cannot reach a user
+  whose membership exists only in `ORG_SIBLING` — **even though**
+  `ORG_A.tenant_id === ORG_SIBLING.tenant_id === TENANT_A` — because the
+  predicate requires `memberships.organization_id = scope.organizationId`.
+  Organization membership never escalates to tenant-wide reach.
+- **C. Positive control.** A **valid** `{ ORG_SIBLING, TENANT_A }` scope
+  (`ORG_SIBLING` genuinely belongs to `TENANT_A`) correctly reaches members of
+  `ORG_SIBLING`. `{ ORG_SIBLING, TENANT_A }` is a consistent canonical tuple,
+  not a mismatch.
 
-Prior to this fix, all four operations (`listAll`, `findById`, `updateProfile`,
-`deactivate`) used the DI-registered `UserRepository` — a global, unscoped
-repository with no tenant concept at all — so any ABAC-authorized tenant
-owner/admin could read or mutate **any user in any tenant**. See SEC-26 in
-`docs/ai/general/SECURITY_CODING_PATTERNS.md` for the full writeup.
+For `platform-global` there is deliberately no row-containment predicate —
+legitimate only because the explicit classification already granted that
+authority.
+
+An ABAC-authorized caller who requests a user outside their organization scope
+(a sibling organization in the same tenant, or another tenant entirely) gets
+exactly the same `404` as a nonexistent id — never a distinguishing `403`,
+which would leak existence.
+
+`access.tenant.tenantId` (the legacy collapsed `TenantContext` value) remains
+in Slice 4B in the transitional ABAC policy selector passed to
+`AuthorizationService.can(...)` and in existing audit/logging metadata
+(`recordAdminAuditEvent(...)` and the routes' `logger.info(...)` calls, both
+unchanged by this slice). It is **not** canonical `DataScope` authority, **not**
+parent-`TenantId` provenance, **not** organization-membership evidence, and
+**not** an SQL containment input — it never reaches the canonical Admin Users
+scope predicate.
+
+Prior to SEC-26, all four operations used the DI-registered `UserRepository` —
+a global, unscoped repository — so any ABAC-authorized tenant owner/admin
+could read or mutate any user in any tenant. SEC-26's fix introduced a
+scoped `DrizzleAdminUsersService`; OZI-71 Slice 4B replaced that fix's legacy
+`AdminUserScope = { tenantId } | null` with the canonical `DataScope` above.
+See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 
 ### Sibling Admin Surfaces — Invitations and Waitlist (SEC-41)
 
@@ -123,7 +191,8 @@ Lists all users with pagination and search.
 Returns a single user record. Returns **404** if user not found (IDOR protection — no
 403 on not found), and **400** if `:id` is not a syntactically valid UUID (SEC-23 --
 validated before any DB call). Returns the same **404** when the id is a real user
-outside the caller's tenant (see Tenant Scoping above).
+outside the caller's `DataScope` (see **Data scoping — canonical per-operation
+`DataScope`** above).
 
 ### `PATCH /api/admin/users/:id`
 
@@ -171,20 +240,29 @@ scoping applies or is needed.
 The admin routes instead use `DrizzleAdminUsersService`
 (`src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.ts`) — directly
 instantiated at the route-handler call site (not DI-registered), mirroring
-`DrizzleFeatureFlagAdminService`. Every method takes an `AdminUserScope` (`{
-tenantId: string } | null`):
+`DrizzleFeatureFlagAdminService`. Every method takes a canonical
+`AdminUsersDataScope` — `Extract<DataScope, { kind: 'organization' | 'platform-global' }>`
+(no `null`, no `tenant`):
 
 - `listAll(opts, scope)`
-- `findById(id, scope)`
-- `updateProfile(id, profile, scope)`
-- `deactivate(id, deactivatedAt, scope)`
+- `findById(requestedUserId, scope)`
+- `updateProfile(requestedUserId, profile, scope)`
+- `deactivate(requestedUserId, deactivatedAt, scope)`
+
+`requestedUserId` is the raw, `z.uuid()`-validated route parameter — it stays a
+resource predicate input and is never branded as a canonical `UserId`, and
+there is no pre-read to brand it (that would break same-statement
+containment).
 
 Because `users` has no `tenant_id`/`organization_id` column of its own, scoping is
-enforced via a lightweight core-level join reference,
-`membershipsReferenceTable` (`src/core/db/schema/references.ts`, mirroring the
-already-established `usersReferenceTable` pattern), so the `user` module can build a
-correlated `EXISTS` predicate against `memberships` without importing the
-`authorization` module's real Drizzle schema.
+enforced via lightweight core-level join references in
+`src/core/db/schema/references.ts` — `membershipsReferenceTable` and
+`organizationsReferenceTable` (which carries `id` plus a read-only `tenant_id`
+for the canonical-tuple check) — so the `user` module can build the correlated
+`EXISTS` predicate against `memberships` joined to `organizations` **without
+importing the `authorization` module's real Drizzle schema**. These reference
+declarations are outside the `drizzle-kit` schema glob: they are query
+mappings, never migrated.
 
 ## UI
 
@@ -203,15 +281,16 @@ both go through `withAdminStepUp`: the caller needs a second factor verified
 within the last 15 minutes, in the current session. Reads are unaffected.
 
 The requirement does not depend on whether the caller is a platform admin or
-a tenant admin — that distinction is authorization (SEC-26/SEC-41) and is
-still enforced separately, in the same `WHERE` clause as the mutation.
+an organization admin — that distinction is authorization (SEC-26/SEC-41,
+canonical `DataScope` since OZI-71 Slice 4B) and is still enforced separately,
+in the same `WHERE` clause as the mutation.
 
 Details: `docs/features/37 - MFA & Step-Up Authentication.md`.
 
 ## Security Notes
 
 - **IDOR protection**: `GET /api/admin/users/:id` returns 404 (not 403) when user is not found to avoid enumeration.
-- **Cross-tenant IDOR/BOLA (fixed)**: prior to this fix, an ABAC-authorized (non-platform-admin) tenant owner/admin could read, rename, or deactivate any user in any tenant — `checkAdminAccess()` only verified the _action_ was allowed, never _whose_ users the caller could reach, and every DB call went through the globally-scoped `UserRepository`. Fixed by deriving an `AdminUserScope` from `isPlatformAdmin` and enforcing it in the same SQL predicate as each read/mutation via `DrizzleAdminUsersService`. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+- **Cross-tenant IDOR/BOLA (fixed)**: prior to SEC-26, an ABAC-authorized (non-platform-admin) tenant owner/admin could read, rename, or deactivate any user in any tenant — `checkAdminAccess()` only verified the _action_ was allowed, never _whose_ users the caller could reach, and every DB call went through the globally-scoped `UserRepository`. SEC-26 fixed this with a scoped `DrizzleAdminUsersService`; **OZI-71 Slice 4B** then replaced that fix's legacy `AdminUserScope = { tenantId } | null` with a canonical per-operation `DataScope` (`organization` with a load-bearing `organizationId` + `tenantId` tuple, or explicitly-classified `platform-global` — never `null`, never `tenant`), still enforced in the same SQL predicate as each read/mutation. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
 - **SEC-23 (UUID validation)**: `:id` is validated with `z.uuid()` before any DB call in both `GET` and `PATCH /api/admin/users/:id` — a malformed id now 400s instead of reaching the DB layer.
 - **SEC-41 (sibling admin surfaces)**: the invitations and waitlist admin routes were audited for the same defect class and fixed — the unscoped flat `DELETE /api/admin/invitations/:id` route was removed, the nested revoke moved its scope into the `UPDATE` predicate, and the waitlist admin routes were made platform-admin only. A static guard now enforces the platform-admin/ABAC split across `src/app/api/admin/**`. See **Sibling Admin Surfaces (SEC-41)** above.
 - **Pagination clamping**: `limit` is silently capped at 100 (not rejected).
@@ -221,26 +300,29 @@ Details: `docs/features/37 - MFA & Step-Up Authentication.md`.
 
 ## Files Changed
 
-| File                                                                  | Change                                                                                                    |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `src/core/contracts/user.ts`                                          | Extended `User` interface and `UserRepository` contract (self-service surface only)                       |
-| `src/modules/user/infrastructure/drizzle/schema.ts`                   | Added `deactivated_at` column                                                                             |
-| `src/modules/user/infrastructure/drizzle/DrizzleUserRepository.ts`    | Self-service (`findById`/`updateProfile`/etc. by the caller's own id); no longer used by the admin routes |
-| `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.ts` | **New** — tenant-scoped admin CRUD surface used by `/api/admin/users/**`                                  |
-| `src/core/db/schema/references.ts`                                    | Added `membershipsReferenceTable` (core-level join reference)                                             |
-| `src/core/db/migrations/generated/0012_users_deactivated_at.sql`      | Migration SQL                                                                                             |
-| `src/app/api/admin/users/route.ts`                                    | `GET /api/admin/users` — now tenant-scoped                                                                |
-| `src/app/api/admin/users/[id]/route.ts`                               | `GET` / `PATCH /api/admin/users/:id` — now tenant-scoped, UUID-validated                                  |
-| `src/app/admin/users/page.tsx`                                        | RSC page                                                                                                  |
-| `src/app/admin/users/UsersClient.tsx`                                 | Client component                                                                                          |
-| `src/app/admin/page.tsx`                                              | Users card changed to `status: 'active'`                                                                  |
+| File                                                                  | Change                                                                                                                                                  |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/core/contracts/user.ts`                                          | Extended `User` interface and `UserRepository` contract (self-service surface only)                                                                     |
+| `src/modules/user/infrastructure/drizzle/schema.ts`                   | Added `deactivated_at` column                                                                                                                           |
+| `src/modules/user/infrastructure/drizzle/DrizzleUserRepository.ts`    | Self-service (`findById`/`updateProfile`/etc. by the caller's own id); no longer used by the admin routes                                               |
+| `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.ts` | **New** (SEC-26); OZI-71 Slice 4B — takes a canonical `AdminUsersDataScope` (`organization` \| `platform-global`), canonical-tuple `EXISTS` containment |
+| `src/core/db/schema/references.ts`                                    | Added `membershipsReferenceTable` (SEC-26); OZI-71 Slice 4B added `tenant_id` to `organizationsReferenceTable` (read-only, not migrated)                |
+| `src/core/db/migrations/generated/0012_users_deactivated_at.sql`      | Migration SQL                                                                                                                                           |
+| `src/app/api/admin/users/users-admin-scope.ts`                        | **New** (OZI-71 Slice 4B) — shared seam: `resolveAdminUsersScope`, `AdminUsersScopeInvariantError`                                                      |
+| `src/app/api/admin/users/route.ts`                                    | `GET /api/admin/users` — canonical `DataScope`-scoped                                                                                                   |
+| `src/app/api/admin/users/[id]/route.ts`                               | `GET` / `PATCH /api/admin/users/:id` — canonical `DataScope`-scoped, UUID-validated                                                                     |
+| `src/app/admin/users/page.tsx`                                        | RSC page                                                                                                                                                |
+| `src/app/admin/users/UsersClient.tsx`                                 | Client component                                                                                                                                        |
+| `src/app/admin/page.tsx`                                              | Users card changed to `status: 'active'`                                                                                                                |
 
 ## Tests
 
-| File                                                                          | Type                                                                                                 |
-| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/modules/user/infrastructure/drizzle/DrizzleUserRepository.db.test.ts`    | Integration (real DB) — self-service surface                                                         |
-| `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.db.test.ts` | Integration (real DB) — cross-tenant IDOR regression coverage                                        |
-| `src/app/api/admin/users/route.test.ts`                                       | Unit (route handler) — includes SEC-26 tenant-scoping regression                                     |
-| `src/app/api/admin/users/[id]/route.test.ts`                                  | Unit (route handler) — includes SEC-26 tenant-scoping + SEC-23 UUID regressions                      |
-| `e2e/admin-users.spec.ts`                                                     | Playwright E2E (UI rendering only — API responses are mocked, does not exercise real tenant scoping) |
+| File                                                                          | Type                                                                                                                                            |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/modules/user/infrastructure/drizzle/DrizzleUserRepository.db.test.ts`    | Integration (real DB) — self-service surface                                                                                                    |
+| `src/modules/user/infrastructure/drizzle/DrizzleAdminUsersService.db.test.ts` | Integration (real DB) — canonical `DataScope` containment: cross-tenant, same-tenant sibling-org, mismatched canonical tuple, `platform-global` |
+| `src/app/api/admin/users/users-admin-scope.test.ts`                           | Unit — scope seam (ordinary → `organization`, platform → `platform-global`, membership denial → `null`, invariant errors)                       |
+| `src/app/api/admin/users/users-admin-scope.type-test.ts`                      | Compile-time — `AdminUsersDataScope` accepts `organization` / `platform-global`, rejects `tenant`, wide `DataScope`, `null`                     |
+| `src/app/api/admin/users/route.test.ts`                                       | Unit (route handler) — canonical scope forwarded; membership denial → empty list; invariant → 500                                               |
+| `src/app/api/admin/users/[id]/route.test.ts`                                  | Unit (route handler) — canonical scope forwarded; scoped miss → 404; SEC-23 UUID regressions; step-up preserved                                 |
+| `e2e/admin-users.spec.ts`                                                     | Playwright E2E (UI rendering only — API responses are mocked, does not exercise real scoping)                                                   |

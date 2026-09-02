@@ -15,6 +15,8 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveAdminUsersScope } from '../users-admin-scope';
+
 import { DrizzleAdminUsersService } from '@/modules/user/infrastructure/drizzle/DrizzleAdminUsersService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withAdminStepUp } from '@/security/api/with-admin-step-up';
@@ -40,11 +42,12 @@ const deactivateBodySchema = z.object({
 type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
 
 /**
- * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
- * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
- * authorization for a client-supplied `id` naming a user who may belong to
- * another tenant -- check `isPlatformAdmin` and pass the resulting
- * `AdminUserScope` through to the service. See SEC-26 in
+ * The ABAC business-action gate (SEC-26): whether this actor may perform the
+ * given `user:*` action in the admin panel at all. It does NOT decide which
+ * rows are in reach -- that is the canonical per-operation `DataScope` from
+ * `resolveAdminUsersScope`, AND-ed into the same SQL statement as the
+ * requested `id`. `allowed: true` alone is never sufficient for a
+ * client-supplied `id`. See SEC-26 in
  * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
  */
 async function checkAdminAccess(
@@ -100,16 +103,19 @@ export const GET = withErrorHandler(
     }
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+    // Canonical per-operation scope (OZI-71 Slice 4B). A user outside the
+    // caller's scope 404s exactly like a nonexistent id -- enforced in the
+    // same DB predicate as the lookup (SEC-26), never a distinguishing 403
+    // (avoids cross-tenant existence leaks). `null` is a legitimate
+    // ordinary membership denial and maps to the same 404.
+    const scope = await resolveAdminUsersScope(access, db);
+
+    if (!scope) {
+      return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
+    }
+
     const service = new DrizzleAdminUsersService(db);
-    // An ABAC-authorized (non-platform-admin) caller may only read a user
-    // who belongs to their own tenant, regardless of which `id` they supply
-    // -- enforced in the same DB predicate as the lookup itself (SEC-26).
-    // A user outside the caller's tenant must 404 exactly like a
-    // nonexistent id, never a distinguishing 403 (avoids cross-tenant
-    // existence leaks).
-    const scope = adminAccess.isPlatformAdmin
-      ? null
-      : { tenantId: access.tenant.tenantId };
     const user = await service.findById(id, scope);
 
     if (!user) {
@@ -163,9 +169,11 @@ export const PATCH = withErrorHandler(
           return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
         }
 
-        const scope = adminAccess.isPlatformAdmin
-          ? null
-          : { tenantId: access.tenant.tenantId };
+        const scope = await resolveAdminUsersScope(access, db);
+        if (!scope) {
+          return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
+        }
+
         const deactivatedAt = new Date();
         const deactivated = await service.deactivate(id, deactivatedAt, scope);
 
@@ -217,9 +225,11 @@ export const PATCH = withErrorHandler(
         return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
       }
 
-      const scope = adminAccess.isPlatformAdmin
-        ? null
-        : { tenantId: access.tenant.tenantId };
+      const scope = await resolveAdminUsersScope(access, db);
+      if (!scope) {
+        return createServerErrorResponse('User not found', 404, 'NOT_FOUND');
+      }
+
       const updated = await service.updateProfile(
         id,
         { displayName: patchResult.data.displayName },

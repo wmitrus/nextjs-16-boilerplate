@@ -58,7 +58,7 @@ For an `organization` `DataScope`, containment is enforced **inside the same
 SQL statement** as the read/mutation — never a separate "check membership,
 then act on id" step — as a correlated `EXISTS`:
 
-```
+```sql
 EXISTS (SELECT 1
         FROM memberships m
         JOIN organizations o ON o.id = m.organization_id

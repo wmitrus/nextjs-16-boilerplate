@@ -17,9 +17,10 @@ and different data scope** (see **Data scoping — canonical per-operation
 2. **Ordinary ABAC-authorized organization admin** — holds the relevant
    `USER_*` business-action grant (`USER_READ` / `USER_UPDATE` /
    `USER_DEACTIVATE` on `RESOURCES.USER`) via `AuthorizationService.can()`. The
-   grant only proves the **action type** is allowed; it yields an
-   `organization` `DataScope` for the caller's own active organization. This
-   actor is **not** a platform admin.
+   grant only proves the **action type** is allowed. Separately, after that
+   business-action check succeeds, `resolveAdminUsersScope(...)` derives an
+   `organization` `DataScope` for the caller's verified active organization.
+   This actor is **not** a platform admin.
 
 Non-admin authenticated users receive **403 Forbidden**. Unauthenticated requests are rejected by `withNodeProvisioning` before the admin check runs.
 

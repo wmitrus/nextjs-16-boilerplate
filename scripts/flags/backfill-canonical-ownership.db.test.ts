@@ -4,6 +4,7 @@ import postgres from 'postgres';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  loadLegacyOwnershipEvidence,
   runFeatureFlagOwnershipBackfill,
   type BackfillDecision,
 } from './backfill-canonical-ownership';
@@ -760,29 +761,176 @@ describe('runFeatureFlagOwnershipBackfill — monotonic disposition (finding 4b,
     });
   });
 
-  it('planned quarantined -> final canonical is REFUSED (the reviewed quarantine stands)', async () => {
+  it('round 4: planned quarantined -> fresh NOT-quarantined (projected sibling vanished) => collision_changed, row stays unresolved_legacy — NOT canonical, NOT a stale quarantine', async () => {
     // two siblings project to ORG_B1 -> both planned quarantined.
     await insertMapping('clerk', 'ext-mono', ORG_B1);
     const idA = await insertLegacy('mono-b', ORG_B1); // Case B -> ORG_B1
     const idB = await insertLegacy('mono-b', 'ext-mono'); // Case C -> ORG_B1
+    const records: BackfillDecision[] = [];
 
     const report = await backfill('apply', {
-      onDecision: () => {},
+      onDecision: (d) => {
+        records.push(d);
+      },
       onBeforeRowUpdate: async (row) => {
         if (row.id !== idA) return;
-        // sibling idB no longer resolves to ORG_B1 -> idA's FRESH disposition
-        // would be "canonical". Monotonic safety must keep the quarantine.
+        // sibling idB no longer resolves to ORG_B1 BEFORE idA's apply txn does
+        // its fresh, witness-locked collision probe -> the projected collision
+        // that justified idA's planned quarantine is GONE.
         await testDb.db.execute(
           sql`UPDATE feature_flags SET tenant_id = 'now-unmatched' WHERE id = ${idB}`,
         );
       },
     });
 
+    // Assertions are scoped to idA: whichever row is processed first, idA is
+    // the one whose planned (projected) collision witness vanishes before its
+    // fresh probe. idA must NOT canonicalize (fail closed) and must NOT persist
+    // the stale quarantine (that would permanently hide the historical override).
     expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(report.reasonCounts.collision_changed).toBe(1); // exactly idA
     expect(await rowById(idA)).toMatchObject({
       organizationId: null,
-      ownershipState: 'quarantined',
+      ownershipState: 'unresolved_legacy',
     });
+    const resA = records.find(
+      (r) => r.featureFlagId === idA && r.phase === 'result',
+    );
+    expect(resA).toMatchObject({
+      outcome: 'concurrently_changed',
+      reason: 'collision_changed',
+    });
+    expect(
+      records.find((r) => r.featureFlagId === idA && r.phase === 'intent'),
+    ).toMatchObject({ outcome: 'quarantined' });
+  });
+
+  it('round 4: planned quarantined (existing FF·B winner) -> winner removed before the fresh probe => collision_changed, row stays unresolved_legacy', async () => {
+    await insertFfbCanonical('mono-c', ORG_B1, 'ffb-mono-c');
+    const histId = await insertLegacy('mono-c', ORG_B1); // plan: quarantine (winner owns it)
+    const records: BackfillDecision[] = [];
+
+    const report = await backfill('apply', {
+      onDecision: (d) => {
+        records.push(d);
+      },
+      onBeforeRowUpdate: async (row) => {
+        if (row.id !== histId) return;
+        // the FF·B winner is deleted BEFORE the apply txn's fresh probe.
+        await testDb.db.execute(
+          sql`DELETE FROM feature_flags WHERE key = 'mono-c' AND ownership_state = 'canonical_organization'`,
+        );
+      },
+    });
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(report.quarantinedCount).toBe(0);
+    expect(report.reasonCounts.collision_changed).toBe(1);
+    expect(await rowById(histId)).toMatchObject({
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+    });
+    expect(
+      records.find((r) => r.featureFlagId === histId && r.phase === 'result'),
+    ).toMatchObject({
+      outcome: 'concurrently_changed',
+      reason: 'collision_changed',
+    });
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — collision-witness stability (finding round 4, real Postgres only)', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('Test A: the fresh transactional probe FOR SHARE-locks the canonical winner; a concurrent DELETE of that winner is blocked until the backfill txn commits; the candidate commits quarantined', async () => {
+    if (!process.env.TEST_DATABASE_URL) return; // needs a second real connection
+
+    await insertFfbCanonical('witnessA', ORG_B1, 'ffb-witnessA');
+    const histId = await insertLegacy('witnessA', ORG_B1); // plan: quarantine
+
+    const other = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    let deleteStillPendingDuringLock = false;
+    let blockedDelete: Promise<unknown> = Promise.resolve();
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: () => {},
+        // Fires right after the fresh, witness-locked probe (the FF·B winner is
+        // FOR SHARE-locked now) and before the candidate is mutated.
+        onAfterFreshCollisionCheck: async (row) => {
+          if (row.id !== histId) return;
+          blockedDelete = other`
+            DELETE FROM feature_flags
+            WHERE key = 'witnessA' AND ownership_state = 'canonical_organization'
+          `.catch(() => {});
+          const raced = await Promise.race([
+            blockedDelete.then(() => 'settled'),
+            sleep(500).then(() => 'still-pending'),
+          ]);
+          deleteStillPendingDuringLock = raced === 'still-pending';
+        },
+      });
+      await blockedDelete; // unblocks once our txn commits
+
+      expect(deleteStillPendingDuringLock).toBe(true); // held off for the window
+      expect(report.quarantinedCount).toBe(1);
+      expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(await rowById(histId)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'quarantined',
+      });
+      // the concurrent writer's DELETE only lands after commit
+      const remaining = (await allRows()).filter((r) => r.key === 'witnessA');
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]).toMatchObject({
+        id: histId,
+        ownershipState: 'quarantined',
+      });
+    } finally {
+      await other.end({ timeout: 5 });
+    }
+  });
+
+  it('Test B: an FF·B winner removed by a second connection AFTER intent but BEFORE the fresh probe => candidate stays unresolved_legacy / org NULL, result concurrently_changed / collision_changed', async () => {
+    if (!process.env.TEST_DATABASE_URL) return;
+
+    await insertFfbCanonical('witnessB', ORG_B1, 'ffb-witnessB');
+    const histId = await insertLegacy('witnessB', ORG_B1); // plan: quarantine
+
+    const other = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    const records: BackfillDecision[] = [];
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: (d) => {
+          records.push(d);
+        },
+        onBeforeRowUpdate: async (row) => {
+          if (row.id !== histId) return;
+          // committed by another connection before the apply txn opens
+          await other`
+            DELETE FROM feature_flags
+            WHERE key = 'witnessB' AND ownership_state = 'canonical_organization'
+          `;
+        },
+      });
+
+      expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(report.quarantinedCount).toBe(0);
+      expect(report.reasonCounts.collision_changed).toBe(1);
+      expect(await rowById(histId)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'unresolved_legacy',
+      });
+      expect(
+        records.find((r) => r.featureFlagId === histId && r.phase === 'result'),
+      ).toMatchObject({
+        outcome: 'concurrently_changed',
+        reason: 'collision_changed',
+      });
+    } finally {
+      await other.end({ timeout: 5 });
+    }
   });
 });
 
@@ -912,6 +1060,174 @@ describe('runFeatureFlagOwnershipBackfill — 23505 savepoint recovery (finding 
       expect(
         records.find((r) => r.featureFlagId === histId && r.phase === 'intent'),
       ).toMatchObject({ outcome: 'canonical_organization' });
+    } finally {
+      await other.end({ timeout: 5 });
+    }
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — canonical organization id provenance (finding P1, real DB)', () => {
+  const UPPER_B1 = ORG_B1.toUpperCase();
+
+  it('A: legacy tenant_id is an UPPERCASE spelling of a real organizations.id -> canonical resolves to the DB/canonical organization id, not the raw input', async () => {
+    const id = await insertLegacy('upper-direct', UPPER_B1);
+
+    const report = await backfill('apply');
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(1);
+    expect(report.reasonCounts.resolved_internal_organization).toBe(1);
+    const row = await rowById(id);
+    expect(row).toMatchObject({
+      organizationId: ORG_B1, // canonical DB spelling — NOT UPPER_B1
+      ownershipState: 'canonical_organization',
+    });
+    expect(row?.organizationId).not.toBe(UPPER_B1);
+  });
+
+  it('B: the same UPPERCASE legacy value also maps via provider evidence to that SAME organization -> Case D resolves canonical, NOT ambiguous_internal_vs_provider', async () => {
+    await insertMapping('clerk', UPPER_B1, ORG_B1);
+    const id = await insertLegacy('upper-and-provider', UPPER_B1);
+
+    const report = await backfill('apply');
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(1);
+    expect(report.reasonCounts.ambiguous_internal_vs_provider).toBeUndefined();
+    expect(report.reasonCounts.resolved_same_internal_and_provider).toBe(1);
+    expect(await rowById(id)).toMatchObject({
+      organizationId: ORG_B1,
+      ownershipState: 'canonical_organization',
+    });
+  });
+
+  it('C: two historical siblings for one key use upper- and lower-case UUID spellings of the same organization -> dry-run detects the projected collision; both quarantined; no arbitrary winner', async () => {
+    const idLower = await insertLegacy('case-key', ORG_B1);
+    const idUpper = await insertLegacy('case-key', UPPER_B1);
+
+    const dry = await backfill('dry-run');
+    expect(dry.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(dry.quarantinedCount).toBe(2);
+    expect(dry.reasonCounts.projected_collision_quarantined).toBe(2);
+
+    const applied = await backfill('apply');
+    expect(applied.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(applied.quarantinedCount).toBe(2);
+    for (const id of [idLower, idUpper]) {
+      expect(await rowById(id)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'quarantined',
+      });
+    }
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — bounded set-based evidence (finding P2 / N+1, real DB)', () => {
+  /** Count top-level `.select()` + `.execute()` calls made through a db handle. */
+  const countingDb = (base: TestDb['db']) => {
+    let queries = 0;
+    const proxy = new Proxy(base, {
+      get(target, prop, receiver) {
+        const orig = Reflect.get(target, prop, receiver);
+        if (
+          (prop === 'select' || prop === 'execute') &&
+          typeof orig === 'function'
+        ) {
+          return (...args: unknown[]) => {
+            queries += 1;
+            return (orig as (...a: unknown[]) => unknown).apply(target, args);
+          };
+        }
+        return orig;
+      },
+    });
+    return { db: proxy as TestDb['db'], queries: () => queries };
+  };
+
+  it('loadLegacyOwnershipEvidence issues an O(1) bounded number of queries — the count does NOT grow with the number of legacy values', async () => {
+    const many = Array.from(
+      { length: 120 },
+      (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+    );
+    const few = many.slice(0, 5);
+
+    const c1 = countingDb(testDb.db);
+    await loadLegacyOwnershipEvidence(many, c1);
+    const c2 = countingDb(testDb.db);
+    await loadLegacyOwnershipEvidence(few, c2);
+
+    expect(c1.queries()).toBe(c2.queries()); // independent of input size
+    expect(c1.queries()).toBeLessThanOrEqual(4); // ≤ 4 bounded IN(...) reads
+  });
+
+  it('a key with 150 same-key siblings (all projecting the same collision): dry-run collision planning stays LINEAR in candidates — no per-sibling gatherEvidence N+1', async () => {
+    const SIBLINGS = 150;
+    // Distinct legacy values (uq_feature_flags_key_tenant forbids repeats), each
+    // mapped via provider evidence to ORG_B1, so every row classifies canonical
+    // -> ORG_B1 and every one projects a collision against all the others.
+    for (let i = 0; i < SIBLINGS; i += 1) {
+      const ext = `ext-mega-${i}`;
+      await insertMapping('clerk', ext, ORG_B1);
+      await insertLegacy('mega-key', ext);
+    }
+    const counter = countingDb(testDb.db);
+
+    const report = await runFeatureFlagOwnershipBackfill(counter.db, {
+      mode: 'dry-run',
+      batchSize: 500,
+    });
+
+    expect(report.candidateCount).toBe(SIBLINGS);
+    expect(report.quarantinedCount).toBe(SIBLINGS); // all projected collisions
+    // The OLD per-sibling gatherEvidence design was ~candidateCount * (siblings *
+    // ~2) queries (≈ 45 000 here). The set-based loader is a small constant per
+    // candidate: assert well under a linear ceiling the quadratic design could
+    // never meet.
+    expect(counter.queries()).toBeLessThan(report.candidateCount * 20);
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — projected sibling witness stability (finding 6.2, real Postgres only)', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('the sibling that establishes a projected collision is FOR SHARE-locked; a concurrent UPDATE of that sibling is blocked until the candidate decision commits', async () => {
+    if (!process.env.TEST_DATABASE_URL) return; // needs a second real connection
+
+    // two same-key rows (distinct legacy values, both mapped -> ORG_B1) both
+    // resolve canonical => each projects a collision witnessed by the other.
+    await insertMapping('clerk', 'ext-sla', ORG_B1);
+    await insertMapping('clerk', 'ext-slb', ORG_B1);
+    const idA = await insertLegacy('sib-lock', 'ext-sla');
+    await insertLegacy('sib-lock', 'ext-slb');
+
+    const other = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    let siblingWriteStillPending = false;
+    let blockedWrite: Promise<unknown> = Promise.resolve();
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: () => {},
+        onAfterFreshCollisionCheck: async (row) => {
+          if (row.id !== idA) return;
+          // some same-key sibling is FOR SHARE-locked right now; mutating any of
+          // them from another connection must block until this txn commits.
+          blockedWrite = other`
+            UPDATE feature_flags SET tenant_id = 'moved-away'
+            WHERE key = 'sib-lock' AND id <> ${idA}
+          `.catch(() => {});
+          const raced = await Promise.race([
+            blockedWrite.then(() => 'settled'),
+            sleep(500).then(() => 'pending'),
+          ]);
+          siblingWriteStillPending = raced === 'pending';
+        },
+      });
+      await blockedWrite; // unblocks once our txn commits
+
+      expect(siblingWriteStillPending).toBe(true);
+      expect(report.quarantinedCount).toBeGreaterThanOrEqual(1);
+      expect(await rowById(idA)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'quarantined',
+      });
     } finally {
       await other.end({ timeout: 5 });
     }

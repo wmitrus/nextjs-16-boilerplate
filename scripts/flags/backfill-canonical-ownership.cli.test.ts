@@ -1,4 +1,11 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import {
+  closeSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -17,7 +24,10 @@ vi.mock('@/core/db/create-db', () => ({ createDb: vi.fn() }));
 
 import {
   checkArtifactPathIsNew,
+  finalizeBackfillReport,
   parseBackfillCliArgs,
+  reserveBackfillArtifacts,
+  resolveArtifactPaths,
 } from './backfill-canonical-ownership';
 
 describe('parseBackfillCliArgs — mode + operator gate', () => {
@@ -154,5 +164,201 @@ describe('checkArtifactPathIsNew — no silent overwrite', () => {
       ORIGINAL_DEST,
     ); // untouched
     expect(pathExistsWithinBase(tmpRel, CWD, 'report (temp)')).toBe(true); // temp preserved for retry
+  });
+});
+
+describe('resolveArtifactPaths — physical alias / confinement preflight (finding P2)', () => {
+  const CWD = process.cwd();
+  const BASE_REL = join('node_modules', '.cache', 'ffc-alias-test');
+  let runDir: string; // absolute mkdtemp dir under the repo
+  let realRel: string; // repo-relative real directory
+  let linkRel: string; // repo-relative symlink -> realRel (same physical dir)
+  let escapeRel: string; // repo-relative symlink -> a dir OUTSIDE the repo
+  let outsideDir: string; // that outside dir (under os.tmpdir())
+
+  beforeAll(() => {
+    ensureDirectorySyncWithinBase(join(CWD, BASE_REL), CWD, 'alias-test base');
+    runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
+    const real = join(runDir, 'real');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename, no-restricted-syntax -- this suite's own mkdtemp scratch dir
+    mkdirSync(real);
+    realRel = relative(CWD, real);
+
+    const link = join(runDir, 'link');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned scratch symlink
+    symlinkSync(real, link); // link/ and real/ are the same physical dir
+    linkRel = relative(CWD, link);
+
+    outsideDir = mkdtempSync(join(tmpdir(), 'ffc-escape-'));
+    const escape = join(runDir, 'escape');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned scratch symlink pointing outside the repo on purpose
+    symlinkSync(outsideDir, escape); // escape/ points outside the repo
+    escapeRel = relative(CWD, escape);
+  });
+
+  afterAll(() => {
+    // eslint-disable-next-line no-restricted-syntax -- test's own mkdtempSync() dirs
+    rmSync(runDir, { recursive: true, force: true });
+    // eslint-disable-next-line no-restricted-syntax -- test's own mkdtempSync() dir
+    rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  it('three distinct repo-contained paths -> ok, with validated PHYSICAL targets', () => {
+    const r = resolveArtifactPaths(
+      join(realRel, 'd.ndjson'),
+      join(realRel, 'r.json'),
+      CWD,
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.paths.physicalDecisions).toBe(join(runDir, 'real', 'd.ndjson'));
+      expect(r.paths.physicalReport).toBe(join(runDir, 'real', 'r.json'));
+      expect(r.paths.physicalTmpReport).toBe(
+        join(runDir, 'real', 'r.json.partial'),
+      );
+    }
+  });
+
+  it('identical decisions/report -> rejected before any WAL / DB access', () => {
+    const r = resolveArtifactPaths(
+      join(realRel, 'same.json'),
+      join(realRel, 'same.json'),
+      CWD,
+    );
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).toMatch(/same physical path/i);
+  });
+
+  it('--decisions equals <report>.partial -> rejected', () => {
+    const r = resolveArtifactPaths(
+      join(realRel, 'r.json.partial'),
+      join(realRel, 'r.json'),
+      CWD,
+    );
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).toMatch(/--report \(temp\)/i);
+  });
+
+  it('lexical alias (out/../report.json vs report.json) -> still rejected', () => {
+    const r = resolveArtifactPaths(
+      `${realRel}/sub/../d.ndjson`,
+      join(realRel, 'd.ndjson'),
+      CWD,
+    );
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).toMatch(/same physical path/i);
+  });
+
+  it('decisions through a SYMLINKED parent + report through the REAL parent resolving to the same inode -> rejected', () => {
+    const r = resolveArtifactPaths(
+      join(linkRel, 'x.json'), // link/ -> real/
+      join(realRel, 'x.json'),
+      CWD,
+    );
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).toMatch(/same physical path/i);
+  });
+
+  it('a symlinked parent directory that escapes the repo -> rejected (physical confinement)', () => {
+    const r = resolveArtifactPaths(
+      join(escapeRel, 'd.ndjson'), // escape/ -> os.tmpdir()/...
+      join(realRel, 'r.json'),
+      CWD,
+    );
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).toMatch(/physical/i);
+  });
+
+  it('a missing parent directory -> rejected (open() cannot create it)', () => {
+    const r = resolveArtifactPaths(
+      join(realRel, 'nope', 'd.ndjson'),
+      join(realRel, 'r.json'),
+      CWD,
+    );
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).toMatch(/parent directory does not exist/i);
+  });
+});
+
+describe('reserveBackfillArtifacts / finalizeBackfillReport — reserve temp BEFORE DB (finding: artifact-gate)', () => {
+  const CWD = process.cwd();
+  const BASE_REL = join('node_modules', '.cache', 'ffc-reserve-test');
+  let runDir: string;
+  let relOf: (name: string) => string;
+
+  beforeAll(() => {
+    ensureDirectorySyncWithinBase(
+      join(CWD, BASE_REL),
+      CWD,
+      'reserve-test base',
+    );
+    runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
+    relOf = (name: string) => relative(CWD, join(runDir, name));
+  });
+
+  afterAll(() => {
+    // eslint-disable-next-line no-restricted-syntax -- test's own mkdtempSync() dir
+    rmSync(runDir, { recursive: true, force: true });
+  });
+
+  it('A — report parent cannot be resolved: fails BEFORE any fd is opened / DB touched', () => {
+    const decisionsRel = relOf('A-d.ndjson');
+    expect(() =>
+      reserveBackfillArtifacts(decisionsRel, relOf('A-missing/r.json'), CWD),
+    ).toThrow(/parent directory does not exist/i);
+    // resolution throws before opening ANYTHING — the decisions WAL is absent
+    expect(pathExistsWithinBase(decisionsRel, CWD, 'decisions')).toBe(false);
+  });
+
+  it('B — normal apply: <report>.partial is reserved up front; final --report is NOT pre-created; finalize publishes it and removes the temp', () => {
+    const decisionsRel = relOf('B-d.ndjson');
+    const reportRel = relOf('B-r.json');
+    const tmpRel = `${reportRel}.partial`;
+
+    const reserved = reserveBackfillArtifacts(decisionsRel, reportRel, CWD);
+    expect(reserved.decisionsFd).not.toBeNull();
+    expect(reserved.reportTmpFd).not.toBeNull();
+    expect(pathExistsWithinBase(tmpRel, CWD, 'temp')).toBe(true); // reserved before DB
+    expect(pathExistsWithinBase(reportRel, CWD, 'report')).toBe(false); // NOT pre-created
+
+    finalizeBackfillReport(
+      reserved,
+      `${JSON.stringify({ runId: 'B', done: true }, null, 2)}\n`,
+    );
+    closeSync(reserved.decisionsFd!);
+    closeSync(reserved.reportTmpFd!);
+
+    expect(pathExistsWithinBase(reportRel, CWD, 'report')).toBe(true); // final appears
+    expect(pathExistsWithinBase(tmpRel, CWD, 'temp')).toBe(false); // temp gone
+    expect(
+      JSON.parse(readTextFileWithinBase(reportRel, CWD, 'report')),
+    ).toMatchObject({ runId: 'B', done: true });
+  });
+
+  it('C — interrupted after reservation (finalize never runs): final --report absent, <report>.partial remains as incomplete-run evidence', () => {
+    const decisionsRel = relOf('C-d.ndjson');
+    const reportRel = relOf('C-r.json');
+    const tmpRel = `${reportRel}.partial`;
+
+    const reserved = reserveBackfillArtifacts(decisionsRel, reportRel, CWD);
+    // simulate the backfill throwing before finalize: run()'s finally just closes fds
+    closeSync(reserved.decisionsFd!);
+    closeSync(reserved.reportTmpFd!);
+
+    expect(pathExistsWithinBase(reportRel, CWD, 'report')).toBe(false); // never published
+    expect(pathExistsWithinBase(tmpRel, CWD, 'temp')).toBe(true); // evidence
+    expect(pathExistsWithinBase(decisionsRel, CWD, 'decisions')).toBe(true);
+  });
+
+  it('rejects when --decisions / --report / <report>.partial already exists (no truncation), closing any fd already opened', () => {
+    const decisionsRel = relOf('D-d.ndjson');
+    const reportRel = relOf('D-r.json');
+    writeTextFileSyncWithinBase(reportRel, CWD, 'prior\n', 'D fixture');
+
+    expect(() =>
+      reserveBackfillArtifacts(decisionsRel, reportRel, CWD),
+    ).toThrow(/already exists/i);
+    // the decisions WAL must not have been left behind
+    expect(pathExistsWithinBase(decisionsRel, CWD, 'decisions')).toBe(false);
   });
 });

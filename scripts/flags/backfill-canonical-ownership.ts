@@ -16,21 +16,24 @@ import {
   type ResolvedOrganization,
 } from '@/core/contracts/legacy-ownership-classification';
 import { createDb } from '@/core/db/create-db';
-import { authOrganizationIdentitiesReferenceTable } from '@/core/db/schema/references';
+import {
+  authOrganizationIdentitiesReferenceTable,
+  organizationsReferenceTable,
+  tenantsReferenceTable,
+} from '@/core/db/schema/references';
 import type { DrizzleDb } from '@/core/db/types';
 
 import {
   appendRecordDurably,
   openNewWalFileWithinBase,
   pathExistsWithinBase,
+  physicalBaseDir,
   publishFileAtomicallyWithinBase,
-  writeNewFileDurablyWithinBase,
+  resolvePhysicalTargetWithinBase,
 } from '../lib/fs-guards-shared';
 
 import { resolveDriver, resolveProvider } from './utils';
 
-import { DrizzleOrganizationScopeAuthority } from '@/modules/authorization/infrastructure/drizzle/DrizzleOrganizationScopeAuthority';
-import { DrizzleTenantExistenceReader } from '@/modules/authorization/infrastructure/drizzle/DrizzleTenantExistenceReader';
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
 
 /**
@@ -46,6 +49,10 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  * the NEUTRAL §14a.10 classifier (`@/core/contracts/legacy-ownership-classification`):
  *
  *   - a real `organizations.id`               -> canonical_organization
+ *     (the canonical id + parent tenant are READ FROM the matched
+ *     `organizations` row — `organizations.id` / `organizations.tenant_id` —
+ *     never the raw legacy input, so an upper-case legacy UUID resolves to its
+ *     canonical DB spelling and does not falsely disagree with a provider map)
  *   - `auth_organization_identities` mapping(s) — across ALL providers — that
  *     collapse to ONE re-verified internal organization -> canonical_organization
  *   - legacy `tenant_id IS NULL` (+ Feature Flags' PROVEN NULL == global
@@ -80,8 +87,13 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  * `--apply --confirm` is a PRODUCTION-DATA-MUTATION-capable mode and REQUIRES
  * both `--decisions=<path>` (streamed NDJSON, complete per-row evidence) and
  * `--report=<path>` (summary JSON). Both paths MUST be new — an existing file
- * is a fail-closed error (a prior dry-run's audit evidence is never truncated).
- * Missing evidence paths, or an existing target, exit BEFORE any DB work.
+ * is a fail-closed error (a prior dry-run's audit evidence is never truncated)
+ * — and `--decisions`, `--report` and `<report>.partial` must resolve to three
+ * DISTINCT PHYSICAL targets: a lexical alias (`out/../report.json` vs
+ * `report.json`), a symlinked parent directory that makes two paths address the
+ * same inode, or a symlinked parent that escapes the real repo is rejected; a
+ * missing parent directory is rejected too. Missing evidence paths, a path
+ * alias, or an existing target all exit BEFORE any WAL / DB work.
  * Optional everywhere: --batch-size=<n> (default 500), --start-after=<uuid>.
  *
  * Before any Production run: 1. explicit dry-run; 2. review the decisions
@@ -103,8 +115,10 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  * ALSO resolves to `org`. Each competing historical row runs this check
  * independently and quarantines ITSELF — no winner is picked by id/UUID order.
  * Dry-run and apply run the identical disposition, so an unchanged database
- * produces the identical result. The sibling scan is bounded by rows sharing
- * ONE key (`SIBLING_LIMIT`), never the full population.
+ * produces the identical result. The same-key sibling set is bounded
+ * (`SIBLING_LIMIT`), and its authoritative evidence is loaded SET-BASED — a
+ * fixed, bounded number of `IN (...)` reads for the whole set, then the neutral
+ * classifier in memory — NOT one evidence gather per sibling.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * CONCURRENCY — ONE CONSISTENCY BOUNDARY PER APPLIED ROW
@@ -117,18 +131,32 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  *     is evaluated and mutated;
  *   - `SELECT ... FOR UPDATE` the candidate `feature_flags` row and verify its
  *     key / tenant_id / state are still exactly what was classified;
- *   - RE-GATHER the FULL authoritative evidence set (direct `organizations`
- *     match, EVERY `auth_organization_identities` mapping, parent tenant,
- *     tenant existence) THROUGH THE TRANSACTION HANDLE and RE-CLASSIFY;
+ *   - RE-LOAD the FULL authoritative evidence set SET-BASED (direct
+ *     `organizations` match, EVERY `auth_organization_identities` mapping,
+ *     re-verified mapped org, tenant existence) THROUGH THE TRANSACTION HANDLE
+ *     and RE-CLASSIFY. Canonical ids/parents come from the matched
+ *     `organizations` row, never the raw legacy string;
  *   - if the classifier result is not STRUCTURALLY identical to the one in the
  *     durable `intent` record (state / organizationId / parentTenantId /
  *     reason all compared) -> FAIL CLOSED (`evidence_changed`), leave the row
  *     unresolved — a canonical organization is never persisted from stale
  *     evidence;
- *   - re-derive the collision disposition on the locked snapshot;
- *   - MONOTONIC SAFETY: never persist a MORE permissive disposition than the
- *     reviewed intent — planned `canonical` -> `quarantined` is allowed, but
- *     planned `quarantined` -> `canonical` is refused (the quarantine stands);
+ *   - re-derive the collision disposition on the locked snapshot, `FOR SHARE`-
+ *     locking every collision WITNESS before relying on it: the existing
+ *     canonical winner row, AND the whole bounded same-key sibling set (locked
+ *     as a set, then classified from ONE set-based evidence bundle). A witness
+ *     deleted / reclassified after the unlocked plan is treated as GONE.
+ *     `FOR SHARE` blocks UPDATE/DELETE of a witness for the rest of the txn but
+ *     never blocks a NEW-row INSERT;
+ *   - MONOTONIC RULE: planned `canonical` -> fresh `quarantined` is applied
+ *     (more restrictive; backed by the CURRENT locked witness). planned
+ *     `quarantined` is only persisted if the CURRENT transactional disposition
+ *     is ALSO a quarantine from a locked witness. planned `quarantined` ->
+ *     fresh NOT-quarantined means the collision that justified the reviewed
+ *     quarantine is gone at the transactional boundary: DO NOT canonicalize
+ *     (fail closed) and DO NOT persist the stale quarantine (that would
+ *     permanently hide the historical override after FF·D) — leave the row
+ *     `unresolved_legacy` / `organization_id NULL` and report `collision_changed`;
  *   - mutate — still with the full optimistic expected-state predicate — and
  *     commit. `uq_feature_flags_key_organization_canonical` remains the final
  *     arbiter for a concurrent FF·B canonical INSERT (which targets a NEW row,
@@ -159,16 +187,20 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  * no matching `result` (same `featureFlagId`) is an incomplete operation,
  * detectable on restart / operator review by scanning the decisions artifact.
  *
- * The `--decisions` write-ahead stream IS exclusive-created (`wx`) up front and
- * its containing directory `fsync`'d, so the WAL file's own directory entry is
- * durable before the first record (it is meant to hold partial records on a
- * crash). The summary `--report` is NOT pre-created: it is published only after
- * every candidate has a durable `result` — written in full + `fsync`'d to
- * `<report>.partial`, then `link(2)`'d (NOT `rename`, which would silently
- * clobber) to the requested path with a genuine no-clobber guarantee, plus a
- * directory `fsync` before and after the temp is unlinked. An interrupted run
- * never reaches that step, so a final report path always names a completed run.
- * Neither `--decisions`, `--report`, nor `<report>.partial` may already exist.
+ * ARTIFACT RESERVATION happens ENTIRELY BEFORE `createDb()` / any DB work: the
+ * three paths are resolved to their PHYSICAL targets (`realpath` of the parent
+ * dir + basename; a symlinked parent that aliases another target or escapes the
+ * real repo is rejected, a missing parent is a fail-closed error), none may
+ * already exist, and BOTH the `--decisions` WAL and `<report>.partial` are
+ * exclusive-created (`wx`) with a containing-directory `fsync`. So a
+ * report-directory problem fails the run before it can mutate. The final
+ * `--report` path is NEVER pre-created. After the run the completed summary is
+ * written IN FULL + `fsync`'d to the ALREADY-RESERVED `<report>.partial` fd
+ * (never a reopened path), then `link(2)`'d (NOT `rename`, which would silently
+ * clobber) to `--report` with a genuine no-clobber guarantee, plus a directory
+ * `fsync` before and after the temp is unlinked. An interrupted run leaves the
+ * `--decisions` WAL and `<report>.partial` as evidence but no final `--report`,
+ * so a `--report` path always names a completed run.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * BOUNDED MEMORY
@@ -206,6 +238,7 @@ export type BackfillDecisionReason =
   | 'projected_collision_quarantined' // ≥2 historical candidates project to the same (key, org)
   | 'too_many_key_siblings_quarantined' // pathological: a single key has too many sibling rows to reconcile
   | 'evidence_changed' // authoritative evidence changed between review and the mutation boundary
+  | 'collision_changed' // the collision that justified a planned quarantine was gone at the transactional boundary
   | 'concurrently_changed';
 
 /**
@@ -387,71 +420,159 @@ function isCanonicalPartialUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-async function readOrganization(
-  authority: DrizzleOrganizationScopeAuthority,
-  organizationId: string,
-): Promise<ResolvedOrganization | null> {
-  if (!isCanonicalIdRepresentation(organizationId)) return null;
-  const parentTenantId = await authority.readParentTenantId(organizationId);
-  return parentTenantId === null ? null : { organizationId, parentTenantId };
-}
-
-interface EvidenceDeps {
+export interface EvidenceDeps {
   readonly db: DrizzleDb;
-  readonly authority: DrizzleOrganizationScopeAuthority;
-  readonly tenants: DrizzleTenantExistenceReader;
 }
 
-async function gatherEvidence(
-  row: CandidateRow,
+/** Evidence for a legacy `tenant_id IS NULL` — no lookups required. */
+const NULL_LEGACY_EVIDENCE: LegacyOwnershipEvidence = {
+  legacyValue: null,
+  nullSemantics: FF_NULL_SEMANTICS,
+  directInternalOrganization: null,
+  providerMappings: [],
+  isKnownTenantId: false,
+};
+
+/**
+ * SET-BASED authoritative evidence loader for a BOUNDED set of legacy
+ * `tenant_id` values (a candidate + its same-key siblings). Query count is
+ * O(1) per call — 4 bounded `IN (...)` reads at most — NOT O(number of values):
+ *
+ *   1. direct `organizations` rows for the UUID-shaped values;
+ *   2. EVERY `auth_organization_identities` row for the values (all providers);
+ *   3. re-verify the mapped internal organization ids against `organizations`;
+ *   4. `tenants` rows for the UUID-shaped values with no direct org match.
+ *
+ * Canonical provenance: `directInternalOrganization` / `verified` carry
+ * `organizations.id` and `organizations.tenant_id` AS READ FROM THE ROW — never
+ * the raw legacy input. `organizations.id` / `tenants.id` are `uuid` columns,
+ * so a match is case-insensitive and the returned id is the DB's canonical
+ * spelling; values are indexed case-insensitively to bridge an upper-case
+ * legacy spelling to its canonical row. UUID SHAPE IS REPRESENTATION ONLY — it
+ * never makes a value canonical; only a matched `organizations` row does.
+ * `auth_organization_identities.external_org_id` is `text` — matched verbatim.
+ *
+ * The SAME neutral `classifyLegacyOwnership()` contract then runs in memory per
+ * value; no second/approximate classifier in SQL.
+ */
+export async function loadLegacyOwnershipEvidence(
+  legacyValues: readonly string[],
   deps: EvidenceDeps,
-): Promise<LegacyOwnershipEvidence> {
-  const legacyValue = row.tenantId;
-  if (legacyValue === null) {
-    return {
-      legacyValue: null,
-      nullSemantics: FF_NULL_SEMANTICS,
-      directInternalOrganization: null,
-      providerMappings: [],
-      isKnownTenantId: false,
-    };
+): Promise<Map<string, LegacyOwnershipEvidence>> {
+  const unique = [...new Set(legacyValues)];
+  const out = new Map<string, LegacyOwnershipEvidence>();
+  if (unique.length === 0) return out;
+
+  const uuidShaped = unique.filter((v) => isCanonicalIdRepresentation(v));
+
+  // 1. direct organizations matches — one bounded query.
+  const directRows = uuidShaped.length
+    ? await deps.db
+        .select({
+          id: organizationsReferenceTable.id,
+          tenantId: organizationsReferenceTable.tenantId,
+        })
+        .from(organizationsReferenceTable)
+        .where(inArray(organizationsReferenceTable.id, uuidShaped))
+    : [];
+  const orgByLowerId = new Map<string, ResolvedOrganization>();
+  for (const r of directRows) {
+    orgByLowerId.set(r.id.toLowerCase(), {
+      organizationId: r.id,
+      parentTenantId: r.tenantId,
+    });
   }
 
-  const directInternalOrganization = await readOrganization(
-    deps.authority,
-    legacyValue,
-  );
-
-  // EVERY auth_organization_identities row for this external value — all providers.
-  const mappingRows = await deps.db
+  // 2. ALL provider identity rows for these external values — one bounded query.
+  const identityRows = await deps.db
     .select({
+      externalOrgId: authOrganizationIdentitiesReferenceTable.externalOrgId,
       provider: authOrganizationIdentitiesReferenceTable.provider,
       organizationId: authOrganizationIdentitiesReferenceTable.organizationId,
     })
     .from(authOrganizationIdentitiesReferenceTable)
     .where(
-      eq(authOrganizationIdentitiesReferenceTable.externalOrgId, legacyValue),
+      inArray(authOrganizationIdentitiesReferenceTable.externalOrgId, unique),
     );
 
-  const providerMappings: ProviderMappingEvidence[] = await Promise.all(
-    mappingRows.map(async (m) => ({
-      provider: m.provider,
-      mappedOrganizationId: m.organizationId,
-      verified: await readOrganization(deps.authority, m.organizationId),
-    })),
+  // 3. re-verify the mapped internal organization ids — one bounded query.
+  const mappedOrgIds = [...new Set(identityRows.map((r) => r.organizationId))];
+  const mappedRows = mappedOrgIds.length
+    ? await deps.db
+        .select({
+          id: organizationsReferenceTable.id,
+          tenantId: organizationsReferenceTable.tenantId,
+        })
+        .from(organizationsReferenceTable)
+        .where(inArray(organizationsReferenceTable.id, mappedOrgIds))
+    : [];
+  const verifiedByLowerId = new Map<string, ResolvedOrganization>();
+  for (const r of mappedRows) {
+    verifiedByLowerId.set(r.id.toLowerCase(), {
+      organizationId: r.id,
+      parentTenantId: r.tenantId,
+    });
+  }
+
+  // 4. known tenants — one bounded query, only for values with no direct org.
+  const needTenantCheck = uuidShaped.filter(
+    (v) => !orgByLowerId.has(v.toLowerCase()),
+  );
+  const tenantRows = needTenantCheck.length
+    ? await deps.db
+        .select({ id: tenantsReferenceTable.id })
+        .from(tenantsReferenceTable)
+        .where(inArray(tenantsReferenceTable.id, needTenantCheck))
+    : [];
+  const knownTenantLowerIds = new Set(
+    tenantRows.map((r) => r.id.toLowerCase()),
   );
 
-  const isKnownTenantId =
-    directInternalOrganization === null &&
-    (await deps.tenants.exists(legacyValue));
+  const identityByExternal = new Map<string, typeof identityRows>();
+  for (const r of identityRows) {
+    const list = identityByExternal.get(r.externalOrgId) ?? [];
+    list.push(r);
+    identityByExternal.set(r.externalOrgId, list);
+  }
 
-  return {
-    legacyValue,
-    nullSemantics: FF_NULL_SEMANTICS,
-    directInternalOrganization,
-    providerMappings,
-    isKnownTenantId,
-  };
+  for (const legacyValue of unique) {
+    const direct = orgByLowerId.get(legacyValue.toLowerCase()) ?? null;
+    const providerMappings: ProviderMappingEvidence[] = (
+      identityByExternal.get(legacyValue) ?? []
+    ).map((m) => ({
+      provider: m.provider,
+      mappedOrganizationId: m.organizationId,
+      verified: verifiedByLowerId.get(m.organizationId.toLowerCase()) ?? null,
+    }));
+    const isKnownTenantId =
+      direct === null && knownTenantLowerIds.has(legacyValue.toLowerCase());
+    out.set(legacyValue, {
+      legacyValue,
+      nullSemantics: FF_NULL_SEMANTICS,
+      directInternalOrganization: direct,
+      providerMappings,
+      isKnownTenantId,
+    });
+  }
+  return out;
+}
+
+/** Evidence for ONE row — delegates to the set-based loader (still bounded). */
+async function gatherEvidence(
+  row: CandidateRow,
+  deps: EvidenceDeps,
+): Promise<LegacyOwnershipEvidence> {
+  if (row.tenantId === null) return NULL_LEGACY_EVIDENCE;
+  const bundle = await loadLegacyOwnershipEvidence([row.tenantId], deps);
+  return (
+    bundle.get(row.tenantId) ?? {
+      legacyValue: row.tenantId,
+      nullSemantics: FF_NULL_SEMANTICS,
+      directInternalOrganization: null,
+      providerMappings: [],
+      isKnownTenantId: false,
+    }
+  );
 }
 
 function toDecisionEvidence(
@@ -482,14 +603,20 @@ function toDecisionEvidence(
   };
 }
 
-async function hasExistingCanonicalCollision(
+/**
+ * Id of an existing `canonical_organization` row that owns `(key,
+ * organizationId)` (excluding the candidate), or `null`. Returns the row
+ * IDENTITY, not just a boolean, so the transactional path can `FOR SHARE`-lock
+ * and re-verify the exact witness before relying on the collision.
+ */
+async function findExistingCanonicalCollisionId(
   db: DrizzleDb,
   key: string,
   organizationId: string,
   excludeId: string,
-): Promise<boolean> {
+): Promise<string | null> {
   const rows = await db
-    .select({ one: sql`1` })
+    .select({ id: featureFlagsTable.id })
     .from(featureFlagsTable)
     .where(
       and(
@@ -500,7 +627,51 @@ async function hasExistingCanonicalCollision(
       ),
     )
     .limit(1);
-  return rows.length > 0;
+  return rows[0]?.id ?? null;
+}
+
+interface LockedFeatureFlagRow {
+  readonly id: string;
+  readonly key: string;
+  readonly tenantId: string | null;
+  readonly organizationId: string | null;
+  readonly ownershipState: string;
+}
+
+/**
+ * `SELECT ... FOR SHARE` one `feature_flags` row by id. `FOR SHARE` blocks a
+ * concurrent `UPDATE` / `DELETE` / reclassification of THAT row for the rest of
+ * the transaction, but does NOT block insertion of a NEW row — so a fresh FF·B
+ * canonical INSERT still races only against the partial unique (the SAVEPOINT +
+ * 23505 path). Returns `null` if the row is gone.
+ */
+async function lockFeatureFlagRowForShare(
+  db: DrizzleDb,
+  id: string,
+): Promise<LockedFeatureFlagRow | null> {
+  const raw = await db.execute(
+    sql`SELECT id, key, tenant_id, organization_id, ownership_state
+        FROM feature_flags WHERE id = ${id} LIMIT 1 FOR SHARE`,
+  );
+  const rows = (
+    Array.isArray(raw) ? raw : ((raw as { rows?: unknown[] }).rows ?? [])
+  ) as Array<{
+    id: string;
+    key: string;
+    tenant_id: string | null;
+    organization_id: string | null;
+    ownership_state: string;
+  }>;
+  const r = rows[0];
+  return r
+    ? {
+        id: r.id,
+        key: r.key,
+        tenantId: r.tenant_id,
+        organizationId: r.organization_id,
+        ownershipState: r.ownership_state,
+      }
+    : null;
 }
 
 /**
@@ -521,19 +692,37 @@ function sameClassification(
 }
 
 /**
- * Does `sibling`'s legacy value ALSO authoritatively resolve (via the same
- * evidence classifier) to `targetOrganizationId` as a `canonical_organization`?
+ * The bounded same-`key` sibling set (`unresolved_legacy` / `quarantined`
+ * rows, excluding the candidate) — ONE query. When `lock` is set the rows are
+ * taken `FOR SHARE`, so every projected-collision WITNESS is stable (no
+ * concurrent `UPDATE` / `DELETE` / reclassification) for the rest of the
+ * transaction. `FOR SHARE` on this bounded set never blocks a NEW-row INSERT.
  */
-async function siblingAlsoResolvesTo(
-  sibling: CandidateRow,
-  targetOrganizationId: string,
+async function loadSameKeySiblings(
   deps: EvidenceDeps,
-): Promise<boolean> {
-  const c = classifyLegacyOwnership(await gatherEvidence(sibling, deps));
-  return (
-    c.proposedOwnershipState === 'canonical_organization' &&
-    c.organizationId === targetOrganizationId
-  );
+  row: CandidateRow,
+  lock: boolean,
+): Promise<CandidateRow[]> {
+  const q = deps.db
+    .select({
+      id: featureFlagsTable.id,
+      key: featureFlagsTable.key,
+      tenantId: featureFlagsTable.tenantId,
+    })
+    .from(featureFlagsTable)
+    .where(
+      and(
+        eq(featureFlagsTable.key, row.key),
+        ne(featureFlagsTable.id, row.id),
+        inArray(featureFlagsTable.ownershipState, [
+          'unresolved_legacy',
+          'quarantined',
+        ]),
+      ),
+    )
+    .orderBy(asc(featureFlagsTable.id))
+    .limit(SIBLING_LIMIT);
+  return lock ? q.for('share') : q;
 }
 
 type CollisionDisposition =
@@ -560,56 +749,90 @@ type CollisionDisposition =
  * 3. a pathological key with too many siblings to reconcile safely -> quarantine.
  * 4. otherwise -> proceed.
  *
- * Memory: the sibling scan is bounded by rows sharing ONE key (`SIBLING_LIMIT`),
- * never the full candidate population.
+ * Memory / round trips: the sibling set is bounded by rows sharing ONE key
+ * (`SIBLING_LIMIT`), and their authoritative evidence is loaded SET-BASED
+ * ({@link loadLegacyOwnershipEvidence}, O(1) queries) then classified in
+ * memory — NOT one `gatherEvidence` per sibling.
+ *
+ * `lockWitness` (true only on the transactional re-derivation): every collision
+ * WITNESS is `FOR SHARE`-locked BEFORE it is relied on — the existing canonical
+ * winner row, and the whole bounded sibling set (locked as a set by
+ * {@link loadSameKeySiblings}). A witness deleted / reclassified after the
+ * unlocked plan is seen as GONE. `FOR SHARE` never blocks a NEW-row INSERT, so
+ * the SAVEPOINT + 23505 path stays the arbiter for a fresh FF·B canonical INSERT.
+ *
+ * ponytail: backfill rows are processed strictly sequentially in a single
+ * process, so a backfill tx holding `FOR UPDATE` on its candidate + `FOR SHARE`
+ * on the sibling set cannot deadlock against another backfill tx. A non-backfill
+ * writer that would conflict (UPDATE/DELETE of a witness) only ever waits.
  */
 async function resolveCanonicalCollisionDisposition(
   row: CandidateRow,
   organizationId: string,
   deps: EvidenceDeps,
+  opts: { readonly lockWitness: boolean } = { lockWitness: false },
 ): Promise<CollisionDisposition> {
-  if (
-    await hasExistingCanonicalCollision(
-      deps.db,
-      row.key,
-      organizationId,
-      row.id,
-    )
-  ) {
-    return {
-      disposition: 'quarantine',
-      reason: 'canonical_collision_quarantined',
-    };
+  const winnerId = await findExistingCanonicalCollisionId(
+    deps.db,
+    row.key,
+    organizationId,
+    row.id,
+  );
+  if (winnerId !== null) {
+    if (!opts.lockWitness) {
+      return {
+        disposition: 'quarantine',
+        reason: 'canonical_collision_quarantined',
+      };
+    }
+    const locked = await lockFeatureFlagRowForShare(deps.db, winnerId);
+    if (
+      locked !== null &&
+      locked.id !== row.id &&
+      locked.key === row.key &&
+      locked.organizationId === organizationId &&
+      locked.ownershipState === 'canonical_organization'
+    ) {
+      return {
+        disposition: 'quarantine',
+        reason: 'canonical_collision_quarantined',
+      };
+    }
+    // The canonical winner vanished / changed under lock — fall through to the
+    // projected-sibling scan (a different witness may still establish a
+    // collision).
   }
 
-  const siblings: CandidateRow[] = await deps.db
-    .select({
-      id: featureFlagsTable.id,
-      key: featureFlagsTable.key,
-      tenantId: featureFlagsTable.tenantId,
-    })
-    .from(featureFlagsTable)
-    .where(
-      and(
-        eq(featureFlagsTable.key, row.key),
-        ne(featureFlagsTable.id, row.id),
-        inArray(featureFlagsTable.ownershipState, [
-          'unresolved_legacy',
-          'quarantined',
-        ]),
-      ),
-    )
-    .limit(SIBLING_LIMIT);
-
+  // Bounded same-key sibling set — ONE query; FOR SHARE-locked as a set when
+  // re-deriving transactionally, so the projected-collision witnesses are stable
+  // until the candidate mutation commits.
+  const siblings = await loadSameKeySiblings(deps, row, opts.lockWitness);
   if (siblings.length >= SIBLING_LIMIT) {
     return {
       disposition: 'quarantine',
       reason: 'too_many_key_siblings_quarantined',
     };
   }
+  if (siblings.length === 0) return { disposition: 'proceed' };
+
+  // SET-BASED authoritative evidence for every DISTINCT non-null sibling legacy
+  // value (one bundle), then the SAME neutral classifier in memory.
+  const evidenceByValue = await loadLegacyOwnershipEvidence(
+    siblings.map((s) => s.tenantId).filter((v): v is string => v !== null),
+    deps,
+  );
 
   for (const sibling of siblings) {
-    if (await siblingAlsoResolvesTo(sibling, organizationId, deps)) {
+    const evidence =
+      sibling.tenantId === null
+        ? NULL_LEGACY_EVIDENCE
+        : evidenceByValue.get(sibling.tenantId);
+    if (!evidence) continue;
+    const c = classifyLegacyOwnership(evidence);
+    if (
+      c.proposedOwnershipState === 'canonical_organization' &&
+      c.organizationId === organizationId
+    ) {
       return {
         disposition: 'quarantine',
         reason: 'projected_collision_quarantined',
@@ -672,11 +895,7 @@ export async function runFeatureFlagOwnershipBackfill(
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_BATCH_SIZE);
   const startAfterId = options.startAfterId ?? null;
 
-  const deps: EvidenceDeps = {
-    db,
-    authority: new DrizzleOrganizationScopeAuthority(db),
-    tenants: new DrizzleTenantExistenceReader(db),
-  };
+  const deps: EvidenceDeps = { db };
 
   let cursor: string | null = startAfterId;
   let candidateCount = 0;
@@ -747,12 +966,15 @@ export async function runFeatureFlagOwnershipBackfill(
    * Decide the outcome for one candidate from its evidence + the projected
    * collision disposition. Pure of DB writes. `pdeps` is the handle the
    * disposition scan reads through (the outer connection when planning, the
-   * per-row transaction when re-deriving at the mutation boundary).
+   * per-row transaction when re-deriving at the mutation boundary). `lockWitness`
+   * is set only on the transactional re-derivation, so the collision witness
+   * row(s) are `FOR SHARE`-locked and re-verified before a quarantine is relied on.
    */
   async function planOutcome(
     row: CandidateRow,
     classification: LegacyOwnershipClassification,
     pdeps: EvidenceDeps,
+    opts: { readonly lockWitness: boolean } = { lockWitness: false },
   ): Promise<PlannedOutcome> {
     if (!classification.mutates) {
       return { outcome: 'unresolved_legacy', reason: classification.reason };
@@ -766,6 +988,7 @@ export async function runFeatureFlagOwnershipBackfill(
       row,
       organizationId,
       pdeps,
+      opts,
     );
     return disp.disposition === 'quarantine'
       ? {
@@ -784,14 +1007,20 @@ export async function runFeatureFlagOwnershipBackfill(
 
   /**
    * Apply ONE candidate row inside a per-row transaction: SHARE-lock the
-   * authoritative lookup tables (so no concurrent writer can change
-   * organizations / tenants / auth_organization_identities while evidence is
-   * re-read and the row is mutated), `FOR UPDATE`-lock the candidate row,
-   * re-gather + re-classify through the transaction handle, re-derive the
-   * collision disposition, enforce monotonic safety vs the durable intent, and
-   * mutate — all in one commit. The partial unique remains the final arbiter
-   * for a concurrent FF·B canonical INSERT (that targets a NEW row, not the
-   * locked one).
+   * authoritative lookup tables (organizations / tenants /
+   * auth_organization_identities), `FOR UPDATE`-lock the candidate row,
+   * re-load its authoritative evidence SET-BASED through the transaction handle
+   * and re-classify, then re-derive the collision disposition — `FOR SHARE`-
+   * locking every witness first (the existing canonical winner row, and the
+   * whole bounded same-key sibling set, classified from ONE set-based evidence
+   * bundle) — enforce the monotonic rule, and mutate, all in one commit:
+   *   - planned canonical  -> fresh quarantined  : quarantine (witness locked);
+   *   - planned quarantined -> fresh !quarantined : `collision_changed` (no
+   *     write; the row stays unresolved_legacy / org NULL — a stale collision
+   *     never persists a quarantine);
+   *   - planned canonical  -> fresh canonical     : canonical UPDATE, with the
+   *     SAVEPOINT + 23505 path as the final arbiter for a concurrent FF·B
+   *     canonical INSERT of a NEW row (which `FOR SHARE` does not block).
    */
   async function applyRowInTransaction(
     row: CandidateRow,
@@ -801,14 +1030,11 @@ export async function runFeatureFlagOwnershipBackfill(
     | { kind: 'done'; result: PlannedOutcome }
     | { kind: 'concurrent' }
     | { kind: 'evidence_changed' }
+    | { kind: 'collision_changed' }
   > {
     return db.transaction(async (txRaw) => {
       const tx = txRaw as unknown as DrizzleDb;
-      const txDeps: EvidenceDeps = {
-        db: tx,
-        authority: new DrizzleOrganizationScopeAuthority(tx),
-        tenants: new DrizzleTenantExistenceReader(tx),
-      };
+      const txDeps: EvidenceDeps = { db: tx };
 
       // Consistent lock order across all rows -> no deadlock between rows.
       await tx.execute(
@@ -851,22 +1077,39 @@ export async function runFeatureFlagOwnershipBackfill(
 
       await options.onLockedBeforeMutation?.({ id: row.id, key: row.key });
 
-      // Re-derive disposition on the locked snapshot.
+      // Re-derive disposition on the LOCKED snapshot. When this yields a
+      // quarantine, `planOutcome` has already `FOR SHARE`-locked and re-verified
+      // the exact feature_flags row(s) that prove the collision, so a witness
+      // that disappeared after planning is seen as gone.
       const fresh =
         classification2.proposedOwnershipState === 'canonical_organization'
-          ? await planOutcome(row, classification2, txDeps)
+          ? await planOutcome(row, classification2, txDeps, {
+              lockWitness: true,
+            })
           : planned;
 
-      // MONOTONIC SAFETY: never persist a MORE permissive disposition than the
-      // durable intent. planned quarantined -> fresh canonical is refused
-      // (keep the reviewed quarantine); planned canonical -> fresh quarantined
-      // is allowed (more restrictive).
-      const final: PlannedOutcome =
-        planned.outcome === 'quarantined' && fresh.outcome !== 'quarantined'
-          ? planned
-          : fresh;
-
       await options.onAfterFreshCollisionCheck?.({ id: row.id, key: row.key });
+
+      // MONOTONIC SAFETY — every mutating outcome is backed by the CURRENT
+      // transactional (locked-witness) disposition, never by a stale intent:
+      //  - planned canonical  -> fresh quarantined  : apply the quarantine
+      //    (more restrictive; its witness is FOR SHARE-locked + confirmed).
+      //  - planned quarantined -> fresh quarantined : apply, but ONLY because
+      //    `fresh` is itself a locked-witness quarantine (not just because the
+      //    pre-transaction intent said quarantine).
+      //  - planned quarantined -> fresh !quarantined : the collision that
+      //    justified the reviewed quarantine is GONE at the transactional
+      //    boundary. Do NOT canonicalize (fail closed) and do NOT persist the
+      //    stale quarantine — that would permanently hide this historical
+      //    override after FF·D. Leave the row unresolved_legacy / org NULL and
+      //    report `collision_changed`.
+      if (
+        planned.outcome === 'quarantined' &&
+        fresh.outcome !== 'quarantined'
+      ) {
+        return { kind: 'collision_changed' as const };
+      }
+      const final: PlannedOutcome = fresh;
 
       // Non-canonical mutations can NEVER trip the canonical partial unique
       // (they leave `organization_id` NULL / `ownership_state` != canonical),
@@ -1003,6 +1246,19 @@ export async function runFeatureFlagOwnershipBackfill(
         phase: 'result',
         outcome: 'concurrently_changed',
         reason: 'evidence_changed',
+      });
+      return;
+    }
+    if (outcome.kind === 'collision_changed') {
+      // A planned quarantine whose collision witness was gone at the
+      // transactional boundary: the row stays unresolved_legacy / org NULL —
+      // NOT canonicalized (fail closed) and NOT quarantined (a stale quarantine
+      // would permanently hide this historical override after FF·D).
+      await emitRecord({
+        ...base,
+        phase: 'result',
+        outcome: 'concurrently_changed',
+        reason: 'collision_changed',
       });
       return;
     }
@@ -1143,31 +1399,237 @@ export function parseBackfillCliArgs(
 }
 
 /**
- * Returns an error string if `relPath` already exists (a prior run's audit
+ * Returns an error string if `path` already exists (a prior run's audit
  * evidence must never be truncated), else `null`. READ-ONLY — never writes.
  */
 export function checkArtifactPathIsNew(
-  relPath: string,
+  artifactPath: string,
   label: string,
+  baseDir: string = process.cwd(),
 ): string | null {
-  return pathExistsWithinBase(relPath, process.cwd(), label)
-    ? `${label} path already exists: ${relPath}. Refusing to overwrite prior audit evidence — choose a new path.`
+  return pathExistsWithinBase(artifactPath, baseDir, label)
+    ? `${label} path already exists: ${artifactPath}. Refusing to overwrite prior audit evidence — choose a new path.`
     : null;
 }
 
+export interface ResolvedArtifactPaths {
+  /** The operator-supplied (possibly relative) paths, unchanged — for messages. */
+  readonly decisionsPath: string | null;
+  readonly reportPath: string | null;
+  readonly tmpReportPath: string | null;
+  /** `realpath` of the repo base — the physical `baseDir` for every artifact open. */
+  readonly realBase: string;
+  /**
+   * PHYSICAL (symlink-followed) target paths: `realpath(parent) + basename`,
+   * each proven to be physically inside {@link realBase} and PAIRWISE DISTINCT.
+   * These — never the raw operator strings — are used for the opens + publish.
+   */
+  readonly physicalDecisions: string | null;
+  readonly physicalReport: string | null;
+  readonly physicalTmpReport: string | null;
+}
+
+export type ArtifactPathResolution =
+  | { readonly ok: true; readonly paths: ResolvedArtifactPaths }
+  | { readonly ok: false; readonly error: string };
+
 /**
- * Exclusive-create a repo-confined write-ahead-log file. `wx` fails closed on a
- * race; `openNewWalFileWithinBase` additionally `fsync`s the containing
- * directory so the new file's directory entry is itself durable before the
- * first `intent` record is written.
+ * Preflight: resolve every non-null artifact path (`--decisions`, `--report`,
+ * and the report's `<report>.partial` temp sibling) to its PHYSICAL target
+ * (`realpath` of the existing parent directory + basename) and verify:
+ *   - each physical parent is physically inside `realpath(baseDir)` — a
+ *     symlinked parent that escapes the real repo is rejected;
+ *   - the three physical targets are PAIRWISE DISTINCT — two arguments that
+ *     alias the same inode (a lexical `out/../report.json` vs `report.json`, OR
+ *     one path through a symlinked directory and another through the real one)
+ *     are rejected.
+ *
+ * A missing parent directory is a fail-closed error (`open()` cannot create it).
+ * Reads the filesystem (`realpath`) but never writes; existence of the target
+ * files themselves is a separate later check. Enforced BEFORE any WAL is
+ * created and BEFORE `createDb()`.
  */
-function openNewArtifact(relPath: string, label: string): number {
-  const err = checkArtifactPathIsNew(relPath, label);
-  if (err) {
-    console.error(`[flags:backfill] ${err}`);
-    process.exit(1);
+export function resolveArtifactPaths(
+  decisionsPath: string | null,
+  reportPath: string | null,
+  baseDir: string,
+): ArtifactPathResolution {
+  const tmpReportPath = reportPath === null ? null : `${reportPath}.partial`;
+
+  let realBase: string;
+  const entries: Array<{ label: string; raw: string; physical: string }> = [];
+  try {
+    realBase = physicalBaseDir(baseDir);
+    for (const [label, raw] of [
+      ['--decisions', decisionsPath],
+      ['--report', reportPath],
+      ['--report (temp)', tmpReportPath],
+    ] as Array<[string, string | null]>) {
+      if (raw === null) continue;
+      entries.push({
+        label,
+        raw,
+        physical: resolvePhysicalTargetWithinBase(
+          raw,
+          baseDir,
+          `flags:backfill ${label}`,
+        ),
+      });
+    }
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
   }
-  return openNewWalFileWithinBase(relPath, process.cwd(), label);
+
+  for (const [i, a] of entries.entries()) {
+    for (const b of entries.slice(i + 1)) {
+      if (a.physical === b.physical) {
+        return {
+          ok: false,
+          error:
+            `${a.label} (${a.raw}) and ${b.label} (${b.raw}) resolve to the ` +
+            `same physical path: ${a.physical}. Provide distinct artifact ` +
+            'paths. Aborting before any WAL / DB access.',
+        };
+      }
+    }
+  }
+
+  const physicalOf = (label: string) =>
+    entries.find((e) => e.label === label)?.physical ?? null;
+  return {
+    ok: true,
+    paths: {
+      decisionsPath,
+      reportPath,
+      tmpReportPath,
+      realBase,
+      physicalDecisions:
+        decisionsPath === null ? null : physicalOf('--decisions'),
+      physicalReport: reportPath === null ? null : physicalOf('--report'),
+      physicalTmpReport:
+        tmpReportPath === null ? null : physicalOf('--report (temp)'),
+    },
+  };
+}
+
+export interface ReservedBackfillArtifacts {
+  readonly realBase: string;
+  readonly decisionsPath: string | null;
+  readonly reportPath: string | null;
+  readonly physicalReport: string | null;
+  readonly physicalTmpReport: string | null;
+  /** Open fd for the decisions WAL, or `null` when `--decisions` was omitted. */
+  readonly decisionsFd: number | null;
+  /**
+   * Open fd for the EXCLUSIVELY-CREATED `<report>.partial`, reserved BEFORE any
+   * DB work so a report-directory problem fails the run before it can mutate.
+   * The completed report is written to THIS fd (never a reopened path).
+   */
+  readonly reportTmpFd: number | null;
+}
+
+/**
+ * Full artifact preflight + RESERVATION, all BEFORE the caller opens a DB
+ * connection:
+ *   1. physical alias / confinement resolution ({@link resolveArtifactPaths});
+ *   2. none of the three targets may already exist;
+ *   3. exclusive-create the decisions WAL and `<report>.partial`, each with a
+ *      containing-directory `fsync`.
+ *
+ * The final `--report` path is NEVER pre-created — its later appearance is the
+ * signal of a completed publication. On ANY failure every fd already opened here
+ * is closed and an `Error` is thrown (the CLI turns that into a non-zero exit
+ * with no DB access).
+ */
+export function reserveBackfillArtifacts(
+  decisionsPath: string | null,
+  reportPath: string | null,
+  baseDir: string,
+): ReservedBackfillArtifacts {
+  const resolution = resolveArtifactPaths(decisionsPath, reportPath, baseDir);
+  if (!resolution.ok) throw new Error(resolution.error);
+  const { realBase, physicalDecisions, physicalReport, physicalTmpReport } =
+    resolution.paths;
+
+  for (const [p, label] of [
+    [physicalDecisions, 'flags:backfill --decisions'],
+    [physicalReport, 'flags:backfill --report'],
+    [physicalTmpReport, 'flags:backfill --report (temp)'],
+  ] as Array<[string | null, string]>) {
+    if (p === null) continue;
+    const err = checkArtifactPathIsNew(p, label, realBase);
+    if (err) throw new Error(err);
+  }
+
+  let decisionsFd: number | null = null;
+  let reportTmpFd: number | null = null;
+  try {
+    decisionsFd =
+      physicalDecisions === null
+        ? null
+        : openNewWalFileWithinBase(
+            physicalDecisions,
+            realBase,
+            'flags:backfill --decisions',
+          );
+    reportTmpFd =
+      physicalTmpReport === null
+        ? null
+        : openNewWalFileWithinBase(
+            physicalTmpReport,
+            realBase,
+            'flags:backfill --report (temp)',
+          );
+  } catch (error) {
+    if (decisionsFd !== null) closeSync(decisionsFd);
+    if (reportTmpFd !== null) closeSync(reportTmpFd);
+    throw error;
+  }
+
+  return {
+    realBase,
+    decisionsPath,
+    reportPath,
+    physicalReport,
+    physicalTmpReport,
+    decisionsFd,
+    reportTmpFd,
+  };
+}
+
+/**
+ * Write the completed `reportJson` IN FULL to the ALREADY-RESERVED
+ * `<report>.partial` fd (no reopen, no truncate of an arbitrary path), `fsync`
+ * it, then `link(2)`-publish it to the final `--report` path (no-clobber) with
+ * the directory `fsync` / temp-unlink from the existing durability protocol. The
+ * caller still owns closing `reportTmpFd` (in its `finally`). A run that never
+ * reaches here leaves only `<report>.partial` — the final path means "complete".
+ */
+export function finalizeBackfillReport(
+  reserved: Pick<
+    ReservedBackfillArtifacts,
+    'realBase' | 'physicalReport' | 'physicalTmpReport' | 'reportTmpFd'
+  >,
+  reportJson: string,
+): void {
+  const { realBase, physicalReport, physicalTmpReport, reportTmpFd } = reserved;
+  if (
+    reportTmpFd === null ||
+    physicalReport === null ||
+    physicalTmpReport === null
+  ) {
+    return;
+  }
+  appendRecordDurably(
+    reportTmpFd,
+    reportJson.endsWith('\n') ? reportJson : `${reportJson}\n`,
+  );
+  publishFileAtomicallyWithinBase(
+    physicalTmpReport,
+    physicalReport,
+    realBase,
+    'flags:backfill --report',
+  );
 }
 
 async function run(): Promise<void> {
@@ -1202,48 +1664,51 @@ async function run(): Promise<void> {
     process.exit(1);
   }
 
-  // The streamed decisions artifact (write-ahead log) IS exclusive-created up
-  // front — it is meant to hold partial `intent`/`result` records on a crash.
-  // The summary report is NOT pre-created: it is published atomically at the
-  // end (temp file -> fsync -> rename), so a final report path can never name
-  // an interrupted run. Both paths (and the report's temp sibling) must be new.
-  const tmpReportPath = reportPath ? `${reportPath}.partial` : null;
-  for (const [p, label] of [
-    [decisionsPath, 'flags:backfill --decisions'],
-    [reportPath, 'flags:backfill --report'],
-    [tmpReportPath, 'flags:backfill --report (temp)'],
-  ] as Array<[string | null, string]>) {
-    if (!p) continue;
-    const err = checkArtifactPathIsNew(p, label);
-    if (err) {
-      console.error(`[flags:backfill] ${err}`);
-      process.exit(1);
-    }
+  // ARTIFACT PREFLIGHT + RESERVATION — all BEFORE createDb() / any DB work:
+  //  - physical alias / confinement resolution (symlinked parents included);
+  //  - none of --decisions / --report / <report>.partial may already exist;
+  //  - exclusive-create the decisions WAL and <report>.partial (each with a
+  //    directory fsync). The final --report path is NEVER pre-created — a
+  //    report-directory problem now fails the run BEFORE it can mutate, and the
+  //    completed report is later written to the RESERVED <report>.partial fd
+  //    (no reopen of an arbitrary path).
+  let reserved: ReservedBackfillArtifacts;
+  try {
+    reserved = reserveBackfillArtifacts(
+      decisionsPath,
+      reportPath,
+      process.cwd(),
+    );
+  } catch (error) {
+    console.error(`[flags:backfill] ${(error as Error).message}`);
+    process.exit(1);
   }
-  const decisionsFd = decisionsPath
-    ? openNewArtifact(decisionsPath, 'flags:backfill --decisions')
-    : null;
+  const { decisionsFd, reportTmpFd } = reserved;
 
   const runId = randomUUID();
   // Every record is written IN FULL (looping over short writes) AND fsync'd to
   // storage before control returns to the runner: an `intent` line is durable
   // before the DB mutation, a `result` line before the run proceeds.
-  const onDecision = decisionsFd
-    ? (decision: BackfillDecision) => {
-        appendRecordDurably(decisionsFd, `${JSON.stringify(decision)}\n`);
-      }
-    : undefined;
+  const onDecision =
+    decisionsFd === null
+      ? undefined
+      : (decision: BackfillDecision) => {
+          appendRecordDurably(decisionsFd, `${JSON.stringify(decision)}\n`);
+        };
 
-  const dbRuntime = createDb({ provider, driver, url });
-
-  console.error(
-    `[flags:backfill] runId=${runId} mode=${mode} driver=${driver} ` +
-      `batchSize=${batchSize}` +
-      (startAfterId ? ` startAfter=${startAfterId}` : '') +
-      ` AUTH_PROVIDER=${process.env.AUTH_PROVIDER ?? '(unset)'} (non-authoritative diagnostic)`,
-  );
-
+  // From here the reserved fds MUST be closed on every exit path — even if
+  // createDb() itself throws — so everything is inside the try/finally.
+  let dbRuntime: ReturnType<typeof createDb> | undefined;
   try {
+    dbRuntime = createDb({ provider, driver, url });
+
+    console.error(
+      `[flags:backfill] runId=${runId} mode=${mode} driver=${driver} ` +
+        `batchSize=${batchSize}` +
+        (startAfterId ? ` startAfter=${startAfterId}` : '') +
+        ` AUTH_PROVIDER=${process.env.AUTH_PROVIDER ?? '(unset)'} (non-authoritative diagnostic)`,
+    );
+
     const report = await runFeatureFlagOwnershipBackfill(dbRuntime.db, {
       mode,
       batchSize,
@@ -1252,27 +1717,14 @@ async function run(): Promise<void> {
       onDecision,
     });
 
-    // Publish the summary only now that every candidate has a durable
-    // `result`: write it in full + fsync to a temp sibling, then link(2) it to
-    // the requested path (no-clobber; NOT rename) + fsync the directory. An
-    // interrupted run never reaches here, so a final report path always names a
-    // completed run.
+    // Publish the summary only now that every candidate has a durable `result`:
+    // write it IN FULL + fsync to the ALREADY-RESERVED <report>.partial fd
+    // (never a reopened path), then link(2) it to the requested path
+    // (no-clobber; NOT rename) + fsync the directory. An interrupted run never
+    // reaches here, so a final report path always names a completed run.
     const json = JSON.stringify(report, null, 2);
     process.stdout.write(`${json}\n`);
-    if (reportPath && tmpReportPath) {
-      writeNewFileDurablyWithinBase(
-        tmpReportPath,
-        process.cwd(),
-        `${json}\n`,
-        'flags:backfill --report (temp)',
-      );
-      publishFileAtomicallyWithinBase(
-        tmpReportPath,
-        reportPath,
-        process.cwd(),
-        'flags:backfill --report',
-      );
-    }
+    finalizeBackfillReport(reserved, `${json}\n`);
 
     console.error(
       `[flags:backfill] ${mode === 'apply' ? 'APPLIED' : 'DRY RUN'} — ` +
@@ -1297,8 +1749,13 @@ async function run(): Promise<void> {
         ' — FF·D is NOT implemented by this slice.',
     );
   } finally {
+    // Close both reserved fds on EVERY path. On success the report fd's inode
+    // is already fsync'd + published (link(2)); on an interrupted/failed run the
+    // decisions WAL and <report>.partial remain on disk as incomplete-run
+    // evidence and the final --report path is absent.
     if (decisionsFd !== null) closeSync(decisionsFd);
-    await dbRuntime.close?.();
+    if (reportTmpFd !== null) closeSync(reportTmpFd);
+    await dbRuntime?.close?.();
   }
 }
 

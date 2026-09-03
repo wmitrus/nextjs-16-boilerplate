@@ -6,6 +6,7 @@ import {
   linkSync,
   mkdirSync,
   openSync,
+  realpathSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -48,6 +49,56 @@ export function pathExistsWithinBase(
 ): boolean {
   const safePath = assertPathWithinBase(filePath, baseDir, label);
   return existsSync(safePath);
+}
+
+/** `realpath` of `baseDir` — the PHYSICAL (symlink-followed) repo base. */
+export function physicalBaseDir(baseDir: string): string {
+  return realpathSync(path.resolve(baseDir));
+}
+
+/**
+ * Resolve the PHYSICAL target path for a NEW file at `filePath`, confined to the
+ * PHYSICAL `baseDir`. Lexical confinement (`assertPathWithinBase`) can be fooled
+ * by a symlinked parent directory: two different lexical strings may address the
+ * same inode, or a lexically-contained path may point outside the real repo.
+ *
+ * This follows symlinks: the file's parent directory MUST already exist and,
+ * after `realpath`, still live inside `realpath(baseDir)`; the returned target is
+ * `realpath(parent) + basename`. A missing parent is a fail-closed error —
+ * `open()` cannot create missing parents anyway, so this surfaces the problem as
+ * a preflight error before any irreversible work.
+ */
+export function resolvePhysicalTargetWithinBase(
+  filePath: string,
+  baseDir: string,
+  label = 'path',
+): string {
+  const realBase = physicalBaseDir(baseDir);
+  const lexical = path.resolve(filePath);
+  const parent = path.dirname(lexical);
+
+  let realParent: string;
+  try {
+    realParent = realpathSync(parent);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `Security: ${label} parent directory does not exist: ${parent}\n` +
+          '  (open() cannot create missing parents — create it first).\n',
+      );
+    }
+    throw error;
+  }
+
+  const prefix = realBase.endsWith(path.sep) ? realBase : realBase + path.sep;
+  if (realParent !== realBase && !realParent.startsWith(prefix)) {
+    throw new Error(
+      `Security: ${label} escapes the allowed directory (physical).\n` +
+        `  Allowed base : ${realBase}\n` +
+        `  Real parent  : ${realParent}\n`,
+    );
+  }
+  return path.join(realParent, path.basename(lexical));
 }
 
 export function ensureDirectorySyncWithinBase(

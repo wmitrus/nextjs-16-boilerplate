@@ -1,3 +1,10 @@
+# [2.15.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.14.0...v2.15.0) (2026-09-03)
+
+
+### Features
+
+* **feature-flags:** add canonical ownership dual-write ([ef1b915](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ef1b915f4d7b64d4d5e6519e493c27fb9f173ba2))
+
 # [2.14.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.13.0...v2.14.0) (2026-09-03)
 
 

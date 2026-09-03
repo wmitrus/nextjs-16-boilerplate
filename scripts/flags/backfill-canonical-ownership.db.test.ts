@@ -1233,3 +1233,272 @@ describe('runFeatureFlagOwnershipBackfill — projected sibling witness stabilit
     }
   });
 });
+
+describe('runFeatureFlagOwnershipBackfill — SIBLING_LIMIT is a work bound, not collision evidence (finding P1)', () => {
+  // Every bulk fixture creates orgs under TENANT_A that the global afterEach
+  // does NOT clean, so each test drops them itself (feature_flags first).
+  const dropBulk = async () => {
+    await testDb.db.delete(featureFlagsTable);
+    await testDb.db.execute(
+      sql`DELETE FROM organizations WHERE tenant_id = ${TENANT_A} AND id NOT IN (${ORG_A1}, ${ORG_A2})`,
+    );
+  };
+  const seedDistinctOrgFlags = async (
+    key: string,
+    n: number,
+    idPrefix: string,
+  ) => {
+    await testDb.db.execute(sql`
+      INSERT INTO organizations (id, tenant_id, name)
+      SELECT (${idPrefix} || lpad(g::text, 12, '0'))::uuid,
+             ${TENANT_A}, ${idPrefix} || g::text
+      FROM generate_series(1, ${n}) g
+    `);
+    await testDb.db.execute(sql`
+      INSERT INTO feature_flags (key, tenant_id, enabled)
+      SELECT ${key}, (${idPrefix} || lpad(g::text, 12, '0'))::uuid, true
+      FROM generate_series(1, ${n}) g
+    `);
+  };
+
+  it('1. 501 same-key candidates, each resolving to a DIFFERENT valid organization: every 500-sibling scan is COMPLETE; nothing is quarantined for scale', async () => {
+    try {
+      await seedDistinctOrgFlags(
+        'distinct-key',
+        501,
+        'aaaa0000-0000-4000-8000-',
+      );
+
+      const dry = await backfill('dry-run');
+      expect(dry.candidateCount).toBe(501);
+      expect(dry.classifiedCanonicalOrganizationCount).toBe(501);
+      expect(dry.quarantinedCount).toBe(0);
+      expect(dry.unresolvedCount).toBe(0);
+      expect(dry.reasonCounts.collision_scan_incomplete).toBeUndefined();
+      expect(
+        dry.reasonCounts.too_many_key_siblings_quarantined,
+      ).toBeUndefined();
+    } finally {
+      await dropBulk();
+    }
+  });
+
+  it('2. MORE than SIBLING_LIMIT siblings, no collision in the inspected set: candidate stays unresolved_legacy / org NULL with reason collision_scan_incomplete; quarantinedCount unchanged (dry-run AND apply)', async () => {
+    try {
+      await seedDistinctOrgFlags(
+        'incomplete-key',
+        502,
+        'bbbb0000-0000-4000-8000-',
+      );
+
+      const dry = await backfill('dry-run');
+      expect(dry.candidateCount).toBe(502);
+      expect(dry.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(dry.quarantinedCount).toBe(0);
+      expect(dry.unresolvedCount).toBe(502);
+      expect(dry.reasonCounts.collision_scan_incomplete).toBe(502);
+
+      const applied = await backfill('apply');
+      expect(applied.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(applied.quarantinedCount).toBe(0);
+      expect(applied.reasonCounts.collision_scan_incomplete).toBe(502);
+      // no mutation happened
+      const rows = await allRows();
+      expect(rows).toHaveLength(502);
+      for (const r of rows) {
+        expect(r.ownershipState).toBe('unresolved_legacy');
+        expect(r.organizationId).toBeNull();
+      }
+    } finally {
+      await dropBulk();
+    }
+  });
+
+  it('3. MORE than SIBLING_LIMIT siblings BUT an ACTUAL collision is inside the inspected/locked set: quarantine IS still allowed (backed by a real witness, not by count)', async () => {
+    try {
+      await insertMapping('clerk', 'ext-c1', ORG_B1);
+      await insertMapping('clerk', 'ext-c2', ORG_B1);
+      // two low-id rows that both resolve canonical -> ORG_B1
+      await testDb.db.execute(sql`
+        INSERT INTO feature_flags (id, key, tenant_id, enabled) VALUES
+        ('00000000-0000-4000-8000-000000000001', 'coll-key', 'ext-c1', true),
+        ('00000000-0000-4000-8000-000000000002', 'coll-key', 'ext-c2', true)
+      `);
+      // 500 high-id rows each resolving to its own distinct organization
+      await testDb.db.execute(sql`
+        INSERT INTO organizations (id, tenant_id, name)
+        SELECT ('cccc0000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid,
+               ${TENANT_A}, 'coll-bulk-' || g
+        FROM generate_series(1, 500) g
+      `);
+      await testDb.db.execute(sql`
+        INSERT INTO feature_flags (id, key, tenant_id, enabled)
+        SELECT ('ffff0000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'coll-key',
+               ('cccc0000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, true
+        FROM generate_series(1, 500) g
+      `);
+
+      const decisions: BackfillDecision[] = [];
+      const dry = await backfill('dry-run', {
+        onDecision: (d) => {
+          decisions.push(d);
+        },
+      });
+
+      expect(dry.candidateCount).toBe(502);
+      // the low-id ORG_B1 pair each witness the other despite an incomplete scan
+      const first = decisions.find(
+        (d) => d.featureFlagId === '00000000-0000-4000-8000-000000000001',
+      );
+      expect(first).toMatchObject({
+        outcome: 'quarantined',
+        reason: 'projected_collision_quarantined',
+      });
+      expect(
+        dry.reasonCounts.projected_collision_quarantined,
+      ).toBeGreaterThanOrEqual(1);
+    } finally {
+      await dropBulk();
+      await testDb.db.execute(
+        sql`DELETE FROM auth_organization_identities WHERE external_org_id IN ('ext-c1', 'ext-c2')`,
+      );
+    }
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — exact evidence-snapshot equality + mutation-boundary evidence on the result (findings P2 / audit-stream)', () => {
+  const providerMappingsOf = (d: BackfillDecision | undefined) =>
+    (d?.evidence.providerMappings ?? []).map((m) => ({
+      provider: m.provider,
+      verified: m.verified,
+    }));
+
+  it('A: a NEW authoritative provider row added after the intent does NOT change the classifier result (still resolved_same_internal_and_provider -> ORG_B1), but the evidence SET differs => evidence_changed, no mutation; intent evidence has 1 mapping, result evidence has 2', async () => {
+    await insertMapping('clerk', ORG_B1, ORG_B1); // verified, agrees with direct
+    const id = await insertLegacy('snap-a', ORG_B1); // resolved_same_internal_and_provider
+    const decisions: BackfillDecision[] = [];
+
+    const report = await backfill('apply', {
+      onDecision: (d) => {
+        decisions.push(d);
+      },
+      onBeforeRowUpdate: async (row) => {
+        if (row.id !== id) return;
+        // a SECOND verified mapping to the SAME org -> classifier result identical
+        await insertMapping('authjs', ORG_B1, ORG_B1);
+      },
+    });
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(report.reasonCounts.evidence_changed).toBe(1);
+    expect(await rowById(id)).toMatchObject({
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+    });
+
+    const forRow = decisions.filter((d) => d.featureFlagId === id);
+    const intent = forRow.find((d) => d.phase === 'intent');
+    const result = forRow.find((d) => d.phase === 'result');
+    expect(intent).toMatchObject({
+      outcome: 'canonical_organization',
+      reason: 'resolved_same_internal_and_provider',
+    });
+    expect(result).toMatchObject({
+      outcome: 'concurrently_changed',
+      reason: 'evidence_changed',
+    });
+    // intent: 1 provider mapping. result (mutation-boundary): 2.
+    expect(providerMappingsOf(intent)).toEqual([
+      { provider: 'clerk', verified: true },
+    ]);
+    expect(
+      providerMappingsOf(result).sort((a, b) =>
+        a.provider < b.provider ? -1 : 1,
+      ),
+    ).toEqual([
+      { provider: 'authjs', verified: true },
+      { provider: 'clerk', verified: true },
+    ]);
+  });
+
+  it("B: a mapped org's parent tenant changed between intent and boundary (same reduced reason/org) => evidence_changed; result evidence shows the NEW parent tenant", async () => {
+    await insertMapping('clerk', 'ext-snap-b', ORG_A1); // -> resolved_provider_organization -> ORG_A1
+    const id = await insertLegacy('snap-b', 'ext-snap-b');
+    const decisions: BackfillDecision[] = [];
+    const NEW_PARENT = TENANT_B;
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: (d) => {
+          decisions.push(d);
+        },
+        onBeforeRowUpdate: async (row) => {
+          if (row.id !== id) return;
+          await testDb.db.execute(
+            sql`UPDATE organizations SET tenant_id = ${NEW_PARENT} WHERE id = ${ORG_A1}`,
+          );
+        },
+      });
+
+      expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(report.reasonCounts.evidence_changed).toBe(1);
+      expect(await rowById(id)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'unresolved_legacy',
+      });
+      const forRow = decisions.filter((d) => d.featureFlagId === id);
+      const intent = forRow.find((d) => d.phase === 'intent');
+      const result = forRow.find((d) => d.phase === 'result');
+      expect(intent?.evidence.providerMappings[0]).toMatchObject({
+        organizationId: ORG_A1,
+        parentTenantId: TENANT_A,
+      });
+      expect(result).toMatchObject({
+        outcome: 'concurrently_changed',
+        reason: 'evidence_changed',
+      });
+      expect(result?.evidence.providerMappings[0]).toMatchObject({
+        organizationId: ORG_A1,
+        parentTenantId: NEW_PARENT,
+      });
+    } finally {
+      await testDb.db.execute(
+        sql`UPDATE organizations SET tenant_id = ${TENANT_A} WHERE id = ${ORG_A1}`,
+      );
+    }
+  });
+
+  it('D: UNCHANGED evidence -> canonical apply still succeeds, and the result record carries the mutation-boundary evidence snapshot (equal to the intent evidence)', async () => {
+    await insertMapping('clerk', 'ext-snap-d', ORG_B1);
+    const id = await insertLegacy('snap-d', 'ext-snap-d'); // resolved_provider_organization
+    const decisions: BackfillDecision[] = [];
+
+    const report = await backfill('apply', {
+      onDecision: (d) => {
+        decisions.push(d);
+      },
+    });
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(1);
+    expect(await rowById(id)).toMatchObject({
+      organizationId: ORG_B1,
+      ownershipState: 'canonical_organization',
+    });
+    const forRow = decisions.filter((d) => d.featureFlagId === id);
+    const intent = forRow.find((d) => d.phase === 'intent');
+    const result = forRow.find((d) => d.phase === 'result');
+    expect(result).toMatchObject({
+      phase: 'result',
+      outcome: 'canonical_organization',
+    });
+    // unchanged evidence => result snapshot is structurally identical to intent's
+    expect(result?.evidence).toEqual(intent?.evidence);
+    expect(result?.evidence.providerMappings).toEqual([
+      expect.objectContaining({
+        provider: 'clerk',
+        verified: true,
+        organizationId: ORG_B1,
+      }),
+    ]);
+  });
+});

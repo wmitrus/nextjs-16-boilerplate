@@ -10,6 +10,8 @@ import { join, relative } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type { LegacyOwnershipEvidence } from '@/core/contracts/legacy-ownership-classification';
+
 import {
   ensureDirectorySyncWithinBase,
   pathExistsWithinBase,
@@ -25,6 +27,7 @@ vi.mock('@/core/db/create-db', () => ({ createDb: vi.fn() }));
 import {
   checkArtifactPathIsNew,
   finalizeBackfillReport,
+  normalizeEvidence,
   parseBackfillCliArgs,
   reserveBackfillArtifacts,
   resolveArtifactPaths,
@@ -360,5 +363,104 @@ describe('reserveBackfillArtifacts / finalizeBackfillReport — reserve temp BEF
     ).toThrow(/already exists/i);
     // the decisions WAL must not have been left behind
     expect(pathExistsWithinBase(decisionsRel, CWD, 'decisions')).toBe(false);
+  });
+});
+
+describe('normalizeEvidence — deterministic multiset snapshot (finding P2 / C)', () => {
+  const org = (id: string, parent: string) => ({
+    organizationId: id,
+    parentTenantId: parent,
+  });
+  const base = (
+    mappings: LegacyOwnershipEvidence['providerMappings'],
+  ): LegacyOwnershipEvidence => ({
+    legacyValue: 'ext-x',
+    nullSemantics: 'proven_intentional_global',
+    directInternalOrganization: null,
+    isKnownTenantId: false,
+    providerMappings: mappings,
+  });
+
+  it('provider mappings in a DIFFERENT order normalize to the SAME string', () => {
+    const a = base([
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+      {
+        provider: 'authjs',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+    ]);
+    const b = base([
+      {
+        provider: 'authjs',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+    ]);
+    expect(normalizeEvidence(a)).toBe(normalizeEvidence(b));
+  });
+
+  it('a DUPLICATE mapping is preserved (multiset, not a Set) — one vs two identical rows normalize DIFFERENTLY', () => {
+    const one = base([
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+    ]);
+    const two = base([
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+    ]);
+    expect(normalizeEvidence(one)).not.toBe(normalizeEvidence(two));
+  });
+
+  it('a changed verified parent tenant changes the snapshot', () => {
+    const a = base([
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+    ]);
+    const b = base([
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't2'),
+      },
+    ]);
+    expect(normalizeEvidence(a)).not.toBe(normalizeEvidence(b));
+  });
+
+  it('an unverified mapping (verified: null) is distinct from a verified one', () => {
+    const unver = base([
+      { provider: 'clerk', mappedOrganizationId: 'o1', verified: null },
+    ]);
+    const ver = base([
+      {
+        provider: 'clerk',
+        mappedOrganizationId: 'o1',
+        verified: org('o1', 't1'),
+      },
+    ]);
+    expect(normalizeEvidence(unver)).not.toBe(normalizeEvidence(ver));
   });
 });

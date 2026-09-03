@@ -109,16 +109,21 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  * COLLISION DISPOSITION (projected candidate set, not only persisted rows)
  * ────────────────────────────────────────────────────────────────────────────
  * A candidate that classifies to `(key, org, canonical_organization)` is
- * quarantined when EITHER an existing `canonical_organization` row already owns
- * `(key, org)` (always an FF·B dual-written row — historical rows never win) OR
- * any OTHER still-unresolved / already-quarantined sibling with the same `key`
- * ALSO resolves to `org`. Each competing historical row runs this check
- * independently and quarantines ITSELF — no winner is picked by id/UUID order.
- * Dry-run and apply run the identical disposition, so an unchanged database
- * produces the identical result. The same-key sibling set is bounded
- * (`SIBLING_LIMIT`), and its authoritative evidence is loaded SET-BASED — a
- * fixed, bounded number of `IN (...)` reads for the whole set, then the neutral
- * classifier in memory — NOT one evidence gather per sibling.
+ * quarantined ONLY on an ACTUAL collision WITNESS: EITHER an existing
+ * `canonical_organization` row already owns `(key, org)` (always an FF·B
+ * dual-written row — historical rows never win) OR another still-unresolved /
+ * already-quarantined sibling with the same `key` ALSO resolves to `org`. Each
+ * competing historical row runs this check independently and quarantines ITSELF
+ * — no winner is picked by id/UUID order. Dry-run and apply run the identical
+ * disposition, so an unchanged database produces the identical result.
+ *
+ * `SIBLING_LIMIT` is a WORK BOUND, NEVER collision evidence. Up to
+ * `SIBLING_LIMIT` same-key siblings are classified from ONE SET-BASED evidence
+ * bundle (a fixed, bounded number of `IN (...)` reads — NOT one gather per
+ * sibling). If the scan is COMPLETE and none collide -> proceed / canonical. If
+ * the scan hit its cap with NO collision proven -> `collision_scan_incomplete`:
+ * the row stays `unresolved_legacy` / `organization_id NULL` (blocking FF·D
+ * until it can be re-evaluated) — it is NEVER quarantined merely for scale.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * CONCURRENCY — ONE CONSISTENCY BOUNDARY PER APPLIED ROW
@@ -133,14 +138,17 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  *     key / tenant_id / state are still exactly what was classified;
  *   - RE-LOAD the FULL authoritative evidence set SET-BASED (direct
  *     `organizations` match, EVERY `auth_organization_identities` mapping,
- *     re-verified mapped org, tenant existence) THROUGH THE TRANSACTION HANDLE
- *     and RE-CLASSIFY. Canonical ids/parents come from the matched
- *     `organizations` row, never the raw legacy string;
- *   - if the classifier result is not STRUCTURALLY identical to the one in the
- *     durable `intent` record (state / organizationId / parentTenantId /
- *     reason all compared) -> FAIL CLOSED (`evidence_changed`), leave the row
- *     unresolved — a canonical organization is never persisted from stale
- *     evidence;
+ *     re-verified mapped org, tenant existence) THROUGH THE TRANSACTION HANDLE.
+ *     Canonical ids/parents come from the matched `organizations` row, never the
+ *     raw legacy string;
+ *   - FAIL CLOSED (`evidence_changed`, no mutation) unless BOTH hold: the
+ *     DETERMINISTIC NORMALIZED evidence SNAPSHOT (`normalizeEvidence` — every
+ *     authoritative field, provider mappings as an ordered multiset) is
+ *     byte-identical to the reviewed `intent`'s, AND the reduced classifier
+ *     result is structurally identical. A changed evidence SET that happens to
+ *     reduce to the same classification (e.g. a stale provider mapping added for
+ *     the same legacy value) is STILL `evidence_changed` — no canonical
+ *     organization is ever persisted from stale evidence;
  *   - re-derive the collision disposition on the locked snapshot, `FOR SHARE`-
  *     locking every collision WITNESS before relying on it: the existing
  *     canonical winner row, AND the whole bounded same-key sibling set (locked
@@ -183,6 +191,11 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  * writes it IN FULL (throwing rather than accepting a stalled partial write)
  * AND `fsync`'s it to storage BEFORE any DB write; (2) the transactional
  * mutation above; (3) a `result` NDJSON record — written in full AND `fsync`'d.
+ * The `intent` record carries the REVIEWED (pre-mutation) evidence; the `result`
+ * record carries the evidence ACTUALLY observed at the transactional mutation
+ * boundary — so a refusal shows exactly which authoritative rows changed. Only
+ * an early candidate-row concurrent change, detected before evidence is
+ * re-read, falls back to the initial evidence on its `result`.
  * Non-mutating rows and ALL dry-run rows emit only a `result`. An `intent` with
  * no matching `result` (same `featureFlagId`) is an incomplete operation,
  * detectable on restart / operator review by scanning the decisions artifact.
@@ -236,7 +249,7 @@ export type BackfillDecisionReason =
   | LegacyOwnershipReason
   | 'canonical_collision_quarantined' // an existing FF·B canonical row owns (key, org)
   | 'projected_collision_quarantined' // ≥2 historical candidates project to the same (key, org)
-  | 'too_many_key_siblings_quarantined' // pathological: a single key has too many sibling rows to reconcile
+  | 'collision_scan_incomplete' // the bounded same-key sibling scan hit its cap with no collision proven — stays unresolved, blocks FF·D
   | 'evidence_changed' // authoritative evidence changed between review and the mutation boundary
   | 'collision_changed' // the collision that justified a planned quarantine was gone at the transactional boundary
   | 'concurrently_changed';
@@ -248,7 +261,12 @@ export type BackfillDecisionReason =
  */
 export type BackfillRecordPhase = 'intent' | 'result';
 
-/** Cap on how many same-`key` sibling rows the projected-collision scan reads. */
+/**
+ * WORK BOUND on how many same-`key` sibling rows the projected-collision scan
+ * classifies per candidate — NEVER collision evidence. Reaching it means the
+ * scan is INCOMPLETE (reason `collision_scan_incomplete`, row stays
+ * `unresolved_legacy`), it never by itself quarantines a row.
+ */
 const SIBLING_LIMIT = 500;
 
 /** The authoritative evidence set consulted for one row (safe fields only). */
@@ -678,6 +696,8 @@ async function lockFeatureFlagRowForShare(
  * Structured equality of two classifier results (evidence -> proposal). ALL
  * authoritative fields are compared — including `parentTenantId`, so a
  * concurrent `organizations.tenant_id` change is NOT treated as "unchanged".
+ * Kept as a DEFENSIVE second invariant; {@link normalizeEvidence} equality is
+ * the primary gate (a changed evidence SET can reduce to the same proposal).
  */
 function sameClassification(
   a: LegacyOwnershipClassification,
@@ -692,11 +712,63 @@ function sameClassification(
 }
 
 /**
- * The bounded same-`key` sibling set (`unresolved_legacy` / `quarantined`
- * rows, excluding the candidate) — ONE query. When `lock` is set the rows are
- * taken `FOR SHARE`, so every projected-collision WITNESS is stable (no
- * concurrent `UPDATE` / `DELETE` / reclassification) for the rest of the
- * transaction. `FOR SHARE` on this bounded set never blocks a NEW-row INSERT.
+ * A DETERMINISTIC canonical string of the COMPLETE authoritative evidence set
+ * (`LegacyOwnershipEvidence`) — for exact snapshot equality at the mutation
+ * boundary. A changed evidence SET that happens to REDUCE to the same classifier
+ * result must NOT authorize a mutation under the old durable intent, so this
+ * compares evidence directly, not the reduced classification.
+ *
+ * Every field the classifier can reason over is included: `legacyValue`,
+ * `nullSemantics`, `directInternalOrganization` (id + parent tenant), every
+ * provider mapping (provider, mapped id, verified id + parent tenant or null),
+ * and `isKnownTenantId`. Provider mappings are sorted into a stable order so DB
+ * row ordering alone cannot produce a false `evidence_changed`; the sort keeps
+ * duplicates (it is a MULTISET, not a Set — an authoritative duplicate row is
+ * never silently dropped).
+ */
+export function normalizeEvidence(evidence: LegacyOwnershipEvidence): string {
+  const org = (o: ResolvedOrganization | null) =>
+    o === null
+      ? null
+      : { organizationId: o.organizationId, parentTenantId: o.parentTenantId };
+  const mappings = evidence.providerMappings
+    .map((m) => ({
+      provider: m.provider,
+      mappedOrganizationId: m.mappedOrganizationId,
+      verified: org(m.verified),
+    }))
+    .map((m) => ({
+      ...m,
+      _k: [
+        m.provider,
+        m.mappedOrganizationId,
+        m.verified?.organizationId ?? '',
+        m.verified?.parentTenantId ?? '',
+      ].join(' '),
+    }))
+    .sort((a, b) => (a._k < b._k ? -1 : a._k > b._k ? 1 : 0))
+    .map((m) => ({
+      provider: m.provider,
+      mappedOrganizationId: m.mappedOrganizationId,
+      verified: m.verified,
+    }));
+  return JSON.stringify({
+    legacyValue: evidence.legacyValue,
+    nullSemantics: evidence.nullSemantics,
+    directInternalOrganization: org(evidence.directInternalOrganization),
+    isKnownTenantId: evidence.isKnownTenantId,
+    providerMappings: mappings,
+  });
+}
+
+/**
+ * Up to `SIBLING_LIMIT + 1` same-`key` sibling rows (`unresolved_legacy` /
+ * `quarantined`, excluding the candidate) — ONE query. The `+ 1` lets the caller
+ * tell a COMPLETE scan (`length <= SIBLING_LIMIT`) from an INCOMPLETE one
+ * without a `COUNT`. When `lock` is set the rows are taken `FOR SHARE`, so every
+ * projected-collision WITNESS is stable (no concurrent `UPDATE` / `DELETE` /
+ * reclassification) for the rest of the transaction. `FOR SHARE` on this bounded
+ * set never blocks a NEW-row INSERT.
  */
 async function loadSameKeySiblings(
   deps: EvidenceDeps,
@@ -721,18 +793,32 @@ async function loadSameKeySiblings(
       ),
     )
     .orderBy(asc(featureFlagsTable.id))
-    .limit(SIBLING_LIMIT);
+    .limit(SIBLING_LIMIT + 1);
   return lock ? q.for('share') : q;
 }
 
+/**
+ * `SIBLING_LIMIT` is a WORK BOUND, never collision evidence. A key with many
+ * historical overrides is not proof that two of them project to the same
+ * `(key, organizationId)`.
+ *
+ *  - `quarantine`  — an ACTUAL witness was found (an existing canonical row, or
+ *    a projected historical sibling resolving to the SAME organization).
+ *  - `proceed`     — the same-key sibling scan was COMPLETE and proved no
+ *    collision.
+ *  - `incomplete`  — the scan hit its cap and no collision was proven: fail
+ *    closed WITHOUT quarantine (the row stays `unresolved_legacy` / org NULL,
+ *    reason `collision_scan_incomplete`, blocking FF·D until it can be
+ *    re-evaluated) — a quarantine here would hide a possibly-valid override.
+ */
 type CollisionDisposition =
   | { readonly disposition: 'proceed' }
+  | { readonly disposition: 'incomplete' }
   | {
       readonly disposition: 'quarantine';
       readonly reason:
         | 'canonical_collision_quarantined'
-        | 'projected_collision_quarantined'
-        | 'too_many_key_siblings_quarantined';
+        | 'projected_collision_quarantined';
     };
 
 /**
@@ -746,13 +832,14 @@ type CollisionDisposition =
  *    `key` whose legacy value ALSO resolves to `organizationId` -> quarantine
  *    BOTH (each row runs this check independently and quarantines itself; no
  *    arbitrary winner picked by id/UUID order).
- * 3. a pathological key with too many siblings to reconcile safely -> quarantine.
- * 4. otherwise -> proceed.
+ * 3. the bounded sibling scan was COMPLETE and none collided -> proceed.
+ * 4. the bounded sibling scan hit its cap with no collision proven -> INCOMPLETE
+ *    (fail closed, no mutation, no quarantine — see {@link CollisionDisposition}).
  *
- * Memory / round trips: the sibling set is bounded by rows sharing ONE key
- * (`SIBLING_LIMIT`), and their authoritative evidence is loaded SET-BASED
- * ({@link loadLegacyOwnershipEvidence}, O(1) queries) then classified in
- * memory — NOT one `gatherEvidence` per sibling.
+ * Memory / round trips: at most `SIBLING_LIMIT` siblings are classified, their
+ * authoritative evidence loaded SET-BASED ({@link loadLegacyOwnershipEvidence},
+ * O(1) queries) then classified in memory — NOT one `gatherEvidence` per
+ * sibling. Row COUNT alone is never a quarantine reason.
  *
  * `lockWitness` (true only on the transactional re-derivation): every collision
  * WITNESS is `FOR SHARE`-locked BEFORE it is relied on — the existing canonical
@@ -803,26 +890,24 @@ async function resolveCanonicalCollisionDisposition(
     // collision).
   }
 
-  // Bounded same-key sibling set — ONE query; FOR SHARE-locked as a set when
-  // re-deriving transactionally, so the projected-collision witnesses are stable
-  // until the candidate mutation commits.
-  const siblings = await loadSameKeySiblings(deps, row, opts.lockWitness);
-  if (siblings.length >= SIBLING_LIMIT) {
-    return {
-      disposition: 'quarantine',
-      reason: 'too_many_key_siblings_quarantined',
-    };
-  }
-  if (siblings.length === 0) return { disposition: 'proceed' };
+  // Bounded same-key sibling set (SIBLING_LIMIT + 1 fetched) — ONE query;
+  // FOR SHARE-locked as a set when re-deriving transactionally, so the
+  // projected-collision witnesses are stable until the candidate mutation
+  // commits.
+  const fetched = await loadSameKeySiblings(deps, row, opts.lockWitness);
+  const scanComplete = fetched.length <= SIBLING_LIMIT;
+  const inspected = scanComplete ? fetched : fetched.slice(0, SIBLING_LIMIT);
+  if (inspected.length === 0) return { disposition: 'proceed' };
 
-  // SET-BASED authoritative evidence for every DISTINCT non-null sibling legacy
-  // value (one bundle), then the SAME neutral classifier in memory.
+  // SET-BASED authoritative evidence for every DISTINCT non-null inspected
+  // sibling legacy value (one bundle), then the SAME neutral classifier in
+  // memory.
   const evidenceByValue = await loadLegacyOwnershipEvidence(
-    siblings.map((s) => s.tenantId).filter((v): v is string => v !== null),
+    inspected.map((s) => s.tenantId).filter((v): v is string => v !== null),
     deps,
   );
 
-  for (const sibling of siblings) {
+  for (const sibling of inspected) {
     const evidence =
       sibling.tenantId === null
         ? NULL_LEGACY_EVIDENCE
@@ -840,7 +925,11 @@ async function resolveCanonicalCollisionDisposition(
     }
   }
 
-  return { disposition: 'proceed' };
+  // No witness in the inspected set. A COMPLETE scan proves no collision; an
+  // INCOMPLETE one proves nothing — fail closed without quarantine.
+  return scanComplete
+    ? { disposition: 'proceed' }
+    : { disposition: 'incomplete' };
 }
 
 function expectedState(row: CandidateRow) {
@@ -990,48 +1079,73 @@ export async function runFeatureFlagOwnershipBackfill(
       pdeps,
       opts,
     );
-    return disp.disposition === 'quarantine'
-      ? {
-          outcome: 'quarantined',
-          reason: disp.reason,
-          organizationId,
-          parentTenantId,
-        }
-      : {
-          outcome: 'canonical_organization',
-          reason: classification.reason,
-          organizationId,
-          parentTenantId,
-        };
+    if (disp.disposition === 'quarantine') {
+      return {
+        outcome: 'quarantined',
+        reason: disp.reason,
+        organizationId,
+        parentTenantId,
+      };
+    }
+    if (disp.disposition === 'incomplete') {
+      // Bounded sibling scan capped with no collision proven — fail closed
+      // WITHOUT quarantine: the row stays unresolved_legacy and blocks FF·D.
+      return {
+        outcome: 'unresolved_legacy',
+        reason: 'collision_scan_incomplete',
+      };
+    }
+    return {
+      outcome: 'canonical_organization',
+      reason: classification.reason,
+      organizationId,
+      parentTenantId,
+    };
   }
 
   /**
    * Apply ONE candidate row inside a per-row transaction: SHARE-lock the
    * authoritative lookup tables (organizations / tenants /
    * auth_organization_identities), `FOR UPDATE`-lock the candidate row,
-   * re-load its authoritative evidence SET-BASED through the transaction handle
-   * and re-classify, then re-derive the collision disposition — `FOR SHARE`-
-   * locking every witness first (the existing canonical winner row, and the
-   * whole bounded same-key sibling set, classified from ONE set-based evidence
-   * bundle) — enforce the monotonic rule, and mutate, all in one commit:
+   * re-load its authoritative evidence SET-BASED through the transaction handle,
+   * and REFUSE the mutation unless BOTH hold: the normalized evidence SNAPSHOT
+   * (`normalizeEvidence`) is byte-identical to the reviewed intent's, AND the
+   * reduced classification is unchanged. Then re-derive the collision
+   * disposition — `FOR SHARE`-locking every witness first (the existing
+   * canonical winner row, and the whole bounded same-key sibling set, classified
+   * from ONE set-based evidence bundle) — enforce the monotonic rule, and
+   * mutate, all in one commit:
+   *   - evidence snapshot differs at all : `evidence_changed` (no write);
+   *   - bounded sibling scan incomplete  : `scan_incomplete` (no write; the row
+   *     stays unresolved_legacy / org NULL, reason `collision_scan_incomplete`);
    *   - planned canonical  -> fresh quarantined  : quarantine (witness locked);
    *   - planned quarantined -> fresh !quarantined : `collision_changed` (no
-   *     write; the row stays unresolved_legacy / org NULL — a stale collision
-   *     never persists a quarantine);
+   *     write; a stale collision never persists a quarantine);
    *   - planned canonical  -> fresh canonical     : canonical UPDATE, with the
    *     SAVEPOINT + 23505 path as the final arbiter for a concurrent FF·B
    *     canonical INSERT of a NEW row (which `FOR SHARE` does not block).
+   *
+   * Every result that reached the mutation boundary carries `evidence2` — the
+   * evidence ACTUALLY observed there — so the WAL `result` record is
+   * self-explanatory (the `intent` carries the reviewed evidence).
    */
   async function applyRowInTransaction(
     row: CandidateRow,
+    evidence1: LegacyOwnershipEvidence,
     classification1: LegacyOwnershipClassification,
     planned: PlannedOutcome,
   ): Promise<
-    | { kind: 'done'; result: PlannedOutcome }
-    | { kind: 'concurrent' }
-    | { kind: 'evidence_changed' }
-    | { kind: 'collision_changed' }
+    | {
+        kind: 'done';
+        result: PlannedOutcome;
+        evidence2: LegacyOwnershipEvidence;
+      }
+    | { kind: 'concurrent'; evidence2?: LegacyOwnershipEvidence }
+    | { kind: 'evidence_changed'; evidence2: LegacyOwnershipEvidence }
+    | { kind: 'collision_changed'; evidence2: LegacyOwnershipEvidence }
+    | { kind: 'scan_incomplete'; evidence2: LegacyOwnershipEvidence }
   > {
+    const intentSnapshot = normalizeEvidence(evidence1);
     return db.transaction(async (txRaw) => {
       const tx = txRaw as unknown as DrizzleDb;
       const txDeps: EvidenceDeps = { db: tx };
@@ -1067,12 +1181,17 @@ export async function runFeatureFlagOwnershipBackfill(
         return { kind: 'concurrent' as const };
       }
 
-      // Re-gather + re-classify the FULL authoritative evidence set under lock.
-      const classification2 = classifyLegacyOwnership(
-        await gatherEvidence(row, txDeps),
-      );
-      if (!sameClassification(classification2, classification1)) {
-        return { kind: 'evidence_changed' as const };
+      // Re-load the FULL authoritative evidence set under lock and compare the
+      // EXACT normalized snapshot (not just the reduced classification): a
+      // changed evidence SET must never authorize a mutation under the old
+      // durable intent. `sameClassification` is kept as a defensive second gate.
+      const evidence2 = await gatherEvidence(row, txDeps);
+      const classification2 = classifyLegacyOwnership(evidence2);
+      if (
+        normalizeEvidence(evidence2) !== intentSnapshot ||
+        !sameClassification(classification2, classification1)
+      ) {
+        return { kind: 'evidence_changed' as const, evidence2 };
       }
 
       await options.onLockedBeforeMutation?.({ id: row.id, key: row.key });
@@ -1089,6 +1208,12 @@ export async function runFeatureFlagOwnershipBackfill(
           : planned;
 
       await options.onAfterFreshCollisionCheck?.({ id: row.id, key: row.key });
+
+      // Bounded sibling scan incomplete at the mutation boundary (SIBLING_LIMIT
+      // reached, no collision proven) -> NO mutation; row stays unresolved.
+      if (fresh.outcome === 'unresolved_legacy') {
+        return { kind: 'scan_incomplete' as const, evidence2 };
+      }
 
       // MONOTONIC SAFETY — every mutating outcome is backed by the CURRENT
       // transactional (locked-witness) disposition, never by a stale intent:
@@ -1107,7 +1232,7 @@ export async function runFeatureFlagOwnershipBackfill(
         planned.outcome === 'quarantined' &&
         fresh.outcome !== 'quarantined'
       ) {
-        return { kind: 'collision_changed' as const };
+        return { kind: 'collision_changed' as const, evidence2 };
       }
       const final: PlannedOutcome = fresh;
 
@@ -1121,8 +1246,8 @@ export async function runFeatureFlagOwnershipBackfill(
           .where(expectedState(row))
           .returning();
         return updated.length === 0
-          ? { kind: 'concurrent' as const }
-          : { kind: 'done' as const, result: final };
+          ? { kind: 'concurrent' as const, evidence2 }
+          : { kind: 'done' as const, result: final, evidence2 };
       }
       if (final.outcome === 'quarantined') {
         const updated = await tx
@@ -1131,8 +1256,8 @@ export async function runFeatureFlagOwnershipBackfill(
           .where(expectedState(row))
           .returning();
         return updated.length === 0
-          ? { kind: 'concurrent' as const }
-          : { kind: 'done' as const, result: final };
+          ? { kind: 'concurrent' as const, evidence2 }
+          : { kind: 'done' as const, result: final, evidence2 };
       }
 
       // canonical_organization — the ONLY branch that can lose the race to a
@@ -1155,8 +1280,8 @@ export async function runFeatureFlagOwnershipBackfill(
             .returning();
         });
         return updated.length === 0
-          ? { kind: 'concurrent' as const }
-          : { kind: 'done' as const, result: final };
+          ? { kind: 'concurrent' as const, evidence2 }
+          : { kind: 'done' as const, result: final, evidence2 };
       } catch (error) {
         if (!isCanonicalPartialUniqueViolation(error)) throw error;
         // Savepoint rolled back; the outer transaction is still healthy.
@@ -1166,7 +1291,7 @@ export async function runFeatureFlagOwnershipBackfill(
           .where(expectedState(row))
           .returning();
         return q.length === 0
-          ? { kind: 'concurrent' as const }
+          ? { kind: 'concurrent' as const, evidence2 }
           : {
               kind: 'done' as const,
               result: {
@@ -1175,6 +1300,7 @@ export async function runFeatureFlagOwnershipBackfill(
                 organizationId: final.organizationId,
                 parentTenantId: final.parentTenantId,
               },
+              evidence2,
             };
       }
     });
@@ -1238,14 +1364,41 @@ export async function runFeatureFlagOwnershipBackfill(
     await options.onBeforeRowUpdate?.({ id: row.id, key: row.key });
 
     // ── ONE consistency boundary: lock, revalidate, re-derive, mutate ──
-    const outcome = await applyRowInTransaction(row, classification1, planned);
+    const outcome = await applyRowInTransaction(
+      row,
+      evidence1,
+      classification1,
+      planned,
+    );
+
+    // The RESULT record carries the evidence ACTUALLY observed at the
+    // transactional mutation boundary (`evidence2`) — the INTENT already carries
+    // the reviewed `evidence1`. Only an early candidate-row concurrent change,
+    // which happens before evidence is re-read, falls back to `evidence1`.
+    const boundaryEvidence = outcome.evidence2
+      ? toDecisionEvidence(outcome.evidence2)
+      : base.evidence;
 
     if (outcome.kind === 'evidence_changed') {
       await emitRecord({
         ...base,
+        evidence: boundaryEvidence,
         phase: 'result',
         outcome: 'concurrently_changed',
         reason: 'evidence_changed',
+      });
+      return;
+    }
+    if (outcome.kind === 'scan_incomplete') {
+      // Bounded sibling scan hit its cap at the mutation boundary with no
+      // collision proven: NOT canonical (fail closed) and NOT quarantined
+      // (count alone is not collision evidence). Stays unresolved, blocks FF·D.
+      await emitRecord({
+        ...base,
+        evidence: boundaryEvidence,
+        phase: 'result',
+        outcome: 'unresolved_legacy',
+        reason: 'collision_scan_incomplete',
       });
       return;
     }
@@ -1256,6 +1409,7 @@ export async function runFeatureFlagOwnershipBackfill(
       // would permanently hide this historical override after FF·D).
       await emitRecord({
         ...base,
+        evidence: boundaryEvidence,
         phase: 'result',
         outcome: 'concurrently_changed',
         reason: 'collision_changed',
@@ -1265,6 +1419,7 @@ export async function runFeatureFlagOwnershipBackfill(
     if (outcome.kind === 'concurrent') {
       await emitRecord({
         ...base,
+        evidence: boundaryEvidence,
         phase: 'result',
         outcome: 'concurrently_changed',
         reason: 'concurrently_changed',
@@ -1275,6 +1430,7 @@ export async function runFeatureFlagOwnershipBackfill(
       ...withOrg(
         {
           ...base,
+          evidence: boundaryEvidence,
           outcome: outcome.result.outcome,
           reason: outcome.result.reason,
         },

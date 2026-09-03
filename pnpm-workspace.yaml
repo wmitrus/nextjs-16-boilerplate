@@ -33,7 +33,7 @@ overrides:
   handlebars: '>=4.7.9'
   lodash-es: '>=4.18.0'
   'fast-uri@>=2.3.1 <2.4.3': 2.4.3
-  'fast-uri@>=3.0.0 <3.1.5': 3.1.5
+  'fast-uri@>=3.0.0 <3.1.7': 3.1.7
   'fast-uri@>=4.0.0 <4.1.1': 4.1.1
   'next@>=16.0.0 <16.2.5': '>=16.2.5'
   'next@>=16.0.0 <16.2.6': '>=16.2.6'
@@ -66,6 +66,8 @@ overrides:
   'smol-toml@<1.6.1': 1.6.1
   'tar@>=7.0.0 <7.5.21': 7.5.21
   'browserslist@<4.28.7': '>=4.28.7'
+  '@humanfs/node@<0.16.8': '>=0.16.8'
+  'qs@>=6.14.0 <6.16.0': 6.16.0
 
 audit:
   # --- GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq (image-size@2.0.2) ---
@@ -189,3 +191,4 @@ minimumReleaseAgeExclude:
   - '@next/swc-win32-x64-msvc@16.3.2'
   - eslint-config-next@16.3.2
   - next@16.3.2
+  - fast-uri@3.1.7

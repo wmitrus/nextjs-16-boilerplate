@@ -132,10 +132,14 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  * ────────────────────────────────────────────────────────────────────────────
  * Keyset pagination by `id` (never OFFSET). In `apply` mode each mutating row
  * runs inside its own transaction that:
- *   - `LOCK TABLE organizations, tenants, auth_organization_identities IN SHARE
- *     MODE` (consistent order across rows — no inter-row deadlock) so NO
- *     concurrent writer can change the authoritative lookup data while the row
- *     is evaluated and mutated;
+ *   - `LOCK TABLE tenants, organizations, auth_organization_identities IN SHARE
+ *     MODE` so NO concurrent writer can change the authoritative lookup data
+ *     while the row is evaluated and mutated. The table order is a GLOBAL
+ *     lock-order invariant, not merely "consistent across backfill rows": it
+ *     matches `DrizzleProvisioningService`'s write order (`tenants` ->
+ *     `organizations` -> `auth_organization_identities`). Keep this order
+ *     synchronized with production writers to avoid deadlocks
+ *     (see {@link acquireAuthoritativeEvidenceLocks});
  *   - `SELECT ... FOR UPDATE` the candidate `feature_flags` row and verify its
  *     key / tenant_id / state are still exactly what was classified;
  *   - RE-LOAD the FULL authoritative evidence set SET-BASED (direct
@@ -680,6 +684,30 @@ interface LockedFeatureFlagRow {
   readonly tenantId: string | null;
   readonly organizationId: string | null;
   readonly ownershipState: string;
+}
+
+/**
+ * Take `SHARE` locks on the three authoritative-evidence tables so no
+ * concurrent writer can change the lookup data while a candidate row is
+ * evaluated and mutated.
+ *
+ * GLOBAL LOCK ORDER: `tenants` -> `organizations` ->
+ * `auth_organization_identities`. PostgreSQL locks the tables named in a single
+ * `LOCK TABLE` left-to-right, so this MUST match the order production writers
+ * take their conflicting `ROW EXCLUSIVE` locks. `DrizzleProvisioningService`
+ * inserts in exactly that order (`tenants`, then `organizations`, then
+ * `auth_organization_identities`); the reverse order here would deadlock a
+ * provisioning transaction that already holds `tenants`. Keep this synchronized
+ * with production writers.
+ *
+ * Exported so a real-Postgres regression can exercise the exact statement.
+ */
+export async function acquireAuthoritativeEvidenceLocks(
+  db: DrizzleDb,
+): Promise<void> {
+  await db.execute(
+    sql`LOCK TABLE tenants, organizations, auth_organization_identities IN SHARE MODE`,
+  );
 }
 
 /**
@@ -1228,10 +1256,11 @@ export async function runFeatureFlagOwnershipBackfill(
       const tx = txRaw as unknown as DrizzleDb;
       const txDeps: EvidenceDeps = { db: tx };
 
-      // Consistent lock order across all rows -> no deadlock between rows.
-      await tx.execute(
-        sql`LOCK TABLE organizations, tenants, auth_organization_identities IN SHARE MODE`,
-      );
+      // GLOBAL lock order: tenants -> organizations ->
+      // auth_organization_identities, matching DrizzleProvisioningService's
+      // write order. Keep synchronized with production writers to avoid
+      // deadlocks. See acquireAuthoritativeEvidenceLocks().
+      await acquireAuthoritativeEvidenceLocks(tx);
 
       // Stabilize the candidate row for the life of the transaction.
       const lockedRaw = await tx.execute(

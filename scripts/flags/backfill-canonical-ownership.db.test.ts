@@ -1,9 +1,13 @@
 /** @vitest-environment node */
 import { sql } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import type { DrizzleDb } from '@/core/db/types';
+
 import {
+  acquireAuthoritativeEvidenceLocks,
   loadLegacyOwnershipEvidence,
   runFeatureFlagOwnershipBackfill,
   type BackfillDecision,
@@ -991,6 +995,133 @@ describe('runFeatureFlagOwnershipBackfill — authoritative-evidence lock (findi
         sql`DELETE FROM auth_organization_identities WHERE external_org_id = ${ORG_B1}`,
       );
       await other.end({ timeout: 5 });
+    }
+  });
+});
+
+describe('acquireAuthoritativeEvidenceLocks — GLOBAL lock order tenants -> organizations -> auth_organization_identities (finding P2, real Postgres only)', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const waitFor = async <T>(
+    fn: () => Promise<T | null | false>,
+    timeoutMs = 8000,
+  ): Promise<T> => {
+    const start = Date.now();
+    for (;;) {
+      const v = await fn();
+      if (v) return v as T;
+      if (Date.now() - start > timeoutMs) {
+        throw new Error('waitFor: condition not met before timeout');
+      }
+      await sleep(50);
+    }
+  };
+
+  it('a provisioning txn holding `tenants` ROW EXCLUSIVE makes FF·C WAIT on `tenants` FIRST (never requesting `organizations`); provisioning then completes and FF·C acquires all three — no deadlock / 40P01', async () => {
+    if (!process.env.TEST_DATABASE_URL) return; // needs 3 real connections
+    const url = process.env.TEST_DATABASE_URL;
+
+    const ffcClient = postgres(url, { max: 1 });
+    const prov = postgres(url, { max: 1 });
+    const obs = postgres(url, { max: 1 });
+    const ffcDb = drizzle(ffcClient);
+
+    let ffcAcquiredAt = 0;
+    let ffcError: unknown = null;
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    // Assigned only AFTER `prov` provably holds `tenants` ROW EXCLUSIVE, so
+    // FF·C's `LOCK TABLE` is GUARANTEED to block on `tenants` rather than
+    // racing ahead and grabbing all three SHARE locks first.
+    let ffcTxn: Promise<void> = Promise.resolve();
+
+    try {
+      // 1. provisioning acquires ROW EXCLUSIVE on `tenants` FIRST and holds it
+      //    (this is the lock `INSERT INTO tenants` would take).
+      await prov`BEGIN`;
+      await prov`LOCK TABLE tenants IN ROW EXCLUSIVE MODE`;
+
+      // 2. NOW start FF·C's LOCK acquisition via the REAL helper. Because
+      //    `tenants` is FIRST in the statement and `prov` holds it RX, FF·C
+      //    blocks there. Prove it deterministically from pg_stat_activity +
+      //    pg_locks, not by timing.
+      ffcTxn = ffcDb
+        .transaction(async (tx) => {
+          await acquireAuthoritativeEvidenceLocks(tx as unknown as DrizzleDb);
+          ffcAcquiredAt = Date.now();
+          await held;
+        })
+        .catch((e: unknown) => {
+          ffcError = e;
+        });
+
+      const blockedPid = await waitFor(async () => {
+        const rows = await obs<{ pid: number }[]>`
+          SELECT pid FROM pg_stat_activity
+          WHERE state = 'active' AND wait_event_type = 'Lock'
+            AND query ILIKE '%LOCK TABLE tenants, organizations, auth_organization_identities%'`;
+        return rows.length ? Number(rows[0]!.pid) : null;
+      });
+
+      const locks = await obs<
+        { rel: string; mode: string; granted: boolean }[]
+      >`
+        SELECT relation::regclass::text AS rel, mode, granted
+        FROM pg_locks
+        WHERE pid = ${blockedPid} AND locktype = 'relation'
+          AND relation::regclass::text = ANY(ARRAY[
+            'tenants','organizations','auth_organization_identities'])`;
+      const byRel = new Map(locks.map((r) => [r.rel, r]));
+
+      // FF·C is WAITING for SHARE on `tenants` and has NOT yet requested the
+      // later tables — proof the LOCK statement processes `tenants` first.
+      expect(byRel.get('tenants')).toMatchObject({
+        mode: 'ShareLock',
+        granted: false,
+      });
+      expect(byRel.has('organizations')).toBe(false);
+      expect(byRel.has('auth_organization_identities')).toBe(false);
+      expect(ffcAcquiredAt).toBe(0); // helper has not returned
+
+      // 3. provisioning proceeds to `organizations` then
+      //    `auth_organization_identities` and commits. FF·C holds NOTHING
+      //    (queued on `tenants`), so there is no lock cycle.
+      await prov`LOCK TABLE organizations IN ROW EXCLUSIVE MODE`;
+      await prov`LOCK TABLE auth_organization_identities IN ROW EXCLUSIVE MODE`;
+      await prov`COMMIT`;
+
+      // 4. FF·C now unblocks and holds granted SHARE on all three.
+      await waitFor(async () => {
+        const rows = await obs<{ rel: string }[]>`
+          SELECT relation::regclass::text AS rel
+          FROM pg_locks
+          WHERE pid = ${blockedPid} AND locktype = 'relation'
+            AND mode = 'ShareLock' AND granted = true
+            AND relation::regclass::text = ANY(ARRAY[
+              'tenants','organizations','auth_organization_identities'])`;
+        return rows.length === 3 ? rows : null;
+      });
+      expect(ffcAcquiredAt).toBeGreaterThan(0);
+
+      // 5. release FF·C -> its transaction commits cleanly, no 40P01.
+      release();
+      await ffcTxn;
+      expect(ffcError).toBeNull();
+    } finally {
+      // Order matters: release the provisioning txn (frees `tenants`) and the
+      // in-test latch FIRST, so a still-blocked FF·C `LOCK TABLE` can proceed.
+      // Then force every connection closed — a still-blocked query errors out,
+      // which resolves `ffcTxn` via its `.catch()`. Awaiting `ffcTxn` before
+      // releasing `prov` would hang the whole suite (it holds `tenants`).
+      await prov`COMMIT`.catch(() => {}); // no-op if already committed
+      release();
+      await Promise.allSettled([
+        ffcClient.end({ timeout: 5 }),
+        prov.end({ timeout: 5 }),
+        obs.end({ timeout: 5 }),
+      ]);
+      await ffcTxn.catch(() => {});
     }
   });
 });

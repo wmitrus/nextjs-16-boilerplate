@@ -1066,6 +1066,125 @@ describe('runFeatureFlagOwnershipBackfill — 23505 savepoint recovery (finding 
   });
 });
 
+describe('runFeatureFlagOwnershipBackfill — 23505 fallback quarantine requires a CURRENT locked canonical winner (finding P2, real Postgres only)', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('A — fallback SELECT ... FOR SHARE locks the 23505 winner; a concurrent DELETE of it is BLOCKED until the backfill txn commits; the historical row commits quarantined', async () => {
+    if (!process.env.TEST_DATABASE_URL) return;
+
+    const histId = await insertLegacy('race-fb-a', ORG_B1); // canonical -> ORG_B1
+    const other = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    const records: BackfillDecision[] = [];
+    let deleteStillPending = false;
+    let blockedDelete: Promise<unknown> = Promise.resolve();
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: (d) => {
+          records.push(d);
+        },
+        onAfterFreshCollisionCheck: async (row) => {
+          if (row.id !== histId) return;
+          // winning FF·B canonical row committed by another connection
+          await other`
+            INSERT INTO feature_flags (key, tenant_id, organization_id, ownership_state, enabled)
+            VALUES ('race-fb-a', 'ffb-a', ${ORG_B1}, 'canonical_organization', true)
+          `;
+        },
+        onAfterFallbackWitnessLock: async (row) => {
+          if (row.id !== histId) return;
+          // the fallback has just FOR SHARE-locked that winner; a concurrent
+          // DELETE of it must block until this txn commits
+          blockedDelete = other`
+            DELETE FROM feature_flags
+            WHERE key = 'race-fb-a' AND ownership_state = 'canonical_organization'
+          `.catch(() => {});
+          const raced = await Promise.race([
+            blockedDelete.then(() => 'settled'),
+            sleep(500).then(() => 'pending'),
+          ]);
+          deleteStillPending = raced === 'pending';
+        },
+      });
+      await blockedDelete; // unblocks once our txn commits
+
+      expect(deleteStillPending).toBe(true);
+      expect(report.quarantinedCount).toBe(1);
+      expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(await rowById(histId)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'quarantined',
+      });
+      expect(
+        records.find((r) => r.featureFlagId === histId && r.phase === 'result'),
+      ).toMatchObject({
+        outcome: 'quarantined',
+        reason: 'canonical_collision_quarantined',
+      });
+      // the concurrent DELETE only lands AFTER our commit
+      const remaining = (await allRows()).filter((r) => r.key === 'race-fb-a');
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]).toMatchObject({
+        id: histId,
+        ownershipState: 'quarantined',
+      });
+    } finally {
+      await other.end({ timeout: 5 });
+    }
+  });
+
+  it('B — the 23505-proven winner is DELETED before the fallback can FOR SHARE-lock it: candidate stays unresolved_legacy / org NULL, NO quarantine, result concurrently_changed / collision_changed', async () => {
+    if (!process.env.TEST_DATABASE_URL) return;
+
+    const histId = await insertLegacy('race-fb-b', ORG_B1);
+    const other = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    const records: BackfillDecision[] = [];
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: (d) => {
+          records.push(d);
+        },
+        onAfterFreshCollisionCheck: async (row) => {
+          if (row.id !== histId) return;
+          await other`
+            INSERT INTO feature_flags (key, tenant_id, organization_id, ownership_state, enabled)
+            VALUES ('race-fb-b', 'ffb-b', ${ORG_B1}, 'canonical_organization', true)
+          `;
+        },
+        onAfterCanonical23505: async (row) => {
+          if (row.id !== histId) return;
+          // winner removed by another connection AFTER the 23505 rollback but
+          // BEFORE the fallback witness lock — the fallback must find nothing.
+          await other`
+            DELETE FROM feature_flags
+            WHERE key = 'race-fb-b' AND ownership_state = 'canonical_organization'
+          `;
+        },
+      });
+
+      expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(report.quarantinedCount).toBe(0);
+      expect(report.reasonCounts.collision_changed).toBe(1);
+      expect(await rowById(histId)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'unresolved_legacy',
+      });
+      expect(
+        records.find((r) => r.featureFlagId === histId && r.phase === 'result'),
+      ).toMatchObject({
+        outcome: 'concurrently_changed',
+        reason: 'collision_changed',
+      });
+      expect(
+        records.find((r) => r.featureFlagId === histId && r.phase === 'intent'),
+      ).toMatchObject({ outcome: 'canonical_organization' });
+    } finally {
+      await other.end({ timeout: 5 });
+    }
+  });
+});
+
 describe('runFeatureFlagOwnershipBackfill — canonical organization id provenance (finding P1, real DB)', () => {
   const UPPER_B1 = ORG_B1.toUpperCase();
 

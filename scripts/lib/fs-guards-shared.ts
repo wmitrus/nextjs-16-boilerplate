@@ -2,6 +2,7 @@ import {
   closeSync,
   createReadStream,
   existsSync,
+  fstatSync,
   fsyncSync,
   linkSync,
   mkdirSync,
@@ -215,6 +216,48 @@ function fsyncDir(dirPath: string): void {
     fsyncSync(dirFd);
   } finally {
     closeSync(dirFd);
+  }
+}
+
+/**
+ * Do two OPEN file descriptors refer to the SAME filesystem entry? Compares
+ * `fstat` `(dev, ino)` — authoritative across case-insensitive / normalizing
+ * volumes where two different path strings can name one inode.
+ */
+export function sameFilesystemEntry(fdA: number, fdB: number): boolean {
+  const a = fstatSync(fdA);
+  const b = fstatSync(fdB);
+  return a.dev === b.dev && a.ino === b.ino;
+}
+
+/**
+ * Best-effort removal of files THIS process just exclusively created (a failed
+ * multi-file reservation), with a directory `fsync` per affected directory so
+ * the cleanup is durable. NEVER throws; silently skips anything already gone or
+ * never created. Every path is confined to `baseDir` — a caller must only pass
+ * paths it created itself, never a pre-existing file.
+ */
+export function removeCreatedArtifactsWithinBase(
+  filePaths: readonly string[],
+  baseDir: string,
+  label = 'artifact cleanup',
+): void {
+  const dirs = new Set<string>();
+  for (const filePath of filePaths) {
+    const safePath = assertPathWithinBase(filePath, baseDir, label);
+    try {
+      unlinkSync(safePath);
+      dirs.add(path.dirname(safePath));
+    } catch {
+      // already gone / never created — nothing to clean up
+    }
+  }
+  for (const dir of dirs) {
+    try {
+      fsyncDir(dir);
+    } catch {
+      // a best-effort cleanup fsync failure must not mask the original error
+    }
   }
 }
 

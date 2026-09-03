@@ -17,6 +17,7 @@ import {
   pathExistsWithinBase,
   publishFileAtomicallyWithinBase,
   readTextFileWithinBase,
+  unlinkSyncWithinBase,
   writeNewFileDurablyWithinBase,
   writeTextFileSyncWithinBase,
 } from '../lib/fs-guards-shared';
@@ -363,6 +364,91 @@ describe('reserveBackfillArtifacts / finalizeBackfillReport — reserve temp BEF
     ).toThrow(/already exists/i);
     // the decisions WAL must not have been left behind
     expect(pathExistsWithinBase(decisionsRel, CWD, 'decisions')).toBe(false);
+  });
+});
+
+describe('reserveBackfillArtifacts — actual filesystem case / normalization semantics (finding P2)', () => {
+  const CWD = process.cwd();
+  const BASE_REL = join('node_modules', '.cache', 'ffc-fscase-test');
+  let runDir: string;
+  let relOf: (name: string) => string;
+  let caseInsensitive = false;
+
+  beforeAll(() => {
+    ensureDirectorySyncWithinBase(join(CWD, BASE_REL), CWD, 'fscase base');
+    runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
+    relOf = (name: string) => relative(CWD, join(runDir, name));
+
+    // Portable detection: create a controlled probe name, then look it up with
+    // a differently-cased spelling. The filesystem itself is authoritative — no
+    // process.platform check.
+    const upperRel = relOf('CaseProbe');
+    writeTextFileSyncWithinBase(upperRel, CWD, '', 'case probe');
+    try {
+      caseInsensitive = pathExistsWithinBase(
+        relOf('caseprobe'),
+        CWD,
+        'case probe',
+      );
+    } finally {
+      unlinkSyncWithinBase(upperRel, CWD, 'case probe');
+    }
+  });
+
+  afterAll(() => {
+    // eslint-disable-next-line no-restricted-syntax -- suite-owned mkdtempSync dir
+    rmSync(runDir, { recursive: true, force: true });
+  });
+
+  it('A — detects (does not assume) whether the host test filesystem is case-insensitive', () => {
+    process.stdout.write(
+      `[ffc-fscase-test] host test filesystem is ${
+        caseInsensitive ? 'CASE-INSENSITIVE' : 'CASE-SENSITIVE'
+      }\n`,
+    );
+    expect(typeof caseInsensitive).toBe('boolean');
+  });
+
+  it('B — case-insensitive FS: --decisions=<dir>/Report + --report=<dir>/report -> reservation rejects BEFORE DB and leaves no created artifacts', () => {
+    if (!caseInsensitive) return; // scenario impossible on a case-sensitive FS
+    const dRel = relOf('Report');
+    const rRel = relOf('report');
+
+    expect(() => reserveBackfillArtifacts(dRel, rRel, CWD)).toThrow(
+      /aliases another reserved artifact|same filesystem entry/i,
+    );
+    // Report / report / Report.partial all denote the same entry here, so
+    // nothing this failed reservation created may remain.
+    expect(pathExistsWithinBase(dRel, CWD, 'd')).toBe(false);
+    expect(pathExistsWithinBase(`${rRel}.partial`, CWD, 't')).toBe(false);
+  });
+
+  it('C — case-sensitive FS: the two names ARE genuinely distinct and the filesystem-semantic check does NOT falsely alias them', () => {
+    if (caseInsensitive) return;
+    const dRel = relOf('Report');
+    const rRel = relOf('report');
+
+    const reserved = reserveBackfillArtifacts(dRel, rRel, CWD);
+    try {
+      expect(reserved.decisionsFd).not.toBeNull();
+      expect(reserved.reportTmpFd).not.toBeNull();
+      expect(pathExistsWithinBase(dRel, CWD, 'd')).toBe(true); // Report (WAL)
+      expect(pathExistsWithinBase(`${rRel}.partial`, CWD, 't')).toBe(true);
+      expect(pathExistsWithinBase(rRel, CWD, 'r')).toBe(false); // report NOT pre-created
+    } finally {
+      closeSync(reserved.decisionsFd!);
+      closeSync(reserved.reportTmpFd!);
+    }
+  });
+
+  it("D — case-insensitive FS: --decisions aliases <report>.partial under case folding -> the second `wx` fails BEFORE DB; cleanup removes only THIS attempt's artifact", () => {
+    if (!caseInsensitive) return;
+    const dRel = relOf('Rep.partial'); // decisions
+    const rRel = relOf('rep'); // <report>.partial = rep.partial ~ Rep.partial
+
+    expect(() => reserveBackfillArtifacts(dRel, rRel, CWD)).toThrow();
+    expect(pathExistsWithinBase(dRel, CWD, 'd')).toBe(false); // removed by cleanup
+    expect(pathExistsWithinBase(rRel, CWD, 'r')).toBe(false); // final --report never pre-created
   });
 });
 

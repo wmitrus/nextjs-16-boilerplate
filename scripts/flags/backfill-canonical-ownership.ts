@@ -29,7 +29,9 @@ import {
   pathExistsWithinBase,
   physicalBaseDir,
   publishFileAtomicallyWithinBase,
+  removeCreatedArtifactsWithinBase,
   resolvePhysicalTargetWithinBase,
+  sameFilesystemEntry,
 } from '../lib/fs-guards-shared';
 
 import { resolveDriver, resolveProvider } from './utils';
@@ -170,8 +172,12 @@ import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzl
  *     arbiter for a concurrent FF·B canonical INSERT (which targets a NEW row,
  *     not the FOR-UPDATE-locked one): the canonical UPDATE runs inside a
  *     SAVEPOINT, so a `23505` there rolls back ONLY the savepoint and the
- *     still-healthy outer transaction quarantines the historical row and
- *     commits (`canonical_collision_quarantined`).
+ *     still-healthy outer transaction then finds AND `FOR SHARE`-locks the
+ *     CURRENT canonical winner in ONE predicate — only a locked, still-canonical
+ *     winner authorizes the fallback quarantine (`canonical_collision_quarantined`).
+ *     If that winner has itself vanished / been reclassified before it can be
+ *     locked, the fallback is refused: the row stays `unresolved_legacy` /
+ *     `organization_id NULL` and reports `collision_changed`.
  *
  * Every run has a `runId` (in the summary and on every streamed record). A
  * resumed run passes `--start-after=<id>` and writes to NEW artifact paths, so
@@ -251,7 +257,7 @@ export type BackfillDecisionReason =
   | 'projected_collision_quarantined' // ≥2 historical candidates project to the same (key, org)
   | 'collision_scan_incomplete' // the bounded same-key sibling scan hit its cap with no collision proven — stays unresolved, blocks FF·D
   | 'evidence_changed' // authoritative evidence changed between review and the mutation boundary
-  | 'collision_changed' // the collision that justified a planned quarantine was gone at the transactional boundary
+  | 'collision_changed' // a collision witness vanished before it could be relied on — a planned quarantine's projected sibling gone at the transactional boundary, OR a 23505-proven canonical winner gone before the fallback quarantine could FOR SHARE-lock it
   | 'concurrently_changed';
 
 /**
@@ -356,6 +362,26 @@ export interface FeatureFlagBackfillOptions {
    * ACTUAL `23505` savepoint-recovery path (not the pre-checked quarantine).
    */
   readonly onAfterFreshCollisionCheck?: (row: {
+    readonly id: string;
+    readonly key: string;
+  }) => Promise<void> | void;
+  /**
+   * Test-only seam: invoked INSIDE the per-row transaction immediately AFTER a
+   * canonical `23505` SAVEPOINT rollback and BEFORE the fallback witness is
+   * `FOR SHARE`-locked — so a test can delete / reclassify the 23505-proven
+   * winner and prove the fallback quarantine is refused (`collision_changed`).
+   */
+  readonly onAfterCanonical23505?: (row: {
+    readonly id: string;
+    readonly key: string;
+  }) => Promise<void> | void;
+  /**
+   * Test-only seam: invoked INSIDE the per-row transaction immediately AFTER the
+   * 23505 fallback witness is `FOR SHARE`-locked and BEFORE the historical row
+   * is quarantined — so a test can prove a concurrent DELETE / reclassification
+   * of that witness is blocked until the backfill transaction commits.
+   */
+  readonly onAfterFallbackWitnessLock?: (row: {
     readonly id: string;
     readonly key: string;
   }) => Promise<void> | void;
@@ -693,6 +719,51 @@ async function lockFeatureFlagRowForShare(
 }
 
 /**
+ * Find AND `FOR SHARE`-lock the CURRENT canonical winner for `(key,
+ * organizationId)` in ONE `SELECT ... FOR SHARE` predicate (no `SELECT id` +
+ * later lock, which would open a second window). Used by the 23505 fallback:
+ * a unique violation proves a winner existed at the failed INSERT/UPDATE, not
+ * that one still exists when the fallback quarantine commits. Returns `null`
+ * when no current canonical winner can be locked.
+ */
+async function lockCanonicalWinnerForShare(
+  db: DrizzleDb,
+  key: string,
+  organizationId: string,
+  excludeId: string,
+): Promise<LockedFeatureFlagRow | null> {
+  const raw = await db.execute(
+    sql`SELECT id, key, tenant_id, organization_id, ownership_state
+        FROM feature_flags
+        WHERE key = ${key}
+          AND organization_id = ${organizationId}
+          AND ownership_state = 'canonical_organization'
+          AND id <> ${excludeId}
+        LIMIT 1
+        FOR SHARE`,
+  );
+  const rows = (
+    Array.isArray(raw) ? raw : ((raw as { rows?: unknown[] }).rows ?? [])
+  ) as Array<{
+    id: string;
+    key: string;
+    tenant_id: string | null;
+    organization_id: string | null;
+    ownership_state: string;
+  }>;
+  const r = rows[0];
+  return r
+    ? {
+        id: r.id,
+        key: r.key,
+        tenantId: r.tenant_id,
+        organizationId: r.organization_id,
+        ownershipState: r.ownership_state,
+      }
+    : null;
+}
+
+/**
  * Structured equality of two classifier results (evidence -> proposal). ALL
  * authoritative fields are compared — including `parentTenantId`, so a
  * concurrent `organizations.tenant_id` change is NOT treated as "unchanged".
@@ -731,27 +802,31 @@ export function normalizeEvidence(evidence: LegacyOwnershipEvidence): string {
     o === null
       ? null
       : { organizationId: o.organizationId, parentTenantId: o.parentTenantId };
+  // Stable, delimiter-safe sort key: JSON.stringify of a fixed-shape tuple —
+  // every element is quoted/escaped so no separator is ambiguous, and
+  // duplicates are preserved (the array is sorted, not deduped: a MULTISET).
+  const sortKey = (m: {
+    provider: string;
+    mappedOrganizationId: string;
+    verified: { organizationId: string; parentTenantId: string } | null;
+  }) =>
+    JSON.stringify([
+      m.provider,
+      m.mappedOrganizationId,
+      m.verified?.organizationId ?? null,
+      m.verified?.parentTenantId ?? null,
+    ]);
   const mappings = evidence.providerMappings
     .map((m) => ({
       provider: m.provider,
       mappedOrganizationId: m.mappedOrganizationId,
       verified: org(m.verified),
     }))
-    .map((m) => ({
-      ...m,
-      _k: [
-        m.provider,
-        m.mappedOrganizationId,
-        m.verified?.organizationId ?? '',
-        m.verified?.parentTenantId ?? '',
-      ].join(' '),
-    }))
-    .sort((a, b) => (a._k < b._k ? -1 : a._k > b._k ? 1 : 0))
-    .map((m) => ({
-      provider: m.provider,
-      mappedOrganizationId: m.mappedOrganizationId,
-      verified: m.verified,
-    }));
+    .sort((a, b) => {
+      const ka = sortKey(a);
+      const kb = sortKey(b);
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
   return JSON.stringify({
     legacyValue: evidence.legacyValue,
     nullSemantics: evidence.nullSemantics,
@@ -1121,9 +1196,12 @@ export async function runFeatureFlagOwnershipBackfill(
    *   - planned canonical  -> fresh quarantined  : quarantine (witness locked);
    *   - planned quarantined -> fresh !quarantined : `collision_changed` (no
    *     write; a stale collision never persists a quarantine);
-   *   - planned canonical  -> fresh canonical     : canonical UPDATE, with the
-   *     SAVEPOINT + 23505 path as the final arbiter for a concurrent FF·B
-   *     canonical INSERT of a NEW row (which `FOR SHARE` does not block).
+   *   - planned canonical  -> fresh canonical     : canonical UPDATE inside a
+   *     SAVEPOINT. On a `23505` (a concurrent FF·B canonical INSERT of a NEW
+   *     row, which `FOR SHARE` does not block) the savepoint rolls back and the
+   *     healthy outer transaction finds AND `FOR SHARE`-locks the CURRENT
+   *     canonical winner in ONE predicate: a locked, still-canonical winner ->
+   *     fallback quarantine; that winner itself already gone -> `collision_changed`.
    *
    * Every result that reached the mutation boundary carries `evidence2` — the
    * evidence ACTUALLY observed there — so the WAL `result` record is
@@ -1265,8 +1343,7 @@ export async function runFeatureFlagOwnershipBackfill(
       // canonical`. Run it inside a SAVEPOINT (nested transaction): a `23505`
       // there rolls back ONLY the savepoint (`ROLLBACK TO SAVEPOINT`), leaving
       // the OUTER transaction — and its SHARE locks + `FOR UPDATE` — healthy
-      // and usable. The DB partial unique stays the final arbiter; on a loss we
-      // quarantine the historical row on the still-open outer transaction.
+      // and usable. The DB partial unique stays the final arbiter.
       try {
         const updated = await tx.transaction(async (spRaw) => {
           const sp = spRaw as unknown as DrizzleDb;
@@ -1284,7 +1361,34 @@ export async function runFeatureFlagOwnershipBackfill(
           : { kind: 'done' as const, result: final, evidence2 };
       } catch (error) {
         if (!isCanonicalPartialUniqueViolation(error)) throw error;
-        // Savepoint rolled back; the outer transaction is still healthy.
+        // Savepoint rolled back; the outer transaction is still healthy. A
+        // `23505` is NOT by itself proof a canonical winner still exists — the
+        // row that caused it may already be deleted / reclassified. Find AND
+        // `FOR SHARE`-lock the CURRENT winner in ONE predicate (no second
+        // window); only a locked, still-canonical winner authorizes the
+        // fallback quarantine.
+        await options.onAfterCanonical23505?.({ id: row.id, key: row.key });
+        const winner = await lockCanonicalWinnerForShare(
+          tx,
+          row.key,
+          final.organizationId as string,
+          row.id,
+        );
+        if (
+          winner === null ||
+          winner.id === row.id ||
+          winner.key !== row.key ||
+          winner.organizationId !== (final.organizationId as string) ||
+          winner.ownershipState !== 'canonical_organization'
+        ) {
+          // The 23505-proven winner vanished / was reclassified before it could
+          // be locked. Do NOT retry canonicalization, do NOT quarantine.
+          return { kind: 'collision_changed' as const, evidence2 };
+        }
+        await options.onAfterFallbackWitnessLock?.({
+          id: row.id,
+          key: row.key,
+        });
         const q = await tx
           .update(featureFlagsTable)
           .set({ ownershipState: 'quarantined' })
@@ -1403,10 +1507,13 @@ export async function runFeatureFlagOwnershipBackfill(
       return;
     }
     if (outcome.kind === 'collision_changed') {
-      // A planned quarantine whose collision witness was gone at the
-      // transactional boundary: the row stays unresolved_legacy / org NULL —
-      // NOT canonicalized (fail closed) and NOT quarantined (a stale quarantine
-      // would permanently hide this historical override after FF·D).
+      // A collision witness vanished before it could be relied on — either a
+      // planned quarantine's projected sibling gone at the transactional
+      // boundary, or a 23505-proven canonical winner gone before the fallback
+      // quarantine could FOR SHARE-lock it. Either way the row stays
+      // unresolved_legacy / org NULL — NOT canonicalized (fail closed) and NOT
+      // quarantined (a stale quarantine would permanently hide this historical
+      // override after FF·D).
       await emitRecord({
         ...base,
         evidence: boundaryEvidence,
@@ -1687,15 +1794,24 @@ export interface ReservedBackfillArtifacts {
 /**
  * Full artifact preflight + RESERVATION, all BEFORE the caller opens a DB
  * connection:
- *   1. physical alias / confinement resolution ({@link resolveArtifactPaths});
- *   2. none of the three targets may already exist;
- *   3. exclusive-create the decisions WAL and `<report>.partial`, each with a
- *      containing-directory `fsync`.
+ *   1. physical alias / confinement resolution ({@link resolveArtifactPaths}) —
+ *      lexical, symlink alias and symlink escape;
+ *   2. none of the three targets may already exist (actual filesystem lookup);
+ *   3. exclusive-create the decisions WAL (`wx`);
+ *   4. exclusive-create `<report>.partial` (`wx`) — a second `wx` that would
+ *      alias the decisions WAL under THIS filesystem's case / normalization
+ *      semantics fails here, before any DB access;
+ *   4a. the two reserved fds must be DISTINCT filesystem entries (`fstat`
+ *       `dev`/`ino`) — a belt-and-suspenders check, not the primary proof;
+ *   5. re-check the FINAL `--report` path is STILL absent by an actual
+ *      filesystem lookup — on a case-insensitive volume `Report` may now
+ *      "exist" because it aliases a just-created reserved artifact.
  *
- * The final `--report` path is NEVER pre-created — its later appearance is the
- * signal of a completed publication. On ANY failure every fd already opened here
- * is closed and an `Error` is thrown (the CLI turns that into a non-zero exit
- * with no DB access).
+ * The final `--report` path is NEVER pre-created (its later appearance is the
+ * completion marker). On ANY failure after a file was created here, every fd is
+ * closed, ONLY the artifacts THIS reservation created are removed (never a
+ * pre-existing file), the affected directories are `fsync`'d, and an `Error` is
+ * thrown before `createDb()` — no fake interrupted-run WAL / `.partial` is left.
  */
 export function reserveBackfillArtifacts(
   decisionsPath: string | null,
@@ -1707,6 +1823,7 @@ export function reserveBackfillArtifacts(
   const { realBase, physicalDecisions, physicalReport, physicalTmpReport } =
     resolution.paths;
 
+  // 2. all targets initially absent (actual filesystem lookup).
   for (const [p, label] of [
     [physicalDecisions, 'flags:backfill --decisions'],
     [physicalReport, 'flags:backfill --report'],
@@ -1717,29 +1834,90 @@ export function reserveBackfillArtifacts(
     if (err) throw new Error(err);
   }
 
+  const created: string[] = [];
   let decisionsFd: number | null = null;
   let reportTmpFd: number | null = null;
+
+  // Close every opened fd, remove ONLY the files this reservation created
+  // (durably), and rethrow — nothing half-reserved survives.
+  const abort = (err: Error): never => {
+    if (decisionsFd !== null) {
+      try {
+        closeSync(decisionsFd);
+      } catch {
+        // fd already closed / invalid — nothing to do
+      }
+    }
+    if (reportTmpFd !== null) {
+      try {
+        closeSync(reportTmpFd);
+      } catch {
+        // fd already closed / invalid — nothing to do
+      }
+    }
+    removeCreatedArtifactsWithinBase(
+      created,
+      realBase,
+      'flags:backfill reservation cleanup',
+    );
+    throw err;
+  };
+
   try {
-    decisionsFd =
-      physicalDecisions === null
-        ? null
-        : openNewWalFileWithinBase(
-            physicalDecisions,
-            realBase,
-            'flags:backfill --decisions',
-          );
-    reportTmpFd =
-      physicalTmpReport === null
-        ? null
-        : openNewWalFileWithinBase(
-            physicalTmpReport,
-            realBase,
-            'flags:backfill --report (temp)',
-          );
+    // 3. exclusive-create the decisions WAL.
+    if (physicalDecisions !== null) {
+      decisionsFd = openNewWalFileWithinBase(
+        physicalDecisions,
+        realBase,
+        'flags:backfill --decisions',
+      );
+      created.push(physicalDecisions);
+    }
+    // 4. exclusive-create <report>.partial — `wx` fails here if it aliases the
+    //    decisions WAL under the filesystem's case / normalization semantics.
+    if (physicalTmpReport !== null) {
+      reportTmpFd = openNewWalFileWithinBase(
+        physicalTmpReport,
+        realBase,
+        'flags:backfill --report (temp)',
+      );
+      created.push(physicalTmpReport);
+    }
   } catch (error) {
-    if (decisionsFd !== null) closeSync(decisionsFd);
-    if (reportTmpFd !== null) closeSync(reportTmpFd);
-    throw error;
+    return abort(error as Error);
+  }
+
+  // 4a. the two reserved fds must not be the same filesystem entry.
+  if (
+    decisionsFd !== null &&
+    reportTmpFd !== null &&
+    sameFilesystemEntry(decisionsFd, reportTmpFd)
+  ) {
+    return abort(
+      new Error(
+        'flags:backfill --decisions and --report (temp) resolved to the same ' +
+          'filesystem entry (dev/ino). Provide distinct artifact paths. ' +
+          'Aborting before any DB access.',
+      ),
+    );
+  }
+
+  // 5. the FINAL --report path must STILL be absent — an actual filesystem
+  //    lookup, so a case-insensitive volume where `report` now aliases a
+  //    just-created reserved artifact (`Report` / `Report.partial`) is caught
+  //    here, before createDb() and without ever pre-creating --report.
+  if (
+    physicalReport !== null &&
+    pathExistsWithinBase(physicalReport, realBase, 'flags:backfill --report')
+  ) {
+    return abort(
+      new Error(
+        `flags:backfill --report path now resolves to an existing filesystem ` +
+          `entry: ${physicalReport} — it aliases another reserved artifact ` +
+          `under this filesystem's case / normalization semantics. Provide ` +
+          `distinct artifact paths. Aborting before any DB access.`,
+      ),
+    );
   }
 
   return {

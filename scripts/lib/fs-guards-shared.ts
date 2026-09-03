@@ -5,6 +5,7 @@ import {
   fstatSync,
   fsyncSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   openSync,
   realpathSync,
@@ -50,6 +51,32 @@ export function pathExistsWithinBase(
 ): boolean {
   const safePath = assertPathWithinBase(filePath, baseDir, label);
   return existsSync(safePath);
+}
+
+/**
+ * Does a DIRECTORY ENTRY exist at `filePath` (confined to `baseDir`)? Uses
+ * `lstat`, NOT `stat` / `existsSync`, so a DANGLING symlink counts as present —
+ * its directory entry is real and will make an `O_EXCL` create or a `link(2)`
+ * publish fail `EEXIST`. Returns `true` for a regular file, directory, valid
+ * symlink OR dangling symlink; `false` ONLY for `ENOENT`; any other error
+ * propagates.
+ *
+ * Use this (not {@link pathExistsWithinBase}) for no-clobber preflight where a
+ * name being TAKEN — regardless of whether its target resolves — must reject.
+ */
+export function pathEntryExistsWithinBase(
+  filePath: string,
+  baseDir: string,
+  label = 'path',
+): boolean {
+  const safePath = assertPathWithinBase(filePath, baseDir, label);
+  try {
+    lstatSync(safePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 /** `realpath` of `baseDir` — the PHYSICAL (symlink-followed) repo base. */

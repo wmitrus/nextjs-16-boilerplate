@@ -14,6 +14,7 @@ import type { LegacyOwnershipEvidence } from '@/core/contracts/legacy-ownership-
 
 import {
   ensureDirectorySyncWithinBase,
+  pathEntryExistsWithinBase,
   pathExistsWithinBase,
   publishFileAtomicallyWithinBase,
   readTextFileWithinBase,
@@ -364,6 +365,115 @@ describe('reserveBackfillArtifacts / finalizeBackfillReport — reserve temp BEF
     ).toThrow(/already exists/i);
     // the decisions WAL must not have been left behind
     expect(pathExistsWithinBase(decisionsRel, CWD, 'decisions')).toBe(false);
+  });
+});
+
+describe('reserveBackfillArtifacts — a pre-existing DIRECTORY ENTRY (incl. dangling symlink) at any artifact name rejects (finding: lexists preflight)', () => {
+  const CWD = process.cwd();
+  const BASE_REL = join('node_modules', '.cache', 'ffc-lexists-test');
+  let runDir: string;
+  let relOf: (name: string) => string;
+  let deadTarget: string; // an absolute path guaranteed never to exist
+
+  beforeAll(() => {
+    ensureDirectorySyncWithinBase(join(CWD, BASE_REL), CWD, 'lexists base');
+    runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
+    relOf = (name: string) => relative(CWD, join(runDir, name));
+    deadTarget = join(runDir, '__never_created__');
+  });
+
+  afterAll(() => {
+    // eslint-disable-next-line no-restricted-syntax -- suite-owned mkdtempSync dir
+    rmSync(runDir, { recursive: true, force: true });
+  });
+
+  it('pathEntryExistsWithinBase sees a DANGLING symlink that pathExistsWithinBase misses', () => {
+    const linkRel = relOf('probe-dangling');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned scratch symlink to a nonexistent target
+    symlinkSync(deadTarget, join(runDir, 'probe-dangling'));
+
+    expect(pathExistsWithinBase(linkRel, CWD, 'probe')).toBe(false); // existsSync misses it
+    expect(pathEntryExistsWithinBase(linkRel, CWD, 'probe')).toBe(true); // lstat sees it
+    unlinkSyncWithinBase(linkRel, CWD, 'probe');
+  });
+
+  it('A — pre-existing DANGLING symlink at --report: reservation rejects BEFORE DB; no decisions/report.partial left behind', () => {
+    const decisionsRel = relOf('A-d.ndjson');
+    const reportRel = relOf('A-r.json');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned scratch dangling symlink
+    symlinkSync(deadTarget, join(runDir, 'A-r.json'));
+
+    expect(() =>
+      reserveBackfillArtifacts(decisionsRel, reportRel, CWD),
+    ).toThrow(/already exists|directory entry/i);
+    // caught in the pre-create existence loop -> nothing was created
+    expect(pathEntryExistsWithinBase(decisionsRel, CWD, 'd')).toBe(false);
+    expect(pathEntryExistsWithinBase(`${reportRel}.partial`, CWD, 't')).toBe(
+      false,
+    );
+  });
+
+  it('B — pre-existing DANGLING symlink at --decisions: rejected before any reservation artifact is left behind', () => {
+    const decisionsRel = relOf('B-d.ndjson');
+    const reportRel = relOf('B-r.json');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned scratch dangling symlink
+    symlinkSync(deadTarget, join(runDir, 'B-d.ndjson'));
+
+    expect(() =>
+      reserveBackfillArtifacts(decisionsRel, reportRel, CWD),
+    ).toThrow(/already exists|directory entry/i);
+    expect(pathEntryExistsWithinBase(reportRel, CWD, 'r')).toBe(false);
+    expect(pathEntryExistsWithinBase(`${reportRel}.partial`, CWD, 't')).toBe(
+      false,
+    );
+  });
+
+  it('C — pre-existing DANGLING symlink at <report>.partial: rejected before DB', () => {
+    const decisionsRel = relOf('C-d.ndjson');
+    const reportRel = relOf('C-r.json');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned scratch dangling symlink
+    symlinkSync(deadTarget, join(runDir, 'C-r.json.partial'));
+
+    expect(() =>
+      reserveBackfillArtifacts(decisionsRel, reportRel, CWD),
+    ).toThrow(/already exists|directory entry/i);
+    expect(pathEntryExistsWithinBase(decisionsRel, CWD, 'd')).toBe(false);
+    expect(pathEntryExistsWithinBase(reportRel, CWD, 'r')).toBe(false);
+  });
+
+  it('D — a VALID symlink entry at --report is also still rejected', () => {
+    const decisionsRel = relOf('D-d.ndjson');
+    const reportRel = relOf('D-r.json');
+    writeTextFileSyncWithinBase(
+      relOf('D-real'),
+      CWD,
+      'real\n',
+      'D real target',
+    );
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned scratch symlink to a real file
+    symlinkSync(join(runDir, 'D-real'), join(runDir, 'D-r.json'));
+
+    expect(() =>
+      reserveBackfillArtifacts(decisionsRel, reportRel, CWD),
+    ).toThrow(/already exists|directory entry/i);
+    expect(pathEntryExistsWithinBase(decisionsRel, CWD, 'd')).toBe(false);
+  });
+
+  it('E — ordinary absent paths still reserve successfully', () => {
+    const decisionsRel = relOf('E-d.ndjson');
+    const reportRel = relOf('E-r.json');
+
+    const reserved = reserveBackfillArtifacts(decisionsRel, reportRel, CWD);
+    try {
+      expect(reserved.decisionsFd).not.toBeNull();
+      expect(reserved.reportTmpFd).not.toBeNull();
+      expect(pathExistsWithinBase(decisionsRel, CWD, 'd')).toBe(true);
+      expect(pathExistsWithinBase(`${reportRel}.partial`, CWD, 't')).toBe(true);
+      expect(pathEntryExistsWithinBase(reportRel, CWD, 'r')).toBe(false); // final NOT pre-created
+    } finally {
+      closeSync(reserved.decisionsFd!);
+      closeSync(reserved.reportTmpFd!);
+    }
   });
 });
 

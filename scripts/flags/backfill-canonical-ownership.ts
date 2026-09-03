@@ -26,7 +26,7 @@ import type { DrizzleDb } from '@/core/db/types';
 import {
   appendRecordDurably,
   openNewWalFileWithinBase,
-  pathExistsWithinBase,
+  pathEntryExistsWithinBase,
   physicalBaseDir,
   publishFileAtomicallyWithinBase,
   removeCreatedArtifactsWithinBase,
@@ -1662,16 +1662,20 @@ export function parseBackfillCliArgs(
 }
 
 /**
- * Returns an error string if `path` already exists (a prior run's audit
- * evidence must never be truncated), else `null`. READ-ONLY — never writes.
+ * Returns an error string if a DIRECTORY ENTRY already exists at `path` (a
+ * prior run's audit evidence must never be truncated), else `null`. READ-ONLY —
+ * never writes. Uses `lstat` semantics ({@link pathEntryExistsWithinBase}), so a
+ * DANGLING symlink at the name is still "taken": `existsSync` would say absent,
+ * but `O_EXCL` create / `link(2)` publish would then fail `EEXIST` (after a DB
+ * run may already have committed).
  */
 export function checkArtifactPathIsNew(
   artifactPath: string,
   label: string,
   baseDir: string = process.cwd(),
 ): string | null {
-  return pathExistsWithinBase(artifactPath, baseDir, label)
-    ? `${label} path already exists: ${artifactPath}. Refusing to overwrite prior audit evidence — choose a new path.`
+  return pathEntryExistsWithinBase(artifactPath, baseDir, label)
+    ? `${label} path already exists (directory entry present, may be a dangling symlink): ${artifactPath}. Refusing to overwrite prior audit evidence — choose a new path.`
     : null;
 }
 
@@ -1796,16 +1800,19 @@ export interface ReservedBackfillArtifacts {
  * connection:
  *   1. physical alias / confinement resolution ({@link resolveArtifactPaths}) —
  *      lexical, symlink alias and symlink escape;
- *   2. none of the three targets may already exist (actual filesystem lookup);
+ *   2. none of the three targets may already have a DIRECTORY ENTRY — an
+ *      `lstat` lookup ({@link pathEntryExistsWithinBase}), so a pre-existing
+ *      DANGLING symlink at a name (which `existsSync` reports as absent, yet a
+ *      later `O_EXCL` create / `link(2)` publish hits `EEXIST` on) rejects too;
  *   3. exclusive-create the decisions WAL (`wx`);
  *   4. exclusive-create `<report>.partial` (`wx`) — a second `wx` that would
  *      alias the decisions WAL under THIS filesystem's case / normalization
  *      semantics fails here, before any DB access;
  *   4a. the two reserved fds must be DISTINCT filesystem entries (`fstat`
  *       `dev`/`ino`) — a belt-and-suspenders check, not the primary proof;
- *   5. re-check the FINAL `--report` path is STILL absent by an actual
- *      filesystem lookup — on a case-insensitive volume `Report` may now
- *      "exist" because it aliases a just-created reserved artifact.
+ *   5. re-check the FINAL `--report` name STILL has NO directory entry (`lstat`)
+ *      — catches both a case/normalization alias of a just-created reserved
+ *      artifact AND a pre-existing dangling symlink at `--report`.
  *
  * The final `--report` path is NEVER pre-created (its later appearance is the
  * completion marker). On ANY failure after a file was created here, every fd is
@@ -1823,7 +1830,8 @@ export function reserveBackfillArtifacts(
   const { realBase, physicalDecisions, physicalReport, physicalTmpReport } =
     resolution.paths;
 
-  // 2. all targets initially absent (actual filesystem lookup).
+  // 2. none of the three names may already have a directory entry (`lstat`,
+  //    so a dangling symlink counts as taken).
   for (const [p, label] of [
     [physicalDecisions, 'flags:backfill --decisions'],
     [physicalReport, 'flags:backfill --report'],
@@ -1902,20 +1910,27 @@ export function reserveBackfillArtifacts(
     );
   }
 
-  // 5. the FINAL --report path must STILL be absent — an actual filesystem
-  //    lookup, so a case-insensitive volume where `report` now aliases a
-  //    just-created reserved artifact (`Report` / `Report.partial`) is caught
+  // 5. the FINAL --report path must STILL have NO directory entry — an `lstat`
+  //    lookup ({@link pathEntryExistsWithinBase}), so BOTH a case-insensitive
+  //    volume where `report` now aliases a just-created reserved artifact
+  //    (`Report` / `Report.partial`) AND a pre-existing DANGLING symlink at
+  //    `report` (which `existsSync` would miss, but the later `link(2)` publish
+  //    would hit `EEXIST` on — after a DB run may have committed) are caught
   //    here, before createDb() and without ever pre-creating --report.
   if (
     physicalReport !== null &&
-    pathExistsWithinBase(physicalReport, realBase, 'flags:backfill --report')
+    pathEntryExistsWithinBase(
+      physicalReport,
+      realBase,
+      'flags:backfill --report',
+    )
   ) {
     return abort(
       new Error(
-        `flags:backfill --report path now resolves to an existing filesystem ` +
-          `entry: ${physicalReport} — it aliases another reserved artifact ` +
-          `under this filesystem's case / normalization semantics. Provide ` +
-          `distinct artifact paths. Aborting before any DB access.`,
+        `flags:backfill --report path now has an existing directory entry ` +
+          `(possibly a dangling symlink or a case/normalization alias of ` +
+          `another reserved artifact): ${physicalReport}. Provide distinct ` +
+          `artifact paths. Aborting before any DB access.`,
       ),
     );
   }

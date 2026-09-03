@@ -200,8 +200,11 @@ describe('Proxy', () => {
       const echoed = response?.headers.get('x-correlation-id');
       expect(echoed).toMatch(UUID_RE);
       expect(echoed).not.toContain('script');
-      // Not truncated to a safe prefix either -- replaced outright.
-      expect(echoed).not.toContain('abc');
+      // Not truncated to a safe prefix either -- replaced outright. `hostile`
+      // holds a space and markup, so a genuine UUID can never be a substring
+      // of it; this fails only on real prefix/chunk retention, never on which
+      // UUID the RNG happened to mint.
+      expect(hostile.includes(String(echoed))).toBe(false);
     });
 
     it('replaces an oversized correlation id', async () => {

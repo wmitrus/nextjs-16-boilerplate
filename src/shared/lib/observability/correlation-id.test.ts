@@ -47,10 +47,17 @@ describe('resolveCorrelationId (SEC-46)', () => {
     expect(result.source).toBe('generated');
     expect(result.rejection).toBe('too_long');
     expect(result.correlationId).toMatch(UUID_RE);
-    // The refused value must not survive in any form. Truncating would keep a
-    // caller-chosen prefix and present it downstream as if validated.
-    expect(result.correlationId).not.toContain('aaa');
-    expect(oversized.startsWith(result.correlationId)).toBe(false);
+    // The refused value must not survive in ANY form -- not returned, not kept
+    // as a prefix, not any substring of it. Truncating would present a
+    // caller-chosen chunk downstream as if it had been validated. `oversized`
+    // is a single repeated character, so a genuine UUID (dashes + varied hex)
+    // can never be a substring of it -- this fails only on real prefix/chunk
+    // retention, never on which UUID the RNG happened to mint.
+    expect(oversized.includes(result.correlationId)).toBe(false);
+    // It is minted fresh, independent of the input: a second call differs.
+    expect(resolveCorrelationId(oversized).correlationId).not.toBe(
+      result.correlationId,
+    );
   });
 
   it('refuses the characters that turn one log line into two', () => {

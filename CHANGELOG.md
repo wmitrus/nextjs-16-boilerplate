@@ -1,3 +1,10 @@
+# [2.14.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.13.0...v2.14.0) (2026-09-03)
+
+
+### Features
+
+* **feature-flags:** add canonical ownership schema ([294f9dc](https://github.com/wmitrus/nextjs-16-boilerplate/commit/294f9dc9c6722c3dba45181eb309bdd73f6b2cee))
+
 # [2.13.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.12.0...v2.13.0) (2026-09-02)
 
 

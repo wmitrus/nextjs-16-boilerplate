@@ -139,6 +139,7 @@
     "db:all:down": "node scripts/compose-db-local.mjs down",
     "test:db:local": "TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/app_test vitest run --config vitest.db.local.config.ts",
     "port:pid": "lsof -ti ",
+    "flags:backfill:canonical-ownership": "tsx scripts/flags/backfill-canonical-ownership.ts",
     "flags:export": "tsx scripts/flags/export.ts",
     "flags:import": "tsx scripts/flags/import.ts",
     "flags:migrate": "tsx scripts/flags/migrate.ts",

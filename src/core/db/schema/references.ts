@@ -1,4 +1,4 @@
-import { pgTable, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, uuid } from 'drizzle-orm/pg-core';
 
 export const usersReferenceTable = pgTable('users', {
   id: uuid('id').primaryKey(),
@@ -40,3 +40,21 @@ export const membershipsReferenceTable = pgTable('memberships', {
   userId: uuid('user_id').notNull(),
   organizationId: uuid('organization_id').notNull(),
 });
+
+/**
+ * Read-only reference to the `auth_organization_identities` table (owned by the
+ * `auth` module): `(provider, external_org_id)` -> internal `organization_id`.
+ * Carries just the three columns another module / a migration script needs to
+ * resolve a legacy external-organization string to every internal organization
+ * it authoritatively maps to — across ALL providers, since historical data does
+ * not record which provider produced the value (OZI-71 FF·C, plan §14a.10 Case
+ * G). Read-only, never migrated (excluded from the `drizzle-kit` schema glob).
+ */
+export const authOrganizationIdentitiesReferenceTable = pgTable(
+  'auth_organization_identities',
+  {
+    provider: text('provider').notNull(),
+    externalOrgId: text('external_org_id').notNull(),
+    organizationId: uuid('organization_id').notNull(),
+  },
+);

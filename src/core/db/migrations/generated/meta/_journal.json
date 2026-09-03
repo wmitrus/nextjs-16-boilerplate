@@ -148,6 +148,13 @@
       "when": 1787759503138,
       "tag": "0020_sour_hitman",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788379948375,
+      "tag": "0021_sweet_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

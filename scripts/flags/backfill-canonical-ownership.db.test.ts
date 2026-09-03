@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { sql } from 'drizzle-orm';
+import postgres from 'postgres';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -34,8 +35,14 @@ const UNKNOWN_UUID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 const backfill = (
   mode: 'dry-run' | 'apply',
   over: Partial<Parameters<typeof runFeatureFlagOwnershipBackfill>[1]> = {},
-) =>
-  runFeatureFlagOwnershipBackfill(testDb.db, { mode, batchSize: 500, ...over });
+) => {
+  const opts = { mode, batchSize: 500, ...over };
+  // apply now requires an audit sink; tests that don't assert on it get a no-op.
+  if (opts.mode === 'apply' && !opts.onDecision) {
+    opts.onDecision = () => {};
+  }
+  return runFeatureFlagOwnershipBackfill(testDb.db, opts);
+};
 
 async function insertLegacy(
   key: string,
@@ -490,10 +497,423 @@ describe('runFeatureFlagOwnershipBackfill — bounded-memory reporting (real DB)
     expect(report.unresolvedRowsSample.length).toBeLessThan(total);
     expect(report.unresolvedRowsTruncated).toBe(true);
     expect(report.reasonCounts.unresolved_arbitrary_string).toBe(total);
-    expect(decisions).toHaveLength(total);
-    expect(decisions.every((d) => d.outcome === 'unresolved_legacy')).toBe(
-      true,
-    );
+    expect(decisions).toHaveLength(total); // dry-run + non-mutating -> result only
+    expect(
+      decisions.every(
+        (d) => d.phase === 'result' && d.outcome === 'unresolved_legacy',
+      ),
+    ).toBe(true);
     expect(new Set(decisions.map((d) => d.runId)).size).toBe(1);
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — projected historical collisions (finding 1, real DB)', () => {
+  it('two unresolved rows with the same key that project to the same organization are BOTH quarantined; dry-run and apply agree; no historical row becomes canonical', async () => {
+    // ORG_A1's UUID (direct internal) and a provider alias that maps -> ORG_A1.
+    await insertMapping('clerk', 'ext-alias-a1', ORG_A1);
+    const idA = await insertLegacy('shared', ORG_A1); // Case B -> ORG_A1
+    const idB = await insertLegacy('shared', 'ext-alias-a1'); // Case C -> ORG_A1
+
+    const dry = await backfill('dry-run');
+    expect(dry.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(dry.quarantinedCount).toBe(2);
+    expect(dry.reasonCounts.projected_collision_quarantined).toBe(2);
+
+    const applied = await backfill('apply');
+    expect(applied.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(applied.quarantinedCount).toBe(2);
+    expect(applied.reasonCounts.projected_collision_quarantined).toBe(2);
+
+    for (const id of [idA, idB]) {
+      expect(await rowById(id)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'quarantined',
+      });
+    }
+  });
+
+  it('an existing FF·B canonical row still wins over a projecting historical candidate (canonical_collision_quarantined, not projected)', async () => {
+    await insertFfbCanonical('k', ORG_B1, 'ffb-legacy');
+    const histId = await insertLegacy('k', ORG_B1);
+
+    const applied = await backfill('apply');
+    expect(applied.reasonCounts.canonical_collision_quarantined).toBe(1);
+    expect(
+      applied.reasonCounts.projected_collision_quarantined,
+    ).toBeUndefined();
+    expect(await rowById(histId)).toMatchObject({
+      organizationId: null,
+      ownershipState: 'quarantined',
+    });
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — mutation-boundary evidence revalidation (finding 2, real DB)', () => {
+  it('a conflicting provider mapping introduced after classification, before the UPDATE: no canonical organization is persisted', async () => {
+    const id = await insertLegacy('reval', ORG_B1); // classifies canonical -> ORG_B1
+
+    const decisions: BackfillDecision[] = [];
+    const report = await backfill('apply', {
+      onDecision: (d) => {
+        decisions.push(d);
+      },
+      onBeforeRowUpdate: async (row) => {
+        if (row.id !== id) return;
+        // a provider mapping now makes ORG_B1's own UUID also resolve -> ORG_A2
+        await insertMapping('clerk', ORG_B1, ORG_A2);
+      },
+    });
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(report.skippedConcurrentChangeCount).toBe(1);
+    expect(report.reasonCounts.evidence_changed).toBe(1);
+    expect(await rowById(id)).toMatchObject({
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+    });
+
+    // WAL: the intent record was written (mutation attempted), the result record
+    // says the row failed closed.
+    const forRow = decisions.filter((d) => d.featureFlagId === id);
+    expect(forRow.map((d) => d.phase)).toEqual(['intent', 'result']);
+    expect(forRow[0]).toMatchObject({
+      phase: 'intent',
+      outcome: 'canonical_organization',
+    });
+    expect(forRow[1]).toMatchObject({
+      phase: 'result',
+      outcome: 'concurrently_changed',
+      reason: 'evidence_changed',
+    });
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — write-ahead audit protocol (finding 3, real DB)', () => {
+  it('artifact failure BEFORE the mutation (intent sink throws) => run aborts, no DB mutation', async () => {
+    const id = await insertLegacy('wal-a', ORG_B1);
+
+    await expect(
+      backfill('apply', {
+        onDecision: (d) => {
+          if (d.phase === 'intent') throw new Error('disk full (intent)');
+        },
+      }),
+    ).rejects.toThrow(/disk full \(intent\)/);
+
+    expect(await rowById(id)).toMatchObject({
+      ownershipState: 'unresolved_legacy',
+      organizationId: null,
+    });
+  });
+
+  it('failure AFTER the mutation commit but BEFORE the result record => durable intent remains, reconciliation identifies the incomplete op', async () => {
+    const id = await insertLegacy('wal-b', ORG_B1);
+    const records: BackfillDecision[] = [];
+
+    await expect(
+      backfill('apply', {
+        onDecision: (d) => {
+          // model "the result write failed, nothing recorded for it"
+          if (d.phase === 'result' && d.featureFlagId === id) {
+            throw new Error('disk full (result)');
+          }
+          records.push(d);
+        },
+      }),
+    ).rejects.toThrow(/disk full \(result\)/);
+
+    // the DB mutation committed...
+    expect(await rowById(id)).toMatchObject({
+      organizationId: ORG_B1,
+      ownershipState: 'canonical_organization',
+    });
+    // ...and the artifact has an intent with NO matching result — detectable.
+    const intents = records.filter(
+      (r) => r.featureFlagId === id && r.phase === 'intent',
+    );
+    const results = records.filter(
+      (r) => r.featureFlagId === id && r.phase === 'result',
+    );
+    expect(intents).toHaveLength(1);
+    expect(results).toHaveLength(0);
+  });
+
+  it('normal apply => every mutating row has intent+result; non-mutating rows have result only; summary is consistent', async () => {
+    const canonicalId = await insertLegacy('n-canon', ORG_B1);
+    const globalId = await insertLegacy('n-global', null);
+    const unresolvedId = await insertLegacy('n-unres', 'no-match');
+
+    const records: BackfillDecision[] = [];
+    const report = await backfill('apply', {
+      onDecision: (d) => {
+        records.push(d);
+      },
+    });
+
+    const phasesFor = (id: string) =>
+      records.filter((r) => r.featureFlagId === id).map((r) => r.phase);
+    expect(phasesFor(canonicalId)).toEqual(['intent', 'result']);
+    expect(phasesFor(globalId)).toEqual(['intent', 'result']);
+    expect(phasesFor(unresolvedId)).toEqual(['result']);
+
+    // counters come only from `result` records
+    expect(report.classifiedCanonicalOrganizationCount).toBe(1);
+    expect(report.classifiedIntentionalGlobalCount).toBe(1);
+    expect(report.unresolvedCount).toBe(1);
+    expect(records.filter((r) => r.phase === 'result').length).toBe(
+      report.candidateCount,
+    );
+
+    expect(await rowById(canonicalId)).toMatchObject({
+      ownershipState: 'canonical_organization',
+      organizationId: ORG_B1,
+    });
+    expect(await rowById(globalId)).toMatchObject({
+      ownershipState: 'intentional_global',
+    });
+    expect(await rowById(unresolvedId)).toMatchObject({
+      ownershipState: 'unresolved_legacy',
+    });
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — full classification compare incl. parentTenantId (finding 2, real DB)', () => {
+  it('a concurrent organizations.tenant_id change between plan and mutation boundary is caught (evidence_changed)', async () => {
+    const id = await insertLegacy('reval-parent', ORG_B1); // canonical -> ORG_B1 / TENANT_B
+
+    const report = await backfill('apply', {
+      onDecision: () => {},
+      onBeforeRowUpdate: async (row) => {
+        if (row.id !== id) return;
+        // invariant #10 forbids this in prod; the test forces it to prove the
+        // revalidation compares parentTenantId, not just org/state/reason.
+        await testDb.db.execute(
+          sql`UPDATE organizations SET tenant_id = ${TENANT_A} WHERE id = ${ORG_B1}`,
+        );
+      },
+    });
+
+    try {
+      expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(report.skippedConcurrentChangeCount).toBe(1);
+      expect(report.reasonCounts.evidence_changed).toBe(1);
+      expect(await rowById(id)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'unresolved_legacy',
+      });
+    } finally {
+      await testDb.db.execute(
+        sql`UPDATE organizations SET tenant_id = ${TENANT_B} WHERE id = ${ORG_B1}`,
+      );
+    }
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — apply requires a durable audit sink (finding 3, real DB)', () => {
+  it('rejects apply with no onDecision and leaves the candidate row unchanged', async () => {
+    const id = await insertLegacy('no-sink', ORG_B1);
+
+    await expect(
+      runFeatureFlagOwnershipBackfill(testDb.db, {
+        mode: 'apply',
+        batchSize: 500,
+      }),
+    ).rejects.toThrow(/requires an onDecision audit sink/i);
+
+    expect(await rowById(id)).toMatchObject({
+      ownershipState: 'unresolved_legacy',
+      organizationId: null,
+    });
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — monotonic disposition (finding 4b, real DB)', () => {
+  it('planned canonical -> final quarantined IS applied (more restrictive)', async () => {
+    const id = await insertLegacy('mono-a', ORG_B1); // plan: canonical -> ORG_B1
+    const records: BackfillDecision[] = [];
+
+    const report = await backfill('apply', {
+      onDecision: (d) => {
+        records.push(d);
+      },
+      onBeforeRowUpdate: async (row) => {
+        if (row.id !== id) return;
+        // an FF·B canonical row for (mono-a, ORG_B1) appears after the intent
+        await insertFfbCanonical('mono-a', ORG_B1, 'ffb-mono-a');
+      },
+    });
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(report.quarantinedCount).toBe(1);
+    expect(await rowById(id)).toMatchObject({
+      organizationId: null,
+      ownershipState: 'quarantined',
+    });
+    const forRow = records.filter((r) => r.featureFlagId === id);
+    expect(forRow[0]).toMatchObject({
+      phase: 'intent',
+      outcome: 'canonical_organization',
+    });
+    expect(forRow[1]).toMatchObject({
+      phase: 'result',
+      outcome: 'quarantined',
+    });
+  });
+
+  it('planned quarantined -> final canonical is REFUSED (the reviewed quarantine stands)', async () => {
+    // two siblings project to ORG_B1 -> both planned quarantined.
+    await insertMapping('clerk', 'ext-mono', ORG_B1);
+    const idA = await insertLegacy('mono-b', ORG_B1); // Case B -> ORG_B1
+    const idB = await insertLegacy('mono-b', 'ext-mono'); // Case C -> ORG_B1
+
+    const report = await backfill('apply', {
+      onDecision: () => {},
+      onBeforeRowUpdate: async (row) => {
+        if (row.id !== idA) return;
+        // sibling idB no longer resolves to ORG_B1 -> idA's FRESH disposition
+        // would be "canonical". Monotonic safety must keep the quarantine.
+        await testDb.db.execute(
+          sql`UPDATE feature_flags SET tenant_id = 'now-unmatched' WHERE id = ${idB}`,
+        );
+      },
+    });
+
+    expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+    expect(await rowById(idA)).toMatchObject({
+      organizationId: null,
+      ownershipState: 'quarantined',
+    });
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — authoritative-evidence lock (finding 1, real Postgres only)', () => {
+  it('holds SHARE locks on the lookup tables and blocks a concurrent auth_organization_identities write until commit', async () => {
+    if (!process.env.TEST_DATABASE_URL) return; // PGlite is single-connection
+    const id = await insertLegacy('locked', ORG_B1); // canonical -> ORG_B1
+
+    const other = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    let lockedTables: string[] = [];
+    let stillPendingDuringLock = false;
+    let blockedInsert: Promise<unknown> = Promise.resolve();
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: () => {},
+        onLockedBeforeMutation: async (row) => {
+          if (row.id !== id) return;
+
+          // (a) the SHARE locks are provably held right now
+          const rows = await other<{ rel: string }[]>`
+            SELECT relation::regclass::text AS rel
+            FROM pg_locks
+            WHERE mode = 'ShareLock' AND relation IS NOT NULL
+              AND relation::regclass::text = ANY(ARRAY[
+                'organizations','tenants','auth_organization_identities'])`;
+          lockedTables = rows.map((r) => r.rel).sort();
+
+          // (b) a concurrent write to a locked table cannot proceed while held.
+          blockedInsert = other`
+            INSERT INTO auth_organization_identities (provider, external_org_id, organization_id)
+            VALUES ('clerk', ${ORG_B1}, ${ORG_A2})`.catch(() => {});
+          const raced = await Promise.race([
+            blockedInsert.then(() => 'settled'),
+            sleep(500).then(() => 'still-pending'),
+          ]);
+          stillPendingDuringLock = raced === 'still-pending';
+          // the txn now commits; the blocked insert unblocks and is awaited below
+        },
+      });
+      await blockedInsert;
+
+      expect(lockedTables).toEqual([
+        'auth_organization_identities',
+        'organizations',
+        'tenants',
+      ]);
+      expect(stillPendingDuringLock).toBe(true); // held off for the whole window
+      // the row was canonicalized from the evidence valid at evaluation time
+      expect(report.classifiedCanonicalOrganizationCount).toBe(1);
+      expect(await rowById(id)).toMatchObject({
+        organizationId: ORG_B1,
+        ownershipState: 'canonical_organization',
+      });
+    } finally {
+      await testDb.db.execute(
+        sql`DELETE FROM auth_organization_identities WHERE external_org_id = ${ORG_B1}`,
+      );
+      await other.end({ timeout: 5 });
+    }
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — 23505 savepoint recovery (finding P1, real Postgres only)', () => {
+  it('a competing FF·B canonical row inserted AFTER the fresh collision check trips uq_feature_flags_key_organization_canonical; only that savepoint rolls back; the historical row commits as quarantined and the FF·B row is untouched', async () => {
+    if (!process.env.TEST_DATABASE_URL) return; // needs a second real connection
+
+    const histId = await insertLegacy('race-23505', ORG_B1); // classifies canonical -> ORG_B1
+    const other = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    const records: BackfillDecision[] = [];
+    let raceInsertError: unknown = null;
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: (d) => {
+          records.push(d);
+        },
+        // Fires INSIDE the per-row transaction, AFTER the fresh collision check
+        // returned "proceed" (no FF·B row, no sibling) and BEFORE the canonical
+        // UPDATE — the only window in which the UPDATE itself can raise 23505.
+        onAfterFreshCollisionCheck: async (row) => {
+          if (row.id !== histId) return;
+          // A different connection commits the winning FF·B canonical row for
+          // the SAME (key, organization_id). feature_flags is not SHARE-locked
+          // and this is a new row, so the insert is not blocked.
+          await other`
+            INSERT INTO feature_flags (key, tenant_id, organization_id, ownership_state, enabled)
+            VALUES ('race-23505', 'ffb-race', ${ORG_B1}, 'canonical_organization', true)
+          `.catch((e: unknown) => {
+            raceInsertError = e;
+          });
+        },
+      });
+
+      expect(raceInsertError).toBeNull(); // the FF·B insert genuinely committed
+
+      // The outer transaction survived the savepoint rollback and committed the
+      // quarantine of the historical row.
+      expect(report.classifiedCanonicalOrganizationCount).toBe(0);
+      expect(report.quarantinedCount).toBe(1);
+      expect(report.skippedConcurrentChangeCount).toBe(0);
+      expect(await rowById(histId)).toMatchObject({
+        organizationId: null,
+        ownershipState: 'quarantined',
+      });
+
+      // The FF·B row that won the race is byte-for-byte untouched.
+      const ffb = (await allRows()).find(
+        (r) => r.key === 'race-23505' && r.id !== histId,
+      );
+      expect(ffb).toMatchObject({
+        organizationId: ORG_B1,
+        ownershipState: 'canonical_organization',
+        tenantId: 'ffb-race',
+      });
+
+      // The durable result record reflects the DB partial unique as final arbiter.
+      const result = records.find(
+        (r) => r.featureFlagId === histId && r.phase === 'result',
+      );
+      expect(result).toMatchObject({
+        outcome: 'quarantined',
+        reason: 'canonical_collision_quarantined',
+      });
+      // The intent that preceded it planned the (now-lost) canonical write.
+      expect(
+        records.find((r) => r.featureFlagId === histId && r.phase === 'intent'),
+      ).toMatchObject({ outcome: 'canonical_organization' });
+    } finally {
+      await other.end({ timeout: 5 });
+    }
   });
 });

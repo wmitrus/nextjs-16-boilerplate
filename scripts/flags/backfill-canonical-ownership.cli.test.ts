@@ -5,7 +5,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
   ensureDirectorySyncWithinBase,
+  pathExistsWithinBase,
+  publishFileAtomicallyWithinBase,
   readTextFileWithinBase,
+  writeNewFileDurablyWithinBase,
   writeTextFileSyncWithinBase,
 } from '../lib/fs-guards-shared';
 
@@ -119,5 +122,37 @@ describe('checkArtifactPathIsNew — no silent overwrite', () => {
     expect(readTextFileWithinBase(existingRel, CWD, 'cli-test fixture')).toBe(
       ORIGINAL,
     );
+  });
+
+  it('atomic publish: durable temp write -> link produces a complete file, no .partial left', () => {
+    const finalRel = relative(CWD, join(dir, 'summary.json'));
+    const tmpRel = `${finalRel}.partial`;
+    const body = `${JSON.stringify({ runId: 'x', done: true })}\n`;
+
+    writeNewFileDurablyWithinBase(tmpRel, CWD, body, 'report (temp)');
+    expect(pathExistsWithinBase(tmpRel, CWD, 'report (temp)')).toBe(true);
+    publishFileAtomicallyWithinBase(tmpRel, finalRel, CWD, 'report');
+
+    expect(pathExistsWithinBase(tmpRel, CWD, 'report (temp)')).toBe(false); // temp gone
+    expect(readTextFileWithinBase(finalRel, CWD, 'report')).toBe(body); // complete
+  });
+
+  it('no-clobber: publish refuses when the destination already exists at publication time, and leaves it byte-for-byte unchanged', () => {
+    const finalRel = relative(CWD, join(dir, 'preexisting.json'));
+    const tmpRel = `${finalRel}.partial`;
+    const ORIGINAL_DEST = `${JSON.stringify({ from: 'a concurrent writer' })}\n`;
+
+    // Destination is created AFTER a caller might have checked it was absent —
+    // exactly the check-then-act window `link(2)` closes.
+    writeTextFileSyncWithinBase(finalRel, CWD, ORIGINAL_DEST, 'dest fixture');
+    writeNewFileDurablyWithinBase(tmpRel, CWD, 'newer body\n', 'report (temp)');
+
+    expect(() =>
+      publishFileAtomicallyWithinBase(tmpRel, finalRel, CWD, 'report'),
+    ).toThrow(/Refusing to overwrite/i);
+    expect(readTextFileWithinBase(finalRel, CWD, 'dest fixture')).toBe(
+      ORIGINAL_DEST,
+    ); // untouched
+    expect(pathExistsWithinBase(tmpRel, CWD, 'report (temp)')).toBe(true); // temp preserved for retry
   });
 });

@@ -38,7 +38,31 @@ async function readDbFlags(db: DrizzleDb): Promise<FlagsFile> {
   };
 }
 
-async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
+/**
+ * Write static-adapter flags into `feature_flags`.
+ *
+ * Static flags are ALWAYS global (`tenantId === null`). Post-FF·B writer
+ * invariant (OZI-71): a MISSING row is inserted EXPLICITLY as
+ * `intentional_global` (`tenant_id NULL`, `organization_id NULL`) — never left
+ * to the `unresolved_legacy` schema default. An EXISTING row's ownership is NOT
+ * reclassified here (that is FF·C's job); only `enabled` / `description` /
+ * `updatedAt` are touched.
+ *
+ * Defensive: `readStaticFlags()` always supplies `tenantId === null`. If a
+ * future caller passes a scoped entry, fail closed rather than silently
+ * coercing it to a global row.
+ */
+export async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
+  const scoped = data.flags.filter((entry) => entry.tenantId !== null);
+  if (scoped.length > 0) {
+    throw new Error(
+      `[flags:migrate] writeToDb received ${scoped.length} organization-scoped ` +
+        `entr${scoped.length === 1 ? 'y' : 'ies'}: ${scoped.map((e) => e.key).join(', ')}. ` +
+        'Static flags are always global; refusing to coerce a scoped entry to a ' +
+        'global row. Create scoped flags through the organization-aware admin path.',
+    );
+  }
+
   for (const entry of data.flags) {
     const existing = await db
       .select({ id: featureFlagsTable.id })
@@ -65,7 +89,9 @@ async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
     } else {
       await db.insert(featureFlagsTable).values({
         key: entry.key,
-        tenantId: entry.tenantId ?? null,
+        tenantId: null,
+        organizationId: null,
+        ownershipState: 'intentional_global',
         enabled: entry.enabled,
         description: entry.description ?? null,
       });

@@ -12,6 +12,7 @@ import {
   runFeatureFlagOwnershipBackfill,
   type BackfillDecision,
 } from './backfill-canonical-ownership';
+import { FlagsInputError, upsertFlags } from './import';
 
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
@@ -1750,5 +1751,67 @@ describe('runFeatureFlagOwnershipBackfill — exact evidence-snapshot equality +
         organizationId: ORG_B1,
       }),
     ]);
+  });
+});
+
+describe('runFeatureFlagOwnershipBackfill — the supported legacy import writer cannot inject a phantom sibling at the fresh-collision boundary (finding P1 root cause, real Postgres only)', () => {
+  it('a real flags:import scoped write attempted (on a SEPARATE connection) right after the fresh sibling scan FAILS CLOSED (FlagsInputError, zero rows); the candidate canonicalizes normally; no second historical unresolved row; no arbitrary winner', async () => {
+    if (!process.env.TEST_DATABASE_URL) return; // needs a 2nd real connection
+
+    const candId = await insertLegacy('race-import', ORG_B1); // classifies canonical -> ORG_B1
+    // A dedicated connection for the concurrent operator write (like Production:
+    // flags:import runs as its own process, never on the backfill's connection).
+    const importClient = postgres(process.env.TEST_DATABASE_URL, { max: 1 });
+    const importDb = drizzle(importClient);
+    let importError: unknown = null;
+    let rowsForKeyDuringSeam = 0;
+
+    try {
+      const report = await backfill('apply', {
+        onDecision: () => {},
+        onAfterFreshCollisionCheck: async (row) => {
+          if (row.id !== candId) return;
+          // The REAL supported writer (NOT a raw SQL INSERT). A brand-new
+          // organization-scoped entry for the SAME key must be refused.
+          try {
+            await upsertFlags(importDb as unknown as DrizzleDb, {
+              flags: [
+                { key: 'race-import', enabled: true, tenantId: TENANT_A },
+              ],
+            });
+          } catch (e) {
+            importError = e;
+          }
+          rowsForKeyDuringSeam = Number(
+            (
+              await importClient<{ n: number }[]>`
+                SELECT count(*)::int AS n FROM feature_flags WHERE key = 'race-import'`
+            )[0]!.n,
+          );
+        },
+      });
+
+      // the supported writer refused, and inserted nothing
+      expect(importError).toBeInstanceOf(FlagsInputError);
+      expect(rowsForKeyDuringSeam).toBe(1); // still just the original candidate
+
+      // the candidate canonicalizes normally — no phantom sibling changed anything
+      expect(report.classifiedCanonicalOrganizationCount).toBe(1);
+      expect(report.quarantinedCount).toBe(0);
+      expect(await rowById(candId)).toMatchObject({
+        organizationId: ORG_B1,
+        ownershipState: 'canonical_organization',
+      });
+
+      // no SECOND historical unresolved row for the key; no arbitrary winner
+      const all = (await allRows()).filter((r) => r.key === 'race-import');
+      expect(all).toHaveLength(1);
+      expect(all[0]).toMatchObject({ id: candId });
+      expect(
+        all.filter((r) => r.ownershipState === 'unresolved_legacy'),
+      ).toHaveLength(0);
+    } finally {
+      await importClient.end({ timeout: 5 });
+    }
   });
 });

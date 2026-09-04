@@ -230,7 +230,7 @@ pnpm flags:migrate --from=static --to=db
 pnpm flags:migrate --from=db --to=static
 ```
 
-**`--from=static --to=db`**: reads `FEATURE_FLAGS_STATIC`, upserts each flag into the `feature_flags` table. Existing rows are updated; missing rows are inserted. Tenant-scoped rows from the static format are not produced (static flags are always global).
+**`--from=static --to=db`**: reads `FEATURE_FLAGS_STATIC`, upserts each flag into the `feature_flags` table. Static flags are always global, so a **missing** row is created explicitly as `ownership_state = 'intentional_global'` (`organization_id NULL`) — never the fail-closed `unresolved_legacy` default. An **existing** row is update-only (`enabled` / `description`); its `ownership_state` / `organization_id` are left to OZI-71 FF·C's evidence-based historical classification and are never reclassified here.
 
 **`--from=db --to=static`**: reads all rows from the DB and prints a `FEATURE_FLAGS_STATIC=...` line to stdout. Only global rows (`tenant_id IS NULL`) are included. Copy the output into your `.env` file to switch to the static adapter.
 
@@ -277,7 +277,15 @@ pnpm flags:import --file=flags-backup.json
 pnpm flags:export --adapter=static | pnpm flags:import
 ```
 
-`flags:import` only writes to the DB. Each flag is upserted: existing rows are updated, missing rows are inserted. Tenant-scoped entries in the JSON are preserved.
+`flags:import` only writes to the DB. Post-FF·B canonical dual-write (OZI-71) constrains what it may create:
+
+- **Existing row** (`key` + legacy `tenantId` match): update-only (`enabled` / `description` / `updatedAt`). `organization_id` / `ownership_state` are never touched — a canonical row stays canonical, an unresolved historical row stays under FF·C's classification.
+- **Missing global row** (`tenantId: null`): inserted as `ownership_state = 'intentional_global'` (`organization_id NULL`).
+- **Missing organization-scoped row** (`tenantId` non-null): **fails closed**. `flags:import` cannot authoritatively resolve the canonical organization from a legacy `tenantId`, and a new DB row must carry canonical ownership. The whole import is rejected before any write (a `FlagsInputError` naming the offending keys); create scoped flags through the organization-aware admin creation path instead.
+
+Restoring **brand-new** organization-scoped rows from a legacy-format backup is not supported by `flags:import`; it would require a canonical-aware import design (authoritative organization resolution, same-statement tuple proof, canonical collision handling).
+
+> **During a controlled Production OZI-71 FF·C backfill**: do not run `flags:import` / `flags:migrate` concurrently with the backfill apply, and never issue manual out-of-band `feature_flags` DML. The supported writers (`DrizzleFeatureFlagAdminService`, `flags:import`, `flags:migrate`) all honour the post-FF·B invariant; ad-hoc SQL does not.
 
 ### Switching providers: step-by-step
 

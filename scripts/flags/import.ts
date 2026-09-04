@@ -8,7 +8,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { createDb } from '@/core/db/create-db';
 import type { DrizzleDb } from '@/core/db/types';
 
-import type { FlagsFile } from './types';
+import type { FlagEntry, FlagsFile } from './types';
 import {
   isSchemaNotFoundError,
   parseArg,
@@ -19,7 +19,7 @@ import {
 
 import { featureFlagsTable } from '@/modules/feature-flags/infrastructure/drizzle/schema';
 
-class FlagsInputError extends Error {
+export class FlagsInputError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'FlagsInputError';
@@ -87,13 +87,56 @@ function readInput(filePath: string | undefined): FlagsFile {
   }
 }
 
-async function upsertFlags(db: DrizzleDb, data: FlagsFile): Promise<void> {
+type ImportPlanItem =
+  | {
+      readonly entry: FlagEntry;
+      readonly action: 'update';
+      readonly id: string;
+    }
+  | { readonly entry: FlagEntry; readonly action: 'insert-global' };
+
+/**
+ * Upsert legacy-format flag entries into `feature_flags`.
+ *
+ * Post-FF·B writer invariant (OZI-71): every NEW `feature_flags` row must carry
+ * canonical ownership — `flags:import` can only produce that for a GLOBAL row
+ * (`tenant_id IS NULL` -> `ownership_state = 'intentional_global'`). It NEVER
+ * relies on the `unresolved_legacy` schema default and NEVER creates a new
+ * organization-scoped row, because it cannot authoritatively resolve the
+ * canonical organization from a legacy `tenantId`. Existing rows are
+ * update-only: their `organization_id` / `ownership_state` are left to FF·C's
+ * evidence-based historical classification.
+ *
+ * Fails CLOSED before any write: if any entry would create a new scoped row,
+ * nothing is inserted or updated.
+ *
+ * Duplicate legacy identities `(key, tenantId)` in one input collapse to a
+ * single operation with LAST-WRITE-WINS values for `enabled` / `description`,
+ * preserving the historical sequential-upsert behavior (a second occurrence
+ * used to see the row the first one wrote and UPDATE it).
+ */
+export async function upsertFlags(
+  db: DrizzleDb,
+  data: FlagsFile,
+): Promise<void> {
   if (data.flags.length === 0) {
     console.error('[flags:import] No flags found in input. Nothing to import.');
     return;
   }
 
+  // Collapse duplicate identities to last-write-wins. Key on a JSON tuple so a
+  // key/tenantId containing the separator can't forge a collision.
+  const byIdentity = new Map<string, FlagEntry>();
   for (const entry of data.flags) {
+    byIdentity.set(JSON.stringify([entry.key, entry.tenantId]), entry);
+  }
+  const uniqueEntries = [...byIdentity.values()];
+
+  // Classify EVERY identity against the DB first — fail closed before mutating.
+  const plan: ImportPlanItem[] = [];
+  const rejectedScopedKeys: string[] = [];
+
+  for (const entry of uniqueEntries) {
     const existing = await db
       .select({ id: featureFlagsTable.id })
       .from(featureFlagsTable)
@@ -107,27 +150,55 @@ async function upsertFlags(db: DrizzleDb, data: FlagsFile): Promise<void> {
       )
       .limit(1);
 
-    if (existing.length > 0) {
+    const [existingRow] = existing;
+
+    if (existingRow !== undefined) {
+      plan.push({ entry, action: 'update', id: existingRow.id });
+    } else if (entry.tenantId === null) {
+      plan.push({ entry, action: 'insert-global' });
+    } else {
+      rejectedScopedKeys.push(entry.key);
+    }
+  }
+
+  if (rejectedScopedKeys.length > 0) {
+    throw new FlagsInputError(
+      `[flags:import] Refusing to create ${rejectedScopedKeys.length} brand-new ` +
+        `organization-scoped feature flag(s): ${rejectedScopedKeys.join(', ')}.\n` +
+        '  After canonical dual-write activation (OZI-71 FF·B) a NEW feature_flags ' +
+        'row must carry canonical ownership (organization_id + ownership_state = ' +
+        "'canonical_organization'), and flags:import cannot resolve the canonical " +
+        'organization from a legacy tenantId. Create scoped flags through the ' +
+        'organization-aware admin creation path instead.\n' +
+        '  (Updating EXISTING scoped rows via flags:import is still allowed; ' +
+        'GLOBAL rows are still created as intentional_global.)',
+    );
+  }
+
+  for (const item of plan) {
+    if (item.action === 'update') {
       await db
         .update(featureFlagsTable)
         .set({
-          enabled: entry.enabled,
-          description: entry.description ?? null,
+          enabled: item.entry.enabled,
+          description: item.entry.description ?? null,
           updatedAt: new Date(),
         })
-        .where(eq(featureFlagsTable.id, existing[0]!.id));
+        .where(eq(featureFlagsTable.id, item.id));
     } else {
       await db.insert(featureFlagsTable).values({
-        key: entry.key,
-        tenantId: entry.tenantId ?? null,
-        enabled: entry.enabled,
-        description: entry.description ?? null,
+        key: item.entry.key,
+        tenantId: null,
+        organizationId: null,
+        ownershipState: 'intentional_global',
+        enabled: item.entry.enabled,
+        description: item.entry.description ?? null,
       });
     }
   }
 
   console.error(
-    `[flags:import] Imported ${data.flags.length} flag(s) into DB.`,
+    `[flags:import] Imported ${uniqueEntries.length} flag(s) into DB.`,
   );
 }
 
@@ -159,6 +230,10 @@ async function run(): Promise<void> {
   try {
     await upsertFlags(dbRuntime.db, data);
   } catch (err) {
+    if (err instanceof FlagsInputError) {
+      console.error(err.message);
+      process.exit(1);
+    }
     if (isSchemaNotFoundError(err)) {
       const migrationCommand =
         driver === 'postgres'

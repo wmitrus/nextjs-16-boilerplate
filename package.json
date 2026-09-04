@@ -5,7 +5,7 @@
   "engines": {
     "node": "24.x"
   },
-  "packageManager": "pnpm@11.23.0+sha512.f00082e5b283a199b74e079da28d155c008fe232f44c8a06ea7ddfa014ecf719fc362f790ecc67b28106ddac2afb24c49a9a079159da560b2ce7d1e98efd11af",
+  "packageManager": "pnpm@11.25.0+sha512.5cde925b4f075f725eb71fbae18a42ffe784524789f19b61c731cb8721ec28aaee160e01a8d5af4fedb2a42cdbf300efe23db356b0d4a17b4d63e11f8ab7c956",
   "scripts": {
     "predev": "node -e \"try{require('fs').unlinkSync('data/pglite/postmaster.pid')}catch(e){}\"",
     "dev": "next dev",
@@ -139,6 +139,7 @@
     "db:all:down": "node scripts/compose-db-local.mjs down",
     "test:db:local": "TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/app_test vitest run --config vitest.db.local.config.ts",
     "port:pid": "lsof -ti ",
+    "flags:backfill:canonical-ownership": "tsx scripts/flags/backfill-canonical-ownership.ts",
     "flags:export": "tsx scripts/flags/export.ts",
     "flags:import": "tsx scripts/flags/import.ts",
     "flags:migrate": "tsx scripts/flags/migrate.ts",

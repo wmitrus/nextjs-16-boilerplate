@@ -1,3 +1,23 @@
+# [2.16.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.15.0...v2.16.0) (2026-09-04)
+
+
+### Bug Fixes
+
+* **ci:** bound dependency audit without bypassing lockfile ([7975e5f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7975e5f71f326f0840569aa8930b74608a27394f)), closes [hi#severity](https://github.com/hi/issues/severity)
+* **ci:** bound dependency audit without bypassing lockfile ([0b12bd8](https://github.com/wmitrus/nextjs-16-boilerplate/commit/0b12bd8d58a349d45fcc6d89d5bcee9d88283de1)), closes [hi#severity](https://github.com/hi/issues/severity)
+* **ci:** preserve full high-severity dependency audit coverage ([8076afb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8076afb8d7b6bf903f7a6df50df6c86f83ead277)), closes [hi#severity](https://github.com/hi/issues/severity)
+* **flags:** remove unnecessary non-null assertions ([dec474b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/dec474b6667057176e5cd1ef29e2f1f5df28f67e))
+* **ozi-71:** align backfill lock order with provisioning ([8a504b6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8a504b68f68513a80f4f9238488e9355e82ad1fe))
+* **ozi-71:** close legacy feature flag writer gap ([7f865e1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7f865e1e451cbdb97d30ba95b9e2d01d7f96253c))
+
+
+### Features
+
+* **flags:** enhance backfill process with write-ahead logging ([fca5898](https://github.com/wmitrus/nextjs-16-boilerplate/commit/fca5898a657b8977b9c110f9072f9150830eafa1))
+* **flags:** harden FF·C collision scan bound + evidence-snapshot equality ([a341770](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a341770cc2ba8b66941011e29534b23f10626148))
+* **fs-guards:** add physical path resolution for file targets ([f6adca2](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f6adca2939a4970b4fa34e750b11dc835254aff8))
+* **ozi-71:** backfill canonical feature flag ownership ([3ae0e53](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3ae0e537a2067349a24ec437b905b1bceac2c237))
+
 # [2.15.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.14.0...v2.15.0) (2026-09-03)
 
 

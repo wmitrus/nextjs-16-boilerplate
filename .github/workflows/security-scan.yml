@@ -30,26 +30,39 @@ jobs:
         with:
           node-version: 24
 
+      # Dependency-audit policy (do not weaken):
+      #   High/Critical in a RUNTIME dependency      -> blocks merge (step below)
+      #   High/Critical in a DEVELOPMENT dependency   -> blocks merge (step below)
+      #   Moderate across the full graph              -> visibility only
+      #
+      # A single full-graph `pnpm audit` sends the entire tree as one bulk
+      # request to registry.npmjs.org/-/npm/v1/security/advisories/bulk; that
+      # endpoint degrades on large bodies (~5k nodes full vs ~1.3k --prod /
+      # ~3.8k --dev). Splitting the blocking gate into --prod and --dev reduces
+      # each request's size while preserving High+ coverage for both the runtime
+      # and the development graph. Both requests still hit the npm advisories
+      # endpoint and may still retry or be slow (`pnpm audit` runs its own
+      # retry/backoff for this endpoint -- NPM_CONFIG_FETCH_* does not control
+      # it), so each blocking step carries a hard `timeout-minutes` bound: a
+      # timeout is a FAILED step, never a silent pass. Advisories that are
+      # genuinely dev-only AND production-unreachable are handled by explicit,
+      # documented entries in pnpm-workspace.yaml `audit.ignore` -- never by
+      # removing a gate.
+
       - name: Run pnpm audit (production deps, High+, blocking)
-        # Blocking merge gate, scoped to production dependencies.
-        # `pnpm audit` (full graph) sends the entire dependency tree as one
-        # bulk request to registry.npmjs.org/-/npm/v1/security/advisories/bulk;
-        # that endpoint degrades on large bodies and the dev graph is now big
-        # enough that the request times out (`--prod` ~1.3k nodes vs ~5k full).
-        # Prod deps are what ships, and every advisory currently ignored in
-        # pnpm-workspace.yaml is already a dev-only, production-unreachable
-        # build tool. Full-graph moderate+ stays below, non-blocking.
+        timeout-minutes: 10
         run: pnpm audit --prod --audit-level high
 
+      - name: Run pnpm audit (development deps, High+, blocking)
+        timeout-minutes: 10
+        run: pnpm audit --dev --audit-level high
+
       - name: Run pnpm audit (full graph, Moderate+, visibility only)
-        # Non-blocking: surfaces dev+prod advisories in the CI log without
-        # gating the build. Single attempt with a 60s cap so it fails fast
-        # instead of burning CI minutes on retries when the bulk endpoint
-        # times out on the large body.
+        # Non-blocking: widens severity to Moderate across the whole graph for
+        # awareness in the CI log. High/Critical (prod AND dev) are already
+        # blocking above -- this step only adds severity breadth, not a gate.
         continue-on-error: true
-        env:
-          NPM_CONFIG_FETCH_RETRIES: '0'
-          NPM_CONFIG_FETCH_TIMEOUT: '60000'
+        timeout-minutes: 10
         run: pnpm audit --audit-level moderate
 
   secret-scan:

@@ -732,38 +732,50 @@ all.
 
 ---
 
-## PE-30 — Restore full dependency-graph CVE coverage (Dependabot + dependency-review)
+## PE-30 — Replace the registry-dependent `pnpm audit` gate with GitHub-native dependency review
 
-- **Source**: `security-scan.yml` `pnpm audit` timeout fix (2026-09-04)
+- **Source**: `security-scan.yml` dependency-audit hardening (2026-09-04)
 - **Date added**: 2026-09-04
-- **Status**: Open — deferred by repo owner until more of the local
-  development work is settled ("wrzucę jak ogarniemy większą część
-  developmentu tutaj")
+- **Status**: Open — resilience/tooling improvement, deferred by repo owner
+  until more of the local development work is settled ("wrzucę jak ogarniemy
+  większą część developmentu tutaj")
 
-**Description**: The blocking dependency-audit gate is now scoped to
-`pnpm audit --prod --audit-level high` because full-graph `pnpm audit`
-sends the entire tree as one bulk request to
-`registry.npmjs.org/-/npm/v1/security/advisories/bulk` and that endpoint
-times out on the current graph size. The full-graph moderate+ step is
-non-blocking and best-effort. Net effect: a high-severity CVE reachable
-only through a devDependency / build tool no longer fails a merge, and the
-repo has no Dependabot config, so nothing scans the full graph
-authoritatively. Restore that coverage without reintroducing the bulk-endpoint
-timeout:
+**Not a coverage hole.** High/Critical coverage is intact: the merge gate is
+now **two blocking steps** — `pnpm audit --prod --audit-level high` **and**
+`pnpm audit --dev --audit-level high` — so a High/Critical advisory in a
+runtime _or_ a development dependency blocks merge. The prod/dev split replaced
+one full-graph `pnpm audit` only because a single ~5k-node bulk request to
+`registry.npmjs.org/-/npm/v1/security/advisories/bulk` degrades on body size;
+each half is small enough to answer. Full-graph `--audit-level moderate` stays
+visibility-only.
+
+**The remaining weakness is _resilience_, not scope.** Both blocking steps
+still depend on that npm advisories endpoint. Local measurement (2026-09-04)
+saw it return `503` and stretch the `--dev` step to ~100–280 s on two of two
+runs (and `--prod` to ~340 s once), recovering only via `pnpm audit`'s own
+retry loop — `NPM_CONFIG_FETCH_RETRIES` / `NPM_CONFIG_FETCH_TIMEOUT` do **not**
+control that retry/backoff, so they were dropped from the workflow. Each
+blocking step instead carries `timeout-minutes: 10` as a real hard bound (a
+timeout is a FAILED step, not a pass), so a longer endpoint outage fails the
+gate on infrastructure rather than hanging the job — but it still fails it,
+rather than surfacing a real advisory.
+
+Move the authoritative scan server-side:
 
 1. Enable **Dependabot alerts** + **Dependabot security updates** (repo
-   Settings → Code security) — GitHub scans `pnpm-lock.yaml` server-side
-   against the GitHub Advisory DB, whole tree, no `pnpm audit` call.
-2. Add `.github/dependabot.yml` (`package-ecosystem: "npm"`, weekly,
-   group dev-dependency bumps) for routine version-update PRs.
-3. Optionally add `actions/dependency-review-action` on `pull_request` as
-   the real blocking gate for newly-introduced vulnerable deps (runs via
-   the GitHub API, no bulk-endpoint payload) — pairs with Dependabot
-   alerts, which cover the pre-existing tree.
+   Settings → Code security) — GitHub scans `pnpm-lock.yaml` against the
+   GitHub Advisory DB, whole tree, no `pnpm audit` call.
+2. Add `.github/dependabot.yml` (`package-ecosystem: "npm"`, weekly, group
+   dev-dependency bumps) for routine version-update PRs.
+3. Add `actions/dependency-review-action` on `pull_request` as the blocking
+   gate for _newly introduced_ vulnerable deps (GitHub API, no bulk-endpoint
+   payload). Pair it with Dependabot alerts for the pre-existing / newly
+   disclosed tree, then the `pnpm audit --prod`/`--dev` steps can drop to
+   `continue-on-error` visibility-only or be removed.
 
 **Why deferred**: repo owner wants to defer dependency-tooling churn (weekly
-Dependabot PR noise, branch-protection changes) until the bulk of active
-development here has stabilised. The `--prod` gate holds the
-production-facing line in the meantime; every advisory currently ignored in
-`pnpm-workspace.yaml` is already a documented dev-only, production-unreachable
-build tool.
+Dependabot PR noise, branch-protection changes) until active development here
+has stabilised. Until then the two blocking `pnpm audit` steps hold the
+High/Critical line for both runtime and development dependencies; every
+advisory currently ignored in `pnpm-workspace.yaml` is a documented dev-only,
+production-unreachable build tool.

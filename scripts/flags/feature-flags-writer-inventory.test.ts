@@ -81,7 +81,7 @@ describe('feature_flags writer inventory (OZI-71 FF·C P1)', () => {
         ...src.matchAll(
           /\.insert\(\s*featureFlagsTable\s*\)\s*\.values\(\s*\{([\s\S]*?)\}\s*\)/g,
         ),
-      ].map((m) => m[1]!);
+      ].map((m) => m[1]);
       expect(bodies.length).toBeGreaterThan(0);
       for (const body of bodies) {
         expect(body).toMatch(/ownershipState\s*:/);

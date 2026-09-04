@@ -77,7 +77,9 @@ export async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
       )
       .limit(1);
 
-    if (existing.length > 0) {
+    const [existingRow] = existing;
+
+    if (existingRow !== undefined) {
       await db
         .update(featureFlagsTable)
         .set({
@@ -85,7 +87,7 @@ export async function writeToDb(db: DrizzleDb, data: FlagsFile): Promise<void> {
           description: entry.description ?? null,
           updatedAt: new Date(),
         })
-        .where(eq(featureFlagsTable.id, existing[0]!.id));
+        .where(eq(featureFlagsTable.id, existingRow.id));
     } else {
       await db.insert(featureFlagsTable).values({
         key: entry.key,

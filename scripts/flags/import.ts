@@ -150,8 +150,10 @@ export async function upsertFlags(
       )
       .limit(1);
 
-    if (existing.length > 0) {
-      plan.push({ entry, action: 'update', id: existing[0]!.id });
+    const [existingRow] = existing;
+
+    if (existingRow !== undefined) {
+      plan.push({ entry, action: 'update', id: existingRow.id });
     } else if (entry.tenantId === null) {
       plan.push({ entry, action: 'insert-global' });
     } else {

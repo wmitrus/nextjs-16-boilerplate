@@ -107,13 +107,14 @@ const BASE_REL = join('node_modules', '.cache', 'ffc-fault-inject-test');
 const HAS_PROC_FD = existsSync('/proc/self/fd');
 // The 0o300-dir fsync fault relies on DAC enforcement — root bypasses it.
 const IS_ROOT = typeof process.getuid === 'function' && process.getuid() === 0;
+const permissionIt = IS_ROOT ? it.skip : it;
 
 /** Count this process's open fds (Linux) — a deterministic fd-leak probe. */
 const openFdCount = (): number =>
   HAS_PROC_FD ? readdirSync('/proc/self/fd').length : -1;
 
 let runDir: string;
-let relOf: (name: string) => string;
+const relOf = (name: string): string => relative(CWD, join(runDir, name));
 const noReadDirs: string[] = [];
 
 const chmod = (dir: string, mode: number): void => {
@@ -136,7 +137,6 @@ const makeNoReadDir = (name: string): string => {
 beforeAll(() => {
   ensureDirectorySyncWithinBase(join(CWD, BASE_REL), CWD, 'fault-inject base');
   runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
-  relOf = (name: string) => relative(CWD, join(runDir, name));
 });
 
 beforeEach(() => {
@@ -162,7 +162,7 @@ afterAll(() => {
 });
 
 describe('openNewWalFileWithinBase — ownership on a post-openSync throw (finding P2)', () => {
-  it.skipIf(IS_ROOT)(
+  permissionIt(
     'A — openSync succeeds, directory fsync throws EACCES: rethrows, closes the fd (no leak), removes its own create, path is reusable',
     () => {
       const dir = makeNoReadDir('A');
@@ -185,7 +185,7 @@ describe('openNewWalFileWithinBase — ownership on a post-openSync throw (findi
 });
 
 describe('reserveBackfillArtifacts — one cleanup boundary for every post-acquisition failure (finding P2)', () => {
-  it.skipIf(IS_ROOT)(
+  permissionIt(
     'B — <report>.partial dir fsync throws EACCES: the helper self-cleans <report>.partial; the single outer abort cleans the decisions WAL; no fd leak',
     () => {
       // decisions in a readable dir; <report>.partial in a 0o300 dir.
@@ -248,7 +248,7 @@ describe('reserveBackfillArtifacts — one cleanup boundary for every post-acqui
     expect(pathEntryExistsWithinBase(reportRel, CWD, 'r')).toBe(false);
   });
 
-  it.skipIf(IS_ROOT)(
+  permissionIt(
     'E — a pre-existing entry is never removed by a failed attempt (abort only touches THIS reservation’s creates)',
     () => {
       // E1: an unrelated pre-existing sibling in a readable dir survives an abort

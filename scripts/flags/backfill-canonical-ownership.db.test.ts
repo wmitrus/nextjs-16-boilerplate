@@ -58,7 +58,12 @@ async function insertLegacy(
     .insert(featureFlagsTable)
     .values({ key, tenantId, enabled: true })
     .returning();
-  return row!.id;
+
+  if (row === undefined) {
+    throw new Error('Expected inserted legacy feature flag row');
+  }
+
+  return row.id;
 }
 
 async function insertFfbCanonical(
@@ -1062,7 +1067,8 @@ describe('acquireAuthoritativeEvidenceLocks — GLOBAL lock order tenants -> org
           SELECT pid FROM pg_stat_activity
           WHERE state = 'active' AND wait_event_type = 'Lock'
             AND query ILIKE '%LOCK TABLE tenants, organizations, auth_organization_identities%'`;
-        return rows.length ? Number(rows[0]!.pid) : null;
+        const [row] = rows;
+        return row === undefined ? null : Number(row.pid);
       });
 
       const locks = await obs<
@@ -1786,7 +1792,7 @@ describe('runFeatureFlagOwnershipBackfill — the supported legacy import writer
             (
               await importClient<{ n: number }[]>`
                 SELECT count(*)::int AS n FROM feature_flags WHERE key = 'race-import'`
-            )[0]!.n,
+            )[0].n,
           );
         },
       });

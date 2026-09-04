@@ -147,7 +147,7 @@ function reduceProviderEvidence(mappings: readonly ProviderMappingEvidence[]): {
     .filter((v): v is ResolvedOrganization => v !== null);
   const distinct = new Set(verified.map((v) => v.organizationId));
   return {
-    org: distinct.size === 1 ? verified[0]! : null,
+    org: distinct.size === 1 ? verified[0] : null,
     conflict: distinct.size > 1,
     staleOnly: mappings.length > 0 && verified.length === 0,
   };

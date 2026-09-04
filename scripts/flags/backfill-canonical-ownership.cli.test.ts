@@ -289,7 +289,7 @@ describe('reserveBackfillArtifacts / finalizeBackfillReport — reserve temp BEF
   const CWD = process.cwd();
   const BASE_REL = join('node_modules', '.cache', 'ffc-reserve-test');
   let runDir: string;
-  let relOf: (name: string) => string;
+  const relOf = (name: string): string => relative(CWD, join(runDir, name));
 
   beforeAll(() => {
     ensureDirectorySyncWithinBase(
@@ -298,7 +298,6 @@ describe('reserveBackfillArtifacts / finalizeBackfillReport — reserve temp BEF
       'reserve-test base',
     );
     runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
-    relOf = (name: string) => relative(CWD, join(runDir, name));
   });
 
   afterAll(() => {
@@ -372,13 +371,12 @@ describe('reserveBackfillArtifacts — a pre-existing DIRECTORY ENTRY (incl. dan
   const CWD = process.cwd();
   const BASE_REL = join('node_modules', '.cache', 'ffc-lexists-test');
   let runDir: string;
-  let relOf: (name: string) => string;
+  const relOf = (name: string): string => relative(CWD, join(runDir, name));
   let deadTarget: string; // an absolute path guaranteed never to exist
 
   beforeAll(() => {
     ensureDirectorySyncWithinBase(join(CWD, BASE_REL), CWD, 'lexists base');
     runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
-    relOf = (name: string) => relative(CWD, join(runDir, name));
     deadTarget = join(runDir, '__never_created__');
   });
 
@@ -481,13 +479,12 @@ describe('reserveBackfillArtifacts — actual filesystem case / normalization se
   const CWD = process.cwd();
   const BASE_REL = join('node_modules', '.cache', 'ffc-fscase-test');
   let runDir: string;
-  let relOf: (name: string) => string;
+  const relOf = (name: string): string => relative(CWD, join(runDir, name));
   let caseInsensitive = false;
 
   beforeAll(() => {
     ensureDirectorySyncWithinBase(join(CWD, BASE_REL), CWD, 'fscase base');
     runDir = mkdtempSync(join(CWD, BASE_REL, 'run-'));
-    relOf = (name: string) => relative(CWD, join(runDir, name));
 
     // Portable detection: create a controlled probe name, then look it up with
     // a differently-cased spelling. The filesystem itself is authoritative — no

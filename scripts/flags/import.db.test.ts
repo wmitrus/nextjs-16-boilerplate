@@ -35,7 +35,7 @@ const countByKey = async (key: string) =>
       .select({ n: sql<number>`count(*)::int` })
       .from(featureFlagsTable)
       .where(eq(featureFlagsTable.key, key))
-  )[0]!.n;
+  )[0].n;
 
 beforeAll(async () => {
   testDb = await resolveTestDb();
@@ -105,6 +105,9 @@ describe('flags:import upsertFlags — post-FF·B writer invariant (OZI-71 FF·C
       INSERT INTO feature_flags (key, tenant_id, enabled, description)
       VALUES ('imp-hist', ${TENANT_A}, true, 'original')`);
     const before = await rowByKey('imp-hist');
+    if (before === undefined) {
+      throw new Error('Expected imp-hist fixture row to exist');
+    }
     expect(before).toMatchObject({
       ownershipState: 'unresolved_legacy',
       organizationId: null,
@@ -122,7 +125,7 @@ describe('flags:import upsertFlags — post-FF·B writer invariant (OZI-71 FF·C
     });
 
     expect(await rowByKey('imp-hist')).toMatchObject({
-      id: before!.id,
+      id: before.id,
       key: 'imp-hist',
       tenantId: TENANT_A,
       enabled: false,
@@ -190,6 +193,9 @@ describe('flags:import upsertFlags — post-FF·B writer invariant (OZI-71 FF·C
       flags: [{ key: 'dup-eg', enabled: true, tenantId: null }],
     });
     const before = await rowByKey('dup-eg');
+    if (before === undefined) {
+      throw new Error('Expected dup-eg fixture row to exist');
+    }
 
     await upsertFlags(testDb.db, {
       flags: [
@@ -200,7 +206,7 @@ describe('flags:import upsertFlags — post-FF·B writer invariant (OZI-71 FF·C
 
     expect(await countByKey('dup-eg')).toBe(1);
     expect(await rowByKey('dup-eg')).toMatchObject({
-      id: before!.id,
+      id: before.id,
       ownershipState: 'intentional_global',
       enabled: true,
       description: 'last',

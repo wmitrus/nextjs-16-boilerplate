@@ -79,6 +79,9 @@ describe('flags:migrate writeToDb — post-FF·B writer invariant (OZI-71 FF·C 
       INSERT INTO feature_flags (key, tenant_id, enabled, description)
       VALUES ('mg-hist', NULL, true, 'original')`);
     const before = await rowByKey('mg-hist');
+    if (before === undefined) {
+      throw new Error('Expected mg-hist fixture row to exist');
+    }
     expect(before).toMatchObject({ ownershipState: 'unresolved_legacy' });
 
     await writeToDb(testDb.db, {
@@ -86,7 +89,7 @@ describe('flags:migrate writeToDb — post-FF·B writer invariant (OZI-71 FF·C 
     });
 
     expect(await rowByKey('mg-hist')).toMatchObject({
-      id: before!.id,
+      id: before.id,
       enabled: false,
       ownershipState: 'unresolved_legacy', // unchanged
       organizationId: null,

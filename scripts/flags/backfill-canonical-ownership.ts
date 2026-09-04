@@ -1875,8 +1875,12 @@ export function reserveBackfillArtifacts(
   let decisionsFd: number | null = null;
   let reportTmpFd: number | null = null;
 
-  // Close every opened fd, remove ONLY the files this reservation created
-  // (durably), and rethrow — nothing half-reserved survives.
+  // ONE cleanup boundary: EVERY operation from the first artifact acquisition
+  // onward runs inside the single `try` below. On ANY throw the `catch` calls
+  // `abort` EXACTLY ONCE — it closes every opened fd, removes ONLY the files
+  // this reservation created (durably), and rethrows; nothing half-reserved
+  // survives. `abort` is NEVER called from inside the try (that would double-
+  // clean); semantic failures inside the try throw a plain Error instead.
   const abort = (err: Error): never => {
     if (decisionsFd !== null) {
       try {
@@ -1920,48 +1924,45 @@ export function reserveBackfillArtifacts(
       );
       created.push(physicalTmpReport);
     }
-  } catch (error) {
-    return abort(error as Error);
-  }
 
-  // 4a. the two reserved fds must not be the same filesystem entry.
-  if (
-    decisionsFd !== null &&
-    reportTmpFd !== null &&
-    sameFilesystemEntry(decisionsFd, reportTmpFd)
-  ) {
-    return abort(
-      new Error(
+    // 4a. the two reserved fds must not be the same filesystem entry.
+    if (
+      decisionsFd !== null &&
+      reportTmpFd !== null &&
+      sameFilesystemEntry(decisionsFd, reportTmpFd)
+    ) {
+      throw new Error(
         'flags:backfill --decisions and --report (temp) resolved to the same ' +
           'filesystem entry (dev/ino). Provide distinct artifact paths. ' +
           'Aborting before any DB access.',
-      ),
-    );
-  }
+      );
+    }
 
-  // 5. the FINAL --report path must STILL have NO directory entry — an `lstat`
-  //    lookup ({@link pathEntryExistsWithinBase}), so BOTH a case-insensitive
-  //    volume where `report` now aliases a just-created reserved artifact
-  //    (`Report` / `Report.partial`) AND a pre-existing DANGLING symlink at
-  //    `report` (which `existsSync` would miss, but the later `link(2)` publish
-  //    would hit `EEXIST` on — after a DB run may have committed) are caught
-  //    here, before createDb() and without ever pre-creating --report.
-  if (
-    physicalReport !== null &&
-    pathEntryExistsWithinBase(
-      physicalReport,
-      realBase,
-      'flags:backfill --report',
-    )
-  ) {
-    return abort(
-      new Error(
+    // 5. the FINAL --report path must STILL have NO directory entry — an `lstat`
+    //    lookup ({@link pathEntryExistsWithinBase}), so BOTH a case-insensitive
+    //    volume where `report` now aliases a just-created reserved artifact
+    //    (`Report` / `Report.partial`) AND a pre-existing DANGLING symlink at
+    //    `report` (which `existsSync` would miss, but the later `link(2)` publish
+    //    would hit `EEXIST` on — after a DB run may have committed) are caught
+    //    here, before createDb() and without ever pre-creating --report. A
+    //    non-ENOENT `lstat` failure here also routes through the single catch.
+    if (
+      physicalReport !== null &&
+      pathEntryExistsWithinBase(
+        physicalReport,
+        realBase,
+        'flags:backfill --report',
+      )
+    ) {
+      throw new Error(
         `flags:backfill --report path now has an existing directory entry ` +
           `(possibly a dangling symlink or a case/normalization alias of ` +
           `another reserved artifact): ${physicalReport}. Provide distinct ` +
           `artifact paths. Aborting before any DB access.`,
-      ),
-    );
+      );
+    }
+  } catch (error) {
+    return abort(error as Error);
   }
 
   return {

@@ -369,6 +369,12 @@ export function writeNewFileDurablyWithinBase(
  * containing directory so the new directory entry itself is durable before the
  * first record is written. Returns the raw fd for {@link appendRecordDurably}.
  * Fails closed (`wx`) if the path already exists.
+ *
+ * Ownership of the fd + the newly created file transfers to the caller ONLY on
+ * successful return. If the directory `fsync` throws, this helper still owns
+ * both: it closes the fd, unlinks the file IT just exclusively created (`wx`
+ * guarantees the create was ours — never a pre-existing entry), best-effort
+ * `fsync`s the directory, and rethrows the ORIGINAL failure.
  */
 export function openNewWalFileWithinBase(
   filePath: string,
@@ -377,7 +383,26 @@ export function openNewWalFileWithinBase(
 ): number {
   const safePath = assertPathWithinBase(filePath, baseDir, label);
   const fd = openSync(safePath, 'wx');
-  fsyncDir(path.dirname(safePath));
+  try {
+    fsyncDir(path.dirname(safePath));
+  } catch (error) {
+    try {
+      closeSync(fd);
+    } catch {
+      // fd already invalid — nothing to do
+    }
+    try {
+      unlinkSync(safePath);
+    } catch {
+      // our exclusive create is gone already — nothing to do
+    }
+    try {
+      fsyncDir(path.dirname(safePath));
+    } catch {
+      // best-effort cleanup durability must not mask the original error
+    }
+    throw error;
+  }
   return fd;
 }
 

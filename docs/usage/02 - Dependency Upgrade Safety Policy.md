@@ -7,14 +7,18 @@ Provide a low-risk, repeatable process for dependency updates with clear rollbac
 ## Baseline (current project policy)
 
 - Runtime target: Node `24.x` (local, CI, Vercel aligned).
-- Security baseline: `pnpm audit` must be green before and after each batch.
+- Security baseline: `pnpm audit --prod --audit-level high` must be green before
+  and after each batch (this is the CI merge gate). Plain `pnpm audit` sends the
+  whole dev graph as one bulk request and currently times out against the npm
+  advisories endpoint; run it with `NPM_CONFIG_FETCH_RETRIES=0` for a best-effort
+  full-graph view, but do not gate on it.
 - Quality baseline: all required gates must pass before merge.
 
 ## Upgrade strategy
 
 1. Start with visibility:
    - `pnpm outdated`
-   - `pnpm audit`
+   - `pnpm audit --prod --audit-level high`
 2. Split updates into **small batches**:
    - Patch-only first.
    - Minor updates next.
@@ -84,7 +88,7 @@ Do not continue to next batch until current batch is green.
 ```bash
 # 1) inspect
 pnpm outdated
-pnpm audit
+pnpm audit --prod --audit-level high
 
 # 2) update one safe batch (example)
 pnpm add -D <packages...>

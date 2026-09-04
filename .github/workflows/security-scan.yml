@@ -30,13 +30,26 @@ jobs:
         with:
           node-version: 24
 
-      - name: Run pnpm audit (High+, blocking)
-        run: pnpm audit --audit-level high
+      - name: Run pnpm audit (production deps, High+, blocking)
+        # Blocking merge gate, scoped to production dependencies.
+        # `pnpm audit` (full graph) sends the entire dependency tree as one
+        # bulk request to registry.npmjs.org/-/npm/v1/security/advisories/bulk;
+        # that endpoint degrades on large bodies and the dev graph is now big
+        # enough that the request times out (`--prod` ~1.3k nodes vs ~5k full).
+        # Prod deps are what ships, and every advisory currently ignored in
+        # pnpm-workspace.yaml is already a dev-only, production-unreachable
+        # build tool. Full-graph moderate+ stays below, non-blocking.
+        run: pnpm audit --prod --audit-level high
 
-      - name: Run pnpm audit (Moderate+, visibility only)
-        # Non-blocking: surfaces moderate-severity advisories in the CI log
-        # without failing the build. High+ above stays the merge gate.
+      - name: Run pnpm audit (full graph, Moderate+, visibility only)
+        # Non-blocking: surfaces dev+prod advisories in the CI log without
+        # gating the build. Single attempt with a 60s cap so it fails fast
+        # instead of burning CI minutes on retries when the bulk endpoint
+        # times out on the large body.
         continue-on-error: true
+        env:
+          NPM_CONFIG_FETCH_RETRIES: '0'
+          NPM_CONFIG_FETCH_TIMEOUT: '60000'
         run: pnpm audit --audit-level moderate
 
   secret-scan:

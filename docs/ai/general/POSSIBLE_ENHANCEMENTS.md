@@ -729,3 +729,41 @@ optionally with a backfill script for accounts that do not sign in.
 about _finishing_ a rotation rather than performing one, and it needs a
 decision about whether a background backfill belongs in this boilerplate at
 all.
+
+---
+
+## PE-30 — Restore full dependency-graph CVE coverage (Dependabot + dependency-review)
+
+- **Source**: `security-scan.yml` `pnpm audit` timeout fix (2026-09-04)
+- **Date added**: 2026-09-04
+- **Status**: Open — deferred by repo owner until more of the local
+  development work is settled ("wrzucę jak ogarniemy większą część
+  developmentu tutaj")
+
+**Description**: The blocking dependency-audit gate is now scoped to
+`pnpm audit --prod --audit-level high` because full-graph `pnpm audit`
+sends the entire tree as one bulk request to
+`registry.npmjs.org/-/npm/v1/security/advisories/bulk` and that endpoint
+times out on the current graph size. The full-graph moderate+ step is
+non-blocking and best-effort. Net effect: a high-severity CVE reachable
+only through a devDependency / build tool no longer fails a merge, and the
+repo has no Dependabot config, so nothing scans the full graph
+authoritatively. Restore that coverage without reintroducing the bulk-endpoint
+timeout:
+
+1. Enable **Dependabot alerts** + **Dependabot security updates** (repo
+   Settings → Code security) — GitHub scans `pnpm-lock.yaml` server-side
+   against the GitHub Advisory DB, whole tree, no `pnpm audit` call.
+2. Add `.github/dependabot.yml` (`package-ecosystem: "npm"`, weekly,
+   group dev-dependency bumps) for routine version-update PRs.
+3. Optionally add `actions/dependency-review-action` on `pull_request` as
+   the real blocking gate for newly-introduced vulnerable deps (runs via
+   the GitHub API, no bulk-endpoint payload) — pairs with Dependabot
+   alerts, which cover the pre-existing tree.
+
+**Why deferred**: repo owner wants to defer dependency-tooling churn (weekly
+Dependabot PR noise, branch-protection changes) until the bulk of active
+development here has stabilised. The `--prod` gate holds the
+production-facing line in the meantime; every advisory currently ignored in
+`pnpm-workspace.yaml` is already a documented dev-only, production-unreachable
+build tool.

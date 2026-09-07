@@ -11,6 +11,7 @@ import {
 import {
   type CanonicalFeatureFlagWriteFacts,
   type CreateFeatureFlagInput,
+  type FeatureFlagAdminScope,
   DrizzleFeatureFlagAdminService,
 } from './DrizzleFeatureFlagAdminService';
 import { featureFlagsTable } from './schema';
@@ -31,6 +32,37 @@ const orgLegFacts = {
   organizationId: ORG_LEG,
   tenantId: TENANT_LEG,
 } as CanonicalFeatureFlagWriteFacts;
+
+// OZI-71 FF·D topology for list/update/delete scope regressions.
+// TENANT_C ┬ ORG_C1        TENANT_D ── ORG_D1
+//          └ ORG_C2
+const TENANT_C = '5c5c5c5c-5c5c-4c5c-8c5c-5c5c5c5c5c5c';
+const TENANT_D = '6d6d6d6d-6d6d-4d6d-8d6d-6d6d6d6d6d6d';
+const ORG_C1 = 'c1c1c1c1-c1c1-4c1c-8c1c-c1c1c1c1c1c1';
+const ORG_C2 = 'c2c2c2c2-c2c2-4c2c-8c2c-c2c2c2c2c2c2';
+const ORG_D1 = 'd1d1d1d1-d1d1-4d1d-8d1d-d1d1d1d1d1d1';
+
+// The composition seam brands these through the audited provenance
+// constructors; a direct test fixture asserts the shape only (mirrors
+// DrizzleFeatureFlagAdminService.canonical.db.test.ts's `org()` helper).
+const scopeC1 = {
+  kind: 'organization',
+  organizationId: ORG_C1,
+  tenantId: TENANT_C,
+} as FeatureFlagAdminScope;
+const scopeC2 = {
+  kind: 'organization',
+  organizationId: ORG_C2,
+  tenantId: TENANT_C,
+} as FeatureFlagAdminScope;
+// A REAL organization (ORG_C1) paired with the WRONG tenant (TENANT_D) --
+// the invalid-tuple negative case.
+const invalidTupleScope = {
+  kind: 'organization',
+  organizationId: ORG_C1,
+  tenantId: TENANT_D,
+} as FeatureFlagAdminScope;
+const platformScope: FeatureFlagAdminScope = { kind: 'platform-global' };
 
 /**
  * Seed a *historical / compatibility-period* legacy-shaped row directly, the
@@ -57,14 +89,41 @@ async function insertLegacyFlag(input: CreateFeatureFlagInput) {
   return row;
 }
 
+/** Seed a row with an explicit ownership state, for FF·D scope regressions. */
+async function insertFlag(input: {
+  key: string;
+  tenantId: string | null;
+  organizationId: string | null;
+  ownershipState:
+    | 'canonical_organization'
+    | 'intentional_global'
+    | 'unresolved_legacy'
+    | 'quarantined';
+  enabled: boolean;
+}) {
+  const [row] = await testDb.db
+    .insert(featureFlagsTable)
+    .values(input)
+    .returning();
+  if (!row) throw new Error('insertFlag: no row returned');
+  return row;
+}
+
 beforeAll(async () => {
   testDb = await resolveTestDb();
   svc = new DrizzleFeatureFlagAdminService(testDb.db);
   await testDb.db.execute(
-    sql`INSERT INTO tenants (id, name) VALUES (${TENANT_LEG}, 'Tenant Leg')`,
+    sql`INSERT INTO tenants (id, name) VALUES
+        (${TENANT_LEG}, 'Tenant Leg'),
+        (${TENANT_C}, 'Tenant C'),
+        (${TENANT_D}, 'Tenant D')`,
   );
   await testDb.db.execute(
-    sql`INSERT INTO organizations (id, tenant_id, name) VALUES (${ORG_LEG}, ${TENANT_LEG}, 'Org Leg')`,
+    sql`INSERT INTO organizations (id, tenant_id, name) VALUES
+        (${ORG_LEG}, ${TENANT_LEG}, 'Org Leg'),
+        (${ORG_C1}, ${TENANT_C}, 'Org C1'),
+        (${ORG_C2}, ${TENANT_C}, 'Org C2'),
+        (${ORG_D1}, ${TENANT_D}, 'Org D1')`,
   );
 });
 
@@ -73,47 +132,293 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
-  await testDb.db.execute(sql`DELETE FROM organizations WHERE id = ${ORG_LEG}`);
-  await testDb.db.execute(sql`DELETE FROM tenants WHERE id = ${TENANT_LEG}`);
+  await testDb.db.execute(
+    sql`DELETE FROM organizations WHERE id IN (${ORG_LEG}, ${ORG_C1}, ${ORG_C2}, ${ORG_D1})`,
+  );
+  await testDb.db.execute(
+    sql`DELETE FROM tenants WHERE id IN (${TENANT_LEG}, ${TENANT_C}, ${TENANT_D})`,
+  );
   await testDb.cleanup();
 });
 
-describe('DrizzleFeatureFlagAdminService — legacy tenant_id regressions (real DB)', () => {
-  it('lists all rows, global and tenant-scoped, ordered by key then tenantId', async () => {
-    await insertLegacyFlag({ key: 'beta', tenantId: null, enabled: true });
-    await insertLegacyFlag({ key: 'alpha', tenantId: null, enabled: false });
-    await insertLegacyFlag({ key: 'alpha', tenantId: 'acme', enabled: true });
-
-    const flags = await svc.listAll();
-
-    // Postgres sorts NULL last in ascending order by default, so a
-    // tenant-scoped row (real string tenantId) sorts before the global
-    // (NULL tenantId) row for the same key.
-    expect(flags).toHaveLength(3);
-    expect(flags.map((f) => [f.key, f.tenantId])).toEqual([
-      ['alpha', 'acme'],
-      ['alpha', null],
-      ['beta', null],
-    ]);
-  });
-
-  it('two legacy rows with the same key and different tenant_id coexist', async () => {
-    await insertLegacyFlag({
-      key: 'shared-key',
+describe('DrizzleFeatureFlagAdminService — list() (real DB, OZI-71 FF·D)', () => {
+  it('organization scope: returns own canonical rows plus intentional_global overlay, excludes unresolved/quarantined', async () => {
+    await insertFlag({
+      key: 'own-canonical',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'sibling-canonical',
+      tenantId: 'legacy-c2',
+      organizationId: ORG_C2,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'a-global-flag',
       tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'still-unresolved',
+      tenantId: 'legacy-unresolved',
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'still-quarantined',
+      tenantId: 'legacy-quarantined',
+      organizationId: null,
+      ownershipState: 'quarantined',
       enabled: true,
     });
 
-    const scoped = await insertLegacyFlag({
-      key: 'shared-key',
-      tenantId: 'acme',
+    const flags = await svc.list(scopeC1);
+
+    expect(flags.map((f) => f.key).sort()).toEqual([
+      'a-global-flag',
+      'own-canonical',
+    ]);
+    expect(flags.some((f) => f.key === 'sibling-canonical')).toBe(false);
+    expect(flags.some((f) => f.key === 'still-unresolved')).toBe(false);
+    expect(flags.some((f) => f.key === 'still-quarantined')).toBe(false);
+  });
+
+  it('CRITICAL: invalid tuple (real org, wrong tenant) -> zero rows, including zero intentional_global overlay', async () => {
+    await insertFlag({
+      key: 'own-canonical',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'a-global-flag',
+      tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+      enabled: true,
+    });
+
+    expect(await svc.list(invalidTupleScope)).toHaveLength(0);
+  });
+
+  it('sibling isolation: ORG_C2 sees its own row, not ORG_C1’s', async () => {
+    await insertFlag({
+      key: 'c1-only',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'c2-only',
+      tenantId: 'legacy-c2',
+      organizationId: ORG_C2,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+
+    const c2Flags = await svc.list(scopeC2);
+    expect(c2Flags.map((f) => f.key)).toEqual(['c2-only']);
+  });
+
+  it('cross-tenant isolation: ORG_D1’s row is invisible to ORG_C1', async () => {
+    await insertFlag({
+      key: 'd1-only',
+      tenantId: 'legacy-d1',
+      organizationId: ORG_D1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+
+    expect(await svc.list(scopeC1)).toHaveLength(0);
+  });
+
+  it('platform-global scope: intentional_global only, NOT an unbounded dump', async () => {
+    await insertFlag({
+      key: 'global-only',
+      tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'org-owned',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+    await insertFlag({
+      key: 'still-unresolved',
+      tenantId: 'legacy-unresolved',
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+      enabled: true,
+    });
+
+    const flags = await svc.list(platformScope);
+    expect(flags.map((f) => f.key)).toEqual(['global-only']);
+  });
+});
+
+describe('DrizzleFeatureFlagAdminService — update()/delete() scope containment (real DB, OZI-71 FF·D)', () => {
+  it('allows updating a row within the caller’s own organization scope', async () => {
+    const created = await insertFlag({
+      key: 'own-update',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
       enabled: false,
     });
 
-    expect(scoped.tenantId).toBe('acme');
-    expect(await svc.listAll()).toHaveLength(2);
+    const updated = await svc.update(created.id, { enabled: true }, scopeC1);
+    expect(updated.enabled).toBe(true);
   });
 
+  it('sibling organization cannot mutate ORG_C1’s row', async () => {
+    const created = await insertFlag({
+      key: 'sibling-update',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: false,
+    });
+
+    await expect(
+      svc.update(created.id, { enabled: true }, scopeC2),
+    ).rejects.toThrow(FeatureFlagNotFoundError);
+  });
+
+  it('cross-tenant mismatched tuple cannot mutate (fails closed, no global fallback)', async () => {
+    const created = await insertFlag({
+      key: 'cross-tenant-update',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: false,
+    });
+
+    await expect(
+      svc.update(created.id, { enabled: true }, invalidTupleScope),
+    ).rejects.toThrow(FeatureFlagNotFoundError);
+
+    // The row must still be unchanged -- the rejected update must not have run.
+    const rows = await testDb.db
+      .select()
+      .from(featureFlagsTable)
+      .where(sql`id = ${created.id}`);
+    expect(rows[0]?.enabled).toBe(false);
+  });
+
+  it('foreign row id cannot mutate anything', async () => {
+    await expect(
+      svc.update(
+        '00000000-0000-4000-8000-000000000000',
+        { enabled: true },
+        scopeC1,
+      ),
+    ).rejects.toThrow(FeatureFlagNotFoundError);
+  });
+
+  it('platform-global scope cannot mutate a canonical_organization row', async () => {
+    const created = await insertFlag({
+      key: 'org-owned-untouchable',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: false,
+    });
+
+    await expect(
+      svc.update(created.id, { enabled: true }, platformScope),
+    ).rejects.toThrow(FeatureFlagNotFoundError);
+  });
+
+  it('organization scope cannot mutate an intentional_global row', async () => {
+    const created = await insertFlag({
+      key: 'global-untouchable-by-org',
+      tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+      enabled: false,
+    });
+
+    await expect(
+      svc.update(created.id, { enabled: true }, scopeC1),
+    ).rejects.toThrow(FeatureFlagNotFoundError);
+  });
+
+  it('platform-global scope can mutate an intentional_global row', async () => {
+    const created = await insertFlag({
+      key: 'global-mutable',
+      tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+      enabled: false,
+    });
+
+    const updated = await svc.update(
+      created.id,
+      { enabled: true },
+      platformScope,
+    );
+    expect(updated.enabled).toBe(true);
+  });
+
+  it('deletes a row within the caller’s own organization scope', async () => {
+    const created = await insertFlag({
+      key: 'own-delete',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+
+    await svc.delete(created.id, scopeC1);
+    expect(await svc.list(scopeC1)).toHaveLength(0);
+  });
+
+  it('sibling organization cannot delete ORG_C1’s row', async () => {
+    const created = await insertFlag({
+      key: 'sibling-delete',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+
+    await expect(svc.delete(created.id, scopeC2)).rejects.toThrow(
+      FeatureFlagNotFoundError,
+    );
+    // Still present -- the rejected delete must not have run.
+    expect(await svc.list(scopeC1)).toHaveLength(1);
+  });
+
+  it('platform-global scope cannot delete a canonical_organization row', async () => {
+    const created = await insertFlag({
+      key: 'org-owned-delete-guard',
+      tenantId: 'legacy-c1',
+      organizationId: ORG_C1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+
+    await expect(svc.delete(created.id, platformScope)).rejects.toThrow(
+      FeatureFlagNotFoundError,
+    );
+    expect(await svc.list(scopeC1)).toHaveLength(1);
+  });
+});
+
+describe('DrizzleFeatureFlagAdminService — legacy create()/duplicate regressions (real DB)', () => {
   it('the legacy (key, tenant_id) unique still fires through the canonical create path as DuplicateFeatureFlagError', async () => {
     await insertLegacyFlag({ key: 'dup', tenantId: 'acme', enabled: true });
 
@@ -123,151 +428,6 @@ describe('DrizzleFeatureFlagAdminService — legacy tenant_id regressions (real 
     await expect(
       svc.create({ key: 'dup', tenantId: 'acme', enabled: false }, orgLegFacts),
     ).rejects.toThrow(DuplicateFeatureFlagError);
-  });
-
-  it('throws FeatureFlagNotFoundError when updating a nonexistent id', async () => {
-    await expect(
-      svc.update(
-        '00000000-0000-4000-8000-000000000000',
-        { enabled: true },
-        null,
-      ),
-    ).rejects.toThrow(FeatureFlagNotFoundError);
-  });
-
-  it('updates enabled and description independently (unscoped / platform admin)', async () => {
-    const created = await insertLegacyFlag({
-      key: 'togglable',
-      tenantId: null,
-      enabled: false,
-      description: 'original',
-    });
-
-    const toggled = await svc.update(created.id, { enabled: true }, null);
-    expect(toggled.enabled).toBe(true);
-    expect(toggled.description).toBe('original');
-
-    const described = await svc.update(
-      created.id,
-      { description: 'updated' },
-      null,
-    );
-    expect(described.enabled).toBe(true);
-    expect(described.description).toBe('updated');
-  });
-
-  it('deletes a flag (unscoped / platform admin)', async () => {
-    const created = await insertLegacyFlag({
-      key: 'deletable',
-      tenantId: null,
-      enabled: true,
-    });
-
-    await svc.delete(created.id, null);
-
-    expect(await svc.listAll()).toHaveLength(0);
-  });
-
-  it('throws FeatureFlagNotFoundError when deleting a nonexistent id', async () => {
-    await expect(
-      svc.delete('00000000-0000-4000-8000-000000000000', null),
-    ).rejects.toThrow(FeatureFlagNotFoundError);
-  });
-
-  describe('tenant scoping (SEC-26 regression coverage)', () => {
-    it('listForTenant returns global rows plus only the given tenant’s own rows', async () => {
-      await insertLegacyFlag({
-        key: 'global-flag',
-        tenantId: null,
-        enabled: true,
-      });
-      await insertLegacyFlag({
-        key: 'acme-flag',
-        tenantId: 'acme',
-        enabled: true,
-      });
-      await insertLegacyFlag({
-        key: 'globex-flag',
-        tenantId: 'globex',
-        enabled: true,
-      });
-
-      const acmeView = await svc.listForTenant('acme');
-
-      expect(acmeView.map((f) => [f.key, f.tenantId]).sort()).toEqual(
-        [
-          ['global-flag', null],
-          ['acme-flag', 'acme'],
-        ].sort(),
-      );
-      expect(acmeView.some((f) => f.tenantId === 'globex')).toBe(false);
-    });
-
-    it('rejects updating another tenant’s row when scoped to a different tenant', async () => {
-      const created = await insertLegacyFlag({
-        key: 'scoped-update',
-        tenantId: 'acme',
-        enabled: false,
-      });
-
-      await expect(
-        svc.update(created.id, { enabled: true }, { tenantId: 'globex' }),
-      ).rejects.toThrow(FeatureFlagNotFoundError);
-    });
-
-    it('rejects updating a global row when scoped to any tenant', async () => {
-      const created = await insertLegacyFlag({
-        key: 'scoped-update-global',
-        tenantId: null,
-        enabled: false,
-      });
-
-      await expect(
-        svc.update(created.id, { enabled: true }, { tenantId: 'acme' }),
-      ).rejects.toThrow(FeatureFlagNotFoundError);
-    });
-
-    it('allows updating a row scoped to the caller’s own tenant', async () => {
-      const created = await insertLegacyFlag({
-        key: 'scoped-update-own',
-        tenantId: 'acme',
-        enabled: false,
-      });
-
-      const updated = await svc.update(
-        created.id,
-        { enabled: true },
-        { tenantId: 'acme' },
-      );
-      expect(updated.enabled).toBe(true);
-    });
-
-    it('rejects deleting another tenant’s row when scoped to a different tenant', async () => {
-      const created = await insertLegacyFlag({
-        key: 'scoped-delete',
-        tenantId: 'acme',
-        enabled: false,
-      });
-
-      await expect(
-        svc.delete(created.id, { tenantId: 'globex' }),
-      ).rejects.toThrow(FeatureFlagNotFoundError);
-
-      // The row must still exist -- the rejected delete must not have run.
-      expect(await svc.listForTenant('acme')).toHaveLength(1);
-    });
-
-    it('allows deleting a row scoped to the caller’s own tenant', async () => {
-      const created = await insertLegacyFlag({
-        key: 'scoped-delete-own',
-        tenantId: 'acme',
-        enabled: false,
-      });
-
-      await svc.delete(created.id, { tenantId: 'acme' });
-
-      expect(await svc.listForTenant('acme')).toHaveLength(0);
-    });
   });
 });
 
@@ -281,6 +441,7 @@ describe('DrizzleFeatureFlagAdminService — FF·B explicit platform-global crea
     expect(created).toMatchObject({
       key: 'g',
       tenantId: null,
+      organizationId: null,
       enabled: true,
       description: 'a test flag',
     });

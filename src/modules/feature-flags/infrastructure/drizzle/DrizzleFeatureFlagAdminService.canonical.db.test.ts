@@ -10,6 +10,7 @@ import {
 import {
   DrizzleFeatureFlagAdminService,
   type CanonicalFeatureFlagWriteFacts,
+  type FeatureFlagAdminScope,
 } from './DrizzleFeatureFlagAdminService';
 import { featureFlagsTable } from './schema';
 
@@ -162,7 +163,11 @@ describe('DrizzleFeatureFlagAdminService — FF·B canonical dual-write (real DB
       org(ORG_A1, TENANT_A),
     );
 
-    await svc.update(created.id, { enabled: true, description: 'x' }, null);
+    await svc.update(created.id, { enabled: true, description: 'x' }, {
+      kind: 'organization',
+      organizationId: ORG_A1,
+      tenantId: TENANT_A,
+    } as FeatureFlagAdminScope);
 
     const rows = await allRows();
     expect(rows).toHaveLength(1);

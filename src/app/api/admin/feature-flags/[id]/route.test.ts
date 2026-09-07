@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   isEnvAdmin: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
+  resolveScope: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
   container: {
@@ -50,6 +51,10 @@ vi.mock(
   }),
 );
 
+vi.mock('../feature-flags-admin-scope', () => ({
+  resolveFeatureFlagsAdminScope: mocks.resolveScope,
+}));
+
 vi.mock('@/security/actions/record-admin-audit-event', () => ({
   recordAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
@@ -73,10 +78,19 @@ const MOCK_FLAG = {
   id: FLAG_ID,
   key: 'my-flag',
   tenantId: null,
+  organizationId: null,
   enabled: true,
   description: 'test',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+const PLATFORM_SCOPE = { kind: 'platform-global' as const };
+// Matches makeAllowedProvisioningAccess()'s default access.tenant.
+const ORG_SCOPE = {
+  kind: 'organization' as const,
+  organizationId: 'tenant_test_1',
+  tenantId: 'tenant_test_1',
 };
 
 describe('PATCH /api/admin/feature-flags/[id]', () => {
@@ -93,6 +107,7 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     });
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
   });
 
   it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
@@ -152,6 +167,18 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 404 when scope derivation legitimately denies membership (no valid scope at all)', async () => {
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { enabled: true }),
+      makeContext(),
+    );
+    expect(res.status).toBe(404);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when the flag does not exist', async () => {
     mocks.update.mockRejectedValue(new FeatureFlagNotFoundError());
 
@@ -178,17 +205,22 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
         enabled: false,
         description: undefined,
       },
-      null,
+      PLATFORM_SCOPE,
     );
     const body = await res.json();
     expect(body.data.flag.enabled).toBe(false);
   });
 
-  it('attributes the audit event to the updated flag’s own tenant, not the platform admin’s active tenant', async () => {
-    // The caller's active tenant is 'tenant_test_1' (makeAllowedProvisioningAccess's
-    // default); a platform admin can update a flag belonging to a different
-    // tenant, and the audit event must reflect the flag's real scope.
-    mocks.update.mockResolvedValue({ ...MOCK_FLAG, tenantId: 'tenant_other' });
+  it('attributes the audit event to the CANONICAL tenant from scope, never the returned flag’s legacy tenantId', async () => {
+    // OZI-71 FF·D review fix — `flag.tenantId` is the opaque legacy
+    // compatibility value, not a real tenant identifier. The audit event
+    // must come from `scope.tenantId` (already proven valid) regardless of
+    // what the mutated DTO's legacy column happens to hold.
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
+    mocks.update.mockResolvedValue({
+      ...MOCK_FLAG,
+      tenantId: 'some-unrelated-legacy-value',
+    });
 
     const { PATCH } = await import('./route');
     const res = await PATCH(
@@ -197,15 +229,34 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     );
     expect(res.status).toBe(200);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'tenant_other' }),
+      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
+    );
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'some-unrelated-legacy-value' }),
     );
   });
 
-  it("SEC-26: scopes the update to the caller's own tenant for an ABAC-authorized non-platform-admin", async () => {
+  it('attributes a platform-global-scoped update’s audit event to tenantId: null', async () => {
+    mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
+    mocks.update.mockResolvedValue({ ...MOCK_FLAG, tenantId: null });
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeRequest('PATCH', { enabled: false }),
+      makeContext(),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: null }),
+    );
+  });
+
+  it('SEC-26: scopes the update to organization scope for an ABAC-authorized non-platform-admin', async () => {
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
     mocks.update.mockResolvedValue({ ...MOCK_FLAG, enabled: false });
 
     const { PATCH } = await import('./route');
@@ -217,7 +268,7 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     expect(mocks.update).toHaveBeenCalledWith(
       FLAG_ID,
       { enabled: false, description: undefined },
-      { tenantId: 'tenant_test_1' },
+      ORG_SCOPE,
     );
   });
 });
@@ -236,12 +287,22 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     });
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
   });
 
   it('returns 400 for a malformed (non-UUID) id before touching the DB (SEC-23)', async () => {
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext('bad-id'));
     expect(res.status).toBe(400);
+    expect(mocks.delete).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when scope derivation legitimately denies membership (no valid scope at all)', async () => {
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(makeRequest('DELETE'), makeContext());
+    expect(res.status).toBe(404);
     expect(mocks.delete).not.toHaveBeenCalled();
   });
 
@@ -259,32 +320,50 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
     expect(res.status).toBe(200);
-    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, null);
+    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, PLATFORM_SCOPE);
   });
 
-  it("SEC-26: scopes the delete to the caller's own tenant for an ABAC-authorized non-platform-admin", async () => {
+  it('SEC-26: scopes the delete to organization scope for an ABAC-authorized non-platform-admin', async () => {
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
     mocks.delete.mockResolvedValue(MOCK_FLAG);
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
     expect(res.status).toBe(200);
-    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, {
-      tenantId: 'tenant_test_1',
-    });
+    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, ORG_SCOPE);
   });
 
-  it('attributes the audit event to the deleted flag’s own tenant, not the platform admin’s active tenant', async () => {
-    mocks.delete.mockResolvedValue({ ...MOCK_FLAG, tenantId: 'tenant_other' });
+  it('attributes the audit event to the CANONICAL tenant from scope, never the deleted flag’s legacy tenantId', async () => {
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
+    mocks.delete.mockResolvedValue({
+      ...MOCK_FLAG,
+      tenantId: 'some-unrelated-legacy-value',
+    });
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
     expect(res.status).toBe(200);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'tenant_other' }),
+      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
+    );
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'some-unrelated-legacy-value' }),
+    );
+  });
+
+  it('attributes a platform-global-scoped delete’s audit event to tenantId: null', async () => {
+    mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
+    mocks.delete.mockResolvedValue({ ...MOCK_FLAG, tenantId: null });
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(makeRequest('DELETE'), makeContext());
+    expect(res.status).toBe(200);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: null }),
     );
   });
 });

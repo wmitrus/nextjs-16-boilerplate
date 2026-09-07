@@ -10,13 +10,14 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, tenantId: null };
-const TENANT_SCOPE = { isPlatformAdmin: false, tenantId: 'acme' };
+const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, organizationId: null };
+const ORG_SCOPE = { isPlatformAdmin: false, organizationId: 'acme-org' };
 
 const FLAG = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   key: 'my-flag',
   tenantId: null,
+  organizationId: null,
   enabled: true,
   description: 'a flag',
   createdAt: '2026-01-01T00:00:00.000Z',
@@ -249,13 +250,13 @@ describe('FeatureFlagsClient', () => {
       ...FLAG,
       id: 'own-flag-id',
       key: 'own-flag',
-      tenantId: 'acme',
+      organizationId: 'acme-org',
     };
     const globalFlag = {
       ...FLAG,
       id: 'global-flag-id',
       key: 'global-flag',
-      tenantId: null,
+      organizationId: null,
     };
 
     it('marks a global row read-only and disables its mutation controls', async () => {
@@ -264,7 +265,7 @@ describe('FeatureFlagsClient', () => {
           data: {
             flags: [ownFlag, globalFlag],
             activeProvider: 'db',
-            scope: TENANT_SCOPE,
+            scope: ORG_SCOPE,
           },
         }),
       );
@@ -296,10 +297,10 @@ describe('FeatureFlagsClient', () => {
       );
     });
 
-    it("locks the create form's Tenant ID field to the caller's own tenant", async () => {
+    it("locks the create form's Organization ID field to the caller's own organization", async () => {
       vi.mocked(fetch).mockResolvedValue(
         jsonResponse({
-          data: { flags: [], activeProvider: 'db', scope: TENANT_SCOPE },
+          data: { flags: [], activeProvider: 'db', scope: ORG_SCOPE },
         }),
       );
 
@@ -308,11 +309,11 @@ describe('FeatureFlagsClient', () => {
         expect(screen.getByText('No feature flags found.')).toBeInTheDocument(),
       );
 
-      const tenantInput = screen.getByLabelText(
-        'Tenant ID (your tenant)',
+      const orgInput = screen.getByLabelText(
+        'Organization ID (your organization)',
       ) as HTMLInputElement;
-      expect(tenantInput).toBeDisabled();
-      expect(tenantInput.value).toBe('acme');
+      expect(orgInput).toBeDisabled();
+      expect(orgInput.value).toBe('acme-org');
     });
   });
 });

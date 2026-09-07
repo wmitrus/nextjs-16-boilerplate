@@ -1,5 +1,6 @@
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
+import type { DataScope } from '@/core/contracts/access-context';
 import type { OrganizationId, TenantId } from '@/core/contracts/canonical-ids';
 import type { DrizzleDb } from '@/core/db';
 import { organizationsReferenceTable } from '@/core/db/schema/references';
@@ -12,10 +13,24 @@ import {
 
 import { featureFlagsTable } from './schema';
 
+/**
+ * OZI-71 FF·D — the canonical scope LIST/UPDATE/DELETE operate under.
+ * Structurally identical to (never imported from)
+ * `src/app/api/admin/feature-flags/feature-flags-admin-scope.ts`'s
+ * `FeatureFlagsDataScope` -- this module stays `modules -> core` only; the
+ * composition layer (`src/app`) is the one place both this type and the
+ * concrete scope-derivation seam are wired together.
+ */
+export type FeatureFlagAdminScope = Extract<
+  DataScope,
+  { kind: 'organization' | 'platform-global' }
+>;
+
 export type FeatureFlagDto = {
   id: string;
   key: string;
   tenantId: string | null;
+  organizationId: string | null;
   enabled: boolean;
   description: string | null;
   createdAt: string;
@@ -63,22 +78,11 @@ export type UpdateFeatureFlagInput = {
   description?: string | null;
 };
 
-/**
- * The tenant scope a caller is authorized to mutate within.
- *
- * `null` means "no additional scope restriction" and must only be passed for
- * an unscoped platform admin (`isEnvBasedPlatformAdmin`). An ABAC-authorized
- * caller (ordinary tenant owner) must always pass `{ tenantId }` so mutations
- * are constrained to their own tenant's rows -- never global (`tenantId:
- * null`) rows and never another tenant's rows. See SEC-26 in
- * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
- */
-export type MutationScope = { tenantId: string } | null;
-
 function mapFlagRow(row: {
   id: string;
   key: string;
   tenantId: string | null;
+  organizationId: string | null;
   enabled: boolean;
   description: string | null;
   createdAt: Date;
@@ -88,11 +92,43 @@ function mapFlagRow(row: {
     id: row.id,
     key: row.key,
     tenantId: row.tenantId,
+    organizationId: row.organizationId,
     enabled: row.enabled,
     description: row.description,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** Normalize a raw `db.execute` result to its row array (driver-shape safe). */
+function normalizeRawRows<T>(raw: unknown): T[] {
+  return (
+    Array.isArray(raw) ? raw : ((raw as { rows?: unknown[] }).rows ?? [])
+  ) as T[];
+}
+
+interface RawFlagRow {
+  id: string;
+  key: string;
+  tenantId: string | null;
+  organizationId: string | null;
+  enabled: boolean;
+  description: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+function mapRawFlagRow(row: RawFlagRow): FeatureFlagDto {
+  return mapFlagRow({
+    id: row.id,
+    key: row.key,
+    tenantId: row.tenantId,
+    organizationId: row.organizationId,
+    enabled: row.enabled,
+    description: row.description,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+  });
 }
 
 function hasUniqueViolationCode(value: unknown): boolean {
@@ -134,17 +170,37 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-function scopePredicate(id: string, scope: MutationScope) {
+/**
+ * OZI-71 FF·D — the same-statement mutation predicate. For `organization`
+ * scope the row must ALREADY be `canonical_organization` owned by exactly
+ * `scope.organizationId`, AND the parent tuple
+ * (`organizations.id = scope.organizationId AND organizations.tenant_id =
+ * scope.tenantId`) is re-proven via an `EXISTS` subquery IN THE SAME
+ * statement (SEC-26) -- never a separate preceding SELECT. A sibling
+ * organization, a mismatched tenant, or a foreign row id all fail the
+ * conjunction and affect zero rows. For `platform-global` scope the row must
+ * already be `intentional_global`; a `canonical_organization` row can never
+ * match this branch. Neither branch reads `tenant_id`.
+ */
+function scopePredicate(id: string, scope: FeatureFlagAdminScope) {
   const idPredicate = eq(featureFlagsTable.id, id);
 
-  if (scope === null) {
-    return idPredicate;
+  if (scope.kind === 'platform-global') {
+    return and(
+      idPredicate,
+      eq(featureFlagsTable.ownershipState, 'intentional_global'),
+    );
   }
 
-  // Deliberately `eq`, not `tenantScopePredicate`'s null-aware form: an
-  // ABAC-authorized (non-platform-admin) caller may mutate only rows that
-  // belong to their own tenant, never global (`tenantId: null`) rows.
-  return and(idPredicate, eq(featureFlagsTable.tenantId, scope.tenantId));
+  return and(
+    idPredicate,
+    eq(featureFlagsTable.ownershipState, 'canonical_organization'),
+    eq(featureFlagsTable.organizationId, scope.organizationId),
+    sql`exists (
+      select 1 from ${organizationsReferenceTable}
+      where id = ${scope.organizationId} and tenant_id = ${scope.tenantId}
+    )`,
+  );
 }
 
 /**
@@ -157,42 +213,68 @@ function scopePredicate(id: string, scope: MutationScope) {
  * `DrizzleAdminOrganizationsMutationService`, not `UserRepository`. See
  * `.copilot/tasks/2026-08-20-admin-feature-flags-gui/01 - Architecture Guard - Summary.md`.
  *
- * Every mutation method takes a `MutationScope`: callers authorized only via
- * ABAC (not an unscoped platform admin) must pass their own `tenantId` so the
- * DB predicate itself enforces tenant isolation, rather than trusting that
- * the caller already validated the target row's ownership. See SEC-26.
+ * OZI-71 FF·D — `list`/`update`/`delete` take a canonical
+ * {@link FeatureFlagAdminScope} (derived server-side by
+ * `feature-flags-admin-scope.ts`), never a legacy tenant id: the DB predicate
+ * itself enforces containment, rather than trusting that the caller already
+ * validated the target row's ownership. See SEC-26.
  */
 export class DrizzleFeatureFlagAdminService {
   constructor(private readonly db: DrizzleDb) {}
 
-  /** Full, unscoped list. Only for an unscoped platform admin. */
-  async listAll(): Promise<FeatureFlagDto[]> {
-    const rows = await this.db
-      .select()
-      .from(featureFlagsTable)
-      .orderBy(featureFlagsTable.key, featureFlagsTable.tenantId);
-
-    return rows.map(mapFlagRow);
-  }
-
   /**
-   * Global (`tenantId: null`) rows plus the given tenant's own rows.
-   * For an ABAC-authorized (non-platform-admin) caller -- never surfaces
-   * another tenant's rows.
+   * `organization` scope — canonical rows for exactly `scope.organizationId`
+   * plus `intentional_global` as a READ-ONLY overlay, excluding
+   * `unresolved_legacy`/`quarantined`. The `(organizationId, tenantId)` tuple
+   * is proven valid FIRST via `EXISTS`, gating the whole predicate: an
+   * invalid tuple yields ZERO rows, including zero overlay -- never a
+   * partial/global-only fallback.
+   *
+   * `platform-global` scope — `intentional_global` rows ONLY. Deliberately
+   * NOT the legacy `listAll()` unrestricted dump: a platform admin's
+   * `platform-global` scope has a literal DB meaning here (unlike Admin
+   * Users, where it stands in for "unrestricted"), so this never returns
+   * ANY `canonical_organization` row — signed-off verdict, see
+   * `feature-flags-admin-scope.ts`.
    */
-  async listForTenant(tenantId: string): Promise<FeatureFlagDto[]> {
-    const rows = await this.db
-      .select()
-      .from(featureFlagsTable)
-      .where(
-        or(
-          isNull(featureFlagsTable.tenantId),
-          eq(featureFlagsTable.tenantId, tenantId),
-        ),
-      )
-      .orderBy(featureFlagsTable.key, featureFlagsTable.tenantId);
+  async list(scope: FeatureFlagAdminScope): Promise<FeatureFlagDto[]> {
+    if (scope.kind === 'platform-global') {
+      const rows = await this.db
+        .select()
+        .from(featureFlagsTable)
+        .where(eq(featureFlagsTable.ownershipState, 'intentional_global'))
+        .orderBy(featureFlagsTable.key);
+      return rows.map(mapFlagRow);
+    }
 
-    return rows.map(mapFlagRow);
+    const raw = await this.db.execute(sql`
+      WITH valid_scope AS (
+        SELECT 1
+        FROM ${organizationsReferenceTable}
+        WHERE id = ${scope.organizationId}
+          AND tenant_id = ${scope.tenantId}
+      )
+      SELECT
+        id,
+        key,
+        tenant_id AS "tenantId",
+        organization_id AS "organizationId",
+        enabled,
+        description,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM ${featureFlagsTable}
+      WHERE EXISTS (SELECT 1 FROM valid_scope)
+        AND (
+          (
+            ownership_state = 'canonical_organization'
+            AND organization_id = ${scope.organizationId}
+          )
+          OR ownership_state = 'intentional_global'
+        )
+      ORDER BY key
+    `);
+    return normalizeRawRows<RawFlagRow>(raw).map(mapRawFlagRow);
   }
 
   /**
@@ -306,50 +388,27 @@ export class DrizzleFeatureFlagAdminService {
         id,
         key,
         tenant_id AS "tenantId",
+        organization_id AS "organizationId",
         enabled,
         description,
         created_at AS "createdAt",
         updated_at AS "updatedAt"
     `);
 
-    const rows = (
-      Array.isArray(inserted)
-        ? inserted
-        : (inserted as { rows?: unknown[] }).rows
-    ) as
-      | Array<{
-          id: string;
-          key: string;
-          tenantId: string | null;
-          enabled: boolean;
-          description: string | null;
-          createdAt: Date | string;
-          updatedAt: Date | string;
-        }>
-      | undefined;
-
-    const row = rows?.[0];
+    const row = normalizeRawRows<RawFlagRow>(inserted)[0];
     if (!row) {
       // Zero rows from the tuple proof: the resolved organization no longer
       // exists / was reparented / the server-derived tuple is inconsistent.
       throw new FeatureFlagCanonicalWriteInvariantError();
     }
 
-    return mapFlagRow({
-      id: row.id,
-      key: row.key,
-      tenantId: row.tenantId,
-      enabled: row.enabled,
-      description: row.description,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    });
+    return mapRawFlagRow(row);
   }
 
   async update(
     id: string,
     input: UpdateFeatureFlagInput,
-    scope: MutationScope,
+    scope: FeatureFlagAdminScope,
   ): Promise<FeatureFlagDto> {
     const [row] = await this.db
       .update(featureFlagsTable)
@@ -370,7 +429,10 @@ export class DrizzleFeatureFlagAdminService {
     return mapFlagRow(row);
   }
 
-  async delete(id: string, scope: MutationScope): Promise<FeatureFlagDto> {
+  async delete(
+    id: string,
+    scope: FeatureFlagAdminScope,
+  ): Promise<FeatureFlagDto> {
     const [row] = await this.db
       .delete(featureFlagsTable)
       .where(scopePredicate(id, scope))

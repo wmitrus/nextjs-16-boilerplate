@@ -1,5 +1,7 @@
-import type { AuthorizationContext } from '@/core/contracts/authorization';
-import type { FeatureFlagService } from '@/core/contracts/feature-flags';
+import type {
+  FeatureFlagEvaluationContext,
+  FeatureFlagService,
+} from '@/core/contracts/feature-flags';
 
 export function parseStaticFlagsEnv(
   raw: string | undefined,
@@ -35,7 +37,7 @@ export class StaticFeatureFlagService implements FeatureFlagService {
 
   async isEnabled(
     flag: string,
-    _context: AuthorizationContext,
+    _context: FeatureFlagEvaluationContext,
   ): Promise<boolean> {
     return this.flagMap.get(flag) ?? false;
   }

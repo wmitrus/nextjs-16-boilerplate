@@ -1,5 +1,7 @@
-import type { AuthorizationContext } from '@/core/contracts/authorization';
-import type { FeatureFlagService } from '@/core/contracts/feature-flags';
+import type {
+  FeatureFlagEvaluationContext,
+  FeatureFlagService,
+} from '@/core/contracts/feature-flags';
 import { resolveServerLogger } from '@/core/logger/di';
 
 const logger = resolveServerLogger().child({
@@ -13,7 +15,7 @@ export class ResilientFeatureFlagService implements FeatureFlagService {
 
   async isEnabled(
     flag: string,
-    context: AuthorizationContext,
+    context: FeatureFlagEvaluationContext,
   ): Promise<boolean> {
     try {
       return await this.delegate.isEnabled(flag, context);

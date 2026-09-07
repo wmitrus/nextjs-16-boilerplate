@@ -14,7 +14,7 @@ export interface RequestScopedContext {
    * Population is the responsibility of the specific RSC page, server action,
    * or route handler that knows which named flags are relevant.
    *
-   * Use FeatureFlagService.isEnabled(flag, authorizationContext) at the point
+   * Use FeatureFlagService.isEnabled(flag, evaluationContext) at the point
    * of consumption. Pre-populate this field only when passing a known flag
    * map explicitly through component props or action context.
    *

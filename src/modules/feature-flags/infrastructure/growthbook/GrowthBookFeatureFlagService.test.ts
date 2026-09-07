@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import type { AuthorizationContext } from '@/core/contracts/authorization';
+import {
+  internalOrganizationIdFromOrgRow,
+  internalUserIdFromUsersRow,
+  parentTenantIdFromOrgRow,
+} from '@/core/contracts/canonical-ids.provenance';
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 
 /**
  * Unit tests for GrowthBookFeatureFlagService using a full module mock.
@@ -28,11 +33,17 @@ vi.mock('@growthbook/growthbook', () => ({
 
 import { GrowthBookFeatureFlagService } from './GrowthBookFeatureFlagService';
 
-const ctx: AuthorizationContext = {
-  tenant: { tenantId: 'tenant-1' },
-  subject: { id: 'user-1' },
-  resource: { type: 'feature' },
-  action: 'feature:read',
+const ORG_A = '11111111-1111-1111-1111-111111111111';
+const TENANT_A = '22222222-2222-2222-2222-222222222222';
+const USER_1 = '33333333-3333-3333-3333-333333333333';
+
+const ctx: FeatureFlagEvaluationContext = {
+  scope: {
+    kind: 'organization',
+    organizationId: internalOrganizationIdFromOrgRow(ORG_A),
+    tenantId: parentTenantIdFromOrgRow(TENANT_A),
+  },
+  subject: { kind: 'user', userId: internalUserIdFromUsersRow(USER_1) },
 };
 
 describe('GrowthBookFeatureFlagService', () => {
@@ -92,7 +103,7 @@ describe('GrowthBookFeatureFlagService', () => {
     expect(await svc.isEnabled('enabled-flag', ctx)).toBe(true);
   });
 
-  it('passes flag key and per-request user attributes to isOn', async () => {
+  it('passes flag key, subject id, and the canonical OrganizationId as company for organization scope', async () => {
     const svc = new GrowthBookFeatureFlagService({
       clientKey: 'sdk-key-attrs-test',
       apiHost: 'https://cdn.growthbook.io',
@@ -102,10 +113,59 @@ describe('GrowthBookFeatureFlagService', () => {
 
     expect(mockClient.isOn).toHaveBeenCalledWith('any-flag', {
       attributes: {
-        id: 'user-1',
-        company: 'tenant-1',
+        id: USER_1,
+        company: ORG_A,
       },
     });
+  });
+
+  it('does not use TenantId for company (locked FF·D decision)', async () => {
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-no-tenant-company',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+
+    await svc.isEnabled('any-flag', ctx);
+
+    const call = mockClient.isOn.mock.calls[0] as
+      | [string, { attributes: Record<string, unknown> }]
+      | undefined;
+    expect(call?.[1].attributes.company).not.toBe(TENANT_A);
+  });
+
+  it('uses the stable systemSubjectId as id for a system subject', async () => {
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-system-subject',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+    const systemCtx: FeatureFlagEvaluationContext = {
+      scope: { kind: 'platform-global' },
+      subject: { kind: 'system', systemSubjectId: 'operational-switch' },
+    };
+
+    await svc.isEnabled('any-flag', systemCtx);
+
+    expect(mockClient.isOn).toHaveBeenCalledWith('any-flag', {
+      attributes: { id: 'operational-switch' },
+    });
+  });
+
+  it('does not fabricate a company attribute for platform-global scope', async () => {
+    const svc = new GrowthBookFeatureFlagService({
+      clientKey: 'sdk-key-platform-global',
+      apiHost: 'https://cdn.growthbook.io',
+    });
+    const platformCtx: FeatureFlagEvaluationContext = {
+      scope: { kind: 'platform-global' },
+      subject: { kind: 'system', systemSubjectId: 'operational-switch' },
+    };
+
+    await svc.isEnabled('any-flag', platformCtx);
+
+    const call = mockClient.isOn.mock.calls[0] as
+      | [string, { attributes: Record<string, unknown> }]
+      | undefined;
+    expect(call?.[1].attributes).not.toHaveProperty('company');
   });
 
   it('creates separate client instances for different apiHost values with same clientKey', async () => {

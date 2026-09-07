@@ -2,14 +2,15 @@
  * A platform-level operational switch: a boolean an operator can flip to
  * degrade or re-tighten a control at runtime.
  *
- * Deliberately **not** `FeatureFlagService`. That contract takes an
- * `AuthorizationContext` (tenant + subject + resource + action), and the
- * controls these switches guard run *before* authentication -- sign-in,
- * sign-up, password reset. There is no tenant and no subject to pass, and
- * fabricating one at each call site is exactly the ad-hoc feature-flag
- * coupling this repository's architecture rules forbid. Translating this
- * port onto the tenant-scoped flag contract is an adapter's job, done once,
- * not the caller's.
+ * Deliberately **not** `FeatureFlagService`. That contract takes a
+ * `FeatureFlagEvaluationContext` (organization/platform-global scope +
+ * user/system subject), and the controls these switches guard run *before*
+ * authentication -- sign-in, sign-up, password reset. There is no real
+ * tenant/organization and no real subject to pass, and fabricating one at
+ * each call site is exactly the ad-hoc feature-flag coupling this
+ * repository's architecture rules forbid. Translating this port onto the
+ * canonical flag contract (an explicit `platform-global` scope + a stable
+ * `system` subject) is an adapter's job, done once, not the caller's.
  *
  * ## Resolution order and why the override is loosen-only
  *

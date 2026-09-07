@@ -10,9 +10,14 @@ The feature flag system is a contract-first module. Application code never impor
 
 ```typescript
 interface FeatureFlagService {
-  isEnabled(flag: string, context: AuthorizationContext): Promise<boolean>;
+  isEnabled(
+    flag: string,
+    context: FeatureFlagEvaluationContext,
+  ): Promise<boolean>;
 }
 ```
+
+`FeatureFlagEvaluationContext` (OZI-71 FF·D) is provider-neutral: `scope` is either `{ kind: 'organization', organizationId, tenantId }` or `{ kind: 'platform-global' }` — the DB provider's containment key, with the `(organizationId, tenantId)` tuple proven valid before any row can match. `subject` is `{ kind: 'user', userId }` or `{ kind: 'system', systemSubjectId }` — what a targeting provider (GrowthBook) hashes/buckets on. `attributes?` are optional additional provider-neutral facts and are never authority.
 
 **Fail-safe guarantee**: every adapter registered through the factory is wrapped in `ResilientFeatureFlagService`. If the underlying provider throws (DB unreachable, SDK timeout, network error), `isEnabled()` logs a warning and returns `false`. Callers must never wrap flag evaluation in `try/catch`.
 
@@ -54,7 +59,7 @@ The active adapter is selected at startup via `FEATURE_FLAG_PROVIDER`. Switching
 
 Flags are read from `FEATURE_FLAGS_STATIC` at server startup. The adapter parses the string once and stores the result in memory. No DB. No network. No runtime updates — a server restart is required to change flags.
 
-Context attributes (`tenantId`, `userId`) are ignored. All requests see the same flag values.
+The `FeatureFlagEvaluationContext` (scope, subject) is ignored entirely. All requests see the same flag values.
 
 ### When to use
 
@@ -87,9 +92,9 @@ Format: `flag-key=true` or `flag-key=false`, separated by commas. Spaces around 
 
 ### How it works
 
-Flags are stored in the `feature_flags` Postgres table and queried on every `isEnabled()` call. Flags can be global (apply to all tenants) or scoped to a specific tenant.
+Flags are stored in the `feature_flags` Postgres table and queried on every `isEnabled()` call. Flags can be global (`ownership_state = 'intentional_global'`) or scoped to a specific organization (`ownership_state = 'canonical_organization'`).
 
-**Tenant resolution priority**: if a row exists for the current `tenantId`, that row wins over the global row. If neither exists, the flag returns `false`.
+**Resolution priority (OZI-71 FF·D, plan §14a.7)**: for `organization` scope, the `(organizationId, tenantId)` tuple is proven valid FIRST (a real `organizations` row where `id = organizationId AND tenant_id = tenantId`) — an invalid tuple returns `false` with no fallback. Only then: a `canonical_organization` row for that exact `organizationId` wins over an `intentional_global` row; if neither exists, `false`. For `platform-global` scope, only `intentional_global` rows resolve. `unresolved_legacy` and `quarantined` rows never participate in any scope. The legacy `tenant_id` column still exists (a dual-written rollback shadow — see §4's schema table) but is no longer read by this provider.
 
 ### When to use
 
@@ -108,17 +113,19 @@ DATABASE_URL=postgresql://user:pass@host:5432/dbname
 
 Table: `feature_flags`
 
-| Column        | Type                             | Notes                                                   |
-| ------------- | -------------------------------- | ------------------------------------------------------- |
-| `id`          | `uuid`                           | Primary key, auto-generated                             |
-| `key`         | `text NOT NULL`                  | Flag identifier, e.g. `demo.new-dashboard-ui`           |
-| `tenant_id`   | `text NULL`                      | `NULL` = global flag; non-null = tenant-scoped override |
-| `enabled`     | `boolean NOT NULL DEFAULT false` | Flag state                                              |
-| `description` | `text NULL`                      | Optional human-readable description                     |
-| `created_at`  | `timestamptz`                    | Auto-set on insert                                      |
-| `updated_at`  | `timestamptz`                    | Auto-set on insert, updated on change                   |
+| Column            | Type                                        | Notes                                                                                                                           |
+| ----------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | `uuid`                                      | Primary key, auto-generated                                                                                                     |
+| `key`             | `text NOT NULL`                             | Flag identifier, e.g. `demo.new-dashboard-ui`                                                                                   |
+| `tenant_id`       | `text NULL`                                 | Legacy scoping key. Dual-written for rollback (FF·B); no longer read by `isEnabled()` (FF·D).                                   |
+| `organization_id` | `uuid NULL`                                 | Canonical scoping key, FK to `organizations` (`ON DELETE CASCADE`). `NULL` unless `ownership_state = 'canonical_organization'`. |
+| `ownership_state` | `text NOT NULL DEFAULT 'unresolved_legacy'` | `canonical_organization` \| `intentional_global` \| `unresolved_legacy` \| `quarantined`.                                       |
+| `enabled`         | `boolean NOT NULL DEFAULT false`            | Flag state                                                                                                                      |
+| `description`     | `text NULL`                                 | Optional human-readable description                                                                                             |
+| `created_at`      | `timestamptz`                               | Auto-set on insert                                                                                                              |
+| `updated_at`      | `timestamptz`                               | Auto-set on insert, updated on change                                                                                           |
 
-Unique constraint: `(key, tenant_id)` with `NULLS NOT DISTINCT` — each `(key, NULL)` pair is unique, and each `(key, specific_tenant_id)` pair is unique.
+Unique constraints: legacy `(key, tenant_id)` with `NULLS NOT DISTINCT` (still enforced, no longer authoritative for reads); canonical `(key, organization_id)` scoped to `canonical_organization` rows; global `(key)` scoped to `intentional_global` rows (OZI-71 FF·D).
 
 ### Running migrations
 
@@ -130,12 +137,13 @@ pnpm db:pglite:migrate
 
 ### Behavior
 
-| Scenario                                     | Result                              |
-| -------------------------------------------- | ----------------------------------- |
-| Tenant-scoped row exists                     | returns that row's `enabled` value  |
-| Only global row (`tenant_id IS NULL`) exists | returns global `enabled` value      |
-| No rows for this flag                        | `false`                             |
-| DB unreachable                               | `false` (fail-safe, warning logged) |
+| Scenario                                                                       | Result                              |
+| ------------------------------------------------------------------------------ | ----------------------------------- |
+| Invalid `(organizationId, tenantId)` tuple                                     | `false` — no fallback               |
+| `canonical_organization` row for that organization                             | returns that row's `enabled` value  |
+| Only `intentional_global` row exists (valid tuple, or `platform-global` scope) | returns global `enabled` value      |
+| No rows for this flag                                                          | `false`                             |
+| DB unreachable                                                                 | `false` (fail-safe, warning logged) |
 
 ---
 
@@ -194,16 +202,16 @@ GROWTHBOOK_API_HOST=https://cdn.growthbook.io   # optional, this is the default
 
 ### Context attributes passed to GrowthBook
 
-Each `isEnabled()` call passes the following attributes from `AuthorizationContext`:
+Each `isEnabled()` call passes the following attributes from `FeatureFlagEvaluationContext` (OZI-71 FF·D — locked decision, GrowthBook gate closed as a direct cutover):
 
 ```typescript
 {
-  id: context.subject.id,       // ← user ID
-  company: context.tenant.tenantId,  // ← tenant ID
+  id: context.subject.kind === 'user' ? context.subject.userId : context.subject.systemSubjectId,
+  company: context.scope.kind === 'organization' ? context.scope.organizationId : undefined, // omitted for platform-global — never fabricated
 }
 ```
 
-GrowthBook targeting rules can match on `id` (for user-level rollouts) or `company` (for tenant-level rollouts).
+GrowthBook targeting rules can match on `id` (for user-level rollouts) or `company` (for organization-level rollouts). `company` is the canonical internal `OrganizationId` — never a legacy tenant id, and no `companyLegacy` bridge exists.
 
 ### Freshness guarantees
 

@@ -1,5 +1,7 @@
-import type { AuthorizationContext } from '@/core/contracts/authorization';
-import type { FeatureFlagService } from '@/core/contracts/feature-flags';
+import type {
+  FeatureFlagEvaluationContext,
+  FeatureFlagService,
+} from '@/core/contracts/feature-flags';
 
 export class InMemoryFeatureFlagService implements FeatureFlagService {
   private readonly flagMap: Map<string, boolean>;
@@ -10,7 +12,7 @@ export class InMemoryFeatureFlagService implements FeatureFlagService {
 
   async isEnabled(
     flag: string,
-    _context: AuthorizationContext,
+    _context: FeatureFlagEvaluationContext,
   ): Promise<boolean> {
     return this.flagMap.get(flag) ?? false;
   }

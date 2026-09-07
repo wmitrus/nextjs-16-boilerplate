@@ -10,18 +10,37 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, tenantId: null };
-const TENANT_SCOPE = { isPlatformAdmin: false, tenantId: 'acme' };
+const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, organizationId: null };
+const ORG_SCOPE = { isPlatformAdmin: false, organizationId: 'acme-org' };
 
 const FLAG = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   key: 'my-flag',
   tenantId: null,
+  organizationId: null,
   enabled: true,
   description: 'a flag',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
+
+/** A page response for a given flags array — total defaults to the array's
+ * own length (an unpaginated single page), overridable for pagination tests. */
+function pageResponse(
+  flags: unknown[],
+  scope: typeof PLATFORM_ADMIN_SCOPE | typeof ORG_SCOPE,
+  overrides: { total?: number; offset?: number; activeProvider?: string } = {},
+) {
+  return jsonResponse({
+    data: {
+      flags,
+      total: overrides.total ?? flags.length,
+      offset: overrides.offset ?? 0,
+      activeProvider: overrides.activeProvider ?? 'db',
+      scope,
+    },
+  });
+}
 
 describe('FeatureFlagsClient', () => {
   beforeEach(() => {
@@ -30,13 +49,7 @@ describe('FeatureFlagsClient', () => {
 
   it('lists flags and shows the active provider on load', async () => {
     vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({
-        data: {
-          flags: [FLAG],
-          activeProvider: 'db',
-          scope: PLATFORM_ADMIN_SCOPE,
-        },
-      }),
+      pageResponse([FLAG], PLATFORM_ADMIN_SCOPE),
     );
 
     render(<FeatureFlagsClient />);
@@ -47,13 +60,7 @@ describe('FeatureFlagsClient', () => {
 
   it('disables mutation controls and warns when the active provider is not db', async () => {
     vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({
-        data: {
-          flags: [FLAG],
-          activeProvider: 'static',
-          scope: PLATFORM_ADMIN_SCOPE,
-        },
-      }),
+      pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, { activeProvider: 'static' }),
     );
 
     render(<FeatureFlagsClient />);
@@ -66,25 +73,9 @@ describe('FeatureFlagsClient', () => {
 
   it('creates a flag and refetches the list on success', async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
-      )
+      .mockResolvedValueOnce(pageResponse([], PLATFORM_ADMIN_SCOPE))
       .mockResolvedValueOnce(jsonResponse({ data: { flag: FLAG } }, 201))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [FLAG],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
-      );
+      .mockResolvedValueOnce(pageResponse([FLAG], PLATFORM_ADMIN_SCOPE));
 
     render(<FeatureFlagsClient />);
 
@@ -106,15 +97,7 @@ describe('FeatureFlagsClient', () => {
 
   it('surfaces the duplicate-flag error message', async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
-      )
+      .mockResolvedValueOnce(pageResponse([], PLATFORM_ADMIN_SCOPE))
       .mockResolvedValueOnce(
         jsonResponse(
           {
@@ -145,26 +128,12 @@ describe('FeatureFlagsClient', () => {
 
   it('toggles a flag and refetches', async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [FLAG],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
-      )
+      .mockResolvedValueOnce(pageResponse([FLAG], PLATFORM_ADMIN_SCOPE))
       .mockResolvedValueOnce(
         jsonResponse({ data: { flag: { ...FLAG, enabled: false } } }),
       )
       .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [{ ...FLAG, enabled: false }],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
+        pageResponse([{ ...FLAG, enabled: false }], PLATFORM_ADMIN_SCOPE),
       );
 
     render(<FeatureFlagsClient />);
@@ -185,15 +154,7 @@ describe('FeatureFlagsClient', () => {
 
   it('surfaces a toggle failure instead of silently reverting to On/Off', async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [FLAG],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
-      )
+      .mockResolvedValueOnce(pageResponse([FLAG], PLATFORM_ADMIN_SCOPE))
       .mockResolvedValueOnce(
         jsonResponse({ error: 'Forbidden', code: 'FORBIDDEN' }, 403),
       );
@@ -210,25 +171,9 @@ describe('FeatureFlagsClient', () => {
 
   it('deletes a flag after confirmation', async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [FLAG],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
-      )
+      .mockResolvedValueOnce(pageResponse([FLAG], PLATFORM_ADMIN_SCOPE))
       .mockResolvedValueOnce(jsonResponse({ data: { deleted: true } }))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            flags: [],
-            activeProvider: 'db',
-            scope: PLATFORM_ADMIN_SCOPE,
-          },
-        }),
-      );
+      .mockResolvedValueOnce(pageResponse([], PLATFORM_ADMIN_SCOPE));
 
     render(<FeatureFlagsClient />);
     await screen.findByText('my-flag');
@@ -244,29 +189,282 @@ describe('FeatureFlagsClient', () => {
     );
   });
 
+  describe('pagination', () => {
+    const manyFlags = Array.from({ length: 25 }, (_, i) => ({
+      ...FLAG,
+      id: `flag-${i}`,
+      key: `flag-${i}`,
+    }));
+
+    it('requests limit=25 (PAGE_SIZE) and offset=0 on initial load', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, { total: 60 }),
+      );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('flag-0');
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/admin/feature-flags?limit=25&offset=0',
+      );
+    });
+
+    it('shows "Showing X–Y of Z" and enables Next when more pages exist', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, { total: 60 }),
+      );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('flag-0');
+
+      expect(screen.getByText('Showing 1–25 of 60')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    });
+
+    it('Next advances offset by PAGE_SIZE and refetches', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, { total: 60 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, {
+            total: 60,
+            offset: 25,
+          }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('flag-0');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+      expect(
+        await screen.findByText('Showing 26–50 of 60'),
+      ).toBeInTheDocument();
+    });
+
+    it('Next is disabled when the current page already covers the total', async () => {
+      // Next's disabled check is `offset(0, client-tracked) + flags.length
+      // >= total` -- a single page whose flags already cover `total` starts
+      // disabled with no navigation needed.
+      const tenFlags = manyFlags.slice(0, 10);
+      vi.mocked(fetch).mockResolvedValue(
+        pageResponse(tenFlags, PLATFORM_ADMIN_SCOPE, { total: 10 }),
+      );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('flag-0');
+      expect(screen.getByText('Showing 1–10 of 10')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    });
+
+    it('Next then Previous returns to offset 0 (round trip)', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, { total: 35 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags.slice(0, 10), PLATFORM_ADMIN_SCOPE, {
+            total: 35,
+            offset: 25,
+          }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, { total: 35 }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('flag-0');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+      await screen.findByText('Showing 26–35 of 35');
+      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=0',
+        ),
+      );
+      await screen.findByText('Showing 1–25 of 35');
+    });
+
+    it('auto-corrects to offset 0 when the current page falls out of range after a shrink', async () => {
+      // On page 2 (offset 25) when a delete elsewhere shrinks the total to
+      // 25 -- the stale offset=25 refetch comes back empty, so the client
+      // must snap to offset 0 and refetch rather than render the
+      // out-of-range page.
+      const pageTwoFlag = { ...FLAG, id: 'flag-p2', key: 'flag-p2' };
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, { total: 50 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([pageTwoFlag], PLATFORM_ADMIN_SCOPE, {
+            total: 50,
+            offset: 25,
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ data: { deleted: true } }))
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 25, offset: 25 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, {
+            total: 25,
+            offset: 0,
+          }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('my-flag');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('flag-p2');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=0',
+        ),
+      );
+      expect(await screen.findByText('Showing 1–25 of 25')).toBeInTheDocument();
+      expect(screen.queryByText('Showing 26–25 of 25')).not.toBeInTheDocument();
+    });
+
+    it('auto-corrects to the new last page when the total shrinks to a non-zero page', async () => {
+      // offset 50 goes stale when the total shrinks to 40 -- the last real
+      // page starts at 25 (floor((40-1)/25)*25), not 0.
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, { total: 100 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, {
+            total: 100,
+            offset: 25,
+          }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, {
+            total: 100,
+            offset: 50,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({ data: { flag: { ...FLAG, enabled: false } } }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 40, offset: 50 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, {
+            total: 40,
+            offset: 25,
+          }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('my-flag');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=50',
+        ),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'On' }));
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+      expect(
+        await screen.findByText('Showing 26–40 of 40'),
+      ).toBeInTheDocument();
+    });
+
+    it('corrects to offset 0 with no negative offset when the total becomes zero', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, { total: 50 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, {
+            total: 50,
+            offset: 25,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({ data: { flag: { ...FLAG, enabled: false } } }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 0, offset: 25 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 0, offset: 0 }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('my-flag');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'On' }));
+
+      expect(await screen.findByText('No results')).toBeInTheDocument();
+      expect(fetch).toHaveBeenLastCalledWith(
+        '/api/admin/feature-flags?limit=25&offset=0',
+      );
+      for (const call of vi.mocked(fetch).mock.calls) {
+        expect(String(call[0])).not.toMatch(/offset=-/);
+      }
+    });
+  });
+
   describe('SEC-26 follow-up: ABAC-authorized non-platform-admin scope', () => {
     const ownFlag = {
       ...FLAG,
       id: 'own-flag-id',
       key: 'own-flag',
-      tenantId: 'acme',
+      organizationId: 'acme-org',
     };
     const globalFlag = {
       ...FLAG,
       id: 'global-flag-id',
       key: 'global-flag',
-      tenantId: null,
+      organizationId: null,
     };
 
     it('marks a global row read-only and disables its mutation controls', async () => {
       vi.mocked(fetch).mockResolvedValue(
-        jsonResponse({
-          data: {
-            flags: [ownFlag, globalFlag],
-            activeProvider: 'db',
-            scope: TENANT_SCOPE,
-          },
-        }),
+        pageResponse([ownFlag, globalFlag], ORG_SCOPE),
       );
 
       render(<FeatureFlagsClient />);
@@ -296,23 +494,19 @@ describe('FeatureFlagsClient', () => {
       );
     });
 
-    it("locks the create form's Tenant ID field to the caller's own tenant", async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        jsonResponse({
-          data: { flags: [], activeProvider: 'db', scope: TENANT_SCOPE },
-        }),
-      );
+    it("locks the create form's Organization ID field to the caller's own organization", async () => {
+      vi.mocked(fetch).mockResolvedValue(pageResponse([], ORG_SCOPE));
 
       render(<FeatureFlagsClient />);
       await waitFor(() =>
         expect(screen.getByText('No feature flags found.')).toBeInTheDocument(),
       );
 
-      const tenantInput = screen.getByLabelText(
-        'Tenant ID (your tenant)',
+      const orgInput = screen.getByLabelText(
+        'Organization ID (your organization)',
       ) as HTMLInputElement;
-      expect(tenantInput).toBeDisabled();
-      expect(tenantInput.value).toBe('acme');
+      expect(orgInput).toBeDisabled();
+      expect(orgInput.value).toBe('acme-org');
     });
   });
 });

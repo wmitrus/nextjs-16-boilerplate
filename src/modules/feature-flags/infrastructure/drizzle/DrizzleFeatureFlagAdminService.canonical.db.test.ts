@@ -10,6 +10,7 @@ import {
 import {
   DrizzleFeatureFlagAdminService,
   type CanonicalFeatureFlagWriteFacts,
+  type FeatureFlagAdminScope,
 } from './DrizzleFeatureFlagAdminService';
 import { featureFlagsTable } from './schema';
 
@@ -162,7 +163,11 @@ describe('DrizzleFeatureFlagAdminService — FF·B canonical dual-write (real DB
       org(ORG_A1, TENANT_A),
     );
 
-    await svc.update(created.id, { enabled: true, description: 'x' }, null);
+    await svc.update(created.id, { enabled: true, description: 'x' }, {
+      kind: 'organization',
+      organizationId: ORG_A1,
+      tenantId: TENANT_A,
+    } as FeatureFlagAdminScope);
 
     const rows = await allRows();
     expect(rows).toHaveLength(1);
@@ -192,10 +197,12 @@ describe('DrizzleFeatureFlagAdminService — FF·B canonical dual-write (real DB
     });
   });
 
-  // Symmetric legacy/canonical semantic invariant: until FF·D `tenant_id IS
-  // NULL` is the LEGACY global classification, so it must not carry a canonical
-  // organization owner (the row would read as global via the legacy path while
-  // being org-only canonically). See the inverse case (`{kind:'global'}` + a
+  // Symmetric legacy/canonical write-time invariant (create()'s
+  // legacyIsGlobal !== canonicalIsGlobal guard, unconditionally enforced,
+  // not just "until FF·D"): a legacy `tenant_id IS NULL` row must not carry
+  // a canonical organization owner — that combination would read as global
+  // via the Audit subsystem's still-legacy tenant_id contract while being
+  // org-only canonically. See the inverse case (`{kind:'global'}` + a
   // non-null legacy key) in `DrizzleFeatureFlagAdminService.db.test.ts`.
   it('semantic mismatch: canonical organization + NULL legacy tenant_id -> invariant, zero rows', async () => {
     await expect(

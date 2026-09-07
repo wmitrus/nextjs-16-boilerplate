@@ -17,10 +17,10 @@ const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
-  listAll: vi.fn(),
-  listForTenant: vi.fn(),
+  list: vi.fn(),
   create: vi.fn(),
   resolveCanonical: vi.fn(),
+  resolveScope: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
   container: {
@@ -60,6 +60,10 @@ vi.mock('@/core/env', () => ({
   },
 }));
 
+vi.mock('./feature-flags-admin-scope', () => ({
+  resolveFeatureFlagsAdminScope: mocks.resolveScope,
+}));
+
 vi.mock('./feature-flags-canonical-write', () => ({
   resolveCanonicalFeatureFlagWrite: mocks.resolveCanonical,
 }));
@@ -68,8 +72,10 @@ vi.mock('@/security/actions/record-admin-audit-event', () => ({
   recordAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
-function makeGetRequest() {
-  return new NextRequest('http://localhost/api/admin/feature-flags');
+function makeGetRequest(queryString = '') {
+  return new NextRequest(
+    `http://localhost/api/admin/feature-flags${queryString}`,
+  );
 }
 
 function makePostRequest(body?: unknown) {
@@ -86,6 +92,7 @@ const TEST_FLAG = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   key: 'my-flag',
   tenantId: null,
+  organizationId: null,
   enabled: true,
   description: null,
   createdAt: '2026-01-01T00:00:00.000Z',
@@ -113,8 +120,7 @@ describe('GET /api/admin/feature-flags', () => {
     mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
     vi.mocked(DrizzleFeatureFlagAdminService).mockImplementation(function () {
       return {
-        listAll: mocks.listAll,
-        listForTenant: mocks.listForTenant,
+        list: mocks.list,
         create: mocks.create,
       } as unknown as DrizzleFeatureFlagAdminService;
     });
@@ -145,10 +151,11 @@ describe('GET /api/admin/feature-flags', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 200 with flags and activeProvider for env-based admin, using the unscoped listAll', async () => {
+  it('returns 200 with flags, total, and activeProvider for a platform admin, using platform-global scope and the default page', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.listAll.mockResolvedValue([TEST_FLAG]);
+    mocks.resolveScope.mockResolvedValue({ kind: 'platform-global' });
+    mocks.list.mockResolvedValue({ flags: [TEST_FLAG], total: 1 });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
@@ -157,40 +164,125 @@ describe('GET /api/admin/feature-flags', () => {
     const body = (await res.json()) as {
       data: {
         flags: unknown[];
+        total: number;
+        limit: number;
+        offset: number;
         activeProvider: string;
-        scope: { isPlatformAdmin: boolean; tenantId: string | null };
+        scope: { isPlatformAdmin: boolean; organizationId: string | null };
       };
     };
     expect(body.data.flags).toHaveLength(1);
+    expect(body.data.total).toBe(1);
+    expect(body.data.limit).toBe(50);
+    expect(body.data.offset).toBe(0);
     expect(body.data.activeProvider).toBe('db');
-    expect(mocks.listAll).toHaveBeenCalledTimes(1);
-    expect(mocks.listForTenant).not.toHaveBeenCalled();
-    expect(body.data.scope).toEqual({ isPlatformAdmin: true, tenantId: null });
+    expect(mocks.list).toHaveBeenCalledWith(
+      { kind: 'platform-global' },
+      { limit: 50, offset: 0 },
+    );
+    expect(body.data.scope).toEqual({
+      isPlatformAdmin: true,
+      organizationId: null,
+    });
   });
 
-  it('SEC-26: uses the tenant-scoped listForTenant for an ABAC-authorized non-platform-admin, never the unscoped listAll', async () => {
+  it('SEC-26: uses organization scope for an ABAC-authorized non-platform-admin', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
-    mocks.listForTenant.mockResolvedValue([TEST_FLAG]);
+    mocks.resolveScope.mockResolvedValue(ORG_FACTS);
+    mocks.list.mockResolvedValue({ flags: [TEST_FLAG], total: 1 });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
     expect(res.status).toBe(200);
-    expect(mocks.listForTenant).toHaveBeenCalledWith('tenant_test_1');
-    expect(mocks.listAll).not.toHaveBeenCalled();
+    expect(mocks.list).toHaveBeenCalledWith(ORG_FACTS, {
+      limit: 50,
+      offset: 0,
+    });
 
     const body = (await res.json()) as {
-      data: { scope: { isPlatformAdmin: boolean; tenantId: string | null } };
+      data: {
+        scope: { isPlatformAdmin: boolean; organizationId: string | null };
+      };
     };
-    // SEC-26 follow-up: the client needs this to render global rows as
-    // read-only for a non-platform-admin, since listForTenant() above
-    // includes global rows but the caller cannot mutate them.
+    // SEC-26 follow-up: the client needs this to render the intentional_global
+    // overlay as read-only for a non-platform-admin.
     expect(body.data.scope).toEqual({
       isPlatformAdmin: false,
-      tenantId: 'tenant_test_1',
+      organizationId: ORG_FACTS.organizationId,
+    });
+  });
+
+  it('returns an empty page (not a 403) when scope derivation legitimately denies membership', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(false);
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { GET } = await import('./route');
+    const res = await GET(makeGetRequest(), mockContext);
+    expect(res.status).toBe(200);
+    expect(mocks.list).not.toHaveBeenCalled();
+
+    const body = (await res.json()) as {
+      data: { flags: unknown[]; total: number };
+    };
+    expect(body.data.flags).toHaveLength(0);
+    expect(body.data.total).toBe(0);
+  });
+
+  describe('pagination', () => {
+    beforeEach(() => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+      mocks.isEnvAdmin.mockReturnValue(true);
+      mocks.resolveScope.mockResolvedValue({ kind: 'platform-global' });
+      mocks.list.mockResolvedValue({ flags: [], total: 0 });
+    });
+
+    it('parses client-supplied limit/offset and passes them through', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=10&offset=20'), mockContext);
+      expect(res.status).toBe(200);
+      expect(mocks.list).toHaveBeenCalledWith(
+        { kind: 'platform-global' },
+        { limit: 10, offset: 20 },
+      );
+    });
+
+    it('clamps a client-requested limit above 200 down to 200 -- server-bounded, not client-trusted', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=99999'), mockContext);
+      expect(res.status).toBe(200);
+      expect(mocks.list).toHaveBeenCalledWith(
+        { kind: 'platform-global' },
+        { limit: 200, offset: 0 },
+      );
+    });
+
+    it('rejects a negative offset with 400 before any list() call', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?offset=-1'), mockContext);
+      expect(res.status).toBe(400);
+      expect(mocks.list).not.toHaveBeenCalled();
+    });
+
+    it('rejects a zero/negative limit with 400 before any list() call', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=0'), mockContext);
+      expect(res.status).toBe(400);
+      expect(mocks.list).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-numeric limit/offset with 400', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=abc'), mockContext);
+      expect(res.status).toBe(400);
+      expect(mocks.list).not.toHaveBeenCalled();
     });
   });
 });
@@ -212,8 +304,7 @@ describe('POST /api/admin/feature-flags', () => {
     });
     vi.mocked(DrizzleFeatureFlagAdminService).mockImplementation(function () {
       return {
-        listAll: mocks.listAll,
-        listForTenant: mocks.listForTenant,
+        list: mocks.list,
         create: mocks.create,
       } as unknown as DrizzleFeatureFlagAdminService;
     });
@@ -229,7 +320,7 @@ describe('POST /api/admin/feature-flags', () => {
 
     const { POST } = await import('./route');
     const res = await POST(
-      makePostRequest({ key: 'x', tenantId: null, enabled: true }),
+      makePostRequest({ key: 'x', organizationId: null, enabled: true }),
       mockContext,
     );
     expect(res.status).toBe(401);
@@ -244,7 +335,7 @@ describe('POST /api/admin/feature-flags', () => {
 
     const { POST } = await import('./route');
     const res = await POST(
-      makePostRequest({ key: 'x', tenantId: null, enabled: true }),
+      makePostRequest({ key: 'x', organizationId: null, enabled: true }),
       mockContext,
     );
     expect(res.status).toBe(403);
@@ -259,6 +350,50 @@ describe('POST /api/admin/feature-flags', () => {
     expect(res.status).toBe(400);
   });
 
+  it('REGRESSION: rejects a legacy tenantId-shaped request instead of silently treating it as a platform-global create', async () => {
+    // z.object silently STRIPS unknown keys, so `tenantId` (the pre-rename
+    // field name) would vanish and `organizationId` would parse as
+    // `undefined` -- for a platform admin, `organizationId ?? null` reads as
+    // an EXPLICIT platform-global request. `createBodySchema` must be a
+    // `strictObject` so this fails closed with 400 instead.
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+
+    const { POST } = await import('./route');
+    const res = await POST(
+      makePostRequest({
+        key: 'legacy-shaped',
+        tenantId: ORG_FACTS.organizationId,
+        enabled: true,
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(400);
+    expect(mocks.resolveCanonical).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('REGRESSION: rejects an unknown extra field alongside a valid payload (fail-closed, not best-effort)', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+
+    const { POST } = await import('./route');
+    const res = await POST(
+      makePostRequest({
+        key: 'x',
+        organizationId: null,
+        enabled: true,
+        scope: { isPlatformAdmin: true, organizationId: null },
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(400);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
   it('returns 409 when the flag key/tenant combination already exists', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
@@ -270,7 +405,7 @@ describe('POST /api/admin/feature-flags', () => {
 
     const { POST } = await import('./route');
     const res = await POST(
-      makePostRequest({ key: 'dup', tenantId: null, enabled: true }),
+      makePostRequest({ key: 'dup', organizationId: null, enabled: true }),
       mockContext,
     );
     expect(res.status).toBe(409);
@@ -289,7 +424,7 @@ describe('POST /api/admin/feature-flags', () => {
 
     const { POST } = await import('./route');
     const res = await POST(
-      makePostRequest({ key: 'my-flag', tenantId: null, enabled: true }),
+      makePostRequest({ key: 'my-flag', organizationId: null, enabled: true }),
       mockContext,
     );
     expect(res.status).toBe(201);
@@ -306,29 +441,72 @@ describe('POST /api/admin/feature-flags', () => {
     );
   });
 
-  it('attributes the audit event to the created flag’s own tenant, not the platform admin’s active tenant', async () => {
-    // The caller's active tenant is 'tenant_test_1' (makeAllowedProvisioningAccess's
-    // default), but a platform admin can create a flag for a different tenant
-    // entirely -- the audit event must reflect the flag's real scope, or the
-    // target tenant never sees the mutation in its own trail while an
-    // unrelated tenant sees an event that never happened to it.
+  it('REGRESSION: audit event uses the flag’s LEGACY tenant_id (Audit subsystem compatibility key), never canonical Feature Flag authority', async () => {
+    // OZI-71 FF·D final review — the Audit subsystem (audit_events /
+    // audit_log_settings) has NOT undergone AUD·A-D: `resolveEffectiveAuditSetting`
+    // still matches by exact string equality against
+    // `audit_log_settings.tenant_id`, and `audit_events.tenant_id` stores
+    // that same legacy key. Feeding it the canonical `TenantId` instead
+    // would resolve settings against a value that predates and may not
+    // match any legacy-configured override -- crossing the FF/AUD package
+    // boundary before AUD's own coordinated cutover. This test proves the
+    // two concepts stay independent: canonical resolution
+    // (`resolveCanonicalFeatureFlagWrite`) still runs and its facts still
+    // reach `service.create` unchanged (Feature Flag authorization is
+    // untouched), while the audit event's `tenantId` comes from the
+    // returned DTO's legacy `tenant_id` shadow value -- deliberately
+    // DIFFERENT from the canonical parent tenant here, to prove the audit
+    // path doesn't quietly read the canonical value instead.
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.create.mockResolvedValue({ ...TEST_FLAG, tenantId: 'tenant_other' });
+    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
+    mocks.create.mockResolvedValue({
+      ...TEST_FLAG,
+      tenantId: LEGACY_SHADOW_VALUE,
+    });
 
     const { POST } = await import('./route');
     const res = await POST(
       makePostRequest({
         key: 'my-flag',
-        tenantId: 'tenant_other',
+        organizationId: ORG_FACTS.organizationId,
         enabled: true,
       }),
       mockContext,
     );
 
     expect(res.status).toBe(201);
+    // Canonical Feature Flag authorization is unaffected: the resolved
+    // organization facts still reach `service.create` untouched.
+    expect(mocks.create).toHaveBeenCalledWith(expect.anything(), ORG_FACTS);
+    // The audit event uses the legacy shadow value, NOT the canonical
+    // parent tenant (which differs from LEGACY_SHADOW_VALUE here).
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'tenant_other' }),
+      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
+    );
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: ORG_FACTS.tenantId }),
+    );
+  });
+
+  it('attributes an explicit platform-global create’s audit event to tenantId: null', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveCanonical.mockResolvedValue({
+      outcome: 'resolved',
+      facts: { kind: 'global' },
+    });
+    mocks.create.mockResolvedValue({ ...TEST_FLAG, tenantId: null });
+
+    const { POST } = await import('./route');
+    const res = await POST(
+      makePostRequest({ key: 'g', organizationId: null, enabled: true }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(201);
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: null }),
     );
   });
 
@@ -340,7 +518,7 @@ describe('POST /api/admin/feature-flags', () => {
       });
     });
 
-    it("ignores a requested global (null tenantId) flag and derives the caller's own tenant instead", async () => {
+    it("ignores a requested global (null organizationId) and derives the caller's own tenant instead", async () => {
       mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
       mocks.create.mockResolvedValue({
         ...TEST_FLAG,
@@ -349,11 +527,11 @@ describe('POST /api/admin/feature-flags', () => {
 
       const { POST } = await import('./route');
       const res = await POST(
-        makePostRequest({ key: 'x', tenantId: null, enabled: true }),
+        makePostRequest({ key: 'x', organizationId: null, enabled: true }),
         mockContext,
       );
       // Deriving (not rejecting) means the normal "Create flag" form -- which
-      // defaults to an empty/null Tenant ID -- keeps working for an
+      // defaults to an empty/null Organization ID -- keeps working for an
       // ABAC-authorized non-platform-admin rather than always 403ing.
       expect(res.status).toBe(201);
       // FF·B: canonical resolution runs for the ABAC caller with their own
@@ -366,9 +544,8 @@ describe('POST /api/admin/feature-flags', () => {
           platformTargetOrganizationId: null,
         }),
       );
-      // ...and the organization facts it returns reach the service create
-      // verbatim, alongside the legacy tenant_id. An ordinary caller NEVER
-      // passes `{ kind: 'global' }`.
+      // ...and the legacy tenant_id shadow value is the caller's own verified
+      // active tenant -- never a client-supplied value.
       expect(mocks.create).toHaveBeenCalledWith(
         expect.objectContaining({ tenantId: 'tenant_test_1' }),
         ORG_FACTS,
@@ -379,7 +556,7 @@ describe('POST /api/admin/feature-flags', () => {
       );
     });
 
-    it("ignores a requested foreign tenantId and derives the caller's own tenant instead", async () => {
+    it("ignores a requested foreign organizationId and derives the caller's own tenant instead", async () => {
       mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
       mocks.create.mockResolvedValue({
         ...TEST_FLAG,
@@ -390,7 +567,7 @@ describe('POST /api/admin/feature-flags', () => {
       const res = await POST(
         makePostRequest({
           key: 'x',
-          tenantId: 'some-other-tenant',
+          organizationId: 'some-other-org',
           enabled: true,
         }),
         mockContext,
@@ -413,7 +590,7 @@ describe('POST /api/admin/feature-flags', () => {
       const res = await POST(
         makePostRequest({
           key: 'x',
-          tenantId: 'tenant_test_1',
+          organizationId: 'tenant_test_1',
           enabled: true,
         }),
         mockContext,
@@ -426,8 +603,14 @@ describe('POST /api/admin/feature-flags', () => {
     });
   });
 
-  describe('FF·B canonical dual-write wiring', () => {
-    it('passes the resolved organization facts through to the service create', async () => {
+  describe('FF·B/FF·D canonical dual-write wiring', () => {
+    it('the legacy tenant_id shadow write is the RAW client organizationId, verbatim — never the resolved parent TenantId', async () => {
+      // FF·B (preserved unchanged through FF·D): the legacy column is
+      // compatibility/rollback data, not canonical authority. Writing the
+      // organization's resolved parent TenantId here instead would collide
+      // two sibling organizations under the same tenant on the retained
+      // legacy `UNIQUE(key, tenant_id)` — see the real-DB regression in
+      // `route.db.test.ts`.
       mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
       mocks.isEnvAdmin.mockReturnValue(true);
       const facts = {
@@ -442,7 +625,7 @@ describe('POST /api/admin/feature-flags', () => {
       const res = await POST(
         makePostRequest({
           key: 'k',
-          tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          organizationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           enabled: true,
         }),
         mockContext,
@@ -457,12 +640,71 @@ describe('POST /api/admin/feature-flags', () => {
       );
       expect(mocks.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          // legacy tenant_id is still the verbatim client value, NOT the
-          // canonical id
+          // the raw request field, verbatim — NOT facts.tenantId.
           tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         }),
         facts,
       );
+      expect(mocks.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: facts.tenantId }),
+        expect.anything(),
+      );
+    });
+
+    it('REGRESSION: sibling organizations under the same tenant get DISTINCT legacy tenant_id values (mock-level)', async () => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+      mocks.isEnvAdmin.mockReturnValue(true);
+      const SAME_PARENT_TENANT = 'tttttttt-tttt-4ttt-8ttt-tttttttttttt';
+      const ORG_1 = '01010101-0101-4101-8101-010101010101';
+      const ORG_2 = '02020202-0202-4202-8202-020202020202';
+
+      const { POST } = await import('./route');
+
+      mocks.resolveCanonical.mockResolvedValueOnce({
+        outcome: 'resolved',
+        facts: {
+          kind: 'organization',
+          organizationId: ORG_1,
+          tenantId: SAME_PARENT_TENANT,
+        },
+      });
+      mocks.create.mockResolvedValueOnce({ ...TEST_FLAG, tenantId: ORG_1 });
+      await POST(
+        makePostRequest({
+          key: 'shared',
+          organizationId: ORG_1,
+          enabled: true,
+        }),
+        mockContext,
+      );
+
+      mocks.resolveCanonical.mockResolvedValueOnce({
+        outcome: 'resolved',
+        facts: {
+          kind: 'organization',
+          organizationId: ORG_2,
+          tenantId: SAME_PARENT_TENANT,
+        },
+      });
+      mocks.create.mockResolvedValueOnce({ ...TEST_FLAG, tenantId: ORG_2 });
+      await POST(
+        makePostRequest({
+          key: 'shared',
+          organizationId: ORG_2,
+          enabled: true,
+        }),
+        mockContext,
+      );
+
+      const [firstCallInput] = mocks.create.mock.calls[0] as [
+        { tenantId: string },
+      ];
+      const [secondCallInput] = mocks.create.mock.calls[1] as [
+        { tenantId: string },
+      ];
+      expect(firstCallInput.tenantId).toBe(ORG_1);
+      expect(secondCallInput.tenantId).toBe(ORG_2);
+      expect(firstCallInput.tenantId).not.toBe(secondCallInput.tenantId);
     });
 
     it('returns 422 and writes nothing when a platform-admin organization target is unresolvable', async () => {
@@ -476,7 +718,7 @@ describe('POST /api/admin/feature-flags', () => {
       const res = await POST(
         makePostRequest({
           key: 'k',
-          tenantId: 'org_does_not_map',
+          organizationId: 'org_does_not_map',
           enabled: true,
         }),
         mockContext,
@@ -489,7 +731,7 @@ describe('POST /api/admin/feature-flags', () => {
       expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
     });
 
-    it('creates an explicit intentional_global flag for a platform admin with tenantId: null', async () => {
+    it('creates an explicit intentional_global flag for a platform admin with organizationId: null, legacy tenant_id stays null', async () => {
       mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
       mocks.isEnvAdmin.mockReturnValue(true);
       mocks.resolveCanonical.mockResolvedValue({
@@ -500,7 +742,7 @@ describe('POST /api/admin/feature-flags', () => {
 
       const { POST } = await import('./route');
       const res = await POST(
-        makePostRequest({ key: 'k', tenantId: null, enabled: true }),
+        makePostRequest({ key: 'k', organizationId: null, enabled: true }),
         mockContext,
       );
 
@@ -523,7 +765,7 @@ describe('POST /api/admin/feature-flags', () => {
 
       const { POST } = await import('./route');
       const res = await POST(
-        makePostRequest({ key: 'k', tenantId: null, enabled: true }),
+        makePostRequest({ key: 'k', organizationId: null, enabled: true }),
         mockContext,
       );
 
@@ -548,7 +790,7 @@ describe('POST /api/admin/feature-flags', () => {
       const res = await POST(
         makePostRequest({
           key: 'k',
-          tenantId: 'a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0',
+          organizationId: 'a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0',
           enabled: true,
         }),
         mockContext,

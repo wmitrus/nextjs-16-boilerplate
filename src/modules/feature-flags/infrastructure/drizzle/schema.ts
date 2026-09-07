@@ -101,6 +101,17 @@ export const featureFlagsTable = pgTable(
         sql`${t.organizationId} is not null and ${t.ownershipState} = 'canonical_organization'`,
       ),
     /**
+     * OZI-71 FF·D — the global semantic partial unique: at most one
+     * `intentional_global` row per `key`. Proven installable SELECT-only
+     * against Production before this migration was generated (zero
+     * duplicate `intentional_global` keys). Additive; does not touch the
+     * scoped canonical unique above, the legacy `uq_feature_flags_key_tenant`,
+     * or `tenant_id`.
+     */
+    uniqueIndex('uq_feature_flags_key_intentional_global')
+      .on(t.key)
+      .where(sql`${t.ownershipState} = 'intentional_global'`),
+    /**
      * OZI-71 FF·A — DB-enforced `ownership_state` ↔ `organization_id`
      * consistency (defense in depth; plan §14a.9). Valid:
      * `canonical_organization` + non-NULL id, or one of the other three states

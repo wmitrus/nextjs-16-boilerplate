@@ -1,6 +1,6 @@
 import { GrowthBookClient } from '@growthbook/growthbook';
 
-import type { AuthorizationContext } from '@/core/contracts/authorization';
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 import type { FeatureFlagService } from '@/core/contracts/feature-flags';
 
 interface ClientEntry {
@@ -27,6 +27,21 @@ export interface GrowthBookFeatureFlagServiceConfig {
   apiHost: string;
 }
 
+/**
+ * OZI-71 FF·D — locked GrowthBook targeting-compatibility decision (gate
+ * closed: no rule/experiment in the connection this repo owns targets
+ * `company` or `id`, so a direct cutover carries no live behavior change):
+ *
+ * - `attributes.id` <- the evaluating subject (`userId` for a user, the
+ *   stable `systemSubjectId` for a system caller) -- unchanged meaning.
+ * - `attributes.company` <- the canonical internal `OrganizationId` for
+ *   `organization` scope. NEVER a `TenantId`, never recovered from a legacy
+ *   context. No `companyLegacy` bridge -- none is justified by the closed
+ *   gate.
+ * - `platform-global` scope has no organization to report: `company` is
+ *   simply omitted rather than fabricating an organization/company value
+ *   merely to satisfy the SDK shape.
+ */
 export class GrowthBookFeatureFlagService implements FeatureFlagService {
   private readonly clientKey: string;
   private readonly apiHost: string;
@@ -38,15 +53,21 @@ export class GrowthBookFeatureFlagService implements FeatureFlagService {
 
   async isEnabled(
     flag: string,
-    context: AuthorizationContext,
+    context: FeatureFlagEvaluationContext,
   ): Promise<boolean> {
     const { client, ready } = getOrCreateClient(this.clientKey, this.apiHost);
     await ready;
-    return client.isOn(flag, {
-      attributes: {
-        id: context.subject.id,
-        company: context.tenant.tenantId,
-      },
-    });
+
+    const id =
+      context.subject.kind === 'user'
+        ? context.subject.userId
+        : context.subject.systemSubjectId;
+
+    const attributes: Record<string, unknown> = { id };
+    if (context.scope.kind === 'organization') {
+      attributes.company = context.scope.organizationId;
+    }
+
+    return client.isOn(flag, { attributes });
   }
 }

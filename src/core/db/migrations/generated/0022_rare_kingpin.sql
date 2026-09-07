@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_feature_flags_key_intentional_global" ON "feature_flags" USING btree ("key") WHERE "feature_flags"."ownership_state" = 'intentional_global';

@@ -1,4 +1,4 @@
-import type { AuthorizationContext } from '@/core/contracts/authorization';
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 import type { FeatureFlagService } from '@/core/contracts/feature-flags';
 import type {
   OperationalSwitch,
@@ -6,25 +6,14 @@ import type {
 } from '@/core/contracts/operational-switch';
 
 /**
- * A synthetic platform-level context for the tenant-scoped flag contract.
- *
- * `FeatureFlagService.isEnabled()` requires an `AuthorizationContext`, but an
- * operational switch has no tenant and no subject -- it is a property of the
- * deployment, and the controls it guards run before authentication. The
- * mapping lives here, in the adapter, rather than at each call site.
- *
- * `DrizzleFeatureFlagService` resolves a row with `tenant_id IS NULL` when no
- * tenant-specific row matches, so a **global** flag row is what this reads --
- * which is the correct scope for a platform switch. A tenant-scoped row for
- * one of these keys would be meaningless; nothing creates one, and the
- * synthetic tenant id below is not a real tenant, so none can match.
+ * OZI-71 FF·D — the operational switch's stable system-subject identity.
+ * Not a tenant, not an organization, not a user: a fixed, explicit label for
+ * "the deployment itself is asking," carried in `subject` only (what a
+ * targeting provider hashes on). It has no bearing on `scope` -- the switch
+ * always requests `platform-global` scope below, resolving only genuinely
+ * `intentional_global` rows.
  */
-const PLATFORM_CONTEXT: AuthorizationContext = {
-  tenant: { tenantId: '__platform__' },
-  subject: { id: '__platform__' },
-  resource: { type: 'feature' },
-  action: 'feature:read',
-};
+const OPERATIONAL_SWITCH_SYSTEM_SUBJECT_ID = 'feature-flag-operational-switch';
 
 /**
  * The runtime override layer: reads the switch from the repository's own
@@ -45,7 +34,14 @@ export class FeatureFlagOperationalSwitch implements OperationalSwitch {
 
   async isOn(key: OperationalSwitchKey): Promise<boolean> {
     try {
-      return await this.flags.isEnabled(key, PLATFORM_CONTEXT);
+      const context: FeatureFlagEvaluationContext = {
+        scope: { kind: 'platform-global' },
+        subject: {
+          kind: 'system',
+          systemSubjectId: OPERATIONAL_SWITCH_SYSTEM_SUBJECT_ID,
+        },
+      };
+      return await this.flags.isEnabled(key, context);
     } catch {
       // `ResilientFeatureFlagService` already swallows delegate failures, but
       // this adapter must not depend on being wrapped in it.

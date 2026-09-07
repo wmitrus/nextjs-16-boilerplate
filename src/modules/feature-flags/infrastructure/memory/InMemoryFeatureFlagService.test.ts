@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AuthorizationContext } from '@/core/contracts/authorization';
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 
 import { InMemoryFeatureFlagService } from './InMemoryFeatureFlagService';
 
-const ctx: AuthorizationContext = {
-  tenant: { tenantId: 't1' },
-  subject: { id: 'u1' },
-  resource: { type: 'doc' },
-  action: 'doc:read',
+const ctx: FeatureFlagEvaluationContext = {
+  scope: { kind: 'platform-global' },
+  subject: { kind: 'system', systemSubjectId: 'test' },
 };
 
 describe('InMemoryFeatureFlagService', () => {

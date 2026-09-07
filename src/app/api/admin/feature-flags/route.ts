@@ -15,6 +15,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveFeatureFlagsAdminScope } from './feature-flags-admin-scope';
 import { resolveCanonicalFeatureFlagWrite } from './feature-flags-canonical-write';
 
 import { DuplicateFeatureFlagError } from '@/modules/feature-flags/domain/errors';
@@ -30,11 +31,40 @@ const logger = resolveServerLogger().child({
   module: 'admin-feature-flags',
 });
 
-const createBodySchema = z.object({
+/**
+ * OZI-71 FF·D — `strictObject`, not `object`: a plain `z.object` silently
+ * STRIPS unknown keys, so a legacy client still sending the pre-rename
+ * `tenantId` field (and omitting `organizationId`) would parse successfully
+ * with `organizationId: undefined` -- for a platform admin that reads as an
+ * explicit `organizationId: null` platform-global create, silently creating
+ * a GLOBAL flag instead of failing. `strictObject` rejects any unknown key
+ * (including a stray `tenantId`) with a 400 before canonical resolution
+ * ever runs.
+ */
+const createBodySchema = z.strictObject({
   key: z.string().trim().min(1).max(200),
-  tenantId: z.string().trim().min(1).max(200).nullable().optional(),
+  organizationId: z.string().trim().min(1).max(200).nullable().optional(),
   enabled: z.boolean(),
   description: z.string().trim().max(500).nullable().optional(),
+});
+
+/**
+ * OZI-71 FF·D — mirrors `audit-logs/route.ts`'s established admin-list
+ * pagination convention exactly (same bounds, same shape): `limit` is
+ * server-clamped to 200 regardless of what a client requests, `offset`
+ * floors at 0. Neither is a scope/tenant/org value -- they never affect
+ * authorization, only which page of an already-scoped result set is
+ * returned.
+ */
+const listQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .default(50)
+    .transform((v) => Math.min(v, 200)),
+  offset: z.coerce.number().int().min(0).optional().default(0),
 });
 
 type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
@@ -42,9 +72,9 @@ type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
 /**
  * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
  * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
- * authorization for a client-supplied scope (tenantId, cross-tenant row) --
- * check `isPlatformAdmin` before allowing anything outside the caller's own
- * tenant. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
+ * authorization for a client-supplied scope (organizationId, cross-org row)
+ * -- check `isPlatformAdmin` before allowing anything outside the caller's
+ * own organization. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
  */
 async function checkAdminAccess(
   email: string | undefined,
@@ -74,7 +104,7 @@ async function checkAdminAccess(
 }
 
 export const GET = withErrorHandler(
-  withNodeProvisioning(async (_request, _context, access) => {
+  withNodeProvisioning(async (request, _context, access) => {
     await connection();
 
     const container = getAppContainer();
@@ -91,35 +121,63 @@ export const GET = withErrorHandler(
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
+    const url = new URL(request.url);
+    const queryResult = listQuerySchema.safeParse({
+      limit: url.searchParams.get('limit') ?? undefined,
+      offset: url.searchParams.get('offset') ?? undefined,
+    });
+    if (!queryResult.success) {
+      return createServerErrorResponse(
+        'Invalid query parameters',
+        400,
+        'VALIDATION_ERROR',
+      );
+    }
+    const { limit, offset } = queryResult.data;
+
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+    // OZI-71 FF·D — canonical per-operation scope, never the legacy
+    // tenant_id: `organization` scope (own org's canonical rows +
+    // intentional_global read-only overlay) or `platform-global`
+    // (intentional_global only). `null` is a legitimate fail-closed
+    // membership denial -- maps to an empty page, not a 403 (ABAC already
+    // granted `allowed` above).
+    const scope = await resolveFeatureFlagsAdminScope(access, db);
+
     const service = new DrizzleFeatureFlagAdminService(db);
-    // An ABAC-authorized tenant owner only sees global defaults plus their
-    // own tenant's rows -- never another tenant's overrides (SEC-26).
-    const flags = adminAccess.isPlatformAdmin
-      ? await service.listAll()
-      : await service.listForTenant(access.tenant.tenantId);
+    const { flags, total } =
+      scope === null
+        ? { flags: [], total: 0 }
+        : await service.list(scope, { limit, offset });
 
     logger.info(
       {
         event: 'admin:feature_flag_list',
         adminId: access.user.id,
         tenantId: access.tenant.tenantId,
-        total: flags.length,
+        total,
       },
       'Admin feature flag list fetched',
     );
 
     return createSuccessResponse({
       flags,
+      total,
+      limit,
+      offset,
       activeProvider: env.FEATURE_FLAG_PROVIDER,
       // Lets the client render mutation controls only for rows the caller
-      // can actually mutate -- an ABAC-authorized tenant owner sees global
-      // rows (via listForTenant above) but cannot toggle/edit/delete them;
-      // without this the client has no way to know that (SEC-26 follow-up:
-      // PR #71 review).
-      scope: adminAccess.isPlatformAdmin
-        ? { isPlatformAdmin: true, tenantId: null }
-        : { isPlatformAdmin: false, tenantId: access.tenant.tenantId },
+      // can actually mutate -- an ABAC-authorized org owner sees global
+      // rows as a read-only overlay (via `service.list` above) but cannot
+      // toggle/edit/delete them; without this the client has no way to know
+      // that (SEC-26 follow-up: PR #71 review).
+      scope:
+        scope === null
+          ? { isPlatformAdmin: false, organizationId: null }
+          : scope.kind === 'platform-global'
+            ? { isPlatformAdmin: true, organizationId: null }
+            : { isPlatformAdmin: false, organizationId: scope.organizationId },
     });
   }),
 );
@@ -163,31 +221,20 @@ export const POST = withErrorHandler(
         );
       }
 
-      // An ABAC-authorized (non-platform-admin) caller may only ever create
-      // rows scoped to their own verified tenant -- derive the scope from
-      // `access.tenant.tenantId` rather than trusting (or rejecting) the
-      // client-supplied `tenantId`. Rejecting on mismatch instead of deriving
-      // would 403 the normal "Create flag" form for these callers, since the
-      // client has no way to know its own internal tenant id ahead of time
-      // (SEC-26 follow-up: PR #71 review). Platform admins keep full control,
-      // including creating global (`null`) rows.
-      const requestedTenantId = adminAccess.isPlatformAdmin
-        ? (parseResult.data.tenantId ?? null)
-        : access.tenant.tenantId;
-
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
 
-      // OZI-71 FF·B — resolve the canonical ownership facts written alongside
-      // (never instead of) the legacy `tenant_id`. Authorization is already
-      // settled above; this only answers "which internal organization?".
-      // Ordinary org-context writer: resolution failure fails closed (generic
-      // 500 via withErrorHandler). Platform admin: `tenantId: null` -> explicit
-      // global; an unresolvable organization target -> 422, no row written.
+      // OZI-71 FF·B/FF·D — resolve the canonical ownership facts written
+      // alongside (never instead of) the legacy `tenant_id`. Authorization is
+      // already settled above; this only answers "which internal
+      // organization?". Ordinary org-context writer: resolution failure fails
+      // closed (generic 500 via withErrorHandler). Platform admin:
+      // `organizationId: null` -> explicit global; an unresolvable
+      // organization target -> 422, no row written.
       const canonical = await resolveCanonicalFeatureFlagWrite({
         isPlatformAdmin: adminAccess.isPlatformAdmin,
         ordinaryActiveOrganizationId: access.tenant.organizationId,
         platformTargetOrganizationId: adminAccess.isPlatformAdmin
-          ? (parseResult.data.tenantId ?? null)
+          ? (parseResult.data.organizationId ?? null)
           : null,
         db,
         authProvider: env.AUTH_PROVIDER,
@@ -200,6 +247,26 @@ export const POST = withErrorHandler(
           'ORGANIZATION_NOT_RESOLVED',
         );
       }
+
+      // OZI-71 FF·B (preserved unchanged through FF·D) — the legacy
+      // `tenant_id` column is COMPATIBILITY / ROLLBACK DATA, not canonical
+      // authority: FF·B always wrote the platform admin's raw candidate
+      // string VERBATIM, never its canonically-resolved parent tenant.
+      // Writing `canonical.facts.tenantId` (the ORGANIZATION's parent
+      // TenantId) here instead would be a real regression: two sibling
+      // organizations under the SAME tenant (a legal canonical topology --
+      // the same key may exist once per organization) would both write the
+      // same tenant_id and collide on the retained legacy
+      // `UNIQUE(key, tenant_id)`, even though canonically they are two
+      // distinct, valid rows. The raw `organizationId` field is only ever
+      // used as this opaque compatibility value here -- it never by itself
+      // becomes `organization_id` / `ownership_state` (that is exclusively
+      // `canonical.facts`, resolved above). For an ordinary caller it stays
+      // `access.tenant.tenantId`, exactly as the FF·B contract already
+      // established.
+      const requestedTenantId = adminAccess.isPlatformAdmin
+        ? (parseResult.data.organizationId ?? null)
+        : access.tenant.tenantId;
 
       const service = new DrizzleFeatureFlagAdminService(db);
 
@@ -229,11 +296,22 @@ export const POST = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.create',
           outcome: 'success',
-          // The flag's own scope, not the acting admin's active tenant -- a
-          // platform admin can create a flag for a different tenant (or
-          // global, tenantId: null); attributing the event to the admin's
-          // own tenant would hide it from the flag's real tenant and
-          // mislabel it into an unrelated one (Codex review, PR #72).
+          // OZI-71 FF·D review correction — this is intentionally the
+          // FLAG's legacy `tenant_id` shadow value, NOT canonical Feature
+          // Flag authority. `audit_log_settings`/`audit_events` remain on
+          // the Audit subsystem's OWN legacy `tenant_id` contract until the
+          // coordinated AUD·A-D package (plan §14a): `resolveEffectiveAuditSetting`
+          // matches by exact string equality against
+          // `audit_log_settings.tenant_id`, and `audit_events.tenant_id`
+          // stores that same legacy key. Passing the canonical `TenantId`
+          // here instead would resolve settings against a value that
+          // predates and does not match any legacy-configured override --
+          // exactly the "changing one package's ownership semantics breaks
+          // the other's setting resolution" risk the plan calls out for
+          // keeping FF and AUD as coordinated-but-separate cutovers. This
+          // has NO effect on Feature Flag authorization, which is settled
+          // entirely above via `canonical.facts` + the same-statement SQL
+          // proof (Codex review, PR #72 / OZI-71 FF·D final review).
           tenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',

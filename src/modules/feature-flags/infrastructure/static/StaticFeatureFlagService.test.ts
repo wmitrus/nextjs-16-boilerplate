@@ -1,17 +1,28 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AuthorizationContext } from '@/core/contracts/authorization';
+import {
+  internalOrganizationIdFromOrgRow,
+  internalUserIdFromUsersRow,
+  parentTenantIdFromOrgRow,
+} from '@/core/contracts/canonical-ids.provenance';
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 
 import {
   StaticFeatureFlagService,
   parseStaticFlagsEnv,
 } from './StaticFeatureFlagService';
 
-const ctx: AuthorizationContext = {
-  tenant: { tenantId: 't1' },
-  subject: { id: 'u1' },
-  resource: { type: 'doc' },
-  action: 'doc:read',
+const ORG_A = '11111111-1111-1111-1111-111111111111';
+const TENANT_A = '22222222-2222-2222-2222-222222222222';
+const USER_1 = '33333333-3333-3333-3333-333333333333';
+
+const ctx: FeatureFlagEvaluationContext = {
+  scope: {
+    kind: 'organization',
+    organizationId: internalOrganizationIdFromOrgRow(ORG_A),
+    tenantId: parentTenantIdFromOrgRow(TENANT_A),
+  },
+  subject: { kind: 'user', userId: internalUserIdFromUsersRow(USER_1) },
 };
 
 describe('parseStaticFlagsEnv', () => {
@@ -86,13 +97,11 @@ describe('StaticFeatureFlagService', () => {
     expect(await svc.isEnabled('unknown', ctx)).toBe(false);
   });
 
-  it('ignores the AuthorizationContext (flags are global)', async () => {
+  it('ignores the FeatureFlagEvaluationContext (flags are global)', async () => {
     const svc = new StaticFeatureFlagService({ flag: true });
-    const otherCtx: AuthorizationContext = {
-      tenant: { tenantId: 'different-tenant' },
-      subject: { id: 'u2' },
-      resource: { type: 'post' },
-      action: 'post:write',
+    const otherCtx: FeatureFlagEvaluationContext = {
+      scope: { kind: 'platform-global' },
+      subject: { kind: 'system', systemSubjectId: 'other-caller' },
     };
 
     expect(await svc.isEnabled('flag', ctx)).toBe(true);

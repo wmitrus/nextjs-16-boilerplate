@@ -21,11 +21,15 @@ import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
  * with a NULL `organization_id`, its legacy `tenant_id` untouched, and a
  * historical `tenant_id IS NULL` row is never promoted to `intentional_global`.
  *
- * It reconstructs the post-0020 state (drop 0021's additive objects + its
- * migration-bookkeeping row), inserts legacy-shaped rows, then re-applies 0021
- * through the repository's own migration runner (`runMigrations`) — a real
- * PostgreSQL DDL transition, not an SQL-text inspection and not a post-migration
- * insert.
+ * It reconstructs the post-0020 state (drop 0021's additive objects + the
+ * migration-bookkeeping rows for 0021 AND every migration after it, since
+ * drizzle's migrate() decides what to apply from the LATEST recorded
+ * timestamp, not per-migration gaps — leaving a later migration's row in
+ * place would make it skip 0021 entirely), inserts legacy-shaped rows, then
+ * re-applies 0021 (and any migration after it, replayed as normal forward
+ * progress) through the repository's own migration runner (`runMigrations`)
+ * — a real PostgreSQL DDL transition, not an SQL-text inspection and not a
+ * post-migration insert.
  *
  * Serialized DB runs only: `pnpm test:db:local` (real Postgres, fileParallelism
  * false) or the default PGlite runner (a fresh in-memory instance per file).
@@ -72,15 +76,20 @@ describe('feature_flags — OZI-71 FF·A migration 0021 transition (real DB)', (
     );
 
     // 1. Reconstruct the post-0020 state: drop 0021's additive objects
-    //    (CASCADE also removes its FK, both indexes and the CHECK) and its
-    //    migration-bookkeeping row so the runner re-applies ONLY 0021.
+    //    (CASCADE also removes its FK, both indexes, the CHECK, and any
+    //    later migration's index that depends on the dropped columns, e.g.
+    //    FF·D's `uq_feature_flags_key_intentional_global`) and the
+    //    migration-bookkeeping rows for 0021 AND every migration after it.
+    //    drizzle's migrate() applies everything newer than the LATEST
+    //    recorded timestamp -- leaving a later migration's row in place
+    //    would make it conclude 0021 is already applied and do nothing.
     await testDb.db.execute(
       sql`ALTER TABLE feature_flags
             DROP COLUMN IF EXISTS ownership_state CASCADE,
             DROP COLUMN IF EXISTS organization_id CASCADE`,
     );
     await testDb.db.execute(
-      sql`DELETE FROM drizzle.__drizzle_migrations WHERE created_at = ${FFA_MIGRATION_WHEN}`,
+      sql`DELETE FROM drizzle.__drizzle_migrations WHERE created_at >= ${FFA_MIGRATION_WHEN}`,
     );
 
     // 2. Insert legacy-shaped rows that predate 0021.

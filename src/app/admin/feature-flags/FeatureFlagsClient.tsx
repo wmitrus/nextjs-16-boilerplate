@@ -8,6 +8,7 @@ interface AdminFeatureFlag {
   id: string;
   key: string;
   tenantId: string | null;
+  organizationId: string | null;
   enabled: boolean;
   description: string | null;
   createdAt: string;
@@ -17,13 +18,15 @@ interface AdminFeatureFlag {
 type ActiveProvider = 'static' | 'db' | 'growthbook';
 
 /**
- * The caller's own mutation scope, as derived server-side. A platform admin
- * can mutate any row; an ABAC-authorized tenant owner can only mutate rows
- * belonging to their own `tenantId` -- global rows and other tenants' rows
- * are visible (for context) but not mutable for them. See SEC-26 in
+ * The caller's own mutation scope, as derived server-side. OZI-71 FF·D: a
+ * platform admin's scope is `platform-global` (this panel then shows
+ * `intentional_global` rows only, all mutable by them); an ABAC-authorized
+ * org owner can only mutate rows belonging to their own `organizationId` --
+ * the `intentional_global` overlay rows they also see are visible (for
+ * context) but not mutable for them. See SEC-26 in
  * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
  */
-type AdminScope = { isPlatformAdmin: boolean; tenantId: string | null };
+type AdminScope = { isPlatformAdmin: boolean; organizationId: string | null };
 
 type FetchState =
   | { status: 'idle' }
@@ -31,6 +34,8 @@ type FetchState =
   | {
       status: 'success';
       flags: AdminFeatureFlag[];
+      total: number;
+      offset: number;
       activeProvider: ActiveProvider;
       scope: AdminScope;
     }
@@ -38,9 +43,17 @@ type FetchState =
 
 type RowActionStatus = 'pending' | 'done' | 'error';
 
+/** Mirrors AuditLogsClient's established admin-list pagination convention. */
+const PAGE_SIZE = 25;
+
 function canMutateFlag(flag: AdminFeatureFlag, scope: AdminScope): boolean {
+  // Platform-global scope only ever lists `intentional_global` rows (see
+  // route.ts), so every row a platform admin sees here is one they can
+  // mutate.
   if (scope.isPlatformAdmin) return true;
-  return flag.tenantId !== null && flag.tenantId === scope.tenantId;
+  return (
+    flag.organizationId !== null && flag.organizationId === scope.organizationId
+  );
 }
 
 function formatDate(d: string): string {
@@ -74,18 +87,22 @@ export function FeatureFlagsClient() {
   >(new Map());
 
   const [createKey, setCreateKey] = React.useState('');
-  const [createTenantId, setCreateTenantId] = React.useState('');
+  const [createOrganizationId, setCreateOrganizationId] = React.useState('');
   const [createEnabled, setCreateEnabled] = React.useState(false);
   const [createDescription, setCreateDescription] = React.useState('');
   const [createState, setCreateState] = React.useState<
     'idle' | 'pending' | 'error'
   >('idle');
   const [createError, setCreateError] = React.useState<string | null>(null);
+  const [offset, setOffset] = React.useState(0);
 
   const fetchFlags = React.useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const res = await fetch('/api/admin/feature-flags');
+      const params = new URLSearchParams();
+      params.set('limit', String(PAGE_SIZE));
+      params.set('offset', String(offset));
+      const res = await fetch(`/api/admin/feature-flags?${params.toString()}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
           error?: string;
@@ -99,13 +116,30 @@ export function FeatureFlagsClient() {
       const json = (await res.json()) as {
         data: {
           flags: AdminFeatureFlag[];
+          total: number;
+          offset: number;
           activeProvider: ActiveProvider;
           scope: AdminScope;
         };
       };
+      // The requested offset can be stale by the time this response lands
+      // (a delete shrank the total, or a concurrent change did). Rather than
+      // render a page that no longer exists, snap to the last real page and
+      // let the offset-driven effect below refetch it -- never commit an
+      // out-of-range page to `success` state.
+      const lastValidOffset =
+        json.data.total === 0
+          ? 0
+          : Math.floor((json.data.total - 1) / PAGE_SIZE) * PAGE_SIZE;
+      if (json.data.offset > lastValidOffset) {
+        setOffset(lastValidOffset);
+        return;
+      }
       setState({
         status: 'success',
         flags: json.data.flags,
+        total: json.data.total,
+        offset: json.data.offset,
         activeProvider: json.data.activeProvider,
         scope: json.data.scope,
       });
@@ -113,7 +147,7 @@ export function FeatureFlagsClient() {
       const msg = err instanceof Error ? err.message : 'Network error';
       setState({ status: 'error', message: msg });
     }
-  }, []);
+  }, [offset]);
 
   React.useEffect(() => {
     void fetchFlags();
@@ -122,11 +156,12 @@ export function FeatureFlagsClient() {
   const mutationsAllowed =
     state.status === 'success' && state.activeProvider === 'db';
   const scope = state.status === 'success' ? state.scope : null;
-  // An ABAC-authorized tenant owner can only ever create rows for their own
-  // tenant -- the server derives and enforces this regardless of what's
-  // submitted, so lock the field rather than let the caller type a value
-  // that will silently be overridden (SEC-26 follow-up: PR #71 review).
-  const tenantFieldLocked = scope !== null && !scope.isPlatformAdmin;
+  // An ABAC-authorized org owner can only ever create rows for their own
+  // organization -- the server derives and enforces this regardless of
+  // what's submitted, so lock the field rather than let the caller type a
+  // value that will silently be overridden (SEC-26 follow-up: PR #71
+  // review).
+  const organizationFieldLocked = scope !== null && !scope.isPlatformAdmin;
 
   async function handleCreate(
     event: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
@@ -141,7 +176,7 @@ export function FeatureFlagsClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           key: createKey.trim(),
-          tenantId: createTenantId.trim() || null,
+          organizationId: createOrganizationId.trim() || null,
           enabled: createEnabled,
           description: createDescription.trim() || null,
         }),
@@ -156,7 +191,7 @@ export function FeatureFlagsClient() {
       }
       setCreateState('idle');
       setCreateKey('');
-      setCreateTenantId('');
+      setCreateOrganizationId('');
       setCreateEnabled(false);
       setCreateDescription('');
       void fetchFlags();
@@ -278,19 +313,23 @@ export function FeatureFlagsClient() {
         </div>
         <div className="flex flex-col gap-1">
           <label
-            htmlFor="ff-tenant"
+            htmlFor="ff-organization"
             className="text-xs font-medium text-zinc-500 dark:text-zinc-400"
           >
-            {tenantFieldLocked
-              ? 'Tenant ID (your tenant)'
-              : 'Tenant ID (empty = global)'}
+            {organizationFieldLocked
+              ? 'Organization ID (your organization)'
+              : 'Organization ID (empty = global)'}
           </label>
           <input
-            id="ff-tenant"
+            id="ff-organization"
             type="text"
-            value={tenantFieldLocked ? (scope?.tenantId ?? '') : createTenantId}
-            onChange={(e) => setCreateTenantId(e.target.value)}
-            disabled={!mutationsAllowed || tenantFieldLocked}
+            value={
+              organizationFieldLocked
+                ? (scope?.organizationId ?? '')
+                : createOrganizationId
+            }
+            onChange={(e) => setCreateOrganizationId(e.target.value)}
+            disabled={!mutationsAllowed || organizationFieldLocked}
             className="w-40 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-zinc-800 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
@@ -399,7 +438,7 @@ export function FeatureFlagsClient() {
                       {flag.key}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                      {flag.tenantId ?? (
+                      {flag.organizationId ?? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                           Global
                           {!mutable && (
@@ -562,6 +601,37 @@ export function FeatureFlagsClient() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {state.status === 'success' && (
+        <div className="mt-4 flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
+          <span>
+            {state.total === 0
+              ? 'No results'
+              : `Showing ${state.offset + 1}–${Math.min(
+                  state.offset + state.flags.length,
+                  state.total,
+                )} of ${state.total}`}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+              disabled={offset === 0}
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 disabled:opacity-50 dark:border-zinc-700"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => setOffset((o) => o + PAGE_SIZE)}
+              disabled={offset + state.flags.length >= state.total}
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 disabled:opacity-50 dark:border-zinc-700"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -15,6 +15,8 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveFeatureFlagsAdminScope } from '../feature-flags-admin-scope';
+
 import { FeatureFlagNotFoundError } from '@/modules/feature-flags/domain/errors';
 import { DrizzleFeatureFlagAdminService } from '@/modules/feature-flags/infrastructure/drizzle/DrizzleFeatureFlagAdminService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
@@ -39,10 +41,10 @@ type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
 
 /**
  * Distinguishes an unscoped platform-admin grant from an ABAC grant scoped
- * to `tenantId`. Callers must not treat `allowed: true` alone as sufficient
- * authorization for a client-supplied `id` naming a row that may belong to
- * another tenant -- check `isPlatformAdmin` and pass the resulting
- * `MutationScope` through to the service. See SEC-26 in
+ * to the caller's own organization. Callers must not treat `allowed: true`
+ * alone as sufficient authorization for a client-supplied `id` naming a row
+ * that may belong to another organization -- check `isPlatformAdmin` and
+ * pass the resulting canonical scope through to the service. See SEC-26 in
  * `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
  */
 async function checkAdminAccess(
@@ -131,13 +133,24 @@ export const PATCH = withErrorHandler(
       }
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+      // OZI-71 FF·D — canonical per-operation scope, never the legacy
+      // tenant_id: the DB predicate binds `id` + `organization_id` +
+      // `ownership_state` (organization scope, re-proving the parent tuple in
+      // the same statement) or `ownership_state = 'intentional_global'`
+      // (platform-global scope). `null` means no valid scope at all -- no
+      // row could ever match, so this is a 404, not a 403 (ABAC already
+      // granted `allowed` above).
+      const scope = await resolveFeatureFlagsAdminScope(access, db);
+      if (scope === null) {
+        return createServerErrorResponse(
+          'Feature flag not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
       const service = new DrizzleFeatureFlagAdminService(db);
-      // An ABAC-authorized (non-platform-admin) caller may only mutate rows
-      // scoped to their own verified tenant, regardless of which `id` they
-      // supply -- the service enforces this in the DB predicate (SEC-26).
-      const scope = adminAccess.isPlatformAdmin
-        ? null
-        : { tenantId: access.tenant.tenantId };
 
       try {
         const flag = await service.update(
@@ -164,9 +177,11 @@ export const PATCH = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.update',
           outcome: 'success',
-          // The flag's own scope, not the acting admin's active tenant --
-          // see the identical note on the create handler (Codex review,
-          // PR #72).
+          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
+          // shadow value, NOT canonical Feature Flag authority. See the
+          // identical, fully-explained note on the create handler
+          // (`route.ts`) — the Audit subsystem stays on its own legacy
+          // `tenant_id` contract until the coordinated AUD·A-D package.
           tenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
@@ -218,10 +233,17 @@ export const DELETE = withErrorHandler(
       }
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+      const scope = await resolveFeatureFlagsAdminScope(access, db);
+      if (scope === null) {
+        return createServerErrorResponse(
+          'Feature flag not found',
+          404,
+          'NOT_FOUND',
+        );
+      }
+
       const service = new DrizzleFeatureFlagAdminService(db);
-      const scope = adminAccess.isPlatformAdmin
-        ? null
-        : { tenantId: access.tenant.tenantId };
 
       try {
         const flag = await service.delete(id, scope);
@@ -240,9 +262,11 @@ export const DELETE = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.delete',
           outcome: 'success',
-          // The flag's own scope, not the acting admin's active tenant --
-          // see the identical note on the create handler (Codex review,
-          // PR #72).
+          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
+          // shadow value, NOT canonical Feature Flag authority. See the
+          // identical, fully-explained note on the create handler
+          // (`route.ts`) — the Audit subsystem stays on its own legacy
+          // `tenant_id` contract until the coordinated AUD·A-D package.
           tenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',

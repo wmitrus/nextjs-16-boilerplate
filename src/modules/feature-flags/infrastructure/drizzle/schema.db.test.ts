@@ -51,6 +51,8 @@ const SUITE_FLAG_KEYS = [
   'fk-ok',
   'cascade-me',
   'keep-me',
+  'dup-global',
+  'mixed-key',
 ] as const;
 
 beforeAll(async () => {
@@ -374,6 +376,46 @@ describe('feature_flags — OZI-71 FF·A schema contract (real DB)', () => {
           ),
         /check|ck_feature_flags_ownership_state_org|violates/i,
       );
+    });
+  });
+
+  describe('10.7 FF·D global semantic uniqueness (uq_feature_flags_key_intentional_global)', () => {
+    it('rejects a second intentional_global row for the same key', async () => {
+      // Distinct legacy tenant_id values so the legacy `uq_feature_flags_key_tenant`
+      // (both rows would otherwise share NULL) does not mask the FF·D global
+      // partial unique under test.
+      await testDb.db.execute(
+        sql`INSERT INTO feature_flags (key, tenant_id, organization_id, ownership_state, enabled)
+            VALUES ('dup-global', 'legacy-dup-a', NULL, 'intentional_global', true)`,
+      );
+
+      await expectRejection(
+        () =>
+          testDb.db.execute(
+            sql`INSERT INTO feature_flags (key, tenant_id, organization_id, ownership_state, enabled)
+                VALUES ('dup-global', 'legacy-dup-b', NULL, 'intentional_global', false)`,
+          ),
+        /uq_feature_flags_key_intentional_global/i,
+      );
+    });
+
+    it('a canonical_organization row and an intentional_global row may share the same key', async () => {
+      await seedOrganizations();
+
+      await testDb.db.execute(
+        sql`INSERT INTO feature_flags (key, tenant_id, organization_id, ownership_state, enabled)
+            VALUES ('mixed-key', 'legacy-mixed-org', ${ORG_A}, 'canonical_organization', true)`,
+      );
+      await testDb.db.execute(
+        sql`INSERT INTO feature_flags (key, organization_id, ownership_state, enabled)
+            VALUES ('mixed-key', NULL, 'intentional_global', true)`,
+      );
+
+      const rows = await testDb.db
+        .select({ id: featureFlagsTable.id })
+        .from(featureFlagsTable)
+        .where(eq(featureFlagsTable.key, 'mixed-key'));
+      expect(rows).toHaveLength(2);
     });
   });
 });

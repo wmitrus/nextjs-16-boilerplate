@@ -1,17 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AuthorizationContext } from '@/core/contracts/authorization';
-import type { FeatureFlagService } from '@/core/contracts/feature-flags';
+import type {
+  FeatureFlagEvaluationContext,
+  FeatureFlagService,
+} from '@/core/contracts/feature-flags';
 
 import { isFeatureEnabled } from './isFeatureEnabled';
 
 describe('isFeatureEnabled', () => {
   it('delegates feature evaluation to the configured service', async () => {
-    const context = {
-      subject: { id: 'user-1' },
-      resource: { type: 'dashboard' },
-      environment: {},
-    } as AuthorizationContext;
+    const context: FeatureFlagEvaluationContext = {
+      scope: { kind: 'platform-global' },
+      subject: { kind: 'system', systemSubjectId: 'test' },
+    };
     const service: FeatureFlagService = {
       isEnabled: vi.fn().mockResolvedValue(true),
     };

@@ -3,8 +3,10 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 
 import { FEATURE_FLAGS } from '@/core/contracts';
-import type { AuthorizationContext } from '@/core/contracts/authorization';
-import type { FeatureFlagService } from '@/core/contracts/feature-flags';
+import type {
+  FeatureFlagEvaluationContext,
+  FeatureFlagService,
+} from '@/core/contracts/feature-flags';
 import { env } from '@/core/env';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -41,20 +43,21 @@ async function FeatureFlagsDemoContent() {
 
   const provider = env.FEATURE_FLAG_PROVIDER;
 
-  // Demo-only synthetic context — carries no security significance.
-  // The static adapter ignores context; DB/GrowthBook return false for unknown ids.
-  const demoAuthContext: AuthorizationContext = {
-    tenant: { tenantId: 'demo' },
-    subject: { id: 'anonymous' },
-    resource: { type: 'demo' },
-    action: 'demo:view',
+  // Demo-only synthetic context — carries no security significance. These 3
+  // flags are genuinely platform-global (OZI-71 FF·C classified them
+  // `intentional_global`), so `platform-global` scope is the correct
+  // request, not a stand-in tenant/org. The static adapter ignores context;
+  // DB/GrowthBook return false for a flag that doesn't resolve.
+  const demoContext: FeatureFlagEvaluationContext = {
+    scope: { kind: 'platform-global' },
+    subject: { kind: 'system', systemSubjectId: 'feature-flags-demo' },
   };
 
   const [newDashboardUi, betaExports, experimentalAnalytics] =
     await Promise.all([
-      flagService.isEnabled('demo.new-dashboard-ui', demoAuthContext),
-      flagService.isEnabled('demo.beta-exports', demoAuthContext),
-      flagService.isEnabled('demo.experimental-analytics', demoAuthContext),
+      flagService.isEnabled('demo.new-dashboard-ui', demoContext),
+      flagService.isEnabled('demo.beta-exports', demoContext),
+      flagService.isEnabled('demo.experimental-analytics', demoContext),
     ]);
 
   return (

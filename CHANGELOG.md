@@ -1,3 +1,17 @@
+# [2.17.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.16.0...v2.17.0) (2026-09-07)
+
+
+### Bug Fixes
+
+* **feature-flags:** address final review feedback ([7de2907](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7de29074473d3a1a9f0150cb4472dbb685130c8c))
+* **feature-flags:** restore legacy audit compatibility and add admin list pagination ([699d840](https://github.com/wmitrus/nextjs-16-boilerplate/commit/699d840f0fa37dba4a4304110fc16ee80af1ed96))
+
+
+### Features
+
+* **feature-flags:** cut over evaluation to canonical organization scope ([f8f4fe1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/f8f4fe1a45b788965d762e502c5336f860606562))
+* **feature-flags:** enforce canonical scope in admin operations ([c2c28eb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c2c28eb9cc67174006e9a6f3c3a143ff0b87ba56))
+
 # [2.16.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.15.0...v2.16.0) (2026-09-04)
 
 

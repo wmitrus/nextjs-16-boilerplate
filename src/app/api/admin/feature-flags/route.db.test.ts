@@ -194,26 +194,28 @@ describe('POST /api/admin/feature-flags — FF·B legacy tenant_id compatibility
     expect(body1.data.flag.tenantId).toBe(ORG_1);
     expect(body2.data.flag.tenantId).toBe(ORG_2);
 
-    // OZI-71 FF·D review fix — the DB legacy shadow column and the audit
-    // trail's tenant attribution are DIFFERENT concepts and must NOT be
-    // confused: the DB column holds the opaque per-organization compatibility
-    // value (ORG_1 / ORG_2, asserted above); the audit event must instead
-    // record the REAL canonical parent tenant (TENANT_T, shared by both
-    // organizations) — proving compatibility data != authority end to end,
-    // against the real resolver, not a mock.
+    // OZI-71 FF·D final review — the Audit subsystem (audit_events /
+    // audit_log_settings) has NOT undergone AUD·A-D and remains on its own
+    // legacy `tenant_id` contract (`resolveEffectiveAuditSetting` matches by
+    // exact string equality against `audit_log_settings.tenant_id`). The
+    // audit event therefore intentionally carries the SAME opaque legacy
+    // shadow value as the DB column (ORG_1 / ORG_2), not the canonical
+    // parent TENANT_T. This is proven alongside `organizationId`/
+    // `ownershipState` above (asserted against the REAL canonical resolver,
+    // not a mock) being correctly ORG_1/ORG_2 + `canonical_organization`
+    // regardless — Feature Flag canonical authorization and the Audit
+    // subsystem's legacy compatibility key are independently correct, not
+    // coupled.
     expect(mocks.recordAdminAuditEvent).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ tenantId: TENANT_T }),
+      expect.objectContaining({ tenantId: ORG_1 }),
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ tenantId: TENANT_T }),
-    );
-    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_1 }),
-    );
-    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: ORG_2 }),
+    );
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: TENANT_T }),
     );
   });
 

@@ -34,8 +34,9 @@ function _featureFlagAdminScopeTypeContract(
   const service = new DrizzleFeatureFlagAdminService(db);
 
   // Positive: organization + platform-global are accepted by every method.
-  void service.list(organizationScope);
-  void service.list(platformGlobalScope);
+  const pagination = { limit: 50, offset: 0 };
+  void service.list(organizationScope, pagination);
+  void service.list(platformGlobalScope, pagination);
   void service.update('x', {}, organizationScope);
   void service.update('x', {}, platformGlobalScope);
   void service.delete('x', organizationScope);

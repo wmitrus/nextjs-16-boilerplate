@@ -65,6 +65,19 @@ const invalidTupleScope = {
 const platformScope: FeatureFlagAdminScope = { kind: 'platform-global' };
 
 /**
+ * Thin wrapper for tests that only care about row containment, not
+ * pagination itself (which has its own dedicated real-Postgres suite —
+ * `route.db.test.ts`'s pagination describe block). A generous default page
+ * keeps every existing containment assertion exercising the SAME `list()`
+ * implementation the paginated route uses, without threading `{ limit,
+ * offset }` through call sites that aren't testing pagination.
+ */
+async function listFlags(scope: FeatureFlagAdminScope) {
+  const { flags } = await svc.list(scope, { limit: 50, offset: 0 });
+  return flags;
+}
+
+/**
  * Seed a *historical / compatibility-period* legacy-shaped row directly, the
  * way pre-FF·B rows and any un-migrated legacy writer look: a legacy
  * `tenant_id`, no `organization_id`, and the FF·A fail-closed
@@ -179,7 +192,7 @@ describe('DrizzleFeatureFlagAdminService — list() (real DB, OZI-71 FF·D)', ()
       enabled: true,
     });
 
-    const flags = await svc.list(scopeC1);
+    const flags = await listFlags(scopeC1);
 
     expect(flags.map((f) => f.key).sort()).toEqual([
       'a-global-flag',
@@ -206,7 +219,7 @@ describe('DrizzleFeatureFlagAdminService — list() (real DB, OZI-71 FF·D)', ()
       enabled: true,
     });
 
-    expect(await svc.list(invalidTupleScope)).toHaveLength(0);
+    expect(await listFlags(invalidTupleScope)).toHaveLength(0);
   });
 
   it('sibling isolation: ORG_C2 sees its own row, not ORG_C1’s', async () => {
@@ -225,7 +238,7 @@ describe('DrizzleFeatureFlagAdminService — list() (real DB, OZI-71 FF·D)', ()
       enabled: true,
     });
 
-    const c2Flags = await svc.list(scopeC2);
+    const c2Flags = await listFlags(scopeC2);
     expect(c2Flags.map((f) => f.key)).toEqual(['c2-only']);
   });
 
@@ -238,7 +251,7 @@ describe('DrizzleFeatureFlagAdminService — list() (real DB, OZI-71 FF·D)', ()
       enabled: true,
     });
 
-    expect(await svc.list(scopeC1)).toHaveLength(0);
+    expect(await listFlags(scopeC1)).toHaveLength(0);
   });
 
   it('platform-global scope: intentional_global only, NOT an unbounded dump', async () => {
@@ -264,8 +277,172 @@ describe('DrizzleFeatureFlagAdminService — list() (real DB, OZI-71 FF·D)', ()
       enabled: true,
     });
 
-    const flags = await svc.list(platformScope);
+    const flags = await listFlags(platformScope);
     expect(flags.map((f) => f.key)).toEqual(['global-only']);
+  });
+});
+
+describe('DrizzleFeatureFlagAdminService — list() pagination (real DB, OZI-71 FF·D review)', () => {
+  const PAGE_LIMIT = 4;
+
+  /**
+   * 9 rows ORG_C1 is entitled to see (7 own canonical + 2 global overlay),
+   * plus one row each of sibling-org (ORG_C2), foreign-tenant (ORG_D1),
+   * unresolved_legacy, and quarantined -- none of which may EVER appear on
+   * any page. 9 rows over a 4-row page crosses three pages (4 + 4 + 1),
+   * giving a real partial last page in addition to two full ones.
+   */
+  async function seedPaginationFixture(): Promise<{
+    ownKeys: string[];
+    excludedKeys: string[];
+  }> {
+    const ownKeys: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const key = `own-${String(i).padStart(2, '0')}`;
+      ownKeys.push(key);
+      await insertFlag({
+        key,
+        tenantId: `legacy-own-${i}`,
+        organizationId: ORG_C1,
+        ownershipState: 'canonical_organization',
+        enabled: true,
+      });
+    }
+    for (let i = 0; i < 2; i++) {
+      const key = `global-${String(i).padStart(2, '0')}`;
+      ownKeys.push(key);
+      await insertFlag({
+        key,
+        tenantId: null,
+        organizationId: null,
+        ownershipState: 'intentional_global',
+        enabled: true,
+      });
+    }
+
+    const excludedKeys = [
+      'excluded-sibling-org',
+      'excluded-foreign-tenant',
+      'excluded-unresolved',
+      'excluded-quarantined',
+    ];
+    await insertFlag({
+      key: excludedKeys[0]!,
+      tenantId: 'legacy-sibling',
+      organizationId: ORG_C2,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+    await insertFlag({
+      key: excludedKeys[1]!,
+      tenantId: 'legacy-foreign',
+      organizationId: ORG_D1,
+      ownershipState: 'canonical_organization',
+      enabled: true,
+    });
+    await insertFlag({
+      key: excludedKeys[2]!,
+      tenantId: 'legacy-unresolved-pg',
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+      enabled: true,
+    });
+    await insertFlag({
+      key: excludedKeys[3]!,
+      tenantId: 'legacy-quarantined-pg',
+      organizationId: null,
+      ownershipState: 'quarantined',
+      enabled: true,
+    });
+
+    return { ownKeys: ownKeys.sort(), excludedKeys };
+  }
+
+  it('paginates organization scope across 3 pages: total is stable, pages partition exactly the entitled rows, excluded rows never appear on any page', async () => {
+    const { ownKeys, excludedKeys } = await seedPaginationFixture();
+
+    const page1 = await svc.list(scopeC1, { limit: PAGE_LIMIT, offset: 0 });
+    const page2 = await svc.list(scopeC1, { limit: PAGE_LIMIT, offset: 4 });
+    const page3 = await svc.list(scopeC1, { limit: PAGE_LIMIT, offset: 8 });
+
+    // total uses the EXACT SAME containment predicate as row retrieval --
+    // stable across every page of the same query.
+    expect(page1.total).toBe(9);
+    expect(page2.total).toBe(9);
+    expect(page3.total).toBe(9);
+
+    expect(page1.flags).toHaveLength(4);
+    expect(page2.flags).toHaveLength(4);
+    expect(page3.flags).toHaveLength(1); // the real partial last page
+
+    const allKeys = [...page1.flags, ...page2.flags, ...page3.flags].map(
+      (f) => f.key,
+    );
+    // No duplicates and no gaps across the page boundary -- the union of all
+    // pages is exactly the 9 entitled rows, each exactly once.
+    expect(allKeys.sort()).toEqual(ownKeys);
+    expect(new Set(allKeys).size).toBe(9);
+
+    // The excluded rows (sibling org, foreign tenant, unresolved, quarantined)
+    // never surface on ANY page, at ANY offset.
+    for (const excluded of excludedKeys) {
+      expect(allKeys).not.toContain(excluded);
+    }
+  });
+
+  it('page 2 preserves the same containment guarantees as page 1: invalid tuple -> empty page, total 0, on every offset', async () => {
+    await seedPaginationFixture();
+
+    const page1 = await svc.list(invalidTupleScope, {
+      limit: PAGE_LIMIT,
+      offset: 0,
+    });
+    const page2 = await svc.list(invalidTupleScope, {
+      limit: PAGE_LIMIT,
+      offset: 4,
+    });
+
+    expect(page1).toEqual({ flags: [], total: 0 });
+    expect(page2).toEqual({ flags: [], total: 0 });
+  });
+
+  it('page 2 preserves sibling/foreign-tenant/unresolved/quarantined exclusion, not just page 1', async () => {
+    const { excludedKeys } = await seedPaginationFixture();
+
+    const page2 = await svc.list(scopeC1, { limit: PAGE_LIMIT, offset: 4 });
+
+    for (const excluded of excludedKeys) {
+      expect(page2.flags.map((f) => f.key)).not.toContain(excluded);
+    }
+  });
+
+  it('ordering is stable and deterministic: the same page requested twice returns identical rows in the same order', async () => {
+    await seedPaginationFixture();
+
+    const first = await svc.list(scopeC1, { limit: PAGE_LIMIT, offset: 0 });
+    const second = await svc.list(scopeC1, { limit: PAGE_LIMIT, offset: 0 });
+
+    expect(first.flags.map((f) => f.id)).toEqual(second.flags.map((f) => f.id));
+  });
+
+  it('platform-global scope paginates intentional_global only, excluding canonical_organization/unresolved/quarantined on every page', async () => {
+    const { excludedKeys } = await seedPaginationFixture();
+
+    const page1 = await svc.list(platformScope, {
+      limit: PAGE_LIMIT,
+      offset: 0,
+    });
+
+    expect(page1.total).toBe(2); // only the 2 intentional_global rows
+    expect(page1.flags.map((f) => f.key).sort()).toEqual([
+      'global-00',
+      'global-01',
+    ]);
+    for (const excluded of excludedKeys) {
+      expect(page1.flags.map((f) => f.key)).not.toContain(excluded);
+    }
+    // No `own-*` (canonical_organization) row leaks into platform-global.
+    expect(page1.flags.some((f) => f.key.startsWith('own-'))).toBe(false);
   });
 });
 
@@ -383,7 +560,7 @@ describe('DrizzleFeatureFlagAdminService — update()/delete() scope containment
     });
 
     await svc.delete(created.id, scopeC1);
-    expect(await svc.list(scopeC1)).toHaveLength(0);
+    expect(await listFlags(scopeC1)).toHaveLength(0);
   });
 
   it('sibling organization cannot delete ORG_C1’s row', async () => {
@@ -399,7 +576,7 @@ describe('DrizzleFeatureFlagAdminService — update()/delete() scope containment
       FeatureFlagNotFoundError,
     );
     // Still present -- the rejected delete must not have run.
-    expect(await svc.list(scopeC1)).toHaveLength(1);
+    expect(await listFlags(scopeC1)).toHaveLength(1);
   });
 
   it('platform-global scope cannot delete a canonical_organization row', async () => {
@@ -414,7 +591,7 @@ describe('DrizzleFeatureFlagAdminService — update()/delete() scope containment
     await expect(svc.delete(created.id, platformScope)).rejects.toThrow(
       FeatureFlagNotFoundError,
     );
-    expect(await svc.list(scopeC1)).toHaveLength(1);
+    expect(await listFlags(scopeC1)).toHaveLength(1);
   });
 });
 

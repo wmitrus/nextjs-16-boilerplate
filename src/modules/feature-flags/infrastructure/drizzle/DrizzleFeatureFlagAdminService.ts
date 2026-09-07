@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, count, eq, sql, type SQL } from 'drizzle-orm';
 
 import type { DataScope } from '@/core/contracts/access-context';
 import type { OrganizationId, TenantId } from '@/core/contracts/canonical-ids';
@@ -45,10 +45,11 @@ export type CreateFeatureFlagInput = {
 };
 
 /**
- * OZI-71 FF·B — the canonical ownership facts a create must persist ALONGSIDE
- * the legacy `tenant_id` (which is still written verbatim from
- * {@link CreateFeatureFlagInput.tenantId} and stays authoritative for every
- * read until FF·D).
+ * OZI-71 FF·B (rollback/compatibility history) — the canonical ownership
+ * facts a create must persist ALONGSIDE the legacy `tenant_id` (still
+ * written verbatim from {@link CreateFeatureFlagInput.tenantId} — a rollback
+ * shadow value and the Audit subsystem's own legacy compatibility key, no
+ * longer read for canonical Feature Flag authorization since FF·D).
  *
  * - `organization` — an authoritatively-resolved organization override. BOTH
  *   ids are load-bearing: the INSERT proves
@@ -76,6 +77,15 @@ export type CanonicalFeatureFlagWriteFacts =
 export type UpdateFeatureFlagInput = {
   enabled?: boolean;
   description?: string | null;
+};
+
+/** Mirrors `AuditEventPagination` (`DrizzleAuditLogReadService.ts`) — the
+ * repository's established admin-list pagination shape. Bounds are enforced
+ * by the route's zod schema, not here; this type only carries already-valid
+ * numbers. */
+export type FeatureFlagAdminPagination = {
+  readonly limit: number;
+  readonly offset: number;
 };
 
 function mapFlagRow(row: {
@@ -227,8 +237,8 @@ export class DrizzleFeatureFlagAdminService {
    * plus `intentional_global` as a READ-ONLY overlay, excluding
    * `unresolved_legacy`/`quarantined`. The `(organizationId, tenantId)` tuple
    * is proven valid FIRST via `EXISTS`, gating the whole predicate: an
-   * invalid tuple yields ZERO rows, including zero overlay -- never a
-   * partial/global-only fallback.
+   * invalid tuple yields ZERO rows AND `total: 0` -- never a partial/
+   * global-only fallback.
    *
    * `platform-global` scope — `intentional_global` rows ONLY. Deliberately
    * NOT the legacy `listAll()` unrestricted dump: a platform admin's
@@ -236,53 +246,95 @@ export class DrizzleFeatureFlagAdminService {
    * Users, where it stands in for "unrestricted"), so this never returns
    * ANY `canonical_organization` row — signed-off verdict, see
    * `feature-flags-admin-scope.ts`.
+   *
+   * Pagination mirrors `DrizzleAuditLogReadService.query()`: the row page
+   * and the `total` count run against the EXACT SAME containment predicate
+   * (one `SQL` fragment, reused in both statements below -- never two
+   * hand-written copies that could drift), in parallel, ordered by
+   * `(key, id)` for a stable, deterministic page boundary (a bare `key`
+   * order is not unique -- a canonical row and an `intentional_global` row
+   * can share one key).
    */
-  async list(scope: FeatureFlagAdminScope): Promise<FeatureFlagDto[]> {
+  async list(
+    scope: FeatureFlagAdminScope,
+    pagination: FeatureFlagAdminPagination,
+  ): Promise<{ flags: FeatureFlagDto[]; total: number }> {
     if (scope.kind === 'platform-global') {
-      const rows = await this.db
-        .select()
-        .from(featureFlagsTable)
-        .where(eq(featureFlagsTable.ownershipState, 'intentional_global'))
-        .orderBy(featureFlagsTable.key);
-      return rows.map(mapFlagRow);
+      const where = eq(featureFlagsTable.ownershipState, 'intentional_global');
+      const [rows, totalRows] = await Promise.all([
+        this.db
+          .select()
+          .from(featureFlagsTable)
+          .where(where)
+          .orderBy(featureFlagsTable.key, featureFlagsTable.id)
+          .limit(pagination.limit)
+          .offset(pagination.offset),
+        this.db.select({ total: count() }).from(featureFlagsTable).where(where),
+      ]);
+      return {
+        flags: rows.map(mapFlagRow),
+        total: totalRows[0]?.total ?? 0,
+      };
     }
 
-    const raw = await this.db.execute(sql`
-      WITH valid_scope AS (
-        SELECT 1
-        FROM ${organizationsReferenceTable}
-        WHERE id = ${scope.organizationId}
-          AND tenant_id = ${scope.tenantId}
+    // The ONE containment predicate, embedded verbatim into both the row
+    // page and the count query below -- proving the tuple valid, then
+    // admitting exactly this organization's canonical rows plus the global
+    // overlay.
+    const containment: SQL = sql`
+      EXISTS (
+        SELECT 1 FROM ${organizationsReferenceTable}
+        WHERE id = ${scope.organizationId} AND tenant_id = ${scope.tenantId}
       )
-      SELECT
-        id,
-        key,
-        tenant_id AS "tenantId",
-        organization_id AS "organizationId",
-        enabled,
-        description,
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-      FROM ${featureFlagsTable}
-      WHERE EXISTS (SELECT 1 FROM valid_scope)
-        AND (
-          (
-            ownership_state = 'canonical_organization'
-            AND organization_id = ${scope.organizationId}
-          )
-          OR ownership_state = 'intentional_global'
+      AND (
+        (
+          ownership_state = 'canonical_organization'
+          AND organization_id = ${scope.organizationId}
         )
-      ORDER BY key
-    `);
-    return normalizeRawRows<RawFlagRow>(raw).map(mapRawFlagRow);
+        OR ownership_state = 'intentional_global'
+      )
+    `;
+
+    const [raw, rawTotal] = await Promise.all([
+      this.db.execute(sql`
+        SELECT
+          id,
+          key,
+          tenant_id AS "tenantId",
+          organization_id AS "organizationId",
+          enabled,
+          description,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM ${featureFlagsTable}
+        WHERE ${containment}
+        ORDER BY key, id
+        LIMIT ${pagination.limit} OFFSET ${pagination.offset}
+      `),
+      this.db.execute(sql`
+        SELECT count(*)::int AS total
+        FROM ${featureFlagsTable}
+        WHERE ${containment}
+      `),
+    ]);
+
+    const totalRow = normalizeRawRows<{ total: number }>(rawTotal)[0];
+    return {
+      flags: normalizeRawRows<RawFlagRow>(raw).map(mapRawFlagRow),
+      total: totalRow?.total ?? 0,
+    };
   }
 
   /**
-   * OZI-71 FF·B — canonical dual-write. `input.tenantId` is still written to
-   * `feature_flags.tenant_id` VERBATIM (legacy authoritative read key,
-   * unchanged rollback semantics — never normalized to the canonical id);
-   * `canonical` additionally populates `organization_id` + `ownership_state`.
-   * Reads are untouched and still legacy until FF·D.
+   * OZI-71 FF·B (rollback/compatibility history) — canonical dual-write.
+   * `input.tenantId` is still written to `feature_flags.tenant_id` VERBATIM
+   * (never normalized to the canonical id): a rollback shadow value, kept
+   * for the legacy-contract Audit subsystem and for a reverted deploy, not
+   * for canonical Feature Flag reads. `canonical` additionally populates
+   * `organization_id` + `ownership_state`, which is what FF·D's canonical
+   * runtime and admin reads now use exclusively (`DrizzleFeatureFlagService.isEnabled`,
+   * `list`/`update`/`delete` above) — `feature_flags.tenant_id` is not read
+   * by any of them.
    */
   async create(
     input: CreateFeatureFlagInput,

@@ -72,8 +72,10 @@ vi.mock('@/security/actions/record-admin-audit-event', () => ({
   recordAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
-function makeGetRequest() {
-  return new NextRequest('http://localhost/api/admin/feature-flags');
+function makeGetRequest(queryString = '') {
+  return new NextRequest(
+    `http://localhost/api/admin/feature-flags${queryString}`,
+  );
 }
 
 function makePostRequest(body?: unknown) {
@@ -149,11 +151,11 @@ describe('GET /api/admin/feature-flags', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 200 with flags and activeProvider for a platform admin, using platform-global scope', async () => {
+  it('returns 200 with flags, total, and activeProvider for a platform admin, using platform-global scope and the default page', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
     mocks.resolveScope.mockResolvedValue({ kind: 'platform-global' });
-    mocks.list.mockResolvedValue([TEST_FLAG]);
+    mocks.list.mockResolvedValue({ flags: [TEST_FLAG], total: 1 });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
@@ -162,13 +164,22 @@ describe('GET /api/admin/feature-flags', () => {
     const body = (await res.json()) as {
       data: {
         flags: unknown[];
+        total: number;
+        limit: number;
+        offset: number;
         activeProvider: string;
         scope: { isPlatformAdmin: boolean; organizationId: string | null };
       };
     };
     expect(body.data.flags).toHaveLength(1);
+    expect(body.data.total).toBe(1);
+    expect(body.data.limit).toBe(50);
+    expect(body.data.offset).toBe(0);
     expect(body.data.activeProvider).toBe('db');
-    expect(mocks.list).toHaveBeenCalledWith({ kind: 'platform-global' });
+    expect(mocks.list).toHaveBeenCalledWith(
+      { kind: 'platform-global' },
+      { limit: 50, offset: 0 },
+    );
     expect(body.data.scope).toEqual({
       isPlatformAdmin: true,
       organizationId: null,
@@ -182,12 +193,15 @@ describe('GET /api/admin/feature-flags', () => {
       can: vi.fn().mockResolvedValue(true),
     });
     mocks.resolveScope.mockResolvedValue(ORG_FACTS);
-    mocks.list.mockResolvedValue([TEST_FLAG]);
+    mocks.list.mockResolvedValue({ flags: [TEST_FLAG], total: 1 });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
     expect(res.status).toBe(200);
-    expect(mocks.list).toHaveBeenCalledWith(ORG_FACTS);
+    expect(mocks.list).toHaveBeenCalledWith(ORG_FACTS, {
+      limit: 50,
+      offset: 0,
+    });
 
     const body = (await res.json()) as {
       data: {
@@ -202,7 +216,7 @@ describe('GET /api/admin/feature-flags', () => {
     });
   });
 
-  it('returns an empty list (not a 403) when scope derivation legitimately denies membership', async () => {
+  it('returns an empty page (not a 403) when scope derivation legitimately denies membership', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
@@ -215,8 +229,61 @@ describe('GET /api/admin/feature-flags', () => {
     expect(res.status).toBe(200);
     expect(mocks.list).not.toHaveBeenCalled();
 
-    const body = (await res.json()) as { data: { flags: unknown[] } };
+    const body = (await res.json()) as {
+      data: { flags: unknown[]; total: number };
+    };
     expect(body.data.flags).toHaveLength(0);
+    expect(body.data.total).toBe(0);
+  });
+
+  describe('pagination', () => {
+    beforeEach(() => {
+      mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+      mocks.isEnvAdmin.mockReturnValue(true);
+      mocks.resolveScope.mockResolvedValue({ kind: 'platform-global' });
+      mocks.list.mockResolvedValue({ flags: [], total: 0 });
+    });
+
+    it('parses client-supplied limit/offset and passes them through', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=10&offset=20'), mockContext);
+      expect(res.status).toBe(200);
+      expect(mocks.list).toHaveBeenCalledWith(
+        { kind: 'platform-global' },
+        { limit: 10, offset: 20 },
+      );
+    });
+
+    it('clamps a client-requested limit above 200 down to 200 -- server-bounded, not client-trusted', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=99999'), mockContext);
+      expect(res.status).toBe(200);
+      expect(mocks.list).toHaveBeenCalledWith(
+        { kind: 'platform-global' },
+        { limit: 200, offset: 0 },
+      );
+    });
+
+    it('rejects a negative offset with 400 before any list() call', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?offset=-1'), mockContext);
+      expect(res.status).toBe(400);
+      expect(mocks.list).not.toHaveBeenCalled();
+    });
+
+    it('rejects a zero/negative limit with 400 before any list() call', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=0'), mockContext);
+      expect(res.status).toBe(400);
+      expect(mocks.list).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-numeric limit/offset with 400', async () => {
+      const { GET } = await import('./route');
+      const res = await GET(makeGetRequest('?limit=abc'), mockContext);
+      expect(res.status).toBe(400);
+      expect(mocks.list).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -374,19 +441,28 @@ describe('POST /api/admin/feature-flags', () => {
     );
   });
 
-  it('attributes the audit event to the CANONICAL parent tenant from resolution, never the returned flag’s legacy tenantId', async () => {
-    // OZI-71 FF·D review fix — `flag.tenantId` is now the opaque legacy
-    // compatibility value (the raw organizationId candidate, see route.ts),
-    // not a real tenant identifier. The audit event must reflect
-    // `canonical.facts.tenantId` (the flag's real canonical scope) — proven
-    // here by mocking `create` to return a DTO whose `tenantId` is
-    // completely unrelated to the resolved canonical tenant, and asserting
-    // the audit call ignores it entirely.
+  it('REGRESSION: audit event uses the flag’s LEGACY tenant_id (Audit subsystem compatibility key), never canonical Feature Flag authority', async () => {
+    // OZI-71 FF·D final review — the Audit subsystem (audit_events /
+    // audit_log_settings) has NOT undergone AUD·A-D: `resolveEffectiveAuditSetting`
+    // still matches by exact string equality against
+    // `audit_log_settings.tenant_id`, and `audit_events.tenant_id` stores
+    // that same legacy key. Feeding it the canonical `TenantId` instead
+    // would resolve settings against a value that predates and may not
+    // match any legacy-configured override -- crossing the FF/AUD package
+    // boundary before AUD's own coordinated cutover. This test proves the
+    // two concepts stay independent: canonical resolution
+    // (`resolveCanonicalFeatureFlagWrite`) still runs and its facts still
+    // reach `service.create` unchanged (Feature Flag authorization is
+    // untouched), while the audit event's `tenantId` comes from the
+    // returned DTO's legacy `tenant_id` shadow value -- deliberately
+    // DIFFERENT from the canonical parent tenant here, to prove the audit
+    // path doesn't quietly read the canonical value instead.
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
+    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
     mocks.create.mockResolvedValue({
       ...TEST_FLAG,
-      tenantId: ORG_FACTS.organizationId, // the opaque legacy shadow value
+      tenantId: LEGACY_SHADOW_VALUE,
     });
 
     const { POST } = await import('./route');
@@ -400,11 +476,16 @@ describe('POST /api/admin/feature-flags', () => {
     );
 
     expect(res.status).toBe(201);
+    // Canonical Feature Flag authorization is unaffected: the resolved
+    // organization facts still reach `service.create` untouched.
+    expect(mocks.create).toHaveBeenCalledWith(expect.anything(), ORG_FACTS);
+    // The audit event uses the legacy shadow value, NOT the canonical
+    // parent tenant (which differs from LEGACY_SHADOW_VALUE here).
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_FACTS.tenantId }),
+      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_FACTS.organizationId }),
+      expect.objectContaining({ tenantId: ORG_FACTS.tenantId }),
     );
   });
 

@@ -34,12 +34,17 @@ type FetchState =
   | {
       status: 'success';
       flags: AdminFeatureFlag[];
+      total: number;
+      offset: number;
       activeProvider: ActiveProvider;
       scope: AdminScope;
     }
   | { status: 'error'; message: string };
 
 type RowActionStatus = 'pending' | 'done' | 'error';
+
+/** Mirrors AuditLogsClient's established admin-list pagination convention. */
+const PAGE_SIZE = 25;
 
 function canMutateFlag(flag: AdminFeatureFlag, scope: AdminScope): boolean {
   // Platform-global scope only ever lists `intentional_global` rows (see
@@ -89,11 +94,15 @@ export function FeatureFlagsClient() {
     'idle' | 'pending' | 'error'
   >('idle');
   const [createError, setCreateError] = React.useState<string | null>(null);
+  const [offset, setOffset] = React.useState(0);
 
   const fetchFlags = React.useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const res = await fetch('/api/admin/feature-flags');
+      const params = new URLSearchParams();
+      params.set('limit', String(PAGE_SIZE));
+      params.set('offset', String(offset));
+      const res = await fetch(`/api/admin/feature-flags?${params.toString()}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
           error?: string;
@@ -107,6 +116,8 @@ export function FeatureFlagsClient() {
       const json = (await res.json()) as {
         data: {
           flags: AdminFeatureFlag[];
+          total: number;
+          offset: number;
           activeProvider: ActiveProvider;
           scope: AdminScope;
         };
@@ -114,6 +125,8 @@ export function FeatureFlagsClient() {
       setState({
         status: 'success',
         flags: json.data.flags,
+        total: json.data.total,
+        offset: json.data.offset,
         activeProvider: json.data.activeProvider,
         scope: json.data.scope,
       });
@@ -121,7 +134,7 @@ export function FeatureFlagsClient() {
       const msg = err instanceof Error ? err.message : 'Network error';
       setState({ status: 'error', message: msg });
     }
-  }, []);
+  }, [offset]);
 
   React.useEffect(() => {
     void fetchFlags();
@@ -575,6 +588,37 @@ export function FeatureFlagsClient() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {state.status === 'success' && (
+        <div className="mt-4 flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
+          <span>
+            {state.total === 0
+              ? 'No results'
+              : `Showing ${state.offset + 1}–${Math.min(
+                  state.offset + state.flags.length,
+                  state.total,
+                )} of ${state.total}`}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+              disabled={offset === 0}
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 disabled:opacity-50 dark:border-zinc-700"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => setOffset((o) => o + PAGE_SIZE)}
+              disabled={offset + state.flags.length >= state.total}
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 disabled:opacity-50 dark:border-zinc-700"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -211,15 +211,20 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     expect(body.data.flag.enabled).toBe(false);
   });
 
-  it('attributes the audit event to the CANONICAL tenant from scope, never the returned flag’s legacy tenantId', async () => {
-    // OZI-71 FF·D review fix — `flag.tenantId` is the opaque legacy
-    // compatibility value, not a real tenant identifier. The audit event
-    // must come from `scope.tenantId` (already proven valid) regardless of
-    // what the mutated DTO's legacy column happens to hold.
+  it('REGRESSION: audit event uses the mutated flag’s LEGACY tenant_id, never the canonical scope tenant', async () => {
+    // OZI-71 FF·D final review — the Audit subsystem is not yet on the
+    // canonical model (see the identical, fully-explained note on the
+    // create handler in `route.ts`). `scope.tenantId` (the canonical
+    // parent tenant that authorized this mutation) and the returned DTO's
+    // legacy `tenant_id` are deliberately DIFFERENT values here, to prove
+    // the audit path reads the legacy one and canonical scope containment
+    // (already exercised by the SQL containment suite) is untouched by
+    // this choice.
     mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
+    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
     mocks.update.mockResolvedValue({
       ...MOCK_FLAG,
-      tenantId: 'some-unrelated-legacy-value',
+      tenantId: LEGACY_SHADOW_VALUE,
     });
 
     const { PATCH } = await import('./route');
@@ -228,11 +233,18 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
       makeContext(),
     );
     expect(res.status).toBe(200);
+    // Canonical mutation containment is unaffected: the same-statement
+    // scope predicate still ran with the real canonical scope.
+    expect(mocks.update).toHaveBeenCalledWith(
+      FLAG_ID,
+      expect.anything(),
+      ORG_SCOPE,
+    );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
+      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'some-unrelated-legacy-value' }),
+      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
     );
   });
 
@@ -337,21 +349,23 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, ORG_SCOPE);
   });
 
-  it('attributes the audit event to the CANONICAL tenant from scope, never the deleted flag’s legacy tenantId', async () => {
+  it('REGRESSION: audit event uses the deleted flag’s LEGACY tenant_id, never the canonical scope tenant', async () => {
     mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
+    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
     mocks.delete.mockResolvedValue({
       ...MOCK_FLAG,
-      tenantId: 'some-unrelated-legacy-value',
+      tenantId: LEGACY_SHADOW_VALUE,
     });
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
     expect(res.status).toBe(200);
+    expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, ORG_SCOPE);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
+      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'some-unrelated-legacy-value' }),
+      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
     );
   });
 

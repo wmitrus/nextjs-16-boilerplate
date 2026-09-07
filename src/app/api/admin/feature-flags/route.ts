@@ -48,6 +48,25 @@ const createBodySchema = z.strictObject({
   description: z.string().trim().max(500).nullable().optional(),
 });
 
+/**
+ * OZI-71 FF·D — mirrors `audit-logs/route.ts`'s established admin-list
+ * pagination convention exactly (same bounds, same shape): `limit` is
+ * server-clamped to 200 regardless of what a client requests, `offset`
+ * floors at 0. Neither is a scope/tenant/org value -- they never affect
+ * authorization, only which page of an already-scoped result set is
+ * returned.
+ */
+const listQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .default(50)
+    .transform((v) => Math.min(v, 200)),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+});
+
 type AdminAccess = { allowed: boolean; isPlatformAdmin: boolean };
 
 /**
@@ -85,7 +104,7 @@ async function checkAdminAccess(
 }
 
 export const GET = withErrorHandler(
-  withNodeProvisioning(async (_request, _context, access) => {
+  withNodeProvisioning(async (request, _context, access) => {
     await connection();
 
     const container = getAppContainer();
@@ -102,31 +121,51 @@ export const GET = withErrorHandler(
       return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
     }
 
+    const url = new URL(request.url);
+    const queryResult = listQuerySchema.safeParse({
+      limit: url.searchParams.get('limit') ?? undefined,
+      offset: url.searchParams.get('offset') ?? undefined,
+    });
+    if (!queryResult.success) {
+      return createServerErrorResponse(
+        'Invalid query parameters',
+        400,
+        'VALIDATION_ERROR',
+      );
+    }
+    const { limit, offset } = queryResult.data;
+
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
 
     // OZI-71 FF·D — canonical per-operation scope, never the legacy
     // tenant_id: `organization` scope (own org's canonical rows +
     // intentional_global read-only overlay) or `platform-global`
     // (intentional_global only). `null` is a legitimate fail-closed
-    // membership denial -- maps to an empty list, not a 403 (ABAC already
+    // membership denial -- maps to an empty page, not a 403 (ABAC already
     // granted `allowed` above).
     const scope = await resolveFeatureFlagsAdminScope(access, db);
 
     const service = new DrizzleFeatureFlagAdminService(db);
-    const flags = scope === null ? [] : await service.list(scope);
+    const { flags, total } =
+      scope === null
+        ? { flags: [], total: 0 }
+        : await service.list(scope, { limit, offset });
 
     logger.info(
       {
         event: 'admin:feature_flag_list',
         adminId: access.user.id,
         tenantId: access.tenant.tenantId,
-        total: flags.length,
+        total,
       },
       'Admin feature flag list fetched',
     );
 
     return createSuccessResponse({
       flags,
+      total,
+      limit,
+      offset,
       activeProvider: env.FEATURE_FLAG_PROVIDER,
       // Lets the client render mutation controls only for rows the caller
       // can actually mutate -- an ABAC-authorized org owner sees global
@@ -257,19 +296,23 @@ export const POST = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.create',
           outcome: 'success',
-          // OZI-71 FF·D — the flag's own CANONICAL tenant, from
-          // `canonical.facts`, never `flag.tenantId`: that DTO field is now
-          // the opaque legacy compatibility value (the raw organizationId
-          // candidate for a platform-admin create, see above), not a real
-          // tenant identifier. Using it here would mislabel the audit event
-          // under an organization id instead of its actual parent tenant.
-          // (Still "the flag's own scope, not the acting admin's active
-          // tenant" -- a platform admin can create a flag for a different
-          // organization or global; Codex review, PR #72.)
-          tenantId:
-            canonical.facts.kind === 'organization'
-              ? canonical.facts.tenantId
-              : null,
+          // OZI-71 FF·D review correction — this is intentionally the
+          // FLAG's legacy `tenant_id` shadow value, NOT canonical Feature
+          // Flag authority. `audit_log_settings`/`audit_events` remain on
+          // the Audit subsystem's OWN legacy `tenant_id` contract until the
+          // coordinated AUD·A-D package (plan §14a): `resolveEffectiveAuditSetting`
+          // matches by exact string equality against
+          // `audit_log_settings.tenant_id`, and `audit_events.tenant_id`
+          // stores that same legacy key. Passing the canonical `TenantId`
+          // here instead would resolve settings against a value that
+          // predates and does not match any legacy-configured override --
+          // exactly the "changing one package's ownership semantics breaks
+          // the other's setting resolution" risk the plan calls out for
+          // keeping FF and AUD as coordinated-but-separate cutovers. This
+          // has NO effect on Feature Flag authorization, which is settled
+          // entirely above via `canonical.facts` + the same-statement SQL
+          // proof (Codex review, PR #72 / OZI-71 FF·D final review).
+          tenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: flag.id,

@@ -177,12 +177,12 @@ export const PATCH = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.update',
           outcome: 'success',
-          // OZI-71 FF·D — the CANONICAL tenant from `scope` (already proven
-          // valid by `resolveFeatureFlagsAdminScope`/the mutation predicate
-          // above), never `flag.tenantId`: that DTO field is the opaque
-          // legacy compatibility value, not a real tenant identifier. See
-          // the identical note on the create handler (Codex review, PR #72).
-          tenantId: scope.kind === 'organization' ? scope.tenantId : null,
+          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
+          // shadow value, NOT canonical Feature Flag authority. See the
+          // identical, fully-explained note on the create handler
+          // (`route.ts`) — the Audit subsystem stays on its own legacy
+          // `tenant_id` contract until the coordinated AUD·A-D package.
+          tenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,
@@ -246,9 +246,7 @@ export const DELETE = withErrorHandler(
       const service = new DrizzleFeatureFlagAdminService(db);
 
       try {
-        // The returned DTO is no longer needed: audit attribution now comes
-        // from `scope` (see below), and nothing else downstream reads it.
-        await service.delete(id, scope);
+        const flag = await service.delete(id, scope);
 
         logger.info(
           {
@@ -264,10 +262,12 @@ export const DELETE = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.delete',
           outcome: 'success',
-          // OZI-71 FF·D — the CANONICAL tenant from `scope`, never
-          // `flag.tenantId`: see the identical note on the update handler
-          // above / the create handler (Codex review, PR #72).
-          tenantId: scope.kind === 'organization' ? scope.tenantId : null,
+          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
+          // shadow value, NOT canonical Feature Flag authority. See the
+          // identical, fully-explained note on the create handler
+          // (`route.ts`) — the Audit subsystem stays on its own legacy
+          // `tenant_id` contract until the coordinated AUD·A-D package.
+          tenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,

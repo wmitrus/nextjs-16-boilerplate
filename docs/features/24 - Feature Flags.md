@@ -31,7 +31,7 @@ src/
     lib/isFeatureEnabled.ts                ← thin helper for explicit DI callsites
     infrastructure/
       static/StaticFeatureFlagService.ts   ← env-var driven, no DB, no network
-      drizzle/DrizzleFeatureFlagService.ts ← DB-backed, tenant-scoped overrides
+      drizzle/DrizzleFeatureFlagService.ts ← DB-backed, canonical organization-scoped overrides
       growthbook/GrowthBookFeatureFlagService.ts ← GrowthBook SDK, server-side only
       resilient/ResilientFeatureFlagService.ts   ← fail-safe wrapper (always applied)
       memory/InMemoryFeatureFlagService.ts       ← test/development helper
@@ -99,7 +99,7 @@ Flags are stored in the `feature_flags` Postgres table and queried on every `isE
 ### When to use
 
 - Production or staging environments that already have a database
-- Per-tenant flag overrides (e.g. enable a beta feature for one tenant only)
+- Per-organization flag overrides (e.g. enable a beta feature for one organization only)
 - Operators who want to toggle flags without restarting the server
 
 ### Configuration
@@ -375,7 +375,7 @@ Flags are evaluated **server-side only**. Never evaluate flags in client compone
 
 ```typescript
 import { FEATURE_FLAGS } from '@/core/contracts';
-import type { FeatureFlagService } from '@/core/contracts/feature-flags';
+import type { FeatureFlagEvaluationContext, FeatureFlagService } from '@/core/contracts/feature-flags';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 import { connection } from 'next/server';
 
@@ -385,7 +385,10 @@ export default async function MyPage() {
   const container = getAppContainer().createChild();
   const flagService = container.resolve<FeatureFlagService>(FEATURE_FLAGS.SERVICE);
 
-  const isEnabled = await flagService.isEnabled('my-flag', authContext);
+  // See "FeatureFlagEvaluationContext" below for how `context` is actually
+  // built from a canonical, server-verified scope.
+  const context: FeatureFlagEvaluationContext = /* ... */;
+  const isEnabled = await flagService.isEnabled('my-flag', context);
 
   return isEnabled ? <NewFeature /> : <OldFeature />;
 }
@@ -397,7 +400,7 @@ export default async function MyPage() {
 
 ```typescript
 import { FEATURE_FLAGS } from '@/core/contracts';
-import type { FeatureFlagService } from '@/core/contracts/feature-flags';
+import type { FeatureFlagEvaluationContext, FeatureFlagService } from '@/core/contracts/feature-flags';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 export async function myAction(input: Input) {
@@ -406,7 +409,8 @@ export async function myAction(input: Input) {
     FEATURE_FLAGS.SERVICE,
   );
 
-  if (!(await flagService.isEnabled('my-flag', authContext))) {
+  const context: FeatureFlagEvaluationContext = /* ... */;
+  if (!(await flagService.isEnabled('my-flag', context))) {
     throw new Error('Feature not available');
   }
 
@@ -414,33 +418,55 @@ export async function myAction(input: Input) {
 }
 ```
 
-### AuthorizationContext
+### FeatureFlagEvaluationContext
 
-Every `isEnabled()` call requires an `AuthorizationContext`. Use the real security context in authenticated surfaces:
+Every `isEnabled()` call requires a `FeatureFlagEvaluationContext` (OZI-71 FF·D — see §1's contract definition). It has two independent parts:
+
+- `scope` — the DB provider's containment key: `{ kind: 'organization', organizationId, tenantId }` or `{ kind: 'platform-global' }`.
+- `subject` — what a targeting provider (GrowthBook) hashes/buckets on: `{ kind: 'user', userId }` or `{ kind: 'system', systemSubjectId }`.
+
+**Authenticated, organization-owned surfaces** must use `organization` scope with a **server-derived, server-verified** `(organizationId, tenantId)` tuple — never a value read directly off a client request, and never a legacy `tenantId` rebranded as an `organizationId`. The canonical `AccessContext` contract (`@/core/contracts/access-context.ts`) already carries this tuple together, authoritatively, once built:
 
 ```typescript
-import { getSecurityContext } from '@/security/core/security-context';
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 
-const { user } = await getSecurityContext(dependencies);
+// `accessContext: AccessContext` — built server-side via `buildAccessContext()`
+// (see `src/security/core/access-context/build-access-context.ts` and, for a
+// complete worked example, `src/app/api/admin/feature-flags/feature-flags-admin-scope.ts`).
+// `activeOrganization` already carries BOTH the canonical `organizationId` and
+// its authoritative parent `tenantId` (`organizations.tenant_id`), read
+// independently from the DB — never the legacy, possibly-collapsed
+// `TenantContext.tenantId`.
+if (accessContext.activeOrganization === null) {
+  // No active organization — the caller isn't in an organization-owned
+  // working context. Handle explicitly (deny, or fall through to
+  // platform-global if that's a legitimate outcome for this surface).
+}
 
-const authContext: AuthorizationContext = {
-  tenant: { tenantId: user.tenantId },
-  subject: { id: user.id },
-  resource: { type: 'feature' },
-  action: 'feature:read',
+const context: FeatureFlagEvaluationContext = {
+  scope: {
+    kind: 'organization',
+    organizationId: accessContext.activeOrganization.organizationId,
+    tenantId: accessContext.activeOrganization.tenantId,
+  },
+  subject: { kind: 'user', userId: accessContext.userId },
+};
+
+const isEnabled = await flagService.isEnabled('my-flag', context);
+```
+
+An invalid `(organizationId, tenantId)` tuple fails closed at the DB provider (see §4/§11) — it is never a reason to fall back to constructing the tuple some other way.
+
+For demo, public, or platform-level callers with no authenticated user (or no organization-owned working context — e.g. the operational switch, `src/security/core/operational-switch/FeatureFlagOperationalSwitch.ts`), use explicit `platform-global` scope with a stable `systemSubjectId`. **Do not fabricate an `organizationId`/`tenantId`** merely to satisfy the type — `platform-global` scope needs neither:
+
+```typescript
+const demoContext: FeatureFlagEvaluationContext = {
+  scope: { kind: 'platform-global' },
+  subject: { kind: 'system', systemSubjectId: 'feature-flags-demo' },
 };
 ```
 
-For demo or public pages with no authenticated user, use a synthetic context (context carries no security significance for the `static` adapter, and GrowthBook/DB will return `false` for unknown IDs unless a global flag is configured):
-
-```typescript
-const demoContext: AuthorizationContext = {
-  tenant: { tenantId: 'demo' },
-  subject: { id: 'anonymous' },
-  resource: { type: 'demo' },
-  action: 'demo:view',
-};
-```
+The `static` adapter ignores the whole context (all requests see the same flags); GrowthBook/`db` resolve `platform-global` scope to `intentional_global` rows only.
 
 ---
 
@@ -466,19 +492,28 @@ The page always re-renders on every request (`await connection()` opts it out of
 Use `InMemoryFeatureFlagService` or mock `FeatureFlagService` directly. Do not import provider SDKs in unit tests.
 
 ```typescript
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 import { InMemoryFeatureFlagService } from '@/modules/feature-flags';
+
+const ctx: FeatureFlagEvaluationContext = {
+  scope: { kind: 'platform-global' },
+  subject: { kind: 'system', systemSubjectId: 'test' },
+};
 
 const flags = new InMemoryFeatureFlagService({ 'my-flag': true });
 const result = await flags.isEnabled('my-flag', ctx);
 expect(result).toBe(true);
 ```
 
+`InMemoryFeatureFlagService` ignores the context entirely (signature-only) — `platform-global` scope above is just the simplest context to construct, not a requirement.
+
 ### DB integration tests (`*.db.test.ts`)
 
-Use `resolveTestDb()` from `@/testing/db/create-test-db` (PGlite in-memory):
+Use `resolveTestDb()` from `@/testing/db/create-test-db` (PGlite in-memory). Prefer `platform-global` scope when the test isn't about organization authority itself (e.g. an unknown/global-lookup case, as below); an organization-scope test needs a real `organizations` row so the `(organizationId, tenantId)` tuple can be proven valid — see `DrizzleFeatureFlagService.db.test.ts` for worked organization-scope fixtures (`ORG_A1`/`TENANT_A`-style topology, seeded via real `INSERT`s).
 
 ```typescript
 /** @vitest-environment node */
+import type { FeatureFlagEvaluationContext } from '@/core/contracts/feature-flags';
 import { resolveTestDb } from '@/testing/db/create-test-db';
 import { DrizzleFeatureFlagService } from '@/modules/feature-flags';
 
@@ -494,11 +529,9 @@ afterAll(async () => {
 
 it('returns false for unknown flag', async () => {
   const svc = new DrizzleFeatureFlagService(testDb.db);
-  const ctx = {
-    tenant: { tenantId: 'acme' },
-    subject: { id: 'u1' },
-    resource: { type: 'feature' },
-    action: 'feature:read',
+  const ctx: FeatureFlagEvaluationContext = {
+    scope: { kind: 'platform-global' },
+    subject: { kind: 'system', systemSubjectId: 'test' },
   };
   expect(await svc.isEnabled('unknown', ctx)).toBe(false);
 });
@@ -526,4 +559,4 @@ pnpm e2e
 - **`GROWTHBOOK_API_HOST` is validated at startup.** The factory rejects non-`https:` URLs with a startup error. Do not disable this validation.
 - **Flag evaluation is always server-side.** The `FeatureFlagService` contract is not exported to client bundles. Security-sensitive flags (e.g. `extended-security-form`) remain server-controlled.
 - **The fail-safe guarantee means flags default to `false` on error.** This is intentional — it is safer to hide a feature than to expose it when the flag system is unhealthy.
-- **Tenant isolation in the DB adapter**: tenant-scoped rows are only visible to that tenant's `tenantId`. A global row is the fallback, not a bypass. A tenant-scoped `enabled: false` wins over a global `enabled: true`.
+- **Canonical organization containment in the DB adapter (OZI-71 FF·D)**: for `organization` scope, the `(organizationId, tenantId)` tuple is proven valid FIRST (a real `organizations` row where `id = organizationId AND tenant_id = tenantId`) — an invalid tuple fails closed to `false`, with no fallback of any kind. Only once the tuple is valid does a `canonical_organization` row for that exact `organizationId` become reachable, and it wins over an `intentional_global` row (override before global, not a bypass — a `canonical_organization` `enabled: false` beats an `intentional_global` `enabled: true`). For `platform-global` scope, only `intentional_global` rows resolve. `unresolved_legacy` and `quarantined` rows are excluded from every scope, always. The legacy `feature_flags.tenant_id` column is rollback/compatibility data only (dual-written for FF·B, still read by the Audit subsystem's own legacy contract) — it is **not** evaluation authority and is not read by `isEnabled()`.

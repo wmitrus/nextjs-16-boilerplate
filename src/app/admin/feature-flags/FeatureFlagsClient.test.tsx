@@ -299,6 +299,153 @@ describe('FeatureFlagsClient', () => {
       );
       await screen.findByText('Showing 1–25 of 35');
     });
+
+    it('auto-corrects to offset 0 when the current page falls out of range after a shrink', async () => {
+      // On page 2 (offset 25) when a delete elsewhere shrinks the total to
+      // 25 -- the stale offset=25 refetch comes back empty, so the client
+      // must snap to offset 0 and refetch rather than render the
+      // out-of-range page.
+      const pageTwoFlag = { ...FLAG, id: 'flag-p2', key: 'flag-p2' };
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, { total: 50 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([pageTwoFlag], PLATFORM_ADMIN_SCOPE, {
+            total: 50,
+            offset: 25,
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ data: { deleted: true } }))
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 25, offset: 25 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, {
+            total: 25,
+            offset: 0,
+          }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('my-flag');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('flag-p2');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=0',
+        ),
+      );
+      expect(await screen.findByText('Showing 1–25 of 25')).toBeInTheDocument();
+      expect(screen.queryByText('Showing 26–25 of 25')).not.toBeInTheDocument();
+    });
+
+    it('auto-corrects to the new last page when the total shrinks to a non-zero page', async () => {
+      // offset 50 goes stale when the total shrinks to 40 -- the last real
+      // page starts at 25 (floor((40-1)/25)*25), not 0.
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, { total: 100 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, {
+            total: 100,
+            offset: 25,
+          }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, {
+            total: 100,
+            offset: 50,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({ data: { flag: { ...FLAG, enabled: false } } }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 40, offset: 50 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse(manyFlags, PLATFORM_ADMIN_SCOPE, {
+            total: 40,
+            offset: 25,
+          }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('my-flag');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=50',
+        ),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'On' }));
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+      expect(
+        await screen.findByText('Showing 26–40 of 40'),
+      ).toBeInTheDocument();
+    });
+
+    it('corrects to offset 0 with no negative offset when the total becomes zero', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, { total: 50 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([FLAG], PLATFORM_ADMIN_SCOPE, {
+            total: 50,
+            offset: 25,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({ data: { flag: { ...FLAG, enabled: false } } }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 0, offset: 25 }),
+        )
+        .mockResolvedValueOnce(
+          pageResponse([], PLATFORM_ADMIN_SCOPE, { total: 0, offset: 0 }),
+        );
+
+      render(<FeatureFlagsClient />);
+      await screen.findByText('my-flag');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(fetch).toHaveBeenLastCalledWith(
+          '/api/admin/feature-flags?limit=25&offset=25',
+        ),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'On' }));
+
+      expect(await screen.findByText('No results')).toBeInTheDocument();
+      expect(fetch).toHaveBeenLastCalledWith(
+        '/api/admin/feature-flags?limit=25&offset=0',
+      );
+      for (const call of vi.mocked(fetch).mock.calls) {
+        expect(String(call[0])).not.toMatch(/offset=-/);
+      }
+    });
   });
 
   describe('SEC-26 follow-up: ABAC-authorized non-platform-admin scope', () => {

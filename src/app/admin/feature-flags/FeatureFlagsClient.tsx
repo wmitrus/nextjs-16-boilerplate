@@ -122,6 +122,19 @@ export function FeatureFlagsClient() {
           scope: AdminScope;
         };
       };
+      // The requested offset can be stale by the time this response lands
+      // (a delete shrank the total, or a concurrent change did). Rather than
+      // render a page that no longer exists, snap to the last real page and
+      // let the offset-driven effect below refetch it -- never commit an
+      // out-of-range page to `success` state.
+      const lastValidOffset =
+        json.data.total === 0
+          ? 0
+          : Math.floor((json.data.total - 1) / PAGE_SIZE) * PAGE_SIZE;
+      if (json.data.offset > lastValidOffset) {
+        setOffset(lastValidOffset);
+        return;
+      }
       setState({
         status: 'success',
         flags: json.data.flags,

@@ -2,6 +2,15 @@ import './load-env';
 
 import { spawnSync } from 'node:child_process';
 
+import postgres from 'postgres';
+
+import {
+  appendMigrationSessionParams,
+  runAudAPostMigrateSteps,
+  sqlRunnerFromPostgres,
+  type ConvergenceEnforcement,
+} from '@/core/db/post-migrate-steps';
+
 import { reconcileKnownMigrationState } from './reconcile-known-migration-state';
 import {
   assertMigrationJournalComplete,
@@ -67,13 +76,68 @@ export function describeMigrationTarget(resolved: ResolvedMigrationUrl): {
   };
 }
 
-function runDrizzleMigrate(): void {
+/**
+ * OZI-71 AUD·A — post-migrate convergence step, run AFTER `drizzle-kit migrate`
+ * has applied and committed the additive expand migration (`0023`):
+ *
+ *  - builds `idx_audit_events_organization_occurred` with
+ *    `CREATE INDEX CONCURRENTLY` on a fresh connection, OUTSIDE any
+ *    transaction (drizzle-kit wraps every pending migration in ONE
+ *    transaction, where CONCURRENTLY is illegal and a plain build would hold
+ *    a write-blocking `SHARE` lock for the whole scan of a large
+ *    `audit_events`);
+ *  - `VALIDATE`s the two `organization_id` FKs added `NOT VALID` by `0023`,
+ *    each as its own statement — provably a separate transaction from the
+ *    `ADD CONSTRAINT`.
+ *
+ * The connection carries the AUD·A `lock_timeout` / `statement_timeout` policy
+ * via URL params; the step additionally `SET`s a per-operation
+ * `statement_timeout` (0 for the concurrent index build, 1h for VALIDATE).
+ *
+ * `enforcement: 'enforce'` (post-migrate): absent columns / FKs / a
+ * non-matching index are a hard error — the command does not report success
+ * unless the index exists valid with the exact expected definition and both
+ * FKs are validated. `enforcement: 'inspect'` (`--check`): reports only.
+ */
+async function runAudAConvergenceStep(
+  resolved: ResolvedMigrationUrl,
+  enforcement: ConvergenceEnforcement,
+): Promise<void> {
+  const sql = postgres(appendMigrationSessionParams(resolved.url), {
+    prepare: false,
+    max: 1,
+    idle_timeout: 5,
+    connect_timeout: 10,
+  });
+
+  try {
+    const result = await runAudAPostMigrateSteps(
+      sqlRunnerFromPostgres(sql),
+      'concurrent',
+      { enforcement },
+    );
+    console.log(
+      JSON.stringify({ audAPostMigrate: { enforcement, ...result } }, null, 2),
+    );
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+function runDrizzleMigrate(resolved: ResolvedMigrationUrl): void {
   const result = spawnSync(
     'pnpm',
     ['exec', 'drizzle-kit', 'migrate', `--config=${DRIZZLE_CONFIG}`],
     {
       stdio: 'inherit',
-      env: process.env,
+      // Hand `drizzle-kit` a URL carrying the AUD·A DDL session-timeout policy
+      // (lock_timeout 3s, statement_timeout 30s) — the 0023 transaction runs on
+      // a client it builds from this URL alone. A blocked ALTER / ADD
+      // CONSTRAINT then aborts instead of queueing behind a long transaction.
+      env: {
+        ...process.env,
+        [resolved.source]: appendMigrationSessionParams(resolved.url),
+      },
     },
   );
 
@@ -92,13 +156,12 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
     process.env.DATABASE_URL,
     process.env.DATABASE_URL_UNPOOLED,
   );
-  const connectionString = migrationUrl?.url;
-
-  if (!connectionString) {
+  if (!migrationUrl) {
     throw new Error(
       '[db-migrate-prod] DATABASE_URL_UNPOOLED or DATABASE_URL is required before running prod migrations.',
     );
   }
+  const connectionString = migrationUrl.url;
 
   console.log(
     JSON.stringify(
@@ -139,6 +202,10 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
   );
 
   if (dryRun) {
+    // Inspect-only: 0023 may not have run, so report deferred/missing/would-*
+    // without mutation.
+    await runAudAConvergenceStep(migrationUrl, 'inspect');
+
     const repairSummary = await repairKnownMigrationJournalDrift({
       connectionString,
       dryRun: true,
@@ -168,7 +235,20 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  runDrizzleMigrate();
+  // 1. Additive expansion (migration 0023): ADD COLUMN / ADD FK NOT VALID /
+  //    ADD CHECK NOT VALID, under lock_timeout=3s / statement_timeout=30s.
+  //    `drizzle-kit migrate` applies it in its own transaction and COMMITS
+  //    before returning here.
+  runDrizzleMigrate(migrationUrl);
+
+  // 2. Post-migrate convergence, OUTSIDE that transaction: build the
+  //    audit_events organization index with CREATE INDEX CONCURRENTLY, then
+  //    VALIDATE the two deferred FKs (each its own statement). No journaled
+  //    migration ever builds that index — this is the only path that does.
+  //    `enforce`: this call throws unless the index ends up valid + matching
+  //    and both FKs are validated, so the command only succeeds on full
+  //    convergence.
+  await runAudAConvergenceStep(migrationUrl, 'enforce');
 
   const repairSummary = await repairKnownMigrationJournalDrift({
     connectionString,

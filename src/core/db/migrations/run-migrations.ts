@@ -1,9 +1,14 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { sql } from 'drizzle-orm';
 import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
+import {
+  runAudAPostMigrateSteps,
+  sqlRunnerFromDrizzle,
+} from '@/core/db/post-migrate-steps';
 import type { DbDriver, DrizzleDb } from '@/core/db/types';
 import { resolveServerLogger } from '@/core/logger/di';
 
@@ -64,23 +69,33 @@ export async function runMigrations(
       await migrate(db as PgliteDatabase<MigrationSchema>, {
         migrationsFolder: MIGRATIONS_FOLDER,
       });
-
-      logger.info(
-        {
-          event: 'db:migrations:success',
-          driver,
-          migrationsFolder: MIGRATIONS_FOLDER,
-          invocationCount: diagnostics.migrationInvocations,
-        },
-        'Database migration run completed',
-      );
-      return;
+    } else {
+      const { migrate } = await import('drizzle-orm/postgres-js/migrator');
+      await migrate(db as PostgresJsDatabase<MigrationSchema>, {
+        migrationsFolder: MIGRATIONS_FOLDER,
+      });
     }
 
-    const { migrate } = await import('drizzle-orm/postgres-js/migrator');
-    await migrate(db as PostgresJsDatabase<MigrationSchema>, {
-      migrationsFolder: MIGRATIONS_FOLDER,
-    });
+    // OZI-71 AUD·A — the migrator wraps every pending migration in ONE
+    // transaction, so `CREATE INDEX CONCURRENTLY` and a real commit boundary
+    // before `VALIDATE CONSTRAINT` cannot live in a journaled `.sql`. Run
+    // them here, after the migrator's transaction has committed. Idempotent;
+    // fails closed. `plain` index build for PGlite (single-connection, no
+    // large-table write-lock concern); `CONCURRENTLY` for real Postgres.
+    await runAudAPostMigrateSteps(
+      sqlRunnerFromDrizzle(db, (text) => sql.raw(text)),
+      driver === 'pglite' ? 'plain' : 'concurrent',
+      {
+        // `runMigrations` always returns with 0023 applied (journal at head),
+        // so absent AUD·A columns / FKs / index are a hard error here.
+        enforcement: 'enforce',
+        log: (event) =>
+          logger.info(
+            { event: 'db:migrations:post-step', driver, ...event },
+            'AUD·A post-migrate step',
+          ),
+      },
+    );
 
     logger.info(
       {

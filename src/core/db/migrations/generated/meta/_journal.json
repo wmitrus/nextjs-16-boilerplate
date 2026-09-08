@@ -162,6 +162,13 @@
       "when": 1788714032449,
       "tag": "0022_rare_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788794349331,
+      "tag": "0023_breezy_sandman",
+      "breakpoints": true
     }
   ]
 }

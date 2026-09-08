@@ -15,6 +15,11 @@ vi.mock('drizzle-orm/postgres-js/migrator', () => ({
   migrate: postgresMigrateMock,
 }));
 
+// The OZI-71 AUD·A post-migrate step introspects the DB after the migrator;
+// an empty result set makes it a clean no-op (columns "absent", FKs "missing").
+const emptyResultDb = () =>
+  ({ execute: vi.fn().mockResolvedValue([]) }) as unknown as DrizzleDb;
+
 describe('runMigrations', () => {
   afterEach(() => {
     delete process.env.NEXT_RUNTIME;
@@ -23,7 +28,7 @@ describe('runMigrations', () => {
   });
 
   it('runs pglite migrator for pglite driver', async () => {
-    const db = {} as DrizzleDb;
+    const db = emptyResultDb();
 
     await runMigrations(db, 'pglite');
 
@@ -32,7 +37,7 @@ describe('runMigrations', () => {
   });
 
   it('runs postgres migrator for postgres driver', async () => {
-    const db = {} as DrizzleDb;
+    const db = emptyResultDb();
 
     await runMigrations(db, 'postgres');
 

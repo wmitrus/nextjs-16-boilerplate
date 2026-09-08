@@ -22,6 +22,7 @@ import {
   ensureDeferredIndexes,
   runAudAPostMigrateSteps,
   sqlRunnerFromDrizzle,
+  sqlRunnerFromPostgres,
   validateDeferredForeignKeys,
   type IndexBuildMode,
   type SqlRunner,
@@ -90,6 +91,27 @@ async function columnExists(table: string, column: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/**
+ * `postgres-js` wraps driver errors in drizzle's `DrizzleQueryError` whose
+ * top-level `message` is only `"Failed query: ..."`; the real Postgres error
+ * (`canceling statement due to lock timeout`, code `55P03`) lives on `.cause`.
+ * Walk the chain so an assertion can match the real cause.
+ */
+function errorChainText(err: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.message);
+      current = (current as { cause?: unknown }).cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  return parts.join(' | ');
+}
+
 /** Drop both audit tables' AUD·A objects and the 0023 journal row, so the next
  * `runMigrations` replays 0023 from scratch. */
 async function reconstructPre0023(): Promise<void> {
@@ -123,7 +145,7 @@ afterEach(async () => {
   // is not removed by `DROP COLUMN organization_id CASCADE`.
   await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
   await reconstructPre0023();
-  await runMigrations(testDb.db, driver);
+  await runMigrations(testDb.db, driver, { postgresUrl: testUrl });
 });
 
 afterAll(async () => {
@@ -301,14 +323,21 @@ describe('enforce vs inspect gate (fix 2)', () => {
   });
 });
 
-describe('timeout policy actually enforced (fix 1, real Postgres)', () => {
+describe('timeout policy actually enforced on a session-affine connection (fixes 1 + 2, real Postgres)', () => {
   it.skipIf(!isRealPg)(
-    'lock_timeout aborts a CREATE INDEX blocked behind ACCESS EXCLUSIVE within a few seconds',
+    'lock_timeout aborts a blocked CONCURRENTLY build within a few seconds — SET and CREATE INDEX share one session',
     async () => {
       const postgres = (await import('postgres')).default;
       await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
 
+      // A dedicated single-connection client == one explicit PostgreSQL
+      // session, exactly what `runMigrations`/`db-migrate-prod` reserve for
+      // the convergence. `SET lock_timeout` and the `CREATE INDEX
+      // CONCURRENTLY` it governs run on THIS connection.
+      const affineClient = postgres(testUrl!, { max: 1 });
+      const affineRunner = sqlRunnerFromPostgres(affineClient);
       const blocker = postgres(testUrl!, { max: 1 });
+
       try {
         // Hold ACCESS EXCLUSIVE on audit_events in another session.
         const held = blocker
@@ -319,17 +348,69 @@ describe('timeout policy actually enforced (fix 1, real Postgres)', () => {
           .catch(() => undefined);
 
         const started = Date.now();
-        await expect(
-          ensureDeferredIndexes(runner, 'concurrent'),
-        ).rejects.toThrow(
-          /lock timeout|canceling statement due to lock timeout|55P03/i,
+        let thrown: unknown;
+        try {
+          await ensureDeferredIndexes(affineRunner, 'concurrent');
+        } catch (err) {
+          thrown = err;
+        }
+        expect(
+          thrown,
+          'the blocked CONCURRENTLY build must abort',
+        ).toBeDefined();
+        // The real Postgres cause (55P03) is wrapped by drizzle — match the chain.
+        expect(errorChainText(thrown)).toMatch(
+          /lock[_ ]timeout|canceling statement due to lock timeout|55P03/i,
         );
-        // ~lock_timeout (3s) + slack, well under the blocker's 15s hold.
-        expect(Date.now() - started).toBeLessThan(10_000);
+        // lock_timeout is 3s; allow generous CI slack but far below the 15s hold.
+        expect(Date.now() - started).toBeLessThan(12_000);
 
         await held;
       } finally {
+        await affineClient.end({ timeout: 5 });
         await blocker.end({ timeout: 5 });
+      }
+    },
+  );
+
+  it.skipIf(!isRealPg)(
+    "0023's SET LOCAL timeouts do not leak past its reset — a later statement in the same outer transaction runs under the default (fix 1 reset contract)",
+    async () => {
+      const postgres = (await import('postgres')).default;
+      const c = postgres(testUrl!, { max: 1 });
+      try {
+        const r = await c.begin(async (tx) => {
+          const before = (await tx.unsafe('SHOW statement_timeout')) as Array<{
+            statement_timeout: string;
+          }>;
+          // 0023's wrapper.
+          await tx.unsafe("SET LOCAL lock_timeout = '3s'");
+          await tx.unsafe("SET LOCAL statement_timeout = '30s'");
+          const mid = (await tx.unsafe('SHOW statement_timeout')) as Array<{
+            statement_timeout: string;
+          }>;
+          // 0023's reset (the last two statements of 0023_breezy_sandman.sql).
+          await tx.unsafe('SET LOCAL lock_timeout = DEFAULT');
+          await tx.unsafe('SET LOCAL statement_timeout = DEFAULT');
+          const afterStmt = (await tx.unsafe(
+            'SHOW statement_timeout',
+          )) as Array<{ statement_timeout: string }>;
+          const afterLock = (await tx.unsafe('SHOW lock_timeout')) as Array<{
+            lock_timeout: string;
+          }>;
+          return {
+            before: before[0]!.statement_timeout,
+            mid: mid[0]!.statement_timeout,
+            afterStmt: afterStmt[0]!.statement_timeout,
+            afterLock: afterLock[0]!.lock_timeout,
+          };
+        });
+        expect(r.mid).toBe('30s'); // scoped inside 0023
+        expect(r.afterStmt).toBe(r.before); // reset for whatever runs next
+        expect(r.afterStmt).not.toBe('30s');
+        expect(r.afterLock).not.toBe('3s');
+      } finally {
+        await c.end({ timeout: 5 });
       }
     },
   );

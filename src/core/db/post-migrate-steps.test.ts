@@ -1,7 +1,10 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
-  appendMigrationSessionParams,
+  assertDirectPostgresUrl,
   AUD_A_DEFERRED_FK_VALIDATIONS,
   AUD_A_DEFERRED_INDEXES,
   AUD_A_TIMEOUTS,
@@ -10,7 +13,9 @@ import {
   DeferredIndexDefinitionMismatchError,
   decideDeferredIndexAction,
   ensureDeferredIndexes,
+  isPooledPostgresUrl,
   normalizeIndexdef,
+  PooledConnectionRejectedError,
   validateDeferredForeignKeys,
   type ExistingIndexState,
   type SqlRunner,
@@ -171,18 +176,6 @@ function fakeRunner(state: FakeState = {}): {
 }
 
 describe('timeout policy is applied (not merely documented)', () => {
-  it('appendMigrationSessionParams sets lock_timeout=3000 & statement_timeout=30000, idempotently, preserving other params', () => {
-    const out = appendMigrationSessionParams(
-      'postgresql://u:p@ep-x.example/db?sslmode=require',
-    );
-    const u = new URL(out);
-    expect(u.searchParams.get('lock_timeout')).toBe('3000');
-    expect(u.searchParams.get('statement_timeout')).toBe('30000');
-    expect(u.searchParams.get('sslmode')).toBe('require');
-    // idempotent
-    expect(appendMigrationSessionParams(out)).toBe(out);
-  });
-
   it('documented values', () => {
     expect(AUD_A_TIMEOUTS).toEqual({
       LOCK_TIMEOUT_MS: 3_000,
@@ -227,6 +220,77 @@ describe('timeout policy is applied (not merely documented)', () => {
       'ALTER TABLE "audit_events" VALIDATE CONSTRAINT "audit_events_organization_id_organizations_id_fk"',
       'ALTER TABLE "audit_log_settings" VALIDATE CONSTRAINT "audit_log_settings_organization_id_organizations_id_fk"',
     ]);
+  });
+});
+
+describe('AUD·A 0023-only timeout scoping (fix 1)', () => {
+  const MIGRATIONS_DIR = resolve(
+    process.cwd(),
+    'src/core/db/migrations/generated',
+  );
+  const read = (f: string) =>
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    readFileSync(resolve(MIGRATIONS_DIR, f), 'utf8');
+
+  it('migration 0023 wraps its statements in SET LOCAL lock_timeout=3s / statement_timeout=30s and resets to DEFAULT', () => {
+    const sql = read('0023_breezy_sandman.sql');
+    const stmts = sql
+      .split('\n')
+      .filter((l) => !/^\s*--/.test(l))
+      .join('\n')
+      .split(/;\s*(?:--> statement-breakpoint)?/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    expect(stmts[0]).toBe("SET LOCAL lock_timeout = '3s'");
+    expect(stmts[1]).toBe("SET LOCAL statement_timeout = '30s'");
+    expect(stmts.at(-2)).toBe('SET LOCAL lock_timeout = DEFAULT');
+    expect(stmts.at(-1)).toBe('SET LOCAL statement_timeout = DEFAULT');
+    // Every DDL statement sits BETWEEN the SET LOCAL and the reset.
+    const firstDdl = stmts.findIndex((s) => /^ALTER TABLE|^CREATE /i.test(s));
+    const resetAt = stmts.findIndex((s) => /= DEFAULT$/.test(s));
+    expect(firstDdl).toBeGreaterThan(1);
+    expect(firstDdl).toBeLessThan(resetAt);
+  });
+
+  it('NO OTHER generated migration sets lock_timeout / statement_timeout (0023-only)', () => {
+    const offenders = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith('.sql') && f !== '0023_breezy_sandman.sql')
+      .filter((f) => /\b(lock_timeout|statement_timeout)\b/i.test(read(f)));
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('direct/unpooled connection guard (fix 2)', () => {
+  it('accepts a direct URL (generic and Neon direct)', () => {
+    expect(
+      isPooledPostgresUrl('postgresql://u:p@db.internal.example/app'),
+    ).toBe(false);
+    expect(
+      isPooledPostgresUrl(
+        'postgresql://u:p@ep-cool-name-123.us-east-1.aws.neon.tech/app',
+      ),
+    ).toBe(false);
+    expect(() =>
+      assertDirectPostgresUrl(
+        'postgresql://u:p@ep-cool-name-123.us-east-1.aws.neon.tech/app',
+        'test',
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects known pooler URLs (Neon pooler, Supabase pooler, pgbouncer)', () => {
+    for (const url of [
+      'postgresql://u:p@ep-cool-name-123-pooler.us-east-1.aws.neon.tech/app',
+      'postgresql://u:p@aws-0-eu-west-1.pooler.supabase.com:6543/postgres',
+      'postgresql://u:p@db.example/app?pgbouncer=true',
+      'postgresql://u:p@pgbouncer.internal:6432/app',
+    ]) {
+      expect(isPooledPostgresUrl(url), url).toBe(true);
+      expect(() => assertDirectPostgresUrl(url, 'test'), url).toThrow(
+        PooledConnectionRejectedError,
+      );
+    }
   });
 });
 

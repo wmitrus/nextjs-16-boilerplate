@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   describeMigrationTarget,
   resolveMigrationUrl,
   resolveMigrationUrlWithSource,
+  run,
 } from './db-migrate-prod';
 
 describe('db-migrate-prod migration URL resolution', () => {
@@ -48,5 +49,32 @@ describe('db-migrate-prod migration URL resolution', () => {
     });
     expect(JSON.stringify(target)).not.toContain('runtime');
     expect(JSON.stringify(target)).not.toContain('[REDACTED]');
+  });
+});
+
+describe('db-migrate-prod fails closed on connection configuration (fix 2)', () => {
+  const savedUrl = process.env.DATABASE_URL;
+  const savedUnpooled = process.env.DATABASE_URL_UNPOOLED;
+
+  afterEach(() => {
+    if (savedUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = savedUrl;
+    if (savedUnpooled === undefined) delete process.env.DATABASE_URL_UNPOOLED;
+    else process.env.DATABASE_URL_UNPOOLED = savedUnpooled;
+  });
+
+  it('rejects a pooled migration URL BEFORE running any migration', async () => {
+    delete process.env.DATABASE_URL_UNPOOLED;
+    process.env.DATABASE_URL =
+      'postgresql://u:p@ep-x-pooler.us-east-1.aws.neon.tech/app';
+    await expect(run([])).rejects.toThrow(/DIRECT \(unpooled\)/i);
+  });
+
+  it('requires a migration URL', async () => {
+    delete process.env.DATABASE_URL;
+    delete process.env.DATABASE_URL_UNPOOLED;
+    await expect(run([])).rejects.toThrow(
+      /DATABASE_URL_UNPOOLED or DATABASE_URL is required/i,
+    );
   });
 });

@@ -65,7 +65,7 @@ beforeAll(async () => {
 afterAll(async () => {
   // Guarantee the shared schema is back at 0021 regardless of where the test
   // stopped, then drop this suite's rows.
-  await runMigrations(testDb.db, driver);
+  await runMigrations(testDb.db, driver, { postgresUrl: testUrl });
   await testDb.cleanup();
 });
 
@@ -115,7 +115,7 @@ describe('feature_flags — OZI-71 FF·A migration 0021 transition (real DB)', (
     );
 
     // 3. Apply 0021 as a real migration transition via the repo's runner.
-    await runMigrations(testDb.db, driver);
+    await runMigrations(testDb.db, driver, { postgresUrl: testUrl });
 
     // 4. Read those exact rows back.
     const rows = await testDb.db

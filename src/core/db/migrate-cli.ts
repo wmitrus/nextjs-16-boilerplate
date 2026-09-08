@@ -43,6 +43,19 @@ function resolveUrl(driver: DbDriver): string | undefined {
   return url;
 }
 
+/**
+ * Direct (unpooled) URL for the AUD·A post-migrate convergence's dedicated
+ * single-session client. `DATABASE_URL_UNPOOLED` is preferred; `runMigrations`
+ * fails closed if the resolved URL is a known pooler endpoint.
+ */
+function resolveDirectConvergenceUrl(): string | undefined {
+  return (
+    process.env.DATABASE_URL_UNPOOLED?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    undefined
+  );
+}
+
 async function main(): Promise<void> {
   const provider = resolveProvider();
   const driver = resolveDriver();
@@ -57,7 +70,14 @@ async function main(): Promise<void> {
   const dbRuntime = createDb({ provider, driver, url });
 
   try {
-    await runMigrations(dbRuntime.db, driver);
+    // For the postgres driver, `runMigrations` needs a DIRECT URL to open its
+    // own dedicated single-session client for the AUD·A convergence, because
+    // `createDb`'s postgres client is a pool and SET + CONCURRENTLY + VALIDATE
+    // must run through one physical session.
+    await runMigrations(dbRuntime.db, driver, {
+      postgresUrl:
+        driver === 'postgres' ? resolveDirectConvergenceUrl() : undefined,
+    });
   } finally {
     await dbRuntime.close?.();
   }

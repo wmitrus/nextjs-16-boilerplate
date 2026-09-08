@@ -69,7 +69,7 @@ beforeAll(async () => {
 afterAll(async () => {
   // Restore the shared schema to head regardless of where the test stopped,
   // then drop this suite's rows.
-  await runMigrations(testDb.db, driver);
+  await runMigrations(testDb.db, driver, { postgresUrl: testUrl });
   await testDb.db.execute(
     sql`DELETE FROM audit_events WHERE action IN (${sql.join(
       FIXTURE_ACTIONS.map((a) => sql`${a}`),
@@ -111,7 +111,7 @@ describe('audit_events — OZI-71 AUD·A migration-forward transition (real DB)'
     }
 
     // 3. Apply 0023 + the post-migrate convergence step (runMigrations does both).
-    await runMigrations(testDb.db, driver);
+    await runMigrations(testDb.db, driver, { postgresUrl: testUrl });
 
     // 4. Read the seeded rows back.
     const rows = await testDb.db

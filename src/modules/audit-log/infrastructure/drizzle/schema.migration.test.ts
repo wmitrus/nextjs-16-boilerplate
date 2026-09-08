@@ -163,6 +163,20 @@ describe('0023 AUD·A expand migration SQL contract', () => {
       new Set(['audit_events', 'audit_log_settings']),
     );
   });
+
+  it('scopes lock_timeout=3s / statement_timeout=30s to 0023 only, via SET LOCAL + reset', () => {
+    const s = EXPAND_SQL.split('--> statement-breakpoint')
+      .join('')
+      .split(';')
+      .map((x) => x.trim())
+      .filter(Boolean);
+    expect(s[0]).toBe("SET LOCAL lock_timeout = '3s'");
+    expect(s[1]).toBe("SET LOCAL statement_timeout = '30s'");
+    expect(s.at(-2)).toBe('SET LOCAL lock_timeout = DEFAULT');
+    expect(s.at(-1)).toBe('SET LOCAL statement_timeout = DEFAULT');
+    // No connection-wide / non-LOCAL timeout SET.
+    expect(EXPAND_SQL).not.toMatch(/^SET (lock_timeout|statement_timeout)/m);
+  });
 });
 
 describe('AUD·A is exactly one journaled migration', () => {

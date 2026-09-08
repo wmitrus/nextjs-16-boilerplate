@@ -225,15 +225,56 @@ export const AUD_A_TIMEOUTS = {
 } as const;
 
 /**
- * Query-string parameters to append to the migration connection URL so the
- * `drizzle-kit migrate` subprocess (which builds its own client from the URL)
- * starts its session with the 0023-transaction timeout policy. `postgres.js`
- * forwards unrecognised URL params as startup parameters.
+ * The AUD-A DDL timeout policy (`lock_timeout` 3s / `statement_timeout` 30s)
+ * is NOT applied to the whole `drizzle-kit migrate` subprocess — Drizzle wraps
+ * every pending migration in ONE transaction, so a fresh / far-behind database
+ * would run 0000..0022 (including data-backfill migrations like 0014) under
+ * 0023's short caps. Instead, migration `0023_breezy_sandman.sql` scopes the
+ * policy to its own statements with `SET LOCAL … ` + an explicit
+ * `SET LOCAL … = DEFAULT` reset before the transaction moves on to any
+ * migration batched after it. The convergence step below sets its own session
+ * timeouts on a dedicated connection.
  */
-export const AUD_A_MIGRATION_URL_PARAMS: Readonly<Record<string, string>> = {
-  lock_timeout: String(AUD_A_TIMEOUTS.LOCK_TIMEOUT_MS),
-  statement_timeout: String(AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_DDL_MS),
-};
+
+/**
+ * Known connection-pooler markers. A transaction pooler (PgBouncer, Neon
+ * pooler, Supabase pooler) does NOT keep separate statements on one physical
+ * backend, so `SET` → `CREATE INDEX CONCURRENTLY` → `VALIDATE CONSTRAINT` are
+ * not guaranteed session-affine through it. Kept in sync with the pooler
+ * check in `src/core/db/migrations/config/drizzle.prod.ts`.
+ */
+const POOLED_CONNECTION_MARKERS = [
+  '-pooler.', // Neon pooler hostname
+  'pooler.supabase.com', // Supabase pooler hostname
+  'pgbouncer', // PgBouncer hostname or `?pgbouncer=true`
+] as const;
+
+/** True when `url` carries a known transaction-pooler marker. */
+export function isPooledPostgresUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return POOLED_CONNECTION_MARKERS.some((marker) => lower.includes(marker));
+}
+
+export class PooledConnectionRejectedError extends Error {
+  constructor(context: string) {
+    super(
+      '[post-migrate-steps] ' +
+        context +
+        ' requires a DIRECT (unpooled) PostgreSQL URL — a transaction pooler ' +
+        'does not keep SET / CREATE INDEX CONCURRENTLY / VALIDATE CONSTRAINT on ' +
+        'one physical session. Use DATABASE_URL_UNPOOLED (or a genuinely direct ' +
+        'DATABASE_URL).',
+    );
+    this.name = 'PooledConnectionRejectedError';
+  }
+}
+
+/** Throw {@link PooledConnectionRejectedError} unless `url` is a direct URL. */
+export function assertDirectPostgresUrl(url: string, context: string): void {
+  if (isPooledPostgresUrl(url)) {
+    throw new PooledConnectionRejectedError(context);
+  }
+}
 
 /**
  * `enforce` (default) — a real post-migrate run: 0023 has been applied and
@@ -333,6 +374,98 @@ async function dropIfInvalid(
   return false;
 }
 
+type MutatingIndexAction = Extract<
+  DeferredIndexAction,
+  { kind: 'create' | 'recreate-invalid' }
+>;
+
+/**
+ * Build one deferred index (`enforce` mode only). Sets the per-operation
+ * session timeouts (lock 3s / statement 0 — never cap a legitimate long
+ * CONCURRENTLY build), drops a pre-existing INVALID index first when
+ * recreating, then issues the `CREATE INDEX`. If the build throws (lock
+ * timeout, cancellation, ...) a same-name INVALID index it left behind is
+ * dropped best-effort and the ORIGINAL error is rethrown unchanged — the
+ * cleanup must never mask the root cause.
+ */
+async function buildDeferredIndex(
+  runner: SqlRunner,
+  cc: string,
+  spec: DeferredIndexSpec,
+  action: MutatingIndexAction,
+  buildMode: IndexBuildMode,
+  log: (event: Record<string, unknown>) => void,
+): Promise<void> {
+  await setSessionTimeouts(runner, AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_INDEX_MS);
+
+  if (action.kind === 'recreate-invalid') {
+    log({ step: 'index', index: spec.name, op: 'drop-invalid', buildMode });
+    await runner.query(
+      'DROP INDEX' + cc + ' IF EXISTS "public"."' + spec.name + '"',
+    );
+  }
+
+  log({ step: 'index', index: spec.name, op: 'create', buildMode });
+  try {
+    await runner.query(
+      'CREATE INDEX' +
+        cc +
+        ' "' +
+        spec.name +
+        '" ON "' +
+        spec.table +
+        '" USING btree ' +
+        spec.columnListSql,
+    );
+  } catch (err) {
+    let dropped = false;
+    try {
+      dropped = await dropIfInvalid(runner, cc, spec.name);
+    } catch {
+      // Cleanup is best-effort; never mask the original build failure.
+    }
+    log({
+      step: 'index',
+      index: spec.name,
+      op: 'build-failed',
+      droppedInvalid: dropped,
+    });
+    throw err;
+  }
+}
+
+/**
+ * Post-condition (`enforce` mode only): after a build, the index MUST exist,
+ * be valid, and match its expected definition. Otherwise drop a same-name
+ * INVALID index it left and throw `AudAConvergenceError` — the convergence
+ * never reports success half-done.
+ */
+async function assertDeferredIndexConverged(
+  runner: SqlRunner,
+  cc: string,
+  spec: DeferredIndexSpec,
+): Promise<void> {
+  const after = await introspectIndex(runner, spec.name);
+  const defMatches =
+    normalizeIndexdef(after.indexdef ?? '') ===
+    normalizeIndexdef(spec.expectedIndexdef);
+  if (after.exists && after.valid && defMatches) return;
+
+  await dropIfInvalid(runner, cc, spec.name);
+  throw new AudAConvergenceError(
+    'build of ' +
+      JSON.stringify(spec.name) +
+      ' did not produce a valid index matching the expected definition' +
+      ' (exists=' +
+      after.exists +
+      ', valid=' +
+      after.valid +
+      ', def=' +
+      JSON.stringify(after.indexdef) +
+      '). Re-run once the cause is resolved.',
+  );
+}
+
 /**
  * Ensure every deferred index exists, is valid, and matches its expected
  * definition. `buildMode` 'concurrent' uses CREATE/DROP INDEX CONCURRENTLY
@@ -345,11 +478,6 @@ async function dropIfInvalid(
  * on return. `inspect` mode: report the action that WOULD be taken, mutate
  * nothing (a `SET`-free read-only pass), still throw on a VALID
  * wrong-definition collision.
- *
- * If `CREATE INDEX CONCURRENTLY` throws (lock timeout, cancellation, ...) the
- * failure path removes a same-name INVALID index it left behind and rethrows,
- * so the next run starts clean. (A later convergence run would also detect,
- * drop and rebuild an INVALID index — this just makes the current run tidy.)
  */
 export async function ensureDeferredIndexes(
   runner: SqlRunner,
@@ -404,60 +532,9 @@ export async function ensureDeferredIndexes(
       continue;
     }
 
-    // enforce mode, action is 'create' or 'recreate-invalid': mutate.
-    await setSessionTimeouts(runner, AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_INDEX_MS);
-
-    if (action.kind === 'recreate-invalid') {
-      log({ step: 'index', index: spec.name, op: 'drop-invalid', buildMode });
-      await runner.query(
-        'DROP INDEX' + cc + ' IF EXISTS "public"."' + spec.name + '"',
-      );
-    }
-
-    log({ step: 'index', index: spec.name, op: 'create', buildMode });
-    try {
-      await runner.query(
-        'CREATE INDEX' +
-          cc +
-          ' "' +
-          spec.name +
-          '" ON "' +
-          spec.table +
-          '" USING btree ' +
-          spec.columnListSql,
-      );
-    } catch (err) {
-      const dropped = await dropIfInvalid(runner, cc, spec.name);
-      log({
-        step: 'index',
-        index: spec.name,
-        op: 'build-failed',
-        droppedInvalid: dropped,
-      });
-      throw err;
-    }
-
-    const after = await introspectIndex(runner, spec.name);
-    if (
-      !after.exists ||
-      !after.valid ||
-      normalizeIndexdef(after.indexdef ?? '') !==
-        normalizeIndexdef(spec.expectedIndexdef)
-    ) {
-      await dropIfInvalid(runner, cc, spec.name);
-      throw new AudAConvergenceError(
-        'build of ' +
-          JSON.stringify(spec.name) +
-          ' did not produce a valid index matching the expected definition' +
-          ' (exists=' +
-          after.exists +
-          ', valid=' +
-          after.valid +
-          ', def=' +
-          JSON.stringify(after.indexdef) +
-          '). Re-run once the cause is resolved.',
-      );
-    }
+    // enforce mode, action is 'create' or 'recreate-invalid'.
+    await buildDeferredIndex(runner, cc, spec, action, buildMode, log);
+    await assertDeferredIndexConverged(runner, cc, spec);
 
     log({
       step: 'index',
@@ -566,21 +643,6 @@ export async function validateDeferredForeignKeys(
   }
 
   return outcomes;
-}
-
-/**
- * Return `url` with the 0023-transaction session-timeout params
- * ({@link AUD_A_MIGRATION_URL_PARAMS}) set as query parameters, so a client
- * built from the URL alone (the `drizzle-kit migrate` subprocess, and our own
- * convergence connection) starts its session with the policy applied.
- * Idempotent — overwrites any pre-existing values for those keys.
- */
-export function appendMigrationSessionParams(url: string): string {
-  const parsed = new URL(url);
-  for (const [key, value] of Object.entries(AUD_A_MIGRATION_URL_PARAMS)) {
-    parsed.searchParams.set(key, value);
-  }
-  return parsed.toString();
 }
 
 export interface AudAPostMigrateResult {

@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import postgres from 'postgres';
 
 import {
-  appendMigrationSessionParams,
+  assertDirectPostgresUrl,
   runAudAPostMigrateSteps,
   sqlRunnerFromPostgres,
   type ConvergenceEnforcement,
@@ -103,7 +103,10 @@ async function runAudAConvergenceStep(
   resolved: ResolvedMigrationUrl,
   enforcement: ConvergenceEnforcement,
 ): Promise<void> {
-  const sql = postgres(appendMigrationSessionParams(resolved.url), {
+  // Session affinity is only real on a DIRECT connection.
+  assertDirectPostgresUrl(resolved.url, 'AUD·A post-migrate convergence');
+
+  const sql = postgres(resolved.url, {
     prepare: false,
     max: 1,
     idle_timeout: 5,
@@ -124,20 +127,20 @@ async function runAudAConvergenceStep(
   }
 }
 
-function runDrizzleMigrate(resolved: ResolvedMigrationUrl): void {
+/**
+ * Run `drizzle-kit migrate`. It reads `DATABASE_URL_UNPOOLED || DATABASE_URL`
+ * itself (see `drizzle.prod.ts`); no per-run timeout policy is injected here —
+ * migration `0023` scopes its own `lock_timeout` / `statement_timeout` with
+ * `SET LOCAL` so a catch-up batch never runs earlier / later migrations under
+ * 0023's caps.
+ */
+function runDrizzleMigrate(): void {
   const result = spawnSync(
     'pnpm',
     ['exec', 'drizzle-kit', 'migrate', `--config=${DRIZZLE_CONFIG}`],
     {
       stdio: 'inherit',
-      // Hand `drizzle-kit` a URL carrying the AUD·A DDL session-timeout policy
-      // (lock_timeout 3s, statement_timeout 30s) — the 0023 transaction runs on
-      // a client it builds from this URL alone. A blocked ALTER / ADD
-      // CONSTRAINT then aborts instead of queueing behind a long transaction.
-      env: {
-        ...process.env,
-        [resolved.source]: appendMigrationSessionParams(resolved.url),
-      },
+      env: process.env,
     },
   );
 
@@ -172,6 +175,12 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
       2,
     ),
   );
+
+  // Fail closed BEFORE any migration runs: the AUD·A post-migrate convergence
+  // needs one physical PostgreSQL session, so the migration URL must be a
+  // DIRECT (unpooled) endpoint. Rejecting here (not after 0023 commits)
+  // prevents a misconfigured deploy from committing 0023 without convergence.
+  assertDirectPostgresUrl(connectionString, 'db-migrate-prod');
 
   const summary = await reconcileKnownMigrationState({
     connectionString,
@@ -236,10 +245,12 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
   }
 
   // 1. Additive expansion (migration 0023): ADD COLUMN / ADD FK NOT VALID /
-  //    ADD CHECK NOT VALID, under lock_timeout=3s / statement_timeout=30s.
-  //    `drizzle-kit migrate` applies it in its own transaction and COMMITS
-  //    before returning here.
-  runDrizzleMigrate(migrationUrl);
+  //    ADD CHECK NOT VALID. `drizzle-kit migrate` applies it in its own
+  //    transaction and COMMITS before returning here. 0023 scopes its own
+  //    lock_timeout=3s / statement_timeout=30s with `SET LOCAL` (+ reset), so
+  //    a catch-up batch never runs earlier / later migrations under 0023's
+  //    caps.
+  runDrizzleMigrate();
 
   // 2. Post-migrate convergence, OUTSIDE that transaction: build the
   //    audit_events organization index with CREATE INDEX CONCURRENTLY, then

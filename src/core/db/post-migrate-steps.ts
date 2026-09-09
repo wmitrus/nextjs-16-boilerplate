@@ -33,10 +33,21 @@
  * expand migration has not been applied yet) the index step defers instead
  * of failing.
  *
- * Invoked from every migration entry point:
- *   - src/core/db/migrations/run-migrations.ts (PGlite CLI, Testcontainers CI
- *     globalSetup, resolveTestDb);
- *   - scripts/db-migrate-prod.ts, after `drizzle-kit migrate` returns.
+ * Invoked automatically from `src/core/db/migrations/run-migrations.ts` (PGlite
+ * CLI, Testcontainers CI globalSetup, resolveTestDb) right after the migrator.
+ *
+ * NOT invoked automatically by `scripts/db-migrate-prod.ts`: on Production the
+ * `CREATE INDEX CONCURRENTLY` build and the two `VALIDATE CONSTRAINT` scans are
+ * potentially long-running schema operations, which the AUD-A Production DDL
+ * safety plan requires to run behind an explicit operator gate with dry-run
+ * evidence and recovery guidance. `scripts/db-aud-a-converge.ts` is that gate
+ * (`--check` / `--apply --production-approved`) and calls straight into
+ * `runAudAPostMigrateSteps` — there is no second implementation.
+ *
+ * Timeout scoping: migration 0023 wraps its own statements in `SET LOCAL`
+ * (lock_timeout 3s / statement_timeout 30s + reset to DEFAULT); this
+ * post-migrate convergence issues per-operation `SET` on its own dedicated
+ * direct connection (see `setSessionTimeouts` + `AUD_A_TIMEOUTS`).
  *
  * See .copilot/tasks/2026-09-01-ozi-71-tenant-organization-architecture/plan.md
  * section 16 AUD-A ("Production index safety" + "Foreign-key rollout").
@@ -677,6 +688,190 @@ export async function runAudAPostMigrateSteps(
     options,
   );
   return { indexes, foreignKeys };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Read-only inspection + evidence (dedicated Production operator CLI)
+ *
+ * OZI-71 AUD·A Production DDL safety plan (plan §16 AUD·A): every potentially
+ * long-running Production schema operation must carry dry-run size/cardinality
+ * evidence, an explicit operator gate, abort criteria and recovery guidance.
+ * The `CREATE INDEX CONCURRENTLY` build and the two `VALIDATE CONSTRAINT`
+ * scans are exactly that class of operation, so they are NOT run automatically
+ * by `pnpm db:migrate:prod`; the dedicated `pnpm db:aud-a:converge` CLI runs
+ * them behind an explicit `--apply --production-approved` gate.
+ *
+ * `inspectAudAConvergence` / `gatherAudAConvergenceEvidence` are the read-only
+ * side of that CLI: they classify the current state and predict what `--apply`
+ * would do, reusing the SAME primitives (`introspectIndex`,
+ * `requiredColumnsPresent`, `constraintConvalidated`, `normalizeIndexdef`) the
+ * `enforce` executor uses. They issue only SELECTs — no `SET`, no DDL, no
+ * `VALIDATE`, no journal write. Unlike `ensureDeferredIndexes`, a same-name
+ * VALID index with a wrong definition is REPORTED here, not thrown.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export type AudAIndexInspectedState =
+  | 'absent'
+  | 'invalid'
+  | 'valid-exact'
+  | 'valid-wrong-definition';
+
+export type AudAIndexPlan =
+  | 'no-op'
+  | 'create-concurrently'
+  | 'rebuild-invalid'
+  | 'abort-wrong-definition'
+  | 'blocked-expand-not-applied';
+
+export type AudAForeignKeyPlan = 'no-op' | 'validate' | 'blocked-missing';
+
+export interface AudAIndexInspection {
+  readonly name: string;
+  readonly table: string;
+  readonly state: AudAIndexInspectedState;
+  readonly currentDefinition: string | null;
+  readonly expectedDefinition: string;
+  readonly plannedAction: AudAIndexPlan;
+}
+
+export interface AudAForeignKeyInspection {
+  readonly constraint: string;
+  readonly table: string;
+  readonly present: boolean;
+  readonly convalidated: boolean | null;
+  readonly plannedAction: AudAForeignKeyPlan;
+}
+
+export interface AudAConvergenceInspection {
+  /** Proxy for "migration 0023 applied" — its additive columns exist. */
+  readonly expandMigrationApplied: boolean;
+  readonly index: AudAIndexInspection;
+  readonly foreignKeys: AudAForeignKeyInspection[];
+  readonly timeoutPolicy: {
+    readonly lockTimeoutMs: number;
+    readonly indexBuildStatementTimeoutMs: number;
+    readonly fkValidateStatementTimeoutMs: number;
+  };
+}
+
+export interface AudAConvergenceEvidence {
+  readonly inspection: AudAConvergenceInspection;
+  readonly auditEventsRowCount: number | null;
+  readonly auditEventsTableBytes: number | null;
+  readonly auditEventsTotalRelationBytes: number | null;
+}
+
+/**
+ * Classify the current AUD·A convergence state and what an `--apply` run would
+ * do. Read-only (SELECT statements only); never throws on a wrong-definition
+ * index — it reports it.
+ */
+export async function inspectAudAConvergence(
+  runner: SqlRunner,
+  spec: DeferredIndexSpec = AUDIT_EVENTS_ORGANIZATION_INDEX,
+  fks: readonly DeferredForeignKeyValidation[] = AUD_A_DEFERRED_FK_VALIDATIONS,
+): Promise<AudAConvergenceInspection> {
+  const columnsPresent = await requiredColumnsPresent(runner, spec);
+  const existing = await introspectIndex(runner, spec.name);
+
+  let state: AudAIndexInspectedState;
+  let plannedAction: AudAIndexPlan;
+  if (!existing.exists) {
+    state = 'absent';
+    plannedAction = columnsPresent
+      ? 'create-concurrently'
+      : 'blocked-expand-not-applied';
+  } else if (!existing.valid) {
+    state = 'invalid';
+    plannedAction = 'rebuild-invalid';
+  } else if (
+    normalizeIndexdef(existing.indexdef ?? '') ===
+    normalizeIndexdef(spec.expectedIndexdef)
+  ) {
+    state = 'valid-exact';
+    plannedAction = 'no-op';
+  } else {
+    state = 'valid-wrong-definition';
+    plannedAction = 'abort-wrong-definition';
+  }
+
+  const foreignKeys: AudAForeignKeyInspection[] = [];
+  for (const fk of fks) {
+    const convalidated = await constraintConvalidated(runner, fk.constraint);
+    foreignKeys.push({
+      constraint: fk.constraint,
+      table: fk.table,
+      present: convalidated !== null,
+      convalidated,
+      plannedAction:
+        convalidated === null
+          ? 'blocked-missing'
+          : convalidated
+            ? 'no-op'
+            : 'validate',
+    });
+  }
+
+  return {
+    expandMigrationApplied: columnsPresent,
+    index: {
+      name: spec.name,
+      table: spec.table,
+      state,
+      currentDefinition: existing.indexdef,
+      expectedDefinition: spec.expectedIndexdef,
+      plannedAction,
+    },
+    foreignKeys,
+    timeoutPolicy: {
+      lockTimeoutMs: AUD_A_TIMEOUTS.LOCK_TIMEOUT_MS,
+      indexBuildStatementTimeoutMs: AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_INDEX_MS,
+      fkValidateStatementTimeoutMs:
+        AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_VALIDATE_MS,
+    },
+  };
+}
+
+/**
+ * {@link inspectAudAConvergence} plus `audit_events` cardinality / size
+ * evidence for the operator gate. Size lookups are best-effort — a
+ * permission-limited role still gets the inspection and row count. Read-only.
+ */
+export async function gatherAudAConvergenceEvidence(
+  runner: SqlRunner,
+): Promise<AudAConvergenceEvidence> {
+  const inspection = await inspectAudAConvergence(runner);
+
+  let auditEventsRowCount: number | null = null;
+  try {
+    const rows = await runner.query<{ n: string }>(
+      'select count(*)::text as n from audit_events',
+    );
+    if (rows[0]) auditEventsRowCount = Number(rows[0].n);
+  } catch {
+    // leave null — evidence is best-effort
+  }
+
+  let auditEventsTableBytes: number | null = null;
+  let auditEventsTotalRelationBytes: number | null = null;
+  try {
+    const rows = await runner.query<{ t: string; tot: string }>(
+      "select pg_table_size('audit_events')::text as t, pg_total_relation_size('audit_events')::text as tot",
+    );
+    if (rows[0]) {
+      auditEventsTableBytes = Number(rows[0].t);
+      auditEventsTotalRelationBytes = Number(rows[0].tot);
+    }
+  } catch {
+    // pg_table_size / pg_total_relation_size unavailable (e.g. PGlite) — null
+  }
+
+  return {
+    inspection,
+    auditEventsRowCount,
+    auditEventsTableBytes,
+    auditEventsTotalRelationBytes,
+  };
 }
 
 interface PostgresLikeClient {

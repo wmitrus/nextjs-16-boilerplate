@@ -323,7 +323,10 @@ export const auditEventsTable = pgTable(
      * the expand migration commits (plain `CREATE INDEX` for PGlite, which is
      * single-connection). Idempotent; fails closed on an INVALID or
      * wrong-definition same-name index (plan §16 AUD·A "Production index
-     * safety").
+     * safety"). On Production this step is not automatic: it runs behind the
+     * operator gate `pnpm db:aud-a:converge --apply --production-approved`
+     * (`scripts/db-aud-a-converge.ts`); Preview / CI / local run it
+     * automatically via `run-migrations.ts`.
      */
     index('idx_audit_events_organization_occurred').on(
       t.organizationId,

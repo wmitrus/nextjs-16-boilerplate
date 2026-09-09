@@ -115,6 +115,8 @@
     "db:pglite:migrate": "tsx src/core/db/migrate-cli.ts",
     "db:migrate:prod": "tsx scripts/db-migrate-prod.ts",
     "db:migrate:prod:local": "node --env-file=.env.production --import tsx scripts/db-migrate-prod.ts",
+    "db:aud-a:converge": "tsx scripts/db-aud-a-converge.ts",
+    "db:aud-a:converge:local": "node --env-file=.env.production --import tsx scripts/db-aud-a-converge.ts",
     "db:export:sql": "mkdir -p exports/sql && drizzle-kit export --config=src/core/db/migrations/config/drizzle.dev.ts > exports/sql/schema.sql",
     "db:pglite:studio": "drizzle-kit studio --config=src/core/db/migrations/config/drizzle.dev.ts",
     "db:pglite:seed": "cross-env DB_DRIVER=pglite tsx scripts/db-seed.ts",

@@ -20,6 +20,8 @@ import {
   AudAConvergenceError,
   DeferredIndexDefinitionMismatchError,
   ensureDeferredIndexes,
+  gatherAudAConvergenceEvidence,
+  inspectAudAConvergence,
   runAudAPostMigrateSteps,
   sqlRunnerFromDrizzle,
   sqlRunnerFromPostgres,
@@ -320,6 +322,109 @@ describe('enforce vs inspect gate (fix 2)', () => {
     });
     expect(second.indexes).toEqual([{ name: INDEX.name, action: 'skip' }]);
     expect(second.foreignKeys.map((f) => f.action)).toEqual(['skip', 'skip']);
+  });
+});
+
+describe('inspectAudAConvergence / gatherAudAConvergenceEvidence (read-only operator evidence)', () => {
+  async function snapshot() {
+    return {
+      idx: await indexState(),
+      fk0: await fkConvalidated(AUD_A_DEFERRED_FK_VALIDATIONS[0]!.constraint),
+      fk1: await fkConvalidated(AUD_A_DEFERRED_FK_VALIDATIONS[1]!.constraint),
+    };
+  }
+
+  it('a converged database reports valid-exact / no-op and mutates nothing', async () => {
+    const before = await snapshot();
+    const ins = await inspectAudAConvergence(runner);
+
+    expect(ins.expandMigrationApplied).toBe(true);
+    expect(ins.index.state).toBe('valid-exact');
+    expect(ins.index.plannedAction).toBe('no-op');
+    expect(ins.foreignKeys.map((f) => f.plannedAction)).toEqual([
+      'no-op',
+      'no-op',
+    ]);
+    expect(
+      ins.foreignKeys.every((f) => f.present && f.convalidated === true),
+    ).toBe(true);
+    expect(ins.timeoutPolicy).toEqual({
+      lockTimeoutMs: 3_000,
+      indexBuildStatementTimeoutMs: 0,
+      fkValidateStatementTimeoutMs: 3_600_000,
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('an absent index reports create-concurrently (columns present) without creating it', async () => {
+    await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+    const ins = await inspectAudAConvergence(runner);
+    expect(ins.index.state).toBe('absent');
+    expect(ins.index.plannedAction).toBe('create-concurrently');
+    expect(ins.index.currentDefinition).toBeNull();
+    expect((await indexState()).exists).toBe(false);
+  });
+
+  it('a same-name VALID wrong-definition index is REPORTED, not thrown', async () => {
+    await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+    await runner.query(
+      `CREATE INDEX "${INDEX.name}" ON "audit_events" USING btree ("occurred_at")`,
+    );
+    const ins = await inspectAudAConvergence(runner);
+    expect(ins.index.state).toBe('valid-wrong-definition');
+    expect(ins.index.plannedAction).toBe('abort-wrong-definition');
+    // still there, untouched
+    expect((await indexState()).def).toMatch(/\(occurred_at\)/);
+  });
+
+  it.skipIf(!isRealPg)(
+    'an INVALID index reports rebuild-invalid (real Postgres)',
+    async () => {
+      await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+      await runner.query(
+        `CREATE INDEX "${INDEX.name}" ON "audit_events" USING btree ("organization_id","occurred_at")`,
+      );
+      await runner.query(
+        `UPDATE pg_index SET indisvalid = false
+           WHERE indexrelid = '"public"."${INDEX.name}"'::regclass`,
+      );
+      const ins = await inspectAudAConvergence(runner);
+      expect(ins.index.state).toBe('invalid');
+      expect(ins.index.plannedAction).toBe('rebuild-invalid');
+      expect((await indexState()).valid).toBe(false);
+    },
+  );
+
+  it('pre-0023 reports blocked states and expandMigrationApplied=false, no mutation', async () => {
+    await reconstructPre0023();
+    const ins = await inspectAudAConvergence(runner);
+    expect(ins.expandMigrationApplied).toBe(false);
+    expect(ins.index.state).toBe('absent');
+    expect(ins.index.plannedAction).toBe('blocked-expand-not-applied');
+    expect(ins.foreignKeys.map((f) => f.plannedAction)).toEqual([
+      'blocked-missing',
+      'blocked-missing',
+    ]);
+    expect(
+      ins.foreignKeys.every((f) => !f.present && f.convalidated === null),
+    ).toBe(true);
+    expect((await indexState()).exists).toBe(false);
+  });
+
+  it('gatherAudAConvergenceEvidence returns cardinality and best-effort size, read-only', async () => {
+    const before = await snapshot();
+    const ev = await gatherAudAConvergenceEvidence(runner);
+
+    expect(ev.inspection.index.state).toBe('valid-exact');
+    expect(typeof ev.auditEventsRowCount).toBe('number');
+    expect(ev.auditEventsRowCount).toBeGreaterThanOrEqual(0);
+    if (isRealPg) {
+      expect(ev.auditEventsTableBytes).toBeGreaterThan(0);
+      expect(ev.auditEventsTotalRelationBytes).toBeGreaterThanOrEqual(
+        ev.auditEventsTableBytes!,
+      );
+    }
+    expect(await snapshot()).toEqual(before);
   });
 });
 

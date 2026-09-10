@@ -20,13 +20,19 @@ if (
   );
 }
 
+// Keep in sync with `POOLED_CONNECTION_MARKERS` in
+// `src/core/db/post-migrate-steps.ts` (this drizzle-kit config file cannot
+// import from `@/core` — the drizzle-kit loader resolves it standalone).
+const lowerUrl = migrationUrl.toLowerCase();
 const isPoolerUrl =
-  migrationUrl.includes('pgbouncer') || migrationUrl.includes('-pooler.');
+  lowerUrl.includes('pgbouncer') ||
+  lowerUrl.includes('-pooler.') ||
+  lowerUrl.includes('pooler.supabase.com');
 
 if (isPoolerUrl) {
   throw new Error(
     '[drizzle.prod] The effective migration URL appears to be a pooled/PgBouncer URL.\n' +
-      'Migrations MUST use the direct connection (no -pooler. in the hostname).',
+      'Migrations MUST use the direct (unpooled) connection.',
   );
 }
 

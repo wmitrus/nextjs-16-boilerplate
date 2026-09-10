@@ -1,0 +1,1124 @@
+/**
+ * OZI-71 AUD-A post-migrate convergence steps.
+ *
+ * Drizzle's PostgreSQL migrator (both `drizzle-orm/*` migrators and the
+ * `drizzle-kit migrate` CLI, which delegates to `drizzle-orm/postgres-js`)
+ * wraps every pending migration in ONE `session.transaction()`. That makes
+ * two things impossible to express as an ordinary journaled .sql migration:
+ *
+ *   1. CREATE INDEX CONCURRENTLY -- illegal inside any transaction; the
+ *      non-concurrent fallback holds a SHARE lock that blocks writes (not
+ *      reads) for the whole build of a large `audit_events`.
+ *   2. A real transaction boundary between ADD CONSTRAINT ... NOT VALID and
+ *      VALIDATE CONSTRAINT. Inside one transaction the brief SHARE ROW
+ *      EXCLUSIVE taken by ADD CONSTRAINT is held until commit -- i.e. for the
+ *      whole VALIDATE scan -- defeating the point of the NOT VALID split.
+ *
+ * So AUD-A ships exactly ONE journaled migration (0023, purely additive: ADD
+ * COLUMN, ADD FK NOT VALID, ADD CHECK NOT VALID, small indexes on the empty
+ * `audit_log_settings`). The migrator commits it. THEN this module runs, on a
+ * fresh connection, OUTSIDE any transaction:
+ *
+ *   - builds `idx_audit_events_organization_occurred`
+ *     (CREATE INDEX CONCURRENTLY on real Postgres; plain CREATE INDEX on
+ *     PGlite, which is single-connection with no large-table write-lock
+ *     concern);
+ *   - VALIDATEs the two deferred organization_id foreign keys, each as its
+ *     own statement -- provably after 0023 committed.
+ *
+ * Idempotent (safe to re-run every deploy) and FAILS CLOSED: an INVALID index
+ * (interrupted CONCURRENTLY build) is dropped and rebuilt; a same-name index
+ * with a different definition aborts the run; a build that does not yield a
+ * valid index is dropped and throws. If the target columns are absent (the
+ * expand migration has not been applied yet) the index step defers instead
+ * of failing.
+ *
+ * Each deferred FK is verified by FULL STRUCTURAL IDENTITY (Codex P2), not by
+ * name + `convalidated` — a constraint name is unique only within its table.
+ * `introspectForeignKey` anchors to the expected `public.<table>` and compares
+ * constraint type, source/referenced schema+table, ordered column lists, ON
+ * DELETE / ON UPDATE, MATCH and deferrability against the canonical spec in
+ * `AUD_A_DEFERRED_FK_VALIDATIONS`. A same-name FK on the expected table with a
+ * different definition is a HARD FAIL that is never dropped, recreated or
+ * validated; a same-name constraint on any other relation does not count.
+ *
+ * Invoked automatically from `src/core/db/migrations/run-migrations.ts` (PGlite
+ * CLI, Testcontainers CI globalSetup, resolveTestDb) right after the migrator.
+ *
+ * NOT invoked automatically by `scripts/db-migrate-prod.ts`: on Production the
+ * `CREATE INDEX CONCURRENTLY` build and the two `VALIDATE CONSTRAINT` scans are
+ * potentially long-running schema operations, which the AUD-A Production DDL
+ * safety plan requires to run behind an explicit operator gate with dry-run
+ * evidence and recovery guidance. `scripts/db-aud-a-converge.ts` is that gate
+ * (`--check` / `--apply --production-approved`) and calls straight into
+ * `runAudAPostMigrateSteps` — there is no second implementation.
+ *
+ * Timeout scoping: migration 0023 wraps its own statements in `SET LOCAL`
+ * (lock_timeout 3s / statement_timeout 30s + reset to DEFAULT); this
+ * post-migrate convergence issues per-operation `SET` on its own dedicated
+ * direct connection (see `setSessionTimeouts` + `AUD_A_TIMEOUTS`).
+ *
+ * See .copilot/tasks/2026-09-01-ozi-71-tenant-organization-architecture/plan.md
+ * section 16 AUD-A ("Production index safety" + "Foreign-key rollout").
+ */
+
+import {
+  absentForeignKeyIntrospection,
+  AUD_A_DEFERRED_FK_VALIDATIONS,
+  buildForeignKeyIntrospectionSql,
+  decideDeferredForeignKeyAction,
+  DeferredForeignKeyDefinitionMismatchError,
+  formatExpectedForeignKeyDef,
+  interpretForeignKeyRow,
+  planForeignKeyConvergence,
+  type DeferredForeignKeyOutcome,
+  type DeferredForeignKeyValidation,
+  type ForeignKeyIntrospection,
+  type RawForeignKeyRow,
+} from './aud-a-foreign-key';
+
+// Re-export the FK structural-identity surface so existing import paths
+// (`@/core/db/post-migrate-steps`) keep working for tests and the CLI.
+export {
+  AUD_A_DEFERRED_FK_VALIDATIONS,
+  decideDeferredForeignKeyAction,
+  DeferredForeignKeyDefinitionMismatchError,
+  formatExpectedForeignKeyDef,
+  interpretForeignKeyRow,
+  planForeignKeyConvergence,
+  toBool,
+} from './aud-a-foreign-key';
+export type {
+  DeferredForeignKeyAction,
+  DeferredForeignKeyOutcome,
+  DeferredForeignKeyValidation,
+  FkConvergenceInstruction,
+  ForeignKeyIntrospection,
+  ForeignKeyMatchType,
+  ForeignKeyReferentialAction,
+  ForeignKeyValidationAction,
+  RawForeignKeyRow,
+} from './aud-a-foreign-key';
+
+/**
+ * Minimal query surface both a `postgres.Sql` client and a Drizzle `db` can
+ * satisfy. Every statement issued through it is built from compile-time
+ * constants (table / index / constraint names from the specs below), never a
+ * caller value, so no parameter binding is needed.
+ */
+export interface SqlRunner {
+  query<T = Record<string, unknown>>(text: string): Promise<T[]>;
+}
+
+/** 'concurrent' = real Postgres (CONCURRENTLY, non-txn). 'plain' = PGlite. */
+export type IndexBuildMode = 'concurrent' | 'plain';
+
+export interface DeferredIndexSpec {
+  /** Index relation name (unqualified; always public). */
+  readonly name: string;
+  /** Table the index is built on (unqualified, public). */
+  readonly table: string;
+  /** Columns that must exist on the table before the index can be built. */
+  readonly requiredColumns: readonly string[];
+  /** Parenthesised column list exactly as it appears in CREATE INDEX. */
+  readonly columnListSql: string;
+  /**
+   * pg_get_indexdef() output Postgres produces for the finished index,
+   * compared after normalizeIndexdef() to detect a same-name index with a
+   * different definition.
+   */
+  readonly expectedIndexdef: string;
+}
+
+/**
+ * OZI-71 AUD-A: the `audit_events` canonical organization lookup index.
+ * Mirrors idx_audit_events_organization_occurred in
+ * src/modules/audit-log/infrastructure/drizzle/schema.ts. Created ONLY here,
+ * never by a journaled .sql migration.
+ */
+export const AUDIT_EVENTS_ORGANIZATION_INDEX: DeferredIndexSpec = {
+  name: 'idx_audit_events_organization_occurred',
+  table: 'audit_events',
+  requiredColumns: ['organization_id', 'occurred_at'],
+  columnListSql: '("organization_id","occurred_at")',
+  expectedIndexdef:
+    'CREATE INDEX idx_audit_events_organization_occurred ON public.audit_events USING btree (organization_id, occurred_at)',
+};
+
+export const AUD_A_DEFERRED_INDEXES: readonly DeferredIndexSpec[] = [
+  AUDIT_EVENTS_ORGANIZATION_INDEX,
+];
+
+export class DeferredIndexDefinitionMismatchError extends Error {
+  constructor(
+    readonly indexName: string,
+    readonly expected: string,
+    readonly actual: string,
+  ) {
+    super(
+      '[post-migrate-steps] index ' +
+        JSON.stringify(indexName) +
+        ' already exists with an unexpected definition; refusing to proceed. expected: ' +
+        expected +
+        ' | actual: ' +
+        actual,
+    );
+    this.name = 'DeferredIndexDefinitionMismatchError';
+  }
+}
+
+export type DeferredIndexAction =
+  | { kind: 'deferred'; reason: string }
+  | { kind: 'create' }
+  | { kind: 'recreate-invalid' }
+  | { kind: 'skip' };
+
+export interface ExistingIndexState {
+  readonly exists: boolean;
+  readonly valid: boolean;
+  readonly indexdef: string | null;
+}
+
+/**
+ * Lower-cases, collapses whitespace, drops a trailing semicolon, and strips
+ * the redundant `public.` schema qualifier (real Postgres' `pg_get_indexdef`
+ * emits `ON public.audit_events`; PGlite emits `ON audit_events`). Every
+ * deferred index lives in `public`, so the qualifier carries no information.
+ */
+export function normalizeIndexdef(def: string): string {
+  return def
+    .toLowerCase()
+    .replace(/\bpublic\./g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*;\s*$/, '')
+    .trim();
+}
+
+/**
+ * The ONE structural-definition test for a deferred index. Used identically
+ * for VALID and INVALID same-name indexes — ownership is NEVER inferred from
+ * `indisvalid = false` (Codex P2). An existing index with no readable
+ * definition (`indexdef === null`) never matches.
+ */
+export function indexDefinitionMatchesSpec(
+  spec: DeferredIndexSpec,
+  existing: ExistingIndexState,
+): boolean {
+  if (!existing.indexdef) return false;
+  return (
+    normalizeIndexdef(existing.indexdef) ===
+    normalizeIndexdef(spec.expectedIndexdef)
+  );
+}
+
+/**
+ * Pure decision: given whether the required columns exist and the current
+ * state of a same-name index, decide what to do. Throws
+ * `DeferredIndexDefinitionMismatchError` on a wrong-definition collision —
+ * whether the colliding index is VALID or INVALID (the fail-closed case).
+ *
+ *   absent                          -> create
+ *   present + exact + VALID         -> skip
+ *   present + exact + INVALID       -> recreate-invalid
+ *   present + wrong def + VALID     -> hard fail
+ *   present + wrong def + INVALID   -> hard fail
+ */
+export function decideDeferredIndexAction(
+  spec: DeferredIndexSpec,
+  requiredColumnsPresent: boolean,
+  existing: ExistingIndexState,
+): DeferredIndexAction {
+  if (!requiredColumnsPresent) {
+    return {
+      kind: 'deferred',
+      reason:
+        'columns [' +
+        spec.requiredColumns.join(', ') +
+        '] not all present on ' +
+        spec.table +
+        ' yet',
+    };
+  }
+  if (!existing.exists) return { kind: 'create' };
+
+  // Same identity test for VALID and INVALID indexes — verify the definition
+  // BEFORE deciding to rebuild an INVALID one.
+  if (!indexDefinitionMatchesSpec(spec, existing)) {
+    throw new DeferredIndexDefinitionMismatchError(
+      spec.name,
+      normalizeIndexdef(spec.expectedIndexdef),
+      normalizeIndexdef(existing.indexdef ?? ''),
+    );
+  }
+  // Definition is exact: a valid one is a no-op; an INVALID one (an
+  // interrupted CONCURRENTLY build we own) is dropped and rebuilt.
+  return existing.valid ? { kind: 'skip' } : { kind: 'recreate-invalid' };
+}
+
+/**
+ * Session-timeout policy for AUD-A DDL and post-migrate convergence (plan
+ * section 16 AUD-A "Production DDL safety planning"). All values in ms.
+ *
+ * - `LOCK_TIMEOUT` (3s): PostgreSQL's default is 0 = wait forever. A DDL /
+ *   convergence statement that cannot take its lock within 3s is blocked
+ *   behind a long transaction; continuing to wait would queue every later
+ *   query behind the DDL's lock request. Aborting and retrying the deploy is
+ *   strictly safer. 3s rides out normal short transactions.
+ * - `STATEMENT_TIMEOUT_DDL` (30s): 0023's statements are catalog-only on
+ *   PG 11+ (constant-default ADD COLUMN, ADD ... NOT VALID, CREATE INDEX on
+ *   the empty audit_log_settings); 30s is ~100x headroom and never touches
+ *   audit_events data.
+ * - `STATEMENT_TIMEOUT_INDEX` (0 = disabled): a legitimate
+ *   CREATE INDEX CONCURRENTLY build of a large audit_events can run for
+ *   minutes-to-hours (two heap scans + wait-for-transactions). A finite
+ *   statement_timeout would cancel it mid-build, leaving an INVALID index.
+ *   `LOCK_TIMEOUT` still bounds its two brief ShareUpdateExclusiveLock phases.
+ * - `STATEMENT_TIMEOUT_VALIDATE` (1h): VALIDATE CONSTRAINT scans every
+ *   audit_events row but under ShareUpdateExclusiveLock (no DML block). 1h is
+ *   a generous ceiling for a very large table that still guarantees the
+ *   deploy command cannot hang forever on a wedged statement.
+ *
+ * PGlite (single-connection, in-memory) has no lock contention and every
+ * operation is sub-millisecond; it implements both GUCs, so the same `SET`
+ * statements are issued there too, inert but valid.
+ */
+export const AUD_A_TIMEOUTS = {
+  LOCK_TIMEOUT_MS: 3_000,
+  STATEMENT_TIMEOUT_DDL_MS: 30_000,
+  STATEMENT_TIMEOUT_INDEX_MS: 0,
+  STATEMENT_TIMEOUT_VALIDATE_MS: 3_600_000,
+} as const;
+
+/**
+ * The AUD-A DDL timeout policy (`lock_timeout` 3s / `statement_timeout` 30s)
+ * is NOT applied to the whole `drizzle-kit migrate` subprocess — Drizzle wraps
+ * every pending migration in ONE transaction, so a fresh / far-behind database
+ * would run 0000..0022 (including data-backfill migrations like 0014) under
+ * 0023's short caps. Instead, migration `0023_breezy_sandman.sql` scopes the
+ * policy to its own statements with `SET LOCAL … ` + an explicit
+ * `SET LOCAL … = DEFAULT` reset before the transaction moves on to any
+ * migration batched after it. The convergence step below sets its own session
+ * timeouts on a dedicated connection.
+ */
+
+/**
+ * Known connection-pooler markers. A transaction pooler (PgBouncer, Neon
+ * pooler, Supabase pooler) does NOT keep separate statements on one physical
+ * backend, so `SET` → `CREATE INDEX CONCURRENTLY` → `VALIDATE CONSTRAINT` are
+ * not guaranteed session-affine through it. Kept in sync with the pooler
+ * check in `src/core/db/migrations/config/drizzle.prod.ts`.
+ */
+const POOLED_CONNECTION_MARKERS = [
+  '-pooler.', // Neon pooler hostname
+  'pooler.supabase.com', // Supabase pooler hostname
+  'pgbouncer', // PgBouncer hostname or `?pgbouncer=true`
+] as const;
+
+/** True when `url` carries a known transaction-pooler marker. */
+export function isPooledPostgresUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return POOLED_CONNECTION_MARKERS.some((marker) => lower.includes(marker));
+}
+
+export class PooledConnectionRejectedError extends Error {
+  constructor(context: string) {
+    super(
+      '[post-migrate-steps] ' +
+        context +
+        ' requires a DIRECT (unpooled) PostgreSQL URL — a transaction pooler ' +
+        'does not keep SET / CREATE INDEX CONCURRENTLY / VALIDATE CONSTRAINT on ' +
+        'one physical session. Use DATABASE_URL_UNPOOLED (or a genuinely direct ' +
+        'DATABASE_URL).',
+    );
+    this.name = 'PooledConnectionRejectedError';
+  }
+}
+
+/** Throw {@link PooledConnectionRejectedError} unless `url` is a direct URL. */
+export function assertDirectPostgresUrl(url: string, context: string): void {
+  if (isPooledPostgresUrl(url)) {
+    throw new PooledConnectionRejectedError(context);
+  }
+}
+
+/**
+ * `enforce` (default) — a real post-migrate run: 0023 has been applied and
+ *   committed, so absent columns / FKs are an ERROR, and the run does not
+ *   succeed unless the deferred index exists valid with the exact expected
+ *   definition and both deferred FKs are validated.
+ * `inspect` — pre-migration / `--check`: 0023 may not have run; absent
+ *   prerequisites are reported (`deferred` / `missing`), nothing is mutated.
+ * A same-name VALID index with a different definition fails closed in BOTH
+ * modes (operator must intervene; never auto-dropped).
+ */
+export type ConvergenceEnforcement = 'enforce' | 'inspect';
+
+export interface PostMigrateStepOptions {
+  readonly enforcement?: ConvergenceEnforcement;
+  readonly log?: (event: Record<string, unknown>) => void;
+}
+
+/** Thrown by `enforce` mode when a required post-migrate condition is unmet. */
+export class AudAConvergenceError extends Error {
+  constructor(message: string) {
+    super('[post-migrate-steps] ' + message);
+    this.name = 'AudAConvergenceError';
+  }
+}
+
+function defaultLog(event: Record<string, unknown>): void {
+  console.log(JSON.stringify({ audAPostMigrate: event }, null, 2));
+}
+
+function quotedList(values: readonly string[]): string {
+  return values.map((v) => "'" + v + "'").join(', ');
+}
+
+/** Issue `SET lock_timeout` + `SET statement_timeout` for the current step. */
+async function setSessionTimeouts(
+  runner: SqlRunner,
+  statementTimeoutMs: number,
+): Promise<void> {
+  await runner.query('SET lock_timeout = ' + AUD_A_TIMEOUTS.LOCK_TIMEOUT_MS);
+  await runner.query('SET statement_timeout = ' + statementTimeoutMs);
+}
+
+async function requiredColumnsPresent(
+  runner: SqlRunner,
+  spec: DeferredIndexSpec,
+): Promise<boolean> {
+  const rows = await runner.query<{ column_name: string }>(
+    "select column_name from information_schema.columns where table_schema = 'public' and table_name = '" +
+      spec.table +
+      "' and column_name in (" +
+      quotedList(spec.requiredColumns) +
+      ')',
+  );
+  return rows.length === spec.requiredColumns.length;
+}
+
+async function introspectIndex(
+  runner: SqlRunner,
+  name: string,
+): Promise<ExistingIndexState> {
+  const rows = await runner.query<{ indisvalid: boolean; indexdef: string }>(
+    'select i.indisvalid, pg_get_indexdef(i.indexrelid) as indexdef from pg_class c join pg_index i on i.indexrelid = c.oid join pg_namespace n on n.oid = c.relnamespace where n.nspname = ' +
+      "'public' and c.relname = '" +
+      name +
+      "'",
+  );
+  const row = rows[0];
+  return row
+    ? { exists: true, valid: row.indisvalid, indexdef: row.indexdef }
+    : { exists: false, valid: false, indexdef: null };
+}
+
+export interface DeferredIndexOutcome {
+  readonly name: string;
+  readonly action: DeferredIndexAction['kind'];
+  readonly detail?: string;
+}
+
+/**
+ * Drop a same-name index ONLY if it is an INVALID index WE OWN: a partial /
+ * interrupted CONCURRENTLY build whose definition still matches the canonical
+ * spec exactly. A VALID index, and an INVALID index with a DIFFERENT
+ * definition, are NEVER auto-dropped — that is an operator decision (Codex
+ * P2). Ownership is not inferred from `indisvalid = false` alone.
+ */
+async function dropIfInvalid(
+  runner: SqlRunner,
+  cc: string,
+  spec: DeferredIndexSpec,
+): Promise<boolean> {
+  const state = await introspectIndex(runner, spec.name);
+  if (state.exists && !state.valid && indexDefinitionMatchesSpec(spec, state)) {
+    await runner.query(
+      'DROP INDEX' + cc + ' IF EXISTS "public"."' + spec.name + '"',
+    );
+    return true;
+  }
+  return false;
+}
+
+type MutatingIndexAction = Extract<
+  DeferredIndexAction,
+  { kind: 'create' | 'recreate-invalid' }
+>;
+
+/**
+ * Build one deferred index (`enforce` mode only). Sets the per-operation
+ * session timeouts (lock 3s / statement 0 — never cap a legitimate long
+ * CONCURRENTLY build), drops a pre-existing INVALID index first when
+ * recreating, then issues the `CREATE INDEX`. If the build throws (lock
+ * timeout, cancellation, ...) a same-name INVALID index it left behind is
+ * dropped best-effort and the ORIGINAL error is rethrown unchanged — the
+ * cleanup must never mask the root cause.
+ */
+async function buildDeferredIndex(
+  runner: SqlRunner,
+  cc: string,
+  spec: DeferredIndexSpec,
+  action: MutatingIndexAction,
+  buildMode: IndexBuildMode,
+  log: (event: Record<string, unknown>) => void,
+): Promise<void> {
+  await setSessionTimeouts(runner, AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_INDEX_MS);
+
+  if (action.kind === 'recreate-invalid') {
+    // `decideDeferredIndexAction` has already verified this is an INVALID
+    // index whose definition matches the spec exactly; `dropIfInvalid`
+    // re-checks that structural identity and refuses to drop anything else.
+    log({ step: 'index', index: spec.name, op: 'drop-invalid', buildMode });
+    const dropped = await dropIfInvalid(runner, cc, spec);
+    if (!dropped) {
+      throw new AudAConvergenceError(
+        'refusing to rebuild ' +
+          JSON.stringify(spec.name) +
+          ': the same-name index is no longer an INVALID exact-definition ' +
+          'index we own. Resolve it manually and re-run.',
+      );
+    }
+  }
+
+  log({ step: 'index', index: spec.name, op: 'create', buildMode });
+  try {
+    await runner.query(
+      'CREATE INDEX' +
+        cc +
+        ' "' +
+        spec.name +
+        '" ON "' +
+        spec.table +
+        '" USING btree ' +
+        spec.columnListSql,
+    );
+  } catch (err) {
+    // Best-effort cleanup: only an INVALID exact-definition index WE OWN is
+    // dropped here. A wrong-definition leftover is left untouched. The
+    // ORIGINAL build error is always rethrown — cleanup never masks it.
+    let dropped = false;
+    try {
+      dropped = await dropIfInvalid(runner, cc, spec);
+    } catch {
+      // Cleanup is best-effort; never mask the original build failure.
+    }
+    log({
+      step: 'index',
+      index: spec.name,
+      op: 'build-failed',
+      droppedInvalid: dropped,
+    });
+    throw err;
+  }
+}
+
+/**
+ * Post-condition (`enforce` mode only): after a build, the index MUST exist,
+ * be valid, and match its expected definition. Otherwise drop a same-name
+ * INVALID index it left and throw `AudAConvergenceError` — the convergence
+ * never reports success half-done.
+ */
+async function assertDeferredIndexConverged(
+  runner: SqlRunner,
+  cc: string,
+  spec: DeferredIndexSpec,
+): Promise<void> {
+  const after = await introspectIndex(runner, spec.name);
+  if (after.exists && after.valid && indexDefinitionMatchesSpec(spec, after)) {
+    return;
+  }
+
+  // Non-destructive: `dropIfInvalid` removes ONLY an INVALID exact-definition
+  // index we own; a wrong-definition leftover is left for an operator.
+  await dropIfInvalid(runner, cc, spec);
+  throw new AudAConvergenceError(
+    'build of ' +
+      JSON.stringify(spec.name) +
+      ' did not produce a valid index matching the expected definition' +
+      ' (exists=' +
+      after.exists +
+      ', valid=' +
+      after.valid +
+      ', def=' +
+      JSON.stringify(after.indexdef) +
+      '). Re-run once the cause is resolved.',
+  );
+}
+
+/**
+ * Ensure every deferred index exists, is valid, and matches its expected
+ * definition. `buildMode` 'concurrent' uses CREATE/DROP INDEX CONCURRENTLY
+ * (real Postgres, outside any transaction); 'plain' uses the non-concurrent
+ * forms (PGlite). Idempotent; fails closed.
+ *
+ * `enforce` mode (default): a deferred index (required column absent) is an
+ * ERROR, and the returned outcome is only ever `skip` or `create` — i.e. the
+ * index is guaranteed to exist, be valid, and match its expected definition
+ * on return. `inspect` mode: report the action that WOULD be taken, mutate
+ * nothing (a `SET`-free read-only pass), still throw on a VALID
+ * wrong-definition collision.
+ */
+export async function ensureDeferredIndexes(
+  runner: SqlRunner,
+  buildMode: IndexBuildMode,
+  specs: readonly DeferredIndexSpec[] = AUD_A_DEFERRED_INDEXES,
+  options: PostMigrateStepOptions = {},
+): Promise<DeferredIndexOutcome[]> {
+  const enforcement = options.enforcement ?? 'enforce';
+  const log = options.log ?? defaultLog;
+  const cc = buildMode === 'concurrent' ? ' CONCURRENTLY' : '';
+  const outcomes: DeferredIndexOutcome[] = [];
+
+  for (const spec of specs) {
+    const columnsPresent = await requiredColumnsPresent(runner, spec);
+    const before = await introspectIndex(runner, spec.name);
+    // Throws (fail closed) on a VALID wrong-definition collision, both modes.
+    const action = decideDeferredIndexAction(spec, columnsPresent, before);
+
+    if (action.kind === 'deferred') {
+      if (enforcement === 'enforce') {
+        throw new AudAConvergenceError(
+          'required index ' +
+            JSON.stringify(spec.name) +
+            ' cannot be built: ' +
+            action.reason +
+            ' — migration 0023 has not been applied.',
+        );
+      }
+      log({
+        step: 'index',
+        index: spec.name,
+        action: 'deferred',
+        enforcement,
+        detail: action.reason,
+      });
+      outcomes.push({
+        name: spec.name,
+        action: 'deferred',
+        detail: action.reason,
+      });
+      continue;
+    }
+
+    if (action.kind === 'skip' || enforcement === 'inspect') {
+      log({
+        step: 'index',
+        index: spec.name,
+        action: action.kind,
+        enforcement,
+      });
+      outcomes.push({ name: spec.name, action: action.kind });
+      continue;
+    }
+
+    // enforce mode, action is 'create' or 'recreate-invalid'.
+    await buildDeferredIndex(runner, cc, spec, action, buildMode, log);
+    await assertDeferredIndexConverged(runner, cc, spec);
+
+    log({
+      step: 'index',
+      index: spec.name,
+      action: action.kind,
+      buildMode,
+      done: true,
+    });
+    outcomes.push({ name: spec.name, action: action.kind });
+  }
+
+  return outcomes;
+}
+
+/**
+ * Structural FK introspection (Codex P2): retrieve one raw `pg_constraint`
+ * row ANCHORED to the EXPECTED `spec.schema.spec.table` + `spec.constraint`
+ * (a same-named constraint on any other relation yields `exists: false`),
+ * then delegate the pure structural comparison to `interpretForeignKeyRow`
+ * (in `./aud-a-foreign-key`). Read-only — one SELECT.
+ */
+async function introspectForeignKey(
+  runner: SqlRunner,
+  spec: DeferredForeignKeyValidation,
+): Promise<ForeignKeyIntrospection> {
+  const rows = await runner.query<RawForeignKeyRow>(
+    buildForeignKeyIntrospectionSql(spec),
+  );
+  const row = rows[0];
+  return row
+    ? interpretForeignKeyRow(row, spec)
+    : absentForeignKeyIntrospection(spec);
+}
+
+interface FkValidateSession {
+  timeoutsSet: boolean;
+}
+
+/**
+ * `enforce` VALIDATE for one exact, not-yet-`convalidated` FK: set the
+ * session timeout policy once, `ALTER TABLE … VALIDATE CONSTRAINT` on the
+ * exact expected `schema.table`, then re-introspect the FULL definition —
+ * which must still be exact + `convalidated`, or the run fails closed.
+ */
+async function executeForeignKeyValidation(
+  runner: SqlRunner,
+  spec: DeferredForeignKeyValidation,
+  session: FkValidateSession,
+): Promise<void> {
+  if (!session.timeoutsSet) {
+    await setSessionTimeouts(
+      runner,
+      AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_VALIDATE_MS,
+    );
+    session.timeoutsSet = true;
+  }
+  await runner.query(
+    'ALTER TABLE "' +
+      spec.schema +
+      '"."' +
+      spec.table +
+      '" VALIDATE CONSTRAINT "' +
+      spec.constraint +
+      '"',
+  );
+  const after = await introspectForeignKey(runner, spec);
+  if (!after.exists || !after.matchesSpec || !after.convalidated) {
+    throw new AudAConvergenceError(
+      'VALIDATE CONSTRAINT ' +
+        JSON.stringify(spec.constraint) +
+        ' did not leave an exact, validated foreign key (exists=' +
+        after.exists +
+        ', matchesSpec=' +
+        after.matchesSpec +
+        ', convalidated=' +
+        after.convalidated +
+        (after.mismatches.length > 0
+          ? ', mismatches=' + JSON.stringify(after.mismatches)
+          : '') +
+        ').',
+    );
+  }
+}
+
+/**
+ * Converge ONE deferred FK: introspection → pure decision → pure
+ * enforce/inspect instruction → act. A wrong-definition FK NEVER mutates in
+ * either mode — `enforce` throws BEFORE any SET / VALIDATE; `inspect` reports.
+ */
+async function convergeOneForeignKey(
+  runner: SqlRunner,
+  spec: DeferredForeignKeyValidation,
+  enforce: boolean,
+  log: (event: Record<string, unknown>) => void,
+  session: FkValidateSession,
+): Promise<DeferredForeignKeyOutcome> {
+  const introspected = await introspectForeignKey(runner, spec);
+  const instruction = planForeignKeyConvergence(
+    decideDeferredForeignKeyAction(spec, introspected),
+    enforce,
+  );
+  const enforcement = enforce ? 'enforce' : 'inspect';
+
+  if (instruction.kind === 'throw-missing') {
+    throw new AudAConvergenceError(
+      'required foreign key ' +
+        JSON.stringify(spec.constraint) +
+        ' is absent on ' +
+        spec.schema +
+        '.' +
+        spec.table +
+        ' — migration 0023 has not been applied (a constraint of the same ' +
+        'name on another schema/table does NOT satisfy it).',
+    );
+  }
+
+  if (instruction.kind === 'throw-mismatch') {
+    throw new DeferredForeignKeyDefinitionMismatchError(
+      spec.constraint,
+      formatExpectedForeignKeyDef(spec),
+      introspected.definition ?? '(unreadable)',
+      introspected.mismatches,
+    );
+  }
+
+  if (instruction.kind === 'validate') {
+    await executeForeignKeyValidation(runner, spec, session);
+    log({
+      step: 'fk-validate',
+      constraint: spec.constraint,
+      action: 'validate',
+      enforcement,
+      done: true,
+    });
+    return { constraint: spec.constraint, action: 'validate' };
+  }
+
+  // instruction.kind === 'report'
+  log({
+    step: 'fk-validate',
+    constraint: spec.constraint,
+    action: instruction.action,
+    enforcement,
+    ...(instruction.action === 'wrong-definition'
+      ? { mismatches: introspected.mismatches }
+      : {}),
+  });
+  return { constraint: spec.constraint, action: instruction.action };
+}
+
+/**
+ * Run VALIDATE CONSTRAINT for each deferred FK, as its own statement, only
+ * when it is present with the EXACT expected structural definition and not
+ * yet validated. Runs after (never inside) the expand migration's
+ * transaction, so ADD CONSTRAINT's brief SHARE ROW EXCLUSIVE is long
+ * released; VALIDATE CONSTRAINT itself takes only SHARE UPDATE EXCLUSIVE on
+ * the table (+ ROW SHARE on organizations) and blocks neither reads nor
+ * writes. Idempotent. Iteration/orchestration only — per-FK state handling
+ * lives in `convergeOneForeignKey`.
+ *
+ * `enforce` mode (default): an absent expected FK is an ERROR; a present
+ * wrong-definition FK is a HARD FAIL BEFORE any SET / VALIDATE (never dropped
+ * / recreated / mutated — schema drift is an operator decision, exactly like
+ * a wrong-definition deferred index); after a VALIDATE the FK is
+ * re-introspected in full and must still be exact + `convalidated`. `inspect`
+ * mode: report `missing` / `wrong-definition` / `validate` (would) / `skip`,
+ * mutate nothing (SELECT-only).
+ */
+export async function validateDeferredForeignKeys(
+  runner: SqlRunner,
+  fks: readonly DeferredForeignKeyValidation[] = AUD_A_DEFERRED_FK_VALIDATIONS,
+  options: PostMigrateStepOptions = {},
+): Promise<DeferredForeignKeyOutcome[]> {
+  const enforce = (options.enforcement ?? 'enforce') === 'enforce';
+  const log = options.log ?? defaultLog;
+  const session: FkValidateSession = { timeoutsSet: false };
+  const outcomes: DeferredForeignKeyOutcome[] = [];
+
+  for (const spec of fks) {
+    outcomes.push(
+      await convergeOneForeignKey(runner, spec, enforce, log, session),
+    );
+  }
+
+  return outcomes;
+}
+
+export interface AudAPostMigrateResult {
+  readonly indexes: DeferredIndexOutcome[];
+  readonly foreignKeys: DeferredForeignKeyOutcome[];
+}
+
+/**
+ * Run every AUD-A post-migrate convergence step, in order:
+ *   1. build the deferred index(es) (concurrent vs plain per `buildMode`);
+ *   2. validate the deferred foreign keys.
+ * Idempotent. In the default `enforce` mode this either brings the database
+ * fully to the AUD-A end state (deferred index present, valid and matching
+ * its expected definition; both deferred FKs validated) or throws
+ * `AudAConvergenceError` — it never returns "success" with the work
+ * half-done. `inspect` mode (`--check` / pre-0023) reports only.
+ */
+export async function runAudAPostMigrateSteps(
+  runner: SqlRunner,
+  buildMode: IndexBuildMode,
+  options: PostMigrateStepOptions = {},
+): Promise<AudAPostMigrateResult> {
+  const indexes = await ensureDeferredIndexes(
+    runner,
+    buildMode,
+    AUD_A_DEFERRED_INDEXES,
+    options,
+  );
+  const foreignKeys = await validateDeferredForeignKeys(
+    runner,
+    AUD_A_DEFERRED_FK_VALIDATIONS,
+    options,
+  );
+  return { indexes, foreignKeys };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Read-only inspection + evidence (dedicated Production operator CLI)
+ *
+ * OZI-71 AUD·A Production DDL safety plan (plan §16 AUD·A): every potentially
+ * long-running Production schema operation must carry dry-run size/cardinality
+ * evidence, an explicit operator gate, abort criteria and recovery guidance.
+ * The `CREATE INDEX CONCURRENTLY` build and the two `VALIDATE CONSTRAINT`
+ * scans are exactly that class of operation, so they are NOT run automatically
+ * by `pnpm db:migrate:prod`; the dedicated `pnpm db:aud-a:converge` CLI runs
+ * them behind an explicit `--apply --production-approved` gate.
+ *
+ * `inspectAudAConvergence` / `gatherAudAConvergenceEvidence` are the read-only
+ * side of that CLI: they classify the current state and predict what `--apply`
+ * would do, reusing the SAME primitives (`introspectIndex`,
+ * `introspectForeignKey`, `requiredColumnsPresent`, `normalizeIndexdef`) the
+ * `enforce` executor uses. They issue only SELECTs — no `SET`, no DDL, no
+ * `VALIDATE`, no journal write. Unlike the executors, a same-name VALID index
+ * with a wrong definition — and a same-name FK on the expected table with a
+ * wrong full definition — are REPORTED here, not thrown.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export type AudAIndexInspectedState =
+  | 'absent'
+  | 'invalid'
+  | 'invalid-wrong-definition'
+  | 'valid-exact'
+  | 'valid-wrong-definition';
+
+export type AudAIndexPlan =
+  | 'no-op'
+  | 'create-concurrently'
+  | 'rebuild-invalid'
+  | 'abort-wrong-definition'
+  | 'blocked-expand-not-applied';
+
+/**
+ * Pure index classification for the read-only inspector. The SAME structural
+ * identity test (`indexDefinitionMatchesSpec`) as the executor is applied to
+ * VALID and INVALID indexes alike (Codex P2): an INVALID index whose
+ * definition does NOT match the spec is `invalid-wrong-definition` /
+ * `abort-wrong-definition` — NOT `rebuild-invalid`, and never labelled
+ * `valid-*`.
+ */
+export function classifyIndexInspection(
+  spec: DeferredIndexSpec,
+  existing: ExistingIndexState,
+  columnsPresent: boolean,
+): { state: AudAIndexInspectedState; plannedAction: AudAIndexPlan } {
+  if (!existing.exists) {
+    return {
+      state: 'absent',
+      plannedAction: columnsPresent
+        ? 'create-concurrently'
+        : 'blocked-expand-not-applied',
+    };
+  }
+  const exact = indexDefinitionMatchesSpec(spec, existing);
+  if (exact && existing.valid) {
+    return { state: 'valid-exact', plannedAction: 'no-op' };
+  }
+  if (exact) {
+    return { state: 'invalid', plannedAction: 'rebuild-invalid' };
+  }
+  if (existing.valid) {
+    return {
+      state: 'valid-wrong-definition',
+      plannedAction: 'abort-wrong-definition',
+    };
+  }
+  return {
+    state: 'invalid-wrong-definition',
+    plannedAction: 'abort-wrong-definition',
+  };
+}
+
+/** Mirrors the deferred-index state model, for FKs (Codex P2). */
+export type AudAForeignKeyInspectedState =
+  | 'absent'
+  | 'present-exact-unvalidated'
+  | 'present-exact-validated'
+  | 'present-wrong-definition';
+
+export type AudAForeignKeyPlan =
+  | 'no-op'
+  | 'validate'
+  | 'blocked-missing'
+  | 'abort-wrong-definition';
+
+export interface AudAIndexInspection {
+  readonly name: string;
+  readonly table: string;
+  readonly state: AudAIndexInspectedState;
+  readonly currentDefinition: string | null;
+  readonly expectedDefinition: string;
+  readonly plannedAction: AudAIndexPlan;
+}
+
+export interface AudAForeignKeyInspection {
+  readonly constraint: string;
+  /** Expected source schema (`public` for AUD·A). */
+  readonly schema: string;
+  /** Expected source table. */
+  readonly table: string;
+  readonly state: AudAForeignKeyInspectedState;
+  /** A constraint with this name exists ON THE EXPECTED `schema.table`. */
+  readonly present: boolean;
+  /** Rollout state only — `null` when absent. NOT part of FK identity. */
+  readonly convalidated: boolean | null;
+  /** Canonical expected FK definition (from the spec). */
+  readonly expectedDefinition: string;
+  /** `pg_get_constraintdef(oid, true)` of the actual constraint, or `null`. */
+  readonly currentDefinition: string | null;
+  /** Field-level current-vs-expected differences (only when wrong-definition). */
+  readonly definitionMismatches: readonly string[];
+  readonly plannedAction: AudAForeignKeyPlan;
+}
+
+export interface AudAConvergenceInspection {
+  /** Proxy for "migration 0023 applied" — its additive columns exist. */
+  readonly expandMigrationApplied: boolean;
+  readonly index: AudAIndexInspection;
+  readonly foreignKeys: AudAForeignKeyInspection[];
+  readonly timeoutPolicy: {
+    readonly lockTimeoutMs: number;
+    readonly indexBuildStatementTimeoutMs: number;
+    readonly fkValidateStatementTimeoutMs: number;
+  };
+}
+
+export interface AudAConvergenceEvidence {
+  readonly inspection: AudAConvergenceInspection;
+  readonly auditEventsRowCount: number | null;
+  readonly auditEventsTableBytes: number | null;
+  readonly auditEventsTotalRelationBytes: number | null;
+}
+
+/**
+ * Classify the current AUD·A convergence state and what an `--apply` run would
+ * do. Read-only (SELECT statements only); never throws on a wrong-definition
+ * index — it reports it.
+ */
+export async function inspectAudAConvergence(
+  runner: SqlRunner,
+  spec: DeferredIndexSpec = AUDIT_EVENTS_ORGANIZATION_INDEX,
+  fks: readonly DeferredForeignKeyValidation[] = AUD_A_DEFERRED_FK_VALIDATIONS,
+): Promise<AudAConvergenceInspection> {
+  const columnsPresent = await requiredColumnsPresent(runner, spec);
+  const existing = await introspectIndex(runner, spec.name);
+  const { state, plannedAction } = classifyIndexInspection(
+    spec,
+    existing,
+    columnsPresent,
+  );
+
+  const foreignKeys: AudAForeignKeyInspection[] = [];
+  for (const fkSpec of fks) {
+    const fk = await introspectForeignKey(runner, fkSpec);
+
+    let fkState: AudAForeignKeyInspectedState;
+    let fkPlan: AudAForeignKeyPlan;
+    if (!fk.exists) {
+      fkState = 'absent';
+      fkPlan = 'blocked-missing';
+    } else if (!fk.matchesSpec) {
+      fkState = 'present-wrong-definition';
+      fkPlan = 'abort-wrong-definition';
+    } else if (fk.convalidated) {
+      fkState = 'present-exact-validated';
+      fkPlan = 'no-op';
+    } else {
+      fkState = 'present-exact-unvalidated';
+      fkPlan = 'validate';
+    }
+
+    foreignKeys.push({
+      constraint: fkSpec.constraint,
+      schema: fkSpec.schema,
+      table: fkSpec.table,
+      state: fkState,
+      present: fk.exists,
+      convalidated: fk.exists ? fk.convalidated : null,
+      expectedDefinition: formatExpectedForeignKeyDef(fkSpec),
+      currentDefinition: fk.definition,
+      definitionMismatches:
+        fkState === 'present-wrong-definition' ? fk.mismatches : [],
+      plannedAction: fkPlan,
+    });
+  }
+
+  return {
+    expandMigrationApplied: columnsPresent,
+    index: {
+      name: spec.name,
+      table: spec.table,
+      state,
+      currentDefinition: existing.indexdef,
+      expectedDefinition: spec.expectedIndexdef,
+      plannedAction,
+    },
+    foreignKeys,
+    timeoutPolicy: {
+      lockTimeoutMs: AUD_A_TIMEOUTS.LOCK_TIMEOUT_MS,
+      indexBuildStatementTimeoutMs: AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_INDEX_MS,
+      fkValidateStatementTimeoutMs:
+        AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_VALIDATE_MS,
+    },
+  };
+}
+
+/**
+ * {@link inspectAudAConvergence} plus `audit_events` cardinality / size
+ * evidence for the operator gate. Size lookups are best-effort — a
+ * permission-limited role still gets the inspection and row count. Read-only.
+ */
+export async function gatherAudAConvergenceEvidence(
+  runner: SqlRunner,
+): Promise<AudAConvergenceEvidence> {
+  const inspection = await inspectAudAConvergence(runner);
+
+  let auditEventsRowCount: number | null = null;
+  try {
+    const rows = await runner.query<{ n: string }>(
+      'select count(*)::text as n from audit_events',
+    );
+    if (rows[0]) auditEventsRowCount = Number(rows[0].n);
+  } catch {
+    // leave null — evidence is best-effort
+  }
+
+  let auditEventsTableBytes: number | null = null;
+  let auditEventsTotalRelationBytes: number | null = null;
+  try {
+    const rows = await runner.query<{ t: string; tot: string }>(
+      "select pg_table_size('audit_events')::text as t, pg_total_relation_size('audit_events')::text as tot",
+    );
+    if (rows[0]) {
+      auditEventsTableBytes = Number(rows[0].t);
+      auditEventsTotalRelationBytes = Number(rows[0].tot);
+    }
+  } catch {
+    // pg_table_size / pg_total_relation_size unavailable (e.g. PGlite) — null
+  }
+
+  return {
+    inspection,
+    auditEventsRowCount,
+    auditEventsTableBytes,
+    auditEventsTotalRelationBytes,
+  };
+}
+
+interface PostgresLikeClient {
+  unsafe: (text: string) => PromiseLike<unknown>;
+}
+
+/** Adapt a postgres.Sql-style unsafe(text) client to SqlRunner. */
+export function sqlRunnerFromPostgres(client: PostgresLikeClient): SqlRunner {
+  return {
+    query: async (text) => (await client.unsafe(text)) as never[],
+  };
+}
+
+interface DrizzleLikeDb {
+  // Drizzle's `execute` param type differs across drivers (string | SQLWrapper
+  // vs SQLWrapper); accept anything the `raw()` bridge produces.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  execute: (query: any) => Promise<unknown>;
+}
+
+/**
+ * Adapt a Drizzle `db` (execute(sql) returning rows or { rows }). Pass `raw` =
+ * drizzle-orm's `sql.raw` so the runner can issue string SQL.
+ */
+export function sqlRunnerFromDrizzle(
+  db: DrizzleLikeDb,
+  raw: (text: string) => unknown,
+): SqlRunner {
+  return {
+    query: async (text) => {
+      const result = await db.execute(raw(text));
+      if (Array.isArray(result)) return result as never[];
+      const rows = (result as { rows?: unknown }).rows;
+      return (Array.isArray(rows) ? rows : []) as never[];
+    },
+  };
+}

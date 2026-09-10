@@ -65,7 +65,7 @@ beforeAll(async () => {
 afterAll(async () => {
   // Guarantee the shared schema is back at 0021 regardless of where the test
   // stopped, then drop this suite's rows.
-  await runMigrations(testDb.db, driver);
+  await runMigrations(testDb.db, driver, { postgresUrl: testUrl });
   await testDb.cleanup();
 });
 
@@ -88,6 +88,21 @@ describe('feature_flags — OZI-71 FF·A migration 0021 transition (real DB)', (
             DROP COLUMN IF EXISTS ownership_state CASCADE,
             DROP COLUMN IF EXISTS organization_id CASCADE`,
     );
+    // Deleting the journal tail forces a forward replay of EVERY migration
+    // after 0020 — including OZI-71 AUD·A (0023-0025), which adds columns to
+    // the audit tables. Those plain `ADD COLUMN` statements are not
+    // replay-safe, so reconstruct the audit tables' pre-AUD·A state too
+    // (CASCADE also drops their FKs, indexes and CHECKs).
+    await testDb.db.execute(
+      sql`ALTER TABLE audit_events
+            DROP COLUMN IF EXISTS ownership_state CASCADE,
+            DROP COLUMN IF EXISTS organization_id CASCADE`,
+    );
+    await testDb.db.execute(
+      sql`ALTER TABLE audit_log_settings
+            DROP COLUMN IF EXISTS ownership_state CASCADE,
+            DROP COLUMN IF EXISTS organization_id CASCADE`,
+    );
     await testDb.db.execute(
       sql`DELETE FROM drizzle.__drizzle_migrations WHERE created_at >= ${FFA_MIGRATION_WHEN}`,
     );
@@ -100,7 +115,7 @@ describe('feature_flags — OZI-71 FF·A migration 0021 transition (real DB)', (
     );
 
     // 3. Apply 0021 as a real migration transition via the repo's runner.
-    await runMigrations(testDb.db, driver);
+    await runMigrations(testDb.db, driver, { postgresUrl: testUrl });
 
     // 4. Read those exact rows back.
     const rows = await testDb.db

@@ -2,6 +2,8 @@ import './load-env';
 
 import { spawnSync } from 'node:child_process';
 
+import { assertDirectPostgresUrl } from '@/core/db/post-migrate-steps';
+
 import { reconcileKnownMigrationState } from './reconcile-known-migration-state';
 import {
   assertMigrationJournalComplete,
@@ -67,6 +69,13 @@ export function describeMigrationTarget(resolved: ResolvedMigrationUrl): {
   };
 }
 
+/**
+ * Run `drizzle-kit migrate`. It reads `DATABASE_URL_UNPOOLED || DATABASE_URL`
+ * itself (see `drizzle.prod.ts`); no per-run timeout policy is injected here —
+ * migration `0023` scopes its own `lock_timeout` / `statement_timeout` with
+ * `SET LOCAL` so a catch-up batch never runs earlier / later migrations under
+ * 0023's caps.
+ */
 function runDrizzleMigrate(): void {
   const result = spawnSync(
     'pnpm',
@@ -92,13 +101,12 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
     process.env.DATABASE_URL,
     process.env.DATABASE_URL_UNPOOLED,
   );
-  const connectionString = migrationUrl?.url;
-
-  if (!connectionString) {
+  if (!migrationUrl) {
     throw new Error(
       '[db-migrate-prod] DATABASE_URL_UNPOOLED or DATABASE_URL is required before running prod migrations.',
     );
   }
+  const connectionString = migrationUrl.url;
 
   console.log(
     JSON.stringify(
@@ -109,6 +117,11 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
       2,
     ),
   );
+
+  // Fail closed BEFORE any migration runs: DDL and drizzle's single migration
+  // transaction must not run through a transaction pooler, so the migration
+  // URL must be a DIRECT (unpooled) endpoint.
+  assertDirectPostgresUrl(connectionString, 'db-migrate-prod');
 
   const summary = await reconcileKnownMigrationState({
     connectionString,
@@ -168,6 +181,23 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  // Additive expansion (migration 0023): ADD COLUMN / ADD FK NOT VALID / ADD
+  // CHECK NOT VALID. `drizzle-kit migrate` applies it in its own transaction
+  // and COMMITS. 0023 scopes its own lock_timeout=3s / statement_timeout=30s
+  // with `SET LOCAL` (+ reset), so a catch-up batch never runs earlier / later
+  // migrations under 0023's caps.
+  //
+  // OZI-71 AUD·A operational split (Codex P1): the long-running AUD·A
+  // convergence (`CREATE INDEX CONCURRENTLY idx_audit_events_organization_occurred`
+  // with statement_timeout=0, and `VALIDATE CONSTRAINT` on both deferred FKs
+  // with statement_timeout up to 1h) is NOT run here. Per the AUD·A Production
+  // DDL safety plan it is a separately operator-approved step:
+  //   pnpm db:aud-a:converge --check                       (read-only evidence)
+  //   pnpm db:aud-a:converge --apply --production-approved  (mutating)
+  // AUD·A is additive-only: the legacy runtime path stays authoritative, the
+  // NOT VALID FKs still enforce new/changed rows, and the deferred index is
+  // not required by the legacy runtime — so a normal deploy applies 0023 and
+  // exits without touching those operations.
   runDrizzleMigrate();
 
   const repairSummary = await repairKnownMigrationJournalDrift({

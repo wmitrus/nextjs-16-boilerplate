@@ -10,6 +10,7 @@ import {
   AUD_A_TIMEOUTS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
   AudAConvergenceError,
+  classifyIndexInspection,
   DeferredForeignKeyDefinitionMismatchError,
   DeferredIndexDefinitionMismatchError,
   decideDeferredForeignKeyAction,
@@ -126,6 +127,111 @@ describe('decideDeferredIndexAction', () => {
           'CREATE UNIQUE INDEX idx_audit_events_organization_occurred ON public.audit_events USING btree (organization_id, occurred_at)',
       }),
     ).toThrow(/unexpected definition/);
+  });
+
+  // Codex P2: an INVALID same-name index must be STRUCTURALLY verified before
+  // it is treated as a rebuildable interrupted build — never inferred from
+  // `indisvalid = false` alone.
+  it('INVALID + EXACT expected definition -> recreate-invalid', () => {
+    expect(
+      decideDeferredIndexAction(SPEC, true, {
+        exists: true,
+        valid: false,
+        indexdef:
+          'CREATE INDEX idx_audit_events_organization_occurred ON public.audit_events USING btree (organization_id,  occurred_at)',
+      }),
+    ).toEqual({ kind: 'recreate-invalid' });
+  });
+
+  it('FAILS CLOSED: INVALID same-name index with WRONG columns -> DeferredIndexDefinitionMismatchError', () => {
+    expect(() =>
+      decideDeferredIndexAction(SPEC, true, {
+        exists: true,
+        valid: false,
+        indexdef:
+          'CREATE INDEX idx_audit_events_organization_occurred ON public.audit_events USING btree (occurred_at, organization_id)',
+      }),
+    ).toThrow(DeferredIndexDefinitionMismatchError);
+  });
+
+  it('FAILS CLOSED: INVALID same-name UNIQUE index where a plain one is expected -> mismatch error', () => {
+    expect(() =>
+      decideDeferredIndexAction(SPEC, true, {
+        exists: true,
+        valid: false,
+        indexdef:
+          'CREATE UNIQUE INDEX idx_audit_events_organization_occurred ON public.audit_events USING btree (organization_id, occurred_at)',
+      }),
+    ).toThrow(/unexpected definition/);
+  });
+
+  it('FAILS CLOSED: an existing index with no readable definition never matches', () => {
+    expect(() =>
+      decideDeferredIndexAction(SPEC, true, {
+        exists: true,
+        valid: false,
+        indexdef: null,
+      }),
+    ).toThrow(DeferredIndexDefinitionMismatchError);
+  });
+});
+
+describe('classifyIndexInspection (read-only inspector agrees with enforce)', () => {
+  const wrongDef =
+    'CREATE INDEX idx_audit_events_organization_occurred ON public.audit_events USING btree (occurred_at)';
+
+  it('absent -> create-concurrently / blocked per columns', () => {
+    expect(classifyIndexInspection(SPEC, NONE, true)).toEqual({
+      state: 'absent',
+      plannedAction: 'create-concurrently',
+    });
+    expect(classifyIndexInspection(SPEC, NONE, false)).toEqual({
+      state: 'absent',
+      plannedAction: 'blocked-expand-not-applied',
+    });
+  });
+
+  it('valid + exact -> valid-exact / no-op', () => {
+    expect(classifyIndexInspection(SPEC, VALID_MATCH, true)).toEqual({
+      state: 'valid-exact',
+      plannedAction: 'no-op',
+    });
+  });
+
+  it('INVALID + exact -> invalid / rebuild-invalid', () => {
+    expect(
+      classifyIndexInspection(
+        SPEC,
+        { exists: true, valid: false, indexdef: SPEC.expectedIndexdef },
+        true,
+      ),
+    ).toEqual({ state: 'invalid', plannedAction: 'rebuild-invalid' });
+  });
+
+  it('VALID + wrong definition -> valid-wrong-definition / abort-wrong-definition', () => {
+    expect(
+      classifyIndexInspection(
+        SPEC,
+        { exists: true, valid: true, indexdef: wrongDef },
+        true,
+      ),
+    ).toEqual({
+      state: 'valid-wrong-definition',
+      plannedAction: 'abort-wrong-definition',
+    });
+  });
+
+  it('INVALID + wrong definition -> invalid-wrong-definition / abort-wrong-definition (NOT rebuild, NOT valid-*)', () => {
+    expect(
+      classifyIndexInspection(
+        SPEC,
+        { exists: true, valid: false, indexdef: wrongDef },
+        true,
+      ),
+    ).toEqual({
+      state: 'invalid-wrong-definition',
+      plannedAction: 'abort-wrong-definition',
+    });
   });
 });
 

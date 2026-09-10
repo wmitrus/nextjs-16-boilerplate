@@ -170,9 +170,9 @@ function describeIndexPlan(plan: AudAIndexPlan): string {
     case 'create-concurrently':
       return 'CREATE INDEX CONCURRENTLY WILL run (may scan a large audit_events)';
     case 'rebuild-invalid':
-      return 'an INVALID index will be DROP INDEX CONCURRENTLY-ed and rebuilt';
+      return 'an INVALID index whose definition MATCHES the canonical spec will be DROP INDEX CONCURRENTLY-ed and rebuilt';
     case 'abort-wrong-definition':
-      return 'HARD FAIL — a VALID index with a different definition exists; --apply aborts and NEVER drops it';
+      return 'HARD FAIL — a same-name index with a DIFFERENT definition exists (VALID or INVALID); --apply aborts and NEVER drops or rebuilds it (no automatic DROP/rebuild for a wrong-definition INVALID index)';
     case 'blocked-expand-not-applied':
       return 'BLOCKED — migration 0023 is not applied; --apply fails closed';
   }
@@ -288,17 +288,19 @@ export function formatEvidence(
 export function formatRecoveryGuidance(): string {
   return [
     'Recovery guidance:',
-    '  • Interrupted CREATE INDEX CONCURRENTLY / INVALID index:',
-    '      the next `--apply --production-approved` run detects the INVALID index,',
-    '      DROP INDEX CONCURRENTLY IF EXISTS it, and rebuilds it. Nothing manual',
-    '      is required; an INVALID index is not used by the planner.',
+    '  • Interrupted CREATE INDEX CONCURRENTLY / INVALID index whose definition',
+    '    MATCHES the canonical spec:',
+    '      the next `--apply --production-approved` run detects it, DROP INDEX',
+    '      CONCURRENTLY IF EXISTS it, and rebuilds it. Nothing manual is',
+    '      required; an INVALID index is not used by the planner.',
     '  • lock_timeout abort (SQLSTATE 55P03, "canceling statement due to lock',
     '    timeout"): a long transaction held a conflicting lock on audit_events.',
     '      Find it via pg_stat_activity / pg_locks, let it finish or cancel it,',
     '      then re-run `--apply --production-approved` (idempotent).',
-    '  • VALID same-name index with a WRONG definition:',
-    '      the command HARD FAILS and NEVER drops a valid index. An operator must',
-    '      review it, then `DROP INDEX CONCURRENTLY` it manually and re-run.',
+    '  • Same-name index with a WRONG definition — whether VALID or INVALID:',
+    '      the command HARD FAILS and NEVER drops or rebuilds it (an INVALID',
+    '      wrong-definition index is NOT auto-dropped). An operator must review',
+    '      it, then `DROP INDEX CONCURRENTLY` it manually and re-run.',
     '      Expected definition:',
     `        ${AUDIT_EVENTS_ORGANIZATION_INDEX.expectedIndexdef}`,
     '  • FK VALIDATE failure (historical rows violate the constraint):',

@@ -62,6 +62,44 @@
  * section 16 AUD-A ("Production index safety" + "Foreign-key rollout").
  */
 
+import {
+  absentForeignKeyIntrospection,
+  AUD_A_DEFERRED_FK_VALIDATIONS,
+  buildForeignKeyIntrospectionSql,
+  decideDeferredForeignKeyAction,
+  DeferredForeignKeyDefinitionMismatchError,
+  formatExpectedForeignKeyDef,
+  interpretForeignKeyRow,
+  planForeignKeyConvergence,
+  type DeferredForeignKeyOutcome,
+  type DeferredForeignKeyValidation,
+  type ForeignKeyIntrospection,
+  type RawForeignKeyRow,
+} from './aud-a-foreign-key';
+
+// Re-export the FK structural-identity surface so existing import paths
+// (`@/core/db/post-migrate-steps`) keep working for tests and the CLI.
+export {
+  AUD_A_DEFERRED_FK_VALIDATIONS,
+  decideDeferredForeignKeyAction,
+  DeferredForeignKeyDefinitionMismatchError,
+  formatExpectedForeignKeyDef,
+  interpretForeignKeyRow,
+  planForeignKeyConvergence,
+  toBool,
+} from './aud-a-foreign-key';
+export type {
+  DeferredForeignKeyAction,
+  DeferredForeignKeyOutcome,
+  DeferredForeignKeyValidation,
+  FkConvergenceInstruction,
+  ForeignKeyIntrospection,
+  ForeignKeyMatchType,
+  ForeignKeyReferentialAction,
+  ForeignKeyValidationAction,
+  RawForeignKeyRow,
+} from './aud-a-foreign-key';
+
 /**
  * Minimal query surface both a `postgres.Sql` client and a Drizzle `db` can
  * satisfy. Every statement issued through it is built from compile-time
@@ -92,51 +130,6 @@ export interface DeferredIndexSpec {
   readonly expectedIndexdef: string;
 }
 
-/** Referential action, as written in SQL and decoded from `pg_constraint`. */
-export type ForeignKeyReferentialAction =
-  | 'no action'
-  | 'restrict'
-  | 'cascade'
-  | 'set null'
-  | 'set default';
-
-/** FK match semantics; AUD·A uses the default (simple). */
-export type ForeignKeyMatchType = 'simple' | 'full' | 'partial';
-
-/**
- * Complete structural identity of a deferred AUD·A foreign key (Codex P2).
- *
- * A constraint NAME is unique only within its table, never globally, so
- * "name + convalidated" is NOT sufficient identity — a same-named constraint
- * on another schema/table, a same-named non-FK constraint, or an FK with the
- * wrong columns / referenced relation / referential actions could all satisfy
- * a name-only lookup. Every field below is compared structurally against
- * `pg_constraint` (+ `pg_class` / `pg_namespace` / `pg_attribute`), anchored
- * to the EXPECTED `schema.table`. `convalidated` is rollout STATE, tracked
- * separately — never part of identity.
- */
-export interface DeferredForeignKeyValidation {
-  /** Source (child) schema — always `public` for AUD·A. */
-  readonly schema: string;
-  /** Source (child) table (unqualified, within `schema`). */
-  readonly table: string;
-  /** Constraint name (unique within `schema.table` only). */
-  readonly constraint: string;
-  /** Ordered local (child) column list, exactly as in the FK. */
-  readonly columns: readonly string[];
-  /** Referenced (parent) schema — always `public` for AUD·A. */
-  readonly referencedSchema: string;
-  /** Referenced (parent) table. */
-  readonly referencedTable: string;
-  /** Ordered referenced (parent) column list. */
-  readonly referencedColumns: readonly string[];
-  readonly onDelete: ForeignKeyReferentialAction;
-  readonly onUpdate: ForeignKeyReferentialAction;
-  readonly matchType: ForeignKeyMatchType;
-  readonly deferrable: boolean;
-  readonly initiallyDeferred: boolean;
-}
-
 /**
  * OZI-71 AUD-A: the `audit_events` canonical organization lookup index.
  * Mirrors idx_audit_events_organization_occurred in
@@ -156,58 +149,6 @@ export const AUD_A_DEFERRED_INDEXES: readonly DeferredIndexSpec[] = [
   AUDIT_EVENTS_ORGANIZATION_INDEX,
 ];
 
-/**
- * OZI-71 AUD-A: the two organization_id FKs added NOT VALID by migration
- * `0023_breezy_sandman.sql`, validated here after 0023's transaction commits.
- * These specs are the SINGLE source of truth for "the expected FK" — consumed
- * by BOTH the convergence executor and the read-only inspector.
- *
- * 0023 (verbatim):
- *   ALTER TABLE "audit_events" ADD CONSTRAINT
- *     "audit_events_organization_id_organizations_id_fk"
- *     FOREIGN KEY ("organization_id")
- *     REFERENCES "public"."organizations"("id")
- *     ON DELETE set null ON UPDATE no action NOT VALID;
- *   ALTER TABLE "audit_log_settings" ADD CONSTRAINT
- *     "audit_log_settings_organization_id_organizations_id_fk"
- *     FOREIGN KEY ("organization_id")
- *     REFERENCES "public"."organizations"("id")
- *     ON DELETE cascade ON UPDATE no action NOT VALID;
- * Neither specifies MATCH or DEFERRABLE, so both are Postgres defaults
- * (MATCH SIMPLE, NOT DEFERRABLE, NOT INITIALLY DEFERRED).
- */
-export const AUD_A_DEFERRED_FK_VALIDATIONS: readonly DeferredForeignKeyValidation[] =
-  [
-    {
-      schema: 'public',
-      table: 'audit_events',
-      constraint: 'audit_events_organization_id_organizations_id_fk',
-      columns: ['organization_id'],
-      referencedSchema: 'public',
-      referencedTable: 'organizations',
-      referencedColumns: ['id'],
-      onDelete: 'set null',
-      onUpdate: 'no action',
-      matchType: 'simple',
-      deferrable: false,
-      initiallyDeferred: false,
-    },
-    {
-      schema: 'public',
-      table: 'audit_log_settings',
-      constraint: 'audit_log_settings_organization_id_organizations_id_fk',
-      columns: ['organization_id'],
-      referencedSchema: 'public',
-      referencedTable: 'organizations',
-      referencedColumns: ['id'],
-      onDelete: 'cascade',
-      onUpdate: 'no action',
-      matchType: 'simple',
-      deferrable: false,
-      initiallyDeferred: false,
-    },
-  ];
-
 export class DeferredIndexDefinitionMismatchError extends Error {
   constructor(
     readonly indexName: string,
@@ -223,35 +164,6 @@ export class DeferredIndexDefinitionMismatchError extends Error {
         actual,
     );
     this.name = 'DeferredIndexDefinitionMismatchError';
-  }
-}
-
-/**
- * Thrown (fail closed, both modes) when a constraint with the expected name
- * exists ON THE EXPECTED `schema.table` but its full structural definition
- * does not match the canonical spec. Schema drift is an operator / schema-
- * repair decision — the FK is NEVER auto-dropped, recreated, or validated.
- */
-export class DeferredForeignKeyDefinitionMismatchError extends Error {
-  constructor(
-    readonly constraintName: string,
-    readonly expected: string,
-    readonly actual: string,
-    readonly mismatches: readonly string[] = [],
-  ) {
-    super(
-      '[post-migrate-steps] foreign key ' +
-        JSON.stringify(constraintName) +
-        ' exists on its expected table with a different definition; refusing ' +
-        'to VALIDATE it (never auto-dropped / recreated). expected: ' +
-        expected +
-        ' | actual: ' +
-        actual +
-        (mismatches.length > 0
-          ? ' | mismatches: ' + mismatches.join('; ')
-          : ''),
-    );
-    this.name = 'DeferredForeignKeyDefinitionMismatchError';
   }
 }
 
@@ -283,10 +195,33 @@ export function normalizeIndexdef(def: string): string {
 }
 
 /**
+ * The ONE structural-definition test for a deferred index. Used identically
+ * for VALID and INVALID same-name indexes — ownership is NEVER inferred from
+ * `indisvalid = false` (Codex P2). An existing index with no readable
+ * definition (`indexdef === null`) never matches.
+ */
+export function indexDefinitionMatchesSpec(
+  spec: DeferredIndexSpec,
+  existing: ExistingIndexState,
+): boolean {
+  if (!existing.indexdef) return false;
+  return (
+    normalizeIndexdef(existing.indexdef) ===
+    normalizeIndexdef(spec.expectedIndexdef)
+  );
+}
+
+/**
  * Pure decision: given whether the required columns exist and the current
  * state of a same-name index, decide what to do. Throws
- * DeferredIndexDefinitionMismatchError on a wrong-definition collision (the
- * fail-closed case).
+ * `DeferredIndexDefinitionMismatchError` on a wrong-definition collision —
+ * whether the colliding index is VALID or INVALID (the fail-closed case).
+ *
+ *   absent                          -> create
+ *   present + exact + VALID         -> skip
+ *   present + exact + INVALID       -> recreate-invalid
+ *   present + wrong def + VALID     -> hard fail
+ *   present + wrong def + INVALID   -> hard fail
  */
 export function decideDeferredIndexAction(
   spec: DeferredIndexSpec,
@@ -305,14 +240,19 @@ export function decideDeferredIndexAction(
     };
   }
   if (!existing.exists) return { kind: 'create' };
-  if (!existing.valid) return { kind: 'recreate-invalid' };
 
-  const actual = normalizeIndexdef(existing.indexdef ?? '');
-  const expected = normalizeIndexdef(spec.expectedIndexdef);
-  if (actual !== expected) {
-    throw new DeferredIndexDefinitionMismatchError(spec.name, expected, actual);
+  // Same identity test for VALID and INVALID indexes — verify the definition
+  // BEFORE deciding to rebuild an INVALID one.
+  if (!indexDefinitionMatchesSpec(spec, existing)) {
+    throw new DeferredIndexDefinitionMismatchError(
+      spec.name,
+      normalizeIndexdef(spec.expectedIndexdef),
+      normalizeIndexdef(existing.indexdef ?? ''),
+    );
   }
-  return { kind: 'skip' };
+  // Definition is exact: a valid one is a no-op; an INVALID one (an
+  // interrupted CONCURRENTLY build we own) is dropped and rebuilt.
+  return existing.valid ? { kind: 'skip' } : { kind: 'recreate-invalid' };
 }
 
 /**
@@ -480,19 +420,21 @@ export interface DeferredIndexOutcome {
 }
 
 /**
- * Drop a same-name index ONLY if it is INVALID (a partial / interrupted
- * CONCURRENTLY build we own). A VALID index — including a VALID
- * wrong-definition one — is NEVER auto-dropped; that is an operator decision.
+ * Drop a same-name index ONLY if it is an INVALID index WE OWN: a partial /
+ * interrupted CONCURRENTLY build whose definition still matches the canonical
+ * spec exactly. A VALID index, and an INVALID index with a DIFFERENT
+ * definition, are NEVER auto-dropped — that is an operator decision (Codex
+ * P2). Ownership is not inferred from `indisvalid = false` alone.
  */
 async function dropIfInvalid(
   runner: SqlRunner,
   cc: string,
-  name: string,
+  spec: DeferredIndexSpec,
 ): Promise<boolean> {
-  const state = await introspectIndex(runner, name);
-  if (state.exists && !state.valid) {
+  const state = await introspectIndex(runner, spec.name);
+  if (state.exists && !state.valid && indexDefinitionMatchesSpec(spec, state)) {
     await runner.query(
-      'DROP INDEX' + cc + ' IF EXISTS "public"."' + name + '"',
+      'DROP INDEX' + cc + ' IF EXISTS "public"."' + spec.name + '"',
     );
     return true;
   }
@@ -524,10 +466,19 @@ async function buildDeferredIndex(
   await setSessionTimeouts(runner, AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_INDEX_MS);
 
   if (action.kind === 'recreate-invalid') {
+    // `decideDeferredIndexAction` has already verified this is an INVALID
+    // index whose definition matches the spec exactly; `dropIfInvalid`
+    // re-checks that structural identity and refuses to drop anything else.
     log({ step: 'index', index: spec.name, op: 'drop-invalid', buildMode });
-    await runner.query(
-      'DROP INDEX' + cc + ' IF EXISTS "public"."' + spec.name + '"',
-    );
+    const dropped = await dropIfInvalid(runner, cc, spec);
+    if (!dropped) {
+      throw new AudAConvergenceError(
+        'refusing to rebuild ' +
+          JSON.stringify(spec.name) +
+          ': the same-name index is no longer an INVALID exact-definition ' +
+          'index we own. Resolve it manually and re-run.',
+      );
+    }
   }
 
   log({ step: 'index', index: spec.name, op: 'create', buildMode });
@@ -543,9 +494,12 @@ async function buildDeferredIndex(
         spec.columnListSql,
     );
   } catch (err) {
+    // Best-effort cleanup: only an INVALID exact-definition index WE OWN is
+    // dropped here. A wrong-definition leftover is left untouched. The
+    // ORIGINAL build error is always rethrown — cleanup never masks it.
     let dropped = false;
     try {
-      dropped = await dropIfInvalid(runner, cc, spec.name);
+      dropped = await dropIfInvalid(runner, cc, spec);
     } catch {
       // Cleanup is best-effort; never mask the original build failure.
     }
@@ -571,12 +525,13 @@ async function assertDeferredIndexConverged(
   spec: DeferredIndexSpec,
 ): Promise<void> {
   const after = await introspectIndex(runner, spec.name);
-  const defMatches =
-    normalizeIndexdef(after.indexdef ?? '') ===
-    normalizeIndexdef(spec.expectedIndexdef);
-  if (after.exists && after.valid && defMatches) return;
+  if (after.exists && after.valid && indexDefinitionMatchesSpec(spec, after)) {
+    return;
+  }
 
-  await dropIfInvalid(runner, cc, spec.name);
+  // Non-destructive: `dropIfInvalid` removes ONLY an INVALID exact-definition
+  // index we own; a wrong-definition leftover is left for an operator.
+  await dropIfInvalid(runner, cc, spec);
   throw new AudAConvergenceError(
     'build of ' +
       JSON.stringify(spec.name) +
@@ -674,268 +629,140 @@ export async function ensureDeferredIndexes(
   return outcomes;
 }
 
-export type ForeignKeyValidationAction =
-  | 'skip'
-  | 'validate'
-  | 'missing'
-  | 'wrong-definition';
-
-export interface DeferredForeignKeyOutcome {
-  readonly constraint: string;
-  readonly action: ForeignKeyValidationAction;
-}
-
-/** `pg_constraint` referential-action codes ↔ SQL text. */
-const FK_ACTION_CODE: Record<ForeignKeyReferentialAction, string> = {
-  'no action': 'a',
-  restrict: 'r',
-  cascade: 'c',
-  'set null': 'n',
-  'set default': 'd',
-};
-const FK_ACTION_LABEL: Record<string, ForeignKeyReferentialAction> = {
-  a: 'no action',
-  r: 'restrict',
-  c: 'cascade',
-  n: 'set null',
-  d: 'set default',
-};
-/** `pg_constraint.confmatchtype` codes; older PG emits `u` for simple. */
-const FK_MATCH_CODES: Record<ForeignKeyMatchType, readonly string[]> = {
-  full: ['f'],
-  partial: ['p'],
-  simple: ['s', 'u'],
-};
-const FK_MATCH_LABEL: Record<string, ForeignKeyMatchType> = {
-  f: 'full',
-  p: 'partial',
-  s: 'simple',
-  u: 'simple',
-};
-
-/** Tolerant boolean coercion across postgres.js / drizzle / PGlite runners. */
-function toBool(value: unknown): boolean {
-  return value === true || value === 't' || value === 'true' || value === 1;
-}
-
-function splitColumns(value: string | null): string[] {
-  return value ? value.split(',') : [];
-}
-
-function orderedEqual(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((v, i) => v === b.at(i));
-}
-
-/** Canonical human-readable form of an expected FK, for operator diagnostics. */
-export function formatExpectedForeignKeyDef(
-  spec: DeferredForeignKeyValidation,
-): string {
-  const match =
-    spec.matchType === 'simple' ? '' : ` MATCH ${spec.matchType.toUpperCase()}`;
-  const defer = spec.deferrable
-    ? ` DEFERRABLE${spec.initiallyDeferred ? ' INITIALLY DEFERRED' : ''}`
-    : '';
-  return (
-    `FOREIGN KEY (${spec.columns.join(', ')}) ` +
-    `REFERENCES ${spec.referencedSchema}.${spec.referencedTable} ` +
-    `(${spec.referencedColumns.join(', ')}) ` +
-    `ON DELETE ${spec.onDelete.toUpperCase()} ` +
-    `ON UPDATE ${spec.onUpdate.toUpperCase()}${match}${defer}`
-  );
-}
-
-interface RawForeignKeyRow {
-  contype: string;
-  source_schema: string;
-  source_table: string;
-  referenced_schema: string | null;
-  referenced_table: string | null;
-  confdeltype: string;
-  confupdtype: string;
-  confmatchtype: string;
-  condeferrable: unknown;
-  condeferred: unknown;
-  convalidated: unknown;
-  definition: string;
-  local_columns: string | null;
-  referenced_columns: string | null;
-}
-
-export interface ForeignKeyIntrospection {
-  /** A constraint with this name exists ON THE EXPECTED `schema.table`. */
-  readonly exists: boolean;
-  /** Full structural identity matches the spec (ignores `convalidated`). */
-  readonly matchesSpec: boolean;
-  /** Rollout state only — `false` when `!exists`. NOT part of identity. */
-  readonly convalidated: boolean;
-  /** `pg_get_constraintdef(oid, true)` of the actual constraint (diagnostics). */
-  readonly definition: string | null;
-  /** Field-level differences vs the spec (empty when `matchesSpec`). */
-  readonly mismatches: readonly string[];
-}
-
 /**
- * Structural FK introspection (Codex P2). Anchored to the EXPECTED
- * `spec.schema.spec.table` + `spec.constraint` — a same-named constraint on
- * any other relation simply does not match the `WHERE` and yields
- * `exists: false`. Compares constraint type, source/referenced schema+table,
- * ordered local & referenced column lists (resolved attnum→attname), ON
- * DELETE / ON UPDATE, MATCH, and deferrability. Read-only (one SELECT).
+ * Structural FK introspection (Codex P2): retrieve one raw `pg_constraint`
+ * row ANCHORED to the EXPECTED `spec.schema.spec.table` + `spec.constraint`
+ * (a same-named constraint on any other relation yields `exists: false`),
+ * then delegate the pure structural comparison to `interpretForeignKeyRow`
+ * (in `./aud-a-foreign-key`). Read-only — one SELECT.
  */
 async function introspectForeignKey(
   runner: SqlRunner,
   spec: DeferredForeignKeyValidation,
 ): Promise<ForeignKeyIntrospection> {
   const rows = await runner.query<RawForeignKeyRow>(
-    'with target as (' +
-      'select c.oid, c.conrelid, c.confrelid, c.contype, c.confdeltype, ' +
-      'c.confupdtype, c.confmatchtype, c.condeferrable, c.condeferred, ' +
-      'c.convalidated, c.conkey, c.confkey, ' +
-      'src_ns.nspname as source_schema, src_rel.relname as source_table, ' +
-      'ref_ns.nspname as referenced_schema, ref_rel.relname as referenced_table, ' +
-      'pg_get_constraintdef(c.oid, true) as definition ' +
-      'from pg_constraint c ' +
-      'join pg_class src_rel on src_rel.oid = c.conrelid ' +
-      'join pg_namespace src_ns on src_ns.oid = src_rel.relnamespace ' +
-      'left join pg_class ref_rel on ref_rel.oid = c.confrelid ' +
-      'left join pg_namespace ref_ns on ref_ns.oid = ref_rel.relnamespace ' +
-      "where src_ns.nspname = '" +
-      spec.schema +
-      "' and src_rel.relname = '" +
-      spec.table +
-      "' and c.conname = '" +
-      spec.constraint +
-      "') " +
-      'select t.contype::text as contype, t.source_schema, t.source_table, ' +
-      't.referenced_schema, t.referenced_table, ' +
-      't.confdeltype::text as confdeltype, t.confupdtype::text as confupdtype, ' +
-      't.confmatchtype::text as confmatchtype, ' +
-      't.condeferrable, t.condeferred, t.convalidated, t.definition, ' +
-      "(select string_agg(a.attname, ',' order by k.ord) " +
-      'from unnest(t.conkey) with ordinality as k(attnum, ord) ' +
-      'join pg_attribute a on a.attrelid = t.conrelid and a.attnum = k.attnum' +
-      ') as local_columns, ' +
-      "(select string_agg(a.attname, ',' order by k.ord) " +
-      'from unnest(t.confkey) with ordinality as k(attnum, ord) ' +
-      'join pg_attribute a on a.attrelid = t.confrelid and a.attnum = k.attnum' +
-      ') as referenced_columns ' +
-      'from target t',
+    buildForeignKeyIntrospectionSql(spec),
   );
-
   const row = rows[0];
-  if (!row) {
-    return {
-      exists: false,
-      matchesSpec: false,
-      convalidated: false,
-      definition: null,
-      mismatches: [
-        'no constraint named ' +
-          JSON.stringify(spec.constraint) +
-          ' on ' +
-          spec.schema +
-          '.' +
-          spec.table,
-      ],
-    };
-  }
+  return row
+    ? interpretForeignKeyRow(row, spec)
+    : absentForeignKeyIntrospection(spec);
+}
 
-  const localColumns = splitColumns(row.local_columns);
-  const referencedColumns = splitColumns(row.referenced_columns);
-  const onDelete = FK_ACTION_LABEL[row.confdeltype] ?? row.confdeltype;
-  const onUpdate = FK_ACTION_LABEL[row.confupdtype] ?? row.confupdtype;
-  const matchType = FK_MATCH_LABEL[row.confmatchtype] ?? row.confmatchtype;
-
-  const mismatches: string[] = [];
-  const diff = (label: string, expected: unknown, actual: unknown): void => {
-    if (expected !== actual) {
-      mismatches.push(
-        label +
-          ": expected '" +
-          String(expected) +
-          "', got '" +
-          String(actual) +
-          "'",
-      );
-    }
-  };
-
-  if (row.contype !== 'f') {
-    mismatches.push(
-      "type: expected FOREIGN KEY, got contype='" + row.contype + "'",
-    );
-  }
-  diff('source schema', spec.schema, row.source_schema);
-  diff('source table', spec.table, row.source_table);
-  diff('referenced schema', spec.referencedSchema, row.referenced_schema);
-  diff('referenced table', spec.referencedTable, row.referenced_table);
-  if (!orderedEqual(localColumns, spec.columns)) {
-    mismatches.push(
-      'local columns: expected [' +
-        spec.columns.join(', ') +
-        '], got [' +
-        localColumns.join(', ') +
-        ']',
-    );
-  }
-  if (!orderedEqual(referencedColumns, spec.referencedColumns)) {
-    mismatches.push(
-      'referenced columns: expected [' +
-        spec.referencedColumns.join(', ') +
-        '], got [' +
-        referencedColumns.join(', ') +
-        ']',
-    );
-  }
-  if (row.confdeltype !== FK_ACTION_CODE[spec.onDelete]) {
-    diff('ON DELETE', spec.onDelete, onDelete);
-  }
-  if (row.confupdtype !== FK_ACTION_CODE[spec.onUpdate]) {
-    diff('ON UPDATE', spec.onUpdate, onUpdate);
-  }
-  if (!FK_MATCH_CODES[spec.matchType].includes(row.confmatchtype)) {
-    diff('MATCH', spec.matchType, matchType);
-  }
-  if (toBool(row.condeferrable) !== spec.deferrable) {
-    diff('deferrable', spec.deferrable, toBool(row.condeferrable));
-  }
-  if (toBool(row.condeferred) !== spec.initiallyDeferred) {
-    diff('initially deferred', spec.initiallyDeferred, toBool(row.condeferred));
-  }
-
-  return {
-    exists: true,
-    matchesSpec: mismatches.length === 0,
-    convalidated: toBool(row.convalidated),
-    definition: row.definition,
-    mismatches,
-  };
+interface FkValidateSession {
+  timeoutsSet: boolean;
 }
 
 /**
- * Pure decision for one deferred FK, mirroring `decideDeferredIndexAction`.
- * `blocked-missing` — nothing with this name on the expected `schema.table`.
- * `abort-wrong-definition` — present there but a different full definition.
- * `validate` — exact but not yet `convalidated`. `skip` — exact + validated.
+ * `enforce` VALIDATE for one exact, not-yet-`convalidated` FK: set the
+ * session timeout policy once, `ALTER TABLE … VALIDATE CONSTRAINT` on the
+ * exact expected `schema.table`, then re-introspect the FULL definition —
+ * which must still be exact + `convalidated`, or the run fails closed.
  */
-export type DeferredForeignKeyAction =
-  | { kind: 'blocked-missing' }
-  | { kind: 'abort-wrong-definition'; mismatches: readonly string[] }
-  | { kind: 'validate' }
-  | { kind: 'skip' };
-
-export function decideDeferredForeignKeyAction(
-  _spec: DeferredForeignKeyValidation,
-  introspected: ForeignKeyIntrospection,
-): DeferredForeignKeyAction {
-  if (!introspected.exists) return { kind: 'blocked-missing' };
-  if (!introspected.matchesSpec) {
-    return {
-      kind: 'abort-wrong-definition',
-      mismatches: introspected.mismatches,
-    };
+async function executeForeignKeyValidation(
+  runner: SqlRunner,
+  spec: DeferredForeignKeyValidation,
+  session: FkValidateSession,
+): Promise<void> {
+  if (!session.timeoutsSet) {
+    await setSessionTimeouts(
+      runner,
+      AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_VALIDATE_MS,
+    );
+    session.timeoutsSet = true;
   }
-  return introspected.convalidated ? { kind: 'skip' } : { kind: 'validate' };
+  await runner.query(
+    'ALTER TABLE "' +
+      spec.schema +
+      '"."' +
+      spec.table +
+      '" VALIDATE CONSTRAINT "' +
+      spec.constraint +
+      '"',
+  );
+  const after = await introspectForeignKey(runner, spec);
+  if (!after.exists || !after.matchesSpec || !after.convalidated) {
+    throw new AudAConvergenceError(
+      'VALIDATE CONSTRAINT ' +
+        JSON.stringify(spec.constraint) +
+        ' did not leave an exact, validated foreign key (exists=' +
+        after.exists +
+        ', matchesSpec=' +
+        after.matchesSpec +
+        ', convalidated=' +
+        after.convalidated +
+        (after.mismatches.length > 0
+          ? ', mismatches=' + JSON.stringify(after.mismatches)
+          : '') +
+        ').',
+    );
+  }
+}
+
+/**
+ * Converge ONE deferred FK: introspection → pure decision → pure
+ * enforce/inspect instruction → act. A wrong-definition FK NEVER mutates in
+ * either mode — `enforce` throws BEFORE any SET / VALIDATE; `inspect` reports.
+ */
+async function convergeOneForeignKey(
+  runner: SqlRunner,
+  spec: DeferredForeignKeyValidation,
+  enforce: boolean,
+  log: (event: Record<string, unknown>) => void,
+  session: FkValidateSession,
+): Promise<DeferredForeignKeyOutcome> {
+  const introspected = await introspectForeignKey(runner, spec);
+  const instruction = planForeignKeyConvergence(
+    decideDeferredForeignKeyAction(spec, introspected),
+    enforce,
+  );
+  const enforcement = enforce ? 'enforce' : 'inspect';
+
+  if (instruction.kind === 'throw-missing') {
+    throw new AudAConvergenceError(
+      'required foreign key ' +
+        JSON.stringify(spec.constraint) +
+        ' is absent on ' +
+        spec.schema +
+        '.' +
+        spec.table +
+        ' — migration 0023 has not been applied (a constraint of the same ' +
+        'name on another schema/table does NOT satisfy it).',
+    );
+  }
+
+  if (instruction.kind === 'throw-mismatch') {
+    throw new DeferredForeignKeyDefinitionMismatchError(
+      spec.constraint,
+      formatExpectedForeignKeyDef(spec),
+      introspected.definition ?? '(unreadable)',
+      introspected.mismatches,
+    );
+  }
+
+  if (instruction.kind === 'validate') {
+    await executeForeignKeyValidation(runner, spec, session);
+    log({
+      step: 'fk-validate',
+      constraint: spec.constraint,
+      action: 'validate',
+      enforcement,
+      done: true,
+    });
+    return { constraint: spec.constraint, action: 'validate' };
+  }
+
+  // instruction.kind === 'report'
+  log({
+    step: 'fk-validate',
+    constraint: spec.constraint,
+    action: instruction.action,
+    enforcement,
+    ...(instruction.action === 'wrong-definition'
+      ? { mismatches: introspected.mismatches }
+      : {}),
+  });
+  return { constraint: spec.constraint, action: instruction.action };
 }
 
 /**
@@ -945,134 +772,31 @@ export function decideDeferredForeignKeyAction(
  * transaction, so ADD CONSTRAINT's brief SHARE ROW EXCLUSIVE is long
  * released; VALIDATE CONSTRAINT itself takes only SHARE UPDATE EXCLUSIVE on
  * the table (+ ROW SHARE on organizations) and blocks neither reads nor
- * writes. Idempotent.
+ * writes. Idempotent. Iteration/orchestration only — per-FK state handling
+ * lives in `convergeOneForeignKey`.
  *
  * `enforce` mode (default): an absent expected FK is an ERROR; a present
- * wrong-definition FK is a HARD FAIL BEFORE any VALIDATE (never dropped /
- * recreated / mutated — schema drift is an operator decision, exactly like a
- * VALID wrong-definition deferred index); after a VALIDATE the FK is
+ * wrong-definition FK is a HARD FAIL BEFORE any SET / VALIDATE (never dropped
+ * / recreated / mutated — schema drift is an operator decision, exactly like
+ * a wrong-definition deferred index); after a VALIDATE the FK is
  * re-introspected in full and must still be exact + `convalidated`. `inspect`
  * mode: report `missing` / `wrong-definition` / `validate` (would) / `skip`,
- * mutate nothing.
+ * mutate nothing (SELECT-only).
  */
 export async function validateDeferredForeignKeys(
   runner: SqlRunner,
   fks: readonly DeferredForeignKeyValidation[] = AUD_A_DEFERRED_FK_VALIDATIONS,
   options: PostMigrateStepOptions = {},
 ): Promise<DeferredForeignKeyOutcome[]> {
-  const enforcement = options.enforcement ?? 'enforce';
+  const enforce = (options.enforcement ?? 'enforce') === 'enforce';
   const log = options.log ?? defaultLog;
+  const session: FkValidateSession = { timeoutsSet: false };
   const outcomes: DeferredForeignKeyOutcome[] = [];
-  let timeoutsSet = false;
 
   for (const spec of fks) {
-    const introspected = await introspectForeignKey(runner, spec);
-    const decision = decideDeferredForeignKeyAction(spec, introspected);
-
-    if (decision.kind === 'blocked-missing') {
-      if (enforcement === 'enforce') {
-        throw new AudAConvergenceError(
-          'required foreign key ' +
-            JSON.stringify(spec.constraint) +
-            ' is absent on ' +
-            spec.schema +
-            '.' +
-            spec.table +
-            ' — migration 0023 has not been applied (a constraint of the same ' +
-            'name on another schema/table does NOT satisfy it).',
-        );
-      }
-      log({
-        step: 'fk-validate',
-        constraint: spec.constraint,
-        action: 'missing',
-        enforcement,
-      });
-      outcomes.push({ constraint: spec.constraint, action: 'missing' });
-      continue;
-    }
-
-    if (decision.kind === 'abort-wrong-definition') {
-      // NEVER mutate. enforce → hard fail BEFORE VALIDATE; inspect → report.
-      if (enforcement === 'enforce') {
-        throw new DeferredForeignKeyDefinitionMismatchError(
-          spec.constraint,
-          formatExpectedForeignKeyDef(spec),
-          introspected.definition ?? '(unreadable)',
-          introspected.mismatches,
-        );
-      }
-      log({
-        step: 'fk-validate',
-        constraint: spec.constraint,
-        action: 'wrong-definition',
-        enforcement,
-        mismatches: introspected.mismatches,
-      });
-      outcomes.push({
-        constraint: spec.constraint,
-        action: 'wrong-definition',
-      });
-      continue;
-    }
-
-    if (decision.kind === 'skip' || enforcement === 'inspect') {
-      const action = decision.kind === 'skip' ? 'skip' : 'validate';
-      log({
-        step: 'fk-validate',
-        constraint: spec.constraint,
-        action,
-        enforcement,
-      });
-      outcomes.push({ constraint: spec.constraint, action });
-      continue;
-    }
-
-    // enforce mode + decision.kind === 'validate' (exact, not yet validated).
-    if (!timeoutsSet) {
-      await setSessionTimeouts(
-        runner,
-        AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_VALIDATE_MS,
-      );
-      timeoutsSet = true;
-    }
-    await runner.query(
-      'ALTER TABLE "' +
-        spec.schema +
-        '"."' +
-        spec.table +
-        '" VALIDATE CONSTRAINT "' +
-        spec.constraint +
-        '"',
+    outcomes.push(
+      await convergeOneForeignKey(runner, spec, enforce, log, session),
     );
-
-    // Re-introspect the FULL definition, not just `convalidated`.
-    const after = await introspectForeignKey(runner, spec);
-    if (!after.exists || !after.matchesSpec || !after.convalidated) {
-      throw new AudAConvergenceError(
-        'VALIDATE CONSTRAINT ' +
-          JSON.stringify(spec.constraint) +
-          ' did not leave an exact, validated foreign key (exists=' +
-          after.exists +
-          ', matchesSpec=' +
-          after.matchesSpec +
-          ', convalidated=' +
-          after.convalidated +
-          (after.mismatches.length > 0
-            ? ', mismatches=' + JSON.stringify(after.mismatches)
-            : '') +
-          ').',
-      );
-    }
-
-    log({
-      step: 'fk-validate',
-      constraint: spec.constraint,
-      action: 'validate',
-      enforcement,
-      done: true,
-    });
-    outcomes.push({ constraint: spec.constraint, action: 'validate' });
   }
 
   return outcomes;
@@ -1136,6 +860,7 @@ export async function runAudAPostMigrateSteps(
 export type AudAIndexInspectedState =
   | 'absent'
   | 'invalid'
+  | 'invalid-wrong-definition'
   | 'valid-exact'
   | 'valid-wrong-definition';
 
@@ -1145,6 +870,46 @@ export type AudAIndexPlan =
   | 'rebuild-invalid'
   | 'abort-wrong-definition'
   | 'blocked-expand-not-applied';
+
+/**
+ * Pure index classification for the read-only inspector. The SAME structural
+ * identity test (`indexDefinitionMatchesSpec`) as the executor is applied to
+ * VALID and INVALID indexes alike (Codex P2): an INVALID index whose
+ * definition does NOT match the spec is `invalid-wrong-definition` /
+ * `abort-wrong-definition` — NOT `rebuild-invalid`, and never labelled
+ * `valid-*`.
+ */
+export function classifyIndexInspection(
+  spec: DeferredIndexSpec,
+  existing: ExistingIndexState,
+  columnsPresent: boolean,
+): { state: AudAIndexInspectedState; plannedAction: AudAIndexPlan } {
+  if (!existing.exists) {
+    return {
+      state: 'absent',
+      plannedAction: columnsPresent
+        ? 'create-concurrently'
+        : 'blocked-expand-not-applied',
+    };
+  }
+  const exact = indexDefinitionMatchesSpec(spec, existing);
+  if (exact && existing.valid) {
+    return { state: 'valid-exact', plannedAction: 'no-op' };
+  }
+  if (exact) {
+    return { state: 'invalid', plannedAction: 'rebuild-invalid' };
+  }
+  if (existing.valid) {
+    return {
+      state: 'valid-wrong-definition',
+      plannedAction: 'abort-wrong-definition',
+    };
+  }
+  return {
+    state: 'invalid-wrong-definition',
+    plannedAction: 'abort-wrong-definition',
+  };
+}
 
 /** Mirrors the deferred-index state model, for FKs (Codex P2). */
 export type AudAForeignKeyInspectedState =
@@ -1219,27 +984,11 @@ export async function inspectAudAConvergence(
 ): Promise<AudAConvergenceInspection> {
   const columnsPresent = await requiredColumnsPresent(runner, spec);
   const existing = await introspectIndex(runner, spec.name);
-
-  let state: AudAIndexInspectedState;
-  let plannedAction: AudAIndexPlan;
-  if (!existing.exists) {
-    state = 'absent';
-    plannedAction = columnsPresent
-      ? 'create-concurrently'
-      : 'blocked-expand-not-applied';
-  } else if (!existing.valid) {
-    state = 'invalid';
-    plannedAction = 'rebuild-invalid';
-  } else if (
-    normalizeIndexdef(existing.indexdef ?? '') ===
-    normalizeIndexdef(spec.expectedIndexdef)
-  ) {
-    state = 'valid-exact';
-    plannedAction = 'no-op';
-  } else {
-    state = 'valid-wrong-definition';
-    plannedAction = 'abort-wrong-definition';
-  }
+  const { state, plannedAction } = classifyIndexInspection(
+    spec,
+    existing,
+    columnsPresent,
+  );
 
   const foreignKeys: AudAForeignKeyInspection[] = [];
   for (const fkSpec of fks) {

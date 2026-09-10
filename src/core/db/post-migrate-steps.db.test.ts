@@ -190,7 +190,7 @@ describe('ensureDeferredIndexes executor', () => {
   });
 
   it.skipIf(!isRealPg)(
-    'recovers an INVALID index by dropping and rebuilding it (real Postgres)',
+    'recovers an EXACT interrupted INVALID index by dropping and rebuilding it (real Postgres)',
     async () => {
       await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
       await runner.query(
@@ -207,6 +207,59 @@ describe('ensureDeferredIndexes executor', () => {
         { name: INDEX.name, action: 'recreate-invalid' },
       ]);
       expect((await indexState()).valid).toBe(true);
+    },
+  );
+
+  it.skipIf(!isRealPg)(
+    'Codex P2: an INVALID same-name WRONG-definition index is a HARD FAIL and is NEVER dropped/rebuilt (real Postgres)',
+    async () => {
+      await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+      // Same NAME, wrong columns; then forced INVALID via the catalog.
+      await runner.query(
+        `CREATE INDEX "${INDEX.name}" ON "audit_events" USING btree ("occurred_at")`,
+      );
+      await runner.query(
+        `UPDATE pg_index SET indisvalid = false
+           WHERE indexrelid = '"public"."${INDEX.name}"'::regclass`,
+      );
+      const before = await indexState();
+      expect(before.exists && !before.valid).toBe(true);
+      expect(before.def).toMatch(/\(occurred_at\)/);
+
+      await expect(ensureDeferredIndexes(runner, mode)).rejects.toBeInstanceOf(
+        DeferredIndexDefinitionMismatchError,
+      );
+      await expect(
+        runAudAPostMigrateSteps(runner, mode, { enforcement: 'enforce' }),
+      ).rejects.toBeInstanceOf(DeferredIndexDefinitionMismatchError);
+
+      // Byte-identical: the wrong INVALID index was NOT dropped or rebuilt.
+      const after = await indexState();
+      expect(after).toEqual(before);
+    },
+  );
+
+  it.skipIf(!isRealPg)(
+    'Codex P2: a failed CREATE INDEX cleanup never removes a WRONG-definition INVALID leftover (real Postgres)',
+    async () => {
+      // Simulate a build that failed and left a same-name INVALID index with a
+      // DIFFERENT definition. `assertDeferredIndexConverged`'s cleanup must not
+      // touch it (only an exact-definition INVALID index is dropped).
+      await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+      await runner.query(
+        `CREATE INDEX "${INDEX.name}" ON "audit_events" USING btree ("occurred_at")`,
+      );
+      await runner.query(
+        `UPDATE pg_index SET indisvalid = false
+           WHERE indexrelid = '"public"."${INDEX.name}"'::regclass`,
+      );
+      const before = await indexState();
+
+      await expect(ensureDeferredIndexes(runner, mode)).rejects.toBeInstanceOf(
+        DeferredIndexDefinitionMismatchError,
+      );
+
+      expect(await indexState()).toEqual(before);
     },
   );
 
@@ -379,7 +432,7 @@ describe('inspectAudAConvergence / gatherAudAConvergenceEvidence (read-only oper
   });
 
   it.skipIf(!isRealPg)(
-    'an INVALID index reports rebuild-invalid (real Postgres)',
+    'an EXACT INVALID index reports invalid / rebuild-invalid (real Postgres)',
     async () => {
       await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
       await runner.query(
@@ -393,6 +446,28 @@ describe('inspectAudAConvergence / gatherAudAConvergenceEvidence (read-only oper
       expect(ins.index.state).toBe('invalid');
       expect(ins.index.plannedAction).toBe('rebuild-invalid');
       expect((await indexState()).valid).toBe(false);
+    },
+  );
+
+  it.skipIf(!isRealPg)(
+    'Codex P2: an INVALID WRONG-definition index reports invalid-wrong-definition / abort — NOT rebuild-invalid (real Postgres)',
+    async () => {
+      await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+      await runner.query(
+        `CREATE INDEX "${INDEX.name}" ON "audit_events" USING btree ("occurred_at")`,
+      );
+      await runner.query(
+        `UPDATE pg_index SET indisvalid = false
+           WHERE indexrelid = '"public"."${INDEX.name}"'::regclass`,
+      );
+      const before = await indexState();
+
+      const ins = await inspectAudAConvergence(runner);
+      expect(ins.index.state).toBe('invalid-wrong-definition');
+      expect(ins.index.plannedAction).toBe('abort-wrong-definition');
+
+      // read-only: nothing changed
+      expect(await indexState()).toEqual(before);
     },
   );
 

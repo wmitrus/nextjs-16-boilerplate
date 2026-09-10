@@ -192,8 +192,17 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
   it('reports each already-converged / blocked index state distinctly', () => {
     const states = [
       ['valid-exact', 'no-op', /CREATE INDEX will NOT run/],
-      ['invalid', 'rebuild-invalid', /rebuilt/],
+      [
+        'invalid',
+        'rebuild-invalid',
+        /definition MATCHES the canonical spec.*rebuilt/,
+      ],
       ['valid-wrong-definition', 'abort-wrong-definition', /HARD FAIL/],
+      [
+        'invalid-wrong-definition',
+        'abort-wrong-definition',
+        /NEVER drops or rebuilds it \(no automatic DROP\/rebuild for a wrong-definition INVALID index\)/,
+      ],
       ['absent', 'blocked-expand-not-applied', /BLOCKED/],
     ] as const;
     for (const [state, plan, re] of states) {
@@ -296,8 +305,15 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
     expect(g).toMatch(/lock_timeout abort/i);
     expect(g).toMatch(/wrong definition/i);
     expect(g).toMatch(/FK VALIDATE failure/i);
-    // never instructs an automatic drop of a valid index
-    expect(g).toMatch(/NEVER drops a valid index/i);
+    // Codex P2: a wrong-definition index — VALID *or* INVALID — is never
+    // auto-dropped or rebuilt.
+    expect(g).toMatch(
+      /Same-name index with a WRONG definition — whether VALID or INVALID/i,
+    );
+    expect(g).toMatch(/NEVER drops or rebuilds it/i);
+    expect(g.replace(/\s+/g, ' ')).toMatch(
+      /INVALID\s+wrong-definition index is NOT auto-dropped/i,
+    );
     // FK schema-drift: hard fail, never auto drop/recreate/validate
     expect(g).toMatch(/Same-name FK on the expected table with a WRONG/i);
     expect(g).toMatch(/NEVER drops\/recreates\/validates it/i);

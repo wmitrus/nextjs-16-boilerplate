@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AudAConvergenceEvidence,
   AudAConvergenceInspection,
+  AudAForeignKeyInspection,
   SqlRunner,
 } from '@/core/db/post-migrate-steps';
 
@@ -31,6 +32,27 @@ import {
 
 const POOLED = 'postgresql://u:p@ep-x-pooler.us-east-1.aws.neon.tech/app';
 const DIRECT = 'postgresql://u:p@ep-x.us-east-1.aws.neon.tech/app';
+
+/** A structurally-complete `AudAForeignKeyInspection` for fixtures. */
+function fkInsp(
+  over: Partial<AudAForeignKeyInspection> = {},
+): AudAForeignKeyInspection {
+  return {
+    constraint: 'audit_events_organization_id_organizations_id_fk',
+    schema: 'public',
+    table: 'audit_events',
+    state: 'present-exact-validated',
+    present: true,
+    convalidated: true,
+    expectedDefinition:
+      'FOREIGN KEY (organization_id) REFERENCES public.organizations (id) ON DELETE SET NULL ON UPDATE NO ACTION',
+    currentDefinition:
+      'FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL',
+    definitionMismatches: [],
+    plannedAction: 'no-op',
+    ...over,
+  };
+}
 
 describe('db:aud-a:converge — operator gate (fails closed before any DB work)', () => {
   const savedUrl = process.env.DATABASE_URL;
@@ -109,20 +131,17 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
         plannedAction: 'create-concurrently',
       },
       foreignKeys: [
-        {
+        fkInsp({
           constraint: 'audit_events_organization_id_organizations_id_fk',
           table: 'audit_events',
-          present: true,
+          state: 'present-exact-unvalidated',
           convalidated: false,
           plannedAction: 'validate',
-        },
-        {
+        }),
+        fkInsp({
           constraint: 'audit_log_settings_organization_id_organizations_id_fk',
           table: 'audit_log_settings',
-          present: true,
-          convalidated: true,
-          plannedAction: 'no-op',
-        },
+        }),
       ],
       timeoutPolicy: {
         lockTimeoutMs: 3000,
@@ -147,13 +166,22 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
     // index state + planned action
     expect(out).toContain('state                  : absent');
     expect(out).toMatch(/CREATE INDEX CONCURRENTLY WILL run/);
-    // both FKs, with per-FK planned action
+    // both FKs, with per-FK structural detail + planned action
     expect(out).toContain('audit_events_organization_id_organizations_id_fk');
     expect(out).toContain(
       'audit_log_settings_organization_id_organizations_id_fk',
     );
+    expect(out).toMatch(/expected source table : public\.audit_events/);
+    expect(out).toMatch(/definition state      : present-exact-unvalidated/);
+    expect(out).toMatch(/definition state      : present-exact-validated/);
+    expect(out).toMatch(
+      /expected definition   : FOREIGN KEY \(organization_id\)/,
+    );
+    expect(out).toMatch(
+      /current definition    : FOREIGN KEY \(organization_id\)/,
+    );
     expect(out).toMatch(/VALIDATE CONSTRAINT WILL run/);
-    expect(out).toMatch(/already validated — VALIDATE CONSTRAINT will NOT run/);
+    expect(out).toMatch(/VALIDATE CONSTRAINT will NOT run/i);
     // timeout policy
     expect(out).toContain('lock_timeout');
     expect(out).toContain('3000 ms');
@@ -188,6 +216,66 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
     }
   });
 
+  it('renders a wrong-definition FK with mismatches and the abort plan', () => {
+    const out = formatEvidence(
+      target,
+      {
+        ...evidence,
+        inspection: {
+          ...evidence.inspection,
+          foreignKeys: [
+            fkInsp({
+              state: 'present-wrong-definition',
+              convalidated: true,
+              currentDefinition:
+                'FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE',
+              definitionMismatches: [
+                "ON DELETE: expected 'set null', got 'cascade'",
+              ],
+              plannedAction: 'abort-wrong-definition',
+            }),
+            fkInsp({
+              constraint:
+                'audit_log_settings_organization_id_organizations_id_fk',
+              table: 'audit_log_settings',
+            }),
+          ],
+        },
+      },
+      'check',
+    );
+    expect(out).toMatch(/definition state      : present-wrong-definition/);
+    expect(out).toMatch(
+      /mismatches            : ON DELETE: expected 'set null'/,
+    );
+    expect(out).toMatch(/HARD FAIL — a same-name FK on the expected table/);
+  });
+
+  it('renders an absent FK as blocked-missing on its expected table', () => {
+    const out = formatEvidence(
+      target,
+      {
+        ...evidence,
+        inspection: {
+          ...evidence.inspection,
+          foreignKeys: [
+            fkInsp({
+              state: 'absent',
+              present: false,
+              convalidated: null,
+              currentDefinition: null,
+              plannedAction: 'blocked-missing',
+            }),
+          ],
+        },
+      },
+      'check',
+    );
+    expect(out).toMatch(/present on that table : NO/);
+    expect(out).toMatch(/current definition    : \(absent\)/);
+    expect(out).toMatch(/BLOCKED — expected FK absent on its table/);
+  });
+
   it('marks size evidence unavailable rather than printing null', () => {
     const out = formatEvidence(
       target,
@@ -202,7 +290,7 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
     expect(out).not.toContain(': null');
   });
 
-  it('recovery guidance covers the four required failure modes', () => {
+  it('recovery guidance covers every required failure mode', () => {
     const g = formatRecoveryGuidance();
     expect(g).toMatch(/interrupted create index concurrently|INVALID index/i);
     expect(g).toMatch(/lock_timeout abort/i);
@@ -210,6 +298,16 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
     expect(g).toMatch(/FK VALIDATE failure/i);
     // never instructs an automatic drop of a valid index
     expect(g).toMatch(/NEVER drops a valid index/i);
+    // FK schema-drift: hard fail, never auto drop/recreate/validate
+    expect(g).toMatch(/Same-name FK on the expected table with a WRONG/i);
+    expect(g).toMatch(/NEVER drops\/recreates\/validates it/i);
+    // both canonical expected FK definitions are printed for the operator
+    expect(g).toMatch(
+      /audit_events_organization_id_organizations_id_fk: FOREIGN KEY \(organization_id\) REFERENCES public\.organizations \(id\) ON DELETE SET NULL ON UPDATE NO ACTION/,
+    );
+    expect(g).toMatch(
+      /audit_log_settings_organization_id_organizations_id_fk: FOREIGN KEY \(organization_id\) REFERENCES public\.organizations \(id\) ON DELETE CASCADE ON UPDATE NO ACTION/,
+    );
   });
 });
 
@@ -284,20 +382,14 @@ function inspection(
       plannedAction: 'no-op',
     },
     foreignKeys: [
-      {
+      fkInsp({
         constraint: 'audit_events_organization_id_organizations_id_fk',
         table: 'audit_events',
-        present: true,
-        convalidated: true,
-        plannedAction: 'no-op',
-      },
-      {
+      }),
+      fkInsp({
         constraint: 'audit_log_settings_organization_id_organizations_id_fk',
         table: 'audit_log_settings',
-        present: true,
-        convalidated: true,
-        plannedAction: 'no-op',
-      },
+      }),
     ],
     timeoutPolicy: {
       lockTimeoutMs: 3000,
@@ -560,6 +652,62 @@ describe('db:aud-a:converge — approved --apply orchestration', () => {
     ).rejects.toThrow(/post-condition check failed after convergence/i);
     expect(h.runConvergence).toHaveBeenCalledTimes(1);
     expect(h.close).toHaveBeenCalled();
+  });
+
+  it('final postcondition FAILS when a FK is not present-exact-validated after convergence', async () => {
+    const h = makeDeps();
+    let call = 0;
+    h.gatherEvidence.mockImplementation(async () => {
+      call += 1;
+      if (call === 1) return evidenceOf(inspection());
+      // post-convergence: index fine, but one FK is convalidated with a
+      // wrong definition — convalidated alone must NOT satisfy COMPLETE.
+      return evidenceOf(
+        inspection({
+          foreignKeys: [
+            fkInsp({
+              constraint: 'audit_events_organization_id_organizations_id_fk',
+              state: 'present-wrong-definition',
+              convalidated: true,
+              definitionMismatches: [
+                "ON DELETE: expected 'set null', got 'cascade'",
+              ],
+              plannedAction: 'abort-wrong-definition',
+            }),
+            fkInsp({
+              constraint:
+                'audit_log_settings_organization_id_organizations_id_fk',
+              table: 'audit_log_settings',
+            }),
+          ],
+        }),
+      );
+    });
+    await expect(
+      run(['--apply', '--production-approved'], h.deps),
+    ).rejects.toThrow(/post-condition check failed after convergence/i);
+  });
+
+  it('final postcondition FAILS when the FK set count differs from the canonical AUD·A set', async () => {
+    const h = makeDeps();
+    let call = 0;
+    h.gatherEvidence.mockImplementation(async () => {
+      call += 1;
+      if (call === 1) return evidenceOf(inspection());
+      // only ONE FK reported back — not the full canonical set of two.
+      return evidenceOf(
+        inspection({
+          foreignKeys: [
+            fkInsp({
+              constraint: 'audit_events_organization_id_organizations_id_fk',
+            }),
+          ],
+        }),
+      );
+    });
+    await expect(
+      run(['--apply', '--production-approved'], h.deps),
+    ).rejects.toThrow(/post-condition check failed after convergence/i);
   });
 
   it('a VALID wrong-definition index stays fail-closed: executor error propagates, CLI never drops it', async () => {

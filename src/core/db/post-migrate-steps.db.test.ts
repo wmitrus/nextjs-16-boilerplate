@@ -18,6 +18,7 @@ import {
   AUD_A_DEFERRED_FK_VALIDATIONS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
   AudAConvergenceError,
+  DeferredForeignKeyDefinitionMismatchError,
   DeferredIndexDefinitionMismatchError,
   ensureDeferredIndexes,
   gatherAudAConvergenceEvidence,
@@ -425,6 +426,251 @@ describe('inspectAudAConvergence / gatherAudAConvergenceEvidence (read-only oper
       );
     }
     expect(await snapshot()).toEqual(before);
+  });
+});
+
+describe('structural FK verification — same-name collisions & definition drift (Codex P2)', () => {
+  const FK_EVENTS = AUD_A_DEFERRED_FK_VALIDATIONS[0]!; // audit_events, ON DELETE SET NULL
+  const FK_SETTINGS = AUD_A_DEFERRED_FK_VALIDATIONS[1]!; // audit_log_settings, ON DELETE CASCADE
+
+  /** Raw `pg_constraint` row anchored to a specific schema.table (test-only). */
+  async function rawFk(
+    schema: string,
+    table: string,
+    name: string,
+  ): Promise<{ confdeltype: string; convalidated: boolean } | null> {
+    const rows = await runner.query<{
+      confdeltype: string;
+      convalidated: boolean;
+    }>(
+      `select c.confdeltype::text as confdeltype, c.convalidated
+         from pg_constraint c
+         join pg_class rel on rel.oid = c.conrelid
+         join pg_namespace ns on ns.oid = rel.relnamespace
+        where ns.nspname = '${schema}' and rel.relname = '${table}'
+          and c.conname = '${name}'`,
+    );
+    return rows[0]
+      ? {
+          confdeltype: rows[0].confdeltype,
+          convalidated: rows[0].convalidated === true,
+        }
+      : null;
+  }
+
+  function fkInspection(constraint: string) {
+    return inspectAudAConvergence(runner).then(
+      (ins) => ins.foreignKeys.find((f) => f.constraint === constraint)!,
+    );
+  }
+
+  afterEach(async () => {
+    // Undo any drift this block introduced BEFORE the file-level afterEach
+    // reconstructs 0023. A wrong FK on a non-organization_id local column is
+    // NOT removed by `DROP COLUMN organization_id CASCADE`.
+    await runner.query(
+      `ALTER TABLE public.audit_events DROP CONSTRAINT IF EXISTS "${FK_EVENTS.constraint}"`,
+    );
+    await runner.query(
+      `ALTER TABLE public.audit_log_settings DROP CONSTRAINT IF EXISTS "${FK_SETTINGS.constraint}"`,
+    );
+    await runner.query('DROP SCHEMA IF EXISTS aud_p2_other CASCADE');
+    await runner.query('DROP TABLE IF EXISTS public.aud_p2_wrong_ref CASCADE');
+  });
+
+  it('A: a correct exact NOT VALID FK → exact-unvalidated → enforce validates → final exact + validated', async () => {
+    await runner.query(
+      `ALTER TABLE public.audit_events DROP CONSTRAINT "${FK_EVENTS.constraint}"`,
+    );
+    await runner.query(
+      `ALTER TABLE public.audit_events ADD CONSTRAINT "${FK_EVENTS.constraint}" ` +
+        `FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ` +
+        `ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID`,
+    );
+
+    const before = await fkInspection(FK_EVENTS.constraint);
+    expect(before.state).toBe('present-exact-unvalidated');
+    expect(before.plannedAction).toBe('validate');
+    expect(before.convalidated).toBe(false);
+
+    const outcome = await validateDeferredForeignKeys(runner, [FK_EVENTS], {
+      enforcement: 'enforce',
+    });
+    expect(outcome).toEqual([
+      { constraint: FK_EVENTS.constraint, action: 'validate' },
+    ]);
+
+    const after = await fkInspection(FK_EVENTS.constraint);
+    expect(after.state).toBe('present-exact-validated');
+    expect(after.plannedAction).toBe('no-op');
+    expect(after.convalidated).toBe(true);
+  });
+
+  it('B: a correct exact + validated FK is a no-op in both inspect and enforce', async () => {
+    // beforeAll already converged both FKs.
+    const ins = await inspectAudAConvergence(runner);
+    for (const f of ins.foreignKeys) {
+      expect(f.state).toBe('present-exact-validated');
+      expect(f.plannedAction).toBe('no-op');
+      expect(f.convalidated).toBe(true);
+    }
+    const outcome = await validateDeferredForeignKeys(
+      runner,
+      AUD_A_DEFERRED_FK_VALIDATIONS,
+      { enforcement: 'enforce' },
+    );
+    expect(outcome.map((o) => o.action)).toEqual(['skip', 'skip']);
+  });
+
+  it('C: same table + same name but WRONG ON DELETE (cascade, not set null) → wrong-definition; hard fail; never mutated', async () => {
+    await runner.query(
+      `ALTER TABLE public.audit_events DROP CONSTRAINT "${FK_EVENTS.constraint}"`,
+    );
+    await runner.query(
+      `ALTER TABLE public.audit_events ADD CONSTRAINT "${FK_EVENTS.constraint}" ` +
+        `FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ` +
+        `ON DELETE CASCADE ON UPDATE NO ACTION NOT VALID`,
+    );
+
+    // inspect: REPORTS, never throws, never mutates
+    const fk = await fkInspection(FK_EVENTS.constraint);
+    expect(fk.state).toBe('present-wrong-definition');
+    expect(fk.plannedAction).toBe('abort-wrong-definition');
+    expect(fk.definitionMismatches.join(' ')).toMatch(/ON DELETE/i);
+    expect(fk.currentDefinition).toMatch(/CASCADE/i);
+
+    // enforce: HARD FAIL, before any VALIDATE
+    await expect(
+      validateDeferredForeignKeys(runner, [FK_EVENTS], {
+        enforcement: 'enforce',
+      }),
+    ).rejects.toBeInstanceOf(DeferredForeignKeyDefinitionMismatchError);
+    await expect(
+      runAudAPostMigrateSteps(runner, mode, { enforcement: 'enforce' }),
+    ).rejects.toBeInstanceOf(DeferredForeignKeyDefinitionMismatchError);
+
+    // untouched: still CASCADE ('c'), still NOT VALID — not dropped/recreated
+    const raw = await rawFk('public', 'audit_events', FK_EVENTS.constraint);
+    expect(raw?.confdeltype).toBe('c');
+    expect(raw?.convalidated).toBe(false);
+  });
+
+  it('D: same constraint name lives in ANOTHER schema while the expected public FK is absent → missing; enforce fails closed; decoy untouched', async () => {
+    await runner.query(
+      `ALTER TABLE public.audit_events DROP CONSTRAINT "${FK_EVENTS.constraint}"`,
+    );
+    await runner.query('CREATE SCHEMA aud_p2_other');
+    await runner.query(
+      `CREATE TABLE aud_p2_other.audit_events (id int primary key, organization_id uuid)`,
+    );
+    // a fully VALID, convalidated same-name FK on the other schema/table
+    await runner.query(
+      `ALTER TABLE aud_p2_other.audit_events ADD CONSTRAINT "${FK_EVENTS.constraint}" ` +
+        `FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ` +
+        `ON DELETE SET NULL ON UPDATE NO ACTION`,
+    );
+    const decoyBefore = await rawFk(
+      'aud_p2_other',
+      'audit_events',
+      FK_EVENTS.constraint,
+    );
+    expect(decoyBefore).not.toBeNull();
+    expect(decoyBefore?.convalidated).toBe(true);
+
+    // the name-only lookup would have taken this decoy; the structural one MUST NOT
+    const fk = await fkInspection(FK_EVENTS.constraint);
+    expect(fk.state).toBe('absent');
+    expect(fk.present).toBe(false);
+    expect(fk.convalidated).toBeNull();
+    expect(fk.plannedAction).toBe('blocked-missing');
+
+    await expect(
+      validateDeferredForeignKeys(runner, [FK_EVENTS], {
+        enforcement: 'enforce',
+      }),
+    ).rejects.toBeInstanceOf(AudAConvergenceError);
+
+    // the decoy on the other schema was never touched
+    const decoyAfter = await rawFk(
+      'aud_p2_other',
+      'audit_events',
+      FK_EVENTS.constraint,
+    );
+    expect(decoyAfter).toEqual(decoyBefore);
+  });
+
+  it('E: expected table + name but WRONG referenced relation → wrong-definition; hard fail', async () => {
+    await runner.query(
+      `ALTER TABLE public.audit_events DROP CONSTRAINT "${FK_EVENTS.constraint}"`,
+    );
+    await runner.query(
+      'CREATE TABLE public.aud_p2_wrong_ref (id uuid primary key)',
+    );
+    await runner.query(
+      `ALTER TABLE public.audit_events ADD CONSTRAINT "${FK_EVENTS.constraint}" ` +
+        `FOREIGN KEY (organization_id) REFERENCES public.aud_p2_wrong_ref(id) ` +
+        `ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID`,
+    );
+
+    const fk = await fkInspection(FK_EVENTS.constraint);
+    expect(fk.state).toBe('present-wrong-definition');
+    expect(fk.definitionMismatches.join(' ')).toMatch(/referenced table/i);
+
+    await expect(
+      validateDeferredForeignKeys(runner, [FK_EVENTS], {
+        enforcement: 'enforce',
+      }),
+    ).rejects.toBeInstanceOf(DeferredForeignKeyDefinitionMismatchError);
+
+    const raw = await rawFk('public', 'audit_events', FK_EVENTS.constraint);
+    expect(raw?.convalidated).toBe(false); // never validated
+  });
+
+  it('F: expected table + name but WRONG local column → wrong-definition; hard fail', async () => {
+    await runner.query(
+      `ALTER TABLE public.audit_events DROP CONSTRAINT "${FK_EVENTS.constraint}"`,
+    );
+    // audit_events.actor_user_id is a uuid column — right type, WRONG column.
+    await runner.query(
+      `ALTER TABLE public.audit_events ADD CONSTRAINT "${FK_EVENTS.constraint}" ` +
+        `FOREIGN KEY (actor_user_id) REFERENCES public.organizations(id) ` +
+        `ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID`,
+    );
+
+    const fk = await fkInspection(FK_EVENTS.constraint);
+    expect(fk.state).toBe('present-wrong-definition');
+    expect(fk.definitionMismatches.join(' ')).toMatch(/local columns/i);
+
+    await expect(
+      validateDeferredForeignKeys(runner, [FK_EVENTS], {
+        enforcement: 'enforce',
+      }),
+    ).rejects.toBeInstanceOf(DeferredForeignKeyDefinitionMismatchError);
+  });
+
+  it('inspect never mutates for any drift shape (read-only proof)', async () => {
+    await runner.query(
+      `ALTER TABLE public.audit_events DROP CONSTRAINT "${FK_EVENTS.constraint}"`,
+    );
+    await runner.query(
+      `ALTER TABLE public.audit_events ADD CONSTRAINT "${FK_EVENTS.constraint}" ` +
+        `FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ` +
+        `ON DELETE CASCADE ON UPDATE NO ACTION NOT VALID`,
+    );
+    const raw1 = await rawFk('public', 'audit_events', FK_EVENTS.constraint);
+
+    // two inspect calls + an inspect-mode executor pass — all read-only
+    await inspectAudAConvergence(runner);
+    await gatherAudAConvergenceEvidence(runner);
+    const out = await validateDeferredForeignKeys(runner, [FK_EVENTS], {
+      enforcement: 'inspect',
+    });
+    expect(out).toEqual([
+      { constraint: FK_EVENTS.constraint, action: 'wrong-definition' },
+    ]);
+
+    const raw2 = await rawFk('public', 'audit_events', FK_EVENTS.constraint);
+    expect(raw2).toEqual(raw1); // byte-identical: nothing changed
   });
 });
 

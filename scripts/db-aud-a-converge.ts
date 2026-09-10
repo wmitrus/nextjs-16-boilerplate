@@ -4,7 +4,9 @@ import postgres from 'postgres';
 
 import {
   assertDirectPostgresUrl,
+  AUD_A_DEFERRED_FK_VALIDATIONS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
+  formatExpectedForeignKeyDef,
   gatherAudAConvergenceEvidence,
   runAudAPostMigrateSteps,
   sqlRunnerFromPostgres,
@@ -179,11 +181,13 @@ function describeIndexPlan(plan: AudAIndexPlan): string {
 function describeFkPlan(plan: AudAForeignKeyPlan): string {
   switch (plan) {
     case 'no-op':
-      return 'already validated — VALIDATE CONSTRAINT will NOT run';
+      return 'already exact + validated — VALIDATE CONSTRAINT will NOT run';
     case 'validate':
-      return 'VALIDATE CONSTRAINT WILL run (scans audit_events under SHARE UPDATE EXCLUSIVE)';
+      return 'VALIDATE CONSTRAINT WILL run (scans the table under SHARE UPDATE EXCLUSIVE)';
     case 'blocked-missing':
-      return 'BLOCKED — FK absent; migration 0023 is not applied; --apply fails closed';
+      return 'BLOCKED — expected FK absent on its table; migration 0023 is not applied; --apply fails closed';
+    case 'abort-wrong-definition':
+      return 'HARD FAIL — a same-name FK on the expected table has a DIFFERENT definition; --apply aborts and NEVER drops/recreates/validates it';
   }
 }
 
@@ -249,13 +253,22 @@ export function formatEvidence(
     `  planned action         : ${describeIndexPlan(ins.index.plannedAction)}`,
   );
   L.push('');
-  L.push('Deferred foreign keys:');
+  L.push('Deferred foreign keys (full structural identity):');
   for (const fk of ins.foreignKeys) {
-    L.push(`  ${fk.constraint} (${fk.table})`);
-    L.push(`    present              : ${fk.present ? 'yes' : 'NO'}`);
+    L.push(`  ${fk.constraint}`);
+    L.push(`    expected source table : ${fk.schema}.${fk.table}`);
+    L.push(`    present on that table : ${fk.present ? 'yes' : 'NO'}`);
+    L.push(`    definition state      : ${fk.state}`);
     L.push(
       `    convalidated          : ${fk.convalidated === null ? '(absent)' : String(fk.convalidated)}`,
     );
+    L.push(`    expected definition   : ${fk.expectedDefinition}`);
+    L.push(`    current definition    : ${fk.currentDefinition ?? '(absent)'}`);
+    if (fk.definitionMismatches.length > 0) {
+      L.push(
+        `    mismatches            : ${fk.definitionMismatches.join('; ')}`,
+      );
+    }
     L.push(`    planned action        : ${describeFkPlan(fk.plannedAction)}`);
   }
   L.push('');
@@ -292,6 +305,13 @@ export function formatRecoveryGuidance(): string {
     '      an audit_events / audit_log_settings row has organization_id pointing',
     '      at a missing organizations.id. Investigate/repair those rows; the FK',
     '      stays NOT VALID and keeps enforcing new/changed rows until re-run.',
+    '  • Same-name FK on the expected table with a WRONG definition:',
+    '      the command HARD FAILS and NEVER drops/recreates/validates it. An',
+    '      operator must reconcile the schema drift (DROP + re-ADD the FK to',
+    '      match 0023), then re-run. Expected definitions:',
+    ...AUD_A_DEFERRED_FK_VALIDATIONS.map(
+      (fk) => `        ${fk.constraint}: ${formatExpectedForeignKeyDef(fk)}`,
+    ),
   ].join('\n');
 }
 
@@ -400,13 +420,26 @@ export async function run(
     );
 
     // 5. Post-convergence re-inspection + 6. exact final postcondition.
-    //    `runConvergence` already throws AudAConvergenceError on a half-done
-    //    state; this re-reads for the operator log and asserts independently.
+    //    `runConvergence` already throws on a half-done / wrong-definition
+    //    state; this re-reads the SHARED inspection and asserts independently:
+    //    the deferred index is valid-exact AND the FK set is EXACTLY the
+    //    canonical AUD·A set (count + names from AUD_A_DEFERRED_FK_VALIDATIONS)
+    //    with every FK in `present-exact-validated` (i.e. full structural
+    //    identity plus convalidated=true).
     const after = await deps.gatherEvidence(runner);
+    const expectedFkConstraints = new Set(
+      AUD_A_DEFERRED_FK_VALIDATIONS.map((fk) => fk.constraint),
+    );
+    const fkStates = after.inspection.foreignKeys;
+    const fkComplete =
+      fkStates.length === AUD_A_DEFERRED_FK_VALIDATIONS.length &&
+      fkStates.every(
+        (f) =>
+          expectedFkConstraints.has(f.constraint) &&
+          f.state === 'present-exact-validated',
+      );
     const converged =
-      after.inspection.index.state === 'valid-exact' &&
-      after.inspection.foreignKeys.length > 0 &&
-      after.inspection.foreignKeys.every((f) => f.convalidated === true);
+      after.inspection.index.state === 'valid-exact' && fkComplete;
     if (!converged) {
       throw new Error(
         `[${CTX}] post-condition check failed after convergence: ${JSON.stringify(
@@ -418,7 +451,8 @@ export async function run(
     console.log(
       `[${CTX}] AUD·A Production convergence COMPLETE — ` +
         'idx_audit_events_organization_occurred is VALID and matches the ' +
-        'expected definition; both deferred FKs are validated.',
+        'expected definition; both deferred FKs match their full canonical ' +
+        'definition and are validated.',
     );
   } finally {
     await close();

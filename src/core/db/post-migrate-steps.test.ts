@@ -10,14 +10,18 @@ import {
   AUD_A_TIMEOUTS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
   AudAConvergenceError,
+  DeferredForeignKeyDefinitionMismatchError,
   DeferredIndexDefinitionMismatchError,
+  decideDeferredForeignKeyAction,
   decideDeferredIndexAction,
   ensureDeferredIndexes,
+  formatExpectedForeignKeyDef,
   isPooledPostgresUrl,
   normalizeIndexdef,
   PooledConnectionRejectedError,
   validateDeferredForeignKeys,
   type ExistingIndexState,
+  type ForeignKeyIntrospection,
   type SqlRunner,
 } from './post-migrate-steps';
 
@@ -125,14 +129,28 @@ describe('decideDeferredIndexAction', () => {
   });
 });
 
+const FK_ACTION_CODE = new Map<string, string>([
+  ['no action', 'a'],
+  ['restrict', 'r'],
+  ['cascade', 'c'],
+  ['set null', 'n'],
+  ['set default', 'd'],
+]);
+
 /**
- * A configurable fake `SqlRunner` that answers the three introspection queries
- * from canned state and records every other statement it is asked to run.
+ * A configurable fake `SqlRunner` that answers the introspection queries from
+ * canned state and records every other statement it is asked to run.
+ *
+ * `fkConvalidated[name]`: `undefined` / `null` → the FK is ABSENT on its
+ * expected table; `true` / `false` → present with the EXACT structural
+ * definition and that `convalidated`. `fkWrongDef[name]` forces a
+ * wrong-definition row (differing ON DELETE).
  */
 interface FakeState {
   columnsPresent?: boolean;
   index?: ExistingIndexState;
   fkConvalidated?: Record<string, boolean | null>;
+  fkWrongDef?: Record<string, boolean>;
 }
 
 function fakeRunner(state: FakeState = {}): {
@@ -156,12 +174,48 @@ function fakeRunner(state: FakeState = {}): {
             : []
         ) as T[];
       }
-      const fkMatch = /conname = '([a-z_]+)'/.exec(text);
-      if (text.startsWith('select convalidated') && fkMatch) {
-        const v = state.fkConvalidated?.[fkMatch[1]!];
-        return (
-          v === undefined || v === null ? [] : [{ convalidated: v }]
-        ) as T[];
+      // The structural FK introspection query.
+      const fkMatch = /c\.conname = '([a-z_]+)'/.exec(text);
+      if (text.startsWith('with target as (') && fkMatch) {
+        const name = fkMatch[1]!;
+        const conv = new Map(Object.entries(state.fkConvalidated ?? {})).get(
+          name,
+        );
+        if (conv === undefined || conv === null) return [] as T[]; // absent
+        const spec = AUD_A_DEFERRED_FK_VALIDATIONS.find(
+          (f) => f.constraint === name,
+        )!;
+        const exactDel = FK_ACTION_CODE.get(spec.onDelete)!;
+        const wrong =
+          new Map(Object.entries(state.fkWrongDef ?? {})).get(name) === true;
+        return [
+          {
+            contype: 'f',
+            source_schema: spec.schema,
+            source_table: spec.table,
+            referenced_schema: spec.referencedSchema,
+            referenced_table: spec.referencedTable,
+            confdeltype: wrong ? (exactDel === 'c' ? 'n' : 'c') : exactDel,
+            confupdtype: FK_ACTION_CODE.get(spec.onUpdate)!,
+            confmatchtype: 's',
+            condeferrable: false,
+            condeferred: false,
+            convalidated: conv,
+            definition:
+              'FOREIGN KEY (' +
+              spec.columns.join(', ') +
+              ') REFERENCES ' +
+              spec.referencedSchema +
+              '.' +
+              spec.referencedTable +
+              '(' +
+              spec.referencedColumns.join(', ') +
+              ')' +
+              (conv ? '' : ' NOT VALID'),
+            local_columns: spec.columns.join(','),
+            referenced_columns: spec.referencedColumns.join(','),
+          },
+        ] as T[];
       }
       // A recorded (mutating) statement — model its effect on fake state.
       statements.push(text);
@@ -217,8 +271,8 @@ describe('timeout policy is applied (not merely documented)', () => {
     expect(statements).toEqual([
       'SET lock_timeout = 3000',
       'SET statement_timeout = 3600000',
-      'ALTER TABLE "audit_events" VALIDATE CONSTRAINT "audit_events_organization_id_organizations_id_fk"',
-      'ALTER TABLE "audit_log_settings" VALIDATE CONSTRAINT "audit_log_settings_organization_id_organizations_id_fk"',
+      'ALTER TABLE "public"."audit_events" VALIDATE CONSTRAINT "audit_events_organization_id_organizations_id_fk"',
+      'ALTER TABLE "public"."audit_log_settings" VALIDATE CONSTRAINT "audit_log_settings_organization_id_organizations_id_fk"',
     ]);
   });
 });
@@ -370,6 +424,103 @@ describe('convergence enforcement contract', () => {
     expect(ix).toEqual([{ name: SPEC.name, action: 'skip' }]);
     expect(fk.map((o) => o.action)).toEqual(['skip', 'skip']);
     expect(statements).toEqual([]); // nothing mutated, no timeouts SET
+  });
+});
+
+describe('structural FK identity (Codex P2)', () => {
+  const exact = (
+    over: Partial<ForeignKeyIntrospection> = {},
+  ): ForeignKeyIntrospection => ({
+    exists: true,
+    matchesSpec: true,
+    convalidated: false,
+    definition:
+      'FOREIGN KEY (organization_id) REFERENCES public.organizations(id)',
+    mismatches: [],
+    ...over,
+  });
+
+  it('decideDeferredForeignKeyAction maps every introspection state', () => {
+    const spec = AUD_A_DEFERRED_FK_VALIDATIONS[0]!;
+    expect(
+      decideDeferredForeignKeyAction(spec, {
+        exists: false,
+        matchesSpec: false,
+        convalidated: false,
+        definition: null,
+        mismatches: ['absent'],
+      }).kind,
+    ).toBe('blocked-missing');
+    expect(
+      decideDeferredForeignKeyAction(spec, {
+        exists: true,
+        matchesSpec: false,
+        convalidated: true, // validated but WRONG definition is still wrong
+        definition: 'x',
+        mismatches: ["ON DELETE: expected 'set null', got 'cascade'"],
+      }).kind,
+    ).toBe('abort-wrong-definition');
+    expect(decideDeferredForeignKeyAction(spec, exact()).kind).toBe('validate');
+    expect(
+      decideDeferredForeignKeyAction(spec, exact({ convalidated: true })).kind,
+    ).toBe('skip');
+  });
+
+  it('formatExpectedForeignKeyDef renders both canonical AUD·A FKs', () => {
+    expect(formatExpectedForeignKeyDef(AUD_A_DEFERRED_FK_VALIDATIONS[0]!)).toBe(
+      'FOREIGN KEY (organization_id) REFERENCES public.organizations (id) ON DELETE SET NULL ON UPDATE NO ACTION',
+    );
+    expect(formatExpectedForeignKeyDef(AUD_A_DEFERRED_FK_VALIDATIONS[1]!)).toBe(
+      'FOREIGN KEY (organization_id) REFERENCES public.organizations (id) ON DELETE CASCADE ON UPDATE NO ACTION',
+    );
+  });
+
+  it('enforce mode: a same-name wrong-definition FK HARD FAILS before VALIDATE and is never mutated', async () => {
+    const { runner, statements } = fakeRunner({
+      fkConvalidated: {
+        audit_events_organization_id_organizations_id_fk: false,
+        audit_log_settings_organization_id_organizations_id_fk: false,
+      },
+      fkWrongDef: { audit_events_organization_id_organizations_id_fk: true },
+    });
+    await expect(
+      validateDeferredForeignKeys(runner, undefined, {
+        enforcement: 'enforce',
+      }),
+    ).rejects.toBeInstanceOf(DeferredForeignKeyDefinitionMismatchError);
+    // No VALIDATE / SET issued — the drift is reported, never touched.
+    expect(statements).toEqual([]);
+  });
+
+  it('inspect mode: a same-name wrong-definition FK is REPORTED, not thrown', async () => {
+    const { runner, statements } = fakeRunner({
+      fkConvalidated: {
+        audit_events_organization_id_organizations_id_fk: true,
+        audit_log_settings_organization_id_organizations_id_fk: true,
+      },
+      fkWrongDef: { audit_events_organization_id_organizations_id_fk: true },
+    });
+    const out = await validateDeferredForeignKeys(runner, undefined, {
+      enforcement: 'inspect',
+    });
+    expect(out.map((o) => o.action)).toEqual(['wrong-definition', 'skip']);
+    expect(statements).toEqual([]);
+  });
+
+  it('enforce mode: VALIDATE is issued on the schema-qualified expected table', async () => {
+    const { runner, statements } = fakeRunner({
+      fkConvalidated: {
+        audit_events_organization_id_organizations_id_fk: false,
+        audit_log_settings_organization_id_organizations_id_fk: true,
+      },
+    });
+    const out = await validateDeferredForeignKeys(runner, undefined, {
+      enforcement: 'enforce',
+    });
+    expect(out.map((o) => o.action)).toEqual(['validate', 'skip']);
+    expect(statements).toContain(
+      'ALTER TABLE "public"."audit_events" VALIDATE CONSTRAINT "audit_events_organization_id_organizations_id_fk"',
+    );
   });
 });
 

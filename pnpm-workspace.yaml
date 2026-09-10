@@ -75,7 +75,10 @@ overrides:
   'minimatch@>=10.0.0 <10.2.3': 10.2.3
   'path-to-regexp@>=6.0.0 <6.3.0': 6.3.0
   'path-to-regexp@>=8.0.0 <8.4.0': 8.4.0
-  'smol-toml@<1.6.1': 1.6.1
+  # GHSA-7w5x-hrqm-74c2: DoS via malformed TOML documents in smol-toml,
+  # fixed in 1.7.1. (Widened from the earlier <1.6.1 pin.) Dev-only: reached
+  # exclusively through the `vercel` CLI's @vercel/python-analysis.
+  'smol-toml@<1.7.1': '>=1.7.1'
   'tar@>=7.0.0 <7.5.21': 7.5.21
   'browserslist@<4.28.7': '>=4.28.7'
   '@humanfs/node@<0.16.8': '>=0.16.8'

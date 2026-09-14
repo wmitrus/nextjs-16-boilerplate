@@ -10,29 +10,31 @@ import {
   run,
 } from './db-migrate-prod';
 
-describe('db-migrate-prod migration URL resolution', () => {
-  it('prefers DATABASE_URL_UNPOOLED over DATABASE_URL', () => {
+describe('db-migrate-prod migration URL resolution (Codex P1: DATABASE_URL_UNPOOLED only)', () => {
+  it('accepts DATABASE_URL_UNPOOLED with a custom hostname such as direct-db.internal', () => {
     const resolved = resolveMigrationUrlWithSource(
-      'postgresql://runtime:[REDACTED]@ep-main-pooler.example.test/app',
-      'postgresql://direct:[REDACTED]@ep-branch.example.test/app',
+      'postgresql://direct:[REDACTED]@direct-db.internal/app',
     );
 
     expect(resolved).toEqual({
       source: 'DATABASE_URL_UNPOOLED',
-      url: 'postgresql://direct:[REDACTED]@ep-branch.example.test/app',
+      url: 'postgresql://direct:[REDACTED]@direct-db.internal/app',
     });
     expect(
       resolveMigrationUrl(
-        'postgresql://runtime:[REDACTED]@ep-main-pooler.example.test/app',
-        'postgresql://direct:[REDACTED]@ep-branch.example.test/app',
+        'postgresql://direct:[REDACTED]@direct-db.internal/app',
       ),
-    ).toBe('postgresql://direct:[REDACTED]@ep-branch.example.test/app');
+    ).toBe('postgresql://direct:[REDACTED]@direct-db.internal/app');
+  });
+
+  it('resolves to undefined when DATABASE_URL_UNPOOLED is absent, regardless of DATABASE_URL', () => {
+    expect(resolveMigrationUrlWithSource(undefined)).toBeUndefined();
+    expect(resolveMigrationUrl(undefined)).toBeUndefined();
   });
 
   it('describes the migration target without exposing credentials', () => {
     const resolved = resolveMigrationUrlWithSource(
-      'postgresql://runtime:[REDACTED]@ep-main-pooler.example.test/app',
-      undefined,
+      'postgresql://direct:[REDACTED]@ep-branch.example.test/app',
     );
 
     expect(resolved).toBeDefined();
@@ -44,18 +46,18 @@ describe('db-migrate-prod migration URL resolution', () => {
     const target = describeMigrationTarget(resolved);
 
     expect(target).toEqual({
-      source: 'DATABASE_URL',
+      source: 'DATABASE_URL_UNPOOLED',
       protocol: 'postgresql:',
-      hostname: 'ep-main-pooler.example.test',
+      hostname: 'ep-branch.example.test',
       database: 'app',
-      pooled: true,
+      pooled: false,
     });
-    expect(JSON.stringify(target)).not.toContain('runtime');
+    expect(JSON.stringify(target)).not.toContain('direct');
     expect(JSON.stringify(target)).not.toContain('[REDACTED]');
   });
 });
 
-describe('db-migrate-prod fails closed on connection configuration (fix 2)', () => {
+describe('db-migrate-prod fails closed on connection configuration (fix 2 / Codex P1)', () => {
   const savedUrl = process.env.DATABASE_URL;
   const savedUnpooled = process.env.DATABASE_URL_UNPOOLED;
 
@@ -66,19 +68,49 @@ describe('db-migrate-prod fails closed on connection configuration (fix 2)', () 
     else process.env.DATABASE_URL_UNPOOLED = savedUnpooled;
   });
 
-  it('rejects a pooled migration URL BEFORE running any migration', async () => {
+  it('only DATABASE_URL present -> fails before running any migration (no DATABASE_URL fallback)', async () => {
     delete process.env.DATABASE_URL_UNPOOLED;
     process.env.DATABASE_URL =
-      'postgresql://u:p@ep-x-pooler.us-east-1.aws.neon.tech/app';
-    await expect(run([])).rejects.toThrow(/DIRECT \(unpooled\)/i);
+      'postgresql://u:p@direct-looking.example.test/app';
+    await expect(run([])).rejects.toThrow(/DATABASE_URL_UNPOOLED is required/i);
   });
 
-  it('requires a migration URL', async () => {
+  it('only DATABASE_URL present -> also fails on --check, before opening any DB connection', async () => {
+    delete process.env.DATABASE_URL_UNPOOLED;
+    process.env.DATABASE_URL =
+      'postgresql://u:p@direct-looking.example.test/app';
+    await expect(run(['--check'])).rejects.toThrow(
+      /DATABASE_URL_UNPOOLED is required/i,
+    );
+  });
+
+  it('requires a migration URL when neither var is set', async () => {
     delete process.env.DATABASE_URL;
     delete process.env.DATABASE_URL_UNPOOLED;
-    await expect(run([])).rejects.toThrow(
-      /DATABASE_URL_UNPOOLED or DATABASE_URL is required/i,
+    await expect(run([])).rejects.toThrow(/DATABASE_URL_UNPOOLED is required/i);
+  });
+
+  it('DATABASE_URL_UNPOOLED containing a known pooler marker -> rejected', async () => {
+    delete process.env.DATABASE_URL;
+    process.env.DATABASE_URL_UNPOOLED =
+      'postgresql://u:p@ep-x-pooler.us-east-1.aws.neon.tech/app';
+    await expect(run([])).rejects.toThrow(/pooler/i);
+  });
+
+  it('when both vars are set, DATABASE_URL_UNPOOLED is the only target used (DATABASE_URL is ignored)', () => {
+    process.env.DATABASE_URL =
+      'postgresql://runtime:[REDACTED]@ep-main-pooler.example.test/app';
+    process.env.DATABASE_URL_UNPOOLED =
+      'postgresql://direct:[REDACTED]@direct-db.internal/app';
+
+    const resolved = resolveMigrationUrlWithSource(
+      process.env.DATABASE_URL_UNPOOLED,
     );
+
+    expect(resolved).toEqual({
+      source: 'DATABASE_URL_UNPOOLED',
+      url: 'postgresql://direct:[REDACTED]@direct-db.internal/app',
+    });
   });
 });
 
@@ -106,8 +138,17 @@ describe('db-migrate-prod no longer runs AUD·A convergence (Codex P1)', () => {
     expect(source).toMatch(/repairKnownMigrationJournalDrift/);
     expect(source).toMatch(/validateMigrationJournal/);
     expect(source).toMatch(/assertMigrationJournalComplete/);
-    // Still fails closed on a pooled URL before anything runs.
-    expect(source).toMatch(/assertDirectPostgresUrl\(connectionString/);
+    // Still fails closed on a known pooler marker (defense-in-depth) before
+    // anything runs — the actual trust boundary is DATABASE_URL_UNPOOLED,
+    // enforced earlier by resolveMigrationUrlWithSource.
+    expect(source).toMatch(/assertNoKnownPoolerMarker\(connectionString/);
+  });
+
+  it('resolves the migration URL from DATABASE_URL_UNPOOLED only (no DATABASE_URL fallback)', () => {
+    expect(source).toMatch(
+      /resolveMigrationUrlWithSource\(\s*process\.env\.DATABASE_URL_UNPOOLED,?\s*\)/,
+    );
+    expect(source).not.toMatch(/process\.env\.DATABASE_URL,/);
   });
 
   it('points operators at the dedicated convergence CLI', () => {

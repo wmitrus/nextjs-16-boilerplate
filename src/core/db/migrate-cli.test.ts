@@ -78,7 +78,7 @@ describe('resolveMigrationTarget (single canonical target)', () => {
       PooledConnectionRejectedError,
     );
     expect(() => resolveMigrationTarget('postgres')).toThrow(
-      /DIRECT \(unpooled\)/i,
+      /known transaction-pooler/i,
     );
   });
 
@@ -173,7 +173,9 @@ describe('runMigrateCli orchestration (same URL for migration + convergence)', (
     process.env.DATABASE_URL = POOLED;
     const h = makeDeps();
 
-    await expect(runMigrateCli(h.deps)).rejects.toThrow(/DIRECT \(unpooled\)/i);
+    await expect(runMigrateCli(h.deps)).rejects.toThrow(
+      /known transaction-pooler/i,
+    );
 
     expect(h.createDb).not.toHaveBeenCalled();
     expect(h.runMigrations).not.toHaveBeenCalled();

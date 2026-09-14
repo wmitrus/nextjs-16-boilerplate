@@ -6,7 +6,7 @@ import type { PgliteDatabase } from 'drizzle-orm/pglite';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import {
-  assertDirectPostgresUrl,
+  assertNoKnownPoolerMarker,
   runAudAPostMigrateSteps,
   sqlRunnerFromDrizzle,
   sqlRunnerFromPostgres,
@@ -98,7 +98,10 @@ export async function runMigrations(
             'pooled connections).',
         );
       }
-      assertDirectPostgresUrl(options.postgresUrl, 'runMigrations convergence');
+      assertNoKnownPoolerMarker(
+        options.postgresUrl,
+        'runMigrations convergence',
+      );
     }
 
     if (driver === 'pglite') {

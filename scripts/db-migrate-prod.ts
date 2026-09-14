@@ -2,7 +2,7 @@ import './load-env';
 
 import { spawnSync } from 'node:child_process';
 
-import { assertDirectPostgresUrl } from '@/core/db/post-migrate-steps';
+import { assertNoKnownPoolerMarker } from '@/core/db/post-migrate-steps';
 
 import { reconcileKnownMigrationState } from './reconcile-known-migration-state';
 import {
@@ -14,7 +14,17 @@ import {
 
 const DRIZZLE_CONFIG = 'src/core/db/migrations/config/drizzle.prod.ts';
 
-type MigrationUrlSource = 'DATABASE_URL' | 'DATABASE_URL_UNPOOLED';
+/**
+ * `DATABASE_URL_UNPOOLED` is the ONLY accepted source for Production DDL
+ * (Codex P1). It is the operator trust boundary: the operator explicitly
+ * configures this variable with a genuinely direct endpoint. There is
+ * deliberately no fallback to `DATABASE_URL` — a Production `DATABASE_URL`
+ * is commonly (and often silently) a transaction pooler, and an
+ * unrecognized custom pooler/proxy cannot be reliably distinguished from a
+ * direct endpoint by inspecting the URL string
+ * ({@link assertNoKnownPoolerMarker} is defense-in-depth only, not proof).
+ */
+type MigrationUrlSource = 'DATABASE_URL_UNPOOLED';
 
 interface ResolvedMigrationUrl {
   source: MigrationUrlSource;
@@ -22,33 +32,21 @@ interface ResolvedMigrationUrl {
 }
 
 export function resolveMigrationUrl(
-  rawUrl: string | undefined,
   unpooledUrl: string | undefined,
 ): string | undefined {
-  return resolveMigrationUrlWithSource(rawUrl, unpooledUrl)?.url;
+  return resolveMigrationUrlWithSource(unpooledUrl)?.url;
 }
 
 export function resolveMigrationUrlWithSource(
-  rawUrl: string | undefined,
   unpooledUrl: string | undefined,
 ): ResolvedMigrationUrl | undefined {
   const directUrl = unpooledUrl?.trim();
-  if (directUrl) {
-    return {
-      source: 'DATABASE_URL_UNPOOLED',
-      url: directUrl,
-    };
-  }
+  if (!directUrl) return undefined;
 
-  const pooledUrl = rawUrl?.trim();
-  if (pooledUrl) {
-    return {
-      source: 'DATABASE_URL',
-      url: pooledUrl,
-    };
-  }
-
-  return undefined;
+  return {
+    source: 'DATABASE_URL_UNPOOLED',
+    url: directUrl,
+  };
 }
 
 export function describeMigrationTarget(resolved: ResolvedMigrationUrl): {
@@ -70,8 +68,9 @@ export function describeMigrationTarget(resolved: ResolvedMigrationUrl): {
 }
 
 /**
- * Run `drizzle-kit migrate`. It reads `DATABASE_URL_UNPOOLED || DATABASE_URL`
- * itself (see `drizzle.prod.ts`); no per-run timeout policy is injected here —
+ * Run `drizzle-kit migrate`. It reads `DATABASE_URL_UNPOOLED` itself (see
+ * `drizzle.prod.ts`) and requires it explicitly, with no fallback to
+ * `DATABASE_URL` (Codex P1); no per-run timeout policy is injected here —
  * migration `0023` scopes its own `lock_timeout` / `statement_timeout` with
  * `SET LOCAL` so a catch-up batch never runs earlier / later migrations under
  * 0023's caps.
@@ -98,12 +97,15 @@ function runDrizzleMigrate(): void {
 export async function run(argv = process.argv.slice(2)): Promise<void> {
   const dryRun = argv.includes('--check');
   const migrationUrl = resolveMigrationUrlWithSource(
-    process.env.DATABASE_URL,
     process.env.DATABASE_URL_UNPOOLED,
   );
   if (!migrationUrl) {
     throw new Error(
-      '[db-migrate-prod] DATABASE_URL_UNPOOLED or DATABASE_URL is required before running prod migrations.',
+      '[db-migrate-prod] DATABASE_URL_UNPOOLED is required before running prod ' +
+        'migrations. DATABASE_URL is NOT accepted as a fallback: it is commonly ' +
+        'a pooled/proxied endpoint, and an unrecognized custom pooler cannot be ' +
+        'reliably detected from the URL string. Configure DATABASE_URL_UNPOOLED ' +
+        'to an explicitly direct PostgreSQL endpoint (Codex P1).',
     );
   }
   const connectionString = migrationUrl.url;
@@ -118,10 +120,10 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
     ),
   );
 
-  // Fail closed BEFORE any migration runs: DDL and drizzle's single migration
-  // transaction must not run through a transaction pooler, so the migration
-  // URL must be a DIRECT (unpooled) endpoint.
-  assertDirectPostgresUrl(connectionString, 'db-migrate-prod');
+  // Defense-in-depth ONLY (Codex P1): reject a KNOWN pooler marker even
+  // though `connectionString` already came exclusively from
+  // DATABASE_URL_UNPOOLED (the actual trust boundary, enforced above).
+  assertNoKnownPoolerMarker(connectionString, 'db-migrate-prod');
 
   const summary = await reconcileKnownMigrationState({
     connectionString,

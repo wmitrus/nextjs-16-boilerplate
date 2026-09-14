@@ -199,7 +199,7 @@ describe('runMigrations — AUD·A orchestration (real DB)', () => {
       runMigrations(testDb.db, 'postgres', {
         postgresUrl: 'postgresql://u:p@ep-x-pooler.us-east-1.aws.neon.tech/app',
       }),
-    ).rejects.toThrow(/DIRECT \(unpooled\)/i);
+    ).rejects.toThrow(/known transaction-pooler/i);
 
     expect(diag.migrationActiveCount).toBe(before);
   });

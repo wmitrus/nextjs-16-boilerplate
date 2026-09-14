@@ -11,7 +11,7 @@ import {
   type AudAIndexPlan,
 } from '@/core/db/aud-a-convergence-inspection';
 import {
-  assertDirectPostgresUrl,
+  assertNoKnownPoolerMarker,
   AUD_A_DEFERRED_FK_VALIDATIONS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
   formatExpectedForeignKeyDef,
@@ -337,12 +337,15 @@ export async function run(
   const { mode } = parseArgs(argv);
 
   const migrationUrl = resolveMigrationUrlWithSource(
-    process.env.DATABASE_URL,
     process.env.DATABASE_URL_UNPOOLED,
   );
   if (!migrationUrl) {
     throw new Error(
-      `[${CTX}] DATABASE_URL_UNPOOLED or DATABASE_URL is required.`,
+      `[${CTX}] DATABASE_URL_UNPOOLED is required. DATABASE_URL is NOT ` +
+        'accepted as a fallback (Codex P1): it is commonly a pooled/proxied ' +
+        'endpoint, and an unrecognized custom pooler cannot be reliably ' +
+        'detected from the URL string. Configure DATABASE_URL_UNPOOLED to an ' +
+        'explicitly direct PostgreSQL endpoint.',
     );
   }
 
@@ -350,10 +353,12 @@ export async function run(
   console.log(JSON.stringify({ convergeTarget: target }, null, 2));
 
   // The whole convergence — SET → CREATE INDEX CONCURRENTLY → VALIDATE
-  // CONSTRAINT — is only session-affine on a DIRECT connection. Fail closed on
-  // a known pooler for BOTH modes: `--check`'s evidence would describe a path
-  // `--apply` cannot use. (The target JSON above still shows what was seen.)
-  assertDirectPostgresUrl(migrationUrl.url, CTX);
+  // CONSTRAINT — is only session-affine on a DIRECT connection.
+  // DATABASE_URL_UNPOOLED (enforced above) is the trust boundary; this is
+  // defense-in-depth ONLY (Codex P1), applied for BOTH modes: `--check`'s
+  // evidence would describe a path `--apply` cannot use. (The target JSON
+  // above still shows what was seen.)
+  assertNoKnownPoolerMarker(migrationUrl.url, CTX);
 
   const { runner, close } = deps.openRunner(migrationUrl.url);
 

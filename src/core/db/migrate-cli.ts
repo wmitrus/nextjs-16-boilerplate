@@ -1,6 +1,6 @@
 import { createDb } from '@/core/db/create-db';
 import { runMigrations } from '@/core/db/migrations/run-migrations';
-import { assertDirectPostgresUrl } from '@/core/db/post-migrate-steps';
+import { assertNoKnownPoolerMarker } from '@/core/db/post-migrate-steps';
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
 /**
@@ -43,10 +43,14 @@ function resolveDriver(): DbDriver {
  * `CREATE INDEX CONCURRENTLY` / FK `VALIDATE` convergence on another.
  *
  * - `postgres`: `DATABASE_URL_UNPOOLED` (preferred) else `DATABASE_URL`. It
- *   must exist and must be a DIRECT (unpooled) endpoint -- this fails closed
- *   HERE, before any DB client is opened or the migrator can run, reusing
- *   `assertDirectPostgresUrl` (no duplicated pooler detection). A direct URL
- *   is also a valid source for `createDb`'s pool.
+ *   must exist, and is checked for a KNOWN pooler marker (defense-in-depth
+ *   only -- `assertNoKnownPoolerMarker`, no duplicated pooler detection) --
+ *   this fails closed HERE, before any DB client is opened or the migrator
+ *   can run. This is the local/PGlite-adjacent entrypoint
+ *   (`pnpm db:pglite:migrate`); Production DDL/convergence
+ *   (`scripts/db-migrate-prod.ts`, `scripts/db-aud-a-converge.ts`) does NOT
+ *   fall back to `DATABASE_URL` and requires `DATABASE_URL_UNPOOLED`
+ *   explicitly (Codex P1).
  * - `pglite`: `DATABASE_URL` as-is (optional; unchanged behavior).
  */
 export function resolveMigrationTarget(driver: DbDriver): string | undefined {
@@ -65,7 +69,7 @@ export function resolveMigrationTarget(driver: DbDriver): string | undefined {
   }
 
   // Fail closed BEFORE createDb / the migrator / migration 0023 / convergence.
-  assertDirectPostgresUrl(url, 'migrate-cli');
+  assertNoKnownPoolerMarker(url, 'migrate-cli');
 
   return url;
 }

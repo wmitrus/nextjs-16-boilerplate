@@ -170,7 +170,7 @@ pnpm db:migrate:prod:local
 
 Use `db:migrate:prod:local` only for local operator runs that intentionally load `.env.production`.
 
-`db:migrate:prod` must stay CI-friendly and read the active environment without requiring a local file, preferring `DATABASE_URL_UNPOOLED` and falling back to `DATABASE_URL` only when the effective migration sink is already direct.
+`db:migrate:prod` must stay CI-friendly and read the active environment without requiring a local file. It requires `DATABASE_URL_UNPOOLED` explicitly and does **not** fall back to `DATABASE_URL`: `DATABASE_URL_UNPOOLED` is the operator trust boundary for Production DDL, since a pooler/proxy hostname pattern cannot be reliably distinguished from a genuinely direct one (a custom transaction-mode PgBouncer/proxy would not match any known marker).
 
 **No SSH tunnel required.** Neon supports direct external TLS connections from any IP.
 
@@ -188,7 +188,7 @@ Example:
 pnpm db:migrate:prod && pnpm build
 ```
 
-`db:migrate:prod` already prefers `DATABASE_URL_UNPOOLED` for the Drizzle connection. Do not overwrite `DATABASE_URL` in the Vercel Build Command, because the app runtime should keep the pooled URL while migrations use the direct URL.
+`db:migrate:prod` requires `DATABASE_URL_UNPOOLED` for the Drizzle connection and will fail closed if it is absent. Do not overwrite `DATABASE_URL` in the Vercel Build Command, because the app runtime should keep the pooled URL while migrations use the direct URL.
 
 2. In GitHub Actions, do **not** run preview migrations before `vercel deploy` and do **not** use `vercel build` / `vercel deploy --prebuilt` for preview deployments.
 

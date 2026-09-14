@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { classifyIndexInspection } from './aud-a-convergence-inspection';
 import {
-  assertDirectPostgresUrl,
+  assertNoKnownPoolerMarker,
   AUD_A_DEFERRED_FK_VALIDATIONS,
   AUD_A_DEFERRED_INDEXES,
   AUD_A_TIMEOUTS,
@@ -424,8 +424,8 @@ describe('AUD·A 0023-only timeout scoping (fix 1)', () => {
   });
 });
 
-describe('direct/unpooled connection guard (fix 2)', () => {
-  it('accepts a direct URL (generic and Neon direct)', () => {
+describe('known-pooler-marker guard (fix 2; defense-in-depth only, Codex P1)', () => {
+  it('does not flag a direct URL (generic and Neon direct) as a known pooler', () => {
     expect(
       isPooledPostgresUrl('postgresql://u:p@db.internal.example/app'),
     ).toBe(false);
@@ -435,8 +435,20 @@ describe('direct/unpooled connection guard (fix 2)', () => {
       ),
     ).toBe(false);
     expect(() =>
-      assertDirectPostgresUrl(
+      assertNoKnownPoolerMarker(
         'postgresql://u:p@ep-cool-name-123.us-east-1.aws.neon.tech/app',
+        'test',
+      ),
+    ).not.toThrow();
+  });
+
+  it('does not flag an unrecognized custom proxy hostname either (absence of a marker is not proof of directness)', () => {
+    expect(isPooledPostgresUrl('postgresql://u:p@db-proxy.internal/app')).toBe(
+      false,
+    );
+    expect(() =>
+      assertNoKnownPoolerMarker(
+        'postgresql://u:p@db-proxy.internal/app',
         'test',
       ),
     ).not.toThrow();
@@ -450,7 +462,7 @@ describe('direct/unpooled connection guard (fix 2)', () => {
       'postgresql://u:p@pgbouncer.internal:6432/app',
     ]) {
       expect(isPooledPostgresUrl(url), url).toBe(true);
-      expect(() => assertDirectPostgresUrl(url, 'test'), url).toThrow(
+      expect(() => assertNoKnownPoolerMarker(url, 'test'), url).toThrow(
         PooledConnectionRejectedError,
       );
     }

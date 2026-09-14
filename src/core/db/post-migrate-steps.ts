@@ -307,6 +307,16 @@ export const AUD_A_TIMEOUTS = {
  * backend, so `SET` → `CREATE INDEX CONCURRENTLY` → `VALIDATE CONSTRAINT` are
  * not guaranteed session-affine through it. Kept in sync with the pooler
  * check in `src/core/db/migrations/config/drizzle.prod.ts`.
+ *
+ * DEFENSE-IN-DEPTH ONLY (Codex P1): this list can reject a URL that matches
+ * one of these specific substrings, but ABSENCE of a match is NOT proof the
+ * endpoint is direct. An unrecognized custom transaction-mode PgBouncer/proxy
+ * (e.g. `db-proxy.internal`) matches none of these markers and would pass
+ * silently. The actual trust boundary for Production DDL/convergence
+ * (`scripts/db-migrate-prod.ts`, `drizzle.prod.ts`,
+ * `scripts/db-aud-a-converge.ts`) is which environment variable the operator
+ * put the URL in — `DATABASE_URL_UNPOOLED` EXCLUSIVELY, never inferred from
+ * the URL string and never falling back to `DATABASE_URL`.
  */
 const POOLED_CONNECTION_MARKERS = [
   '-pooler.', // Neon pooler hostname
@@ -314,7 +324,11 @@ const POOLED_CONNECTION_MARKERS = [
   'pgbouncer', // PgBouncer hostname or `?pgbouncer=true`
 ] as const;
 
-/** True when `url` carries a known transaction-pooler marker. */
+/**
+ * True when `url` carries a known transaction-pooler marker. Detects
+ * known-BAD endpoints only (Codex P1) — `false` does NOT mean `url` is a
+ * trusted direct endpoint, only that it matched none of the known markers.
+ */
 export function isPooledPostgresUrl(url: string): boolean {
   const lower = url.toLowerCase();
   return POOLED_CONNECTION_MARKERS.some((marker) => lower.includes(marker));
@@ -325,17 +339,26 @@ export class PooledConnectionRejectedError extends Error {
     super(
       '[post-migrate-steps] ' +
         context +
-        ' requires a DIRECT (unpooled) PostgreSQL URL — a transaction pooler ' +
-        'does not keep SET / CREATE INDEX CONCURRENTLY / VALIDATE CONSTRAINT on ' +
-        'one physical session. Use DATABASE_URL_UNPOOLED (or a genuinely direct ' +
-        'DATABASE_URL).',
+        ' rejected this PostgreSQL URL: it matches a KNOWN transaction-pooler ' +
+        'marker (PgBouncer / Neon pooler / Supabase pooler). A transaction ' +
+        'pooler does not keep SET / CREATE INDEX CONCURRENTLY / VALIDATE ' +
+        'CONSTRAINT on one physical session.',
     );
     this.name = 'PooledConnectionRejectedError';
   }
 }
 
-/** Throw {@link PooledConnectionRejectedError} unless `url` is a direct URL. */
-export function assertDirectPostgresUrl(url: string, context: string): void {
+/**
+ * Reject `url` if it carries a KNOWN transaction-pooler marker
+ * ({@link isPooledPostgresUrl}). This is DEFENSE-IN-DEPTH ONLY (Codex P1):
+ * passing this check does NOT prove `url` is a genuinely direct connection —
+ * an unrecognized custom pooler/proxy matches no marker and would pass.
+ * Callers that need a TRUSTED direct endpoint must establish that trust
+ * themselves, by requiring the URL to come from an explicitly
+ * operator-configured variable (`DATABASE_URL_UNPOOLED` for Production
+ * DDL/convergence — never a `DATABASE_URL` fallback) BEFORE calling this.
+ */
+export function assertNoKnownPoolerMarker(url: string, context: string): void {
   if (isPooledPostgresUrl(url)) {
     throw new PooledConnectionRejectedError(context);
   }

@@ -78,31 +78,66 @@ describe('db:aud-a:converge — operator gate (fails closed before any DB work)'
     await expect(run(['--apply'])).rejects.toThrow(/--production-approved/);
   });
 
-  it('rejects a pooled URL on --check (evidence would describe an unusable path)', async () => {
+  it('only DATABASE_URL present -> fails before opening a DB connection on --check (Codex P1: no fallback)', async () => {
     delete process.env.DATABASE_URL_UNPOOLED;
-    process.env.DATABASE_URL = POOLED;
-    await expect(run(['--check'])).rejects.toThrow(/DIRECT \(unpooled\)/i);
-  });
-
-  it('rejects a pooled URL even with --apply --production-approved, before any mutation', async () => {
-    delete process.env.DATABASE_URL_UNPOOLED;
-    process.env.DATABASE_URL = POOLED;
-    await expect(run(['--apply', '--production-approved'])).rejects.toThrow(
-      /DIRECT \(unpooled\)/i,
-    );
-  });
-
-  it('requires a migration URL', async () => {
-    delete process.env.DATABASE_URL;
-    delete process.env.DATABASE_URL_UNPOOLED;
+    process.env.DATABASE_URL = DIRECT;
     await expect(run(['--check'])).rejects.toThrow(
-      /DATABASE_URL_UNPOOLED or DATABASE_URL is required/i,
+      /DATABASE_URL_UNPOOLED is required/i,
     );
+  });
+
+  it('only DATABASE_URL present -> fails before opening a DB connection on --apply --production-approved (Codex P1: no fallback)', async () => {
+    delete process.env.DATABASE_URL_UNPOOLED;
+    process.env.DATABASE_URL = DIRECT;
+    await expect(run(['--apply', '--production-approved'])).rejects.toThrow(
+      /DATABASE_URL_UNPOOLED is required/i,
+    );
+  });
+
+  it('rejects a pooled DATABASE_URL_UNPOOLED on --check (known-marker defense-in-depth)', async () => {
+    delete process.env.DATABASE_URL;
+    process.env.DATABASE_URL_UNPOOLED = POOLED;
+    await expect(run(['--check'])).rejects.toThrow(/pooler/i);
+  });
+
+  it('rejects a pooled DATABASE_URL_UNPOOLED even with --apply --production-approved, before any mutation', async () => {
+    delete process.env.DATABASE_URL;
+    process.env.DATABASE_URL_UNPOOLED = POOLED;
+    await expect(run(['--apply', '--production-approved'])).rejects.toThrow(
+      /pooler/i,
+    );
+  });
+
+  it('accepts DATABASE_URL_UNPOOLED with a custom hostname such as direct-db.internal', () => {
+    const resolved = resolveMigrationUrlWithSource(
+      'postgresql://u:p@direct-db.internal/app',
+    );
+    expect(resolved).toEqual({
+      source: 'DATABASE_URL_UNPOOLED',
+      url: 'postgresql://u:p@direct-db.internal/app',
+    });
+  });
+
+  it('requires DATABASE_URL_UNPOOLED even when only DATABASE_URL is set to the same value', async () => {
+    delete process.env.DATABASE_URL_UNPOOLED;
+    process.env.DATABASE_URL = DIRECT;
+    await expect(run(['--check'])).rejects.toThrow(
+      /DATABASE_URL_UNPOOLED is required/i,
+    );
+  });
+
+  it('when both vars are set, DATABASE_URL_UNPOOLED is the only Production target', () => {
+    process.env.DATABASE_URL = POOLED;
+    process.env.DATABASE_URL_UNPOOLED = DIRECT;
+    const resolved = resolveMigrationUrlWithSource(
+      process.env.DATABASE_URL_UNPOOLED,
+    );
+    expect(resolved).toEqual({ source: 'DATABASE_URL_UNPOOLED', url: DIRECT });
   });
 
   it('does not leak credentials in the logged convergence target', async () => {
-    delete process.env.DATABASE_URL_UNPOOLED;
-    process.env.DATABASE_URL = POOLED;
+    delete process.env.DATABASE_URL;
+    process.env.DATABASE_URL_UNPOOLED = POOLED;
     await expect(run(['--check'])).rejects.toThrow();
     const logged = logSpy.mock.calls.flat().map(String).join('\n');
     expect(logged).toContain('convergeTarget');
@@ -112,7 +147,7 @@ describe('db:aud-a:converge — operator gate (fails closed before any DB work)'
 
 describe('db:aud-a:converge — evidence & recovery formatting', () => {
   const target = describeMigrationTarget(
-    resolveMigrationUrlWithSource(undefined, DIRECT)!,
+    resolveMigrationUrlWithSource(DIRECT)!,
   );
 
   const evidence: AudAConvergenceEvidence = {
@@ -375,6 +410,27 @@ describe('db:aud-a:converge — strict argument parsing (fail closed)', () => {
     } finally {
       logSpy.mockRestore();
       delete process.env.DATABASE_URL_UNPOOLED;
+    }
+  });
+
+  it('no DB connection is opened on --check or --apply when DATABASE_URL_UNPOOLED is absent, even with DATABASE_URL set', async () => {
+    delete process.env.DATABASE_URL_UNPOOLED;
+    process.env.DATABASE_URL = DIRECT;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const deps = makeDeps();
+    try {
+      await expect(run(['--check'], deps.deps)).rejects.toThrow(
+        /DATABASE_URL_UNPOOLED is required/i,
+      );
+      await expect(
+        run(['--apply', '--production-approved'], deps.deps),
+      ).rejects.toThrow(/DATABASE_URL_UNPOOLED is required/i);
+      expect(deps.openRunner).not.toHaveBeenCalled();
+      expect(deps.runConvergence).not.toHaveBeenCalled();
+      expect(deps.gatherEvidence).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+      delete process.env.DATABASE_URL;
     }
   });
 });

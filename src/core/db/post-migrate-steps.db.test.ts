@@ -548,6 +548,77 @@ describe('inspectAudAConvergence / gatherAudAConvergenceEvidence (read-only oper
     }
     expect(await snapshot()).toEqual(before);
   });
+
+  it.skipIf(!isRealPg)(
+    'Codex regression: gatherAudAConvergenceEvidence measures public.audit_events, not a decoy earlier in search_path (real Postgres)',
+    async () => {
+      const postgres = (await import('postgres')).default;
+      const decoyClient = postgres(testUrl!, { max: 1 });
+      const decoyRunner = sqlRunnerFromPostgres(decoyClient);
+
+      try {
+        // The canonical relation's TRUE evidence, captured via the shared
+        // session (never touched by the decoy's hostile search_path).
+        const expectedRowCount = await runner
+          .query<{
+            n: string;
+          }>('select count(*)::text as n from "public"."audit_events"')
+          .then((rows) => Number(rows[0]!.n));
+        const expectedTableBytes = await runner
+          .query<{
+            t: string;
+          }>('select pg_table_size(\'"public"."audit_events"\')::text as t')
+          .then((rows) => Number(rows[0]!.t));
+
+        // A same-named decoy table, in a schema placed BEFORE `public` on
+        // this session's search_path, made OBSERVABLY DIFFERENT from public
+        // via a distinct, much larger row count and on-disk size — if
+        // `gatherAudAConvergenceEvidence` ever regressed to an unqualified
+        // `FROM audit_events` / `pg_table_size('audit_events')`, it would
+        // report the decoy's numbers instead.
+        await decoyClient.unsafe('CREATE SCHEMA IF NOT EXISTS aud_p2_decoy');
+        await decoyClient.unsafe(
+          'CREATE TABLE IF NOT EXISTS aud_p2_decoy.audit_events (organization_id uuid, occurred_at timestamptz)',
+        );
+        const decoyRowCount = expectedRowCount + 3000;
+        await decoyClient.unsafe(
+          'insert into aud_p2_decoy.audit_events (organization_id, occurred_at) ' +
+            `select gen_random_uuid(), now() from generate_series(1, ${decoyRowCount})`,
+        );
+        const decoyTableBytes = await decoyClient
+          .unsafe(
+            "select pg_table_size('aud_p2_decoy.audit_events')::text as t",
+          )
+          .then((rows) =>
+            Number((rows as unknown as Array<{ t: string }>)[0]!.t),
+          );
+        // Sanity: the decoy really is bigger, or this test proves nothing.
+        expect(decoyTableBytes).toBeGreaterThan(expectedTableBytes);
+
+        await decoyClient.unsafe('SET search_path TO aud_p2_decoy, public');
+
+        const ev = await gatherAudAConvergenceEvidence(decoyRunner);
+
+        expect(ev.auditEventsRowCount).toBe(expectedRowCount);
+        expect(ev.auditEventsRowCount).not.toBe(decoyRowCount);
+        expect(ev.auditEventsTableBytes).toBe(expectedTableBytes);
+        expect(ev.auditEventsTableBytes).not.toBe(decoyTableBytes);
+
+        // public.audit_events itself was never mutated by the decoy setup.
+        const afterPublicCount = await runner
+          .query<{
+            n: string;
+          }>('select count(*)::text as n from "public"."audit_events"')
+          .then((rows) => Number(rows[0]!.n));
+        expect(afterPublicCount).toBe(expectedRowCount);
+      } finally {
+        await decoyClient
+          .unsafe('DROP SCHEMA IF EXISTS aud_p2_decoy CASCADE')
+          .catch(() => undefined);
+        await decoyClient.end({ timeout: 5 });
+      }
+    },
+  );
 });
 
 describe('structural FK verification — same-name collisions & definition drift (Codex P2)', () => {
@@ -811,13 +882,23 @@ describe('timeout policy actually enforced on a session-affine connection (fixes
       const blocker = postgres(testUrl!, { max: 1 });
 
       try {
-        // Hold ACCESS EXCLUSIVE on audit_events in another session. A
-        // deferred signal is resolved ONLY after `LOCK TABLE` has actually
-        // been granted server-side, so the test proves lock_timeout — not a
-        // race against connection/transaction scheduling.
+        // Hold ACCESS EXCLUSIVE on audit_events in another session. Two
+        // deferred signals, not fixed sleeps:
+        //   - `lockAcquiredSignal` resolves ONLY after `LOCK TABLE` has
+        //     actually been granted server-side, so the test proves
+        //     lock_timeout — not a race against connection/transaction
+        //     scheduling.
+        //   - `releaseLockSignal` lets the blocker release the lock the
+        //     INSTANT this test is done asserting, instead of holding it
+        //     (and the test) for a fixed 15s regardless of how fast the
+        //     abort actually happened.
         let lockAcquired!: () => void;
         const lockAcquiredSignal = new Promise<void>((resolve) => {
           lockAcquired = resolve;
+        });
+        let releaseLock!: () => void;
+        const releaseLockSignal = new Promise<void>((resolve) => {
+          releaseLock = resolve;
         });
 
         const held = blocker
@@ -827,7 +908,7 @@ describe('timeout policy actually enforced on a session-affine connection (fixes
             // the lock, so signalling here proves the blocker is confirmed
             // holding it before the timed section starts.
             lockAcquired();
-            await new Promise((r) => setTimeout(r, 15_000));
+            await releaseLockSignal;
           })
           .catch(() => undefined);
 
@@ -850,9 +931,13 @@ describe('timeout policy actually enforced on a session-affine connection (fixes
         );
         // lock_timeout is 3s; the lock was already CONFIRMED held before this
         // clock started, so this bound proves the abort — not connection
-        // scheduling slack. Generous CI headroom, still far below the 15s hold.
+        // scheduling slack. Generous CI headroom, well above the ~3-6s the
+        // abort (plus its best-effort cleanup retry) actually takes.
         expect(Date.now() - started).toBeLessThan(12_000);
 
+        // Release the blocker's lock now — `ensureDeferredIndexes` has
+        // already settled above, so there is nothing left for it to block.
+        releaseLock();
         await held;
       } finally {
         await affineClient.end({ timeout: 5 });

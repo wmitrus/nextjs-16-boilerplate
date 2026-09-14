@@ -243,10 +243,18 @@ export async function gatherAudAConvergenceEvidence(
 ): Promise<AudAConvergenceEvidence> {
   const inspection = await inspectAudAConvergence(runner);
 
+  // Schema-qualified to `public.audit_events`, exactly like every other
+  // AUD·A catalog read (`introspectIndex`/`requiredColumnsPresent`/
+  // `introspectForeignKey` all anchor to `public` explicitly) — never
+  // resolved through `search_path`. An operator role with a hostile/
+  // decoy-earlier `search_path` must still get evidence for the canonical
+  // relation, not whatever `audit_events` search_path happens to resolve
+  // first, or the mandatory Production evidence gate could pass on the
+  // wrong table's row count / size.
   let auditEventsRowCount: number | null = null;
   try {
     const rows = await runner.query<{ n: string }>(
-      'select count(*)::text as n from audit_events',
+      'select count(*)::text as n from "public"."audit_events"',
     );
     if (rows[0]) auditEventsRowCount = Number(rows[0].n);
   } catch {
@@ -257,7 +265,8 @@ export async function gatherAudAConvergenceEvidence(
   let auditEventsTotalRelationBytes: number | null = null;
   try {
     const rows = await runner.query<{ t: string; tot: string }>(
-      "select pg_table_size('audit_events')::text as t, pg_total_relation_size('audit_events')::text as tot",
+      'select pg_table_size(\'"public"."audit_events"\')::text as t, ' +
+        'pg_total_relation_size(\'"public"."audit_events"\')::text as tot',
     );
     if (rows[0]) {
       auditEventsTableBytes = Number(rows[0].t);

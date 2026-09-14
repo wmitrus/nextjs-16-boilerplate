@@ -13,6 +13,10 @@ import {
   inject,
 } from 'vitest';
 
+import {
+  gatherAudAConvergenceEvidence,
+  inspectAudAConvergence,
+} from '@/core/db/aud-a-convergence-inspection';
 import { runMigrations } from '@/core/db/migrations/run-migrations';
 import {
   AUD_A_DEFERRED_FK_VALIDATIONS,
@@ -21,8 +25,6 @@ import {
   DeferredForeignKeyDefinitionMismatchError,
   DeferredIndexDefinitionMismatchError,
   ensureDeferredIndexes,
-  gatherAudAConvergenceEvidence,
-  inspectAudAConvergence,
   runAudAPostMigrateSteps,
   sqlRunnerFromDrizzle,
   sqlRunnerFromPostgres,
@@ -175,6 +177,50 @@ describe('ensureDeferredIndexes executor', () => {
       /audit_events USING btree \(organization_id, occurred_at\)/,
     );
   });
+
+  it.skipIf(!isRealPg)(
+    'Codex regression: CREATE INDEX targets public.audit_events even under a hostile search_path (real Postgres)',
+    async () => {
+      const postgres = (await import('postgres')).default;
+      const decoyClient = postgres(testUrl!, { max: 1 });
+      const decoyRunner = sqlRunnerFromPostgres(decoyClient);
+
+      try {
+        await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+        expect((await indexState()).exists).toBe(false);
+
+        // A same-named decoy table, in a schema placed BEFORE `public` on
+        // this session's search_path, with the SAME columns the index needs.
+        // If CREATE INDEX ever regresses to an unqualified `ON "audit_events"`,
+        // Postgres would silently resolve it to THIS table instead of the
+        // canonical `public.audit_events`.
+        await decoyClient.unsafe('CREATE SCHEMA IF NOT EXISTS aud_p2_decoy');
+        await decoyClient.unsafe(
+          'CREATE TABLE IF NOT EXISTS aud_p2_decoy.audit_events (organization_id uuid, occurred_at timestamptz)',
+        );
+        await decoyClient.unsafe('SET search_path TO aud_p2_decoy, public');
+
+        const outcomes = await ensureDeferredIndexes(decoyRunner, 'concurrent');
+        expect(outcomes).toEqual([{ name: INDEX.name, action: 'create' }]);
+
+        // The canonical public relation received the index...
+        const st = await indexState();
+        expect(st.exists && st.valid).toBe(true);
+        expect(st.def).toMatch(/\bpublic\.audit_events\b/);
+
+        // ...and the decoy earlier in search_path was NEVER touched.
+        const decoyIndexes = await decoyClient.unsafe(
+          "select indexname from pg_indexes where schemaname = 'aud_p2_decoy' and tablename = 'audit_events'",
+        );
+        expect(decoyIndexes.length).toBe(0);
+      } finally {
+        await decoyClient
+          .unsafe('DROP SCHEMA IF EXISTS aud_p2_decoy CASCADE')
+          .catch(() => undefined);
+        await decoyClient.end({ timeout: 5 });
+      }
+    },
+  );
 
   it('FAILS CLOSED on a same-name VALID index with a different definition; never drops it', async () => {
     await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
@@ -765,13 +811,27 @@ describe('timeout policy actually enforced on a session-affine connection (fixes
       const blocker = postgres(testUrl!, { max: 1 });
 
       try {
-        // Hold ACCESS EXCLUSIVE on audit_events in another session.
+        // Hold ACCESS EXCLUSIVE on audit_events in another session. A
+        // deferred signal is resolved ONLY after `LOCK TABLE` has actually
+        // been granted server-side, so the test proves lock_timeout — not a
+        // race against connection/transaction scheduling.
+        let lockAcquired!: () => void;
+        const lockAcquiredSignal = new Promise<void>((resolve) => {
+          lockAcquired = resolve;
+        });
+
         const held = blocker
           .begin(async (tx) => {
             await tx.unsafe('LOCK TABLE audit_events IN ACCESS EXCLUSIVE MODE');
+            // The `LOCK TABLE` above only resolves once Postgres has granted
+            // the lock, so signalling here proves the blocker is confirmed
+            // holding it before the timed section starts.
+            lockAcquired();
             await new Promise((r) => setTimeout(r, 15_000));
           })
           .catch(() => undefined);
+
+        await lockAcquiredSignal;
 
         const started = Date.now();
         let thrown: unknown;
@@ -788,7 +848,9 @@ describe('timeout policy actually enforced on a session-affine connection (fixes
         expect(errorChainText(thrown)).toMatch(
           /lock[_ ]timeout|canceling statement due to lock timeout|55P03/i,
         );
-        // lock_timeout is 3s; allow generous CI slack but far below the 15s hold.
+        // lock_timeout is 3s; the lock was already CONFIRMED held before this
+        // clock started, so this bound proves the abort — not connection
+        // scheduling slack. Generous CI headroom, still far below the 15s hold.
         expect(Date.now() - started).toBeLessThan(12_000);
 
         await held;

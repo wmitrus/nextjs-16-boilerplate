@@ -383,7 +383,12 @@ async function setSessionTimeouts(
   await runner.query('SET statement_timeout = ' + statementTimeoutMs);
 }
 
-async function requiredColumnsPresent(
+/**
+ * Exported ONLY so `./aud-a-convergence-inspection` (the read-only inspector)
+ * can reuse the SAME catalog read the enforce executor uses below — never
+ * called by any other consumer.
+ */
+export async function requiredColumnsPresent(
   runner: SqlRunner,
   spec: DeferredIndexSpec,
 ): Promise<boolean> {
@@ -397,7 +402,11 @@ async function requiredColumnsPresent(
   return rows.length === spec.requiredColumns.length;
 }
 
-async function introspectIndex(
+/**
+ * Exported ONLY so `./aud-a-convergence-inspection` can reuse the SAME
+ * catalog read the enforce executor uses below.
+ */
+export async function introspectIndex(
   runner: SqlRunner,
   name: string,
 ): Promise<ExistingIndexState> {
@@ -488,7 +497,7 @@ async function buildDeferredIndex(
         cc +
         ' "' +
         spec.name +
-        '" ON "' +
+        '" ON "public"."' +
         spec.table +
         '" USING btree ' +
         spec.columnListSql,
@@ -635,8 +644,11 @@ export async function ensureDeferredIndexes(
  * (a same-named constraint on any other relation yields `exists: false`),
  * then delegate the pure structural comparison to `interpretForeignKeyRow`
  * (in `./aud-a-foreign-key`). Read-only — one SELECT.
+ *
+ * Exported ONLY so `./aud-a-convergence-inspection` can reuse the SAME
+ * introspection the enforce executor below uses.
  */
-async function introspectForeignKey(
+export async function introspectForeignKey(
   runner: SqlRunner,
   spec: DeferredForeignKeyValidation,
 ): Promise<ForeignKeyIntrospection> {
@@ -836,256 +848,13 @@ export async function runAudAPostMigrateSteps(
   return { indexes, foreignKeys };
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Read-only inspection + evidence (dedicated Production operator CLI)
- *
- * OZI-71 AUD·A Production DDL safety plan (plan §16 AUD·A): every potentially
- * long-running Production schema operation must carry dry-run size/cardinality
- * evidence, an explicit operator gate, abort criteria and recovery guidance.
- * The `CREATE INDEX CONCURRENTLY` build and the two `VALIDATE CONSTRAINT`
- * scans are exactly that class of operation, so they are NOT run automatically
- * by `pnpm db:migrate:prod`; the dedicated `pnpm db:aud-a:converge` CLI runs
- * them behind an explicit `--apply --production-approved` gate.
- *
- * `inspectAudAConvergence` / `gatherAudAConvergenceEvidence` are the read-only
- * side of that CLI: they classify the current state and predict what `--apply`
- * would do, reusing the SAME primitives (`introspectIndex`,
- * `introspectForeignKey`, `requiredColumnsPresent`, `normalizeIndexdef`) the
- * `enforce` executor uses. They issue only SELECTs — no `SET`, no DDL, no
- * `VALIDATE`, no journal write. Unlike the executors, a same-name VALID index
- * with a wrong definition — and a same-name FK on the expected table with a
- * wrong full definition — are REPORTED here, not thrown.
- * ──────────────────────────────────────────────────────────────────────────── */
-
-export type AudAIndexInspectedState =
-  | 'absent'
-  | 'invalid'
-  | 'invalid-wrong-definition'
-  | 'valid-exact'
-  | 'valid-wrong-definition';
-
-export type AudAIndexPlan =
-  | 'no-op'
-  | 'create-concurrently'
-  | 'rebuild-invalid'
-  | 'abort-wrong-definition'
-  | 'blocked-expand-not-applied';
-
-/**
- * Pure index classification for the read-only inspector. The SAME structural
- * identity test (`indexDefinitionMatchesSpec`) as the executor is applied to
- * VALID and INVALID indexes alike (Codex P2): an INVALID index whose
- * definition does NOT match the spec is `invalid-wrong-definition` /
- * `abort-wrong-definition` — NOT `rebuild-invalid`, and never labelled
- * `valid-*`.
- */
-export function classifyIndexInspection(
-  spec: DeferredIndexSpec,
-  existing: ExistingIndexState,
-  columnsPresent: boolean,
-): { state: AudAIndexInspectedState; plannedAction: AudAIndexPlan } {
-  if (!existing.exists) {
-    return {
-      state: 'absent',
-      plannedAction: columnsPresent
-        ? 'create-concurrently'
-        : 'blocked-expand-not-applied',
-    };
-  }
-  const exact = indexDefinitionMatchesSpec(spec, existing);
-  if (exact && existing.valid) {
-    return { state: 'valid-exact', plannedAction: 'no-op' };
-  }
-  if (exact) {
-    return { state: 'invalid', plannedAction: 'rebuild-invalid' };
-  }
-  if (existing.valid) {
-    return {
-      state: 'valid-wrong-definition',
-      plannedAction: 'abort-wrong-definition',
-    };
-  }
-  return {
-    state: 'invalid-wrong-definition',
-    plannedAction: 'abort-wrong-definition',
-  };
-}
-
-/** Mirrors the deferred-index state model, for FKs (Codex P2). */
-export type AudAForeignKeyInspectedState =
-  | 'absent'
-  | 'present-exact-unvalidated'
-  | 'present-exact-validated'
-  | 'present-wrong-definition';
-
-export type AudAForeignKeyPlan =
-  | 'no-op'
-  | 'validate'
-  | 'blocked-missing'
-  | 'abort-wrong-definition';
-
-export interface AudAIndexInspection {
-  readonly name: string;
-  readonly table: string;
-  readonly state: AudAIndexInspectedState;
-  readonly currentDefinition: string | null;
-  readonly expectedDefinition: string;
-  readonly plannedAction: AudAIndexPlan;
-}
-
-export interface AudAForeignKeyInspection {
-  readonly constraint: string;
-  /** Expected source schema (`public` for AUD·A). */
-  readonly schema: string;
-  /** Expected source table. */
-  readonly table: string;
-  readonly state: AudAForeignKeyInspectedState;
-  /** A constraint with this name exists ON THE EXPECTED `schema.table`. */
-  readonly present: boolean;
-  /** Rollout state only — `null` when absent. NOT part of FK identity. */
-  readonly convalidated: boolean | null;
-  /** Canonical expected FK definition (from the spec). */
-  readonly expectedDefinition: string;
-  /** `pg_get_constraintdef(oid, true)` of the actual constraint, or `null`. */
-  readonly currentDefinition: string | null;
-  /** Field-level current-vs-expected differences (only when wrong-definition). */
-  readonly definitionMismatches: readonly string[];
-  readonly plannedAction: AudAForeignKeyPlan;
-}
-
-export interface AudAConvergenceInspection {
-  /** Proxy for "migration 0023 applied" — its additive columns exist. */
-  readonly expandMigrationApplied: boolean;
-  readonly index: AudAIndexInspection;
-  readonly foreignKeys: AudAForeignKeyInspection[];
-  readonly timeoutPolicy: {
-    readonly lockTimeoutMs: number;
-    readonly indexBuildStatementTimeoutMs: number;
-    readonly fkValidateStatementTimeoutMs: number;
-  };
-}
-
-export interface AudAConvergenceEvidence {
-  readonly inspection: AudAConvergenceInspection;
-  readonly auditEventsRowCount: number | null;
-  readonly auditEventsTableBytes: number | null;
-  readonly auditEventsTotalRelationBytes: number | null;
-}
-
-/**
- * Classify the current AUD·A convergence state and what an `--apply` run would
- * do. Read-only (SELECT statements only); never throws on a wrong-definition
- * index — it reports it.
- */
-export async function inspectAudAConvergence(
-  runner: SqlRunner,
-  spec: DeferredIndexSpec = AUDIT_EVENTS_ORGANIZATION_INDEX,
-  fks: readonly DeferredForeignKeyValidation[] = AUD_A_DEFERRED_FK_VALIDATIONS,
-): Promise<AudAConvergenceInspection> {
-  const columnsPresent = await requiredColumnsPresent(runner, spec);
-  const existing = await introspectIndex(runner, spec.name);
-  const { state, plannedAction } = classifyIndexInspection(
-    spec,
-    existing,
-    columnsPresent,
-  );
-
-  const foreignKeys: AudAForeignKeyInspection[] = [];
-  for (const fkSpec of fks) {
-    const fk = await introspectForeignKey(runner, fkSpec);
-
-    let fkState: AudAForeignKeyInspectedState;
-    let fkPlan: AudAForeignKeyPlan;
-    if (!fk.exists) {
-      fkState = 'absent';
-      fkPlan = 'blocked-missing';
-    } else if (!fk.matchesSpec) {
-      fkState = 'present-wrong-definition';
-      fkPlan = 'abort-wrong-definition';
-    } else if (fk.convalidated) {
-      fkState = 'present-exact-validated';
-      fkPlan = 'no-op';
-    } else {
-      fkState = 'present-exact-unvalidated';
-      fkPlan = 'validate';
-    }
-
-    foreignKeys.push({
-      constraint: fkSpec.constraint,
-      schema: fkSpec.schema,
-      table: fkSpec.table,
-      state: fkState,
-      present: fk.exists,
-      convalidated: fk.exists ? fk.convalidated : null,
-      expectedDefinition: formatExpectedForeignKeyDef(fkSpec),
-      currentDefinition: fk.definition,
-      definitionMismatches:
-        fkState === 'present-wrong-definition' ? fk.mismatches : [],
-      plannedAction: fkPlan,
-    });
-  }
-
-  return {
-    expandMigrationApplied: columnsPresent,
-    index: {
-      name: spec.name,
-      table: spec.table,
-      state,
-      currentDefinition: existing.indexdef,
-      expectedDefinition: spec.expectedIndexdef,
-      plannedAction,
-    },
-    foreignKeys,
-    timeoutPolicy: {
-      lockTimeoutMs: AUD_A_TIMEOUTS.LOCK_TIMEOUT_MS,
-      indexBuildStatementTimeoutMs: AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_INDEX_MS,
-      fkValidateStatementTimeoutMs:
-        AUD_A_TIMEOUTS.STATEMENT_TIMEOUT_VALIDATE_MS,
-    },
-  };
-}
-
-/**
- * {@link inspectAudAConvergence} plus `audit_events` cardinality / size
- * evidence for the operator gate. Size lookups are best-effort — a
- * permission-limited role still gets the inspection and row count. Read-only.
- */
-export async function gatherAudAConvergenceEvidence(
-  runner: SqlRunner,
-): Promise<AudAConvergenceEvidence> {
-  const inspection = await inspectAudAConvergence(runner);
-
-  let auditEventsRowCount: number | null = null;
-  try {
-    const rows = await runner.query<{ n: string }>(
-      'select count(*)::text as n from audit_events',
-    );
-    if (rows[0]) auditEventsRowCount = Number(rows[0].n);
-  } catch {
-    // leave null — evidence is best-effort
-  }
-
-  let auditEventsTableBytes: number | null = null;
-  let auditEventsTotalRelationBytes: number | null = null;
-  try {
-    const rows = await runner.query<{ t: string; tot: string }>(
-      "select pg_table_size('audit_events')::text as t, pg_total_relation_size('audit_events')::text as tot",
-    );
-    if (rows[0]) {
-      auditEventsTableBytes = Number(rows[0].t);
-      auditEventsTotalRelationBytes = Number(rows[0].tot);
-    }
-  } catch {
-    // pg_table_size / pg_total_relation_size unavailable (e.g. PGlite) — null
-  }
-
-  return {
-    inspection,
-    auditEventsRowCount,
-    auditEventsTableBytes,
-    auditEventsTotalRelationBytes,
-  };
-}
+// The read-only inspection + evidence layer for the dedicated Production
+// operator CLI — `inspectAudAConvergence`, `gatherAudAConvergenceEvidence`,
+// `classifyIndexInspection`, and their `AudA*` types — now lives in
+// `./aud-a-convergence-inspection` (import it directly from there). It is
+// deliberately NOT re-exported here: that module imports the catalog-read
+// primitives below FROM this file, so a re-export back would create an
+// import cycle. Nothing in this file calls into that module.
 
 interface PostgresLikeClient {
   unsafe: (text: string) => PromiseLike<unknown>;

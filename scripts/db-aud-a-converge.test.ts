@@ -4,8 +4,8 @@ import type {
   AudAConvergenceEvidence,
   AudAConvergenceInspection,
   AudAForeignKeyInspection,
-  SqlRunner,
-} from '@/core/db/post-migrate-steps';
+} from '@/core/db/aud-a-convergence-inspection';
+import type { SqlRunner } from '@/core/db/post-migrate-steps';
 
 import {
   formatEvidence,
@@ -442,12 +442,16 @@ function makeDeps(over: Partial<ConvergeDeps> = {}) {
   const close = vi.fn(async () => {});
   const openRunner = vi.fn((_url: string) => ({ runner, close }));
   const gatherEvidence = vi.fn(async () => evidenceOf(inspection()));
+  // Post-convergence re-inspection: deliberately a DIFFERENT dep from
+  // `gatherEvidence` — it must never trigger a second cardinality/size scan.
+  const inspectConvergence = vi.fn(async () => inspection());
   const validateJournal = vi.fn(async () => ({ ...COMPLETE_JOURNAL }));
   const assertJournalComplete = vi.fn((_s: unknown) => {});
   const runConvergence = vi.fn(async () => ({ indexes: [], foreignKeys: [] }));
   const deps = {
     openRunner,
     gatherEvidence,
+    inspectConvergence,
     validateJournal,
     assertJournalComplete,
     runConvergence,
@@ -459,6 +463,7 @@ function makeDeps(over: Partial<ConvergeDeps> = {}) {
     close,
     openRunner,
     gatherEvidence,
+    inspectConvergence,
     validateJournal,
     assertJournalComplete,
     runConvergence,
@@ -574,6 +579,10 @@ describe('db:aud-a:converge — approved --apply orchestration', () => {
       order.push('converge');
       return { indexes: [], foreignKeys: [] };
     });
+    h.inspectConvergence.mockImplementation(async () => {
+      order.push('inspect');
+      return inspection();
+    });
 
     await expect(
       run(['--apply', '--production-approved'], h.deps),
@@ -583,13 +592,20 @@ describe('db:aud-a:converge — approved --apply orchestration', () => {
     expect(h.runConvergence).toHaveBeenCalledWith(h.runner, 'concurrent', {
       enforcement: 'enforce',
     });
-    // evidence → journal gate → executor → re-inspection
+    // Codex regression guard: the mandatory preflight cardinality/size
+    // evidence (`gatherEvidence`, incl. the exact `count(*)` /
+    // `pg_table_size` scans) runs EXACTLY once — the post-convergence
+    // postcondition must re-check via `inspectConvergence` instead, never
+    // by repeating that scan.
+    expect(h.gatherEvidence).toHaveBeenCalledTimes(1);
+    expect(h.inspectConvergence).toHaveBeenCalledTimes(1);
+    // preflight evidence → journal gate → executor → structural re-inspection
     expect(order).toEqual([
       'gather',
       'journal',
       'assert-journal',
       'converge',
-      'gather',
+      'inspect',
     ]);
     expect(h.close).toHaveBeenCalled();
     expect(logSpy.mock.calls.flat().map(String).join('\n')).toMatch(
@@ -603,6 +619,8 @@ describe('db:aud-a:converge — approved --apply orchestration', () => {
       run(['--apply', '--production-approved'], h.deps),
     ).resolves.toBeUndefined();
     expect(h.runConvergence).toHaveBeenCalledTimes(1);
+    expect(h.gatherEvidence).toHaveBeenCalledTimes(1);
+    expect(h.inspectConvergence).toHaveBeenCalledTimes(1);
   });
 
   it('rejects before executor mutation when migration 0023 is not applied', async () => {
@@ -644,86 +662,78 @@ describe('db:aud-a:converge — approved --apply orchestration', () => {
 
   it('rejects when the final postcondition is not met after convergence', async () => {
     const h = makeDeps();
-    let call = 0;
-    h.gatherEvidence.mockImplementation(async () => {
-      call += 1;
-      // first call: pre-apply evidence is fine; second call: still not converged
-      return call === 1
-        ? evidenceOf(inspection())
-        : evidenceOf(
-            inspection({
-              index: {
-                name: INDEX_NAME,
-                table: 'audit_events',
-                state: 'invalid',
-                currentDefinition: EXPECTED_DEF,
-                expectedDefinition: EXPECTED_DEF,
-                plannedAction: 'rebuild-invalid',
-              },
-            }),
-          );
-    });
+    // Pre-apply evidence is fine; the post-convergence structural
+    // re-inspection (NOT a second `gatherEvidence` scan) still shows an
+    // unconverged index.
+    h.inspectConvergence.mockImplementation(async () =>
+      inspection({
+        index: {
+          name: INDEX_NAME,
+          table: 'audit_events',
+          state: 'invalid',
+          currentDefinition: EXPECTED_DEF,
+          expectedDefinition: EXPECTED_DEF,
+          plannedAction: 'rebuild-invalid',
+        },
+      }),
+    );
     await expect(
       run(['--apply', '--production-approved'], h.deps),
     ).rejects.toThrow(/post-condition check failed after convergence/i);
     expect(h.runConvergence).toHaveBeenCalledTimes(1);
+    // The preflight cardinality/size scan still ran exactly once, and was
+    // NOT repeated to check the postcondition.
+    expect(h.gatherEvidence).toHaveBeenCalledTimes(1);
+    expect(h.inspectConvergence).toHaveBeenCalledTimes(1);
     expect(h.close).toHaveBeenCalled();
   });
 
   it('final postcondition FAILS when a FK is not present-exact-validated after convergence', async () => {
     const h = makeDeps();
-    let call = 0;
-    h.gatherEvidence.mockImplementation(async () => {
-      call += 1;
-      if (call === 1) return evidenceOf(inspection());
-      // post-convergence: index fine, but one FK is convalidated with a
-      // wrong definition — convalidated alone must NOT satisfy COMPLETE.
-      return evidenceOf(
-        inspection({
-          foreignKeys: [
-            fkInsp({
-              constraint: 'audit_events_organization_id_organizations_id_fk',
-              state: 'present-wrong-definition',
-              convalidated: true,
-              definitionMismatches: [
-                "ON DELETE: expected 'set null', got 'cascade'",
-              ],
-              plannedAction: 'abort-wrong-definition',
-            }),
-            fkInsp({
-              constraint:
-                'audit_log_settings_organization_id_organizations_id_fk',
-              table: 'audit_log_settings',
-            }),
-          ],
-        }),
-      );
-    });
+    // post-convergence: index fine, but one FK is convalidated with a
+    // wrong definition — convalidated alone must NOT satisfy COMPLETE.
+    h.inspectConvergence.mockImplementation(async () =>
+      inspection({
+        foreignKeys: [
+          fkInsp({
+            constraint: 'audit_events_organization_id_organizations_id_fk',
+            state: 'present-wrong-definition',
+            convalidated: true,
+            definitionMismatches: [
+              "ON DELETE: expected 'set null', got 'cascade'",
+            ],
+            plannedAction: 'abort-wrong-definition',
+          }),
+          fkInsp({
+            constraint:
+              'audit_log_settings_organization_id_organizations_id_fk',
+            table: 'audit_log_settings',
+          }),
+        ],
+      }),
+    );
     await expect(
       run(['--apply', '--production-approved'], h.deps),
     ).rejects.toThrow(/post-condition check failed after convergence/i);
+    expect(h.gatherEvidence).toHaveBeenCalledTimes(1);
   });
 
   it('final postcondition FAILS when the FK set count differs from the canonical AUD·A set', async () => {
     const h = makeDeps();
-    let call = 0;
-    h.gatherEvidence.mockImplementation(async () => {
-      call += 1;
-      if (call === 1) return evidenceOf(inspection());
-      // only ONE FK reported back — not the full canonical set of two.
-      return evidenceOf(
-        inspection({
-          foreignKeys: [
-            fkInsp({
-              constraint: 'audit_events_organization_id_organizations_id_fk',
-            }),
-          ],
-        }),
-      );
-    });
+    // only ONE FK reported back — not the full canonical set of two.
+    h.inspectConvergence.mockImplementation(async () =>
+      inspection({
+        foreignKeys: [
+          fkInsp({
+            constraint: 'audit_events_organization_id_organizations_id_fk',
+          }),
+        ],
+      }),
+    );
     await expect(
       run(['--apply', '--production-approved'], h.deps),
     ).rejects.toThrow(/post-condition check failed after convergence/i);
+    expect(h.gatherEvidence).toHaveBeenCalledTimes(1);
   });
 
   it('a VALID wrong-definition index stays fail-closed: executor error propagates, CLI never drops it', async () => {
@@ -755,6 +765,7 @@ describe('db:aud-a:converge — approved --apply orchestration', () => {
     // The CLI issues no DROP itself — its only DB access is the injected runner,
     // which recorded no calls.
     expect(h.runner.query).not.toHaveBeenCalled();
+    expect(h.inspectConvergence).not.toHaveBeenCalled();
     expect(h.close).toHaveBeenCalled();
   });
 });

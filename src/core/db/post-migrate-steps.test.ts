@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { classifyIndexInspection } from './aud-a-convergence-inspection';
 import {
   assertDirectPostgresUrl,
   AUD_A_DEFERRED_FK_VALIDATIONS,
@@ -10,7 +11,6 @@ import {
   AUD_A_TIMEOUTS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
   AudAConvergenceError,
-  classifyIndexInspection,
   DeferredForeignKeyDefinitionMismatchError,
   DeferredIndexDefinitionMismatchError,
   decideDeferredForeignKeyAction,
@@ -358,6 +358,9 @@ describe('timeout policy is applied (not merely documented)', () => {
     expect(statements[0]).toBe('SET lock_timeout = 3000');
     expect(statements[1]).toBe('SET statement_timeout = 0');
     expect(statements[2]).toContain('CREATE INDEX CONCURRENTLY');
+    // Schema-qualified to the canonical relation — never relies on
+    // `search_path` to resolve the bare table name (Codex regression).
+    expect(statements[2]).toContain('ON "public"."audit_events"');
     // Never impose a short statement_timeout on the index build.
     expect(statements).not.toContain('SET statement_timeout = 30000');
   });

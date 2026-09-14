@@ -3,16 +3,20 @@ import './load-env';
 import postgres from 'postgres';
 
 import {
+  gatherAudAConvergenceEvidence,
+  inspectAudAConvergence,
+  type AudAConvergenceEvidence,
+  type AudAConvergenceInspection,
+  type AudAForeignKeyPlan,
+  type AudAIndexPlan,
+} from '@/core/db/aud-a-convergence-inspection';
+import {
   assertDirectPostgresUrl,
   AUD_A_DEFERRED_FK_VALIDATIONS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
   formatExpectedForeignKeyDef,
-  gatherAudAConvergenceEvidence,
   runAudAPostMigrateSteps,
   sqlRunnerFromPostgres,
-  type AudAConvergenceEvidence,
-  type AudAForeignKeyPlan,
-  type AudAIndexPlan,
   type SqlRunner,
 } from '@/core/db/post-migrate-steps';
 
@@ -133,6 +137,13 @@ export function missingMandatoryEvidence(
  */
 export interface ConvergeDeps {
   gatherEvidence: typeof gatherAudAConvergenceEvidence;
+  /**
+   * Post-convergence re-inspection ONLY — deliberately narrower than
+   * `gatherEvidence`. It must NOT re-run the mandatory preflight
+   * cardinality/size evidence queries (`count(*)` / `pg_table_size`); the
+   * final postcondition only needs the structural index/FK state.
+   */
+  inspectConvergence: typeof inspectAudAConvergence;
   validateJournal: typeof validateMigrationJournal;
   assertJournalComplete: typeof assertMigrationJournalComplete;
   runConvergence: typeof runAudAPostMigrateSteps;
@@ -145,6 +156,7 @@ export interface ConvergeDeps {
 function defaultDeps(): ConvergeDeps {
   return {
     gatherEvidence: gatherAudAConvergenceEvidence,
+    inspectConvergence: inspectAudAConvergence,
     validateJournal: validateMigrationJournal,
     assertJournalComplete: assertMigrationJournalComplete,
     runConvergence: runAudAPostMigrateSteps,
@@ -423,16 +435,19 @@ export async function run(
 
     // 5. Post-convergence re-inspection + 6. exact final postcondition.
     //    `runConvergence` already throws on a half-done / wrong-definition
-    //    state; this re-reads the SHARED inspection and asserts independently:
-    //    the deferred index is valid-exact AND the FK set is EXACTLY the
+    //    state; this re-reads the SHARED structural inspection (NOT
+    //    `gatherEvidence` again — the postcondition never needs a second
+    //    exact `count(*)` / table-size scan) and asserts independently: the
+    //    deferred index is valid-exact AND the FK set is EXACTLY the
     //    canonical AUD·A set (count + names from AUD_A_DEFERRED_FK_VALIDATIONS)
     //    with every FK in `present-exact-validated` (i.e. full structural
     //    identity plus convalidated=true).
-    const after = await deps.gatherEvidence(runner);
+    const after: AudAConvergenceInspection =
+      await deps.inspectConvergence(runner);
     const expectedFkConstraints = new Set(
       AUD_A_DEFERRED_FK_VALIDATIONS.map((fk) => fk.constraint),
     );
-    const fkStates = after.inspection.foreignKeys;
+    const fkStates = after.foreignKeys;
     const fkComplete =
       fkStates.length === AUD_A_DEFERRED_FK_VALIDATIONS.length &&
       fkStates.every(
@@ -440,12 +455,11 @@ export async function run(
           expectedFkConstraints.has(f.constraint) &&
           f.state === 'present-exact-validated',
       );
-    const converged =
-      after.inspection.index.state === 'valid-exact' && fkComplete;
+    const converged = after.index.state === 'valid-exact' && fkComplete;
     if (!converged) {
       throw new Error(
         `[${CTX}] post-condition check failed after convergence: ${JSON.stringify(
-          after.inspection,
+          after,
         )}`,
       );
     }

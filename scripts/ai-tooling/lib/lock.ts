@@ -1,21 +1,34 @@
 /**
- * OS-level exclusive lock via `O_CREAT | O_EXCL` (portable on Linux/WSL) —
- * no new dependency.
+ * OS-level exclusive lock via a `link(2)`-published, fully-pre-written file
+ * (portable on Linux/WSL) — no new dependency.
  *
  * This is deliberately NOT `flock()`: `flock()` locks are tied to an open
  * file description and are released automatically by the kernel if the
- * holding process dies, with no manual bookkeeping. An `O_EXCL` lock file
- * has no such auto-release — a crashed holder leaves the file behind, which
- * is exactly why this module also records who holds it and checks
- * liveness before treating an existing lock file as stale.
+ * holding process dies, with no manual bookkeeping. A plain lock file has
+ * no such auto-release — a crashed holder leaves the file behind, which is
+ * exactly why this module also records who holds it and checks liveness
+ * before treating an existing lock file as stale.
  *
  * Race analysis:
- * - Mutual exclusion itself is correct regardless of how two processes
- *   interleave the staleness-check/cleanup steps below, because the final
- *   `openSync(path, 'wx')` is a single atomic syscall (O_CREAT|O_EXCL) —
- *   it is the true linearization point. Only one process can ever succeed
- *   at creating the same path this way; the logic before it is cleanup
- *   only, not part of the exclusion guarantee.
+ * - The lock is published with {@link publishFileAtomicallyWithinBase}:
+ *   the holder record (`<pid>:<startTime>`) is written IN FULL to a private
+ *   temp sibling first, then `link(2)`'d onto the lock path. `link(2)`
+ *   fails closed with `EEXIST` if the destination already exists — the
+ *   SAME no-clobber guarantee a raw `open(path, 'wx')` gives — and it is
+ *   the true linearization point: only one process can ever win that link
+ *   for a given path. The earlier design published via
+ *   `open(path, 'wx')` immediately followed by a SEPARATE `writeSync` for
+ *   the holder record, which left a real window: a second process could
+ *   observe the just-created (still EMPTY) lock file between those two
+ *   steps, read `''`, fail to decode a holder from it, conclude the lock
+ *   was stale, delete it, and create its own — letting two processes
+ *   acquire at once (OZI-28 real two-process contention regression). By
+ *   the time `link(2)` makes the destination visible under this design,
+ *   the full holder record is already durable in the source inode, so no
+ *   reader can ever observe a partially-written lock file. Losing the
+ *   `link(2)` race after our own staleness check just passed means another
+ *   process's publish won it in between — that is reported as a genuine
+ *   `LockHeldError`, not retried, matching the "fail fast" contract.
  * - PID reuse: checking `process.kill(pid, 0)` alone is not sufficient —
  *   after a crash, the OS can eventually reassign the recorded PID to an
  *   unrelated, live process, which would make a stale lock look "held" by
@@ -32,16 +45,19 @@
  *   `config.ts` places it under `~/.local/state/...`, which is native.
  */
 
-import { closeSync, readFileSync, writeSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import {
   assertPathWithinBase,
   ensureDirectorySyncWithinBase,
-  openSyncWithinBase,
   pathExistsWithinBase,
+  publishFileAtomicallyWithinBase,
   readTextFileWithinBase,
+  removeCreatedArtifactsWithinBase,
   unlinkSyncWithinBase,
+  writeNewFileDurablyWithinBase,
 } from '../../lib/fs-guards-shared';
 
 export class LockHeldError extends Error {
@@ -142,34 +158,59 @@ export function acquireLock(
       throw new LockHeldError(resolved, holder || 'unknown');
     }
     // Stale lock: owning process is gone (or confirmed to be a different
-    // process via start-time mismatch). Clear it and retry once.
-    unlinkSyncWithinBase(resolved, ledgerDir, 'lock file');
+    // process via start-time mismatch). Clear it and retry once. Another
+    // process may have already cleared the SAME stale lock a moment ago —
+    // ENOENT here just means we lost that harmless cleanup race, not a
+    // real failure.
+    try {
+      unlinkSyncWithinBase(resolved, ledgerDir, 'lock file');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
   }
 
   // First run against the documented default ledger dir (or any new
   // AI_INBOX_LEDGER_DIR) has no parent directory yet — create it before the
-  // exclusive open, or that open throws ENOENT instead of the intended
-  // EEXIST/success outcomes below.
+  // publish below, or that publish throws ENOENT instead of the intended
+  // EEXIST/success outcomes.
   ensureDirectorySyncWithinBase(
     path.dirname(resolved),
     ledgerDir,
     'lock directory',
   );
 
-  let fd: number;
+  // Write the FULL holder record to a private temp sibling first, then
+  // publish it onto `resolved` with a genuine no-clobber `link(2)` (see the
+  // file-level doc comment) — no reader can ever observe `resolved` with
+  // partial/empty content.
+  const tempPath = `${resolved}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+  writeNewFileDurablyWithinBase(
+    tempPath,
+    ledgerDir,
+    encodeHolder(process.pid),
+    'lock file (temp)',
+  );
   try {
-    fd = openSyncWithinBase(resolved, ledgerDir, 'wx', 'lock file');
+    publishFileAtomicallyWithinBase(tempPath, resolved, ledgerDir, 'lock file');
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-      const holder = pathExistsWithinBase(resolved, ledgerDir, 'lock file')
-        ? readTextFileWithinBase(resolved, ledgerDir, 'lock file').trim()
-        : 'unknown';
-      throw new LockHeldError(resolved, holder);
+    removeCreatedArtifactsWithinBase(
+      [tempPath],
+      ledgerDir,
+      'lock file (temp cleanup)',
+    );
+    // Only a lost publish race (the destination now exists — someone else's
+    // link won) maps to LockHeldError; any other failure is unexpected and
+    // must propagate unmasked.
+    if (pathExistsWithinBase(resolved, ledgerDir, 'lock file')) {
+      const holder = readTextFileWithinBase(
+        resolved,
+        ledgerDir,
+        'lock file',
+      ).trim();
+      throw new LockHeldError(resolved, holder || 'unknown');
     }
     throw err;
   }
-  writeSync(fd, encodeHolder(process.pid));
-  closeSync(fd);
 
   return {
     release: () => {

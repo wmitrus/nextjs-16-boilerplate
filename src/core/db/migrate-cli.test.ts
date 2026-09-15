@@ -45,6 +45,9 @@ beforeEach(() => {
 
 afterEach(() => {
   logSpy.mockRestore();
+  // NODE_ENV is read-only on `process.env`'s type here — tests that need
+  // NODE_ENV=production use `vi.stubEnv`, which this always undoes.
+  vi.unstubAllEnvs();
   if (savedUrl === undefined) delete process.env.DATABASE_URL;
   else process.env.DATABASE_URL = savedUrl;
   if (savedUnpooled === undefined) delete process.env.DATABASE_URL_UNPOOLED;
@@ -104,6 +107,46 @@ describe('resolveMigrationTarget (single canonical target)', () => {
   it('trims whitespace and treats a blank UNPOOLED as absent', () => {
     process.env.DATABASE_URL_UNPOOLED = '   ';
     process.env.DATABASE_URL = `  ${DIRECT_A}  `;
+    expect(resolveMigrationTarget('postgres')).toBe(DIRECT_A);
+  });
+
+  // ── NODE_ENV=production trust boundary (Codex P1 follow-up) ─────────────
+  // `migrate-cli.ts` is not local-only: `resolveDriver()` itself defaults to
+  // `postgres` under NODE_ENV=production, so this closes the same
+  // trust-boundary hole as `db-migrate-prod.ts` / `db-aud-a-converge.ts`.
+  it('G: NODE_ENV=production + only DATABASE_URL_UNPOOLED -> that URL (no change from non-production)', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.DATABASE_URL_UNPOOLED = DIRECT_B;
+    expect(resolveMigrationTarget('postgres')).toBe(DIRECT_B);
+  });
+
+  it('H: NODE_ENV=production + only DATABASE_URL (e.g. a custom proxy such as db-proxy.internal) -> throws BEFORE any DB work, no fallback', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.DATABASE_URL = 'postgresql://u:p@db-proxy.internal/app';
+    delete process.env.DATABASE_URL_UNPOOLED;
+    expect(() => resolveMigrationTarget('postgres')).toThrow(
+      /NODE_ENV=production requires DATABASE_URL_UNPOOLED/i,
+    );
+  });
+
+  it('I: NODE_ENV=production + neither var -> throws the production-specific message', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(() => resolveMigrationTarget('postgres')).toThrow(
+      /NODE_ENV=production requires DATABASE_URL_UNPOOLED/i,
+    );
+  });
+
+  it('J: NODE_ENV=production + DATABASE_URL_UNPOOLED carrying a known pooler marker -> still rejected (defense-in-depth)', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.DATABASE_URL_UNPOOLED = POOLED;
+    expect(() => resolveMigrationTarget('postgres')).toThrow(
+      PooledConnectionRejectedError,
+    );
+  });
+
+  it('K: non-production (e.g. test/local) + only DATABASE_URL -> the existing guarded local fallback still works', () => {
+    vi.stubEnv('NODE_ENV', '');
+    process.env.DATABASE_URL = DIRECT_A;
     expect(resolveMigrationTarget('postgres')).toBe(DIRECT_A);
   });
 });
@@ -175,6 +218,21 @@ describe('runMigrateCli orchestration (same URL for migration + convergence)', (
 
     await expect(runMigrateCli(h.deps)).rejects.toThrow(
       /known transaction-pooler/i,
+    );
+
+    expect(h.createDb).not.toHaveBeenCalled();
+    expect(h.runMigrations).not.toHaveBeenCalled();
+  });
+
+  it('postgres + NODE_ENV=production: only DATABASE_URL (db-proxy.internal) fails BEFORE createDb / migration / convergence — required regression (Codex P1 follow-up)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.DB_DRIVER = 'postgres';
+    process.env.DATABASE_URL = 'postgresql://u:p@db-proxy.internal/app';
+    delete process.env.DATABASE_URL_UNPOOLED;
+    const h = makeDeps();
+
+    await expect(runMigrateCli(h.deps)).rejects.toThrow(
+      /NODE_ENV=production requires DATABASE_URL_UNPOOLED/i,
     );
 
     expect(h.createDb).not.toHaveBeenCalled();

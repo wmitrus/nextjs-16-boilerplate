@@ -138,7 +138,8 @@ export async function runMigrations(
         { enforcement: 'enforce', log: postStepLog },
       );
     } else {
-      // Validated direct + present at the top of `runMigrations`.
+      // Checked for a known pooler marker (defense-in-depth only -- does NOT
+      // prove directness) and confirmed present at the top of `runMigrations`.
       const postgresUrl = options.postgresUrl as string;
       const { default: postgres } = await import('postgres');
       const affine = postgres(postgresUrl, {

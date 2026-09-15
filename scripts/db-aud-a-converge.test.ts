@@ -191,7 +191,15 @@ describe('db:aud-a:converge — evidence & recovery formatting', () => {
     // Target
     expect(out).toContain('DATABASE_URL_UNPOOLED');
     expect(out).toContain('ep-x.us-east-1.aws.neon.tech');
-    expect(out).toMatch(/endpoint\s+: direct/);
+    // Codex P1: never claims a verified "direct" endpoint — only reports the
+    // trust boundary (source var) and whether a KNOWN pooler marker matched.
+    expect(out).toMatch(
+      /trust\s+: explicitly operator-configured unpooled endpoint/,
+    );
+    expect(out).toMatch(
+      /known pooler marker\s+: no \(not proof of directness\)/,
+    );
+    expect(out).not.toMatch(/endpoint\s+: direct/);
     // 0023 applied
     expect(out).toMatch(/applied \(columns present\): yes/);
     // audit_events size / cardinality

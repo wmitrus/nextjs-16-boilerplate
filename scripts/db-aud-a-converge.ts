@@ -233,7 +233,10 @@ export function formatEvidence(
   L.push(`  protocol               : ${target.protocol}`);
   L.push(`  hostname               : ${target.hostname}`);
   L.push(`  database               : ${target.database}`);
-  L.push(`  endpoint               : ${target.pooled ? 'POOLED' : 'direct'}`);
+  L.push(`  trust                  : ${target.trust}`);
+  L.push(
+    `  known pooler marker    : ${target.knownPoolerMarker ? 'YES — would be rejected' : 'no (not proof of directness)'}`,
+  );
   L.push('');
   L.push('Migration 0023 (additive expand):');
   L.push(

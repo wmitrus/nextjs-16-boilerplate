@@ -169,11 +169,11 @@ Operational commands:
 - `pnpm db:pglite:migrate` → uses the PGlite dev config
 - `pnpm db:pglite:seed` → seeds the canonical PGlite local database
 - `pnpm db:pglite:studio` → opens studio for the canonical PGlite local database
-- `pnpm db:dev:migrate` → uses the dev Postgres config against `127.0.0.1:5432/app_dev`
-- `pnpm db:test:migrate` → uses the test Postgres config against `127.0.0.1:5433/app_test`
+- `pnpm db:dev:migrate` → routes through `src/core/db/migrate-cli.ts` (the same convergence-aware executor as `db:pglite:migrate`) against `127.0.0.1:5432/app_dev`, then runs the AUD·A post-migrate convergence — NOT a bare `drizzle-kit migrate` (Codex P2)
+- `pnpm db:test:migrate` → same executor against `127.0.0.1:5433/app_test`
 - `pnpm db:dev:studio` → opens studio for the dev Postgres config
 - `pnpm db:test:studio` → opens studio for the test Postgres config
-- `pnpm db:migrate:prod` → uses prod config; requires `DATABASE_URL_UNPOOLED` explicitly (no fallback to `DATABASE_URL`)
+- `pnpm db:migrate:prod` → uses prod config; requires `DATABASE_URL_UNPOOLED` explicitly (no fallback to `DATABASE_URL`); on `VERCEL_ENV=preview` also auto-runs AUD·A convergence after migration + journal validation succeed (not on `VERCEL_ENV=production`)
 
 ## CI Guidance
 

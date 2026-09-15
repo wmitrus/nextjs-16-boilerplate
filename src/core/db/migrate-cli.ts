@@ -42,15 +42,20 @@ function resolveDriver(): DbDriver {
  * different branches) could run migration 0023 on one database and the
  * `CREATE INDEX CONCURRENTLY` / FK `VALIDATE` convergence on another.
  *
- * - `postgres`: `DATABASE_URL_UNPOOLED` (preferred) else `DATABASE_URL`. It
- *   must exist, and is checked for a KNOWN pooler marker (defense-in-depth
- *   only -- `assertNoKnownPoolerMarker`, no duplicated pooler detection) --
+ * - `postgres` + `NODE_ENV=production`: `migrate-cli.ts` is not local-only --
+ *   `resolveDriver()` itself defaults to `postgres` under
+ *   `NODE_ENV=production`. So in a production context this requires
+ *   `DATABASE_URL_UNPOOLED` explicitly and does NOT fall back to
+ *   `DATABASE_URL` (Codex P1 follow-up): the same no-fallback contract as
+ *   the dedicated Production DDL/convergence surfaces
+ *   (`scripts/db-migrate-prod.ts`, `scripts/db-aud-a-converge.ts`).
+ * - `postgres` + non-production (local/dev/test): `DATABASE_URL_UNPOOLED`
+ *   (preferred) else `DATABASE_URL` -- the existing guarded local fallback.
+ *   Either way the resolved URL is checked for a KNOWN pooler marker
+ *   (defense-in-depth only -- `assertNoKnownPoolerMarker`, no duplicated
+ *   pooler detection: absence of a marker is NOT proof of directness) --
  *   this fails closed HERE, before any DB client is opened or the migrator
- *   can run. This is the local/PGlite-adjacent entrypoint
- *   (`pnpm db:pglite:migrate`); Production DDL/convergence
- *   (`scripts/db-migrate-prod.ts`, `scripts/db-aud-a-converge.ts`) does NOT
- *   fall back to `DATABASE_URL` and requires `DATABASE_URL_UNPOOLED`
- *   explicitly (Codex P1).
+ *   can run.
  * - `pglite`: `DATABASE_URL` as-is (optional; unchanged behavior).
  */
 export function resolveMigrationTarget(driver: DbDriver): string | undefined {
@@ -58,13 +63,19 @@ export function resolveMigrationTarget(driver: DbDriver): string | undefined {
     return process.env.DATABASE_URL?.trim() || undefined;
   }
 
-  const url =
-    process.env.DATABASE_URL_UNPOOLED?.trim() ||
-    process.env.DATABASE_URL?.trim();
+  const isProduction = process.env.NODE_ENV === 'production';
+  const unpooledUrl = process.env.DATABASE_URL_UNPOOLED?.trim();
+  const url = isProduction
+    ? unpooledUrl
+    : unpooledUrl || process.env.DATABASE_URL?.trim();
 
   if (!url) {
     throw new Error(
-      '[migrate-cli] DATABASE_URL_UNPOOLED or DATABASE_URL is required for postgres.',
+      isProduction
+        ? '[migrate-cli] NODE_ENV=production requires DATABASE_URL_UNPOOLED ' +
+            'explicitly for postgres. DATABASE_URL is NOT accepted as a ' +
+            'fallback in a production context (Codex P1).'
+        : '[migrate-cli] DATABASE_URL_UNPOOLED or DATABASE_URL is required for postgres.',
     );
   }
 

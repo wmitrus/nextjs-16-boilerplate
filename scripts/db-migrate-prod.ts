@@ -2,7 +2,16 @@ import './load-env';
 
 import { spawnSync } from 'node:child_process';
 
-import { assertNoKnownPoolerMarker } from '@/core/db/post-migrate-steps';
+import postgres from 'postgres';
+
+import {
+  assertNoKnownPoolerMarker,
+  isPooledPostgresUrl,
+  runAudAPostMigrateSteps,
+  sqlRunnerFromPostgres,
+  type AudAPostMigrateResult,
+  type SqlRunner,
+} from '@/core/db/post-migrate-steps';
 
 import { reconcileKnownMigrationState } from './reconcile-known-migration-state';
 import {
@@ -49,12 +58,23 @@ export function resolveMigrationUrlWithSource(
   };
 }
 
+/**
+ * Describe the migration target for logging/evidence WITHOUT claiming to
+ * have verified it is direct (Codex P1). `knownPoolerMarker` reuses the SAME
+ * predicate ({@link isPooledPostgresUrl}) the reject path uses, so reporting
+ * and rejection can never disagree; a `false` value means "no known marker
+ * matched", never "confirmed direct" -- an unrecognized custom pooler/proxy
+ * matches no marker and would also report `false` here. `trust` states the
+ * actual trust boundary: the operator explicitly put this URL in
+ * `DATABASE_URL_UNPOOLED`.
+ */
 export function describeMigrationTarget(resolved: ResolvedMigrationUrl): {
   database: string;
   hostname: string;
-  pooled: boolean;
+  knownPoolerMarker: boolean;
   protocol: string;
   source: MigrationUrlSource;
+  trust: string;
 } {
   const parsed = new URL(resolved.url);
 
@@ -63,7 +83,8 @@ export function describeMigrationTarget(resolved: ResolvedMigrationUrl): {
     protocol: parsed.protocol,
     hostname: parsed.hostname,
     database: parsed.pathname.replace(/^\//, ''),
-    pooled: /pooler/i.test(parsed.hostname),
+    knownPoolerMarker: isPooledPostgresUrl(resolved.url),
+    trust: 'explicitly operator-configured unpooled endpoint',
   };
 }
 
@@ -94,7 +115,80 @@ function runDrizzleMigrate(): void {
   }
 }
 
-export async function run(argv = process.argv.slice(2)): Promise<void> {
+/**
+ * Injectable seam for the Preview auto-convergence step ONLY, so it can be
+ * unit-tested deterministically without a database. Reuses the SAME
+ * `runAudAPostMigrateSteps` executor as `db:aud-a:converge --apply` and the
+ * Testcontainers/local `runMigrations` path — no second implementation.
+ */
+export interface MigrateProdDeps {
+  runConvergence: typeof runAudAPostMigrateSteps;
+  openConvergenceRunner: (url: string) => {
+    runner: SqlRunner;
+    close: () => Promise<unknown>;
+  };
+}
+
+function defaultMigrateProdDeps(): MigrateProdDeps {
+  return {
+    runConvergence: runAudAPostMigrateSteps,
+    openConvergenceRunner: (url) => {
+      const sql = postgres(url, {
+        prepare: false,
+        max: 1,
+        idle_timeout: 5,
+        connect_timeout: 10,
+      });
+      return {
+        runner: sqlRunnerFromPostgres(sql),
+        close: () => sql.end({ timeout: 5 }),
+      };
+    },
+  };
+}
+
+/**
+ * Vercel Preview convergence (Codex P2 follow-up). The actual Preview
+ * migration path is the Vercel Build Command `pnpm db:migrate:prod && pnpm
+ * build` -- there is no separate `db:aud-a:converge --apply` step for
+ * Preview, so without this, Preview would stop getting the automatic AUD·A
+ * convergence the rollout promised. Runs ONLY when `VERCEL_ENV=preview`,
+ * ONLY after the journaled migration and exact journal validation succeed,
+ * and ONLY on `DATABASE_URL_UNPOOLED` (the already-established trust
+ * boundary -- no new URL resolution). Never runs for
+ * `VERCEL_ENV=production`: ordinary Production stays the operator-gated
+ * `db:aud-a:converge --check` then `--apply --production-approved`.
+ */
+async function runPreviewConvergence(
+  connectionString: string,
+  deps: MigrateProdDeps,
+): Promise<AudAPostMigrateResult | undefined> {
+  if (process.env.VERCEL_ENV !== 'preview') {
+    return undefined;
+  }
+
+  console.log(
+    '[db-migrate-prod] VERCEL_ENV=preview — running AUD·A post-migrate ' +
+      'convergence automatically on a dedicated single session…',
+  );
+  const { runner, close } = deps.openConvergenceRunner(connectionString);
+  try {
+    const result = await deps.runConvergence(runner, 'concurrent', {
+      enforcement: 'enforce',
+    });
+    console.log(
+      JSON.stringify({ audAConverge: { applied: true, ...result } }, null, 2),
+    );
+    return result;
+  } finally {
+    await close();
+  }
+}
+
+export async function run(
+  argv = process.argv.slice(2),
+  deps: MigrateProdDeps = defaultMigrateProdDeps(),
+): Promise<void> {
   const dryRun = argv.includes('--check');
   const migrationUrl = resolveMigrationUrlWithSource(
     process.env.DATABASE_URL_UNPOOLED,
@@ -192,14 +286,19 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
   // OZI-71 AUD·A operational split (Codex P1): the long-running AUD·A
   // convergence (`CREATE INDEX CONCURRENTLY idx_audit_events_organization_occurred`
   // with statement_timeout=0, and `VALIDATE CONSTRAINT` on both deferred FKs
-  // with statement_timeout up to 1h) is NOT run here. Per the AUD·A Production
-  // DDL safety plan it is a separately operator-approved step:
+  // with statement_timeout up to 1h) is NOT run inline here. For
+  // `VERCEL_ENV=preview` it runs automatically right after journal
+  // validation below (`runPreviewConvergence` -- one Vercel Build Command,
+  // `pnpm db:migrate:prod && pnpm build`, so there is no separate Preview
+  // convergence step to invoke). For ordinary Production it stays a
+  // separately operator-approved step per the AUD·A Production DDL safety
+  // plan:
   //   pnpm db:aud-a:converge --check                       (read-only evidence)
   //   pnpm db:aud-a:converge --apply --production-approved  (mutating)
   // AUD·A is additive-only: the legacy runtime path stays authoritative, the
   // NOT VALID FKs still enforce new/changed rows, and the deferred index is
-  // not required by the legacy runtime — so a normal deploy applies 0023 and
-  // exits without touching those operations.
+  // not required by the legacy runtime — so a normal Production deploy
+  // applies 0023 and exits without touching those operations.
   runDrizzleMigrate();
 
   const repairSummary = await repairKnownMigrationJournalDrift({
@@ -228,6 +327,8 @@ export async function run(argv = process.argv.slice(2)): Promise<void> {
     ),
   );
   assertMigrationJournalComplete(journalSummary);
+
+  await runPreviewConvergence(connectionString, deps);
 }
 
 const isMain =

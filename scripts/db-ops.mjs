@@ -66,11 +66,30 @@ function run(cmd, args, env) {
   }
 }
 
-function runMigrate(url, target) {
-  const config = getDrizzleConfig(target);
-  run('pnpm', ['exec', 'drizzle-kit', 'migrate', `--config=${config}`], {
+/**
+ * Runs migrations through the SAME convergence-aware executor as
+ * `pnpm db:pglite:migrate` (`src/core/db/migrate-cli.ts` -> `runMigrations`)
+ * instead of a bare `drizzle-kit migrate` (Codex P2 follow-up): bare
+ * `drizzle-kit migrate` applies journaled migration 0023 but never runs the
+ * AUD·A post-migrate convergence (`CREATE INDEX CONCURRENTLY` / deferred FK
+ * `VALIDATE CONSTRAINT`), so `idx_audit_events_organization_occurred` and
+ * the deferred FKs could stay unconverged locally after a "successful"
+ * migrate/reset.
+ *
+ * `url` here is the ONE already-guarded canonical local container target
+ * (`resolveUrl` + `guardDevOperation`/`guardTestOperation` above). Both
+ * `DATABASE_URL` AND `DATABASE_URL_UNPOOLED` are pinned to it explicitly in
+ * the child env so a stale/inherited remote `DATABASE_URL_UNPOOLED` (e.g.
+ * exported in the shell from prod/preview work) can never win --
+ * `migrate-cli.ts` prefers `DATABASE_URL_UNPOOLED` for `driver=postgres`.
+ */
+export function runMigrate(url) {
+  run('pnpm', ['exec', 'tsx', 'src/core/db/migrate-cli.ts'], {
     ...process.env,
     DATABASE_URL: url,
+    DATABASE_URL_UNPOOLED: url,
+    DB_DRIVER: 'postgres',
+    DB_PROVIDER: 'drizzle',
   });
 }
 
@@ -154,7 +173,7 @@ async function main() {
   }
 
   if (operation === 'migrate') {
-    runMigrate(url, target);
+    runMigrate(url);
     return;
   }
 
@@ -186,7 +205,7 @@ async function main() {
     runSchemaReset(url);
 
     process.stdout.write('[db-ops] Running migrations...\n');
-    runMigrate(url, target);
+    runMigrate(url);
 
     process.stdout.write('[db-ops] Running seed...\n');
     runSeed(url);
@@ -195,8 +214,17 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  const message = err instanceof Error ? err.message : String(err);
-  process.stderr.write(`[db-ops] Fatal error: ${message}\n`);
-  process.exit(1);
-});
+// Import-safe entry point (`docs/ai/general/SCRIPT_IMPLEMENTATION_PATTERNS.md`):
+// only auto-run when executed directly, so this module can be imported by
+// `db-ops.test.ts` without triggering `main()` against the test runner's argv.
+const isMain =
+  typeof process.argv[1] === 'string' &&
+  process.argv[1].endsWith('/db-ops.mjs');
+
+if (isMain) {
+  main().catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[db-ops] Fatal error: ${message}\n`);
+    process.exit(1);
+  });
+}

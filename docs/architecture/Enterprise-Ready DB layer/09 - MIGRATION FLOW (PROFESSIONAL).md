@@ -21,10 +21,10 @@ pnpm db:test:migrate
 ## PROD – Supabase
 
 ```bash
-DATABASE_URL_UNPOOLED=postgres://direct-host/... DATABASE_URL=postgres://runtime-host/... pnpm db:migrate:prod
+DATABASE_URL_UNPOOLED=postgres://direct-host/... pnpm db:migrate:prod
 ```
 
-`pnpm db:migrate:prod` prefers `DATABASE_URL_UNPOOLED` when it is present and falls back to `DATABASE_URL` only when that effective migration sink is already a direct connection.
+`pnpm db:migrate:prod` requires `DATABASE_URL_UNPOOLED` explicitly and does **not** fall back to `DATABASE_URL` (Codex P1): `DATABASE_URL_UNPOOLED` is the operator trust boundary for Production DDL, since a pooler/proxy hostname pattern cannot be reliably distinguished from a genuinely direct one.
 
 > Always run migrations locally before deploying.
 

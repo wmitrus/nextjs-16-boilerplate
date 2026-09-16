@@ -5,91 +5,82 @@
  * This is deliberately NOT `flock()`: `flock()` locks are tied to an open
  * file description and are released automatically by the kernel if the
  * holding process dies, with no manual bookkeeping. A plain lock file has
- * no such auto-release — a crashed holder leaves the file behind, which is
- * exactly why this module also records who holds it and checks liveness
- * before treating an existing lock file as stale.
+ * no such auto-release — a crashed holder leaves the file behind. This
+ * module records who holds it (PID + process start time, for diagnostics
+ * and to distinguish a live holder from a stale record) but deliberately
+ * does NOT act on that automatically: see below.
  *
  * Race analysis:
  * - Fresh publish (no existing lock file): the holder record
- *   (`<pid>:<startTime>:<nonce>`) is written IN FULL to a private temp
- *   sibling first ({@link writeNewFileDurablyWithinBase}), then `link(2)`'d
- *   onto the lock path ({@link publishFileAtomicallyWithinBase}). `link(2)`
+ *   (`<pid>:<startTime>`) is written IN FULL to a private temp sibling
+ *   first ({@link writeNewFileDurablyWithinBase}), then `link(2)`'d onto
+ *   the lock path ({@link publishFileAtomicallyWithinBase}). `link(2)`
  *   fails closed with `EEXIST` if the destination already exists, and is
  *   the true linearization point: only one process can ever win that link
  *   for a given path. An earlier design published via `open(path, 'wx')`
  *   immediately followed by a SEPARATE `writeSync`, which left a window
  *   where a second process could observe the just-created (still EMPTY)
- *   file, read `''`, decode no holder from it, conclude the lock was
- *   stale, delete it, and create its own — letting two processes acquire
- *   at once (OZI-28 real two-process contention regression, fixed by the
- *   write-before-publish ordering above).
- * - Stale-lock reclamation and release both need to REMOVE an existing
- *   directory entry, and removal is where a second, more subtle race
- *   lives: `unlink(2)` (and `rename(2)`, used as a clobbering "publish")
- *   are PATHNAME-based — they act on whatever CURRENTLY occupies a path,
- *   not on the specific generation a caller earlier read and validated.
- *   A plain "read the holder, decide it's stale, `unlink` the path" (or
- *   "release: `unlink` whatever is at the path") is a genuine TOCTOU: a
- *   second contender can observe the SAME stale generation, and whichever
- *   of the two runs its cleanup+republish LAST can `unlink` the FIRST
- *   one's freshly published, live generation instead of the stale one it
- *   actually validated — a lost-update on the directory entry, not on the
- *   file content. No amount of re-reading immediately before the `unlink`
- *   closes this: the read and the removal are still two separate syscalls
- *   with a window between them.
- *
- *   The fix: {@link grabAndVerifyGeneration} never removes a path by name
- *   alone. It first calls `rename(2)` ({@link renameSyncWithinBase}) to
- *   ATOMICALLY move whatever currently occupies the path into a private,
- *   uniquely-named sibling only this call knows about — ONE syscall, so
- *   there is no window where a second caller could grab the same
- *   directory entry (a second `rename(2)` against an already-moved source
- *   fails closed with `ENOENT`). Only AFTER exclusively possessing
- *   whatever was grabbed does it compare that file's FULL CONTENT against
- *   the generation the caller actually validated (observed as stale
- *   moments earlier for reclaim; the exact record this call itself
- *   published for release). A match means it is genuinely safe to
- *   discard. A mismatch means this call is holding a DIFFERENT (possibly
- *   live, possibly a just-published successor) generation than the one it
- *   validated — never once decided to discard blind — so it restores that
- *   exact file with a no-clobber `link(2)` publish and reports the loss,
- *   instead of destroying it.
- *
- *   Content, not filesystem `(dev, ino)` identity, is the comparison key:
- *   an inode number is NOT a safe proxy for "same generation" here —
- *   once a generation's last link is unlinked (during the 'owned' cleanup
- *   below), the kernel is free to hand that EXACT inode number to the very
- *   next file created on the same filesystem (observed directly while
- *   building this fix: two `acquireLock` calls back-to-back on a tmpfs
- *   temp dir reused the same inode). Comparing `(dev, ino)` alone would
- *   therefore risk a false "match" against an unrelated, brand-new
- *   generation that happened to recycle the old generation's inode number
- *   — an ABA problem. The holder record's random per-acquisition nonce
- *   makes full-content equality a safe, ABA-proof generation fingerprint
- *   instead: two DIFFERENT `acquireLock` calls can never produce the same
- *   content.
- *
- *   This preserves the original design's mutual-exclusion guarantee
- *   (still exactly one winning `link(2)` per generation) while also
- *   making reclaim and release safe against the ordering the create/write
- *   fix alone did not cover.
- * - No safe way to make an automatic reclaim retry indefinitely without
- *   risking starvation under sustained contention, so a lost reclaim (or a
- *   `grabAndVerifyGeneration` call that finds nothing left to grab because
- *   another contender already won) fails closed with `LockHeldError`
- *   rather than looping — matching the module's existing "fail fast, do
- *   not retry" contract.
+ *   file and misread it — fixed by the write-before-publish ordering
+ *   above.
+ * - Existing lock file, holder confirmed live: fails closed with
+ *   `LockHeldError`, as always.
+ * - Existing lock file, holder stale (process gone, or a start-time
+ *   mismatch indicating PID reuse): ALSO fails closed, with
+ *   `StaleLockError`, rather than reclaiming it automatically. This
+ *   module previously attempted automatic reclamation and went through
+ *   two increasingly careful designs, both of which turned out to still
+ *   be exploitable with two or more concurrent contenders:
+ *     1. Reclaim via a plain `unlink` of the stale path: a second
+ *        contender that read the SAME stale record could unlink the
+ *        FIRST contender's freshly published, live generation instead of
+ *        the stale one it actually validated (a lost-update on the
+ *        directory entry).
+ *     2. Reclaim via `rename(2)`-grab-then-verify (move whatever is at
+ *        the path into a private sibling, compare its content against the
+ *        stale record actually observed, restore on mismatch): this closed
+ *        (1) for exactly two contenders, but the grab step itself leaves
+ *        the lock path OBSERVABLY ABSENT while the grabbed file is being
+ *        verified. With a THIRD contender in flight, that vacancy window
+ *        is a real acquisition opportunity: contender A reclaims and
+ *        publishes; contender B (still acting on its stale, pre-reclaim
+ *        observation) grabs A's fresh generation, finds a content
+ *        mismatch, and while trying to restore it, contender C observes
+ *        the lock path as vacant (B's grab briefly removed the only entry)
+ *        and publishes its own generation — B's restore attempt then
+ *        loses to C's fresh `link`, and A, B's restore-failure path, and C
+ *        can all end up believing they hold a valid lock. There is no
+ *        atomic primitive available here ("remove path P only if it still
+ *        holds exactly the generation I validated") that avoids this
+ *        vacancy window — `unlink`/`rename` unconditionally vacate the
+ *        directory entry as their first, uninterruptible effect.
+ *   Given no safe automatic reclamation protocol exists with the
+ *   filesystem primitives available (portable, no new dependency), the
+ *   safety invariant wins over convenience: a stale lock is left exactly
+ *   as found, and `StaleLockError` tells the operator to confirm the
+ *   previous run is genuinely gone and remove it manually.
+ * - Release is one-shot at the acquisition-handle level (a `released`
+ *   guard flag in the closure): calling the SAME handle's `release()`
+ *   more than once only unlinks the path on the FIRST call. Because
+ *   automatic reclamation no longer exists, a compliant contender can
+ *   never publish a successor generation while this holder's own
+ *   generation is still live and unreleased — `LockHeldError` blocks it
+ *   unconditionally — so there is no scenario in normal operation where a
+ *   second `release()` call could ever remove someone else's generation;
+ *   the one-shot guard exists to make that invariant explicit and cheap
+ *   rather than to compensate for a race. (Manually deleting a live lock
+ *   file out from under a still-running process is the documented,
+ *   deliberate operator escape hatch for a stuck reconciliation and is
+ *   outside what this module can or should protect against.)
  * - PID reuse: checking `process.kill(pid, 0)` alone is not sufficient —
  *   after a crash, the OS can eventually reassign the recorded PID to an
  *   unrelated, live process, which would make a stale lock look "held" by
- *   a process that has nothing to do with the original reconciler. This
- *   cannot cause two writers to proceed at once (the exclusion guarantee
- *   above still holds) — its only failure mode is over-cautious blocking
- *   (a false "still held") until the reused PID's unrelated process also
- *   exits. To close this gap, the lock file also records the holder's
- *   process start time (from `/proc/<pid>/stat`, Linux/WSL-native, no
- *   dependency) and liveness is only trusted when both the PID is alive
- *   AND its start time still matches what was recorded.
+ *   a process that has nothing to do with the original reconciler. To
+ *   close this gap, the lock file also records the holder's process start
+ *   time (from `/proc/<pid>/stat`, Linux/WSL-native, no dependency) and
+ *   liveness is only trusted when both the PID is alive AND its start
+ *   time still matches what was recorded — this affects only WHICH error
+ *   (`LockHeldError` vs `StaleLockError`) an operator sees, never whether
+ *   an automatic destructive cleanup happens (it never does).
  * - WSL/Linux: correct as long as the lock path is on the WSL-native
  *   (ext4-backed) filesystem, not a `/mnt/c/...` Windows-mounted path —
  *   `config.ts` places it under `~/.local/state/...`, which is native.
@@ -106,7 +97,7 @@ import {
   publishFileAtomicallyWithinBase,
   readTextFileWithinBase,
   removeCreatedArtifactsWithinBase,
-  renameSyncWithinBase,
+  unlinkSyncWithinBase,
   writeNewFileDurablyWithinBase,
 } from '../../lib/fs-guards-shared';
 
@@ -120,22 +111,24 @@ export class LockHeldError extends Error {
 }
 
 /**
- * Testing-only seams for `lock.stale-race`-style deterministic regression
- * tests. Never used in production — every hook defaults to a no-op, so
- * omitting the third argument (as every real caller does) is behaviorally
- * identical to the hookless version of this module.
+ * Thrown when an existing lock file's recorded holder is NOT confirmed
+ * live (the process is gone, or a start-time mismatch indicates PID
+ * reuse). Deliberately NOT auto-cleared — see the file-level doc comment
+ * for why no automatic reclamation protocol here is safe under 3+-way
+ * contention. The operator must confirm the previous run is genuinely gone
+ * and remove the lock file manually before retrying.
  */
-export interface AcquireLockHooks {
-  /**
-   * Invoked synchronously immediately after `acquireLock` has determined an
-   * EXISTING lock file is stale, but BEFORE it attempts to reclaim it. Lets
-   * a test deterministically force a second, independent contender to fully
-   * reclaim-and-publish its own generation while this call is "paused"
-   * here — proving the reclaim below correctly detects and safely loses
-   * that race (restoring the second contender's fresh generation) instead
-   * of destroying it.
-   */
-  afterStaleDetected?: () => void;
+export class StaleLockError extends Error {
+  constructor(lockPath: string, holderRecord: string) {
+    super(
+      `Reconciliation lock at ${lockPath} appears STALE (recorded holder: ` +
+        `${holderRecord}) — automatic stale-lock reclamation is not ` +
+        'performed (safety over automatic crash recovery). Confirm the ' +
+        'previous run is genuinely gone, then remove this lock file ' +
+        'manually before retrying.',
+    );
+    this.name = 'StaleLockError';
+  }
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -170,19 +163,10 @@ function processStartTime(pid: number): string | null {
   }
 }
 
-/**
- * `<pid>:<startTime>:<nonce>` — the trailing nonce is NOT used for liveness
- * ({@link holderStillValid} only ever looks at the first two fields); it
- * exists purely so every acquisition's record is unique even when the same
- * process (same pid, same start time) re-acquires the same path, making
- * full-content equality a safe generation fingerprint for
- * {@link grabAndVerifyGeneration} (see the file-level doc comment on why
- * filesystem inode identity is NOT safe for that comparison).
- */
+/** `<pid>:<startTime>`, or bare `<pid>` when the start time is unavailable — diagnostics only, not a generation identity/comparison key. */
 function encodeHolder(pid: number): string {
   const startTime = processStartTime(pid);
-  const nonce = randomBytes(8).toString('hex');
-  return `${pid}:${startTime ?? ''}:${nonce}`;
+  return startTime !== null ? `${pid}:${startTime}` : String(pid);
 }
 
 function decodeHolder(
@@ -191,13 +175,7 @@ function decodeHolder(
   const [pidPart, startTimePart] = content.trim().split(':');
   const pid = Number.parseInt(pidPart, 10);
   if (!Number.isFinite(pid)) return null;
-  return {
-    pid,
-    startTime:
-      startTimePart === undefined || startTimePart === ''
-        ? null
-        : startTimePart,
-  };
+  return { pid, startTime: startTimePart ?? null };
 }
 
 /** True only when the recorded holder is both alive and confirmed to be the same process (not a PID reuse). */
@@ -228,86 +206,18 @@ function currentHolderLabel(targetPath: string, ledgerDir: string): string {
   return holder || 'unknown';
 }
 
-type GrabOutcome = 'absent' | 'owned' | 'foreign';
-
 /**
- * Atomically grab whatever currently occupies `targetPath` into a private,
- * uniquely-named sibling, then verify — by comparing that file's FULL
- * CONTENT, never by re-reading/re-trusting `targetPath` a second time —
- * whether what was grabbed is the SAME generation the caller already
- * validated (`expectedContent`). See the file-level doc comment for the
- * full race analysis, including why content (not filesystem inode
- * identity) is the safe comparison key.
- *
- * - `'absent'`: nothing was at `targetPath` any more (`ENOENT`) — this call
- *   never got exclusive possession of anything; it lost the contention
- *   entirely and must not act as though it succeeded.
- * - `'owned'`: what was grabbed matches `expectedContent` exactly —
- *   discarded; the caller may now safely proceed (reclaim: publish a fresh
- *   generation; release: done).
- * - `'foreign'`: what was grabbed has DIFFERENT content — restored
- *   (no-clobber `link(2)`) so its rightful owner still finds it; the caller
- *   has lost this contention and must not act as though it succeeded.
- */
-function grabAndVerifyGeneration(
-  targetPath: string,
-  ledgerDir: string,
-  expectedContent: string,
-  label: string,
-): GrabOutcome {
-  const grabPath = `${targetPath}.${process.pid}.${randomBytes(4).toString('hex')}.grab`;
-
-  try {
-    renameSyncWithinBase(targetPath, grabPath, ledgerDir, `${label} (grab)`);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 'absent';
-    throw err;
-  }
-
-  const grabbedContent = readTextFileWithinBase(
-    grabPath,
-    ledgerDir,
-    `${label} (grab)`,
-  ).trim();
-
-  if (grabbedContent === expectedContent) {
-    removeCreatedArtifactsWithinBase(
-      [grabPath],
-      ledgerDir,
-      `${label} (grab cleanup)`,
-    );
-    return 'owned';
-  }
-
-  try {
-    publishFileAtomicallyWithinBase(
-      grabPath,
-      targetPath,
-      ledgerDir,
-      `${label} (restore)`,
-    );
-  } catch (restoreErr) {
-    // Pathological: a THIRD generation has since appeared at `targetPath`
-    // too, so even the no-clobber restore lost its own race. Never
-    // silently drop the (possibly live) generation still sitting in
-    // `grabPath` — surface loudly instead.
-    throw new Error(
-      `[lock] internal consistency failure at ${targetPath}: grabbed a foreign generation and could not restore it (${(restoreErr as Error).message}).`,
-    );
-  }
-  return 'foreign';
-}
-
-/**
- * Acquire the lock or throw `LockHeldError`. Caller must call the returned
- * `release()`. `lockPath` is confined to `ledgerDir` at every filesystem
- * sink — `path.resolve()` alone normalizes but does not confine, and
- * `ledgerDir` is fully operator-configurable (`AI_INBOX_LEDGER_DIR`).
+ * Acquire the lock or throw `LockHeldError` (live holder) /
+ * `StaleLockError` (stale holder — requires manual cleanup; see the
+ * file-level doc comment for why this is not reclaimed automatically).
+ * Caller must call the returned `release()`. `lockPath` is confined to
+ * `ledgerDir` at every filesystem sink — `path.resolve()` alone normalizes
+ * but does not confine, and `ledgerDir` is fully operator-configurable
+ * (`AI_INBOX_LEDGER_DIR`).
  */
 export function acquireLock(
   lockPath: string,
   ledgerDir: string,
-  hooks: AcquireLockHooks = {},
 ): { release: () => void } {
   const resolved = assertPathWithinBase(
     path.resolve(lockPath),
@@ -324,34 +234,9 @@ export function acquireLock(
     if (holderStillValid(holder)) {
       throw new LockHeldError(resolved, holder || 'unknown');
     }
-
-    hooks.afterStaleDetected?.();
-
-    // Stale lock: owning process is gone (or confirmed to be a different
-    // process via start-time mismatch). Reclaim it SAFELY — never by a
-    // blind path-based unlink, which could delete a different generation
-    // published after `holder` was read above (see the file-level doc
-    // comment).
-    const outcome = grabAndVerifyGeneration(
-      resolved,
-      ledgerDir,
-      holder,
-      'lock file',
-    );
-    if (outcome !== 'owned') {
-      // 'absent': another contender's reclaim-and-republish already won
-      // and grabbed this generation before we could. 'foreign': we grabbed
-      // (and already restored) a DIFFERENT, newer generation than the one
-      // we validated as stale. Either way we lost this round — fail
-      // closed rather than retry (avoids unbounded retry loops / potential
-      // starvation under sustained contention).
-      throw new LockHeldError(
-        resolved,
-        currentHolderLabel(resolved, ledgerDir),
-      );
-    }
-    // outcome === 'owned': genuinely the stale generation we validated,
-    // safely discarded — fall through to publish our own fresh generation.
+    // Stale holder record: FAIL CLOSED. No rename, unlink, replace, or
+    // automatic reclamation of this entry — see the file-level doc comment.
+    throw new StaleLockError(resolved, holder || 'unparseable');
   }
 
   // First run against the documented default ledger dir (or any new
@@ -368,12 +253,11 @@ export function acquireLock(
   // publish it onto `resolved` with a genuine no-clobber `link(2)` (see the
   // file-level doc comment) — no reader can ever observe `resolved` with
   // partial/empty content.
-  const ownRecord = encodeHolder(process.pid);
   const tempPath = `${resolved}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
   writeNewFileDurablyWithinBase(
     tempPath,
     ledgerDir,
-    ownRecord,
+    encodeHolder(process.pid),
     'lock file (temp)',
   );
   try {
@@ -396,29 +280,17 @@ export function acquireLock(
     throw err;
   }
 
+  // One-shot at the acquisition-handle level: a second call on the SAME
+  // handle is a no-op. See the file-level doc comment for why this alone
+  // is sufficient now that automatic reclamation no longer exists.
+  let released = false;
+
   return {
     release: () => {
-      try {
-        // Verify — via the same grab-and-verify primitive, comparing the
-        // EXACT record this acquisition published above (`ownRecord`) —
-        // that this call only ever removes its own generation, never a
-        // successor's.
-        grabAndVerifyGeneration(
-          resolved,
-          ledgerDir,
-          ownRecord,
-          'lock file (release)',
-        );
-        // 'owned': our own generation was discarded (released). 'absent':
-        // already gone (nothing to do). 'foreign': NOT ours — already
-        // restored inside grabAndVerifyGeneration; must not be touched.
-      } catch (err) {
-        // release() typically runs in a caller's `finally` — never let a
-        // pathological internal-consistency failure here mask an in-flight
-        // exception. Loud, but non-fatal to the caller.
-        console.error(
-          `[lock] release() failed to safely clear ${resolved}: ${(err as Error).message}`,
-        );
+      if (released) return;
+      released = true;
+      if (pathExistsWithinBase(resolved, ledgerDir, 'lock file')) {
+        unlinkSyncWithinBase(resolved, ledgerDir, 'lock file');
       }
     },
   };

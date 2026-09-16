@@ -282,6 +282,7 @@ const eslintConfig = defineConfig([
       'scripts/ai-tooling/lib/fuzzy-and-audit.test.ts',
       'scripts/ai-tooling/lib/ledger.test.ts',
       'scripts/ai-tooling/lib/lock.concurrency.test.ts',
+      'scripts/ai-tooling/lib/lock.stale-race.test.ts',
       'scripts/ai-tooling/lib/lock.test.ts',
       'scripts/ai-tooling/lib/reconcile.test.ts',
     ],

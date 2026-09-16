@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   realpathSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -286,6 +287,34 @@ export function removeCreatedArtifactsWithinBase(
       // a best-effort cleanup fsync failure must not mask the original error
     }
   }
+}
+
+/**
+ * Atomically rename `fromPath` to `toPath`, both confined to `baseDir` —
+ * ONE kernel syscall, not a userspace check-then-act. Two distinct,
+ * deliberately non-overlapping uses:
+ *
+ * - As a noreplace-style CREATE guard, it is NOT safe: POSIX `rename(2)`
+ *   silently REPLACES an existing `toPath` rather than failing — use
+ *   {@link publishFileAtomicallyWithinBase} (`link(2)`) when the
+ *   destination must not already exist.
+ * - As an atomic "grab whatever is currently at `fromPath`" primitive, it
+ *   IS safe and is the building block for race-free reclaim/release of a
+ *   contended file: the single syscall either moves the CURRENT entry at
+ *   `fromPath` (whatever it is, even if it changed since the caller last
+ *   looked) or fails closed with `ENOENT` if nothing is there any more —
+ *   there is no window where two callers could both believe they grabbed
+ *   the same entry.
+ */
+export function renameSyncWithinBase(
+  fromPath: string,
+  toPath: string,
+  baseDir: string,
+  label = 'path',
+): void {
+  const safeFrom = assertPathWithinBase(fromPath, baseDir, `${label} (from)`);
+  const safeTo = assertPathWithinBase(toPath, baseDir, `${label} (to)`);
+  renameSync(safeFrom, safeTo);
 }
 
 /**

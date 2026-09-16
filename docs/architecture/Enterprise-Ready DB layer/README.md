@@ -31,9 +31,9 @@ This index provides the recommended reading order for the DB architecture packag
 - Seed architecture and practice: 10, 14, 15, 16, 17
 - Guardrails: 12, 13
 
-## Command map (drizzle-kit only)
+## Command map
 
-- PGLite dev: `pnpm db:pglite:migrate`, `pnpm db:pglite:studio`
-- Dev Postgres: `pnpm db:dev:migrate`, `pnpm db:dev:studio`
-- Test Postgres: `pnpm db:test:migrate`, `pnpm db:test:studio`
-- Production target: `pnpm db:migrate:prod`
+- PGLite dev: `pnpm db:pglite:migrate` (via `migrate-cli.ts`, AUD·A convergence-aware), `pnpm db:pglite:studio` (drizzle-kit)
+- Dev Postgres: `pnpm db:dev:migrate` (via `migrate-cli.ts`, AUD·A convergence-aware), `pnpm db:dev:studio` (drizzle-kit)
+- Test Postgres: `pnpm db:test:migrate` (via `migrate-cli.ts`, AUD·A convergence-aware), `pnpm db:test:studio` (drizzle-kit)
+- Production target: `pnpm db:migrate:prod` (drizzle-kit; requires `DATABASE_URL_UNPOOLED` explicitly, no `DATABASE_URL` fallback)

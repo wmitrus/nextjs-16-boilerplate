@@ -37,6 +37,9 @@ overrides:
   'fast-uri@>=4.0.0 <4.1.1': 4.1.1
   'next@>=16.0.0 <16.2.5': '>=16.2.5'
   'next@>=16.0.0 <16.2.6': '>=16.2.6'
+  # GHSA-p293-qw3h-jr36 (Windows unauth RCE) + GHSA-2xp9-vwfh-vxw4
+  # (Image Optimization AVIF unauth RCE): both fixed in next 16.3.3.
+  'next@>=16.0.0 <16.3.3': '>=16.3.3'
   'ws@>=8.0.0 <8.20.1': '>=8.20.1'
   'brace-expansion@<1.1.18': 1.1.18
   'brace-expansion@>=2.0.0 <2.1.4': 2.1.4
@@ -47,7 +50,10 @@ overrides:
   'tmp@<0.2.6': '>=0.2.6'
   'ws@>=8.0.0 <8.21.0': '>=8.21.0'
   'vite@>=7.0.0 <=7.3.4': '>=7.3.5'
-  'js-yaml@<4.3.1': 4.3.1
+  # GHSA-2883-xcg3-v3hh: maxTotalMergeKeys does not bound CPU for empty
+  # merge sources (ReDoS-class), fixed in 4.3.2. (Also subsumes the earlier
+  # js-yaml <4.3.1 advisory this line previously pinned to 4.3.1.)
+  'js-yaml@<4.3.2': 4.3.2
   'js-yaml@>=5.0.0 <5.2.1': 5.2.1
   'nodemailer@<=8.0.8': '>=8.0.9'
   'nodemailer@<=8.0.7': '>=8.0.8'
@@ -55,7 +61,13 @@ overrides:
   'undici@>=7.23.0 <7.29.0': '>=7.29.0 <8'
   'nodemailer@<=9.0.0': '>=9.0.1'
   'undici@>=7.0.0 <7.29.0': '>=7.29.0 <8'
-  'next>sharp': 0.35.0
+  # GHSA-2x7j-588g-ccc2: quadratic-time ReDoS in nodemailer addressparser,
+  # fixed in 9.1.0. Covers the residual 9.0.x window left by the line above.
+  'nodemailer@>=9.0.0 <9.1.0': '>=9.1.0'
+  # GHSA-rgj7-g3m4-5g8c: libheif vulns reachable through sharp's HEIF
+  # decoder, fixed in sharp 0.35.4. Was previously pinned to an exact
+  # 0.35.0 here, which is what held the transitive `next > sharp` back.
+  'next>sharp': '>=0.35.4'
   '@vitest/browser@>=4.0.0 <4.1.10': 4.1.10
   'nanoid@<3.3.18': 3.3.18
   '@tootallnate/once@<2.0.1': 2.0.1
@@ -63,7 +75,10 @@ overrides:
   'minimatch@>=10.0.0 <10.2.3': 10.2.3
   'path-to-regexp@>=6.0.0 <6.3.0': 6.3.0
   'path-to-regexp@>=8.0.0 <8.4.0': 8.4.0
-  'smol-toml@<1.6.1': 1.6.1
+  # GHSA-7w5x-hrqm-74c2: DoS via malformed TOML documents in smol-toml,
+  # fixed in 1.7.1. (Widened from the earlier <1.6.1 pin.) Dev-only: reached
+  # exclusively through the `vercel` CLI's @vercel/python-analysis.
+  'smol-toml@<1.7.1': '>=1.7.1'
   'tar@>=7.0.0 <7.5.21': 7.5.21
   'browserslist@<4.28.7': '>=4.28.7'
   '@humanfs/node@<0.16.8': '>=0.16.8'
@@ -126,10 +141,27 @@ audit:
   # at that date, re-confirm both the dev-only and the
   # dead-code-on-this-repo's-CDP-path proofs still hold before
   # re-extending the ignore.
+  #
+  # --- GHSA-7pqw-9j4j-h8q3 (extract-zip@2.0.1, arbitrary file write via
+  #     symlink archive entries) ---
+  # Reason: a sibling advisory to GHSA-jmr9-qjv8-65gv above -- same package,
+  # same pinned version (extract-zip@2.0.1), same symlink-archive-entry root
+  # cause, same dependency path (@lhci/cli > lighthouse > puppeteer-core >
+  # @puppeteer/browsers > extract-zip). GitHub advisory (published
+  # 2026-08-17) records `Patched versions: none` -- no fixed extract-zip
+  # release exists, so there is nothing to bump to. Confirmed dev-only and
+  # dead code on this repo's own Lighthouse-CI path by the identical proof
+  # documented for GHSA-jmr9-qjv8-65gv (verified 2026-09-09): the
+  # `preview-deploy.yml` Lighthouse job never lets puppeteer download or
+  # unzip a browser, it drives a pre-installed Chromium over CDP.
+  # Owner: repository maintainers (wmitrus).
+  # Review expiry: 2026-11-22 (quarterly) -- drop the moment a fixed
+  # extract-zip publishes; otherwise re-confirm the shared proof.
   ignore:
     - GHSA-w3rx-r6r6-pgpr
     - GHSA-5p2g-fcmc-qvqq
     - GHSA-jmr9-qjv8-65gv
+    - GHSA-7pqw-9j4j-h8q3
 
 onlyBuiltDependencies:
   - '@clerk/shared'
@@ -179,16 +211,16 @@ minimumReleaseAgeExclude:
   - '@vercel/vc-native-linux-arm64@59.0.0'
   - '@vercel/vc-native-linux-x64@59.0.0'
   - vercel@59.0.0
-  - '@next/env@16.3.2'
-  - '@next/eslint-plugin-next@16.3.2'
-  - '@next/swc-darwin-arm64@16.3.2'
-  - '@next/swc-darwin-x64@16.3.2'
-  - '@next/swc-linux-arm64-gnu@16.3.2'
-  - '@next/swc-linux-arm64-musl@16.3.2'
-  - '@next/swc-linux-x64-gnu@16.3.2'
-  - '@next/swc-linux-x64-musl@16.3.2'
-  - '@next/swc-win32-arm64-msvc@16.3.2'
-  - '@next/swc-win32-x64-msvc@16.3.2'
-  - eslint-config-next@16.3.2
-  - next@16.3.2
+  - '@next/env@16.3.4'
+  - '@next/eslint-plugin-next@16.3.4'
+  - '@next/swc-darwin-arm64@16.3.4'
+  - '@next/swc-darwin-x64@16.3.4'
+  - '@next/swc-linux-arm64-gnu@16.3.4'
+  - '@next/swc-linux-arm64-musl@16.3.4'
+  - '@next/swc-linux-x64-gnu@16.3.4'
+  - '@next/swc-linux-x64-musl@16.3.4'
+  - '@next/swc-win32-arm64-msvc@16.3.4'
+  - '@next/swc-win32-x64-msvc@16.3.4'
+  - eslint-config-next@16.3.4
+  - next@16.3.4
   - fast-uri@3.1.7

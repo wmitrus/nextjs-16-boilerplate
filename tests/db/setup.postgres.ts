@@ -18,7 +18,10 @@ export async function setup(
 
   const client = postgres(url, { max: 1 });
   const db = drizzle(client) as unknown as DrizzleDb;
-  await runMigrations(db, 'postgres');
+  // `postgresUrl` lets `runMigrations` open its own dedicated single-session
+  // client for the AUD·A post-migrate convergence (SET + CONCURRENTLY +
+  // VALIDATE must not span pooled connections).
+  await runMigrations(db, 'postgres', { postgresUrl: url });
   await client.end({ timeout: 5 });
 
   project.provide('TEST_DATABASE_URL', url);

@@ -154,13 +154,15 @@ Drizzle migrations run DDL statements inside a transaction session. PgBouncer (t
 ### Local Migration Against Production Database
 
 1. Copy the **unpooled** connection string from Neon Console or Vercel Storage settings.
-2. Set it in `.env.production`:
+2. Set it in `.env.production` as `DATABASE_URL_UNPOOLED`:
 
 ```dotenv
-DATABASE_URL=postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=require
+DATABASE_URL_UNPOOLED=postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=require
 ```
 
-> Use the `DATABASE_URL_UNPOOLED` value from Vercel, not the pooled `DATABASE_URL`.
+> `db:migrate:prod` requires `DATABASE_URL_UNPOOLED` explicitly and does **not**
+> fall back to `DATABASE_URL` (Codex P1) — setting `DATABASE_URL` here instead
+> has no effect on migrations.
 
 3. Run:
 
@@ -170,7 +172,7 @@ pnpm db:migrate:prod:local
 
 Use `db:migrate:prod:local` only for local operator runs that intentionally load `.env.production`.
 
-`db:migrate:prod` must stay CI-friendly and read the active environment without requiring a local file, preferring `DATABASE_URL_UNPOOLED` and falling back to `DATABASE_URL` only when the effective migration sink is already direct.
+`db:migrate:prod` must stay CI-friendly and read the active environment without requiring a local file. It requires `DATABASE_URL_UNPOOLED` explicitly and does **not** fall back to `DATABASE_URL`: `DATABASE_URL_UNPOOLED` is the operator trust boundary for Production DDL, since a pooler/proxy hostname pattern cannot be reliably distinguished from a genuinely direct one (a custom transaction-mode PgBouncer/proxy would not match any known marker).
 
 **No SSH tunnel required.** Neon supports direct external TLS connections from any IP.
 
@@ -188,7 +190,9 @@ Example:
 pnpm db:migrate:prod && pnpm build
 ```
 
-`db:migrate:prod` already prefers `DATABASE_URL_UNPOOLED` for the Drizzle connection. Do not overwrite `DATABASE_URL` in the Vercel Build Command, because the app runtime should keep the pooled URL while migrations use the direct URL.
+`db:migrate:prod` requires `DATABASE_URL_UNPOOLED` for the Drizzle connection and will fail closed if it is absent. Do not overwrite `DATABASE_URL` in the Vercel Build Command, because the app runtime should keep the pooled URL while migrations use the direct URL.
+
+On Preview specifically (`VERCEL_ENV=preview`), `db:migrate:prod` also automatically runs the AUD·A post-migrate convergence (`CREATE INDEX CONCURRENTLY` / deferred FK `VALIDATE CONSTRAINT`) right after the journaled migration and journal validation succeed, reusing the same executor as `db:aud-a:converge --apply`. It does **not** do this for `VERCEL_ENV=production` — ordinary Production stays the operator-gated `pnpm db:aud-a:converge --check` then `--apply --production-approved`.
 
 2. In GitHub Actions, do **not** run preview migrations before `vercel deploy` and do **not** use `vercel build` / `vercel deploy --prebuilt` for preview deployments.
 
@@ -386,10 +390,12 @@ masked deployment host.
 ```dotenv
 DB_PROVIDER=drizzle
 DB_DRIVER=postgres
-DATABASE_URL=postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=require
+DATABASE_URL_UNPOOLED=postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=require
 ```
 
-Use the `DATABASE_URL_UNPOOLED` value from Neon Console here, not the pooled one.
+Use the **unpooled/direct** value from Neon Console here. `db:migrate:prod`
+requires `DATABASE_URL_UNPOOLED` explicitly and does not read `DATABASE_URL`
+as a fallback (Codex P1).
 
 ---
 

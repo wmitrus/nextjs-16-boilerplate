@@ -79,6 +79,7 @@ export default defineConfig({
         'src/modules/**/infrastructure/drizzle/seed.ts',
         'scripts/bootstrap-admin.ts',
         'scripts/db-migrate-prod.ts',
+        'scripts/db-aud-a-converge.ts',
         'scripts/flags/**',
         'scripts/leantime/**',
         'scripts/new-relic/**',

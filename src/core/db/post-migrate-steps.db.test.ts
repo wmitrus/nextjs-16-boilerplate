@@ -19,12 +19,15 @@ import {
 } from '@/core/db/aud-a-convergence-inspection';
 import { runMigrations } from '@/core/db/migrations/run-migrations';
 import {
+  AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY,
   AUD_A_DEFERRED_FK_VALIDATIONS,
   AUDIT_EVENTS_ORGANIZATION_INDEX,
+  AudAConvergenceAlreadyRunningError,
   AudAConvergenceError,
   DeferredForeignKeyDefinitionMismatchError,
   DeferredIndexDefinitionMismatchError,
   ensureDeferredIndexes,
+  normalizeIndexdef,
   runAudAPostMigrateSteps,
   sqlRunnerFromDrizzle,
   sqlRunnerFromPostgres,
@@ -987,4 +990,164 @@ describe('timeout policy actually enforced on a session-affine connection (fixes
       }
     },
   );
+});
+
+describe('AUD-A convergence advisory-lock serialization (Codex P2, real Postgres)', () => {
+  const LOCK_KEY = AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY;
+
+  /** Probe/manipulate the SAME advisory lock key `runAudAPostMigrateSteps` uses, on a fresh dedicated session. */
+  async function withProbeClient<T>(
+    fn: (probe: {
+      tryLock: () => Promise<boolean>;
+      unlock: () => Promise<void>;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const postgres = (await import('postgres')).default;
+    const client = postgres(testUrl!, { max: 1 });
+    try {
+      return await fn({
+        tryLock: async () => {
+          const rows = (await client.unsafe(
+            `select pg_try_advisory_lock(${LOCK_KEY.namespace}, ${LOCK_KEY.id}) as ok`,
+          )) as Array<{ ok: boolean }>;
+          return rows[0]!.ok;
+        },
+        unlock: async () => {
+          await client.unsafe(
+            `select pg_advisory_unlock(${LOCK_KEY.namespace}, ${LOCK_KEY.id})`,
+          );
+        },
+      });
+    } finally {
+      await client.end({ timeout: 5 });
+    }
+  }
+
+  /** Records every statement issued through `inner`, for asserting a mode never touches the advisory-lock SQL. */
+  function spy(inner: SqlRunner): { queries: string[]; runner: SqlRunner } {
+    const queries: string[] = [];
+    return {
+      queries,
+      runner: {
+        query: async (text) => {
+          queries.push(text);
+          return inner.query(text);
+        },
+      },
+    };
+  }
+
+  it.skipIf(!isRealPg)(
+    'a contending real-Postgres enforce invocation fails CLOSED immediately with zero mutation while the advisory lock is held, and a later run converges normally once it is free',
+    async () => {
+      const fkName = AUD_A_DEFERRED_FK_VALIDATIONS[0]!.constraint;
+
+      await withProbeClient(async (holder) => {
+        // Simulates "convergence A has acquired the lock and is mid-flight":
+        // grab the EXACT key `runAudAPostMigrateSteps` uses, on its own
+        // dedicated session, and hold it (do not release yet).
+        expect(await holder.tryLock()).toBe(true);
+
+        const before = await indexState();
+        const fkBefore = await fkConvalidated(fkName);
+
+        // "Convergence B" — a fully separate dedicated connection — must
+        // fail CLOSED before touching CREATE/DROP INDEX or VALIDATE
+        // CONSTRAINT at all.
+        await expect(
+          runAudAPostMigrateSteps(runner, 'concurrent', {
+            enforcement: 'enforce',
+          }),
+        ).rejects.toThrow(AudAConvergenceAlreadyRunningError);
+
+        // Zero mutation from the failed attempt.
+        expect(await indexState()).toEqual(before);
+        expect(await fkConvalidated(fkName)).toBe(fkBefore);
+
+        // "A" finishes its work and releases.
+        await holder.unlock();
+      });
+
+      // The lock is free — a real convergence now succeeds and reaches the
+      // full AUD-A end state.
+      await expect(
+        runAudAPostMigrateSteps(runner, 'concurrent', {
+          enforcement: 'enforce',
+        }),
+      ).resolves.toBeDefined();
+
+      const after = await indexState();
+      expect(after.exists).toBe(true);
+      expect(after.valid).toBe(true);
+      expect(normalizeIndexdef(after.def!)).toBe(
+        normalizeIndexdef(INDEX.expectedIndexdef),
+      );
+      for (const fk of AUD_A_DEFERRED_FK_VALIDATIONS) {
+        expect(await fkConvalidated(fk.constraint)).toBe(true);
+      }
+    },
+  );
+
+  it.skipIf(!isRealPg)(
+    'the advisory lock releases after a convergence FAILURE too, so a later run can acquire it immediately',
+    async () => {
+      // Force a failure INSIDE the locked region: a same-name VALID index
+      // with the WRONG definition trips `decideDeferredIndexAction`'s
+      // fail-closed check inside `ensureDeferredIndexes`, which only runs
+      // after the advisory lock is already held — proving the `finally`
+      // releases it even on this path.
+      await runner.query(`DROP INDEX IF EXISTS "public"."${INDEX.name}"`);
+      await runner.query(
+        `CREATE INDEX "${INDEX.name}" ON "public"."audit_events" USING btree ("occurred_at")`,
+      );
+
+      await expect(
+        runAudAPostMigrateSteps(runner, 'concurrent', {
+          enforcement: 'enforce',
+        }),
+      ).rejects.toThrow(DeferredIndexDefinitionMismatchError);
+
+      await withProbeClient(async (probe) => {
+        expect(await probe.tryLock()).toBe(true);
+        await probe.unlock();
+      });
+    },
+  );
+
+  it.skipIf(!isRealPg)(
+    'the advisory lock releases after a normal SUCCESSFUL convergence, so a later run can acquire it immediately',
+    async () => {
+      await expect(
+        runAudAPostMigrateSteps(runner, 'concurrent', {
+          enforcement: 'enforce',
+        }),
+      ).resolves.toBeDefined();
+
+      await withProbeClient(async (probe) => {
+        expect(await probe.tryLock()).toBe(true);
+        await probe.unlock();
+      });
+    },
+  );
+
+  it.skipIf(!isRealPg)(
+    '`inspect` mode never invokes the advisory-lock SQL (read-only; no cross-invocation mutation to serialize)',
+    async () => {
+      const { runner: spied, queries } = spy(runner);
+      await runAudAPostMigrateSteps(spied, 'concurrent', {
+        enforcement: 'inspect',
+      });
+      expect(queries.some((q) => /pg_(try_)?advisory_(un)?lock/i.test(q))).toBe(
+        false,
+      );
+    },
+  );
+
+  it('`plain` buildMode (PGlite / local, single-connection) never invokes the advisory-lock SQL, even in enforce mode', async () => {
+    const { runner: spied, queries } = spy(runner);
+    await runAudAPostMigrateSteps(spied, 'plain', { enforcement: 'enforce' });
+    expect(queries.some((q) => /pg_(try_)?advisory_(un)?lock/i.test(q))).toBe(
+      false,
+    );
+  });
 });

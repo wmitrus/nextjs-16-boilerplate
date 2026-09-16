@@ -33,6 +33,12 @@
  * expand migration has not been applied yet) the index step defers instead
  * of failing.
  *
+ * Real-Postgres `enforce`-mode runs additionally serialize on a PostgreSQL
+ * session advisory lock (Codex P2) — see `runAudAPostMigrateSteps`'s doc
+ * comment — because two independent invocations observing the SAME
+ * INVALID/interrupted index build cannot otherwise agree on which of them
+ * owns cleaning it up.
+ *
  * Each deferred FK is verified by FULL STRUCTURAL IDENTITY (Codex P2), not by
  * name + `convalidated` — a constraint name is unique only within its table.
  * `introspectForeignKey` anchors to the expected `public.<table>` and compares
@@ -387,6 +393,75 @@ export class AudAConvergenceError extends Error {
     super('[post-migrate-steps] ' + message);
     this.name = 'AudAConvergenceError';
   }
+}
+
+/**
+ * Fixed PostgreSQL SESSION advisory-lock key pair that serializes the
+ * MUTATING real-Postgres AUD-A convergence lifecycle across independent
+ * invocations (Codex P2). Two `int4` literals, chosen ONCE and never
+ * derived from an index definition, index OID, or any other runtime
+ * state — ownership of this lock must never be confused with ownership of
+ * a particular index/FK generation. `namespace` (`'AUDA'` read as ASCII
+ * hex, fits `int4`) keeps this lock from ever colliding with an unrelated
+ * advisory lock some other subsystem might take on the same database;
+ * `id` identifies this specific lock within that namespace. See
+ * `runAudAPostMigrateSteps`'s doc comment for why this exists and what it
+ * does and does not protect against.
+ */
+export const AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY = {
+  namespace: 0x41554441, // 'AUDA'
+  id: 1,
+} as const;
+
+/**
+ * Thrown when `pg_try_advisory_lock` for {@link AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY}
+ * fails because another real-Postgres, `enforce`-mode AUD-A convergence is
+ * already running against this database. Thrown BEFORE any
+ * CREATE/DROP INDEX or VALIDATE CONSTRAINT — this invocation performs no
+ * mutation at all.
+ */
+export class AudAConvergenceAlreadyRunningError extends Error {
+  constructor() {
+    super(
+      '[post-migrate-steps] another AUD-A convergence is already running ' +
+        'against this database (failed to acquire the AUD-A convergence ' +
+        'advisory lock). Refusing to start a concurrent CREATE INDEX ' +
+        'CONCURRENTLY / VALIDATE CONSTRAINT lifecycle against the same ' +
+        'target. Wait for the other run to finish, then retry.',
+    );
+    this.name = 'AudAConvergenceAlreadyRunningError';
+  }
+}
+
+async function tryAcquireAudAConvergenceLock(
+  runner: SqlRunner,
+): Promise<boolean> {
+  const rows = await runner.query<{ ok: boolean }>(
+    'SELECT pg_try_advisory_lock(' +
+      AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY.namespace +
+      ', ' +
+      AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY.id +
+      ') AS ok',
+  );
+  return rows[0]?.ok === true;
+}
+
+/**
+ * Release {@link AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY}. MUST be issued on the
+ * exact same session/connection that acquired it — `pg_advisory_unlock` is
+ * session-scoped, and every real caller of `runAudAPostMigrateSteps` already
+ * runs on a dedicated `postgres(url, { max: 1 })` connection (see the
+ * function's doc comment), so the `runner` passed to acquire and to this
+ * release are always the same physical session.
+ */
+async function releaseAudAConvergenceLock(runner: SqlRunner): Promise<void> {
+  await runner.query(
+    'SELECT pg_advisory_unlock(' +
+      AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY.namespace +
+      ', ' +
+      AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY.id +
+      ')',
+  );
 }
 
 function defaultLog(event: Record<string, unknown>): void {
@@ -851,11 +926,65 @@ export interface AudAPostMigrateResult {
  * its expected definition; both deferred FKs validated) or throws
  * `AudAConvergenceError` — it never returns "success" with the work
  * half-done. `inspect` mode (`--check` / pre-0023) reports only.
+ *
+ * Serialization (Codex P2): a same-name INVALID index with an exact
+ * canonical definition does NOT prove a given invocation owns that index
+ * generation — two independent real-Postgres `enforce` invocations can both
+ * observe the SAME invalid/interrupted build, and whichever one's cleanup
+ * runs LAST can drop the OTHER's now-VALID index (a classic TOCTOU: the
+ * definition check and the `DROP` are separate statements with a window
+ * between them that no amount of re-reading immediately before the `DROP`
+ * closes). So when `buildMode === 'concurrent'` (real Postgres) AND
+ * `enforcement === 'enforce'` (a real mutating run, never `--check`/PGlite),
+ * this whole function's mutation lifecycle — `ensureDeferredIndexes` (build
+ * + `dropIfInvalid` cleanup), FK validation, and every postcondition check —
+ * runs under a PostgreSQL SESSION advisory lock
+ * ({@link AUD_A_CONVERGENCE_ADVISORY_LOCK_KEY}): `pg_try_advisory_lock`
+ * (non-blocking — a second concurrent invocation fails CLOSED immediately
+ * with `AudAConvergenceAlreadyRunningError`, performing zero mutation,
+ * rather than queuing behind an indefinitely-blocking lock) acquired BEFORE
+ * any mutating work, released in a `finally` on the SAME session that
+ * acquired it. This requires the `runner` to be bound to one dedicated
+ * connection for the call's whole lifetime — true for every real caller:
+ * `run-migrations.ts` and `db-aud-a-converge.ts` (and, through it,
+ * `db-migrate-prod.ts`'s Preview auto-convergence) each open a dedicated
+ * `postgres(url, { max: 1 })` client specifically for this call. `inspect`
+ * mode and `buildMode === 'plain'` (PGlite / local) never touch this lock —
+ * they mutate nothing (`inspect`) or run single-connection with no
+ * cross-invocation contention to serialize (`plain`).
  */
 export async function runAudAPostMigrateSteps(
   runner: SqlRunner,
   buildMode: IndexBuildMode,
   options: PostMigrateStepOptions = {},
+): Promise<AudAPostMigrateResult> {
+  const enforcement = options.enforcement ?? 'enforce';
+  const needsAdvisoryLock =
+    buildMode === 'concurrent' && enforcement === 'enforce';
+
+  if (!needsAdvisoryLock) {
+    return runAudAPostMigrateStepsCore(runner, buildMode, options);
+  }
+
+  const log = options.log ?? defaultLog;
+  const acquired = await tryAcquireAudAConvergenceLock(runner);
+  if (!acquired) {
+    log({ step: 'advisory-lock', op: 'already-running' });
+    throw new AudAConvergenceAlreadyRunningError();
+  }
+  log({ step: 'advisory-lock', op: 'acquired' });
+  try {
+    return await runAudAPostMigrateStepsCore(runner, buildMode, options);
+  } finally {
+    await releaseAudAConvergenceLock(runner);
+    log({ step: 'advisory-lock', op: 'released' });
+  }
+}
+
+async function runAudAPostMigrateStepsCore(
+  runner: SqlRunner,
+  buildMode: IndexBuildMode,
+  options: PostMigrateStepOptions,
 ): Promise<AudAPostMigrateResult> {
   const indexes = await ensureDeferredIndexes(
     runner,

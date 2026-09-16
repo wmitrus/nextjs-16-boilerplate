@@ -1,3 +1,29 @@
+# [2.18.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.17.0...v2.18.0) (2026-09-16)
+
+
+### Bug Fixes
+
+* **ai-tooling:** close stale-lock reclaim/release TOCTOU in acquireLock ([4cd07db](https://github.com/wmitrus/nextjs-16-boilerplate/commit/4cd07db39319b3f74bc574a9da08131b389d0412))
+* **ai-tooling:** close TOCTOU in acquireLock between create and write ([fad6976](https://github.com/wmitrus/nextjs-16-boilerplate/commit/fad6976d47d33e6f0debb71a931fa4e87a52c3cb))
+* **ai-tooling:** fail closed on stale locks -- remove reclaim entirely ([631ff37](https://github.com/wmitrus/nextjs-16-boilerplate/commit/631ff375d53fe85dd92fd558c844cad312c9fdc5))
+* **audit-log:** gate AUD-A production convergence ([db74b90](https://github.com/wmitrus/nextjs-16-boilerplate/commit/db74b9037ec1982c69b2396ce4ed32145fdfd836))
+* **audit-log:** harden AUD-A migration rollout ([1cc5af1](https://github.com/wmitrus/nextjs-16-boilerplate/commit/1cc5af1d544d1b4ee3a79c8767d0916f70633d70))
+* **db:** require DATABASE_URL_UNPOOLED explicitly for Production DDL (Codex P1) ([d86f6d6](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d86f6d6ea005c1a6893ab5e534e7b68887f9007a))
+* **db:** schema-qualify Production evidence reads to public.audit_events ([d73db9b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d73db9b889818f4f6be2c779338afe72b6d31ac0))
+* **db:** serialize real-Postgres AUD-A convergence with an advisory lock ([a710bdd](https://github.com/wmitrus/nextjs-16-boilerplate/commit/a710bddf535f268cab28b31ed6964df49532f2a1))
+* **db:** stop double evidence scan, schema-qualify index, sync lock test ([185be69](https://github.com/wmitrus/nextjs-16-boilerplate/commit/185be699a9174f5d5245abfc2d8fc6bc0b4c8ba9)), closes [#105](https://github.com/wmitrus/nextjs-16-boilerplate/issues/105)
+* **db:** structurally verify INVALID deferred indexes; split FK logic ([155e6be](https://github.com/wmitrus/nextjs-16-boilerplate/commit/155e6be3c87fac1edd1b064c4804c97f6b4dfb05))
+* **db:** use one migration target for postgres ([2c86269](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2c862694849f5e52e5eff4949cf2a8735e88e619))
+* **db:** verify each deferred AUD-A FK by full structural identity ([22bee08](https://github.com/wmitrus/nextjs-16-boilerplate/commit/22bee089465ae91ca135c8dae5ac3bef5347da74))
+* **db:** whole-PR consistency pass -- local convergence, Preview auto-converge (Codex P1/P2) ([44b2da0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/44b2da05c46ecca41d9525404b357b6d1b517483))
+* **deps:** update dependencies to address security vulnerabilities ([9deacbd](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9deacbd33fbab19cfc85bcc3d2a3c9ddd7d722e4))
+* **deps:** update smol-toml to address DoS vulnerability ([8796d1f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8796d1f1a866e31fcd0ec959589f8f40f0bb19ca))
+
+
+### Features
+
+* **audit-log:** add OZI-71 AUD·A additive canonical ownership schema ([26b2945](https://github.com/wmitrus/nextjs-16-boilerplate/commit/26b2945bccf6f647fa8d40db8f8c5f986454ea45))
+
 # [2.17.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.16.0...v2.17.0) (2026-09-07)
 
 

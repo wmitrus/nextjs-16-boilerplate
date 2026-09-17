@@ -441,10 +441,10 @@ describe('POST /api/admin/feature-flags', () => {
     );
   });
 
-  it('REGRESSION: audit event uses the flag’s LEGACY tenant_id (Audit subsystem compatibility key), never canonical Feature Flag authority', async () => {
-    // OZI-71 FF·D final review — the Audit subsystem (audit_events /
-    // audit_log_settings) has NOT undergone AUD·A-D: `resolveEffectiveAuditSetting`
-    // still matches by exact string equality against
+  it('REGRESSION: audit event dual-writes the legacy compatibility key while canonical ownership comes from resolved organization facts', async () => {
+    // OZI-71 AUD·B — Audit now dual-writes canonical ownership while
+    // `resolveEffectiveAuditSetting` deliberately remains on the legacy key
+    // until AUD·D and still matches by exact string equality against
     // `audit_log_settings.tenant_id`, and `audit_events.tenant_id` stores
     // that same legacy key. Feeding it the canonical `TenantId` instead
     // would resolve settings against a value that predates and may not
@@ -479,17 +479,22 @@ describe('POST /api/admin/feature-flags', () => {
     // Canonical Feature Flag authorization is unaffected: the resolved
     // organization facts still reach `service.create` untouched.
     expect(mocks.create).toHaveBeenCalledWith(expect.anything(), ORG_FACTS);
-    // The audit event uses the legacy shadow value, NOT the canonical
-    // parent tenant (which differs from LEGACY_SHADOW_VALUE here).
+    // AUD·B keeps the old compatibility key only in legacyTenantId.
+    // Canonical ownership is independently carried by writeScope.
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
+      expect.objectContaining({
+        legacyTenantId: LEGACY_SHADOW_VALUE,
+        writeScope: ORG_FACTS,
+      }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_FACTS.tenantId }),
+      expect.objectContaining({
+        legacyTenantId: ORG_FACTS.tenantId,
+      }),
     );
   });
 
-  it('attributes an explicit platform-global create’s audit event to tenantId: null', async () => {
+  it('attributes an explicit platform-global create to platform-global writeScope with no legacy tenant', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
     mocks.resolveCanonical.mockResolvedValue({
@@ -506,7 +511,10 @@ describe('POST /api/admin/feature-flags', () => {
 
     expect(res.status).toBe(201);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: null }),
+      expect.objectContaining({
+        legacyTenantId: null,
+        writeScope: { kind: 'platform-global' },
+      }),
     );
   });
 

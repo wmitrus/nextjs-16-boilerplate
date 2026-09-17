@@ -36,3 +36,20 @@ export class InvalidAuditSampleRateError extends Error {
     this.name = 'InvalidAuditSampleRateError';
   }
 }
+
+/**
+ * OZI-71 AUD·B — thrown when a canonical audit write cannot prove its
+ * organization/tenant ownership tuple in the same SQL statement.
+ *
+ * This is a server-side invariant failure, never a signal to reclassify the
+ * event as platform-global. The resilient audit boundary catches the failure
+ * and drops the DB write without affecting the caller operation.
+ */
+export class AuditCanonicalWriteInvariantError extends Error {
+  readonly code = 'AUDIT_CANONICAL_WRITE_INVARIANT';
+
+  constructor(message = 'Audit canonical write invariant violated') {
+    super(message);
+    this.name = 'AuditCanonicalWriteInvariantError';
+  }
+}

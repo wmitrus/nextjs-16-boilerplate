@@ -122,6 +122,7 @@ describe('purgeExpiredAuditEvents', () => {
         updatedByUserId: null,
       },
       null,
+      { kind: 'platform-global' },
     );
 
     const now = new Date('2026-06-01T00:00:00Z');

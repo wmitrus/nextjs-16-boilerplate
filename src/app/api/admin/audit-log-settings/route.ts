@@ -5,6 +5,7 @@ import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 import type { DrizzleDb } from '@/core/db';
+import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -14,6 +15,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveCanonicalAuditWriteScope } from '@/app/_lib/resolve-canonical-audit-write-scope';
 import {
   AUDIT_CATEGORIES,
   AUDIT_RETENTION_DAYS_MAX,
@@ -193,6 +195,25 @@ export const PATCH = withErrorHandler(
         : { tenantId: access.tenant.tenantId };
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+      const canonical = await resolveCanonicalAuditWriteScope({
+        isPlatformAdmin: adminAccess.isPlatformAdmin,
+        ordinaryActiveOrganizationId: access.tenant.organizationId,
+        platformTargetOrganizationId: adminAccess.isPlatformAdmin
+          ? requestedTenantId
+          : null,
+        db,
+        authProvider: env.AUTH_PROVIDER,
+      });
+
+      if (canonical.outcome === 'unresolvable-organization-target') {
+        return createServerErrorResponse(
+          'The target organization could not be resolved to an internal organization',
+          422,
+          'ORGANIZATION_NOT_RESOLVED',
+        );
+      }
+
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
       const setting = await service.upsert(
@@ -206,6 +227,7 @@ export const PATCH = withErrorHandler(
           updatedByUserId: access.user.id,
         },
         scope,
+        canonical.writeScope,
       );
 
       logger.info(
@@ -226,7 +248,8 @@ export const PATCH = withErrorHandler(
         category: 'rbac_policy',
         action: 'audit_log_setting.update',
         outcome: 'success',
-        tenantId: setting.tenantId,
+        writeScope: canonical.writeScope,
+        legacyTenantId: setting.tenantId,
         actorUserId: access.user.id,
         targetType: 'audit_log_setting',
         targetId: setting.category,
@@ -290,6 +313,7 @@ export const DELETE = withErrorHandler(
         : { tenantId: access.tenant.tenantId };
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
       try {
@@ -313,15 +337,54 @@ export const DELETE = withErrorHandler(
         // See the identical note on the PATCH handler above (Codex review,
         // PR #72): recorded under 'rbac_policy', never under the category
         // whose override was just removed.
-        await recordAdminAuditEvent({
-          category: 'rbac_policy',
-          action: 'audit_log_setting.reset',
-          outcome: 'success',
-          tenantId: requestedTenantId,
-          actorUserId: access.user.id,
-          targetType: 'audit_log_setting',
-          targetId: parseResult.data.category,
-        });
+        //
+        // OZI-71 AUD·B — canonical audit classification is deliberately
+        // resolved AFTER the business mutation. A failure to classify this
+        // ancillary audit event must drop the event fail-closed, never turn
+        // the already-authorized reset into a failed business operation and
+        // never reattribute the event as platform-global.
+        try {
+          const canonical = await resolveCanonicalAuditWriteScope({
+            isPlatformAdmin: adminAccess.isPlatformAdmin,
+            ordinaryActiveOrganizationId: access.tenant.organizationId,
+            platformTargetOrganizationId: adminAccess.isPlatformAdmin
+              ? requestedTenantId
+              : null,
+            db,
+            authProvider: env.AUTH_PROVIDER,
+          });
+
+          if (canonical.outcome === 'resolved') {
+            await recordAdminAuditEvent({
+              category: 'rbac_policy',
+              action: 'audit_log_setting.reset',
+              outcome: 'success',
+              writeScope: canonical.writeScope,
+              legacyTenantId: requestedTenantId,
+              actorUserId: access.user.id,
+              targetType: 'audit_log_setting',
+              targetId: parseResult.data.category,
+            });
+          } else {
+            logger.warn(
+              {
+                event: 'admin:audit_log_setting_reset_audit_dropped',
+                category: parseResult.data.category,
+                reason: 'unresolvable-organization-target',
+              },
+              'Audit event dropped because canonical organization ownership could not be resolved',
+            );
+          }
+        } catch (error) {
+          logger.warn(
+            {
+              event: 'admin:audit_log_setting_reset_audit_dropped',
+              category: parseResult.data.category,
+              errorName: error instanceof Error ? error.name : 'UnknownError',
+            },
+            'Audit event dropped because canonical ownership classification failed',
+          );
+        }
 
         return createSuccessResponse({ deleted: true });
       } catch (error) {

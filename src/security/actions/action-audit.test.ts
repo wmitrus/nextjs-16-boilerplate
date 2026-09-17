@@ -2,14 +2,24 @@ import '@/testing/infrastructure/logger';
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 const mocks = vi.hoisted(() => ({
   record: vi.fn().mockResolvedValue(undefined),
   resolve: vi.fn(),
+  identityLookup: {
+    findInternalOrganizationId: vi.fn(),
+  },
+  organizationAuthority: {
+    readParentTenantId: vi.fn(),
+  },
 }));
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => ({ resolve: mocks.resolve }),
 }));
+
+import { AUDIT_LOG, AUTH, AUTHORIZATION } from '@/core/contracts';
 
 import { logActionAudit } from './action-audit';
 
@@ -18,6 +28,28 @@ import {
   resetAllInfrastructureMocks,
   mockChildLogger,
 } from '@/testing';
+
+const ORG_ID = '15000000-0000-4000-8000-000000000001';
+const TENANT_ID = '10000000-0000-4000-8000-000000000001';
+
+function installResolver(auditRecord?: typeof mocks.record): void {
+  const registry = new Map<symbol, unknown>([
+    [AUTH.INTERNAL_IDENTITY_LOOKUP, mocks.identityLookup],
+    [AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY, mocks.organizationAuthority],
+  ]);
+
+  if (auditRecord) {
+    registry.set(AUDIT_LOG.SERVICE, { record: auditRecord });
+  }
+
+  mocks.resolve.mockImplementation((token: symbol) => {
+    if (!registry.has(token)) {
+      throw new Error(`Service not found for key: ${String(token)}`);
+    }
+
+    return registry.get(token);
+  });
+}
 
 describe('Action Audit', () => {
   const mockCtx = createMockSecurityContext({
@@ -29,14 +61,17 @@ describe('Action Audit', () => {
 
   beforeEach(() => {
     resetAllInfrastructureMocks();
-    mocks.record.mockClear();
-    // Default: no AuditLogService registered, matching the global test
-    // double for getAppContainer() in tests/setup.tsx -- resolution throws,
-    // and logActionAudit must swallow that (see the 'AuditLogService wiring'
-    // block below for the case where it *is* registered).
-    mocks.resolve.mockImplementation(() => {
-      throw new Error('Service not found for key: Symbol(AuditLogService)');
-    });
+    mocks.record.mockReset().mockResolvedValue(undefined);
+    mocks.identityLookup.findInternalOrganizationId
+      .mockReset()
+      .mockResolvedValue(ORG_ID);
+    mocks.organizationAuthority.readParentTenantId
+      .mockReset()
+      .mockResolvedValue(TENANT_ID);
+
+    // Canonical ownership dependencies are available, but the AuditLogService
+    // is intentionally absent by default.
+    installResolver();
   });
 
   it('should log success as debug', async () => {
@@ -188,7 +223,7 @@ describe('Action Audit', () => {
 
   describe('AuditLogService wiring (Phase 2)', () => {
     it('records a success event with the server_action category and no error thrown', async () => {
-      mocks.resolve.mockReturnValue({ record: mocks.record });
+      installResolver(mocks.record);
 
       await logActionAudit({
         actionName: 'testAction',
@@ -202,7 +237,12 @@ describe('Action Audit', () => {
           category: 'server_action',
           action: 'testAction',
           outcome: 'success',
-          tenantId: 'tenant_1',
+          writeScope: {
+            kind: 'organization',
+            organizationId: ORG_ID,
+            tenantId: TENANT_ID,
+          },
+          legacyTenantId: 'tenant_1',
           actorUserId: 'user_1',
           ip: '1.2.3.4',
           correlationId: 'c1',
@@ -212,7 +252,7 @@ describe('Action Audit', () => {
     });
 
     it('records a failure event with the redacted input as metadata', async () => {
-      mocks.resolve.mockReturnValue({ record: mocks.record });
+      installResolver(mocks.record);
 
       await logActionAudit({
         actionName: 'testAction',
@@ -253,9 +293,8 @@ describe('Action Audit', () => {
     });
 
     it('does not throw when record() itself rejects', async () => {
-      mocks.resolve.mockReturnValue({
-        record: vi.fn().mockRejectedValue(new Error('DB unavailable')),
-      });
+      mocks.record.mockRejectedValueOnce(new Error('DB unavailable'));
+      installResolver(mocks.record);
 
       await expect(
         logActionAudit({

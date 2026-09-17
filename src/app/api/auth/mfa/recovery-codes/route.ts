@@ -1,10 +1,11 @@
 import { connection } from 'next/server';
 
-import { AUTH } from '@/core/contracts';
+import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
 import {
   supportsApplicationEnrollment,
   type MfaService,
 } from '@/core/contracts/mfa';
+import type { DrizzleDb } from '@/core/db/types';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -14,7 +15,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
-import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { recordCanonicalOrganizationAdminAuditEvent } from '@/app/_lib/record-canonical-admin-audit-event';
 import { enforceStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
@@ -57,14 +58,18 @@ export const POST = withErrorHandler(
       { event: 'auth:mfa_recovery_codes_regenerated', userId: access.user.id },
       'MFA recovery codes regenerated',
     );
-    await recordAdminAuditEvent({
-      category: 'auth',
-      action: 'mfa.recovery_codes.regenerated',
-      outcome: 'success',
-      tenantId: access.tenant.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'mfa',
-      targetId: access.user.id,
+    await recordCanonicalOrganizationAdminAuditEvent({
+      db: getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB),
+      organizationCandidate: access.tenant.organizationId,
+      legacyTenantId: access.tenant.tenantId,
+      event: {
+        category: 'auth',
+        action: 'mfa.recovery_codes.regenerated',
+        outcome: 'success',
+        actorUserId: access.user.id,
+        targetType: 'mfa',
+        targetId: access.user.id,
+      },
     });
 
     return createSuccessResponse({ recoveryCodes });

@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 const envMock = vi.hoisted(() => ({
   APP_SECURITY_MASTER_KEY: 'step-up-guard-test-master-key-not-a-real-secret' as
     | string
@@ -89,6 +91,8 @@ async function validProof(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.registry.clear();
+
   envMock.APP_SECURITY_MASTER_KEY =
     'step-up-guard-test-master-key-not-a-real-secret';
   envMock.ADMIN_STEP_UP_MODE = 'required';
@@ -129,6 +133,8 @@ describe('withAdminStepUp', () => {
       expect.objectContaining({
         action: 'admin.step_up.denied',
         outcome: 'denied',
+        writeScope: { kind: 'platform-global' },
+        legacyTenantId: ACCESS.tenant.tenantId,
         targetId: PATH,
         metadata: { reason: 'absent' },
       }),

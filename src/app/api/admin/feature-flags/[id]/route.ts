@@ -177,12 +177,18 @@ export const PATCH = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.update',
           outcome: 'success',
-          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
-          // shadow value, NOT canonical Feature Flag authority. See the
-          // identical, fully-explained note on the create handler
-          // (`route.ts`) — the Audit subsystem stays on its own legacy
-          // `tenant_id` contract until the coordinated AUD·A-D package.
-          tenantId: flag.tenantId,
+          // OZI-71 AUD·B — canonical Audit ownership follows the already
+          // authorized canonical mutation scope. The flag's legacy
+          // `tenant_id` remains compatibility data only.
+          writeScope:
+            scope.kind === 'organization'
+              ? {
+                  kind: 'organization',
+                  organizationId: scope.organizationId,
+                  tenantId: scope.tenantId,
+                }
+              : { kind: 'platform-global' },
+          legacyTenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,
@@ -262,12 +268,18 @@ export const DELETE = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.delete',
           outcome: 'success',
-          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
-          // shadow value, NOT canonical Feature Flag authority. See the
-          // identical, fully-explained note on the create handler
-          // (`route.ts`) — the Audit subsystem stays on its own legacy
-          // `tenant_id` contract until the coordinated AUD·A-D package.
-          tenantId: flag.tenantId,
+          // OZI-71 AUD·B — canonical Audit ownership follows the already
+          // authorized canonical mutation scope. The flag's legacy
+          // `tenant_id` remains compatibility data only.
+          writeScope:
+            scope.kind === 'organization'
+              ? {
+                  kind: 'organization',
+                  organizationId: scope.organizationId,
+                  tenantId: scope.tenantId,
+                }
+              : { kind: 'platform-global' },
+          legacyTenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,

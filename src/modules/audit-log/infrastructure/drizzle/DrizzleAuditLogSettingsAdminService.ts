@@ -1,6 +1,8 @@
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
+import type { AuditWriteScope } from '@/core/contracts/audit-log';
 import type { DrizzleDb } from '@/core/db';
+import { organizationsReferenceTable } from '@/core/db/schema/references';
 
 import {
   AUDIT_CATEGORIES,
@@ -12,6 +14,7 @@ import {
   getAuditCategoryDefault,
 } from '../../domain/category';
 import {
+  AuditCanonicalWriteInvariantError,
   AuditSettingNotFoundError,
   AuditSettingScopeError,
   InvalidAuditRetentionDaysError,
@@ -91,6 +94,29 @@ function toStoredDto(
     updatedByUserId: row.updatedByUserId,
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+type RawSettingRow = Omit<SettingRow, 'updatedAt'> & {
+  updatedAt: Date | string;
+};
+
+function normalizeRawRows<T>(raw: unknown): T[] {
+  return (
+    Array.isArray(raw) ? raw : ((raw as { rows?: unknown[] }).rows ?? [])
+  ) as T[];
+}
+
+function toRawStoredDto(
+  row: RawSettingRow,
+  source: Exclude<AuditSettingSource, 'taxonomy-default'>,
+): AuditSettingDto {
+  return toStoredDto(
+    {
+      ...row,
+      updatedAt: new Date(row.updatedAt),
+    },
+    source,
+  );
 }
 
 function toDefaultDto(
@@ -230,6 +256,7 @@ export class DrizzleAuditLogSettingsAdminService {
   async upsert(
     input: UpsertAuditSettingInput,
     scope: MutationScope,
+    writeScope: AuditWriteScope,
   ): Promise<AuditSettingDto> {
     assertScopeAllows(input.tenantId, scope);
     assertValidRetentionDays(input.retentionDays);
@@ -237,41 +264,112 @@ export class DrizzleAuditLogSettingsAdminService {
 
     const sampleRate = input.sampleRate ?? null;
 
-    const [row] = await this.db
-      .insert(auditLogSettingsTable)
-      .values({
-        category: input.category,
-        tenantId: input.tenantId,
-        enabled: input.enabled,
-        retentionDays: input.retentionDays,
-        sampleRate,
-        captureInputOnSuccess: input.captureInputOnSuccess,
-        updatedByUserId: input.updatedByUserId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          auditLogSettingsTable.category,
-          auditLogSettingsTable.tenantId,
-        ],
-        set: {
+    // During AUD·B legacy `tenant_id` still drives effective-settings reads,
+    // so its scoped/global meaning must agree with the canonical write scope.
+    // The concrete identifiers deliberately need not be equal.
+    const legacyIsGlobal = input.tenantId === null;
+    const canonicalIsGlobal = writeScope.kind === 'platform-global';
+    if (legacyIsGlobal !== canonicalIsGlobal) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    if (writeScope.kind === 'platform-global') {
+      const [row] = await this.db
+        .insert(auditLogSettingsTable)
+        .values({
+          category: input.category,
+          tenantId: null,
+          organizationId: null,
+          ownershipState: 'intentional_global',
           enabled: input.enabled,
           retentionDays: input.retentionDays,
           sampleRate,
           captureInputOnSuccess: input.captureInputOnSuccess,
           updatedByUserId: input.updatedByUserId,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+        })
+        .onConflictDoUpdate({
+          target: [
+            auditLogSettingsTable.category,
+            auditLogSettingsTable.tenantId,
+          ],
+          set: {
+            organizationId: null,
+            ownershipState: 'intentional_global',
+            enabled: input.enabled,
+            retentionDays: input.retentionDays,
+            sampleRate,
+            captureInputOnSuccess: input.captureInputOnSuccess,
+            updatedByUserId: input.updatedByUserId,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    if (!row) {
-      throw new Error('Failed to upsert audit log setting');
+      if (!row) {
+        throw new Error('Failed to upsert audit log setting');
+      }
+
+      return toStoredDto(row, 'global');
     }
 
-    return toStoredDto(
-      row,
-      row.tenantId === null ? 'global' : 'tenant-override',
-    );
+    // Same-statement canonical containment: the organization id written to
+    // the row comes from the matched organizations row, never directly from
+    // the caller-provided parameter. The legacy conflict target intentionally
+    // remains `(category, tenant_id)` until AUD·D.
+    const raw = await this.db.execute(sql`
+      INSERT INTO ${auditLogSettingsTable}
+        (
+          category,
+          tenant_id,
+          organization_id,
+          ownership_state,
+          enabled,
+          retention_days,
+          sample_rate,
+          capture_input_on_success,
+          updated_by_user_id
+        )
+      SELECT
+        ${input.category},
+        ${input.tenantId},
+        o.id,
+        'canonical_organization',
+        ${input.enabled},
+        ${input.retentionDays},
+        ${sampleRate},
+        ${input.captureInputOnSuccess},
+        ${input.updatedByUserId}
+      FROM ${organizationsReferenceTable} o
+      WHERE o.id = ${writeScope.organizationId}
+        AND o.tenant_id = ${writeScope.tenantId}
+      ON CONFLICT (category, tenant_id)
+      DO UPDATE SET
+        organization_id = EXCLUDED.organization_id,
+        ownership_state = EXCLUDED.ownership_state,
+        enabled = EXCLUDED.enabled,
+        retention_days = EXCLUDED.retention_days,
+        sample_rate = EXCLUDED.sample_rate,
+        capture_input_on_success = EXCLUDED.capture_input_on_success,
+        updated_by_user_id = EXCLUDED.updated_by_user_id,
+        updated_at = now()
+      RETURNING
+        id,
+        category,
+        tenant_id AS "tenantId",
+        enabled,
+        retention_days AS "retentionDays",
+        sample_rate AS "sampleRate",
+        capture_input_on_success AS "captureInputOnSuccess",
+        updated_by_user_id AS "updatedByUserId",
+        updated_at AS "updatedAt"
+    `);
+
+    const row = normalizeRawRows<RawSettingRow>(raw)[0];
+    if (!row) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    return toRawStoredDto(row, 'tenant-override');
   }
 
   /**

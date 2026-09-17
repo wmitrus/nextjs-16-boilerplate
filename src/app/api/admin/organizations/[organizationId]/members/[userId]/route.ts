@@ -20,6 +20,7 @@ import {
   organizationIdSchema,
 } from '../../../_lib';
 
+import { recordCanonicalOrganizationAdminAuditEvent } from '@/app/_lib/record-canonical-admin-audit-event';
 import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import {
   MembershipNotFoundError,
@@ -28,7 +29,6 @@ import {
 } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminMembershipsMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminMembershipsMutationService';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
-import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
@@ -134,14 +134,18 @@ export const PATCH = withErrorHandler(
           roleId: bodyResult.data.roleId,
         });
 
-        await recordAdminAuditEvent({
-          category: 'membership',
-          action: 'membership.update_role',
-          outcome: 'success',
-          tenantId: access.tenant.tenantId,
-          actorUserId: access.user.id,
-          targetType: 'user',
-          targetId: userResult.data.userId,
+        await recordCanonicalOrganizationAdminAuditEvent({
+          db,
+          organizationCandidate: organization.organization.id,
+          legacyTenantId: access.tenant.tenantId,
+          event: {
+            category: 'membership',
+            action: 'membership.update_role',
+            outcome: 'success',
+            actorUserId: access.user.id,
+            targetType: 'user',
+            targetId: userResult.data.userId,
+          },
         });
 
         return createSuccessResponse({ membership });

@@ -1,13 +1,17 @@
 import { randomInt } from 'node:crypto';
 
+import { sql } from 'drizzle-orm';
+
 import type {
   AuditEventInput,
   AuditLogService,
 } from '@/core/contracts/audit-log';
 import type { DrizzleDb } from '@/core/db';
+import { organizationsReferenceTable } from '@/core/db/schema/references';
 import { resolveServerLogger } from '@/core/logger/di';
 
 import { isAuditCategory } from '../../domain/category';
+import { AuditCanonicalWriteInvariantError } from '../../domain/errors';
 
 import { resolveEffectiveAuditSetting } from './effective-settings';
 import { auditEventsTable } from './schema';
@@ -61,6 +65,11 @@ function capMetadata(value: unknown): Record<string, unknown> | null {
   };
 }
 
+/** Normalize a raw `db.execute` result to its row array (driver-shape safe). */
+function normalizeRawRows(raw: unknown): unknown[] {
+  return Array.isArray(raw) ? raw : ((raw as { rows?: unknown[] }).rows ?? []);
+}
+
 /**
  * Real-time, DB-backed implementation of the audit-log write path.
  *
@@ -82,10 +91,13 @@ export class DrizzleAuditLogService implements AuditLogService {
     }
     const category = event.category;
 
+    // AUD·B deliberately keeps effective-setting resolution on the legacy
+    // compatibility key. Canonical ownership becomes authoritative only at
+    // AUD·D, when settings resolution and retention cut over atomically.
     const setting = await resolveEffectiveAuditSetting(
       this.db,
       category,
-      event.tenantId ?? null,
+      event.legacyTenantId,
     );
 
     if (!setting.enabled) return;
@@ -106,19 +118,76 @@ export class DrizzleAuditLogService implements AuditLogService {
       event.outcome !== 'success' || setting.captureInputOnSuccess;
     const metadata = shouldCaptureMetadata ? capMetadata(event.metadata) : null;
 
-    await this.db.insert(auditEventsTable).values({
-      category,
-      action: event.action,
-      outcome: event.outcome,
-      tenantId: event.tenantId ?? null,
-      actorUserId: event.actorUserId ?? null,
-      targetType: event.targetType ?? null,
-      targetId: event.targetId ?? null,
-      ip: event.ip ?? null,
-      userAgent: event.userAgent ? event.userAgent.slice(0, 512) : null,
-      correlationId: event.correlationId ?? null,
-      requestId: event.requestId ?? null,
-      metadata,
-    });
+    const userAgent = event.userAgent ? event.userAgent.slice(0, 512) : null;
+
+    if (event.writeScope.kind === 'platform-global') {
+      await this.db.insert(auditEventsTable).values({
+        category,
+        action: event.action,
+        outcome: event.outcome,
+        tenantId: event.legacyTenantId,
+        organizationId: null,
+        ownershipState: 'intentional_global',
+        actorUserId: event.actorUserId ?? null,
+        targetType: event.targetType ?? null,
+        targetId: event.targetId ?? null,
+        ip: event.ip ?? null,
+        userAgent,
+        correlationId: event.correlationId ?? null,
+        requestId: event.requestId ?? null,
+        metadata,
+      });
+      return;
+    }
+
+    // AUD·B / invariant #11: prove the canonical organization -> tenant
+    // relationship in the SAME statement that creates the audit event.
+    // `organization_id` comes from the matched organization row itself, never
+    // from an unconditional parameter assignment. A deleted, reparented or
+    // internally inconsistent tuple therefore inserts zero rows.
+    const inserted = await this.db.execute(sql`
+      INSERT INTO ${auditEventsTable}
+        (
+          category,
+          action,
+          outcome,
+          tenant_id,
+          organization_id,
+          ownership_state,
+          actor_user_id,
+          target_type,
+          target_id,
+          ip,
+          user_agent,
+          correlation_id,
+          request_id,
+          metadata
+        )
+      SELECT
+        ${category},
+        ${event.action},
+        ${event.outcome},
+        ${event.legacyTenantId},
+        o.id,
+        'canonical_organization',
+        ${event.actorUserId ?? null},
+        ${event.targetType ?? null},
+        ${event.targetId ?? null},
+        ${event.ip ?? null},
+        ${userAgent},
+        ${event.correlationId ?? null},
+        ${event.requestId ?? null},
+        ${metadata === null ? null : JSON.stringify(metadata)}::jsonb
+      FROM ${organizationsReferenceTable} o
+      WHERE o.id = ${event.writeScope.organizationId}
+        AND o.tenant_id = ${event.writeScope.tenantId}
+      RETURNING id
+    `);
+
+    if (normalizeRawRows(inserted).length !== 1) {
+      // Never reclassify a failed organization write as global. The outer
+      // ResilientAuditLogService boundary logs/drops this DB-write failure.
+      throw new AuditCanonicalWriteInvariantError();
+    }
   }
 }

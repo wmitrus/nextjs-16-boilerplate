@@ -21,6 +21,7 @@ import {
   organizationIdSchema,
 } from '../../_lib';
 
+import { recordCanonicalOrganizationAdminAuditEvent } from '@/app/_lib/record-canonical-admin-audit-event';
 import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { rolesTable } from '@/modules/authorization/infrastructure/drizzle/schema';
@@ -28,7 +29,6 @@ import { DuplicateInvitationError } from '@/modules/invitations/domain/errors';
 import { DefaultInvitationService } from '@/modules/invitations/infrastructure/DefaultInvitationService';
 import { DrizzleInvitationRepository } from '@/modules/invitations/infrastructure/drizzle/DrizzleInvitationRepository';
 import { createEmailService } from '@/modules/invitations/infrastructure/EmailServiceFactory';
-import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
@@ -166,14 +166,18 @@ export const POST = withErrorHandler(
           expiresInHours: 72,
         });
 
-        await recordAdminAuditEvent({
-          category: 'membership',
-          action: 'invitation.create',
-          outcome: 'success',
-          tenantId: access.tenant.tenantId,
-          actorUserId: access.user.id,
-          targetType: 'invitation',
-          targetId: invitation.id,
+        await recordCanonicalOrganizationAdminAuditEvent({
+          db,
+          organizationCandidate: organization.organization.id,
+          legacyTenantId: access.tenant.tenantId,
+          event: {
+            category: 'membership',
+            action: 'invitation.create',
+            outcome: 'success',
+            actorUserId: access.user.id,
+            targetType: 'invitation',
+            targetId: invitation.id,
+          },
         });
 
         return createSuccessResponse(

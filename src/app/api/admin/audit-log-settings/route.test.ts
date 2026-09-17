@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 
 import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
@@ -18,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   listEffectiveForTenant: vi.fn(),
   upsert: vi.fn(),
   resetToDefault: vi.fn(),
+  resolveCanonicalAuditWriteScope: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
   container: {
@@ -41,6 +44,10 @@ vi.mock('@/security/core/platform-admin', () => ({
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => mocks.container,
+}));
+
+vi.mock('@/app/_lib/resolve-canonical-audit-write-scope', () => ({
+  resolveCanonicalAuditWriteScope: mocks.resolveCanonicalAuditWriteScope,
 }));
 
 vi.mock(
@@ -86,6 +93,24 @@ beforeEach(() => {
   mocks.connection.mockResolvedValue(undefined);
   mocks.registry.clear();
   mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+
+  mocks.resolveCanonicalAuditWriteScope.mockImplementation(
+    async (input: { readonly isPlatformAdmin: boolean }) =>
+      input.isPlatformAdmin
+        ? {
+            outcome: 'resolved',
+            writeScope: { kind: 'platform-global' as const },
+          }
+        : {
+            outcome: 'resolved',
+            writeScope: {
+              kind: 'organization' as const,
+              organizationId: '15000000-0000-4000-8000-000000000001',
+              tenantId: '10000000-0000-4000-8000-000000000001',
+            },
+          },
+  );
+
   vi.mocked(DrizzleAuditLogSettingsAdminService).mockImplementation(
     function () {
       return {
@@ -274,6 +299,11 @@ describe('PATCH /api/admin/audit-log-settings', () => {
       expect(mocks.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ tenantId: 'tenant_test_1' }),
         { tenantId: 'tenant_test_1' },
+        {
+          kind: 'organization',
+          organizationId: '15000000-0000-4000-8000-000000000001',
+          tenantId: '10000000-0000-4000-8000-000000000001',
+        },
       );
     });
 
@@ -296,6 +326,11 @@ describe('PATCH /api/admin/audit-log-settings', () => {
       expect(mocks.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ tenantId: 'tenant_test_1' }),
         { tenantId: 'tenant_test_1' },
+        {
+          kind: 'organization',
+          organizationId: '15000000-0000-4000-8000-000000000001',
+          tenantId: '10000000-0000-4000-8000-000000000001',
+        },
       );
     });
   });

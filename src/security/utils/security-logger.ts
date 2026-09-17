@@ -4,6 +4,7 @@ import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { redactAuditInput } from '@/security/actions/redact';
+import { resolveCanonicalOrganizationAuditWriteScope } from '@/security/audit/resolve-canonical-organization-audit-write-scope';
 import type { SecurityContext } from '@/security/core/security-context';
 
 const logger = resolveServerLogger().child({
@@ -36,6 +37,22 @@ async function recordSecurityAuditEvent(
   metadata: Record<string, unknown> | undefined,
 ): Promise<void> {
   try {
+    const writeScope = context.user
+      ? await resolveCanonicalOrganizationAuditWriteScope(context.user.tenantId)
+      : ({ kind: 'platform-global' } as const);
+
+    if (writeScope === null) {
+      logger.warn(
+        {
+          event: 'security-logger:db-write-dropped',
+          securityEvent: event,
+          reason: 'canonical-organization-unresolved',
+        },
+        'Security audit DB write dropped because canonical organization ownership could not be resolved',
+      );
+      return;
+    }
+
     const auditLogService = getAppContainer().resolve<AuditLogService>(
       AUDIT_LOG.SERVICE,
     );
@@ -48,7 +65,8 @@ async function recordSecurityAuditEvent(
       // cover cases like auth_failure that aren't strictly authorization
       // denials.
       outcome: 'failure',
-      tenantId: context.user?.tenantId ?? null,
+      writeScope,
+      legacyTenantId: context.user?.tenantId ?? null,
       actorUserId: context.user?.id ?? null,
       ip: context.ip,
       correlationId: context.correlationId,

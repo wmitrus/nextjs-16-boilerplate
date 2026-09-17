@@ -296,23 +296,20 @@ export const POST = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.create',
           outcome: 'success',
-          // OZI-71 FF·D review correction — this is intentionally the
-          // FLAG's legacy `tenant_id` shadow value, NOT canonical Feature
-          // Flag authority. `audit_log_settings`/`audit_events` remain on
-          // the Audit subsystem's OWN legacy `tenant_id` contract until the
-          // coordinated AUD·A-D package (plan §14a): `resolveEffectiveAuditSetting`
-          // matches by exact string equality against
-          // `audit_log_settings.tenant_id`, and `audit_events.tenant_id`
-          // stores that same legacy key. Passing the canonical `TenantId`
-          // here instead would resolve settings against a value that
-          // predates and does not match any legacy-configured override --
-          // exactly the "changing one package's ownership semantics breaks
-          // the other's setting resolution" risk the plan calls out for
-          // keeping FF and AUD as coordinated-but-separate cutovers. This
-          // has NO effect on Feature Flag authorization, which is settled
-          // entirely above via `canonical.facts` + the same-statement SQL
-          // proof (Codex review, PR #72 / OZI-71 FF·D final review).
-          tenantId: flag.tenantId,
+          // OZI-71 AUD·B — canonical ownership comes from the already
+          // resolved Feature Flag write facts, never from the legacy shadow
+          // key. The flag's legacy `tenant_id` is preserved verbatim only
+          // for Audit compatibility while effective-settings/purge still
+          // use the legacy key through AUD·D.
+          writeScope:
+            canonical.facts.kind === 'organization'
+              ? {
+                  kind: 'organization',
+                  organizationId: canonical.facts.organizationId,
+                  tenantId: canonical.facts.tenantId,
+                }
+              : { kind: 'platform-global' },
+          legacyTenantId: flag.tenantId,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: flag.id,

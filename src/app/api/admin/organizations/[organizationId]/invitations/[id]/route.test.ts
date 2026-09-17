@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 
@@ -35,6 +37,7 @@ const mocks = vi.hoisted(() => ({
   container: {
     resolve: vi.fn((token: symbol) => mocks.registry.get(token)),
   },
+  recordCanonicalAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('next/server', async () => {
@@ -56,6 +59,11 @@ vi.mock('@/security/core/platform-admin', () => ({
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => mocks.container,
+}));
+
+vi.mock('@/app/_lib/record-canonical-admin-audit-event', () => ({
+  recordCanonicalOrganizationAdminAuditEvent:
+    mocks.recordCanonicalAdminAuditEvent,
 }));
 
 vi.mock(

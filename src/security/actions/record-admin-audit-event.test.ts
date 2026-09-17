@@ -31,7 +31,8 @@ describe('recordAdminAuditEvent', () => {
       category: 'organization',
       action: 'organization.update_status',
       outcome: 'success',
-      tenantId: 'tenant_1',
+      writeScope: { kind: 'platform-global' },
+      legacyTenantId: 'tenant_1',
       actorUserId: 'user_1',
       targetType: 'organization',
       targetId: 'org_1',
@@ -54,6 +55,8 @@ describe('recordAdminAuditEvent', () => {
         category: 'organization',
         action: 'organization.update_status',
         outcome: 'success',
+        writeScope: { kind: 'platform-global' },
+        legacyTenantId: null,
       }),
     ).resolves.toBeUndefined();
 
@@ -77,6 +80,8 @@ describe('recordAdminAuditEvent', () => {
         category: 'waitlist',
         action: 'waitlist.approve',
         outcome: 'success',
+        writeScope: { kind: 'platform-global' },
+        legacyTenantId: null,
       }),
     ).resolves.toBeUndefined();
   });

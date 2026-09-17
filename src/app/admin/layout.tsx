@@ -3,17 +3,21 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 
-import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import { AUTH, AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
+import type { AuditEventInput } from '@/core/contracts/audit-log';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { MfaService } from '@/core/contracts/mfa';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
+import type { DrizzleDb } from '@/core/db';
+import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import { StepUpProvider } from '@/shared/components/step-up/StepUpProvider';
 import { getServerRequestLogContext } from '@/shared/lib/observability/server-request-log-context';
 
+import { resolveCanonicalAuditWriteScope } from '@/app/_lib/resolve-canonical-audit-write-scope';
 import { buildBootstrapRedirectUrl } from '@/app/auth/post-auth-redirect';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { resolveNodeProvisioningAccess } from '@/security/core/node-provisioning-runtime';
@@ -40,6 +44,51 @@ const logger = resolveServerLogger().child({
  * (`withAdminStepUp`), because a layout guard protects pages, not endpoints.
  */
 const MFA_ENROLLMENT_REDIRECT = '/account/security/mfa?reason=admin';
+
+async function recordOrganizationScopedAdminAccessAuditEvent(
+  container: ReturnType<typeof getAppContainer>,
+  organizationCandidate: string,
+  legacyTenantId: string,
+  event: Omit<AuditEventInput, 'writeScope' | 'legacyTenantId'>,
+): Promise<void> {
+  try {
+    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+    const canonical = await resolveCanonicalAuditWriteScope({
+      isPlatformAdmin: false,
+      ordinaryActiveOrganizationId: organizationCandidate,
+      platformTargetOrganizationId: null,
+      db,
+      authProvider: env.AUTH_PROVIDER,
+    });
+
+    if (canonical.outcome !== 'resolved') {
+      logger.warn(
+        {
+          event: 'admin_guard:audit_dropped',
+          action: event.action,
+          reason: 'unresolvable-organization-target',
+        },
+        'Admin access audit event dropped because canonical organization ownership could not be resolved',
+      );
+      return;
+    }
+
+    await recordAdminAuditEvent({
+      ...event,
+      writeScope: canonical.writeScope,
+      legacyTenantId,
+    });
+  } catch (error) {
+    logger.warn(
+      {
+        event: 'admin_guard:audit_dropped',
+        action: event.action,
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      },
+      'Admin access audit event dropped because canonical ownership classification failed',
+    );
+  }
+}
 
 async function requireMfaEnrollment(
   container: ReturnType<typeof getAppContainer>,
@@ -156,7 +205,8 @@ export async function AdminLayoutGuard({
       category: 'admin_access',
       action: 'admin_panel.access_granted',
       outcome: 'success',
-      tenantId: access.tenant.tenantId,
+      writeScope: { kind: 'platform-global' },
+      legacyTenantId: access.tenant.tenantId,
       actorUserId: access.user.id,
       targetType: 'admin_panel',
       targetId: 'admin-panel',
@@ -204,15 +254,19 @@ export async function AdminLayoutGuard({
       },
       'Admin access denied — user lacks SECURITY_MANAGE_POLICIES permission and is not in ADMIN_USER_EMAILS',
     );
-    await recordAdminAuditEvent({
-      category: 'admin_access',
-      action: 'admin_panel.access_denied',
-      outcome: 'denied',
-      tenantId: access.tenant.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'admin_panel',
-      targetId: 'admin-panel',
-    });
+    await recordOrganizationScopedAdminAccessAuditEvent(
+      container,
+      access.tenant.organizationId,
+      access.tenant.tenantId,
+      {
+        category: 'admin_access',
+        action: 'admin_panel.access_denied',
+        outcome: 'denied',
+        actorUserId: access.user.id,
+        targetType: 'admin_panel',
+        targetId: 'admin-panel',
+      },
+    );
     redirect('/');
   }
 
@@ -226,16 +280,20 @@ export async function AdminLayoutGuard({
     'Admin access granted via ABAC SECURITY_MANAGE_POLICIES',
   );
 
-  await recordAdminAuditEvent({
-    category: 'admin_access',
-    action: 'admin_panel.access_granted',
-    outcome: 'success',
-    tenantId: access.tenant.tenantId,
-    actorUserId: access.user.id,
-    targetType: 'admin_panel',
-    targetId: 'admin-panel',
-    metadata: { source: 'abac' },
-  });
+  await recordOrganizationScopedAdminAccessAuditEvent(
+    container,
+    access.tenant.organizationId,
+    access.tenant.tenantId,
+    {
+      category: 'admin_access',
+      action: 'admin_panel.access_granted',
+      outcome: 'success',
+      actorUserId: access.user.id,
+      targetType: 'admin_panel',
+      targetId: 'admin-panel',
+      metadata: { source: 'abac' },
+    },
+  );
 
   await requireMfaEnrollment(
     container,

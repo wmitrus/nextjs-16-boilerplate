@@ -1,3 +1,5 @@
+import type { OrganizationId, TenantId } from './canonical-ids';
+
 /**
  * Contract for the audit-log write path.
  *
@@ -22,13 +24,39 @@
  * `resolve()` before `record()` is ever reached. See
  * `src/security/actions/action-audit.ts` for the reference pattern.
  */
+export type AuditWriteScope =
+  | {
+      readonly kind: 'organization';
+      readonly organizationId: OrganizationId;
+      readonly tenantId: TenantId;
+    }
+  | {
+      readonly kind: 'platform-global';
+    };
+
 export interface AuditEventInput {
   /** e.g. 'auth', 'server_action', 'security_event' — see the taxonomy. */
   category: string;
   /** e.g. 'org.update', 'policy.delete', 'auth.signin_failed'. */
   action: string;
   outcome: 'success' | 'failure' | 'denied';
-  tenantId?: string | null;
+  /**
+   * Canonical ownership facts for this write.
+   *
+   * `organization` carries the independently verified internal
+   * `(organizationId, tenantId)` tuple. `platform-global` is an explicit
+   * classification, never a fallback for failed organization resolution.
+   */
+  writeScope: AuditWriteScope;
+  /**
+   * Legacy `audit_events.tenant_id` compatibility value retained through
+   * AUD·B/AUD·D for rollback and legacy settings/purge resolution.
+   *
+   * This value is NON-AUTHORITATIVE: it is never canonical TenantId,
+   * OrganizationId, authorization scope, or a fallback source for
+   * `writeScope`.
+   */
+  legacyTenantId: string | null;
   actorUserId?: string | null;
   targetType?: string | null;
   targetId?: string | null;

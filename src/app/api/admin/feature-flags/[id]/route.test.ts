@@ -211,20 +211,15 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     expect(body.data.flag.enabled).toBe(false);
   });
 
-  it('REGRESSION: audit event uses the mutated flag’s LEGACY tenant_id, never the canonical scope tenant', async () => {
-    // OZI-71 FF·D final review — the Audit subsystem is not yet on the
-    // canonical model (see the identical, fully-explained note on the
-    // create handler in `route.ts`). `scope.tenantId` (the canonical
-    // parent tenant that authorized this mutation) and the returned DTO's
-    // legacy `tenant_id` are deliberately DIFFERENT values here, to prove
-    // the audit path reads the legacy one and canonical scope containment
-    // (already exercised by the SQL containment suite) is untouched by
-    // this choice.
+  it('REGRESSION: update normalizes the Audit compatibility key to the internal organization id', async () => {
     mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
-    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
+
+    const FEATURE_FLAG_LEGACY_ALIAS =
+      'legacy-shadow-value-unrelated-to-canonical';
+
     mocks.update.mockResolvedValue({
       ...MOCK_FLAG,
-      tenantId: LEGACY_SHADOW_VALUE,
+      tenantId: FEATURE_FLAG_LEGACY_ALIAS,
     });
 
     const { PATCH } = await import('./route');
@@ -232,23 +227,27 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
       makeRequest('PATCH', { enabled: false }),
       makeContext(),
     );
+
     expect(res.status).toBe(200);
-    // Canonical mutation containment is unaffected: the same-statement
-    // scope predicate still ran with the real canonical scope.
     expect(mocks.update).toHaveBeenCalledWith(
       FLAG_ID,
       expect.anything(),
       ORG_SCOPE,
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
+      expect.objectContaining({
+        legacyTenantId: ORG_SCOPE.organizationId,
+        writeScope: ORG_SCOPE,
+      }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
+      expect.objectContaining({
+        legacyTenantId: FEATURE_FLAG_LEGACY_ALIAS,
+      }),
     );
   });
 
-  it('attributes a platform-global-scoped update’s audit event to tenantId: null', async () => {
+  it('attributes a platform-global-scoped update to platform-global write scope', async () => {
     mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
     mocks.update.mockResolvedValue({ ...MOCK_FLAG, tenantId: null });
 
@@ -259,7 +258,10 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     );
     expect(res.status).toBe(200);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: null }),
+      expect.objectContaining({
+        legacyTenantId: null,
+        writeScope: PLATFORM_SCOPE,
+      }),
     );
   });
 
@@ -349,27 +351,36 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, ORG_SCOPE);
   });
 
-  it('REGRESSION: audit event uses the deleted flag’s LEGACY tenant_id, never the canonical scope tenant', async () => {
+  it('REGRESSION: delete normalizes the Audit compatibility key to the internal organization id', async () => {
     mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
-    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
+
+    const FEATURE_FLAG_LEGACY_ALIAS =
+      'legacy-shadow-value-unrelated-to-canonical';
+
     mocks.delete.mockResolvedValue({
       ...MOCK_FLAG,
-      tenantId: LEGACY_SHADOW_VALUE,
+      tenantId: FEATURE_FLAG_LEGACY_ALIAS,
     });
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
+
     expect(res.status).toBe(200);
     expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, ORG_SCOPE);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
+      expect.objectContaining({
+        legacyTenantId: ORG_SCOPE.organizationId,
+        writeScope: ORG_SCOPE,
+      }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_SCOPE.tenantId }),
+      expect.objectContaining({
+        legacyTenantId: FEATURE_FLAG_LEGACY_ALIAS,
+      }),
     );
   });
 
-  it('attributes a platform-global-scoped delete’s audit event to tenantId: null', async () => {
+  it('attributes a platform-global-scoped delete to platform-global write scope', async () => {
     mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
     mocks.delete.mockResolvedValue({ ...MOCK_FLAG, tenantId: null });
 
@@ -377,7 +388,10 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     const res = await DELETE(makeRequest('DELETE'), makeContext());
     expect(res.status).toBe(200);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: null }),
+      expect.objectContaining({
+        legacyTenantId: null,
+        writeScope: PLATFORM_SCOPE,
+      }),
     );
   });
 });

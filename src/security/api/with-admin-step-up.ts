@@ -67,16 +67,40 @@ async function recordDenial(
   path: string,
   reason: string,
 ): Promise<void> {
-  await recordAdminAuditEvent({
-    category: 'admin_access',
-    action: 'admin.step_up.denied',
-    outcome: 'denied',
-    tenantId: access.tenant.tenantId,
-    actorUserId: access.user.id,
-    targetType: 'admin_mutation',
-    targetId: path,
-    metadata: { reason },
-  });
+  try {
+    await recordAdminAuditEvent({
+      category: 'admin_access',
+      action: 'admin.step_up.denied',
+      outcome: 'denied',
+
+      // Step-up is an authentication-assurance boundary. At this point the
+      // protected handler has not run, so no resource authorization or
+      // canonical resource ownership has been established yet. The denial
+      // itself is therefore an intentional platform-global security event,
+      // not an event owned by the caller's active organization.
+      writeScope: { kind: 'platform-global' },
+      // Preserve the pre-AUD·B compatibility key so effective-setting and
+      // purge behavior remain unchanged until AUD·D. This value carries no
+      // canonical ownership authority.
+      legacyTenantId: access.tenant.tenantId,
+
+      actorUserId: access.user.id,
+      targetType: 'admin_mutation',
+      targetId: path,
+      metadata: { reason },
+    });
+  } catch (error) {
+    getLogger().warn(
+      {
+        event: 'security:step_up_denial_audit_dropped',
+        path,
+        userId: access.user.id,
+        reason,
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      },
+      'Step-up denial DB audit write failed',
+    );
+  }
 }
 
 /**

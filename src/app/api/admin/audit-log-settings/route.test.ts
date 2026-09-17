@@ -1,9 +1,14 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 
-import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
+import {
+  AuditSettingAliasConflictError,
+  AuditSettingNotFoundError,
+} from '@/modules/audit-log/domain/errors';
 import { DrizzleAuditLogSettingsAdminService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
@@ -18,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   listEffectiveForTenant: vi.fn(),
   upsert: vi.fn(),
   resetToDefault: vi.fn(),
+  resolveCanonicalAuditWriteScope: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
   container: {
@@ -41,6 +47,10 @@ vi.mock('@/security/core/platform-admin', () => ({
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => mocks.container,
+}));
+
+vi.mock('@/app/_lib/resolve-canonical-audit-write-scope', () => ({
+  resolveCanonicalAuditWriteScope: mocks.resolveCanonicalAuditWriteScope,
 }));
 
 vi.mock(
@@ -86,6 +96,24 @@ beforeEach(() => {
   mocks.connection.mockResolvedValue(undefined);
   mocks.registry.clear();
   mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+
+  mocks.resolveCanonicalAuditWriteScope.mockImplementation(
+    async (input: { readonly isPlatformAdmin: boolean }) =>
+      input.isPlatformAdmin
+        ? {
+            outcome: 'resolved',
+            writeScope: { kind: 'platform-global' as const },
+          }
+        : {
+            outcome: 'resolved',
+            writeScope: {
+              kind: 'organization' as const,
+              organizationId: '15000000-0000-4000-8000-000000000001',
+              tenantId: '10000000-0000-4000-8000-000000000001',
+            },
+          },
+  );
+
   vi.mocked(DrizzleAuditLogSettingsAdminService).mockImplementation(
     function () {
       return {
@@ -250,6 +278,32 @@ describe('PATCH /api/admin/audit-log-settings', () => {
     );
   });
 
+  it('returns 409 when the requested organization alias is occupied by another legacy setting row', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+      outcome: 'resolved',
+      writeScope: {
+        kind: 'organization',
+        organizationId: '15000000-0000-4000-8000-000000000001',
+        tenantId: '10000000-0000-4000-8000-000000000001',
+      },
+    });
+    mocks.upsert.mockRejectedValue(new AuditSettingAliasConflictError());
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeBodyRequest('PATCH', {
+        ...validBody,
+        tenantId: 'org_provider_acme',
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(409);
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+
   describe('SEC-26 regression: ABAC-authorized non-platform-admin scope constraint', () => {
     beforeEach(() => {
       mocks.isEnvAdmin.mockReturnValue(false);
@@ -274,6 +328,11 @@ describe('PATCH /api/admin/audit-log-settings', () => {
       expect(mocks.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ tenantId: 'tenant_test_1' }),
         { tenantId: 'tenant_test_1' },
+        {
+          kind: 'organization',
+          organizationId: '15000000-0000-4000-8000-000000000001',
+          tenantId: '10000000-0000-4000-8000-000000000001',
+        },
       );
     });
 
@@ -296,6 +355,11 @@ describe('PATCH /api/admin/audit-log-settings', () => {
       expect(mocks.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ tenantId: 'tenant_test_1' }),
         { tenantId: 'tenant_test_1' },
+        {
+          kind: 'organization',
+          organizationId: '15000000-0000-4000-8000-000000000001',
+          tenantId: '10000000-0000-4000-8000-000000000001',
+        },
       );
     });
   });
@@ -326,6 +390,87 @@ describe('DELETE /api/admin/audit-log-settings', () => {
     expect(res.status).toBe(404);
   });
 
+  it('normalizes a provider alias to the internal organization key before reset', async () => {
+    const providerAlias = 'org_provider_acme';
+    const internalOrganizationId = '15000000-0000-4000-8000-000000000001';
+    const parentTenantId = '10000000-0000-4000-8000-000000000001';
+
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+      outcome: 'resolved',
+      writeScope: {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: parentTenantId,
+      },
+    });
+    mocks.resetToDefault.mockResolvedValue(undefined);
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(
+      makeBodyRequest('DELETE', {
+        category: 'auth',
+        tenantId: providerAlias,
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.resetToDefault).toHaveBeenCalledWith(
+      'auth',
+      providerAlias,
+      null,
+      {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: parentTenantId,
+      },
+    );
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        legacyTenantId: internalOrganizationId,
+        writeScope: {
+          kind: 'organization',
+          organizationId: internalOrganizationId,
+          tenantId: parentTenantId,
+        },
+      }),
+    );
+  });
+
+  it('returns 409 when canonical and legacy alias rows collide during reset', async () => {
+    const providerAlias = 'org_provider_acme';
+    const internalOrganizationId = '15000000-0000-4000-8000-000000000001';
+    const parentTenantId = '10000000-0000-4000-8000-000000000001';
+
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+      outcome: 'resolved',
+      writeScope: {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: parentTenantId,
+      },
+    });
+    mocks.resetToDefault.mockRejectedValue(
+      new AuditSettingAliasConflictError(),
+    );
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(
+      makeBodyRequest('DELETE', {
+        category: 'auth',
+        tenantId: providerAlias,
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(409);
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+
   it('returns 200 on successful reset', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
@@ -346,7 +491,17 @@ describe('DELETE /api/admin/audit-log-settings', () => {
   });
 
   it("SEC-26: an ABAC-authorized non-platform-admin's foreign tenantId is derived to their own tenant, not trusted", async () => {
-    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    const internalOrganizationId = '15000000-0000-4000-8000-000000000001';
+
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        tenant: {
+          organizationId: internalOrganizationId,
+          tenantId: internalOrganizationId,
+          userId: 'user_test_1',
+        },
+      }),
+    );
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
@@ -362,8 +517,15 @@ describe('DELETE /api/admin/audit-log-settings', () => {
       mockContext,
     );
     expect(res.status).toBe(200);
-    expect(mocks.resetToDefault).toHaveBeenCalledWith('auth', 'tenant_test_1', {
-      tenantId: 'tenant_test_1',
-    });
+    expect(mocks.resetToDefault).toHaveBeenCalledWith(
+      'auth',
+      internalOrganizationId,
+      { tenantId: internalOrganizationId },
+      {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: '10000000-0000-4000-8000-000000000001',
+      },
+    );
   });
 });

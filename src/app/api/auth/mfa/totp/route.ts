@@ -2,12 +2,13 @@ import { connection } from 'next/server';
 import encodeQR from 'qr';
 import { z } from 'zod';
 
-import { AUTH } from '@/core/contracts';
+import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
 import {
   MfaAlreadyEnrolledError,
   supportsApplicationEnrollment,
   type MfaService,
 } from '@/core/contracts/mfa';
+import type { DrizzleDb } from '@/core/db/types';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -18,7 +19,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
-import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { recordCanonicalOrganizationAdminAuditEvent } from '@/app/_lib/record-canonical-admin-audit-event';
 import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 import { enforceStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
@@ -204,14 +205,18 @@ export const PUT = withErrorHandler(
       { event: 'auth:mfa_enrolled', userId: access.user.id },
       'TOTP enrollment confirmed',
     );
-    await recordAdminAuditEvent({
-      category: 'auth',
-      action: 'mfa.enrolled',
-      outcome: 'success',
-      tenantId: access.tenant.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'mfa',
-      targetId: access.user.id,
+    await recordCanonicalOrganizationAdminAuditEvent({
+      db: getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB),
+      organizationCandidate: access.tenant.organizationId,
+      legacyTenantId: access.tenant.tenantId,
+      event: {
+        category: 'auth',
+        action: 'mfa.enrolled',
+        outcome: 'success',
+        actorUserId: access.user.id,
+        targetType: 'mfa',
+        targetId: access.user.id,
+      },
     });
 
     // Shown exactly once. They are not stored anywhere recoverable -- only
@@ -240,14 +245,18 @@ export const DELETE = withErrorHandler(
       { event: 'auth:mfa_disabled', userId: access.user.id },
       'TOTP enrollment removed',
     );
-    await recordAdminAuditEvent({
-      category: 'auth',
-      action: 'mfa.disabled',
-      outcome: 'success',
-      tenantId: access.tenant.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'mfa',
-      targetId: access.user.id,
+    await recordCanonicalOrganizationAdminAuditEvent({
+      db: getAppContainer().resolve<DrizzleDb>(INFRASTRUCTURE.DB),
+      organizationCandidate: access.tenant.organizationId,
+      legacyTenantId: access.tenant.tenantId,
+      event: {
+        category: 'auth',
+        action: 'mfa.disabled',
+        outcome: 'success',
+        actorUserId: access.user.id,
+        targetType: 'mfa',
+        targetId: access.user.id,
+      },
     });
 
     return createSuccessResponse({ disabled: true });

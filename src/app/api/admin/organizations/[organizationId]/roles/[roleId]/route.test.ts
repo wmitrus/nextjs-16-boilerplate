@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
@@ -75,8 +77,8 @@ vi.mock(
   }),
 );
 
-vi.mock('@/security/actions/record-admin-audit-event', () => ({
-  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+vi.mock('@/app/_lib/record-canonical-admin-audit-event', () => ({
+  recordCanonicalOrganizationAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 function makeContext(
@@ -286,11 +288,15 @@ describe('PATCH /api/admin/organizations/[organizationId]/roles/[roleId]', () =>
     expect(body.data.role).toEqual(renamedRole);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        category: 'rbac_policy',
-        action: 'role.rename',
-        outcome: 'success',
-        targetType: 'role',
-        targetId: ROLE_ID,
+        organizationCandidate: ORG_ID,
+        legacyTenantId: 'tenant-acme',
+        event: expect.objectContaining({
+          category: 'rbac_policy',
+          action: 'role.rename',
+          outcome: 'success',
+          targetType: 'role',
+          targetId: ROLE_ID,
+        }),
       }),
     );
   });
@@ -364,11 +370,15 @@ describe('DELETE /api/admin/organizations/[organizationId]/roles/[roleId]', () =
     expect(body.data.roleId).toBe(ROLE_ID);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        category: 'rbac_policy',
-        action: 'role.delete',
-        outcome: 'success',
-        targetType: 'role',
-        targetId: ROLE_ID,
+        organizationCandidate: ORG_ID,
+        legacyTenantId: 'tenant-acme',
+        event: expect.objectContaining({
+          category: 'rbac_policy',
+          action: 'role.delete',
+          outcome: 'success',
+          targetType: 'role',
+          targetId: ROLE_ID,
+        }),
       }),
     );
   });

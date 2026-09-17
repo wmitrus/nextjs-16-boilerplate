@@ -5,6 +5,7 @@ import type { DrizzleDb } from '@/core/db';
 import { DefaultAuthorizationService } from './domain/AuthorizationService';
 import { PolicyEngine } from './domain/policy/PolicyEngine';
 import { DrizzleMembershipRepository } from './infrastructure/drizzle/DrizzleMembershipRepository';
+import { DrizzleOrganizationScopeAuthority } from './infrastructure/drizzle/DrizzleOrganizationScopeAuthority';
 import { DrizzlePolicyRepository } from './infrastructure/drizzle/DrizzlePolicyRepository';
 import { DrizzleRoleRepository } from './infrastructure/drizzle/DrizzleRoleRepository';
 import { DrizzleTenantAttributesRepository } from './infrastructure/drizzle/DrizzleTenantAttributesRepository';
@@ -23,6 +24,9 @@ export function createAuthorizationModule(
       const policyRepository = new DrizzlePolicyRepository(db);
       const roleRepository = new DrizzleRoleRepository(db);
       const membershipRepository = new DrizzleMembershipRepository(db);
+      const organizationScopeAuthority = new DrizzleOrganizationScopeAuthority(
+        db,
+      );
       const tenantAttributesRepository = new DrizzleTenantAttributesRepository(
         db,
       );
@@ -31,6 +35,10 @@ export function createAuthorizationModule(
 
       container.register(AUTHORIZATION.POLICY_REPOSITORY, policyRepository);
       container.register(AUTHORIZATION.ROLE_REPOSITORY, roleRepository);
+      container.register(
+        AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY,
+        organizationScopeAuthority,
+      );
       container.register(
         AUTHORIZATION.MEMBERSHIP_REPOSITORY,
         membershipRepository,

@@ -2,14 +2,24 @@ import '@/testing/infrastructure/logger';
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 const mocks = vi.hoisted(() => ({
   record: vi.fn().mockResolvedValue(undefined),
   resolve: vi.fn(),
+  identityLookup: {
+    findInternalOrganizationId: vi.fn(),
+  },
+  organizationAuthority: {
+    readParentTenantId: vi.fn(),
+  },
 }));
 
 vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => ({ resolve: mocks.resolve }),
 }));
+
+import { AUDIT_LOG, AUTH, AUTHORIZATION } from '@/core/contracts';
 
 import { logSecurityEvent } from './security-logger';
 
@@ -18,6 +28,28 @@ import {
   resetAllInfrastructureMocks,
   mockChildLogger,
 } from '@/testing';
+
+const ORG_ID = '15000000-0000-4000-8000-000000000001';
+const TENANT_ID = '10000000-0000-4000-8000-000000000001';
+
+function installResolver(auditRecord?: typeof mocks.record): void {
+  const registry = new Map<symbol, unknown>([
+    [AUTH.INTERNAL_IDENTITY_LOOKUP, mocks.identityLookup],
+    [AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY, mocks.organizationAuthority],
+  ]);
+
+  if (auditRecord) {
+    registry.set(AUDIT_LOG.SERVICE, { record: auditRecord });
+  }
+
+  mocks.resolve.mockImplementation((token: symbol) => {
+    if (!registry.has(token)) {
+      throw new Error(`Service not found for key: ${String(token)}`);
+    }
+
+    return registry.get(token);
+  });
+}
 
 describe('Security Logger', () => {
   const mockCtx = createMockSecurityContext({
@@ -30,10 +62,14 @@ describe('Security Logger', () => {
 
   beforeEach(() => {
     resetAllInfrastructureMocks();
-    mocks.record.mockClear();
-    mocks.resolve.mockImplementation(() => {
-      throw new Error('Service not found for key: Symbol(AuditLogService)');
-    });
+    mocks.record.mockReset().mockResolvedValue(undefined);
+    mocks.identityLookup.findInternalOrganizationId
+      .mockReset()
+      .mockResolvedValue(ORG_ID);
+    mocks.organizationAuthority.readParentTenantId
+      .mockReset()
+      .mockResolvedValue(TENANT_ID);
+    installResolver();
   });
 
   it('should log security events as fatal', async () => {
@@ -56,7 +92,7 @@ describe('Security Logger', () => {
 
   describe('AuditLogService wiring (Phase 2)', () => {
     it('records the event under the security_event category with outcome failure', async () => {
-      mocks.resolve.mockReturnValue({ record: mocks.record });
+      installResolver(mocks.record);
 
       await logSecurityEvent({
         event: 'ssrf_attempt',
@@ -69,7 +105,12 @@ describe('Security Logger', () => {
           category: 'security_event',
           action: 'ssrf_attempt',
           outcome: 'failure',
-          tenantId: 't1',
+          writeScope: {
+            kind: 'organization',
+            organizationId: ORG_ID,
+            tenantId: TENANT_ID,
+          },
+          legacyTenantId: 't1',
           actorUserId: 'u1',
           ip: '1.1.1.1',
           correlationId: 'c1',
@@ -80,7 +121,7 @@ describe('Security Logger', () => {
     });
 
     it('redacts sensitive metadata fields before persisting', async () => {
-      mocks.resolve.mockReturnValue({ record: mocks.record });
+      installResolver(mocks.record);
 
       await logSecurityEvent({
         event: 'tenant_violation',

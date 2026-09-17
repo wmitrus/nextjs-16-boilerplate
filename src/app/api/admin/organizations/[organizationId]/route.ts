@@ -21,11 +21,11 @@ import {
   organizationIdSchema,
 } from '../_lib';
 
+import { recordCanonicalOrganizationAdminAuditEvent } from '@/app/_lib/record-canonical-admin-audit-event';
 import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import { OrganizationNotFoundError } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsMutationService';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
-import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
@@ -170,14 +170,18 @@ export const PATCH = withErrorHandler(
             status: bodyResult.data.status,
           });
 
-        await recordAdminAuditEvent({
-          category: 'organization',
-          action: 'organization.update_status',
-          outcome: 'success',
-          tenantId: access.tenant.tenantId,
-          actorUserId: access.user.id,
-          targetType: 'organization',
-          targetId: parseResult.data.id,
+        await recordCanonicalOrganizationAdminAuditEvent({
+          db,
+          organizationCandidate: organization.organization.id,
+          legacyTenantId: access.tenant.tenantId,
+          event: {
+            category: 'organization',
+            action: 'organization.update_status',
+            outcome: 'success',
+            actorUserId: access.user.id,
+            targetType: 'organization',
+            targetId: parseResult.data.id,
+          },
         });
 
         return createSuccessResponse({ organization: updatedOrganization });

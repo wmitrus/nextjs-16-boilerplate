@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
@@ -75,8 +77,8 @@ vi.mock(
   }),
 );
 
-vi.mock('@/security/actions/record-admin-audit-event', () => ({
-  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+vi.mock('@/app/_lib/record-canonical-admin-audit-event', () => ({
+  recordCanonicalOrganizationAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 function makeContext(
@@ -301,11 +303,15 @@ describe('PATCH /api/admin/organizations/[organizationId]/policies/[policyId]', 
     expect(body.data.policy).toEqual(updatedPolicy);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        category: 'rbac_policy',
-        action: 'rbac_policy.update',
-        outcome: 'success',
-        targetType: 'policy',
-        targetId: POLICY_ID,
+        organizationCandidate: ORG_ID,
+        legacyTenantId: 'tenant-acme',
+        event: expect.objectContaining({
+          category: 'rbac_policy',
+          action: 'rbac_policy.update',
+          outcome: 'success',
+          targetType: 'policy',
+          targetId: POLICY_ID,
+        }),
       }),
     );
   });
@@ -430,11 +436,15 @@ describe('DELETE /api/admin/organizations/[organizationId]/policies/[policyId]',
     expect(body.data.policyId).toBe(POLICY_ID);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        category: 'rbac_policy',
-        action: 'rbac_policy.delete',
-        outcome: 'success',
-        targetType: 'policy',
-        targetId: POLICY_ID,
+        organizationCandidate: ORG_ID,
+        legacyTenantId: 'tenant-acme',
+        event: expect.objectContaining({
+          category: 'rbac_policy',
+          action: 'rbac_policy.delete',
+          outcome: 'success',
+          targetType: 'policy',
+          targetId: POLICY_ID,
+        }),
       }),
     );
   });

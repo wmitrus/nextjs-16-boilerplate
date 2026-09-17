@@ -202,6 +202,7 @@ export function createAuthModule(config: AuthModuleConfig): Module {
           provider: config.authProvider,
         }),
       );
+      container.register(AUTH.INTERNAL_IDENTITY_LOOKUP, lookup);
       container.register(AUTH.TENANT_RESOLVER, tenantResolver);
       container.register(AUTH.USER_REPOSITORY, userRepository);
       container.register(

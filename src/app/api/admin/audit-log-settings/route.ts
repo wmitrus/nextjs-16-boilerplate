@@ -5,6 +5,7 @@ import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import type { AuthorizationService } from '@/core/contracts/authorization';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 import type { DrizzleDb } from '@/core/db';
+import { env } from '@/core/env';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -14,6 +15,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveCanonicalAuditWriteScope } from '@/app/_lib/resolve-canonical-audit-write-scope';
 import {
   AUDIT_CATEGORIES,
   AUDIT_RETENTION_DAYS_MAX,
@@ -21,7 +23,10 @@ import {
   AUDIT_SAMPLE_RATE_MAX,
   AUDIT_SAMPLE_RATE_MIN,
 } from '@/modules/audit-log/domain/category';
-import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
+import {
+  AuditSettingAliasConflictError,
+  AuditSettingNotFoundError,
+} from '@/modules/audit-log/domain/errors';
 import { DrizzleAuditLogSettingsAdminService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withAdminStepUp } from '@/security/api/with-admin-step-up';
@@ -193,20 +198,56 @@ export const PATCH = withErrorHandler(
         : { tenantId: access.tenant.tenantId };
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+      const canonical = await resolveCanonicalAuditWriteScope({
+        isPlatformAdmin: adminAccess.isPlatformAdmin,
+        ordinaryActiveOrganizationId: access.tenant.organizationId,
+        platformTargetOrganizationId: adminAccess.isPlatformAdmin
+          ? requestedTenantId
+          : null,
+        db,
+        authProvider: env.AUTH_PROVIDER,
+      });
+
+      if (canonical.outcome === 'unresolvable-organization-target') {
+        return createServerErrorResponse(
+          'The target organization could not be resolved to an internal organization',
+          422,
+          'ORGANIZATION_NOT_RESOLVED',
+        );
+      }
+
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
-      const setting = await service.upsert(
-        {
-          category: parseResult.data.category,
-          tenantId: requestedTenantId,
-          enabled: parseResult.data.enabled,
-          retentionDays: parseResult.data.retentionDays,
-          sampleRate: parseResult.data.sampleRate ?? null,
-          captureInputOnSuccess: parseResult.data.captureInputOnSuccess,
-          updatedByUserId: access.user.id,
-        },
-        scope,
-      );
+      let setting: Awaited<
+        ReturnType<DrizzleAuditLogSettingsAdminService['upsert']>
+      >;
+
+      try {
+        setting = await service.upsert(
+          {
+            category: parseResult.data.category,
+            tenantId: requestedTenantId,
+            enabled: parseResult.data.enabled,
+            retentionDays: parseResult.data.retentionDays,
+            sampleRate: parseResult.data.sampleRate ?? null,
+            captureInputOnSuccess: parseResult.data.captureInputOnSuccess,
+            updatedByUserId: access.user.id,
+          },
+          scope,
+          canonical.writeScope,
+        );
+      } catch (error) {
+        if (error instanceof AuditSettingAliasConflictError) {
+          return createServerErrorResponse(
+            'The requested audit setting alias conflicts with an existing legacy override',
+            409,
+            'AUDIT_SETTING_ALIAS_CONFLICT',
+          );
+        }
+
+        throw error;
+      }
 
       logger.info(
         {
@@ -226,7 +267,8 @@ export const PATCH = withErrorHandler(
         category: 'rbac_policy',
         action: 'audit_log_setting.update',
         outcome: 'success',
-        tenantId: setting.tenantId,
+        writeScope: canonical.writeScope,
+        legacyTenantId: setting.tenantId,
         actorUserId: access.user.id,
         targetType: 'audit_log_setting',
         targetId: setting.category,
@@ -290,6 +332,30 @@ export const DELETE = withErrorHandler(
         : { tenantId: access.tenant.tenantId };
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+      const canonical = await resolveCanonicalAuditWriteScope({
+        isPlatformAdmin: adminAccess.isPlatformAdmin,
+        ordinaryActiveOrganizationId: access.tenant.organizationId,
+        platformTargetOrganizationId: adminAccess.isPlatformAdmin
+          ? requestedTenantId
+          : null,
+        db,
+        authProvider: env.AUTH_PROVIDER,
+      });
+
+      if (canonical.outcome === 'unresolvable-organization-target') {
+        return createServerErrorResponse(
+          'The target organization could not be resolved to an internal organization',
+          422,
+          'ORGANIZATION_NOT_RESOLVED',
+        );
+      }
+
+      const stableTenantId =
+        canonical.writeScope.kind === 'organization'
+          ? canonical.writeScope.organizationId
+          : null;
+
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
       try {
@@ -297,6 +363,7 @@ export const DELETE = withErrorHandler(
           parseResult.data.category,
           requestedTenantId,
           scope,
+          canonical.writeScope,
         );
 
         logger.info(
@@ -305,19 +372,23 @@ export const DELETE = withErrorHandler(
             adminId: access.user.id,
             tenantId: access.tenant.tenantId,
             category: parseResult.data.category,
-            settingTenantId: requestedTenantId,
+            settingTenantId: stableTenantId,
           },
           'Audit log setting reset to default by admin',
         );
 
         // See the identical note on the PATCH handler above (Codex review,
         // PR #72): recorded under 'rbac_policy', never under the category
-        // whose override was just removed.
+        // whose override was just removed. Canonical resolution above is
+        // required by the BUSINESS mutation itself so provider aliases can be
+        // normalized to the stable internal organization compatibility key.
+        // `recordAdminAuditEvent` independently catches audit-write failures.
         await recordAdminAuditEvent({
           category: 'rbac_policy',
           action: 'audit_log_setting.reset',
           outcome: 'success',
-          tenantId: requestedTenantId,
+          writeScope: canonical.writeScope,
+          legacyTenantId: stableTenantId,
           actorUserId: access.user.id,
           targetType: 'audit_log_setting',
           targetId: parseResult.data.category,
@@ -325,6 +396,14 @@ export const DELETE = withErrorHandler(
 
         return createSuccessResponse({ deleted: true });
       } catch (error) {
+        if (error instanceof AuditSettingAliasConflictError) {
+          return createServerErrorResponse(
+            'The requested audit setting alias conflicts with an existing legacy override',
+            409,
+            'AUDIT_SETTING_ALIAS_CONFLICT',
+          );
+        }
+
         if (error instanceof AuditSettingNotFoundError) {
           return createServerErrorResponse(
             'Audit log setting not found',

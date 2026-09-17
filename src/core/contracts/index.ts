@@ -5,6 +5,7 @@ export const INFRASTRUCTURE = {
 export const AUTH = {
   IDENTITY_SOURCE: Symbol('IdentitySource'),
   IDENTITY_PROVIDER: Symbol('IdentityProvider'),
+  INTERNAL_IDENTITY_LOOKUP: Symbol('InternalIdentityLookup'),
   TENANT_RESOLVER: Symbol('TenantResolver'),
   USER_REPOSITORY: Symbol('UserRepository'),
   MFA_SERVICE: Symbol('MfaService'),
@@ -12,6 +13,7 @@ export const AUTH = {
 
 export const AUTHORIZATION = {
   SERVICE: Symbol('AuthorizationService'),
+  ORGANIZATION_SCOPE_AUTHORITY: Symbol('OrganizationScopeAuthority'),
   ROLE_REPOSITORY: Symbol('RoleRepository'),
   MEMBERSHIP_REPOSITORY: Symbol('MembershipRepository'),
   POLICY_REPOSITORY: Symbol('PolicyRepository'),

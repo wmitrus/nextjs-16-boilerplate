@@ -441,28 +441,16 @@ describe('POST /api/admin/feature-flags', () => {
     );
   });
 
-  it('REGRESSION: audit event uses the flag’s LEGACY tenant_id (Audit subsystem compatibility key), never canonical Feature Flag authority', async () => {
-    // OZI-71 FF·D final review — the Audit subsystem (audit_events /
-    // audit_log_settings) has NOT undergone AUD·A-D: `resolveEffectiveAuditSetting`
-    // still matches by exact string equality against
-    // `audit_log_settings.tenant_id`, and `audit_events.tenant_id` stores
-    // that same legacy key. Feeding it the canonical `TenantId` instead
-    // would resolve settings against a value that predates and may not
-    // match any legacy-configured override -- crossing the FF/AUD package
-    // boundary before AUD's own coordinated cutover. This test proves the
-    // two concepts stay independent: canonical resolution
-    // (`resolveCanonicalFeatureFlagWrite`) still runs and its facts still
-    // reach `service.create` unchanged (Feature Flag authorization is
-    // untouched), while the audit event's `tenantId` comes from the
-    // returned DTO's legacy `tenant_id` shadow value -- deliberately
-    // DIFFERENT from the canonical parent tenant here, to prove the audit
-    // path doesn't quietly read the canonical value instead.
+  it('REGRESSION: audit event normalizes its compatibility key to the internal organization id', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
+
+    const FEATURE_FLAG_LEGACY_ALIAS =
+      'legacy-shadow-value-unrelated-to-canonical';
+
     mocks.create.mockResolvedValue({
       ...TEST_FLAG,
-      tenantId: LEGACY_SHADOW_VALUE,
+      tenantId: FEATURE_FLAG_LEGACY_ALIAS,
     });
 
     const { POST } = await import('./route');
@@ -476,20 +464,25 @@ describe('POST /api/admin/feature-flags', () => {
     );
 
     expect(res.status).toBe(201);
-    // Canonical Feature Flag authorization is unaffected: the resolved
-    // organization facts still reach `service.create` untouched.
     expect(mocks.create).toHaveBeenCalledWith(expect.anything(), ORG_FACTS);
-    // The audit event uses the legacy shadow value, NOT the canonical
-    // parent tenant (which differs from LEGACY_SHADOW_VALUE here).
+
+    // Feature Flags may retain a raw provider alias for its own rollback
+    // contract, but Audit has a separate compatibility fact. AUD·B normalizes
+    // that fact to the internal organization UUID used by other org writers.
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: LEGACY_SHADOW_VALUE }),
+      expect.objectContaining({
+        legacyTenantId: ORG_FACTS.organizationId,
+        writeScope: ORG_FACTS,
+      }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: ORG_FACTS.tenantId }),
+      expect.objectContaining({
+        legacyTenantId: FEATURE_FLAG_LEGACY_ALIAS,
+      }),
     );
   });
 
-  it('attributes an explicit platform-global create’s audit event to tenantId: null', async () => {
+  it('attributes an explicit platform-global create to platform-global writeScope with no legacy tenant', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
     mocks.resolveCanonical.mockResolvedValue({
@@ -506,7 +499,10 @@ describe('POST /api/admin/feature-flags', () => {
 
     expect(res.status).toBe(201);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: null }),
+      expect.objectContaining({
+        legacyTenantId: null,
+        writeScope: { kind: 'platform-global' },
+      }),
     );
   });
 

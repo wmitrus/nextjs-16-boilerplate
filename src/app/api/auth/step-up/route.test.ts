@@ -2,6 +2,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 const envMock = vi.hoisted(() => ({
   APP_SECURITY_MASTER_KEY: 'step-up-route-test-master-key-not-a-real-secret' as
     | string
@@ -51,8 +53,8 @@ vi.mock('@/security/api/strict-rate-limit', () => ({
   checkStrictRateLimit: mocks.checkStrictRateLimit,
 }));
 
-vi.mock('@/security/actions/record-admin-audit-event', () => ({
-  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+vi.mock('@/app/_lib/record-canonical-admin-audit-event', () => ({
+  recordCanonicalOrganizationAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 import { AUTH } from '@/core/contracts';
@@ -120,10 +122,14 @@ describe('POST /api/auth/step-up', () => {
 
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        category: 'auth',
-        action: 'mfa.challenge.verified',
-        outcome: 'success',
-        metadata: { factor: 'otp' },
+        organizationCandidate: ACCESS.tenant.organizationId,
+        legacyTenantId: ACCESS.tenant.tenantId,
+        event: expect.objectContaining({
+          category: 'auth',
+          action: 'mfa.challenge.verified',
+          outcome: 'success',
+          metadata: { factor: 'otp' },
+        }),
       }),
     );
   });
@@ -165,8 +171,12 @@ describe('POST /api/auth/step-up', () => {
     expect(response.cookies.get(STEP_UP_COOKIE_NAME)).toBeUndefined();
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'mfa.challenge.failed',
-        metadata: { reason: 'invalid_code' },
+        organizationCandidate: ACCESS.tenant.organizationId,
+        legacyTenantId: ACCESS.tenant.tenantId,
+        event: expect.objectContaining({
+          action: 'mfa.challenge.failed',
+          metadata: { reason: 'invalid_code' },
+        }),
       }),
     );
   });
@@ -186,7 +196,13 @@ describe('POST /api/auth/step-up', () => {
       code: 'MFA_CODE_INVALID',
     });
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ metadata: { reason: 'replayed' } }),
+      expect.objectContaining({
+        organizationCandidate: ACCESS.tenant.organizationId,
+        legacyTenantId: ACCESS.tenant.tenantId,
+        event: expect.objectContaining({
+          metadata: { reason: 'replayed' },
+        }),
+      }),
     );
   });
 

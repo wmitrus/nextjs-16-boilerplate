@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
@@ -70,8 +72,8 @@ vi.mock(
   }),
 );
 
-vi.mock('@/security/actions/record-admin-audit-event', () => ({
-  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+vi.mock('@/app/_lib/record-canonical-admin-audit-event', () => ({
+  recordCanonicalOrganizationAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 function makeRequest(body?: unknown) {
@@ -214,13 +216,16 @@ describe('POST /api/admin/organizations/[organizationId]/roles', () => {
     });
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        category: 'rbac_policy',
-        action: 'role.create',
-        outcome: 'success',
-        tenantId: 'tenant-acme',
-        actorUserId: 'admin-1',
-        targetType: 'role',
-        targetId: createdRole.id,
+        organizationCandidate: ORG_ID,
+        legacyTenantId: 'tenant-acme',
+        event: expect.objectContaining({
+          category: 'rbac_policy',
+          action: 'role.create',
+          outcome: 'success',
+          actorUserId: 'admin-1',
+          targetType: 'role',
+          targetId: createdRole.id,
+        }),
       }),
     );
   });

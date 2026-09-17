@@ -19,6 +19,7 @@ import {
   organizationIdSchema,
 } from '../../../_lib';
 
+import { recordCanonicalOrganizationAdminAuditEvent } from '@/app/_lib/record-canonical-admin-audit-event';
 import { resolveOrganizationsAdminScope } from '@/app/admin/organizations/organizations-admin-scope';
 import {
   DuplicateRoleNameError,
@@ -29,7 +30,6 @@ import {
 } from '@/modules/authorization/domain/errors';
 import { DrizzleAdminOrganizationsReadService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminOrganizationsReadService';
 import { DrizzleAdminRolesMutationService } from '@/modules/authorization/infrastructure/drizzle/DrizzleAdminRolesMutationService';
-import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withAdminStepUp } from '@/security/api/with-admin-step-up';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 
@@ -134,14 +134,18 @@ export const PATCH = withErrorHandler(
           name: bodyResult.data.name,
         });
 
-        await recordAdminAuditEvent({
-          category: 'rbac_policy',
-          action: 'role.rename',
-          outcome: 'success',
-          tenantId: access.tenant.tenantId,
-          actorUserId: access.user.id,
-          targetType: 'role',
-          targetId: roleResult.data.roleId,
+        await recordCanonicalOrganizationAdminAuditEvent({
+          db,
+          organizationCandidate: organization.organization.id,
+          legacyTenantId: access.tenant.tenantId,
+          event: {
+            category: 'rbac_policy',
+            action: 'role.rename',
+            outcome: 'success',
+            actorUserId: access.user.id,
+            targetType: 'role',
+            targetId: roleResult.data.roleId,
+          },
         });
 
         return createSuccessResponse({ role });
@@ -243,14 +247,18 @@ export const DELETE = withErrorHandler(
           roleId: roleResult.data.roleId,
         });
 
-        await recordAdminAuditEvent({
-          category: 'rbac_policy',
-          action: 'role.delete',
-          outcome: 'success',
-          tenantId: access.tenant.tenantId,
-          actorUserId: access.user.id,
-          targetType: 'role',
-          targetId: roleResult.data.roleId,
+        await recordCanonicalOrganizationAdminAuditEvent({
+          db,
+          organizationCandidate: organization.organization.id,
+          legacyTenantId: access.tenant.tenantId,
+          event: {
+            category: 'rbac_policy',
+            action: 'role.delete',
+            outcome: 'success',
+            actorUserId: access.user.id,
+            targetType: 'role',
+            targetId: roleResult.data.roleId,
+          },
         });
 
         return createSuccessResponse({ roleId: roleResult.data.roleId });

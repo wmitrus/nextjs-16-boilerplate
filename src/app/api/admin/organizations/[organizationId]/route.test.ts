@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
@@ -52,8 +54,8 @@ vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => mocks.container,
 }));
 
-vi.mock('@/security/actions/record-admin-audit-event', () => ({
-  recordAdminAuditEvent: mocks.recordAdminAuditEvent,
+vi.mock('@/app/_lib/record-canonical-admin-audit-event', () => ({
+  recordCanonicalOrganizationAdminAuditEvent: mocks.recordAdminAuditEvent,
 }));
 
 vi.mock(
@@ -209,11 +211,15 @@ describe('PATCH /api/admin/organizations/[organizationId]', () => {
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        category: 'organization',
-        action: 'organization.update_status',
-        outcome: 'success',
-        targetType: 'organization',
-        targetId: ORG_ID,
+        organizationCandidate: ORG_ID,
+        legacyTenantId: 'tenant_test_1',
+        event: expect.objectContaining({
+          category: 'organization',
+          action: 'organization.update_status',
+          outcome: 'success',
+          targetType: 'organization',
+          targetId: ORG_ID,
+        }),
       }),
     );
   });

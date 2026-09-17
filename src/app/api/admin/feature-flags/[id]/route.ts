@@ -177,12 +177,19 @@ export const PATCH = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.update',
           outcome: 'success',
-          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
-          // shadow value, NOT canonical Feature Flag authority. See the
-          // identical, fully-explained note on the create handler
-          // (`route.ts`) — the Audit subsystem stays on its own legacy
-          // `tenant_id` contract until the coordinated AUD·A-D package.
-          tenantId: flag.tenantId,
+          // OZI-71 AUD·B — Audit compatibility is normalized independently
+          // from Feature Flags' own legacy shadow key. Organization-owned
+          // Audit events use the stable internal organization UUID.
+          writeScope:
+            scope.kind === 'organization'
+              ? {
+                  kind: 'organization',
+                  organizationId: scope.organizationId,
+                  tenantId: scope.tenantId,
+                }
+              : { kind: 'platform-global' },
+          legacyTenantId:
+            scope.kind === 'organization' ? scope.organizationId : null,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,
@@ -246,7 +253,7 @@ export const DELETE = withErrorHandler(
       const service = new DrizzleFeatureFlagAdminService(db);
 
       try {
-        const flag = await service.delete(id, scope);
+        await service.delete(id, scope);
 
         logger.info(
           {
@@ -262,12 +269,19 @@ export const DELETE = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.delete',
           outcome: 'success',
-          // OZI-71 FF·D review correction — the flag's legacy `tenant_id`
-          // shadow value, NOT canonical Feature Flag authority. See the
-          // identical, fully-explained note on the create handler
-          // (`route.ts`) — the Audit subsystem stays on its own legacy
-          // `tenant_id` contract until the coordinated AUD·A-D package.
-          tenantId: flag.tenantId,
+          // OZI-71 AUD·B — Audit compatibility is normalized independently
+          // from Feature Flags' own legacy shadow key. Organization-owned
+          // Audit events use the stable internal organization UUID.
+          writeScope:
+            scope.kind === 'organization'
+              ? {
+                  kind: 'organization',
+                  organizationId: scope.organizationId,
+                  tenantId: scope.tenantId,
+                }
+              : { kind: 'platform-global' },
+          legacyTenantId:
+            scope.kind === 'organization' ? scope.organizationId : null,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,

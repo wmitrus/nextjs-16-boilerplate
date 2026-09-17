@@ -23,6 +23,8 @@ const EVENT: AuditEventInput = {
   category: 'server_action',
   action: 'org.update',
   outcome: 'success',
+  writeScope: { kind: 'platform-global' },
+  legacyTenantId: null,
 };
 
 function makeDelegate(result: 'ok' | Error): AuditLogService {

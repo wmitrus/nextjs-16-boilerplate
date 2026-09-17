@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 import { ACTIONS, RESOURCES } from '@/core/contracts/resources-actions';
 

@@ -2,9 +2,10 @@ import { connection } from 'next/server';
 import type { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { AUTH } from '@/core/contracts';
+import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { MfaService, MfaVerificationFailure } from '@/core/contracts/mfa';
+import type { DrizzleDb } from '@/core/db/types';
 import { resolveServerLogger } from '@/core/logger/di';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
@@ -15,7 +16,7 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
-import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
+import { recordCanonicalOrganizationAdminAuditEvent } from '@/app/_lib/record-canonical-admin-audit-event';
 import { checkStrictRateLimit } from '@/security/api/strict-rate-limit';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
 import {
@@ -69,7 +70,12 @@ const logger = resolveServerLogger().child({
  */
 async function respondToFailedChallenge(
   reason: MfaVerificationFailure,
-  actor: { readonly userId: string; readonly tenantId: string },
+  actor: {
+    readonly userId: string;
+    readonly organizationId: string;
+    readonly legacyTenantId: string;
+    readonly db: DrizzleDb;
+  },
 ): Promise<NextResponse> {
   logger.warn(
     {
@@ -80,15 +86,19 @@ async function respondToFailedChallenge(
     },
     'Step-up challenge failed',
   );
-  await recordAdminAuditEvent({
-    category: 'auth',
-    action: 'mfa.challenge.failed',
-    outcome: 'denied',
-    tenantId: actor.tenantId,
-    actorUserId: actor.userId,
-    targetType: 'step_up',
-    targetId: STEP_UP_PATH,
-    metadata: { reason },
+  await recordCanonicalOrganizationAdminAuditEvent({
+    db: actor.db,
+    organizationCandidate: actor.organizationId,
+    legacyTenantId: actor.legacyTenantId,
+    event: {
+      category: 'auth',
+      action: 'mfa.challenge.failed',
+      outcome: 'denied',
+      actorUserId: actor.userId,
+      targetType: 'step_up',
+      targetId: STEP_UP_PATH,
+      metadata: { reason },
+    },
   });
 
   if (reason === 'not_enrolled') {
@@ -240,7 +250,9 @@ export const POST = withErrorHandler(
     if (!verification.ok) {
       return await respondToFailedChallenge(verification.reason, {
         userId: access.user.id,
-        tenantId: access.tenant.tenantId,
+        organizationId: access.tenant.organizationId,
+        legacyTenantId: access.tenant.tenantId,
+        db: container.resolve<DrizzleDb>(INFRASTRUCTURE.DB),
       });
     }
 
@@ -261,15 +273,19 @@ export const POST = withErrorHandler(
       },
       'Step-up challenge verified',
     );
-    await recordAdminAuditEvent({
-      category: 'auth',
-      action: 'mfa.challenge.verified',
-      outcome: 'success',
-      tenantId: access.tenant.tenantId,
-      actorUserId: access.user.id,
-      targetType: 'step_up',
-      targetId: STEP_UP_PATH,
-      metadata: { factor: verification.factor },
+    await recordCanonicalOrganizationAdminAuditEvent({
+      db: container.resolve<DrizzleDb>(INFRASTRUCTURE.DB),
+      organizationCandidate: access.tenant.organizationId,
+      legacyTenantId: access.tenant.tenantId,
+      event: {
+        category: 'auth',
+        action: 'mfa.challenge.verified',
+        outcome: 'success',
+        actorUserId: access.user.id,
+        targetType: 'step_up',
+        targetId: STEP_UP_PATH,
+        metadata: { factor: verification.factor },
+      },
     });
 
     const response = createSuccessResponse({

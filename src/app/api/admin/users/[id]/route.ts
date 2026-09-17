@@ -195,7 +195,15 @@ export const PATCH = withErrorHandler(
           category: 'admin_access',
           action: 'user.deactivate',
           outcome: 'success',
-          tenantId: access.tenant.tenantId,
+          writeScope:
+            scope.kind === 'organization'
+              ? {
+                  kind: 'organization',
+                  organizationId: scope.organizationId,
+                  tenantId: scope.tenantId,
+                }
+              : { kind: 'platform-global' },
+          legacyTenantId: access.tenant.tenantId,
           actorUserId: access.user.id,
           targetType: 'user',
           targetId: id,
@@ -254,7 +262,15 @@ export const PATCH = withErrorHandler(
         category: 'admin_access',
         action: 'user.update',
         outcome: 'success',
-        tenantId: access.tenant.tenantId,
+        writeScope:
+          scope.kind === 'organization'
+            ? {
+                kind: 'organization',
+                organizationId: scope.organizationId,
+                tenantId: scope.tenantId,
+              }
+            : { kind: 'platform-global' },
+        legacyTenantId: access.tenant.tenantId,
         actorUserId: access.user.id,
         targetType: 'user',
         targetId: id,

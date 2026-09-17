@@ -333,12 +333,35 @@ export const DELETE = withErrorHandler(
 
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
 
+      const canonical = await resolveCanonicalAuditWriteScope({
+        isPlatformAdmin: adminAccess.isPlatformAdmin,
+        ordinaryActiveOrganizationId: access.tenant.organizationId,
+        platformTargetOrganizationId: adminAccess.isPlatformAdmin
+          ? requestedTenantId
+          : null,
+        db,
+        authProvider: env.AUTH_PROVIDER,
+      });
+
+      if (canonical.outcome === 'unresolvable-organization-target') {
+        return createServerErrorResponse(
+          'The target organization could not be resolved to an internal organization',
+          422,
+          'ORGANIZATION_NOT_RESOLVED',
+        );
+      }
+
+      const stableTenantId =
+        canonical.writeScope.kind === 'organization'
+          ? canonical.writeScope.organizationId
+          : null;
+
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
       try {
         await service.resetToDefault(
           parseResult.data.category,
-          requestedTenantId,
+          stableTenantId,
           scope,
         );
 
@@ -348,62 +371,27 @@ export const DELETE = withErrorHandler(
             adminId: access.user.id,
             tenantId: access.tenant.tenantId,
             category: parseResult.data.category,
-            settingTenantId: requestedTenantId,
+            settingTenantId: stableTenantId,
           },
           'Audit log setting reset to default by admin',
         );
 
         // See the identical note on the PATCH handler above (Codex review,
         // PR #72): recorded under 'rbac_policy', never under the category
-        // whose override was just removed.
-        //
-        // OZI-71 AUD·B — canonical audit classification is deliberately
-        // resolved AFTER the business mutation. A failure to classify this
-        // ancillary audit event must drop the event fail-closed, never turn
-        // the already-authorized reset into a failed business operation and
-        // never reattribute the event as platform-global.
-        try {
-          const canonical = await resolveCanonicalAuditWriteScope({
-            isPlatformAdmin: adminAccess.isPlatformAdmin,
-            ordinaryActiveOrganizationId: access.tenant.organizationId,
-            platformTargetOrganizationId: adminAccess.isPlatformAdmin
-              ? requestedTenantId
-              : null,
-            db,
-            authProvider: env.AUTH_PROVIDER,
-          });
-
-          if (canonical.outcome === 'resolved') {
-            await recordAdminAuditEvent({
-              category: 'rbac_policy',
-              action: 'audit_log_setting.reset',
-              outcome: 'success',
-              writeScope: canonical.writeScope,
-              legacyTenantId: requestedTenantId,
-              actorUserId: access.user.id,
-              targetType: 'audit_log_setting',
-              targetId: parseResult.data.category,
-            });
-          } else {
-            logger.warn(
-              {
-                event: 'admin:audit_log_setting_reset_audit_dropped',
-                category: parseResult.data.category,
-                reason: 'unresolvable-organization-target',
-              },
-              'Audit event dropped because canonical organization ownership could not be resolved',
-            );
-          }
-        } catch (error) {
-          logger.warn(
-            {
-              event: 'admin:audit_log_setting_reset_audit_dropped',
-              category: parseResult.data.category,
-              errorName: error instanceof Error ? error.name : 'UnknownError',
-            },
-            'Audit event dropped because canonical ownership classification failed',
-          );
-        }
+        // whose override was just removed. Canonical resolution above is
+        // required by the BUSINESS mutation itself so provider aliases can be
+        // normalized to the stable internal organization compatibility key.
+        // `recordAdminAuditEvent` independently catches audit-write failures.
+        await recordAdminAuditEvent({
+          category: 'rbac_policy',
+          action: 'audit_log_setting.reset',
+          outcome: 'success',
+          writeScope: canonical.writeScope,
+          legacyTenantId: stableTenantId,
+          actorUserId: access.user.id,
+          targetType: 'audit_log_setting',
+          targetId: parseResult.data.category,
+        });
 
         return createSuccessResponse({ deleted: true });
       } catch (error) {

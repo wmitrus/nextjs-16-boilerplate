@@ -130,17 +130,17 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       await svc.upsert(
         {
           category: 'auth',
-          tenantId: 'acme',
+          tenantId: ORG_A1,
           enabled: true,
           retentionDays: 10,
           captureInputOnSuccess: true,
           updatedByUserId: null,
         },
-        { tenantId: 'acme' },
+        { tenantId: ORG_A1 },
         ACME_WRITE_SCOPE,
       );
 
-      const acmeView = await svc.listEffectiveForTenant('acme');
+      const acmeView = await svc.listEffectiveForTenant(ORG_A1);
       const auth = acmeView.find((s) => s.category === 'auth');
       expect(auth).toMatchObject({
         source: 'tenant-override',
@@ -151,7 +151,7 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
 
       // A different tenant with no override of its own falls back to the
       // global row, never to acme's override (SEC-26).
-      const globexView = await svc.listEffectiveForTenant('globex');
+      const globexView = await svc.listEffectiveForTenant(ORG_B1);
       const globexAuth = globexView.find((s) => s.category === 'auth');
       expect(globexAuth).toMatchObject({
         source: 'global',
@@ -198,13 +198,14 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       ).toHaveLength(1);
     });
 
-    it('moves the active legacy compatibility key when the same canonical organization is updated through another alias', async () => {
+    it('normalizes provider aliases to the stable internal organization compatibility key', async () => {
       const providerAlias = 'org_provider_acme';
 
+      // First store through the stable internal UUID.
       const created = await svc.upsert(
         {
           category: 'security_event',
-          tenantId: providerAlias,
+          tenantId: ORG_A1,
           enabled: true,
           retentionDays: 30,
           captureInputOnSuccess: false,
@@ -214,10 +215,12 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         ACME_WRITE_SCOPE,
       );
 
-      const updated = await svc.upsert(
+      // Updating the SAME canonical organization through a provider alias must
+      // never rotate the Audit compatibility key away from the internal UUID.
+      const updatedViaProvider = await svc.upsert(
         {
           category: 'security_event',
-          tenantId: ORG_A1,
+          tenantId: providerAlias,
           enabled: false,
           retentionDays: 90,
           captureInputOnSuccess: true,
@@ -227,8 +230,8 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         ACME_WRITE_SCOPE,
       );
 
-      expect(updated.id).toBe(created.id);
-      expect(updated).toMatchObject({
+      expect(updatedViaProvider.id).toBe(created.id);
+      expect(updatedViaProvider).toMatchObject({
         tenantId: ORG_A1,
         enabled: false,
         retentionDays: 90,
@@ -236,7 +239,6 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       });
 
       const rows = await testDb.db.select().from(auditLogSettingsTable);
-
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
         id: created.id,
@@ -249,9 +251,9 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         captureInputOnSuccess: true,
       });
 
-      // AUD·B effective reads still use exact legacy tenant_id matching.
-      // The alias used by the current write must therefore immediately see
-      // the updated override rather than global/taxonomy fallback.
+      // Legacy AUD·B readers use exact string equality. Organization-scoped
+      // events therefore still see the updated override through the stable
+      // internal organization UUID.
       const effective = await svc.listEffectiveForTenant(ORG_A1);
       expect(
         effective.find((setting) => setting.category === 'security_event'),
@@ -262,17 +264,14 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         retentionDays: 90,
         captureInputOnSuccess: true,
       });
-    });
 
-    it('fails closed when the requested active alias is already occupied by a different legacy row', async () => {
-      const providerAlias = 'org_provider_acme';
-
-      const canonical = await svc.upsert(
+      // A first write supplied through a provider alias is normalized too.
+      const createdViaProvider = await svc.upsert(
         {
-          category: 'security_event',
+          category: 'server_action',
           tenantId: providerAlias,
           enabled: true,
-          retentionDays: 30,
+          retentionDays: 45,
           captureInputOnSuccess: false,
           updatedByUserId: null,
         },
@@ -280,9 +279,32 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         ACME_WRITE_SCOPE,
       );
 
-      // Simulate a pre-AUD·B legacy row that already owns the alias we are
-      // attempting to activate. AUD·B must not silently delete/reclassify it;
-      // AUD·C owns historical collision disposition.
+      expect(createdViaProvider.tenantId).toBe(ORG_A1);
+    });
+
+    it('fails closed when the stable internal compatibility key is occupied by another legacy row', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      // Simulate a canonical row produced by an earlier alias-shaped writer.
+      const [canonical] = await testDb.db
+        .insert(auditLogSettingsTable)
+        .values({
+          category: 'security_event',
+          tenantId: providerAlias,
+          organizationId: ORG_A1,
+          ownershipState: 'canonical_organization',
+          enabled: true,
+          retentionDays: 30,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        })
+        .returning();
+
+      expect(canonical).toBeDefined();
+
+      // Simulate an independent pre-AUD·B historical row already occupying
+      // the stable key. AUD·C owns collision disposition; AUD·B must not
+      // silently delete or repurpose either row.
       await testDb.db.insert(auditLogSettingsTable).values({
         category: 'security_event',
         tenantId: ORG_A1,
@@ -296,7 +318,7 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         svc.upsert(
           {
             category: 'security_event',
-            tenantId: ORG_A1,
+            tenantId: providerAlias,
             enabled: false,
             retentionDays: 90,
             captureInputOnSuccess: true,
@@ -310,7 +332,7 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       const rows = await testDb.db.select().from(auditLogSettingsTable);
       expect(rows).toHaveLength(2);
 
-      const canonicalAfter = rows.find((row) => row.id === canonical.id);
+      const canonicalAfter = rows.find((row) => row.id === canonical?.id);
       expect(canonicalAfter).toMatchObject({
         tenantId: providerAlias,
         organizationId: ORG_A1,
@@ -319,10 +341,12 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         retentionDays: 30,
       });
 
-      const legacyAfter = rows.find((row) => row.tenantId === ORG_A1);
+      const legacyAfter = rows.find(
+        (row) =>
+          row.tenantId === ORG_A1 && row.ownershipState === 'unresolved_legacy',
+      );
       expect(legacyAfter).toMatchObject({
         organizationId: null,
-        ownershipState: 'unresolved_legacy',
         enabled: true,
         retentionDays: 45,
       });
@@ -447,20 +471,20 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       const result = await svc.upsert(
         {
           category: 'auth',
-          tenantId: 'acme',
+          tenantId: ORG_A1,
           enabled: true,
           retentionDays: 30,
           captureInputOnSuccess: false,
           updatedByUserId: null,
         },
-        { tenantId: 'acme' },
+        { tenantId: ORG_A1 },
         ACME_WRITE_SCOPE,
       );
-      expect(result.tenantId).toBe('acme');
+      expect(result.tenantId).toBe(ORG_A1);
 
       const [stored] = await testDb.db.select().from(auditLogSettingsTable);
       expect(stored).toMatchObject({
-        tenantId: 'acme',
+        tenantId: ORG_A1,
         organizationId: ORG_A1,
         ownershipState: 'canonical_organization',
       });
@@ -491,22 +515,22 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       await svc.upsert(
         {
           category: 'auth',
-          tenantId: 'globex',
+          tenantId: ORG_B1,
           enabled: true,
           retentionDays: 30,
           captureInputOnSuccess: false,
           updatedByUserId: null,
         },
-        { tenantId: 'globex' },
+        { tenantId: ORG_B1 },
         GLOBEX_WRITE_SCOPE,
       );
 
       await expect(
-        svc.resetToDefault('auth', 'globex', { tenantId: 'acme' }),
+        svc.resetToDefault('auth', ORG_B1, { tenantId: ORG_A1 }),
       ).rejects.toThrow(AuditSettingScopeError);
 
       // The row must still exist -- the rejected delete must not have run.
-      const globexView = await svc.listEffectiveForTenant('globex');
+      const globexView = await svc.listEffectiveForTenant(ORG_B1);
       expect(globexView.find((s) => s.category === 'auth')?.source).toBe(
         'tenant-override',
       );

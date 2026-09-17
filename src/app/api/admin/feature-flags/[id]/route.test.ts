@@ -211,20 +211,15 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     expect(body.data.flag.enabled).toBe(false);
   });
 
-  it('REGRESSION: update keeps legacy compatibility key separate from canonical write scope', async () => {
-    // OZI-71 AUD·B — Audit ownership is now canonical, while the legacy
-    // compatibility key remains deliberately independent until AUD·D.
-    // `scope.tenantId` (the canonical
-    // parent tenant that authorized this mutation) and the returned DTO's
-    // legacy `tenant_id` are deliberately DIFFERENT values here, to prove
-    // the audit path reads the legacy one and canonical scope containment
-    // (already exercised by the SQL containment suite) is untouched by
-    // this choice.
+  it('REGRESSION: update normalizes the Audit compatibility key to the internal organization id', async () => {
     mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
-    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
+
+    const FEATURE_FLAG_LEGACY_ALIAS =
+      'legacy-shadow-value-unrelated-to-canonical';
+
     mocks.update.mockResolvedValue({
       ...MOCK_FLAG,
-      tenantId: LEGACY_SHADOW_VALUE,
+      tenantId: FEATURE_FLAG_LEGACY_ALIAS,
     });
 
     const { PATCH } = await import('./route');
@@ -232,9 +227,8 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
       makeRequest('PATCH', { enabled: false }),
       makeContext(),
     );
+
     expect(res.status).toBe(200);
-    // Canonical mutation containment is unaffected: the same-statement
-    // scope predicate still ran with the real canonical scope.
     expect(mocks.update).toHaveBeenCalledWith(
       FLAG_ID,
       expect.anything(),
@@ -242,13 +236,13 @@ describe('PATCH /api/admin/feature-flags/[id]', () => {
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        legacyTenantId: LEGACY_SHADOW_VALUE,
+        legacyTenantId: ORG_SCOPE.organizationId,
         writeScope: ORG_SCOPE,
       }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        legacyTenantId: ORG_SCOPE.tenantId,
+        legacyTenantId: FEATURE_FLAG_LEGACY_ALIAS,
       }),
     );
   });
@@ -357,27 +351,31 @@ describe('DELETE /api/admin/feature-flags/[id]', () => {
     expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, ORG_SCOPE);
   });
 
-  it('REGRESSION: delete keeps legacy compatibility key separate from canonical write scope', async () => {
+  it('REGRESSION: delete normalizes the Audit compatibility key to the internal organization id', async () => {
     mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
-    const LEGACY_SHADOW_VALUE = 'legacy-shadow-value-unrelated-to-canonical';
+
+    const FEATURE_FLAG_LEGACY_ALIAS =
+      'legacy-shadow-value-unrelated-to-canonical';
+
     mocks.delete.mockResolvedValue({
       ...MOCK_FLAG,
-      tenantId: LEGACY_SHADOW_VALUE,
+      tenantId: FEATURE_FLAG_LEGACY_ALIAS,
     });
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeRequest('DELETE'), makeContext());
+
     expect(res.status).toBe(200);
     expect(mocks.delete).toHaveBeenCalledWith(FLAG_ID, ORG_SCOPE);
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        legacyTenantId: LEGACY_SHADOW_VALUE,
+        legacyTenantId: ORG_SCOPE.organizationId,
         writeScope: ORG_SCOPE,
       }),
     );
     expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        legacyTenantId: ORG_SCOPE.tenantId,
+        legacyTenantId: FEATURE_FLAG_LEGACY_ALIAS,
       }),
     );
   });

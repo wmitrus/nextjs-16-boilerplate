@@ -177,9 +177,9 @@ export const PATCH = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.update',
           outcome: 'success',
-          // OZI-71 AUD·B — canonical Audit ownership follows the already
-          // authorized canonical mutation scope. The flag's legacy
-          // `tenant_id` remains compatibility data only.
+          // OZI-71 AUD·B — Audit compatibility is normalized independently
+          // from Feature Flags' own legacy shadow key. Organization-owned
+          // Audit events use the stable internal organization UUID.
           writeScope:
             scope.kind === 'organization'
               ? {
@@ -188,7 +188,8 @@ export const PATCH = withErrorHandler(
                   tenantId: scope.tenantId,
                 }
               : { kind: 'platform-global' },
-          legacyTenantId: flag.tenantId,
+          legacyTenantId:
+            scope.kind === 'organization' ? scope.organizationId : null,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,
@@ -252,7 +253,7 @@ export const DELETE = withErrorHandler(
       const service = new DrizzleFeatureFlagAdminService(db);
 
       try {
-        const flag = await service.delete(id, scope);
+        await service.delete(id, scope);
 
         logger.info(
           {
@@ -268,9 +269,9 @@ export const DELETE = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.delete',
           outcome: 'success',
-          // OZI-71 AUD·B — canonical Audit ownership follows the already
-          // authorized canonical mutation scope. The flag's legacy
-          // `tenant_id` remains compatibility data only.
+          // OZI-71 AUD·B — Audit compatibility is normalized independently
+          // from Feature Flags' own legacy shadow key. Organization-owned
+          // Audit events use the stable internal organization UUID.
           writeScope:
             scope.kind === 'organization'
               ? {
@@ -279,7 +280,8 @@ export const DELETE = withErrorHandler(
                   tenantId: scope.tenantId,
                 }
               : { kind: 'platform-global' },
-          legacyTenantId: flag.tenantId,
+          legacyTenantId:
+            scope.kind === 'organization' ? scope.organizationId : null,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: id,

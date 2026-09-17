@@ -196,11 +196,10 @@ describe('POST /api/admin/feature-flags — FF·B legacy tenant_id compatibility
 
     // OZI-71 AUD·B — Audit now dual-writes canonical ownership while
     // `resolveEffectiveAuditSetting` deliberately remains on the legacy
-    // `tenant_id` compatibility key until AUD·D. Each audit call therefore
-    // preserves the flag's opaque legacy shadow value in `legacyTenantId`,
-    // while `writeScope` comes from the same real canonical Feature Flag
-    // resolution used by the mutation. Storage-level Audit ownership-state
-    // enforcement is covered by DrizzleAuditLogService DB tests.
+    // compatibility key until AUD·D. Audit normalizes that compatibility key
+    // to the internal organization UUID; in this fixture the Feature Flag
+    // legacy shadow happens to be the same ORG_1 / ORG_2 value. Canonical
+    // parent TenantId remains independently carried by `writeScope`.
     expect(mocks.recordAdminAuditEvent).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({

@@ -390,6 +390,50 @@ describe('DELETE /api/admin/audit-log-settings', () => {
     expect(res.status).toBe(404);
   });
 
+  it('normalizes a provider alias to the internal organization key before reset', async () => {
+    const providerAlias = 'org_provider_acme';
+    const internalOrganizationId = '15000000-0000-4000-8000-000000000001';
+    const parentTenantId = '10000000-0000-4000-8000-000000000001';
+
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+      outcome: 'resolved',
+      writeScope: {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: parentTenantId,
+      },
+    });
+    mocks.resetToDefault.mockResolvedValue(undefined);
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(
+      makeBodyRequest('DELETE', {
+        category: 'auth',
+        tenantId: providerAlias,
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.resetToDefault).toHaveBeenCalledWith(
+      'auth',
+      internalOrganizationId,
+      null,
+    );
+    expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        legacyTenantId: internalOrganizationId,
+        writeScope: {
+          kind: 'organization',
+          organizationId: internalOrganizationId,
+          tenantId: parentTenantId,
+        },
+      }),
+    );
+  });
+
   it('returns 200 on successful reset', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
@@ -410,7 +454,17 @@ describe('DELETE /api/admin/audit-log-settings', () => {
   });
 
   it("SEC-26: an ABAC-authorized non-platform-admin's foreign tenantId is derived to their own tenant, not trusted", async () => {
-    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    const internalOrganizationId = '15000000-0000-4000-8000-000000000001';
+
+    mocks.resolveAccess.mockResolvedValue(
+      makeAllowedProvisioningAccess({
+        tenant: {
+          organizationId: internalOrganizationId,
+          tenantId: internalOrganizationId,
+          userId: 'user_test_1',
+        },
+      }),
+    );
     mocks.isEnvAdmin.mockReturnValue(false);
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
@@ -426,8 +480,10 @@ describe('DELETE /api/admin/audit-log-settings', () => {
       mockContext,
     );
     expect(res.status).toBe(200);
-    expect(mocks.resetToDefault).toHaveBeenCalledWith('auth', 'tenant_test_1', {
-      tenantId: 'tenant_test_1',
-    });
+    expect(mocks.resetToDefault).toHaveBeenCalledWith(
+      'auth',
+      internalOrganizationId,
+      { tenantId: internalOrganizationId },
+    );
   });
 });

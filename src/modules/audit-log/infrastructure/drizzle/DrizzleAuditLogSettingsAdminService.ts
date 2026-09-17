@@ -334,11 +334,16 @@ export class DrizzleAuditLogSettingsAdminService {
         throw new AuditCanonicalWriteInvariantError();
       }
 
-      // AUD·B retains `(category, tenant_id)` as the legacy conflict target,
-      // but only one legacy compatibility key can be active for a canonical
-      // setting row at a time. If this organization already owns this category,
-      // move that row to the alias used by the current write so exact-string
-      // legacy readers observe the newly written setting.
+      // AUD·B keeps legacy effective-setting reads on exact `tenant_id`
+      // matching, so every organization-owned Audit writer and setting must
+      // use one stable compatibility key. `TenantContext.tenantId` is the
+      // internal organization UUID; provider aliases are resolution inputs
+      // only and must never become the persisted Audit compatibility key.
+      const stableLegacyTenantId = writeScope.organizationId;
+
+      // The legacy conflict target remains `(category, tenant_id)` until
+      // AUD·D. If a canonical row already exists from an earlier alias-shaped
+      // write, reconcile it onto the stable internal organization UUID.
       const existingCanonicalRaw = await tx.execute(sql`
         SELECT
           id,
@@ -363,7 +368,7 @@ export class DrizzleAuditLogSettingsAdminService {
           SELECT id
           FROM ${auditLogSettingsTable}
           WHERE category = ${input.category}
-            AND tenant_id = ${input.tenantId}
+            AND tenant_id = ${stableLegacyTenantId}
             AND id <> ${existingCanonical.id}
           FOR UPDATE
         `);
@@ -377,7 +382,7 @@ export class DrizzleAuditLogSettingsAdminService {
         const canonicalRaw = await tx.execute(sql`
           UPDATE ${auditLogSettingsTable}
           SET
-            tenant_id = ${input.tenantId},
+            tenant_id = ${stableLegacyTenantId},
             enabled = ${input.enabled},
             retention_days = ${input.retentionDays},
             sample_rate = ${sampleRate},
@@ -424,7 +429,7 @@ export class DrizzleAuditLogSettingsAdminService {
           )
         SELECT
           ${input.category},
-          ${input.tenantId},
+          ${stableLegacyTenantId},
           o.id,
           'canonical_organization',
           ${input.enabled},

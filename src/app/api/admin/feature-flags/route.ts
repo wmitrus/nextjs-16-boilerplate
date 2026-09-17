@@ -296,11 +296,10 @@ export const POST = withErrorHandler(
           category: 'feature_flag',
           action: 'feature_flag.create',
           outcome: 'success',
-          // OZI-71 AUD·B — canonical ownership comes from the already
-          // resolved Feature Flag write facts, never from the legacy shadow
-          // key. The flag's legacy `tenant_id` is preserved verbatim only
-          // for Audit compatibility while effective-settings/purge still
-          // use the legacy key through AUD·D.
+          // OZI-71 AUD·B — Audit compatibility is independent from Feature
+          // Flags' own legacy shadow key. Organization-owned Audit writers
+          // normalize to the stable internal organization UUID so legacy
+          // exact-match setting resolution is consistent across all writers.
           writeScope:
             canonical.facts.kind === 'organization'
               ? {
@@ -309,7 +308,10 @@ export const POST = withErrorHandler(
                   tenantId: canonical.facts.tenantId,
                 }
               : { kind: 'platform-global' },
-          legacyTenantId: flag.tenantId,
+          legacyTenantId:
+            canonical.facts.kind === 'organization'
+              ? canonical.facts.organizationId
+              : null,
           actorUserId: access.user.id,
           targetType: 'feature_flag',
           targetId: flag.id,

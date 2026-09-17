@@ -1,3 +1,19 @@
+# [2.19.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.18.0...v2.19.0) (2026-09-17)
+
+
+### Bug Fixes
+
+* **audit:** activate reconciled settings alias ([9c27892](https://github.com/wmitrus/nextjs-16-boilerplate/commit/9c278928e6e40acd49795418a2ede414f47dbc7c))
+* **audit:** normalize organization compatibility keys ([65ef72b](https://github.com/wmitrus/nextjs-16-boilerplate/commit/65ef72b5c6cd1af3ea67acd8606ad862cdac6302))
+* **audit:** preserve quarantined settings ([623bb69](https://github.com/wmitrus/nextjs-16-boilerplate/commit/623bb69aca02f172c026b35cc95ac83c6d7378ca))
+* **audit:** reconcile canonical setting aliases ([95293cb](https://github.com/wmitrus/nextjs-16-boilerplate/commit/95293cbf62a971086c346a48b79603ead689a922))
+* **audit:** reconcile canonical settings aliases ([3327c2a](https://github.com/wmitrus/nextjs-16-boilerplate/commit/3327c2aff3f1b0770d6efeca3ee0b4a68aa6c17f))
+
+
+### Features
+
+* **audit:** add canonical ownership dual-write ([2ffeb7c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/2ffeb7cf226fc4096fd7bc673761eed4eed89118))
+
 # [2.18.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.17.0...v2.18.0) (2026-09-16)
 
 

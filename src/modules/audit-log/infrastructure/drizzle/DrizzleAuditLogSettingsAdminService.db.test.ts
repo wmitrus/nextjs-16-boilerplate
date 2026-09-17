@@ -197,6 +197,58 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       ).toHaveLength(1);
     });
 
+    it('reconciles alternate legacy aliases that resolve to the same canonical organization', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      const created = await svc.upsert(
+        {
+          category: 'security_event',
+          tenantId: providerAlias,
+          enabled: true,
+          retentionDays: 30,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        },
+        null,
+        ACME_WRITE_SCOPE,
+      );
+
+      const updated = await svc.upsert(
+        {
+          category: 'security_event',
+          tenantId: ORG_A1,
+          enabled: false,
+          retentionDays: 90,
+          captureInputOnSuccess: true,
+          updatedByUserId: null,
+        },
+        null,
+        ACME_WRITE_SCOPE,
+      );
+
+      expect(updated.id).toBe(created.id);
+      expect(updated).toMatchObject({
+        tenantId: providerAlias,
+        enabled: false,
+        retentionDays: 90,
+        captureInputOnSuccess: true,
+      });
+
+      const rows = await testDb.db.select().from(auditLogSettingsTable);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        id: created.id,
+        category: 'security_event',
+        tenantId: providerAlias,
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+        enabled: false,
+        retentionDays: 90,
+        captureInputOnSuccess: true,
+      });
+    });
+
     it('rejects retentionDays outside the allowed range', async () => {
       await expect(
         svc.upsert(

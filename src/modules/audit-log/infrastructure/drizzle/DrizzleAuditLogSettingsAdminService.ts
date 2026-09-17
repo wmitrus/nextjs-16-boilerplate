@@ -312,64 +312,122 @@ export class DrizzleAuditLogSettingsAdminService {
       return toStoredDto(row, 'global');
     }
 
-    // Same-statement canonical containment: the organization id written to
-    // the row comes from the matched organizations row, never directly from
-    // the caller-provided parameter. The legacy conflict target intentionally
-    // remains `(category, tenant_id)` until AUD·D.
-    const raw = await this.db.execute(sql`
-      INSERT INTO ${auditLogSettingsTable}
-        (
+    // Serialize canonical writes for the same organization. The organization
+    // row is authoritative evidence for both the canonical organization id and
+    // its parent tenant; locking it also closes the race between two different
+    // legacy aliases resolving to the same canonical organization.
+    return this.db.transaction(async (tx) => {
+      const lockedOrganizationRaw = await tx.execute(sql`
+        SELECT o.id
+        FROM ${organizationsReferenceTable} o
+        WHERE o.id = ${writeScope.organizationId}
+          AND o.tenant_id = ${writeScope.tenantId}
+        FOR UPDATE
+      `);
+
+      const lockedOrganization = normalizeRawRows<{ id: string }>(
+        lockedOrganizationRaw,
+      )[0];
+
+      if (!lockedOrganization) {
+        throw new AuditCanonicalWriteInvariantError();
+      }
+
+      // AUD·B retains `(category, tenant_id)` as the legacy conflict target.
+      // A canonical row may nevertheless already exist under another supported
+      // legacy alias (for example provider external id vs internal UUID).
+      // Reconcile that canonical row first and preserve its existing legacy
+      // key so we neither create a duplicate canonical owner nor silently
+      // rewrite the compatibility key.
+      const canonicalRaw = await tx.execute(sql`
+        UPDATE ${auditLogSettingsTable}
+        SET
+          enabled = ${input.enabled},
+          retention_days = ${input.retentionDays},
+          sample_rate = ${sampleRate},
+          capture_input_on_success = ${input.captureInputOnSuccess},
+          updated_by_user_id = ${input.updatedByUserId},
+          updated_at = now()
+        WHERE category = ${input.category}
+          AND organization_id = ${writeScope.organizationId}
+          AND ownership_state = 'canonical_organization'
+        RETURNING
+          id,
           category,
-          tenant_id,
-          organization_id,
-          ownership_state,
+          tenant_id AS "tenantId",
           enabled,
-          retention_days,
-          sample_rate,
-          capture_input_on_success,
-          updated_by_user_id
-        )
-      SELECT
-        ${input.category},
-        ${input.tenantId},
-        o.id,
-        'canonical_organization',
-        ${input.enabled},
-        ${input.retentionDays},
-        ${sampleRate},
-        ${input.captureInputOnSuccess},
-        ${input.updatedByUserId}
-      FROM ${organizationsReferenceTable} o
-      WHERE o.id = ${writeScope.organizationId}
-        AND o.tenant_id = ${writeScope.tenantId}
-      ON CONFLICT (category, tenant_id)
-      DO UPDATE SET
-        organization_id = EXCLUDED.organization_id,
-        ownership_state = EXCLUDED.ownership_state,
-        enabled = EXCLUDED.enabled,
-        retention_days = EXCLUDED.retention_days,
-        sample_rate = EXCLUDED.sample_rate,
-        capture_input_on_success = EXCLUDED.capture_input_on_success,
-        updated_by_user_id = EXCLUDED.updated_by_user_id,
-        updated_at = now()
-      RETURNING
-        id,
-        category,
-        tenant_id AS "tenantId",
-        enabled,
-        retention_days AS "retentionDays",
-        sample_rate AS "sampleRate",
-        capture_input_on_success AS "captureInputOnSuccess",
-        updated_by_user_id AS "updatedByUserId",
-        updated_at AS "updatedAt"
-    `);
+          retention_days AS "retentionDays",
+          sample_rate AS "sampleRate",
+          capture_input_on_success AS "captureInputOnSuccess",
+          updated_by_user_id AS "updatedByUserId",
+          updated_at AS "updatedAt"
+      `);
 
-    const row = normalizeRawRows<RawSettingRow>(raw)[0];
-    if (!row) {
-      throw new AuditCanonicalWriteInvariantError();
-    }
+      const canonicalRow = normalizeRawRows<RawSettingRow>(canonicalRaw)[0];
 
-    return toRawStoredDto(row, 'tenant-override');
+      if (canonicalRow) {
+        return toRawStoredDto(canonicalRow, 'tenant-override');
+      }
+
+      // No canonical row exists yet. Insert from the locked authoritative
+      // organization tuple and retain the legacy `(category, tenant_id)`
+      // conflict target until AUD·D.
+      const raw = await tx.execute(sql`
+        INSERT INTO ${auditLogSettingsTable}
+          (
+            category,
+            tenant_id,
+            organization_id,
+            ownership_state,
+            enabled,
+            retention_days,
+            sample_rate,
+            capture_input_on_success,
+            updated_by_user_id
+          )
+        SELECT
+          ${input.category},
+          ${input.tenantId},
+          o.id,
+          'canonical_organization',
+          ${input.enabled},
+          ${input.retentionDays},
+          ${sampleRate},
+          ${input.captureInputOnSuccess},
+          ${input.updatedByUserId}
+        FROM ${organizationsReferenceTable} o
+        WHERE o.id = ${writeScope.organizationId}
+          AND o.tenant_id = ${writeScope.tenantId}
+        ON CONFLICT (category, tenant_id)
+        DO UPDATE SET
+          organization_id = EXCLUDED.organization_id,
+          ownership_state = EXCLUDED.ownership_state,
+          enabled = EXCLUDED.enabled,
+          retention_days = EXCLUDED.retention_days,
+          sample_rate = EXCLUDED.sample_rate,
+          capture_input_on_success = EXCLUDED.capture_input_on_success,
+          updated_by_user_id = EXCLUDED.updated_by_user_id,
+          updated_at = now()
+        RETURNING
+          id,
+          category,
+          tenant_id AS "tenantId",
+          enabled,
+          retention_days AS "retentionDays",
+          sample_rate AS "sampleRate",
+          capture_input_on_success AS "captureInputOnSuccess",
+          updated_by_user_id AS "updatedByUserId",
+          updated_at AS "updatedAt"
+      `);
+
+      const row = normalizeRawRows<RawSettingRow>(raw)[0];
+
+      if (!row) {
+        throw new AuditCanonicalWriteInvariantError();
+      }
+
+      return toRawStoredDto(row, 'tenant-override');
+    });
   }
 
   /**

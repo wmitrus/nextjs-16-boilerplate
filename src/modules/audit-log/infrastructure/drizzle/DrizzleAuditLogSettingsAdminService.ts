@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { eq, isNull, or, sql } from 'drizzle-orm';
 
 import type { AuditWriteScope } from '@/core/contracts/audit-log';
 import type { DrizzleDb } from '@/core/db';
@@ -179,12 +179,6 @@ function assertScopeAllows(
   }
 }
 
-function tenantPredicate(tenantId: string | null) {
-  return tenantId === null
-    ? isNull(auditLogSettingsTable.tenantId)
-    : eq(auditLogSettingsTable.tenantId, tenantId);
-}
-
 /**
  * Admin-only CRUD service for `audit_log_settings` rows.
  *
@@ -308,11 +302,15 @@ export class DrizzleAuditLogSettingsAdminService {
             updatedByUserId: input.updatedByUserId,
             updatedAt: new Date(),
           },
+          setWhere: or(
+            eq(auditLogSettingsTable.ownershipState, 'intentional_global'),
+            eq(auditLogSettingsTable.ownershipState, 'unresolved_legacy'),
+          ),
         })
         .returning();
 
       if (!row) {
-        throw new Error('Failed to upsert audit log setting');
+        throw new AuditSettingAliasConflictError();
       }
 
       return toStoredDto(row, 'global');
@@ -347,21 +345,9 @@ export class DrizzleAuditLogSettingsAdminService {
     }
 
     if (writeScope.kind === 'platform-global') {
-      const predicate = and(
-        eq(auditLogSettingsTable.category, category),
-        tenantPredicate(null),
+      return this.runInTransaction((db) =>
+        this.resetGlobalToDefault(db, category),
       );
-
-      const deleted = await this.db
-        .delete(auditLogSettingsTable)
-        .where(predicate)
-        .returning();
-
-      if (deleted.length === 0) {
-        throw new AuditSettingNotFoundError();
-      }
-
-      return;
     }
 
     if (tenantId === null) {
@@ -381,6 +367,47 @@ export class DrizzleAuditLogSettingsAdminService {
         transaction: (fn: (db: DrizzleDb) => Promise<T>) => Promise<T>;
       }
     ).transaction(fn);
+  }
+
+  private async resetGlobalToDefault(
+    db: DrizzleDb,
+    category: AuditCategory,
+  ): Promise<void> {
+    const raw = await db.execute(sql`
+      SELECT
+        id,
+        ownership_state AS "ownershipState"
+      FROM ${auditLogSettingsTable}
+      WHERE category = ${category}
+        AND tenant_id IS NULL
+      FOR UPDATE
+    `);
+
+    const row = normalizeRawRows<{
+      id: string;
+      ownershipState: string;
+    }>(raw)[0];
+
+    if (!row) {
+      throw new AuditSettingNotFoundError();
+    }
+
+    if (
+      row.ownershipState !== 'intentional_global' &&
+      row.ownershipState !== 'unresolved_legacy'
+    ) {
+      throw new AuditSettingAliasConflictError();
+    }
+
+    const deletedRaw = await db.execute(sql`
+      DELETE FROM ${auditLogSettingsTable}
+      WHERE id = ${row.id}
+      RETURNING id
+    `);
+
+    if (normalizeRawRows<{ id: string }>(deletedRaw).length !== 1) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
   }
 
   private async upsertOrganizationSetting(
@@ -466,6 +493,7 @@ export class DrizzleAuditLogSettingsAdminService {
         capture_input_on_success = EXCLUDED.capture_input_on_success,
         updated_by_user_id = EXCLUDED.updated_by_user_id,
         updated_at = now()
+      WHERE "audit_log_settings"."ownership_state" = 'unresolved_legacy'
       RETURNING
         id,
         category,
@@ -481,7 +509,7 @@ export class DrizzleAuditLogSettingsAdminService {
     const row = normalizeRawRows<RawSettingRow>(raw)[0];
 
     if (!row) {
-      throw new AuditCanonicalWriteInvariantError();
+      throw new AuditSettingAliasConflictError();
     }
 
     return toRawStoredDto(row, 'tenant-override');
@@ -608,7 +636,9 @@ export class DrizzleAuditLogSettingsAdminService {
     // classified/backfilled. Canonical resolution above proves that the raw
     // provider alias and the stable UUID refer to the requested organization.
     const legacyRaw = await db.execute(sql`
-      SELECT id
+      SELECT
+        id,
+        ownership_state AS "ownershipState"
       FROM ${auditLogSettingsTable}
       WHERE category = ${category}
         AND organization_id IS NULL
@@ -619,13 +649,19 @@ export class DrizzleAuditLogSettingsAdminService {
       FOR UPDATE
     `);
 
-    const legacyRows = normalizeRawRows<{ id: string }>(legacyRaw);
+    const legacyRows = normalizeRawRows<{
+      id: string;
+      ownershipState: string;
+    }>(legacyRaw);
 
     if (legacyRows.length === 0) {
       throw new AuditSettingNotFoundError();
     }
 
-    if (legacyRows.length > 1) {
+    if (
+      legacyRows.length > 1 ||
+      legacyRows.some((row) => row.ownershipState !== 'unresolved_legacy')
+    ) {
       throw new AuditSettingAliasConflictError();
     }
 

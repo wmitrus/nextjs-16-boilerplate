@@ -352,6 +352,92 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       });
     });
 
+    it('preserves a quarantined organization compatibility row during upsert', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      const [quarantined] = await testDb.db
+        .insert(auditLogSettingsTable)
+        .values({
+          category: 'security_event',
+          tenantId: ORG_A1,
+          organizationId: null,
+          ownershipState: 'quarantined',
+          enabled: true,
+          retentionDays: 45,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        })
+        .returning();
+
+      await expect(
+        svc.upsert(
+          {
+            category: 'security_event',
+            tenantId: providerAlias,
+            enabled: false,
+            retentionDays: 90,
+            captureInputOnSuccess: true,
+            updatedByUserId: null,
+          },
+          null,
+          ACME_WRITE_SCOPE,
+        ),
+      ).rejects.toThrow(AuditSettingAliasConflictError);
+
+      const [stored] = await testDb.db.select().from(auditLogSettingsTable);
+
+      expect(stored).toMatchObject({
+        id: quarantined?.id,
+        tenantId: ORG_A1,
+        organizationId: null,
+        ownershipState: 'quarantined',
+        enabled: true,
+        retentionDays: 45,
+      });
+    });
+
+    it('preserves a quarantined global compatibility row during upsert', async () => {
+      const [quarantined] = await testDb.db
+        .insert(auditLogSettingsTable)
+        .values({
+          category: 'billing',
+          tenantId: null,
+          organizationId: null,
+          ownershipState: 'quarantined',
+          enabled: true,
+          retentionDays: 45,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        })
+        .returning();
+
+      await expect(
+        svc.upsert(
+          {
+            category: 'billing',
+            tenantId: null,
+            enabled: false,
+            retentionDays: 90,
+            captureInputOnSuccess: true,
+            updatedByUserId: null,
+          },
+          null,
+          GLOBAL_WRITE_SCOPE,
+        ),
+      ).rejects.toThrow(AuditSettingAliasConflictError);
+
+      const [stored] = await testDb.db.select().from(auditLogSettingsTable);
+
+      expect(stored).toMatchObject({
+        id: quarantined?.id,
+        tenantId: null,
+        organizationId: null,
+        ownershipState: 'quarantined',
+        enabled: true,
+        retentionDays: 45,
+      });
+    });
+
     it('rejects retentionDays outside the allowed range', async () => {
       await expect(
         svc.upsert(
@@ -479,6 +565,71 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       expect(await testDb.db.select().from(auditLogSettingsTable)).toHaveLength(
         0,
       );
+    });
+
+    it('preserves a quarantined organization compatibility row during reset', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      const [quarantined] = await testDb.db
+        .insert(auditLogSettingsTable)
+        .values({
+          category: 'security_event',
+          tenantId: ORG_A1,
+          organizationId: null,
+          ownershipState: 'quarantined',
+          enabled: true,
+          retentionDays: 45,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        })
+        .returning();
+
+      await expect(
+        svc.resetToDefault(
+          'security_event',
+          providerAlias,
+          null,
+          ACME_WRITE_SCOPE,
+        ),
+      ).rejects.toThrow(AuditSettingAliasConflictError);
+
+      const [stored] = await testDb.db.select().from(auditLogSettingsTable);
+
+      expect(stored).toMatchObject({
+        id: quarantined?.id,
+        ownershipState: 'quarantined',
+        tenantId: ORG_A1,
+        organizationId: null,
+      });
+    });
+
+    it('preserves a quarantined global compatibility row during reset', async () => {
+      const [quarantined] = await testDb.db
+        .insert(auditLogSettingsTable)
+        .values({
+          category: 'billing',
+          tenantId: null,
+          organizationId: null,
+          ownershipState: 'quarantined',
+          enabled: true,
+          retentionDays: 45,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        })
+        .returning();
+
+      await expect(
+        svc.resetToDefault('billing', null, null, GLOBAL_WRITE_SCOPE),
+      ).rejects.toThrow(AuditSettingAliasConflictError);
+
+      const [stored] = await testDb.db.select().from(auditLogSettingsTable);
+
+      expect(stored).toMatchObject({
+        id: quarantined?.id,
+        ownershipState: 'quarantined',
+        tenantId: null,
+        organizationId: null,
+      });
     });
 
     it('fails closed when canonical and legacy alias rows collide during reset', async () => {

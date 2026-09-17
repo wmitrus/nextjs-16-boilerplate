@@ -23,7 +23,10 @@ import {
   AUDIT_SAMPLE_RATE_MAX,
   AUDIT_SAMPLE_RATE_MIN,
 } from '@/modules/audit-log/domain/category';
-import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
+import {
+  AuditSettingAliasConflictError,
+  AuditSettingNotFoundError,
+} from '@/modules/audit-log/domain/errors';
 import { DrizzleAuditLogSettingsAdminService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService';
 import { recordAdminAuditEvent } from '@/security/actions/record-admin-audit-event';
 import { withAdminStepUp } from '@/security/api/with-admin-step-up';
@@ -216,19 +219,35 @@ export const PATCH = withErrorHandler(
 
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
-      const setting = await service.upsert(
-        {
-          category: parseResult.data.category,
-          tenantId: requestedTenantId,
-          enabled: parseResult.data.enabled,
-          retentionDays: parseResult.data.retentionDays,
-          sampleRate: parseResult.data.sampleRate ?? null,
-          captureInputOnSuccess: parseResult.data.captureInputOnSuccess,
-          updatedByUserId: access.user.id,
-        },
-        scope,
-        canonical.writeScope,
-      );
+      let setting: Awaited<
+        ReturnType<DrizzleAuditLogSettingsAdminService['upsert']>
+      >;
+
+      try {
+        setting = await service.upsert(
+          {
+            category: parseResult.data.category,
+            tenantId: requestedTenantId,
+            enabled: parseResult.data.enabled,
+            retentionDays: parseResult.data.retentionDays,
+            sampleRate: parseResult.data.sampleRate ?? null,
+            captureInputOnSuccess: parseResult.data.captureInputOnSuccess,
+            updatedByUserId: access.user.id,
+          },
+          scope,
+          canonical.writeScope,
+        );
+      } catch (error) {
+        if (error instanceof AuditSettingAliasConflictError) {
+          return createServerErrorResponse(
+            'The requested audit setting alias conflicts with an existing legacy override',
+            409,
+            'AUDIT_SETTING_ALIAS_CONFLICT',
+          );
+        }
+
+        throw error;
+      }
 
       logger.info(
         {

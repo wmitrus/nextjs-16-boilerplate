@@ -21,6 +21,17 @@ export class AuditSettingScopeError extends Error {
   }
 }
 
+export class AuditSettingAliasConflictError extends Error {
+  readonly code = 'AUDIT_SETTING_ALIAS_CONFLICT';
+
+  constructor(
+    message = 'Audit log setting alias conflicts with an existing legacy override',
+  ) {
+    super(message);
+    this.name = 'AuditSettingAliasConflictError';
+  }
+}
+
 export class InvalidAuditRetentionDaysError extends Error {
   readonly code = 'INVALID_AUDIT_RETENTION_DAYS';
   constructor(message = 'retentionDays is outside the allowed range') {

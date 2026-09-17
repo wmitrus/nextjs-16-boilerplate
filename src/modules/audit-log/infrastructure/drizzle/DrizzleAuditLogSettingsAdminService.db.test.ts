@@ -6,6 +6,7 @@ import type { AuditWriteScope } from '@/core/contracts/audit-log';
 
 import {
   AuditCanonicalWriteInvariantError,
+  AuditSettingAliasConflictError,
   AuditSettingNotFoundError,
   AuditSettingScopeError,
   InvalidAuditRetentionDaysError,
@@ -197,7 +198,7 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       ).toHaveLength(1);
     });
 
-    it('reconciles alternate legacy aliases that resolve to the same canonical organization', async () => {
+    it('moves the active legacy compatibility key when the same canonical organization is updated through another alias', async () => {
       const providerAlias = 'org_provider_acme';
 
       const created = await svc.upsert(
@@ -228,7 +229,7 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
 
       expect(updated.id).toBe(created.id);
       expect(updated).toMatchObject({
-        tenantId: providerAlias,
+        tenantId: ORG_A1,
         enabled: false,
         retentionDays: 90,
         captureInputOnSuccess: true,
@@ -240,12 +241,90 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       expect(rows[0]).toMatchObject({
         id: created.id,
         category: 'security_event',
-        tenantId: providerAlias,
+        tenantId: ORG_A1,
         organizationId: ORG_A1,
         ownershipState: 'canonical_organization',
         enabled: false,
         retentionDays: 90,
         captureInputOnSuccess: true,
+      });
+
+      // AUD·B effective reads still use exact legacy tenant_id matching.
+      // The alias used by the current write must therefore immediately see
+      // the updated override rather than global/taxonomy fallback.
+      const effective = await svc.listEffectiveForTenant(ORG_A1);
+      expect(
+        effective.find((setting) => setting.category === 'security_event'),
+      ).toMatchObject({
+        source: 'tenant-override',
+        tenantId: ORG_A1,
+        enabled: false,
+        retentionDays: 90,
+        captureInputOnSuccess: true,
+      });
+    });
+
+    it('fails closed when the requested active alias is already occupied by a different legacy row', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      const canonical = await svc.upsert(
+        {
+          category: 'security_event',
+          tenantId: providerAlias,
+          enabled: true,
+          retentionDays: 30,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        },
+        null,
+        ACME_WRITE_SCOPE,
+      );
+
+      // Simulate a pre-AUD·B legacy row that already owns the alias we are
+      // attempting to activate. AUD·B must not silently delete/reclassify it;
+      // AUD·C owns historical collision disposition.
+      await testDb.db.insert(auditLogSettingsTable).values({
+        category: 'security_event',
+        tenantId: ORG_A1,
+        enabled: true,
+        retentionDays: 45,
+        captureInputOnSuccess: false,
+        updatedByUserId: null,
+      });
+
+      await expect(
+        svc.upsert(
+          {
+            category: 'security_event',
+            tenantId: ORG_A1,
+            enabled: false,
+            retentionDays: 90,
+            captureInputOnSuccess: true,
+            updatedByUserId: null,
+          },
+          null,
+          ACME_WRITE_SCOPE,
+        ),
+      ).rejects.toThrow(AuditSettingAliasConflictError);
+
+      const rows = await testDb.db.select().from(auditLogSettingsTable);
+      expect(rows).toHaveLength(2);
+
+      const canonicalAfter = rows.find((row) => row.id === canonical.id);
+      expect(canonicalAfter).toMatchObject({
+        tenantId: providerAlias,
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+        enabled: true,
+        retentionDays: 30,
+      });
+
+      const legacyAfter = rows.find((row) => row.tenantId === ORG_A1);
+      expect(legacyAfter).toMatchObject({
+        organizationId: null,
+        ownershipState: 'unresolved_legacy',
+        enabled: true,
+        retentionDays: 45,
       });
     });
 

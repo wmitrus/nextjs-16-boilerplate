@@ -15,6 +15,7 @@ import {
 } from '../../domain/category';
 import {
   AuditCanonicalWriteInvariantError,
+  AuditSettingAliasConflictError,
   AuditSettingNotFoundError,
   AuditSettingScopeError,
   InvalidAuditRetentionDaysError,
@@ -333,39 +334,75 @@ export class DrizzleAuditLogSettingsAdminService {
         throw new AuditCanonicalWriteInvariantError();
       }
 
-      // AUD·B retains `(category, tenant_id)` as the legacy conflict target.
-      // A canonical row may nevertheless already exist under another supported
-      // legacy alias (for example provider external id vs internal UUID).
-      // Reconcile that canonical row first and preserve its existing legacy
-      // key so we neither create a duplicate canonical owner nor silently
-      // rewrite the compatibility key.
-      const canonicalRaw = await tx.execute(sql`
-        UPDATE ${auditLogSettingsTable}
-        SET
-          enabled = ${input.enabled},
-          retention_days = ${input.retentionDays},
-          sample_rate = ${sampleRate},
-          capture_input_on_success = ${input.captureInputOnSuccess},
-          updated_by_user_id = ${input.updatedByUserId},
-          updated_at = now()
+      // AUD·B retains `(category, tenant_id)` as the legacy conflict target,
+      // but only one legacy compatibility key can be active for a canonical
+      // setting row at a time. If this organization already owns this category,
+      // move that row to the alias used by the current write so exact-string
+      // legacy readers observe the newly written setting.
+      const existingCanonicalRaw = await tx.execute(sql`
+        SELECT
+          id,
+          tenant_id AS "tenantId"
+        FROM ${auditLogSettingsTable}
         WHERE category = ${input.category}
           AND organization_id = ${writeScope.organizationId}
           AND ownership_state = 'canonical_organization'
-        RETURNING
-          id,
-          category,
-          tenant_id AS "tenantId",
-          enabled,
-          retention_days AS "retentionDays",
-          sample_rate AS "sampleRate",
-          capture_input_on_success AS "captureInputOnSuccess",
-          updated_by_user_id AS "updatedByUserId",
-          updated_at AS "updatedAt"
+        FOR UPDATE
       `);
 
-      const canonicalRow = normalizeRawRows<RawSettingRow>(canonicalRaw)[0];
+      const existingCanonical = normalizeRawRows<{
+        id: string;
+        tenantId: string | null;
+      }>(existingCanonicalRaw)[0];
 
-      if (canonicalRow) {
+      if (existingCanonical) {
+        // Do not destroy or silently repurpose a second historical row that
+        // already owns the requested legacy alias. Historical collision
+        // disposition belongs to AUD·C; AUD·B fails this mutation explicitly.
+        const conflictingAliasRaw = await tx.execute(sql`
+          SELECT id
+          FROM ${auditLogSettingsTable}
+          WHERE category = ${input.category}
+            AND tenant_id = ${input.tenantId}
+            AND id <> ${existingCanonical.id}
+          FOR UPDATE
+        `);
+
+        if (
+          normalizeRawRows<{ id: string }>(conflictingAliasRaw).length !== 0
+        ) {
+          throw new AuditSettingAliasConflictError();
+        }
+
+        const canonicalRaw = await tx.execute(sql`
+          UPDATE ${auditLogSettingsTable}
+          SET
+            tenant_id = ${input.tenantId},
+            enabled = ${input.enabled},
+            retention_days = ${input.retentionDays},
+            sample_rate = ${sampleRate},
+            capture_input_on_success = ${input.captureInputOnSuccess},
+            updated_by_user_id = ${input.updatedByUserId},
+            updated_at = now()
+          WHERE id = ${existingCanonical.id}
+          RETURNING
+            id,
+            category,
+            tenant_id AS "tenantId",
+            enabled,
+            retention_days AS "retentionDays",
+            sample_rate AS "sampleRate",
+            capture_input_on_success AS "captureInputOnSuccess",
+            updated_by_user_id AS "updatedByUserId",
+            updated_at AS "updatedAt"
+        `);
+
+        const canonicalRow = normalizeRawRows<RawSettingRow>(canonicalRaw)[0];
+
+        if (!canonicalRow) {
+          throw new AuditCanonicalWriteInvariantError();
+        }
+
         return toRawStoredDto(canonicalRow, 'tenant-override');
       }
 

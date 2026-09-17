@@ -5,7 +5,10 @@ vi.mock('server-only', () => ({}));
 
 import { AUTHORIZATION, INFRASTRUCTURE } from '@/core/contracts';
 
-import { AuditSettingNotFoundError } from '@/modules/audit-log/domain/errors';
+import {
+  AuditSettingAliasConflictError,
+  AuditSettingNotFoundError,
+} from '@/modules/audit-log/domain/errors';
 import { DrizzleAuditLogSettingsAdminService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogSettingsAdminService';
 import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning';
 
@@ -273,6 +276,32 @@ describe('PATCH /api/admin/audit-log-settings', () => {
         targetId: 'auth',
       }),
     );
+  });
+
+  it('returns 409 when the requested organization alias is occupied by another legacy setting row', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+      outcome: 'resolved',
+      writeScope: {
+        kind: 'organization',
+        organizationId: '15000000-0000-4000-8000-000000000001',
+        tenantId: '10000000-0000-4000-8000-000000000001',
+      },
+    });
+    mocks.upsert.mockRejectedValue(new AuditSettingAliasConflictError());
+
+    const { PATCH } = await import('./route');
+    const res = await PATCH(
+      makeBodyRequest('PATCH', {
+        ...validBody,
+        tenantId: 'org_provider_acme',
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(409);
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
   });
 
   describe('SEC-26 regression: ABAC-authorized non-platform-admin scope constraint', () => {

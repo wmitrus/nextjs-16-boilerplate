@@ -418,7 +418,7 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
         GLOBAL_WRITE_SCOPE,
       );
 
-      await svc.resetToDefault('feature_flag', null, null);
+      await svc.resetToDefault('feature_flag', null, null, GLOBAL_WRITE_SCOPE);
 
       const settings = await svc.listGlobalEffective();
       const ff = settings.find((s) => s.category === 'feature_flag');
@@ -427,8 +427,96 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
 
     it('throws AuditSettingNotFoundError when there is no override row to delete', async () => {
       await expect(
-        svc.resetToDefault('feature_flag', null, null),
+        svc.resetToDefault('feature_flag', null, null, GLOBAL_WRITE_SCOPE),
       ).rejects.toThrow(AuditSettingNotFoundError);
+    });
+
+    it('deletes a canonical organization override even when its legacy key is a provider alias', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      await testDb.db.insert(auditLogSettingsTable).values({
+        category: 'security_event',
+        tenantId: providerAlias,
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+        enabled: false,
+        retentionDays: 30,
+        captureInputOnSuccess: false,
+        updatedByUserId: null,
+      });
+
+      await svc.resetToDefault(
+        'security_event',
+        providerAlias,
+        null,
+        ACME_WRITE_SCOPE,
+      );
+
+      expect(await testDb.db.select().from(auditLogSettingsTable)).toHaveLength(
+        0,
+      );
+    });
+
+    it('deletes a pre-AUD·B legacy override through a resolved provider alias', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      await testDb.db.insert(auditLogSettingsTable).values({
+        category: 'server_action',
+        tenantId: providerAlias,
+        enabled: false,
+        retentionDays: 30,
+        captureInputOnSuccess: false,
+        updatedByUserId: null,
+      });
+
+      await svc.resetToDefault(
+        'server_action',
+        providerAlias,
+        null,
+        ACME_WRITE_SCOPE,
+      );
+
+      expect(await testDb.db.select().from(auditLogSettingsTable)).toHaveLength(
+        0,
+      );
+    });
+
+    it('fails closed when canonical and legacy alias rows collide during reset', async () => {
+      const providerAlias = 'org_provider_acme';
+
+      await testDb.db.insert(auditLogSettingsTable).values([
+        {
+          category: 'security_event',
+          tenantId: providerAlias,
+          organizationId: ORG_A1,
+          ownershipState: 'canonical_organization',
+          enabled: false,
+          retentionDays: 30,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        },
+        {
+          category: 'security_event',
+          tenantId: ORG_A1,
+          enabled: true,
+          retentionDays: 45,
+          captureInputOnSuccess: false,
+          updatedByUserId: null,
+        },
+      ]);
+
+      await expect(
+        svc.resetToDefault(
+          'security_event',
+          providerAlias,
+          null,
+          ACME_WRITE_SCOPE,
+        ),
+      ).rejects.toThrow(AuditSettingAliasConflictError);
+
+      expect(await testDb.db.select().from(auditLogSettingsTable)).toHaveLength(
+        2,
+      );
     });
   });
 
@@ -511,6 +599,21 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       );
     });
 
+    it('resetToDefault fails closed when the canonical organization/tenant tuple is inconsistent', async () => {
+      await expect(
+        svc.resetToDefault(
+          'auth',
+          ORG_A1,
+          { tenantId: ORG_A1 },
+          organizationScope(ORG_A1, TENANT_B),
+        ),
+      ).rejects.toThrow(AuditCanonicalWriteInvariantError);
+
+      expect(await testDb.db.select().from(auditLogSettingsTable)).toHaveLength(
+        0,
+      );
+    });
+
     it('resetToDefault rejects a scoped caller targeting a foreign tenantId', async () => {
       await svc.upsert(
         {
@@ -526,7 +629,12 @@ describe('DrizzleAuditLogSettingsAdminService (real DB)', () => {
       );
 
       await expect(
-        svc.resetToDefault('auth', ORG_B1, { tenantId: ORG_A1 }),
+        svc.resetToDefault(
+          'auth',
+          ORG_B1,
+          { tenantId: ORG_A1 },
+          GLOBEX_WRITE_SCOPE,
+        ),
       ).rejects.toThrow(AuditSettingScopeError);
 
       // The row must still exist -- the rejected delete must not have run.

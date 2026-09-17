@@ -67,6 +67,11 @@ export type UpsertAuditSettingInput = {
  */
 export type MutationScope = { tenantId: string } | null;
 
+type OrganizationAuditWriteScope = Extract<
+  AuditWriteScope,
+  { kind: 'organization' }
+>;
+
 type SettingRow = {
   id: string;
   category: AuditCategory;
@@ -313,189 +318,325 @@ export class DrizzleAuditLogSettingsAdminService {
       return toStoredDto(row, 'global');
     }
 
-    // Serialize canonical writes for the same organization. The organization
-    // row is authoritative evidence for both the canonical organization id and
-    // its parent tenant; locking it also closes the race between two different
-    // legacy aliases resolving to the same canonical organization.
-    return this.db.transaction(async (tx) => {
-      const lockedOrganizationRaw = await tx.execute(sql`
-        SELECT o.id
-        FROM ${organizationsReferenceTable} o
-        WHERE o.id = ${writeScope.organizationId}
-          AND o.tenant_id = ${writeScope.tenantId}
-        FOR UPDATE
-      `);
-
-      const lockedOrganization = normalizeRawRows<{ id: string }>(
-        lockedOrganizationRaw,
-      )[0];
-
-      if (!lockedOrganization) {
-        throw new AuditCanonicalWriteInvariantError();
-      }
-
-      // AUD·B keeps legacy effective-setting reads on exact `tenant_id`
-      // matching, so every organization-owned Audit writer and setting must
-      // use one stable compatibility key. `TenantContext.tenantId` is the
-      // internal organization UUID; provider aliases are resolution inputs
-      // only and must never become the persisted Audit compatibility key.
-      const stableLegacyTenantId = writeScope.organizationId;
-
-      // The legacy conflict target remains `(category, tenant_id)` until
-      // AUD·D. If a canonical row already exists from an earlier alias-shaped
-      // write, reconcile it onto the stable internal organization UUID.
-      const existingCanonicalRaw = await tx.execute(sql`
-        SELECT
-          id,
-          tenant_id AS "tenantId"
-        FROM ${auditLogSettingsTable}
-        WHERE category = ${input.category}
-          AND organization_id = ${writeScope.organizationId}
-          AND ownership_state = 'canonical_organization'
-        FOR UPDATE
-      `);
-
-      const existingCanonical = normalizeRawRows<{
-        id: string;
-        tenantId: string | null;
-      }>(existingCanonicalRaw)[0];
-
-      if (existingCanonical) {
-        // Do not destroy or silently repurpose a second historical row that
-        // already owns the requested legacy alias. Historical collision
-        // disposition belongs to AUD·C; AUD·B fails this mutation explicitly.
-        const conflictingAliasRaw = await tx.execute(sql`
-          SELECT id
-          FROM ${auditLogSettingsTable}
-          WHERE category = ${input.category}
-            AND tenant_id = ${stableLegacyTenantId}
-            AND id <> ${existingCanonical.id}
-          FOR UPDATE
-        `);
-
-        if (
-          normalizeRawRows<{ id: string }>(conflictingAliasRaw).length !== 0
-        ) {
-          throw new AuditSettingAliasConflictError();
-        }
-
-        const canonicalRaw = await tx.execute(sql`
-          UPDATE ${auditLogSettingsTable}
-          SET
-            tenant_id = ${stableLegacyTenantId},
-            enabled = ${input.enabled},
-            retention_days = ${input.retentionDays},
-            sample_rate = ${sampleRate},
-            capture_input_on_success = ${input.captureInputOnSuccess},
-            updated_by_user_id = ${input.updatedByUserId},
-            updated_at = now()
-          WHERE id = ${existingCanonical.id}
-          RETURNING
-            id,
-            category,
-            tenant_id AS "tenantId",
-            enabled,
-            retention_days AS "retentionDays",
-            sample_rate AS "sampleRate",
-            capture_input_on_success AS "captureInputOnSuccess",
-            updated_by_user_id AS "updatedByUserId",
-            updated_at AS "updatedAt"
-        `);
-
-        const canonicalRow = normalizeRawRows<RawSettingRow>(canonicalRaw)[0];
-
-        if (!canonicalRow) {
-          throw new AuditCanonicalWriteInvariantError();
-        }
-
-        return toRawStoredDto(canonicalRow, 'tenant-override');
-      }
-
-      // No canonical row exists yet. Insert from the locked authoritative
-      // organization tuple and retain the legacy `(category, tenant_id)`
-      // conflict target until AUD·D.
-      const raw = await tx.execute(sql`
-        INSERT INTO ${auditLogSettingsTable}
-          (
-            category,
-            tenant_id,
-            organization_id,
-            ownership_state,
-            enabled,
-            retention_days,
-            sample_rate,
-            capture_input_on_success,
-            updated_by_user_id
-          )
-        SELECT
-          ${input.category},
-          ${stableLegacyTenantId},
-          o.id,
-          'canonical_organization',
-          ${input.enabled},
-          ${input.retentionDays},
-          ${sampleRate},
-          ${input.captureInputOnSuccess},
-          ${input.updatedByUserId}
-        FROM ${organizationsReferenceTable} o
-        WHERE o.id = ${writeScope.organizationId}
-          AND o.tenant_id = ${writeScope.tenantId}
-        ON CONFLICT (category, tenant_id)
-        DO UPDATE SET
-          organization_id = EXCLUDED.organization_id,
-          ownership_state = EXCLUDED.ownership_state,
-          enabled = EXCLUDED.enabled,
-          retention_days = EXCLUDED.retention_days,
-          sample_rate = EXCLUDED.sample_rate,
-          capture_input_on_success = EXCLUDED.capture_input_on_success,
-          updated_by_user_id = EXCLUDED.updated_by_user_id,
-          updated_at = now()
-        RETURNING
-          id,
-          category,
-          tenant_id AS "tenantId",
-          enabled,
-          retention_days AS "retentionDays",
-          sample_rate AS "sampleRate",
-          capture_input_on_success AS "captureInputOnSuccess",
-          updated_by_user_id AS "updatedByUserId",
-          updated_at AS "updatedAt"
-      `);
-
-      const row = normalizeRawRows<RawSettingRow>(raw)[0];
-
-      if (!row) {
-        throw new AuditCanonicalWriteInvariantError();
-      }
-
-      return toRawStoredDto(row, 'tenant-override');
-    });
+    return this.runInTransaction((db) =>
+      this.upsertOrganizationSetting(db, input, writeScope, sampleRate),
+    );
   }
 
   /**
-   * Deletes the (category, tenantId) override row, reverting the effective
-   * value back to the global row (or the taxonomy default if there is no
-   * global row either). Throws if no override row exists to delete.
+   * Deletes the requested override and reverts effective resolution to the
+   * global row or taxonomy default.
+   *
+   * AUD·B organization deletes use canonical ownership, not a raw provider
+   * alias. The raw compatibility key is retained only to locate a pre-AUD·B
+   * legacy row when no canonical row exists yet.
    */
   async resetToDefault(
     category: AuditCategory,
     tenantId: string | null,
     scope: MutationScope,
+    writeScope: AuditWriteScope,
   ): Promise<void> {
     assertScopeAllows(tenantId, scope);
 
-    const predicate = and(
-      eq(auditLogSettingsTable.category, category),
-      tenantPredicate(tenantId),
+    const legacyIsGlobal = tenantId === null;
+    const canonicalIsGlobal = writeScope.kind === 'platform-global';
+
+    if (legacyIsGlobal !== canonicalIsGlobal) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    if (writeScope.kind === 'platform-global') {
+      const predicate = and(
+        eq(auditLogSettingsTable.category, category),
+        tenantPredicate(null),
+      );
+
+      const deleted = await this.db
+        .delete(auditLogSettingsTable)
+        .where(predicate)
+        .returning();
+
+      if (deleted.length === 0) {
+        throw new AuditSettingNotFoundError();
+      }
+
+      return;
+    }
+
+    if (tenantId === null) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    return this.runInTransaction((db) =>
+      this.resetOrganizationToDefault(db, category, tenantId, writeScope),
     );
+  }
 
-    const deleted = await this.db
-      .delete(auditLogSettingsTable)
-      .where(predicate)
-      .returning();
+  private async runInTransaction<T>(
+    fn: (db: DrizzleDb) => Promise<T>,
+  ): Promise<T> {
+    return (
+      this.db as unknown as {
+        transaction: (fn: (db: DrizzleDb) => Promise<T>) => Promise<T>;
+      }
+    ).transaction(fn);
+  }
 
-    if (deleted.length === 0) {
+  private async upsertOrganizationSetting(
+    db: DrizzleDb,
+    input: UpsertAuditSettingInput,
+    writeScope: OrganizationAuditWriteScope,
+    sampleRate: number | null,
+  ): Promise<AuditSettingDto> {
+    const lockedOrganizationRaw = await db.execute(sql`
+      SELECT o.id
+      FROM ${organizationsReferenceTable} o
+      WHERE o.id = ${writeScope.organizationId}
+        AND o.tenant_id = ${writeScope.tenantId}
+      FOR UPDATE
+    `);
+
+    const lockedOrganization = normalizeRawRows<{ id: string }>(
+      lockedOrganizationRaw,
+    )[0];
+
+    if (!lockedOrganization) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    const stableLegacyTenantId = writeScope.organizationId;
+
+    const existingCanonicalRaw = await db.execute(sql`
+      SELECT id
+      FROM ${auditLogSettingsTable}
+      WHERE category = ${input.category}
+        AND organization_id = ${writeScope.organizationId}
+        AND ownership_state = 'canonical_organization'
+      FOR UPDATE
+    `);
+
+    const existingCanonical = normalizeRawRows<{ id: string }>(
+      existingCanonicalRaw,
+    )[0];
+
+    if (existingCanonical) {
+      return this.updateExistingOrganizationSetting(
+        db,
+        input,
+        existingCanonical.id,
+        stableLegacyTenantId,
+        sampleRate,
+      );
+    }
+
+    const raw = await db.execute(sql`
+      INSERT INTO ${auditLogSettingsTable}
+        (
+          category,
+          tenant_id,
+          organization_id,
+          ownership_state,
+          enabled,
+          retention_days,
+          sample_rate,
+          capture_input_on_success,
+          updated_by_user_id
+        )
+      SELECT
+        ${input.category},
+        ${stableLegacyTenantId},
+        o.id,
+        'canonical_organization',
+        ${input.enabled},
+        ${input.retentionDays},
+        ${sampleRate},
+        ${input.captureInputOnSuccess},
+        ${input.updatedByUserId}
+      FROM ${organizationsReferenceTable} o
+      WHERE o.id = ${writeScope.organizationId}
+        AND o.tenant_id = ${writeScope.tenantId}
+      ON CONFLICT (category, tenant_id)
+      DO UPDATE SET
+        organization_id = EXCLUDED.organization_id,
+        ownership_state = EXCLUDED.ownership_state,
+        enabled = EXCLUDED.enabled,
+        retention_days = EXCLUDED.retention_days,
+        sample_rate = EXCLUDED.sample_rate,
+        capture_input_on_success = EXCLUDED.capture_input_on_success,
+        updated_by_user_id = EXCLUDED.updated_by_user_id,
+        updated_at = now()
+      RETURNING
+        id,
+        category,
+        tenant_id AS "tenantId",
+        enabled,
+        retention_days AS "retentionDays",
+        sample_rate AS "sampleRate",
+        capture_input_on_success AS "captureInputOnSuccess",
+        updated_by_user_id AS "updatedByUserId",
+        updated_at AS "updatedAt"
+    `);
+
+    const row = normalizeRawRows<RawSettingRow>(raw)[0];
+
+    if (!row) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    return toRawStoredDto(row, 'tenant-override');
+  }
+
+  private async updateExistingOrganizationSetting(
+    db: DrizzleDb,
+    input: UpsertAuditSettingInput,
+    existingCanonicalId: string,
+    stableLegacyTenantId: string,
+    sampleRate: number | null,
+  ): Promise<AuditSettingDto> {
+    const conflictingAliasRaw = await db.execute(sql`
+      SELECT id
+      FROM ${auditLogSettingsTable}
+      WHERE category = ${input.category}
+        AND tenant_id = ${stableLegacyTenantId}
+        AND id <> ${existingCanonicalId}
+      FOR UPDATE
+    `);
+
+    if (normalizeRawRows<{ id: string }>(conflictingAliasRaw).length !== 0) {
+      throw new AuditSettingAliasConflictError();
+    }
+
+    const canonicalRaw = await db.execute(sql`
+      UPDATE ${auditLogSettingsTable}
+      SET
+        tenant_id = ${stableLegacyTenantId},
+        enabled = ${input.enabled},
+        retention_days = ${input.retentionDays},
+        sample_rate = ${sampleRate},
+        capture_input_on_success = ${input.captureInputOnSuccess},
+        updated_by_user_id = ${input.updatedByUserId},
+        updated_at = now()
+      WHERE id = ${existingCanonicalId}
+      RETURNING
+        id,
+        category,
+        tenant_id AS "tenantId",
+        enabled,
+        retention_days AS "retentionDays",
+        sample_rate AS "sampleRate",
+        capture_input_on_success AS "captureInputOnSuccess",
+        updated_by_user_id AS "updatedByUserId",
+        updated_at AS "updatedAt"
+    `);
+
+    const canonicalRow = normalizeRawRows<RawSettingRow>(canonicalRaw)[0];
+
+    if (!canonicalRow) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    return toRawStoredDto(canonicalRow, 'tenant-override');
+  }
+
+  private async resetOrganizationToDefault(
+    db: DrizzleDb,
+    category: AuditCategory,
+    requestedLegacyTenantId: string,
+    writeScope: OrganizationAuditWriteScope,
+  ): Promise<void> {
+    const lockedOrganizationRaw = await db.execute(sql`
+      SELECT o.id
+      FROM ${organizationsReferenceTable} o
+      WHERE o.id = ${writeScope.organizationId}
+        AND o.tenant_id = ${writeScope.tenantId}
+      FOR UPDATE
+    `);
+
+    const lockedOrganization = normalizeRawRows<{ id: string }>(
+      lockedOrganizationRaw,
+    )[0];
+
+    if (!lockedOrganization) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    const stableLegacyTenantId = writeScope.organizationId;
+
+    const canonicalRaw = await db.execute(sql`
+      SELECT id
+      FROM ${auditLogSettingsTable}
+      WHERE category = ${category}
+        AND organization_id = ${writeScope.organizationId}
+        AND ownership_state = 'canonical_organization'
+      FOR UPDATE
+    `);
+
+    const canonicalRow = normalizeRawRows<{ id: string }>(canonicalRaw)[0];
+
+    if (canonicalRow) {
+      const collisionRaw = await db.execute(sql`
+        SELECT id
+        FROM ${auditLogSettingsTable}
+        WHERE category = ${category}
+          AND id <> ${canonicalRow.id}
+          AND (
+            tenant_id = ${requestedLegacyTenantId}
+            OR tenant_id = ${stableLegacyTenantId}
+          )
+        FOR UPDATE
+      `);
+
+      if (normalizeRawRows<{ id: string }>(collisionRaw).length !== 0) {
+        throw new AuditSettingAliasConflictError();
+      }
+
+      const deletedRaw = await db.execute(sql`
+        DELETE FROM ${auditLogSettingsTable}
+        WHERE id = ${canonicalRow.id}
+        RETURNING id
+      `);
+
+      if (normalizeRawRows<{ id: string }>(deletedRaw).length !== 1) {
+        throw new AuditCanonicalWriteInvariantError();
+      }
+
+      return;
+    }
+
+    // Compatibility fallback for a pre-AUD·B setting that has not yet been
+    // classified/backfilled. Canonical resolution above proves that the raw
+    // provider alias and the stable UUID refer to the requested organization.
+    const legacyRaw = await db.execute(sql`
+      SELECT id
+      FROM ${auditLogSettingsTable}
+      WHERE category = ${category}
+        AND organization_id IS NULL
+        AND (
+          tenant_id = ${requestedLegacyTenantId}
+          OR tenant_id = ${stableLegacyTenantId}
+        )
+      FOR UPDATE
+    `);
+
+    const legacyRows = normalizeRawRows<{ id: string }>(legacyRaw);
+
+    if (legacyRows.length === 0) {
       throw new AuditSettingNotFoundError();
+    }
+
+    if (legacyRows.length > 1) {
+      throw new AuditSettingAliasConflictError();
+    }
+
+    const deletedRaw = await db.execute(sql`
+      DELETE FROM ${auditLogSettingsTable}
+      WHERE id = ${legacyRows[0].id}
+      RETURNING id
+    `);
+
+    if (normalizeRawRows<{ id: string }>(deletedRaw).length !== 1) {
+      throw new AuditCanonicalWriteInvariantError();
     }
   }
 }

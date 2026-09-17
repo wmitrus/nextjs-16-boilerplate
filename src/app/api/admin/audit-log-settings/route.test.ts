@@ -419,8 +419,13 @@ describe('DELETE /api/admin/audit-log-settings', () => {
     expect(res.status).toBe(200);
     expect(mocks.resetToDefault).toHaveBeenCalledWith(
       'auth',
-      internalOrganizationId,
+      providerAlias,
       null,
+      {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: parentTenantId,
+      },
     );
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -432,6 +437,38 @@ describe('DELETE /api/admin/audit-log-settings', () => {
         },
       }),
     );
+  });
+
+  it('returns 409 when canonical and legacy alias rows collide during reset', async () => {
+    const providerAlias = 'org_provider_acme';
+    const internalOrganizationId = '15000000-0000-4000-8000-000000000001';
+    const parentTenantId = '10000000-0000-4000-8000-000000000001';
+
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(true);
+    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+      outcome: 'resolved',
+      writeScope: {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: parentTenantId,
+      },
+    });
+    mocks.resetToDefault.mockRejectedValue(
+      new AuditSettingAliasConflictError(),
+    );
+
+    const { DELETE } = await import('./route');
+    const res = await DELETE(
+      makeBodyRequest('DELETE', {
+        category: 'auth',
+        tenantId: providerAlias,
+      }),
+      mockContext,
+    );
+
+    expect(res.status).toBe(409);
+    expect(mocks.recordAdminAuditEvent).not.toHaveBeenCalled();
   });
 
   it('returns 200 on successful reset', async () => {
@@ -484,6 +521,11 @@ describe('DELETE /api/admin/audit-log-settings', () => {
       'auth',
       internalOrganizationId,
       { tenantId: internalOrganizationId },
+      {
+        kind: 'organization',
+        organizationId: internalOrganizationId,
+        tenantId: '10000000-0000-4000-8000-000000000001',
+      },
     );
   });
 });

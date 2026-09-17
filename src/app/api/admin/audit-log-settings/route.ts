@@ -361,8 +361,9 @@ export const DELETE = withErrorHandler(
       try {
         await service.resetToDefault(
           parseResult.data.category,
-          stableTenantId,
+          requestedTenantId,
           scope,
+          canonical.writeScope,
         );
 
         logger.info(
@@ -395,6 +396,14 @@ export const DELETE = withErrorHandler(
 
         return createSuccessResponse({ deleted: true });
       } catch (error) {
+        if (error instanceof AuditSettingAliasConflictError) {
+          return createServerErrorResponse(
+            'The requested audit setting alias conflicts with an existing legacy override',
+            409,
+            'AUDIT_SETTING_ALIAS_CONFLICT',
+          );
+        }
+
         if (error instanceof AuditSettingNotFoundError) {
           return createServerErrorResponse(
             'Audit log setting not found',

@@ -22,6 +22,7 @@ let settingsSvc: DrizzleAuditLogSettingsAdminService;
 const TENANT_A = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
 const TENANT_B = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
 const ORG_A1 = 'a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1';
+const ORG_B1 = 'b1b1b1b1-b1b1-4b1b-8b1b-b1b1b1b1b1b1';
 const ORG_MISSING = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const organizationScope = (
@@ -46,7 +47,8 @@ beforeAll(async () => {
   );
   await testDb.db.execute(
     sql`INSERT INTO organizations (id, tenant_id, name) VALUES
-        (${ORG_A1}, ${TENANT_A}, 'Audit Org A1')`,
+        (${ORG_A1}, ${TENANT_A}, 'Audit Org A1'),
+        (${ORG_B1}, ${TENANT_B}, 'Audit Org B1')`,
   );
 });
 
@@ -56,7 +58,9 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
-  await testDb.db.execute(sql`DELETE FROM organizations WHERE id = ${ORG_A1}`);
+  await testDb.db.execute(
+    sql`DELETE FROM organizations WHERE id IN (${ORG_A1}, ${ORG_B1})`,
+  );
   await testDb.db.execute(
     sql`DELETE FROM tenants WHERE id IN (${TENANT_A}, ${TENANT_B})`,
   );
@@ -556,7 +560,7 @@ describe('DrizzleAuditLogService (real DB)', () => {
     expect(await testDb.db.select().from(auditEventsTable)).toHaveLength(0);
   });
 
-  it('prefers a tenant override over the global row', async () => {
+  it('prefers an organization override over the global row', async () => {
     await settingsSvc.upsert(
       {
         category: 'auth',
@@ -569,27 +573,40 @@ describe('DrizzleAuditLogService (real DB)', () => {
       null,
       { kind: 'platform-global' },
     );
+
     await settingsSvc.upsert(
       {
         category: 'auth',
-        tenantId: 'acme',
+        tenantId: ORG_A1,
         enabled: true,
         retentionDays: 30,
         captureInputOnSuccess: false,
         updatedByUserId: null,
       },
-      { tenantId: 'acme' },
+      { tenantId: ORG_A1 },
       organizationScope(ORG_A1, TENANT_A),
     );
 
-    // acme has its own (enabled) override -- persists despite the disabled global row.
-    await svc.record(makeEvent({ legacyTenantId: 'acme' }));
+    // Organization-owned AUD·B writers use the stable internal organization
+    // UUID as the legacy compatibility key.
+    await svc.record(
+      makeEvent({
+        writeScope: organizationScope(ORG_A1, TENANT_A),
+        legacyTenantId: ORG_A1,
+      }),
+    );
     expect(await testDb.db.select().from(auditEventsTable)).toHaveLength(1);
 
     await testDb.db.delete(auditEventsTable);
 
-    // globex has no override -- falls back to the disabled global row.
-    await svc.record(makeEvent({ legacyTenantId: 'globex' }));
+    // A different real organization has no override and therefore falls back
+    // to the disabled global setting.
+    await svc.record(
+      makeEvent({
+        writeScope: organizationScope(ORG_B1, TENANT_B),
+        legacyTenantId: ORG_B1,
+      }),
+    );
     expect(await testDb.db.select().from(auditEventsTable)).toHaveLength(0);
   });
 

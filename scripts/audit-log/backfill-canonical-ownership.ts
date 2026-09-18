@@ -163,6 +163,7 @@ function createEmptyTableReport(): {
   intentionalGlobalCount: number;
   unresolvedCount: number;
   quarantinedCount: number;
+  concurrentlyChangedCount: number;
 } {
   return {
     candidateCount: 0,

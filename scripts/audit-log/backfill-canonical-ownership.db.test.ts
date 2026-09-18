@@ -605,6 +605,50 @@ describe('AUD·C apply — transactional ownership mutation', () => {
     });
   });
 
+  it('refuses the write when authoritative evidence changes after intent', async () => {
+    await insertMapping('clerk', 'ext-a1', ORG_A1);
+    const eventId = await insertLegacyEvent('ext-a1', 'security_event');
+
+    let changed = false;
+    const { decisions, report } = await decisionsForApply({
+      onBeforeRowUpdate: async (decision) => {
+        if (
+          changed ||
+          decision.sourceTable !== 'audit_events' ||
+          decision.rowId !== String(eventId)
+        ) {
+          return;
+        }
+
+        changed = true;
+        await insertMapping('authjs', 'ext-a1', ORG_A2);
+      },
+    });
+
+    expect(report.byTable.audit_events.concurrentlyChangedCount).toBe(1);
+    expect(
+      decisions.find(
+        (decision) =>
+          decision.phase === 'result' &&
+          decision.sourceTable === 'audit_events' &&
+          decision.rowId === String(eventId),
+      ),
+    ).toMatchObject({
+      outcome: 'concurrently_changed',
+      reason: 'evidence_changed',
+    });
+
+    const [row] = await testDb.db
+      .select()
+      .from(auditEventsTable)
+      .where(eq(auditEventsTable.id, eventId));
+    expect(row).toMatchObject({
+      tenantId: 'ext-a1',
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+    });
+  });
+
   it('requires a decision sink before apply performs any DB work', async () => {
     await insertLegacyEvent(ORG_A1, 'security_event');
 

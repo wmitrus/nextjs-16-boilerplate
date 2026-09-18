@@ -1,8 +1,9 @@
 /** @vitest-environment node */
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  runAuditOwnershipBackfill,
   runAuditOwnershipBackfillDryRun,
   type AuditOwnershipBackfillDecision,
 } from './backfill-canonical-ownership';
@@ -113,6 +114,25 @@ async function decisionsForDryRun(): Promise<{
     onDecision: (decision) => {
       decisions.push(decision);
     },
+  });
+  return { decisions, report };
+}
+
+async function decisionsForApply(
+  overrides: Partial<Parameters<typeof runAuditOwnershipBackfill>[1]> = {},
+): Promise<{
+  decisions: AuditOwnershipBackfillDecision[];
+  report: Awaited<ReturnType<typeof runAuditOwnershipBackfill>>;
+}> {
+  const decisions: AuditOwnershipBackfillDecision[] = [];
+  const report = await runAuditOwnershipBackfill(testDb.db, {
+    mode: 'apply',
+    batchSize: 3,
+    runId: 'aud-c-apply-test-run',
+    onDecision: (decision) => {
+      decisions.push(decision);
+    },
+    ...overrides,
   });
   return { decisions, report };
 }
@@ -413,6 +433,192 @@ describe('AUD·C dry-run — audit_events legacy retention identity', () => {
     ).toMatchObject({
       legacyTenantId: 'legacy-b',
       outcome: 'unresolved_legacy',
+    });
+  });
+});
+
+
+describe('AUD·C apply — transactional ownership mutation', () => {
+  it('applies canonical and intentional-global outcomes while preserving tenant_id', async () => {
+    await insertMapping('clerk', 'ext-a1', ORG_A1);
+
+    const canonicalSettingId = await insertLegacySetting(
+      'ext-a1',
+      'security_event',
+    );
+    const globalSettingId = await insertLegacySetting(null, 'membership');
+    const unresolvedSettingId = await insertLegacySetting(TENANT_B, 'billing');
+
+    const canonicalEventId = await insertLegacyEvent(
+      'ext-a1',
+      'security_event',
+    );
+    const globalEventId = await insertLegacyEvent(null, 'membership');
+    const unresolvedEventId = await insertLegacyEvent(
+      TENANT_B,
+      'organization',
+    );
+
+    const { report } = await decisionsForApply();
+
+    expect(report.runMode).toBe('apply');
+    expect(report.byTable.audit_log_settings).toMatchObject({
+      candidateCount: 3,
+      canonicalOrganizationCount: 1,
+      intentionalGlobalCount: 1,
+      unresolvedCount: 1,
+      quarantinedCount: 0,
+      concurrentlyChangedCount: 0,
+    });
+    expect(report.byTable.audit_events).toMatchObject({
+      candidateCount: 3,
+      canonicalOrganizationCount: 1,
+      intentionalGlobalCount: 1,
+      unresolvedCount: 1,
+      quarantinedCount: 0,
+      concurrentlyChangedCount: 0,
+    });
+
+    const settings = await testDb.db.select().from(auditLogSettingsTable);
+    expect(settings.find((row) => row.id === canonicalSettingId)).toMatchObject({
+      tenantId: 'ext-a1',
+      organizationId: ORG_A1,
+      ownershipState: 'canonical_organization',
+    });
+    expect(settings.find((row) => row.id === globalSettingId)).toMatchObject({
+      tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+    });
+    expect(settings.find((row) => row.id === unresolvedSettingId)).toMatchObject({
+      tenantId: TENANT_B,
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+    });
+
+    const events = await testDb.db.select().from(auditEventsTable);
+    expect(events.find((row) => row.id === canonicalEventId)).toMatchObject({
+      tenantId: 'ext-a1',
+      organizationId: ORG_A1,
+      ownershipState: 'canonical_organization',
+    });
+    expect(events.find((row) => row.id === globalEventId)).toMatchObject({
+      tenantId: null,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+    });
+    expect(events.find((row) => row.id === unresolvedEventId)).toMatchObject({
+      tenantId: TENANT_B,
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
+    });
+  });
+
+  it('is idempotent after resolved rows leave the candidate set', async () => {
+    await insertMapping('clerk', 'ext-a1', ORG_A1);
+    await insertLegacySetting('ext-a1', 'security_event');
+    await insertLegacyEvent('ext-a1', 'security_event');
+
+    const first = await decisionsForApply();
+    expect(first.report.byTable.audit_log_settings.candidateCount).toBe(1);
+    expect(first.report.byTable.audit_events.candidateCount).toBe(1);
+
+    const second = await decisionsForApply();
+    expect(second.report.byTable.audit_log_settings.candidateCount).toBe(0);
+    expect(second.report.byTable.audit_events.candidateCount).toBe(0);
+  });
+
+  it('persists settings quarantine when an AUD·B canonical winner exists', async () => {
+    await insertMapping('clerk', 'ext-a1', ORG_A1);
+
+    const historicalId = await insertLegacySetting(
+      'ext-a1',
+      'security_event',
+    );
+    const canonicalId = await insertCanonicalSetting(
+      ORG_A1,
+      ORG_A1,
+      'security_event',
+    );
+
+    const { report } = await decisionsForApply();
+
+    expect(report.byTable.audit_log_settings).toMatchObject({
+      candidateCount: 1,
+      quarantinedCount: 1,
+      concurrentlyChangedCount: 0,
+    });
+
+    const rows = await testDb.db.select().from(auditLogSettingsTable);
+    expect(rows.find((row) => row.id === historicalId)).toMatchObject({
+      tenantId: 'ext-a1',
+      organizationId: null,
+      ownershipState: 'quarantined',
+    });
+    expect(rows.find((row) => row.id === canonicalId)).toMatchObject({
+      organizationId: ORG_A1,
+      ownershipState: 'canonical_organization',
+    });
+  });
+
+  it('refuses the write when the candidate changes after intent', async () => {
+    await insertMapping('clerk', 'ext-a1', ORG_A1);
+    const eventId = await insertLegacyEvent('ext-a1', 'security_event');
+
+    let changed = false;
+    const { decisions, report } = await decisionsForApply({
+      onBeforeRowUpdate: async (decision) => {
+        if (
+          changed ||
+          decision.sourceTable !== 'audit_events' ||
+          decision.rowId !== String(eventId)
+        ) {
+          return;
+        }
+        changed = true;
+        await testDb.db
+          .update(auditEventsTable)
+          .set({ ownershipState: 'quarantined' })
+          .where(eq(auditEventsTable.id, eventId));
+      },
+    });
+
+    expect(report.byTable.audit_events.concurrentlyChangedCount).toBe(1);
+    expect(
+      decisions.find(
+        (decision) =>
+          decision.phase === 'result' &&
+          decision.sourceTable === 'audit_events' &&
+          decision.rowId === String(eventId),
+      ),
+    ).toMatchObject({
+      outcome: 'concurrently_changed',
+      reason: 'candidate_changed',
+    });
+
+    const [row] = await testDb.db
+      .select()
+      .from(auditEventsTable)
+      .where(eq(auditEventsTable.id, eventId));
+    expect(row).toMatchObject({
+      organizationId: null,
+      ownershipState: 'quarantined',
+    });
+  });
+
+  it('requires a decision sink before apply performs any DB work', async () => {
+    await insertLegacyEvent(ORG_A1, 'security_event');
+
+    await expect(
+      runAuditOwnershipBackfill(testDb.db, {
+        mode: 'apply',
+      }),
+    ).rejects.toThrow('apply mode requires an onDecision sink');
+
+    const [row] = await testDb.db.select().from(auditEventsTable);
+    expect(row).toMatchObject({
+      organizationId: null,
+      ownershipState: 'unresolved_legacy',
     });
   });
 });

@@ -216,6 +216,7 @@ describe('AUD�C dry-run — evidence classification for both audit tables', ()
       intentionalGlobalCount: 1,
       unresolvedCount: 5,
       quarantinedCount: 0,
+      concurrentlyChangedCount: 0,
     });
     expect(report.byTable.audit_events).toEqual({
       candidateCount: 9,
@@ -223,6 +224,7 @@ describe('AUD�C dry-run — evidence classification for both audit tables', ()
       intentionalGlobalCount: 1,
       unresolvedCount: 5,
       quarantinedCount: 0,
+      concurrentlyChangedCount: 0,
     });
 
     expect(report.reasonCounts).toMatchObject({

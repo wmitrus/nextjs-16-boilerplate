@@ -84,6 +84,8 @@ export interface AuditOwnershipBackfillReport {
   readonly startedAt: string;
   readonly completedAt: string;
   readonly batchSize: number;
+  readonly settingsStartAfterId: string | null;
+  readonly eventsStartAfterId: number | null;
   readonly reasonCounts: Record<string, number>;
   readonly byTable: Record<
     AuditOwnershipBackfillSource,
@@ -612,6 +614,8 @@ export async function runAuditOwnershipBackfillDryRun(
     startedAt,
     completedAt: new Date().toISOString(),
     batchSize,
+    settingsStartAfterId: options.settingsStartAfterId ?? null,
+    eventsStartAfterId: options.eventsStartAfterId ?? null,
     reasonCounts: Object.fromEntries(reasonCounts),
     byTable: {
       audit_log_settings: settingsReport,
@@ -1182,6 +1186,8 @@ export async function runAuditOwnershipBackfill(
     startedAt,
     completedAt: new Date().toISOString(),
     batchSize,
+    settingsStartAfterId: options.settingsStartAfterId ?? null,
+    eventsStartAfterId: options.eventsStartAfterId ?? null,
     reasonCounts: Object.fromEntries(reasonCounts),
     byTable: {
       audit_log_settings: settingsReport,

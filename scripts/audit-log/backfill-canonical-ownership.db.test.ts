@@ -36,10 +36,7 @@ async function insertMapping(
 
 async function insertLegacySetting(
   tenantId: string | null,
-  category:
-    | 'security_event'
-    | 'membership'
-    | 'billing' = 'security_event',
+  category: 'security_event' | 'membership' | 'billing' = 'security_event',
 ): Promise<string> {
   const [row] = await testDb.db
     .insert(auditLogSettingsTable)
@@ -54,7 +51,7 @@ async function insertLegacySetting(
       captureInputOnSuccess: false,
       updatedByUserId: null,
     })
-    .returning({ id: auditLogSettingsTable.id });
+    .returning();
 
   if (!row) throw new Error('Expected audit_log_settings fixture row');
   return row.id;
@@ -63,10 +60,7 @@ async function insertLegacySetting(
 async function insertCanonicalSetting(
   tenantId: string,
   organizationId: string,
-  category:
-    | 'security_event'
-    | 'membership'
-    | 'billing' = 'security_event',
+  category: 'security_event' | 'membership' | 'billing' = 'security_event',
 ): Promise<string> {
   const [row] = await testDb.db
     .insert(auditLogSettingsTable)
@@ -81,7 +75,7 @@ async function insertCanonicalSetting(
       captureInputOnSuccess: false,
       updatedByUserId: null,
     })
-    .returning({ id: auditLogSettingsTable.id });
+    .returning();
 
   if (!row) throw new Error('Expected canonical audit_log_settings fixture');
   return row.id;
@@ -89,10 +83,7 @@ async function insertCanonicalSetting(
 
 async function insertLegacyEvent(
   tenantId: string | null,
-  category:
-    | 'security_event'
-    | 'organization'
-    | 'membership' = 'security_event',
+  category: 'security_event' | 'organization' | 'membership' = 'security_event',
 ): Promise<number> {
   const [row] = await testDb.db
     .insert(auditEventsTable)
@@ -105,7 +96,7 @@ async function insertLegacyEvent(
       ownershipState: 'unresolved_legacy',
       actorUserId: null,
     })
-    .returning({ id: auditEventsTable.id });
+    .returning();
 
   if (!row) throw new Error('Expected audit_events fixture row');
   return row.id;
@@ -162,11 +153,11 @@ afterAll(async () => {
   );
   await testDb.db.execute(
     sql`DELETE FROM tenants WHERE id IN (${TENANT_A}, ${TENANT_B})`,
-   );
+  );
   await testDb.cleanup();
 });
 
-describe('AUD�C dry-run — evidence classification for both audit tables', () => {
+describe('AUD�C dry-run — evidence classification for both audit tables', () => {
   it('classifies Cases A-G without mutating either source table', async () => {
     await insertMapping('clerk', 'ext-a1', ORG_A1);
     await insertMapping('clerk', ORG_A1, ORG_A2);
@@ -190,7 +181,10 @@ describe('AUD�C dry-run — evidence classification for both audit tables', () 
     ];
 
     for (const value of legacyValues) {
-      await insertLegacySetting(value);
+      await insertLegacySetting(
+        value,
+        value === 'ext-multi-same' ? 'membership' : 'security_event',
+      );
       await insertLegacyEvent(value);
     }
 
@@ -233,10 +227,7 @@ describe('AUD�C dry-run — evidence classification for both audit tables', () 
           decision.legacyTenantId === legacyTenantId,
       );
 
-    for (const sourceTable of [
-      'audit_log_settings',
-     'audit_events',
-    ] as const) {
+    for (const sourceTable of ['audit_log_settings', 'audit_events'] as const) {
       expect(bySourceAndLegacy(sourceTable, ORG_B1)).toMatchObject({
         outcome: 'canonical_organization',
         proposedOrganizationId: ORG_B1,
@@ -323,10 +314,7 @@ describe('AUD·C dry-run — audit_log_settings collision disposition', () => {
   it('quarantines the historical projection when an AUD·B canonical winner already exists', async () => {
     await insertMapping('clerk', 'ext-a1', ORG_A1);
 
-    const historicalId = await insertLegacySetting(
-      'ext-a1',
-      'security_event',
-    );
+    const historicalId = await insertLegacySetting('ext-a1', 'security_event');
     const canonicalId = await insertCanonicalSetting(
       ORG_A1,
       ORG_A1,

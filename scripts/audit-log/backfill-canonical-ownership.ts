@@ -114,8 +114,7 @@ interface PlannedOutcome {
   readonly parentTenantId: string | null;
 }
 
-const AUDIT_NULL_SEMANTICS: LegacyNullSemantics =
-  'proven_intentional_global';
+const AUDIT_NULL_SEMANTICS: LegacyNullSemantics = 'proven_intentional_global';
 
 const NULL_EVIDENCE: LegacyOwnershipEvidence = {
   legacyValue: null,
@@ -175,8 +174,7 @@ async function loadAuditLegacyOwnershipEvidence(
     .select({
       externalOrgId: authOrganizationIdentitiesReferenceTable.externalOrgId,
       provider: authOrganizationIdentitiesReferenceTable.provider,
-      organizationId:
-        authOrganizationIdentitiesReferenceTable.organizationId,
+      organizationId: authOrganizationIdentitiesReferenceTable.organizationId,
     })
     .from(authOrganizationIdentitiesReferenceTable)
     .where(
@@ -216,9 +214,7 @@ async function loadAuditLegacyOwnershipEvidence(
         .where(inArray(tenantsReferenceTable.id, tenantCandidates))
     : [];
 
-  const knownTenantIds = new Set(
-    tenantRows.map((row) => row.id.toLowerCase()),
-  );
+  const knownTenantIds = new Set(tenantRows.map((row) => row.id.toLowerCase()));
 
   for (const legacyValue of unique) {
     const directInternalOrganization =
@@ -316,10 +312,7 @@ async function planSettingsOutcome(
       and(
         eq(auditLogSettingsTable.category, row.category),
         eq(auditLogSettingsTable.organizationId, organizationId),
-        eq(
-          auditLogSettingsTable.ownershipState,
-          'canonical_organization',
-        ),
+        eq(auditLogSettingsTable.ownershipState, 'canonical_organization'),
         ne(auditLogSettingsTable.id, row.id),
       ),
     )
@@ -345,10 +338,7 @@ async function planSettingsOutcome(
         eq(auditLogSettingsTable.category, row.category),
         ne(auditLogSettingsTable.id, row.id),
         or(
-          eq(
-            auditLogSettingsTable.ownershipState,
-            'unresolved_legacy',
-          ),
+          eq(auditLogSettingsTable.ownershipState, 'unresolved_legacy'),
           eq(auditLogSettingsTable.ownershipState, 'quarantined'),
         ),
       ),

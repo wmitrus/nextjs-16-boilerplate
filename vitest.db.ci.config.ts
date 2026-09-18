@@ -21,6 +21,7 @@ export default defineConfig({
       'src/**/*.db.test.ts',
       'scripts/audit-log/**/*.db.test.ts',
       'scripts/tenancy-inventory/**/*.db.test.ts',
+      'scripts/audit-log/**/*.db.test.ts',
     ],
     globalSetup: ['tests/db/setup.postgres.ts'],
     pool: 'forks',

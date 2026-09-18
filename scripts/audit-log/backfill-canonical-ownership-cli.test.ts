@@ -1,10 +1,4 @@
-import {
-  closeSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-} from 'node:fs';
+import { closeSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
@@ -56,9 +50,9 @@ describe('parseAuditBackfillCliArgs', () => {
   });
 
   it('requires both evidence paths for confirmed apply', () => {
-    expect(
-      parseAuditBackfillCliArgs(['--apply', '--confirm']),
-    ).toMatchObject({ ok: false });
+    expect(parseAuditBackfillCliArgs(['--apply', '--confirm'])).toMatchObject({
+      ok: false,
+    });
 
     expect(
       parseAuditBackfillCliArgs([
@@ -96,9 +90,7 @@ describe('parseAuditBackfillCliArgs', () => {
 
   it('rejects an unsafe audit_events cursor', () => {
     expect(
-      parseAuditBackfillCliArgs([
-        '--events-start-after=9007199254740992',
-      ]),
+      parseAuditBackfillCliArgs(['--events-start-after=9007199254740992']),
     ).toMatchObject({
       ok: false,
       error: expect.stringContaining('Number.MAX_SAFE_INTEGER'),
@@ -124,7 +116,9 @@ describe('AUD·C artifact reservation', () => {
   });
 
   afterAll(() => {
+    // eslint-disable-next-line no-restricted-syntax -- suite-owned mkdtempSync directory under the repo
     rmSync(runDir, { recursive: true, force: true });
+    // eslint-disable-next-line no-restricted-syntax -- suite-owned mkdtempSync directory under os.tmpdir()
     rmSync(outsideDir, { recursive: true, force: true });
   });
 
@@ -154,6 +148,7 @@ describe('AUD·C artifact reservation', () => {
 
   it('rejects a symlinked parent escaping the repo', () => {
     const escape = join(runDir, 'escape');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned symlink intentionally points outside the repo
     symlinkSync(outsideDir, escape);
 
     const resolved = resolveAuditBackfillArtifactPaths(
@@ -208,22 +203,19 @@ describe('AUD·C artifact reservation', () => {
       reserveAuditBackfillArtifacts(decisionsRel, reportRel, CWD),
     ).toThrow(/already exists/i);
 
-    expect(
-      readTextFileWithinBase(decisionsRel, CWD, 'fixture'),
-    ).toBe('prior evidence\n');
+    expect(readTextFileWithinBase(decisionsRel, CWD, 'fixture')).toBe(
+      'prior evidence\n',
+    );
   });
 
   it('rejects a dangling symlink occupying the final report name', () => {
     const reportRel = relOf('dangling.json');
     const target = join(runDir, 'missing-target');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- suite-owned dangling symlink is the behavior under test
     symlinkSync(target, join(runDir, 'dangling.json'));
 
     expect(() =>
-      reserveAuditBackfillArtifacts(
-        relOf('dangling.ndjson'),
-        reportRel,
-        CWD,
-      ),
+      reserveAuditBackfillArtifacts(relOf('dangling.ndjson'), reportRel, CWD),
     ).toThrow(/already exists/i);
   });
 });

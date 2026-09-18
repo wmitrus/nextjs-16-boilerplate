@@ -238,12 +238,8 @@ export function reserveAuditBackfillArtifacts(
   );
   if (!resolution.ok) throw new Error(resolution.error);
 
-  const {
-    realBase,
-    physicalDecisions,
-    physicalReport,
-    physicalTmpReport,
-  } = resolution.paths;
+  const { realBase, physicalDecisions, physicalReport, physicalTmpReport } =
+    resolution.paths;
 
   for (const [artifactPath, label] of [
     [physicalDecisions, 'audit-log:backfill --decisions'],
@@ -473,9 +469,7 @@ export async function runAuditBackfillCli(
       );
     }
     if (reportPath) {
-      console.error(
-        `[audit-log:backfill] Summary written to ${reportPath}`,
-      );
+      console.error(`[audit-log:backfill] Summary written to ${reportPath}`);
     }
   } finally {
     if (decisionsFd !== null) closeSync(decisionsFd);

@@ -101,8 +101,7 @@ export interface AuditOwnershipBackfillDryRunOptions {
   ) => Promise<void> | void;
 }
 
-export interface AuditOwnershipBackfillOptions
-  extends AuditOwnershipBackfillDryRunOptions {
+export interface AuditOwnershipBackfillOptions extends AuditOwnershipBackfillDryRunOptions {
   readonly mode: 'dry-run' | 'apply';
   /**
    * Test seam invoked after a durable intent record and before the mutation
@@ -621,7 +620,6 @@ export async function runAuditOwnershipBackfillDryRun(
   };
 }
 
-
 function normalizeAuditEvidence(evidence: LegacyOwnershipEvidence): string {
   const normalizeOrg = (org: ResolvedOrganization | null) =>
     org === null
@@ -670,8 +668,7 @@ function evidenceFromDecision(
   return {
     legacyValue: decision.legacyTenantId,
     nullSemantics: decision.evidence.nullSemantics,
-    directInternalOrganization:
-      decision.evidence.directInternalOrganization,
+    directInternalOrganization: decision.evidence.directInternalOrganization,
     providerMappings: [...decision.evidence.providerMappings],
     isKnownTenantId: decision.evidence.isKnownTenantId,
   };
@@ -724,11 +721,11 @@ async function lockSettingsCandidateForUpdate(
 
   return Boolean(
     row &&
-      row.id === decision.rowId &&
-      row.category === decision.category &&
-      row.tenant_id === decision.legacyTenantId &&
-      row.organization_id === null &&
-      row.ownership_state === 'unresolved_legacy',
+    row.id === decision.rowId &&
+    row.category === decision.category &&
+    row.tenant_id === decision.legacyTenantId &&
+    row.organization_id === null &&
+    row.ownership_state === 'unresolved_legacy',
   );
 }
 
@@ -754,11 +751,11 @@ async function lockEventCandidateForUpdate(
 
   return Boolean(
     row &&
-      String(row.id) === decision.rowId &&
-      row.category === decision.category &&
-      row.tenant_id === decision.legacyTenantId &&
-      row.organization_id === null &&
-      row.ownership_state === 'unresolved_legacy',
+    String(row.id) === decision.rowId &&
+    row.category === decision.category &&
+    row.tenant_id === decision.legacyTenantId &&
+    row.organization_id === null &&
+    row.ownership_state === 'unresolved_legacy',
   );
 }
 
@@ -902,11 +899,7 @@ async function applyEventDecision(
         normalizeAuditEvidence(plannedEvidence) ||
       !sameAuditClassification(freshClassification, plannedClassification)
     ) {
-      return concurrentResult(
-        decision,
-        'evidence_changed',
-        freshEvidence,
-      );
+      return concurrentResult(decision, 'evidence_changed', freshEvidence);
     }
 
     await options.onLockedBeforeMutation?.(decision);
@@ -964,11 +957,7 @@ async function applySettingsDecision(
         normalizeAuditEvidence(plannedEvidence) ||
       !sameAuditClassification(freshClassification, plannedClassification)
     ) {
-      return concurrentResult(
-        decision,
-        'evidence_changed',
-        freshEvidence,
-      );
+      return concurrentResult(decision, 'evidence_changed', freshEvidence);
     }
 
     await options.onLockedBeforeMutation?.(decision);
@@ -987,10 +976,7 @@ async function applySettingsDecision(
 
     await options.onAfterFreshCollisionCheck?.(decision);
 
-    if (
-      decision.outcome === 'quarantined' &&
-      fresh.outcome !== 'quarantined'
-    ) {
+    if (decision.outcome === 'quarantined' && fresh.outcome !== 'quarantined') {
       return concurrentResult(decision, 'collision_changed', freshEvidence);
     }
     if (fresh.outcome === 'unresolved_legacy') {

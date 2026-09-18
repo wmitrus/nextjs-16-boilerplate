@@ -439,7 +439,6 @@ describe('AUD·C dry-run — audit_events legacy retention identity', () => {
   });
 });
 
-
 describe('AUD·C apply — transactional ownership mutation', () => {
   it('applies canonical and intentional-global outcomes while preserving tenant_id', async () => {
     await insertMapping('clerk', 'ext-a1', ORG_A1);
@@ -456,10 +455,7 @@ describe('AUD·C apply — transactional ownership mutation', () => {
       'security_event',
     );
     const globalEventId = await insertLegacyEvent(null, 'membership');
-    const unresolvedEventId = await insertLegacyEvent(
-      TENANT_B,
-      'organization',
-    );
+    const unresolvedEventId = await insertLegacyEvent(TENANT_B, 'organization');
 
     const { report } = await decisionsForApply();
 
@@ -482,17 +478,21 @@ describe('AUD·C apply — transactional ownership mutation', () => {
     });
 
     const settings = await testDb.db.select().from(auditLogSettingsTable);
-    expect(settings.find((row) => row.id === canonicalSettingId)).toMatchObject({
-      tenantId: 'ext-a1',
-      organizationId: ORG_A1,
-      ownershipState: 'canonical_organization',
-    });
+    expect(settings.find((row) => row.id === canonicalSettingId)).toMatchObject(
+      {
+        tenantId: 'ext-a1',
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+      },
+    );
     expect(settings.find((row) => row.id === globalSettingId)).toMatchObject({
       tenantId: null,
       organizationId: null,
       ownershipState: 'intentional_global',
     });
-    expect(settings.find((row) => row.id === unresolvedSettingId)).toMatchObject({
+    expect(
+      settings.find((row) => row.id === unresolvedSettingId),
+    ).toMatchObject({
       tenantId: TENANT_B,
       organizationId: null,
       ownershipState: 'unresolved_legacy',
@@ -533,10 +533,7 @@ describe('AUD·C apply — transactional ownership mutation', () => {
   it('persists settings quarantine when an AUD·B canonical winner exists', async () => {
     await insertMapping('clerk', 'ext-a1', ORG_A1);
 
-    const historicalId = await insertLegacySetting(
-      'ext-a1',
-      'security_event',
-    );
+    const historicalId = await insertLegacySetting('ext-a1', 'security_event');
     const canonicalId = await insertCanonicalSetting(
       ORG_A1,
       ORG_A1,

@@ -3,6 +3,7 @@ import '../load-env';
 import { randomUUID } from 'node:crypto';
 import { closeSync } from 'node:fs';
 
+import { isCanonicalIdRepresentation } from '@/core/contracts/canonical-ids.provenance';
 import { createDb } from '@/core/db/create-db';
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
@@ -103,6 +104,16 @@ export function parseAuditBackfillCliArgs(
   if (!eventsStartAfter.ok) return eventsStartAfter;
 
   const settingsStartAfterId = arg('settings-start-after') ?? null;
+  if (
+    settingsStartAfterId !== null &&
+    !isCanonicalIdRepresentation(settingsStartAfterId)
+  ) {
+    return {
+      ok: false,
+      error: '--settings-start-after must be a canonical UUID representation',
+    };
+  }
+
   const decisionsPath = arg('decisions') ?? null;
   const reportPath = arg('report') ?? null;
 
@@ -256,12 +267,16 @@ export function reserveAuditBackfillArtifacts(
     if (decisionsFd !== null) {
       try {
         closeSync(decisionsFd);
-      } catch {}
+      } catch {
+        // Best-effort reservation cleanup; preserve the original error.
+      }
     }
     if (reportTmpFd !== null) {
       try {
         closeSync(reportTmpFd);
-      } catch {}
+      } catch {
+        // Best-effort reservation cleanup; preserve the original error.
+      }
     }
     removeCreatedArtifactsWithinBase(
       created,

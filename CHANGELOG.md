@@ -1,3 +1,23 @@
+# [2.20.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.19.0...v2.20.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* **audit:** align AUD-C report shape ([024e6d0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/024e6d0d18a1046d728f95b629fb9c374aa9ad85))
+* **audit:** harden AUD-C CLI inputs ([c8152cf](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c8152cfbf82d50f30e0ddb101d775ac2aa37346d))
+* **audit:** normalize backfill database URL ([7a84f8f](https://github.com/wmitrus/nextjs-16-boilerplate/commit/7a84f8fc374853339561c3731dfc894a9de96402))
+* **audit:** satisfy AUD-C CLI lint guards ([d29b02c](https://github.com/wmitrus/nextjs-16-boilerplate/commit/d29b02c2ffb7e3f5ff8db31fa5698dfd9aaa9680))
+* **audit:** stabilize AUD-C dry-run validation ([8dc8956](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8dc895614968a84782f106195afa1e272b0f4313))
+* **test:** remove duplicate audit DB include ([10e6cba](https://github.com/wmitrus/nextjs-16-boilerplate/commit/10e6cbae81083bd55d0acae0477902ff2653dc8d))
+
+
+### Features
+
+* **audit:** add AUD-C dry-run ownership backfill ([8ceb455](https://github.com/wmitrus/nextjs-16-boilerplate/commit/8ceb455da98a07f30741637c2a4b4135734c24b3))
+* **audit:** add AUD-C operator CLI ([ed2ddc3](https://github.com/wmitrus/nextjs-16-boilerplate/commit/ed2ddc31cda8fbddf97e6c44a548a6ae69099826))
+* **audit:** add transactional AUD-C apply runner ([6c9afc0](https://github.com/wmitrus/nextjs-16-boilerplate/commit/6c9afc03cb0db25258232588c86f860a7f77e98e))
+* **audit:** include AUD-C resume cursors in reports ([cc860df](https://github.com/wmitrus/nextjs-16-boilerplate/commit/cc860df36b3a40fd3e3b77ff5b6e28bf2d37269a))
+
 # [2.19.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.18.0...v2.19.0) (2026-09-17)
 
 

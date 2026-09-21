@@ -24,6 +24,9 @@ import {
 } from './backfill-canonical-ownership';
 
 const DEFAULT_BATCH_SIZE = 500;
+const DEFAULT_PGLITE_URL = 'file:./data/pglite';
+const FILE_URL_PREFIX = 'file:';
+const PGLITE_URL_PREFIX = 'pglite://';
 
 export interface AuditBackfillCliInvocation {
   readonly mode: 'dry-run' | 'apply';
@@ -377,6 +380,27 @@ function resolveDriver(): DbDriver {
   return process.env.NODE_ENV === 'production' ? 'postgres' : 'pglite';
 }
 
+export function resolveDatabaseUrl(
+  driver: DbDriver,
+  rawUrl: string | undefined,
+): string | undefined {
+  if (driver === 'postgres') {
+    return rawUrl?.trim();
+  }
+
+  const trimmed = rawUrl?.trim();
+  if (!trimmed) return DEFAULT_PGLITE_URL;
+
+  if (
+    trimmed.startsWith(FILE_URL_PREFIX) ||
+    trimmed.startsWith(PGLITE_URL_PREFIX)
+  ) {
+    return trimmed;
+  }
+
+  return DEFAULT_PGLITE_URL;
+}
+
 export async function runAuditBackfillCli(
   argv = process.argv.slice(2),
 ): Promise<void> {
@@ -401,7 +425,8 @@ export async function runAuditBackfillCli(
 
   const provider = resolveProvider();
   const driver = resolveDriver();
-  const url = process.env.DATABASE_URL?.trim();
+  const rawUrl = process.env.DATABASE_URL?.trim();
+  const url = resolveDatabaseUrl(driver, rawUrl);
 
   if (provider !== 'drizzle') {
     throw new Error(

@@ -44,7 +44,7 @@ src/
     infrastructure/
       drizzle/
         schema.ts                          ← audit_log_settings + audit_events tables
-        effective-settings.ts              ← resolveEffectiveAuditSetting() — shared by writer + purge job
+        effective-settings.ts              ← canonical effective settings + bounded legacy retention compatibility
         DrizzleAuditLogService.ts          ← write path (enabled/sampling/capture/cap → insert)
         DrizzleAuditLogSettingsAdminService.ts  ← admin CRUD for settings (not DI-registered)
         DrizzleAuditLogReadService.ts      ← admin browse/read path (not DI-registered)
@@ -125,26 +125,50 @@ enforced at the write path, not just as a default.
 
 ## 4. Settings Model
 
-`audit_log_settings` mirrors `feature_flags`' global/tenant-override shape:
-one row per `(category, tenantId)` pair. `tenantId: null` is the global
-default; a tenant row is an override. A missing row for a given pair is not
-an error — it means "use the taxonomy default" from `category.ts`.
+AUD·D uses canonical Organization ownership.
 
-Effective-settings resolution (`resolveEffectiveAuditSetting()` in
-`infrastructure/drizzle/effective-settings.ts`) is a single query: order by
-`tenantId ASC` and take the first row. Postgres's default `NULLS LAST` for
-ascending sort means a real tenant match naturally sorts before the
-global/null row, so `LIMIT 1` picks the tenant override when one exists,
-otherwise the global row, otherwise nothing (in which case the caller falls
-back to the taxonomy default). **This one function is shared by the write
-path and the purge job** — both apply identical enabled/retention/sampling
-rules and can never independently drift.
+`organizations.tenant_id` is the authoritative Tenant → Organization parent
+relation. Legacy `audit_log_settings.tenant_id` and `audit_events.tenant_id`
+remain rollback/data-migration compatibility data where required, but they are
+not canonical authorization authority.
 
-Unlike the settings table, the `audit_events` trail itself has **no
-overlay/inheritance semantic**. A tenant-scoped reader (browse UI, purge job
-scoping) only ever sees that tenant's own rows — never `tenantId: null`
-(platform-level) rows, never another tenant's rows (SEC-26, see
-[SECURITY_CODING_PATTERNS.md](../ai/general/SECURITY_CODING_PATTERNS.md)).
+Canonical organization scope is:
+
+    {
+      kind: 'organization';
+      organizationId;
+      tenantId;
+    }
+
+Both identifiers are load-bearing. The tuple must be proven against
+`organizations` before an organization-scoped read, write, or settings
+evaluation is admitted.
+
+Canonical effective-settings resolution is handled by
+`resolveCanonicalEffectiveAuditSetting()`:
+
+- organization scope:
+  exact canonical organization override → `intentional_global` → taxonomy;
+- platform-global scope:
+  `intentional_global` → taxonomy.
+
+For organization scope, fallback is permitted only after the complete
+`(organizationId, tenantId)` tuple is proven against `organizations`. An
+invalid tuple returns no canonical setting; it does not fall through to global
+or taxonomy.
+
+`unresolved_legacy` and `quarantined` settings never participate in canonical
+effective evaluation.
+
+`resolveLegacyAuditRetentionCompat()` is intentionally separate and is
+**data-migration compatibility only**. It exists only for retention of
+historical `unresolved_legacy` / `quarantined` events until the later cleanup
+phase removes that compatibility path.
+
+The `audit_events` trail itself has no organization/global overlay semantic.
+An ordinary organization viewer sees only rows with its exact
+`organization_id`, and the parent Tenant tuple must still validate. It never
+receives `intentional_global`, NULL-organization, or sibling-organization rows.
 
 ### Managing settings
 
@@ -161,8 +185,10 @@ scoping) only ever sees that tenant's own rows — never `tenantId: null`
 `DrizzleAuditLogService.record(event: AuditEventInput)`:
 
 1. Reject unknown categories (log a warning, drop the event — never throw).
-2. Resolve the effective setting for `(category, tenantId)`. If disabled,
-   drop the event.
+2. Resolve the effective setting from the full canonical `AuditWriteScope`.
+   Organization scope must prove `(organizationId, tenantId)` against
+   `organizations`. An invalid tuple fails closed and is never retried as
+   platform-global. If the resolved setting is disabled, drop the event.
 3. Sampling: if `outcome === 'success'` and `sampleRate` is set, roll the
    dice — a `failure` or `denied` outcome is **never** dropped by sampling,
    regardless of the configured rate, so compliance/security evidence is
@@ -172,7 +198,10 @@ scoping) only ever sees that tenant's own rows — never `tenantId: null`
 5. Metadata is size-capped at 8 KB (serialized). Oversized metadata is
    replaced with `{ truncated: true, originalSizeBytes }` rather than stored
    raw or dropped entirely.
-6. Insert into `audit_events`.
+6. Insert into `audit_events`. Organization writes prove the complete
+   `(organizationId, tenantId)` tuple in the same SQL statement that performs
+   the INSERT. Legacy `tenant_id` remains compatibility/rollback data; it is
+   not canonical authority.
 
 ### Existing wired call sites
 
@@ -205,48 +234,77 @@ metadata (pretty-printed JSON).
 
 Backed by `GET /api/admin/audit-logs`
 (`src/app/api/admin/audit-logs/route.ts`), gated the same way as the
-settings route. **SEC-26-correct tenant scoping**: an env-based platform
-admin gets `DrizzleAuditLogReadService.listGlobal(...)` (unscoped, all
-tenants); an ABAC-authorized non-platform-admin caller always gets
-`listForTenant(access.tenant.tenantId, ...)`, deriving the scope from the
-server-verified security context — never from a client-supplied query
-parameter (there is no `tenantId` filter on this route at all).
+settings route.
+
+AUD·D derives an explicit canonical data scope before calling
+`DrizzleAuditLogReadService.list(scope)`:
+
+- ordinary membership yields organization scope only;
+- platform-global access is explicit;
+- organization reads require exact `organization_id` plus proof that
+  `organizations.tenant_id = scope.tenantId`.
+
+An invalid Organization/Tenant tuple returns no rows. There is no NULL/global
+overlay for an ordinary organization viewer, and no client-supplied legacy
+`tenant_id` is accepted as authorization input.
 
 ---
 
 ## 7. Retention Enforcement (Purge Job)
 
-`purgeExpiredAuditEvents()` (`src/modules/audit-log/infrastructure/drizzle/purge-expired-events.ts`):
+`purgeExpiredAuditEvents()` uses discriminated retention keys rather than the
+legacy `(category, tenantId)` pair.
 
-1. Find every distinct `(category, tenantId)` pair actually present in
-   `audit_events` (not the full taxonomy × every tenant ever seen — only
-   pairs with rows).
-2. For each pair, resolve its currently-effective retention via
-   `resolveEffectiveAuditSetting()` — the same function the writer uses.
-3. Delete rows older than `now - retentionDays` for that pair, in batches of
-   500, looping until nothing older than the cutoff remains. Batching avoids
-   holding row locks for too long on a high-volume append-only table with a
-   single giant `DELETE`.
+The retention groups are:
 
-`scripts/audit-log/purge-expired.ts` is a thin CLI wrapper: resolves
-provider/driver/URL from env (mirroring every other standalone script in
-`scripts/`, e.g. `db-seed.ts`), creates a DB connection, calls the function
-above, prints a per-pair summary, and closes the connection. Supports
-`--dry-run` (reports what would be deleted without deleting anything).
+1. live canonical organization:
+   `(category, organization_id, canonical_organization)`;
+2. canonical organization with `organization_id IS NULL`:
+   `(category, canonical_organization)`;
+3. organization-owned orphaned:
+   `(category, organization_owned_orphaned)`;
+4. intentional global:
+   `(category, intentional_global)`;
+5. historical `unresolved_legacy` / `quarantined`:
+   `(category, legacy audit_events.tenant_id, ownership_state)`.
 
-```bash
-# Local dry run (PGlite/local Postgres, whatever DATABASE_URL resolves to)
-pnpm audit-log:purge:dry-run
+Retention resolution is:
 
-# Local run against a real connection
-pnpm audit-log:purge
+- live canonical organization:
+  canonical organization setting → intentional global → taxonomy;
+- canonical NULL-owned, orphaned, and intentional-global groups:
+  intentional global → taxonomy;
+- unresolved legacy / quarantined:
+  `resolveLegacyAuditRetentionCompat()` only.
 
-# Against the same production env Vercel would use, from your machine
-pnpm audit-log:purge:prod:local
+Legacy NULL tenant grouping uses PostgreSQL `IS NOT DISTINCT FROM`, so NULL is
+part of the legacy retention identity rather than an unmatchable equality
+value.
 
-# What the scheduled workflow actually invokes
-pnpm audit-log:purge:vercel:prod
-```
+Dry-run COUNT and real DELETE both bind the same discriminated retention key
+and cutoff. DELETE additionally re-binds that key at deletion time, so a row
+reconciled between SELECT and DELETE cannot be deleted under its former
+ownership.
+
+Rows are deleted in batches of 500, looping until nothing older than the
+cutoff remains. Batching avoids holding row locks for too long on a
+high-volume append-only table.
+
+Retention configuration has snapshot semantics for each key being processed.
+If an admin changes retention after that key has already been resolved in the
+current purge run, that already-resolved key is not retroactively recalculated.
+
+If a canonical organization key was enumerated and the Organization is deleted
+before processing, purge re-checks the exact original key. If that exact group
+disappeared, the stale key is skipped. If canonical rows still reference the
+missing Organization, purge fails closed with
+`AuditPurgeOwnershipInvariantError`; it never falls back to global, taxonomy,
+or legacy authority.
+
+`scripts/audit-log/purge-expired.ts` is a thin CLI wrapper: it resolves the
+provider/driver/URL from env, creates a DB connection, invokes the purge,
+prints a per-retention-key summary, and closes the connection. It supports
+`--dry-run`, which reports what would be deleted without deleting anything.
 
 ### Scheduled workflow
 
@@ -284,10 +342,11 @@ runs.
   deliberate tradeoff — availability of the primary action over completeness
   of the audit trail — consistent with `ResilientFeatureFlagService`'s
   established pattern in this repo.
-- **SEC-26 (tenant scope)**: both the settings routes and the new browse
-  route derive a non-platform-admin caller's tenant scope from the
-  server-verified security context, never from a client-supplied value. See
-  [SECURITY_CODING_PATTERNS.md](../ai/general/SECURITY_CODING_PATTERNS.md).
+- **Canonical organization scope**: ordinary callers derive Organization
+  scope from the server-verified security context. Both `organizationId` and
+  its authoritative parent `tenantId` are required and proven against
+  `organizations`. Legacy `tenant_id` columns are never canonical
+  authorization authority. Platform-global access is explicit.
 - **Redaction happens before persistence, always.** The same redaction
   rules used for Pino output are applied before a value ever reaches
   `AuditLogService.record()` — nothing unredacted is stored via either sink.
@@ -318,16 +377,19 @@ lookups, bounds constants.
 Use `resolveTestDb()` from `@/testing/db/create-test-db` (PGlite in-memory),
 same pattern as every other module's DB test suite:
 
-- `DrizzleAuditLogService.db.test.ts` — enabled/disabled gating, tenant
-  override precedence, sampling (never drops failure/denied), metadata
-  capture rules, size-cap truncation, unknown-category handling, userAgent
-  truncation.
-- `DrizzleAuditLogSettingsAdminService.db.test.ts` — settings CRUD.
-- `DrizzleAuditLogReadService.db.test.ts` — global vs. tenant-scoped
-  listing, filters, pagination, SEC-26 tenant-scoping regression.
-- `purge-expired-events.db.test.ts` — taxonomy-default retention, admin
-  override retention, dry-run, batching loop, null-tenant vs. real-tenant
-  scoping.
+- `DrizzleAuditLogService.db.test.ts` — canonical effective-setting gating,
+  same-statement Organization/Tenant tuple proof, sampling (never drops
+  failure/denied), metadata capture rules, size-cap truncation,
+  unknown-category handling, userAgent truncation.
+- `DrizzleAuditLogSettingsAdminService.db.test.ts` — canonical settings CRUD,
+  tuple validation, and intentional-global fallback/uniqueness behavior.
+- `DrizzleAuditLogReadService.db.test.ts` — canonical Organization
+  containment, platform-global access, filters, pagination, invalid-tuple,
+  and sibling-Organization regressions.
+- `purge-expired-events.db.test.ts` — discriminated retention keys, canonical
+  Organization/global/legacy retention, NULL legacy semantics, dry-run/delete
+  parity, batching, and stale-key handling after concurrent Organization
+  deletion.
 
 ### Route tests (mocked container)
 

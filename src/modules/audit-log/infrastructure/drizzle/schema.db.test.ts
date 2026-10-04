@@ -382,6 +382,38 @@ describe('AUD·A — audit_events / audit_log_settings schema contract (real DB)
     });
   });
 
+  describe('AUD·D audit_log_settings global semantic unique', () => {
+    it('installs the exact intentional_global partial unique', async () => {
+      const res = await testDb.db.execute(sql`
+        SELECT
+          i.indisunique,
+          i.indisvalid,
+          pg_get_indexdef(i.indexrelid) AS indexdef
+        FROM pg_class c
+        JOIN pg_index i ON i.indexrelid = c.oid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname =
+            'uq_audit_log_settings_category_intentional_global'
+      `);
+
+      const rows = (
+        Array.isArray(res) ? res : (res as { rows: unknown[] }).rows
+      ) as Array<{
+        indisunique: boolean;
+        indisvalid: boolean;
+        indexdef: string;
+      }>;
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.indisunique).toBe(true);
+      expect(rows[0]?.indisvalid).toBe(true);
+      expect(rows[0]?.indexdef).toMatch(
+        /UNIQUE INDEX .*audit_log_settings.*\(category\).*WHERE.*ownership_state.*intentional_global/i,
+      );
+    });
+  });
+
   describe('organization_id FK deletion semantics', () => {
     it('rejects a non-existent organization_id on both tables', async () => {
       await expectRejection(

@@ -26,7 +26,10 @@ interface AdminAuditSetting {
  * the verified session, so this client never needs (or offers) a tenantId
  * field. See SEC-26 in `docs/ai/general/SECURITY_CODING_PATTERNS.md`.
  */
-type AdminScope = { isPlatformAdmin: boolean; tenantId: string | null };
+type AdminScope = {
+  isPlatformAdmin: boolean;
+  organizationId: string | null;
+};
 
 type FetchState =
   | { status: 'idle' }
@@ -270,12 +273,14 @@ export function AuditSettingsClient() {
             Managing <strong>global defaults</strong> — these apply to every
             tenant that has not set its own override.
           </>
-        ) : (
+        ) : scope.organizationId ? (
           <>
-            Managing overrides for <strong>your tenant</strong> (
-            {scope.tenantId}). Categories without an override use the global
-            default shown below.
+            Managing overrides for <strong>your organization</strong> (
+            {scope.organizationId}). Categories without an override use the
+            global default shown below.
           </>
+        ) : (
+          <>No canonical organization scope is available.</>
         )}
       </div>
 

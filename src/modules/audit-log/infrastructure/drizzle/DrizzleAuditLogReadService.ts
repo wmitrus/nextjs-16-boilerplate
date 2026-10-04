@@ -10,7 +10,9 @@ import {
   type SQL,
 } from 'drizzle-orm';
 
+import type { DataScope } from '@/core/contracts/access-context';
 import type { DrizzleDb } from '@/core/db';
+import { organizationsReferenceTable } from '@/core/db/schema/references';
 
 import type { AuditCategory } from '../../domain/category';
 
@@ -58,6 +60,37 @@ export type AuditEventPagination = {
   limit: number;
   offset: number;
 };
+
+export type AuditLogsDataScope = Extract<
+  DataScope,
+  { kind: 'organization' | 'platform-global' }
+>;
+
+/**
+ * OZI-71 AUD·D canonical audit-event containment.
+ *
+ * Platform-global is an explicitly classified unrestricted viewer operation.
+ * Organization scope binds BOTH canonical ids: the event's organization and
+ * that organization's authoritative parent tenant.
+ */
+function auditEventScopePredicates(scope: AuditLogsDataScope): SQL[] {
+  switch (scope.kind) {
+    case 'platform-global':
+      return [];
+
+    case 'organization':
+      return [
+        eq(auditEventsTable.organizationId, scope.organizationId),
+        sql`exists (
+          select 1
+          from ${organizationsReferenceTable}
+          where ${organizationsReferenceTable.id} = ${auditEventsTable.organizationId}
+            and ${organizationsReferenceTable.id} = ${scope.organizationId}
+            and ${organizationsReferenceTable.tenantId} = ${scope.tenantId}
+        )`,
+      ];
+  }
+}
 
 /**
  * Escapes ILIKE metacharacters in caller-supplied text so a literal `%`,
@@ -156,36 +189,33 @@ function mapEventRow(row: {
 
 /**
  * Read-only browsing service for `audit_events` -- the admin-facing trail
- * viewer (`/admin/security/audit-logs`). Deliberately NOT DI-registered,
- * same rationale as `DrizzleAuditLogSettingsAdminService`: admin-only,
- * low-frequency, directly instantiated at the route-handler call site.
+ * viewer (`/admin/security/audit-logs`).
  *
- * `listForTenant` scopes strictly to `tenantId = callerTenantId` -- unlike
- * the settings global/override model, an audit trail has no "overlay"
- * semantic: a tenant-scoped viewer sees only their own tenant's events,
- * never `tenantId: null` (platform-level) rows and never another tenant's
- * rows (SEC-26).
+ * OZI-71 AUD·D: the service boundary accepts only canonical
+ * `organization | platform-global` DataScope. A raw legacy `tenant_id` is
+ * never accepted as authorization input.
+ *
+ * Organization reads bind both members of the canonical tuple in SQL.
+ * Platform-global is an explicitly classified unrestricted viewer operation.
  */
 export class DrizzleAuditLogReadService {
   constructor(private readonly db: DrizzleDb) {}
 
-  async listGlobal(
+  /**
+   * AUD·D canonical viewer boundary.
+   *
+   * This becomes the sole public listing path once the route cutover removes
+   * the transitional legacy methods below.
+   */
+  async list(
+    scope: AuditLogsDataScope,
     filters: AuditEventFilters,
     pagination: AuditEventPagination,
   ): Promise<{ events: AuditEventDto[]; total: number }> {
-    return this.query(filterPredicates(filters), pagination);
-  }
-
-  async listForTenant(
-    tenantId: string,
-    filters: AuditEventFilters,
-    pagination: AuditEventPagination,
-  ): Promise<{ events: AuditEventDto[]; total: number }> {
-    const predicates = [
-      eq(auditEventsTable.tenantId, tenantId),
-      ...filterPredicates(filters),
-    ];
-    return this.query(predicates, pagination);
+    return this.query(
+      [...auditEventScopePredicates(scope), ...filterPredicates(filters)],
+      pagination,
+    );
   }
 
   private async query(

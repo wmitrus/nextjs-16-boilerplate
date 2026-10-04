@@ -487,17 +487,15 @@ describe('DrizzleAuditLogService (real DB)', () => {
       async ({ category, action, outcome, classification, legacyTenantId }) => {
         // Force every category on so the matrix tests ownership rather than
         // taxonomy defaults (notably waitlist defaults to disabled).
-        await settingsSvc.upsert(
+        await settingsSvc.upsertCanonical(
           {
             category,
-            tenantId: null,
             enabled: true,
             retentionDays: 30,
             sampleRate: null,
             captureInputOnSuccess: false,
             updatedByUserId: null,
           },
-          null,
           GLOBAL_WRITE_SCOPE,
         );
 
@@ -542,16 +540,14 @@ describe('DrizzleAuditLogService (real DB)', () => {
   });
 
   it('honors an admin-configured disabled override even for a normally-enabled category', async () => {
-    await settingsSvc.upsert(
+    await settingsSvc.upsertCanonical(
       {
         category: 'auth',
-        tenantId: null,
         enabled: false,
         retentionDays: 30,
         captureInputOnSuccess: false,
         updatedByUserId: null,
       },
-      null,
       { kind: 'platform-global' },
     );
 
@@ -561,29 +557,25 @@ describe('DrizzleAuditLogService (real DB)', () => {
   });
 
   it('prefers an organization override over the global row', async () => {
-    await settingsSvc.upsert(
+    await settingsSvc.upsertCanonical(
       {
         category: 'auth',
-        tenantId: null,
         enabled: false,
         retentionDays: 30,
         captureInputOnSuccess: false,
         updatedByUserId: null,
       },
-      null,
       { kind: 'platform-global' },
     );
 
-    await settingsSvc.upsert(
+    await settingsSvc.upsertCanonical(
       {
         category: 'auth',
-        tenantId: ORG_A1,
         enabled: true,
         retentionDays: 30,
         captureInputOnSuccess: false,
         updatedByUserId: null,
       },
-      { tenantId: ORG_A1 },
       organizationScope(ORG_A1, TENANT_A),
     );
 
@@ -610,6 +602,92 @@ describe('DrizzleAuditLogService (real DB)', () => {
     expect(await testDb.db.select().from(auditEventsTable)).toHaveLength(0);
   });
 
+  it('AUD·D: organization setting resolution ignores legacyTenantId and uses canonical writeScope', async () => {
+    await settingsSvc.upsertCanonical(
+      {
+        category: 'auth',
+        enabled: false,
+        retentionDays: 30,
+        captureInputOnSuccess: false,
+        updatedByUserId: null,
+      },
+      { kind: 'platform-global' },
+    );
+
+    await settingsSvc.upsertCanonical(
+      {
+        category: 'auth',
+        enabled: true,
+        retentionDays: 30,
+        captureInputOnSuccess: false,
+        updatedByUserId: null,
+      },
+      organizationScope(ORG_A1, TENANT_A),
+    );
+
+    // The legacy key deliberately does NOT name ORG_A1. Under the pre-AUD·D
+    // resolver this would miss the organization override and inherit the
+    // disabled global row. Canonical resolution must use writeScope instead.
+    await svc.record(
+      makeEvent({
+        writeScope: organizationScope(ORG_A1, TENANT_A),
+        legacyTenantId: 'legacy-unrelated-key',
+      }),
+    );
+
+    const rows = await testDb.db.select().from(auditEventsTable);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      tenantId: 'legacy-unrelated-key',
+      organizationId: ORG_A1,
+      ownershipState: 'canonical_organization',
+    });
+  });
+
+  it('AUD·D: platform-global setting resolution ignores an organization-shaped legacyTenantId', async () => {
+    await settingsSvc.upsertCanonical(
+      {
+        category: 'auth',
+        enabled: true,
+        retentionDays: 30,
+        captureInputOnSuccess: false,
+        updatedByUserId: null,
+      },
+      { kind: 'platform-global' },
+    );
+
+    await settingsSvc.upsertCanonical(
+      {
+        category: 'auth',
+        enabled: false,
+        retentionDays: 30,
+        captureInputOnSuccess: false,
+        updatedByUserId: null,
+      },
+      organizationScope(ORG_A1, TENANT_A),
+    );
+
+    // Pre-AUD·D resolution by legacyTenantId would have selected the disabled
+    // ORG_A1 override. Platform-global authority must instead resolve only the
+    // intentional-global row.
+    await svc.record(
+      makeEvent({
+        writeScope: { kind: 'platform-global' },
+        legacyTenantId: ORG_A1,
+      }),
+    );
+
+    const rows = await testDb.db.select().from(auditEventsTable);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      tenantId: ORG_A1,
+      organizationId: null,
+      ownershipState: 'intentional_global',
+    });
+  });
+
   describe('metadata capture rules', () => {
     it('always captures metadata on failure, regardless of captureInputOnSuccess', async () => {
       await svc.record(
@@ -633,16 +711,14 @@ describe('DrizzleAuditLogService (real DB)', () => {
     });
 
     it('captures metadata on success when captureInputOnSuccess is enabled', async () => {
-      await settingsSvc.upsert(
+      await settingsSvc.upsertCanonical(
         {
           category: 'auth',
-          tenantId: null,
           enabled: true,
           retentionDays: 30,
           captureInputOnSuccess: true,
           updatedByUserId: null,
         },
-        null,
         { kind: 'platform-global' },
       );
 
@@ -689,17 +765,15 @@ describe('DrizzleAuditLogService (real DB)', () => {
 
   describe('sampling', () => {
     it('never drops a failure event, even at sampleRate 0', async () => {
-      await settingsSvc.upsert(
+      await settingsSvc.upsertCanonical(
         {
           category: 'server_action',
-          tenantId: null,
           enabled: true,
           retentionDays: 30,
           sampleRate: 0,
           captureInputOnSuccess: false,
           updatedByUserId: null,
         },
-        null,
         { kind: 'platform-global' },
       );
 
@@ -711,17 +785,15 @@ describe('DrizzleAuditLogService (real DB)', () => {
     });
 
     it('drops success events at sampleRate 0', async () => {
-      await settingsSvc.upsert(
+      await settingsSvc.upsertCanonical(
         {
           category: 'server_action',
-          tenantId: null,
           enabled: true,
           retentionDays: 30,
           sampleRate: 0,
           captureInputOnSuccess: false,
           updatedByUserId: null,
         },
-        null,
         { kind: 'platform-global' },
       );
 

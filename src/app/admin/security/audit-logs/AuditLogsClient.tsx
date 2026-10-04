@@ -25,7 +25,10 @@ interface AdminAuditEvent {
   metadata: Record<string, unknown> | null;
 }
 
-type AdminScope = { isPlatformAdmin: boolean; tenantId: string | null };
+type AdminScope = {
+  isPlatformAdmin: boolean;
+  organizationId: string | null;
+};
 
 /**
  * Shape of `AdminUserDto` (`DrizzleAdminUsersService.ts`) as it crosses the
@@ -422,13 +425,15 @@ export function AuditLogsClient() {
         <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
           {state.scope.isPlatformAdmin ? (
             <>
-              Showing events across <strong>all tenants</strong>.
+              Showing events across <strong>all organizations</strong>.
+            </>
+          ) : state.scope.organizationId ? (
+            <>
+              Showing events for <strong>your organization</strong> only (
+              {state.scope.organizationId}).
             </>
           ) : (
-            <>
-              Showing events for <strong>your tenant</strong> only (
-              {state.scope.tenantId}).
-            </>
+            <>No canonical organization scope is available.</>
           )}
         </div>
       )}
@@ -682,7 +687,9 @@ export function AuditLogsClient() {
                           <td colSpan={columns.length} className="px-4 py-3">
                             <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
                               <div>
-                                <span className="font-medium">Tenant:</span>{' '}
+                                <span className="font-medium">
+                                  Legacy tenant key:
+                                </span>{' '}
                                 {row.original.tenantId ?? '—'}
                               </div>
                               <div>

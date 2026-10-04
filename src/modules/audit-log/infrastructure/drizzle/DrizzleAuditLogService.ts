@@ -13,7 +13,7 @@ import { resolveServerLogger } from '@/core/logger/di';
 import { isAuditCategory } from '../../domain/category';
 import { AuditCanonicalWriteInvariantError } from '../../domain/errors';
 
-import { resolveEffectiveAuditSetting } from './effective-settings';
+import { resolveCanonicalEffectiveAuditSetting } from './effective-settings';
 import { auditEventsTable } from './schema';
 
 const logger = resolveServerLogger().child({
@@ -91,14 +91,23 @@ export class DrizzleAuditLogService implements AuditLogService {
     }
     const category = event.category;
 
-    // AUD·B deliberately keeps effective-setting resolution on the legacy
-    // compatibility key. Canonical ownership becomes authoritative only at
-    // AUD·D, when settings resolution and retention cut over atomically.
-    const setting = await resolveEffectiveAuditSetting(
+    // OZI-71 AUD·D: effective settings resolve exclusively from the full
+    // canonical write scope. `legacyTenantId` remains compatibility/rollback
+    // data persisted to audit_events; it has no authority over enablement,
+    // sampling, metadata capture, or retention selection.
+    //
+    // An internally inconsistent organization tuple returns null rather than
+    // inheriting global/taxonomy settings. Fail closed and never retry the
+    // event as platform-global.
+    const setting = await resolveCanonicalEffectiveAuditSetting(
       this.db,
       category,
-      event.legacyTenantId,
+      event.writeScope,
     );
+
+    if (setting === null) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
 
     if (!setting.enabled) return;
 

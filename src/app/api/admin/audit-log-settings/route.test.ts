@@ -19,11 +19,10 @@ const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
   isEnvAdmin: vi.fn(),
-  listGlobalEffective: vi.fn(),
-  listEffectiveForTenant: vi.fn(),
-  upsert: vi.fn(),
-  resetToDefault: vi.fn(),
-  resolveCanonicalAuditWriteScope: vi.fn(),
+  list: vi.fn(),
+  upsertCanonical: vi.fn(),
+  resetCanonical: vi.fn(),
+  resolveAdminScope: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
   container: {
@@ -49,8 +48,8 @@ vi.mock('@/core/runtime/bootstrap', () => ({
   getAppContainer: () => mocks.container,
 }));
 
-vi.mock('@/app/_lib/resolve-canonical-audit-write-scope', () => ({
-  resolveCanonicalAuditWriteScope: mocks.resolveCanonicalAuditWriteScope,
+vi.mock('./audit-log-settings-admin-scope', () => ({
+  resolveAuditLogSettingsAdminScope: mocks.resolveAdminScope,
 }));
 
 vi.mock(
@@ -78,6 +77,16 @@ function makeBodyRequest(method: 'PATCH' | 'DELETE', body?: unknown) {
 
 const mockContext = { params: Promise.resolve({}) };
 
+const ORGANIZATION_SCOPE = {
+  kind: 'organization',
+  organizationId: '15000000-0000-4000-8000-000000000001',
+  tenantId: '10000000-0000-4000-8000-000000000001',
+} as const;
+
+const PLATFORM_SCOPE = {
+  kind: 'platform-global',
+} as const;
+
 const TEST_SETTING = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   category: 'auth',
@@ -94,33 +103,24 @@ const TEST_SETTING = {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.connection.mockResolvedValue(undefined);
+  mocks.resolveAdminScope.mockImplementation(
+    async (input: { platformTargetOrganizationId?: string | null }) => ({
+      outcome: 'resolved' as const,
+      scope:
+        input.platformTargetOrganizationId === null
+          ? PLATFORM_SCOPE
+          : ORGANIZATION_SCOPE,
+    }),
+  );
   mocks.registry.clear();
   mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
-
-  mocks.resolveCanonicalAuditWriteScope.mockImplementation(
-    async (input: { readonly isPlatformAdmin: boolean }) =>
-      input.isPlatformAdmin
-        ? {
-            outcome: 'resolved',
-            writeScope: { kind: 'platform-global' as const },
-          }
-        : {
-            outcome: 'resolved',
-            writeScope: {
-              kind: 'organization' as const,
-              organizationId: '15000000-0000-4000-8000-000000000001',
-              tenantId: '10000000-0000-4000-8000-000000000001',
-            },
-          },
-  );
 
   vi.mocked(DrizzleAuditLogSettingsAdminService).mockImplementation(
     function () {
       return {
-        listGlobalEffective: mocks.listGlobalEffective,
-        listEffectiveForTenant: mocks.listEffectiveForTenant,
-        upsert: mocks.upsert,
-        resetToDefault: mocks.resetToDefault,
+        list: mocks.list,
+        upsertCanonical: mocks.upsertCanonical,
+        resetCanonical: mocks.resetCanonical,
       } as unknown as DrizzleAuditLogSettingsAdminService;
     },
   );
@@ -137,62 +137,132 @@ describe('GET /api/admin/audit-log-settings', () => {
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(401);
   });
 
   it('returns 403 when authenticated but not admin', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(false);
+
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(false),
     });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(403);
+    expect(mocks.resolveAdminScope).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
   });
 
-  it('returns 200 with settings for env-based admin, using the unscoped listGlobalEffective', async () => {
+  it('uses platform-global canonical scope for an env-based platform admin', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.listGlobalEffective.mockResolvedValue([TEST_SETTING]);
+    mocks.resolveAdminScope.mockResolvedValue({
+      outcome: 'resolved',
+      scope: PLATFORM_SCOPE,
+    });
+    mocks.list.mockResolvedValue([TEST_SETTING]);
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(200);
+
+    expect(mocks.resolveAdminScope).toHaveBeenCalledWith({
+      access: expect.any(Object),
+      db: mocks.db,
+      authProvider: expect.any(String),
+    });
+
+    expect(mocks.list).toHaveBeenCalledWith(PLATFORM_SCOPE);
 
     const body = (await res.json()) as {
       data: {
         settings: unknown[];
-        scope: { isPlatformAdmin: boolean; tenantId: string | null };
+        scope: {
+          isPlatformAdmin: boolean;
+          organizationId: string | null;
+        };
       };
     };
+
     expect(body.data.settings).toHaveLength(1);
-    expect(mocks.listGlobalEffective).toHaveBeenCalledTimes(1);
-    expect(mocks.listEffectiveForTenant).not.toHaveBeenCalled();
-    expect(body.data.scope).toEqual({ isPlatformAdmin: true, tenantId: null });
+    expect(body.data.scope).toEqual({
+      isPlatformAdmin: true,
+      organizationId: null,
+    });
   });
 
-  it('SEC-26: uses the tenant-scoped listEffectiveForTenant for an ABAC-authorized non-platform-admin, never the unscoped listGlobalEffective', async () => {
+  it('uses canonical organization scope for an ABAC-authorized ordinary admin', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(false);
+
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
-    mocks.listEffectiveForTenant.mockResolvedValue([TEST_SETTING]);
+
+    mocks.resolveAdminScope.mockResolvedValue({
+      outcome: 'resolved',
+      scope: ORGANIZATION_SCOPE,
+    });
+    mocks.list.mockResolvedValue([TEST_SETTING]);
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(200);
-    expect(mocks.listEffectiveForTenant).toHaveBeenCalledWith('tenant_test_1');
-    expect(mocks.listGlobalEffective).not.toHaveBeenCalled();
+    expect(mocks.list).toHaveBeenCalledWith(ORGANIZATION_SCOPE);
 
     const body = (await res.json()) as {
-      data: { scope: { isPlatformAdmin: boolean; tenantId: string | null } };
+      data: {
+        scope: {
+          isPlatformAdmin: boolean;
+          organizationId: string | null;
+        };
+      };
     };
+
     expect(body.data.scope).toEqual({
       isPlatformAdmin: false,
-      tenantId: 'tenant_test_1',
+      organizationId: ORGANIZATION_SCOPE.organizationId,
+    });
+  });
+
+  it('maps a canonical membership denial to an empty list with no legacy fallback', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(false);
+
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+
+    mocks.resolveAdminScope.mockResolvedValue({
+      outcome: 'denied',
+    });
+
+    const { GET } = await import('./route');
+    const res = await GET(makeGetRequest(), mockContext);
+
+    expect(res.status).toBe(200);
+    expect(mocks.list).not.toHaveBeenCalled();
+
+    const body = (await res.json()) as {
+      data: {
+        settings: unknown[];
+        scope: {
+          isPlatformAdmin: boolean;
+          organizationId: string | null;
+        };
+      };
+    };
+
+    expect(body.data.settings).toEqual([]);
+    expect(body.data.scope).toEqual({
+      isPlatformAdmin: false,
+      organizationId: null,
     });
   });
 });
@@ -258,7 +328,7 @@ describe('PATCH /api/admin/audit-log-settings', () => {
   it('returns 200 with the updated setting on success', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.upsert.mockResolvedValue(TEST_SETTING);
+    mocks.upsertCanonical.mockResolvedValue(TEST_SETTING);
 
     const { PATCH } = await import('./route');
     const res = await PATCH(makeBodyRequest('PATCH', validBody), mockContext);
@@ -281,15 +351,17 @@ describe('PATCH /api/admin/audit-log-settings', () => {
   it('returns 409 when the requested organization alias is occupied by another legacy setting row', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+    mocks.resolveAdminScope.mockResolvedValueOnce({
       outcome: 'resolved',
-      writeScope: {
+      scope: {
         kind: 'organization',
         organizationId: '15000000-0000-4000-8000-000000000001',
         tenantId: '10000000-0000-4000-8000-000000000001',
       },
     });
-    mocks.upsert.mockRejectedValue(new AuditSettingAliasConflictError());
+    mocks.upsertCanonical.mockRejectedValue(
+      new AuditSettingAliasConflictError(),
+    );
 
     const { PATCH } = await import('./route');
     const res = await PATCH(
@@ -314,7 +386,7 @@ describe('PATCH /api/admin/audit-log-settings', () => {
 
     it("ignores a requested global (null tenantId) setting and derives the caller's own tenant instead", async () => {
       mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
-      mocks.upsert.mockResolvedValue({
+      mocks.upsertCanonical.mockResolvedValue({
         ...TEST_SETTING,
         tenantId: 'tenant_test_1',
       });
@@ -325,20 +397,20 @@ describe('PATCH /api/admin/audit-log-settings', () => {
         mockContext,
       );
       expect(res.status).toBe(200);
-      expect(mocks.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ tenantId: 'tenant_test_1' }),
-        { tenantId: 'tenant_test_1' },
-        {
-          kind: 'organization',
-          organizationId: '15000000-0000-4000-8000-000000000001',
-          tenantId: '10000000-0000-4000-8000-000000000001',
-        },
-      );
+      expect(mocks.upsertCanonical).toHaveBeenCalledTimes(1);
+
+      const [input, scope] = mocks.upsertCanonical.mock.calls[0]!;
+      expect(input).not.toHaveProperty('tenantId');
+      expect(input).toMatchObject({
+        category: 'auth',
+        enabled: true,
+      });
+      expect(scope).toEqual(ORGANIZATION_SCOPE);
     });
 
     it("ignores a requested foreign tenantId and derives the caller's own tenant instead", async () => {
       mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
-      mocks.upsert.mockResolvedValue({
+      mocks.upsertCanonical.mockResolvedValue({
         ...TEST_SETTING,
         tenantId: 'tenant_test_1',
       });
@@ -352,15 +424,15 @@ describe('PATCH /api/admin/audit-log-settings', () => {
         mockContext,
       );
       expect(res.status).toBe(200);
-      expect(mocks.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ tenantId: 'tenant_test_1' }),
-        { tenantId: 'tenant_test_1' },
-        {
-          kind: 'organization',
-          organizationId: '15000000-0000-4000-8000-000000000001',
-          tenantId: '10000000-0000-4000-8000-000000000001',
-        },
-      );
+      expect(mocks.upsertCanonical).toHaveBeenCalledTimes(1);
+
+      const [input, scope] = mocks.upsertCanonical.mock.calls[0]!;
+      expect(input).not.toHaveProperty('tenantId');
+      expect(input).toMatchObject({
+        category: 'auth',
+        enabled: true,
+      });
+      expect(scope).toEqual(ORGANIZATION_SCOPE);
     });
   });
 });
@@ -383,7 +455,7 @@ describe('DELETE /api/admin/audit-log-settings', () => {
   it('returns 404 when there is no override row to reset', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.resetToDefault.mockRejectedValue(new AuditSettingNotFoundError());
+    mocks.resetCanonical.mockRejectedValue(new AuditSettingNotFoundError());
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeBodyRequest('DELETE', validBody), mockContext);
@@ -397,15 +469,15 @@ describe('DELETE /api/admin/audit-log-settings', () => {
 
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+    mocks.resolveAdminScope.mockResolvedValueOnce({
       outcome: 'resolved',
-      writeScope: {
+      scope: {
         kind: 'organization',
         organizationId: internalOrganizationId,
         tenantId: parentTenantId,
       },
     });
-    mocks.resetToDefault.mockResolvedValue(undefined);
+    mocks.resetCanonical.mockResolvedValue(undefined);
 
     const { DELETE } = await import('./route');
     const res = await DELETE(
@@ -417,16 +489,11 @@ describe('DELETE /api/admin/audit-log-settings', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(mocks.resetToDefault).toHaveBeenCalledWith(
-      'auth',
-      providerAlias,
-      null,
-      {
-        kind: 'organization',
-        organizationId: internalOrganizationId,
-        tenantId: parentTenantId,
-      },
-    );
+    expect(mocks.resetCanonical).toHaveBeenCalledWith('auth', {
+      kind: 'organization',
+      organizationId: internalOrganizationId,
+      tenantId: parentTenantId,
+    });
     expect(mocks.recordAdminAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         legacyTenantId: internalOrganizationId,
@@ -446,15 +513,15 @@ describe('DELETE /api/admin/audit-log-settings', () => {
 
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.resolveCanonicalAuditWriteScope.mockResolvedValueOnce({
+    mocks.resolveAdminScope.mockResolvedValueOnce({
       outcome: 'resolved',
-      writeScope: {
+      scope: {
         kind: 'organization',
         organizationId: internalOrganizationId,
         tenantId: parentTenantId,
       },
     });
-    mocks.resetToDefault.mockRejectedValue(
+    mocks.resetCanonical.mockRejectedValue(
       new AuditSettingAliasConflictError(),
     );
 
@@ -474,7 +541,7 @@ describe('DELETE /api/admin/audit-log-settings', () => {
   it('returns 200 on successful reset', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.resetToDefault.mockResolvedValue(undefined);
+    mocks.resetCanonical.mockResolvedValue(undefined);
 
     const { DELETE } = await import('./route');
     const res = await DELETE(makeBodyRequest('DELETE', validBody), mockContext);
@@ -506,7 +573,7 @@ describe('DELETE /api/admin/audit-log-settings', () => {
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
-    mocks.resetToDefault.mockResolvedValue(undefined);
+    mocks.resetCanonical.mockResolvedValue(undefined);
 
     const { DELETE } = await import('./route');
     const res = await DELETE(
@@ -517,15 +584,9 @@ describe('DELETE /api/admin/audit-log-settings', () => {
       mockContext,
     );
     expect(res.status).toBe(200);
-    expect(mocks.resetToDefault).toHaveBeenCalledWith(
+    expect(mocks.resetCanonical).toHaveBeenCalledWith(
       'auth',
-      internalOrganizationId,
-      { tenantId: internalOrganizationId },
-      {
-        kind: 'organization',
-        organizationId: internalOrganizationId,
-        tenantId: '10000000-0000-4000-8000-000000000001',
-      },
+      ORGANIZATION_SCOPE,
     );
   });
 });

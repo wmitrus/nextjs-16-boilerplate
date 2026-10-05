@@ -14,6 +14,8 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
+import { resolveAuditLogsAdminScope } from './audit-logs-admin-scope';
+
 import { AUDIT_CATEGORIES } from '@/modules/audit-log/domain/category';
 import { DrizzleAuditLogReadService } from '@/modules/audit-log/infrastructure/drizzle/DrizzleAuditLogReadService';
 import { withNodeProvisioning } from '@/security/api/with-node-provisioning';
@@ -124,16 +126,18 @@ export const GET = withErrorHandler(
     const { limit, offset, ...filters } = queryResult.data;
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+    // OZI-71 AUD·D: derive canonical per-operation scope independently from
+    // the legacy TenantContext compatibility fields. A legitimate ordinary
+    // membership denial maps to an empty page; no legacy tenant fallback is
+    // permitted.
+    const scope = await resolveAuditLogsAdminScope(access, db);
+
     const service = new DrizzleAuditLogReadService(db);
-    // An ABAC-authorized tenant caller only ever sees their own tenant's
-    // events -- never another tenant's or platform-level (tenantId: null)
-    // rows (SEC-26).
-    const { events, total } = adminAccess.isPlatformAdmin
-      ? await service.listGlobal(filters, { limit, offset })
-      : await service.listForTenant(access.tenant.tenantId, filters, {
-          limit,
-          offset,
-        });
+    const { events, total } =
+      scope === null
+        ? { events: [], total: 0 }
+        : await service.list(scope, filters, { limit, offset });
 
     logger.info(
       {
@@ -150,9 +154,15 @@ export const GET = withErrorHandler(
       total,
       limit,
       offset,
-      scope: adminAccess.isPlatformAdmin
-        ? { isPlatformAdmin: true, tenantId: null }
-        : { isPlatformAdmin: false, tenantId: access.tenant.tenantId },
+      scope:
+        scope === null
+          ? { isPlatformAdmin: false, organizationId: null }
+          : scope.kind === 'platform-global'
+            ? { isPlatformAdmin: true, organizationId: null }
+            : {
+                isPlatformAdmin: false,
+                organizationId: scope.organizationId,
+              },
     });
   }),
 );

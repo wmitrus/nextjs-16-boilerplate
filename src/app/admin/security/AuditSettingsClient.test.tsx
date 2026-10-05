@@ -10,8 +10,11 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, tenantId: null };
-const TENANT_SCOPE = { isPlatformAdmin: false, tenantId: 'acme' };
+const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, organizationId: null };
+const ORGANIZATION_SCOPE = {
+  isPlatformAdmin: false,
+  organizationId: '15000000-0000-4000-8000-000000000001',
+};
 
 const AUTH_SETTING = {
   id: null,
@@ -61,17 +64,17 @@ describe('AuditSettingsClient', () => {
     expect(screen.getByText(/global defaults/i)).toBeInTheDocument();
   });
 
-  it('shows the tenant-scope banner for an ABAC-authorized non-platform-admin', async () => {
+  it('shows the organization-scope banner for an ABAC-authorized non-platform-admin', async () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({
-        data: { settings: [AUTH_SETTING], scope: TENANT_SCOPE },
+        data: { settings: [AUTH_SETTING], scope: ORGANIZATION_SCOPE },
       }),
     );
 
     render(<AuditSettingsClient />);
 
     expect(await screen.findByText('Authentication')).toBeInTheDocument();
-    expect(screen.getByText(/your tenant/i)).toBeInTheDocument();
+    expect(screen.getByText(/your organization/i)).toBeInTheDocument();
   });
 
   it('toggles a category on/off and refetches', async () => {
@@ -213,7 +216,7 @@ describe('AuditSettingsClient', () => {
       jsonResponse({
         data: {
           settings: [WAITLIST_SETTING],
-          scope: TENANT_SCOPE,
+          scope: ORGANIZATION_SCOPE,
         },
       }),
     );

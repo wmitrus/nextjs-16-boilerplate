@@ -15,7 +15,8 @@ import {
 } from '@/shared/lib/api/response-service';
 import { withErrorHandler } from '@/shared/lib/api/with-error-handler';
 
-import { resolveCanonicalAuditWriteScope } from '@/app/_lib/resolve-canonical-audit-write-scope';
+import { resolveAuditLogSettingsAdminScope } from './audit-log-settings-admin-scope';
+
 import {
   AUDIT_CATEGORIES,
   AUDIT_RETENTION_DAYS_MAX,
@@ -119,13 +120,21 @@ export const GET = withErrorHandler(
     }
 
     const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
+
+    // OZI-71 AUD·D: canonical per-operation scope. A legitimate ordinary
+    // membership denial after the ABAC grant maps to an empty result, never
+    // to a legacy tenant-id fallback.
+    const scopeResolution = await resolveAuditLogSettingsAdminScope({
+      access,
+      db,
+      authProvider: env.AUTH_PROVIDER,
+    });
+
+    const scope =
+      scopeResolution.outcome === 'resolved' ? scopeResolution.scope : null;
+
     const service = new DrizzleAuditLogSettingsAdminService(db);
-    // An ABAC-authorized tenant caller only ever sees their own tenant's
-    // effective settings (tenant override, else global, else taxonomy
-    // default) -- never another tenant's override (SEC-26).
-    const settings = adminAccess.isPlatformAdmin
-      ? await service.listGlobalEffective()
-      : await service.listEffectiveForTenant(access.tenant.tenantId);
+    const settings = scope === null ? [] : await service.list(scope);
 
     logger.info(
       {
@@ -139,9 +148,15 @@ export const GET = withErrorHandler(
 
     return createSuccessResponse({
       settings,
-      scope: adminAccess.isPlatformAdmin
-        ? { isPlatformAdmin: true, tenantId: null }
-        : { isPlatformAdmin: false, tenantId: access.tenant.tenantId },
+      scope:
+        scope === null
+          ? { isPlatformAdmin: false, organizationId: null }
+          : scope.kind === 'platform-global'
+            ? { isPlatformAdmin: true, organizationId: null }
+            : {
+                isPlatformAdmin: false,
+                organizationId: scope.organizationId,
+              },
     });
   }),
 );
@@ -185,31 +200,22 @@ export const PATCH = withErrorHandler(
         );
       }
 
-      // An ABAC-authorized (non-platform-admin) caller may only ever target
-      // their own verified tenant -- derive the scope from
-      // `access.tenant.tenantId` rather than trusting (or rejecting) the
-      // client-supplied `tenantId`, same derive-don't-reject shape as
-      // `/api/admin/feature-flags` (SEC-26).
-      const requestedTenantId = adminAccess.isPlatformAdmin
-        ? (parseResult.data.tenantId ?? null)
-        : access.tenant.tenantId;
-      const scope = adminAccess.isPlatformAdmin
-        ? null
-        : { tenantId: access.tenant.tenantId };
-
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
 
-      const canonical = await resolveCanonicalAuditWriteScope({
-        isPlatformAdmin: adminAccess.isPlatformAdmin,
-        ordinaryActiveOrganizationId: access.tenant.organizationId,
-        platformTargetOrganizationId: adminAccess.isPlatformAdmin
-          ? requestedTenantId
-          : null,
+      // OZI-71 AUD·D: mutation authority is the canonical DataScope itself.
+      // Ordinary callers are always bound to their active organization.
+      // Platform admins may explicitly target global (null/omitted) or a
+      // resolvable organization alias/id.
+      const scopeResolution = await resolveAuditLogSettingsAdminScope({
+        access,
         db,
         authProvider: env.AUTH_PROVIDER,
+        platformTargetOrganizationId: adminAccess.isPlatformAdmin
+          ? (parseResult.data.tenantId ?? null)
+          : undefined,
       });
 
-      if (canonical.outcome === 'unresolvable-organization-target') {
+      if (scopeResolution.outcome === 'unresolvable-organization-target') {
         return createServerErrorResponse(
           'The target organization could not be resolved to an internal organization',
           422,
@@ -217,17 +223,22 @@ export const PATCH = withErrorHandler(
         );
       }
 
+      if (scopeResolution.outcome === 'denied') {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
+
+      const scope = scopeResolution.scope;
+
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
       let setting: Awaited<
-        ReturnType<DrizzleAuditLogSettingsAdminService['upsert']>
+        ReturnType<DrizzleAuditLogSettingsAdminService['upsertCanonical']>
       >;
 
       try {
-        setting = await service.upsert(
+        setting = await service.upsertCanonical(
           {
             category: parseResult.data.category,
-            tenantId: requestedTenantId,
             enabled: parseResult.data.enabled,
             retentionDays: parseResult.data.retentionDays,
             sampleRate: parseResult.data.sampleRate ?? null,
@@ -235,7 +246,6 @@ export const PATCH = withErrorHandler(
             updatedByUserId: access.user.id,
           },
           scope,
-          canonical.writeScope,
         );
       } catch (error) {
         if (error instanceof AuditSettingAliasConflictError) {
@@ -267,8 +277,9 @@ export const PATCH = withErrorHandler(
         category: 'rbac_policy',
         action: 'audit_log_setting.update',
         outcome: 'success',
-        writeScope: canonical.writeScope,
-        legacyTenantId: setting.tenantId,
+        writeScope: scope,
+        legacyTenantId:
+          scope.kind === 'organization' ? scope.organizationId : null,
         actorUserId: access.user.id,
         targetType: 'audit_log_setting',
         targetId: setting.category,
@@ -324,26 +335,18 @@ export const DELETE = withErrorHandler(
         );
       }
 
-      const requestedTenantId = adminAccess.isPlatformAdmin
-        ? (parseResult.data.tenantId ?? null)
-        : access.tenant.tenantId;
-      const scope = adminAccess.isPlatformAdmin
-        ? null
-        : { tenantId: access.tenant.tenantId };
-
       const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
 
-      const canonical = await resolveCanonicalAuditWriteScope({
-        isPlatformAdmin: adminAccess.isPlatformAdmin,
-        ordinaryActiveOrganizationId: access.tenant.organizationId,
-        platformTargetOrganizationId: adminAccess.isPlatformAdmin
-          ? requestedTenantId
-          : null,
+      const scopeResolution = await resolveAuditLogSettingsAdminScope({
+        access,
         db,
         authProvider: env.AUTH_PROVIDER,
+        platformTargetOrganizationId: adminAccess.isPlatformAdmin
+          ? (parseResult.data.tenantId ?? null)
+          : undefined,
       });
 
-      if (canonical.outcome === 'unresolvable-organization-target') {
+      if (scopeResolution.outcome === 'unresolvable-organization-target') {
         return createServerErrorResponse(
           'The target organization could not be resolved to an internal organization',
           422,
@@ -351,20 +354,18 @@ export const DELETE = withErrorHandler(
         );
       }
 
+      if (scopeResolution.outcome === 'denied') {
+        return createServerErrorResponse('Forbidden', 403, 'FORBIDDEN');
+      }
+
+      const scope = scopeResolution.scope;
       const stableTenantId =
-        canonical.writeScope.kind === 'organization'
-          ? canonical.writeScope.organizationId
-          : null;
+        scope.kind === 'organization' ? scope.organizationId : null;
 
       const service = new DrizzleAuditLogSettingsAdminService(db);
 
       try {
-        await service.resetToDefault(
-          parseResult.data.category,
-          requestedTenantId,
-          scope,
-          canonical.writeScope,
-        );
+        await service.resetCanonical(parseResult.data.category, scope);
 
         logger.info(
           {
@@ -387,7 +388,7 @@ export const DELETE = withErrorHandler(
           category: 'rbac_policy',
           action: 'audit_log_setting.reset',
           outcome: 'success',
-          writeScope: canonical.writeScope,
+          writeScope: scope,
           legacyTenantId: stableTenantId,
           actorUserId: access.user.id,
           targetType: 'audit_log_setting',

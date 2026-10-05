@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_audit_log_settings_category_intentional_global" ON "audit_log_settings" USING btree ("category") WHERE "audit_log_settings"."ownership_state" = 'intentional_global';

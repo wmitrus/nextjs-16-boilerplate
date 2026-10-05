@@ -1,7 +1,16 @@
 /** @vitest-environment node */
+import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { DrizzleAuditLogReadService } from './DrizzleAuditLogReadService';
+import {
+  internalOrganizationIdFromOrgRow,
+  parentTenantIdFromOrgRow,
+} from '@/core/contracts/canonical-ids.provenance';
+
+import {
+  DrizzleAuditLogReadService,
+  type AuditLogsDataScope,
+} from './DrizzleAuditLogReadService';
 import { auditEventsTable } from './schema';
 
 import { usersTable } from '@/modules/user/infrastructure/drizzle/schema';
@@ -10,9 +19,45 @@ import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 let testDb: TestDb;
 let svc: DrizzleAuditLogReadService;
 
+const TENANT_A = '71000000-0000-4000-8000-000000000001';
+const TENANT_B = '71000000-0000-4000-8000-000000000002';
+const ORG_A1 = '75000000-0000-4000-8000-000000000001';
+const ORG_A2 = '75000000-0000-4000-8000-000000000002';
+const ORG_B1 = '75000000-0000-4000-8000-000000000003';
+
+function organizationScope(
+  organizationId: string,
+  tenantId: string,
+): AuditLogsDataScope {
+  return {
+    kind: 'organization',
+    organizationId: internalOrganizationIdFromOrgRow(organizationId),
+    tenantId: parentTenantIdFromOrgRow(tenantId),
+  };
+}
+
+const PLATFORM_GLOBAL_SCOPE: AuditLogsDataScope = {
+  kind: 'platform-global',
+};
+
 beforeAll(async () => {
   testDb = await resolveTestDb();
   svc = new DrizzleAuditLogReadService(testDb.db);
+
+  await testDb.db.execute(sql`
+    INSERT INTO tenants (id, name)
+    VALUES
+      (${TENANT_A}, 'Audit Read Tenant A'),
+      (${TENANT_B}, 'Audit Read Tenant B')
+  `);
+
+  await testDb.db.execute(sql`
+    INSERT INTO organizations (id, tenant_id, name)
+    VALUES
+      (${ORG_A1}, ${TENANT_A}, 'Audit Read Org A1'),
+      (${ORG_A2}, ${TENANT_A}, 'Audit Read Org A2'),
+      (${ORG_B1}, ${TENANT_B}, 'Audit Read Org B1')
+  `);
 });
 
 afterEach(async () => {
@@ -20,6 +65,14 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  await testDb.db.execute(sql`
+    DELETE FROM organizations
+    WHERE id IN (${ORG_A1}, ${ORG_A2}, ${ORG_B1})
+  `);
+  await testDb.db.execute(sql`
+    DELETE FROM tenants
+    WHERE id IN (${TENANT_A}, ${TENANT_B})
+  `);
   await testDb.cleanup();
 });
 
@@ -31,12 +84,21 @@ async function insertEvent(overrides: {
   targetType?: string | null;
   targetId?: string | null;
   occurredAt?: Date;
+  organizationId?: string | null;
+  ownershipState?:
+    | 'canonical_organization'
+    | 'organization_owned_orphaned'
+    | 'intentional_global'
+    | 'unresolved_legacy'
+    | 'quarantined';
 }) {
   await testDb.db.insert(auditEventsTable).values({
     category: overrides.category ?? 'auth',
     action: 'auth.signin_success',
     outcome: overrides.outcome ?? 'success',
     tenantId: overrides.tenantId === undefined ? 'acme' : overrides.tenantId,
+    organizationId: overrides.organizationId ?? null,
+    ownershipState: overrides.ownershipState ?? 'unresolved_legacy',
     actorUserId: overrides.actorUserId ?? null,
     targetType: overrides.targetType ?? null,
     targetId: overrides.targetId ?? null,
@@ -45,13 +107,14 @@ async function insertEvent(overrides: {
 }
 
 describe('DrizzleAuditLogReadService (real DB)', () => {
-  describe('listGlobal', () => {
-    it('returns every event regardless of tenant', async () => {
+  describe('list(platform-global)', () => {
+    it('returns every event for explicit platform-global scope', async () => {
       await insertEvent({ tenantId: 'acme' });
       await insertEvent({ tenantId: 'globex' });
       await insertEvent({ tenantId: null });
 
-      const { events, total } = await svc.listGlobal(
+      const { events, total } = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
         {},
         { limit: 50, offset: 0 },
       );
@@ -64,7 +127,8 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
       await insertEvent({ category: 'auth', outcome: 'failure' });
       await insertEvent({ category: 'billing', outcome: 'success' });
 
-      const { events, total } = await svc.listGlobal(
+      const { events, total } = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
         { category: 'auth', outcome: 'failure' },
         { limit: 50, offset: 0 },
       );
@@ -79,14 +143,22 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
       await insertEvent({ occurredAt: new Date(base.getTime() + 2000) });
       await insertEvent({ occurredAt: new Date(base.getTime() + 3000) });
 
-      const page1 = await svc.listGlobal({}, { limit: 2, offset: 0 });
+      const page1 = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
+        {},
+        { limit: 2, offset: 0 },
+      );
       expect(page1.total).toBe(3);
       expect(page1.events).toHaveLength(2);
       expect(page1.events[0]?.occurredAt).toBe(
         new Date(base.getTime() + 3000).toISOString(),
       );
 
-      const page2 = await svc.listGlobal({}, { limit: 2, offset: 2 });
+      const page2 = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
+        {},
+        { limit: 2, offset: 2 },
+      );
       expect(page2.events).toHaveLength(1);
       expect(page2.events[0]?.occurredAt).toBe(
         new Date(base.getTime() + 1000).toISOString(),
@@ -94,47 +166,121 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
     });
   });
 
-  describe('listForTenant', () => {
-    it('SEC-26: never returns another tenant or null-tenant rows', async () => {
-      await insertEvent({ tenantId: 'acme' });
-      await insertEvent({ tenantId: 'globex' });
-      await insertEvent({ tenantId: null });
+  describe('canonical DataScope (OZI-71 AUD·D)', () => {
+    it('platform-global scope keeps the existing unrestricted viewer semantics', async () => {
+      await insertEvent({
+        tenantId: 'legacy-a1',
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+      });
+      await insertEvent({
+        tenantId: null,
+        ownershipState: 'intentional_global',
+      });
+      await insertEvent({
+        tenantId: 'historical-unresolved',
+        ownershipState: 'unresolved_legacy',
+      });
 
-      const { events, total } = await svc.listForTenant(
-        'acme',
+      const { events, total } = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
         {},
         { limit: 50, offset: 0 },
       );
-      expect(total).toBe(1);
-      expect(events).toHaveLength(1);
-      expect(events[0]?.tenantId).toBe('acme');
+
+      expect(total).toBe(3);
+      expect(events).toHaveLength(3);
     });
 
-    it('combines the tenant scope with additional filters', async () => {
+    it('organization scope returns only that canonical organization, never sibling/global/legacy rows', async () => {
       await insertEvent({
-        tenantId: 'acme',
-        targetType: 'user',
-        targetId: 'u1',
+        tenantId: 'legacy-a1',
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
       });
       await insertEvent({
-        tenantId: 'acme',
-        targetType: 'user',
-        targetId: 'u2',
+        tenantId: 'legacy-a2',
+        organizationId: ORG_A2,
+        ownershipState: 'canonical_organization',
       });
       await insertEvent({
-        tenantId: 'globex',
-        targetType: 'user',
-        targetId: 'u1',
+        tenantId: 'legacy-b1',
+        organizationId: ORG_B1,
+        ownershipState: 'canonical_organization',
+      });
+      await insertEvent({
+        tenantId: null,
+        ownershipState: 'intentional_global',
+      });
+      await insertEvent({
+        tenantId: 'historical-unresolved',
+        ownershipState: 'unresolved_legacy',
       });
 
-      const { events, total } = await svc.listForTenant(
-        'acme',
-        { targetType: 'user', targetId: 'u1' },
+      const { events, total } = await svc.list(
+        organizationScope(ORG_A1, TENANT_A),
+        {},
         { limit: 50, offset: 0 },
       );
+
       expect(total).toBe(1);
-      expect(events[0]?.tenantId).toBe('acme');
-      expect(events[0]?.targetId).toBe('u1');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.tenantId).toBe('legacy-a1');
+    });
+
+    it('fails closed for an internally inconsistent organization/tenant tuple with no global fallback', async () => {
+      await insertEvent({
+        tenantId: 'legacy-a1',
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+      });
+      await insertEvent({
+        tenantId: null,
+        ownershipState: 'intentional_global',
+      });
+
+      const { events, total } = await svc.list(
+        organizationScope(ORG_A1, TENANT_B),
+        {},
+        { limit: 50, offset: 0 },
+      );
+
+      expect(total).toBe(0);
+      expect(events).toEqual([]);
+    });
+
+    it('intersects canonical organization containment with ordinary filters', async () => {
+      await insertEvent({
+        tenantId: 'legacy-a1',
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+        targetType: 'user',
+        targetId: 'wanted',
+      });
+      await insertEvent({
+        tenantId: 'legacy-a1',
+        organizationId: ORG_A1,
+        ownershipState: 'canonical_organization',
+        targetType: 'user',
+        targetId: 'other',
+      });
+      await insertEvent({
+        tenantId: 'legacy-a2',
+        organizationId: ORG_A2,
+        ownershipState: 'canonical_organization',
+        targetType: 'user',
+        targetId: 'wanted',
+      });
+
+      const { events, total } = await svc.list(
+        organizationScope(ORG_A1, TENANT_A),
+        { targetType: 'user', targetId: 'wanted' },
+        { limit: 50, offset: 0 },
+      );
+
+      expect(total).toBe(1);
+      expect(events[0]?.targetId).toBe('wanted');
+      expect(events[0]?.tenantId).toBe('legacy-a1');
     });
   });
 
@@ -143,7 +289,8 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
       await insertEvent({ targetType: 'audit_log_setting' });
       await insertEvent({ targetType: 'audit_log_setting_extra' });
 
-      const { events, total } = await svc.listGlobal(
+      const { events, total } = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
         { targetType: 'audit_log_setting' },
         { limit: 50, offset: 0 },
       );
@@ -155,7 +302,8 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
       await insertEvent({ targetType: 'audit_log_setting' });
       await insertEvent({ targetType: 'organization' });
 
-      const { events, total } = await svc.listGlobal(
+      const { events, total } = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
         { targetType: 'audit', targetTypeOp: 'startsWith' },
         { limit: 50, offset: 0 },
       );
@@ -167,7 +315,8 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
       await insertEvent({ targetType: 'audit_log_setting' });
       await insertEvent({ targetType: 'organization' });
 
-      const { events, total } = await svc.listGlobal(
+      const { events, total } = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
         { targetType: 'log', targetTypeOp: 'contains' },
         { limit: 50, offset: 0 },
       );
@@ -179,7 +328,8 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
       await insertEvent({ targetType: '50%_off' });
       await insertEvent({ targetType: '50Xoff' });
 
-      const { events, total } = await svc.listGlobal(
+      const { events, total } = await svc.list(
+        PLATFORM_GLOBAL_SCOPE,
         { targetType: '%_', targetTypeOp: 'contains' },
         { limit: 50, offset: 0 },
       );
@@ -201,7 +351,8 @@ describe('DrizzleAuditLogReadService (real DB)', () => {
         await insertEvent({ actorUserId: actorId });
         await insertEvent({ actorUserId: otherActorId });
 
-        const { events, total } = await svc.listGlobal(
+        const { events, total } = await svc.list(
+          PLATFORM_GLOBAL_SCOPE,
           { actorUserId: '2222-4333-8444', actorUserIdOp: 'contains' },
           { limit: 50, offset: 0 },
         );

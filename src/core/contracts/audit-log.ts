@@ -50,7 +50,8 @@ export interface AuditEventInput {
   writeScope: AuditWriteScope;
   /**
    * Legacy `audit_events.tenant_id` compatibility value retained through
-   * AUD·B/AUD·D for rollback and legacy settings/purge resolution.
+   * AUD·D for rollback and the bounded legacy-retention purge compatibility
+   * path.
    *
    * This value is NON-AUTHORITATIVE: it is never canonical TenantId,
    * OrganizationId, authorization scope, or a fallback source for

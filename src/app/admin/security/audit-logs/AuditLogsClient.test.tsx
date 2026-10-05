@@ -17,8 +17,11 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, tenantId: null };
-const TENANT_SCOPE = { isPlatformAdmin: false, tenantId: 'acme' };
+const PLATFORM_ADMIN_SCOPE = { isPlatformAdmin: true, organizationId: null };
+const ORGANIZATION_SCOPE = {
+  isPlatformAdmin: false,
+  organizationId: '15000000-0000-4000-8000-000000000001',
+};
 
 const EVENT_1 = {
   id: 1,
@@ -107,10 +110,10 @@ describe('AuditLogsClient', () => {
 
     expect(await screen.findByText('auth.signin_success')).toBeInTheDocument();
     expect(screen.getByText('billing.plan_changed')).toBeInTheDocument();
-    expect(screen.getByText(/all tenants/i)).toBeInTheDocument();
+    expect(screen.getByText(/all organizations/i)).toBeInTheDocument();
   });
 
-  it('shows the tenant-scope banner for an ABAC-authorized non-platform-admin', async () => {
+  it('shows the organization-scope banner for an ABAC-authorized non-platform-admin', async () => {
     mockFetchRouter(
       jsonResponse({
         data: {
@@ -118,7 +121,7 @@ describe('AuditLogsClient', () => {
           total: 1,
           limit: 25,
           offset: 0,
-          scope: TENANT_SCOPE,
+          scope: ORGANIZATION_SCOPE,
         },
       }),
     );
@@ -126,7 +129,7 @@ describe('AuditLogsClient', () => {
     render(<AuditLogsClient />);
 
     expect(await screen.findByText('auth.signin_success')).toBeInTheDocument();
-    expect(screen.getByText(/your tenant/i)).toBeInTheDocument();
+    expect(screen.getByText(/your organization/i)).toBeInTheDocument();
   });
 
   it('shows an empty state when there are no matching events', async () => {

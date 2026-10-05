@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 
 import type {
   EmailService,
@@ -19,7 +19,7 @@ export interface NodemailerEmailServiceConfig {
 }
 
 export class NodemailerEmailService implements EmailService {
-  private readonly transporter: nodemailer.Transporter;
+  private readonly transporter: Transporter;
   private readonly fromEmail: string;
 
   constructor(config: NodemailerEmailServiceConfig) {

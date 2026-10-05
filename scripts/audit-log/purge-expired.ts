@@ -3,7 +3,10 @@ import '../load-env';
 import { createDb } from '@/core/db/create-db';
 import type { DbDriver, DbProvider } from '@/core/db/types';
 
-import { purgeExpiredAuditEvents } from '@/modules/audit-log/infrastructure/drizzle/purge-expired-events';
+import {
+  purgeExpiredAuditEvents,
+  type AuditRetentionKey,
+} from '@/modules/audit-log/infrastructure/drizzle/purge-expired-events';
 
 const DEFAULT_PGLITE_URL = 'file:./data/pglite';
 const FILE_URL_PREFIX = 'file:';
@@ -42,6 +45,27 @@ export function resolveDatabaseUrl(
   return DEFAULT_PGLITE_URL;
 }
 
+function formatRetentionKey(key: AuditRetentionKey): string {
+  switch (key.kind) {
+    case 'canonical-organization':
+      return (
+        `category=${key.category} ` +
+        `state=${key.ownershipState} ` +
+        `organization=${key.organizationId}`
+      );
+
+    case 'null-owned':
+      return `category=${key.category} state=${key.ownershipState}`;
+
+    case 'legacy':
+      return (
+        `category=${key.category} ` +
+        `state=${key.ownershipState} ` +
+        `legacyTenant=${key.legacyTenantId ?? '(null)'}`
+      );
+  }
+}
+
 export async function run(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
 
@@ -75,15 +99,15 @@ export async function run(): Promise<void> {
     const results = await purgeExpiredAuditEvents(dbRuntime.db, { dryRun });
 
     let totalDeleted = 0;
-    for (const { pair, retentionDays, deleted } of results) {
+    for (const { key, retentionDays, deleted } of results) {
       totalDeleted += deleted;
       console.log(
-        `  ${pair.category} / tenant=${pair.tenantId ?? '(none)'} : retention=${retentionDays}d, ${dryRun ? 'would delete' : 'deleted'}=${deleted}`,
+        `  ${formatRetentionKey(key)} : retention=${retentionDays}d, ${dryRun ? 'would delete' : 'deleted'}=${deleted}`,
       );
     }
 
     console.log(
-      `[audit-log:purge] Done. ${results.length} (category, tenant) pair(s) checked, ${totalDeleted} row(s) ${dryRun ? 'would be' : ''} deleted.`,
+      `[audit-log:purge] Done. ${results.length} retention key(s) checked, ${totalDeleted} row(s) ${dryRun ? 'would be' : ''} deleted.`,
     );
   } finally {
     await dbRuntime.close?.();

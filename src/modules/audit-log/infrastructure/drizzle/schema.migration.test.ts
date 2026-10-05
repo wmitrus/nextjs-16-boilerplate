@@ -39,6 +39,7 @@ const read = (file: string) =>
     .join('\n');
 
 const EXPAND_SQL = read('0023_breezy_sandman.sql');
+const AUD_D_SQL = read('0024_cultured_tarot.sql');
 const JOURNAL = JSON.parse(read('meta/_journal.json')) as {
   entries: Array<{ idx: number; tag: string }>;
 };
@@ -179,10 +180,43 @@ describe('0023 AUD·A expand migration SQL contract', () => {
   });
 });
 
-describe('AUD·A is exactly one journaled migration', () => {
-  it('0023 is the only new journal entry — no FK-validation or index migration', () => {
-    const tail = JOURNAL.entries.slice(-1).map((e) => `${e.idx}:${e.tag}`);
-    expect(tail).toEqual(['23:0023_breezy_sandman']);
+describe('0024 AUD·D global semantic unique SQL contract', () => {
+  it('adds exactly the intentional-global partial unique for audit_log_settings', () => {
+    expect(AUD_D_SQL.trim()).toBe(
+      `CREATE UNIQUE INDEX "uq_audit_log_settings_category_intentional_global" ON "audit_log_settings" USING btree ("category") WHERE "audit_log_settings"."ownership_state" = 'intentional_global';`,
+    );
+  });
+
+  it('does not alter legacy tenant_id compatibility state', () => {
+    expect(AUD_D_SQL).not.toMatch(/ALTER COLUMN "tenant_id"/i);
+    expect(AUD_D_SQL).not.toMatch(
+      /DROP[^;]*uq_audit_log_settings_category_tenant/i,
+    );
+  });
+
+  it('does not add the later compact canonical unique', () => {
+    expect(AUD_D_SQL).not.toMatch(/NULLS NOT DISTINCT/i);
+  });
+
+  it('contains no destructive DDL', () => {
+    expect(AUD_D_SQL).not.toMatch(/DROP COLUMN/i);
+    expect(AUD_D_SQL).not.toMatch(/DROP TABLE/i);
+    expect(AUD_D_SQL).not.toMatch(/RENAME/i);
+  });
+
+  it('touches audit_log_settings only', () => {
+    expect(AUD_D_SQL).toContain('"audit_log_settings"');
+    expect(AUD_D_SQL).not.toContain('"audit_events"');
+    expect(AUD_D_SQL).not.toContain('"feature_flags"');
+  });
+});
+
+describe('AUD migration journal contract', () => {
+  it('contains AUD·A expand followed by the AUD·D global semantic unique', () => {
+    const tail = JOURNAL.entries.slice(-2).map((e) => `${e.idx}:${e.tag}`);
+
+    expect(tail).toEqual(['23:0023_breezy_sandman', '24:0024_cultured_tarot']);
+
     const tags = JOURNAL.entries.map((e) => e.tag);
     expect(tags).not.toContain('0024_aud_a_validate_organization_fks');
     expect(tags).not.toContain('0025_aud_a_audit_events_organization_index');

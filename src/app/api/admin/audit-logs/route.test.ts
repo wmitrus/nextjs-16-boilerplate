@@ -8,12 +8,20 @@ import { makeAllowedProvisioningAccess } from '@/testing/factories/provisioning'
 
 import '@/testing/infrastructure/logger';
 
+const ORG_SCOPE = {
+  kind: 'organization',
+  organizationId: '15000000-0000-4000-8000-000000000001',
+  tenantId: '10000000-0000-4000-8000-000000000001',
+} as const;
+
+const PLATFORM_SCOPE = { kind: 'platform-global' } as const;
+
 const mocks = vi.hoisted(() => ({
   connection: vi.fn().mockResolvedValue(undefined),
   resolveAccess: vi.fn(),
+  resolveScope: vi.fn(),
   isEnvAdmin: vi.fn(),
-  listGlobal: vi.fn(),
-  listForTenant: vi.fn(),
+  list: vi.fn(),
   db: {},
   registry: new Map<symbol, unknown>(),
   container: {
@@ -32,6 +40,10 @@ vi.mock('@/security/core/node-provisioning-runtime', () => ({
 
 vi.mock('@/security/core/platform-admin', () => ({
   isEnvBasedPlatformAdmin: mocks.isEnvAdmin,
+}));
+
+vi.mock('./audit-logs-admin-scope', () => ({
+  resolveAuditLogsAdminScope: mocks.resolveScope,
 }));
 
 vi.mock('@/core/runtime/bootstrap', () => ({
@@ -57,7 +69,7 @@ const TEST_EVENT = {
   category: 'auth',
   action: 'auth.signin_success',
   outcome: 'success',
-  tenantId: 'tenant_test_1',
+  tenantId: 'legacy-compat-key',
   actorUserId: null,
   targetType: null,
   targetId: null,
@@ -70,13 +82,16 @@ const TEST_EVENT = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+
   mocks.connection.mockResolvedValue(undefined);
+  mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
+
   mocks.registry.clear();
   mocks.registry.set(INFRASTRUCTURE.DB, mocks.db);
+
   vi.mocked(DrizzleAuditLogReadService).mockImplementation(function () {
     return {
-      listGlobal: mocks.listGlobal,
-      listForTenant: mocks.listForTenant,
+      list: mocks.list,
     } as unknown as DrizzleAuditLogReadService;
   });
 });
@@ -92,107 +107,184 @@ describe('GET /api/admin/audit-logs', () => {
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(401);
   });
 
   it('returns 403 when authenticated but not admin', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(false);
+
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(false),
     });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(403);
+    expect(mocks.resolveScope).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
   });
 
-  it('returns 400 for an invalid query (unknown category)', async () => {
+  it('returns 400 for an invalid query', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest('?category=not-real'), mockContext);
+
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when limit exceeds sane bounds after coercion fails', async () => {
+  it('returns 400 when limit coercion fails', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest('?limit=not-a-number'), mockContext);
+
     expect(res.status).toBe(400);
   });
 
-  it('caps an oversized limit at 200 instead of rejecting it', async () => {
+  it('caps an oversized limit at 200', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.listGlobal.mockResolvedValue({ events: [], total: 0 });
+    mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
+    mocks.list.mockResolvedValue({ events: [], total: 0 });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest('?limit=5000'), mockContext);
+
     expect(res.status).toBe(200);
-    expect(mocks.listGlobal).toHaveBeenCalledWith(
+    expect(mocks.list).toHaveBeenCalledWith(
+      PLATFORM_SCOPE,
       expect.any(Object),
       expect.objectContaining({ limit: 200 }),
     );
   });
 
-  it('returns 200 using the unscoped listGlobal for an env-based platform admin', async () => {
+  it('uses explicit platform-global scope for a platform admin', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.listGlobal.mockResolvedValue({ events: [TEST_EVENT], total: 1 });
+    mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
+    mocks.list.mockResolvedValue({
+      events: [TEST_EVENT],
+      total: 1,
+    });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(200);
+    expect(mocks.resolveScope).toHaveBeenCalledWith(
+      expect.any(Object),
+      mocks.db,
+    );
+    expect(mocks.list).toHaveBeenCalledWith(
+      PLATFORM_SCOPE,
+      expect.any(Object),
+      { limit: 50, offset: 0 },
+    );
 
     const body = (await res.json()) as {
       data: {
         events: unknown[];
         total: number;
-        scope: { isPlatformAdmin: boolean; tenantId: string | null };
+        scope: {
+          isPlatformAdmin: boolean;
+          organizationId: string | null;
+        };
       };
     };
+
     expect(body.data.events).toHaveLength(1);
     expect(body.data.total).toBe(1);
-    expect(mocks.listGlobal).toHaveBeenCalledTimes(1);
-    expect(mocks.listForTenant).not.toHaveBeenCalled();
-    expect(body.data.scope).toEqual({ isPlatformAdmin: true, tenantId: null });
+    expect(body.data.scope).toEqual({
+      isPlatformAdmin: true,
+      organizationId: null,
+    });
   });
 
-  it('SEC-26: uses the tenant-scoped listForTenant for an ABAC-authorized non-platform-admin, never the unscoped listGlobal', async () => {
+  it('uses canonical organization scope for an ABAC-authorized ordinary admin', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(false);
+
     mocks.registry.set(AUTHORIZATION.SERVICE, {
       can: vi.fn().mockResolvedValue(true),
     });
-    mocks.listForTenant.mockResolvedValue({ events: [TEST_EVENT], total: 1 });
+
+    mocks.resolveScope.mockResolvedValue(ORG_SCOPE);
+    mocks.list.mockResolvedValue({
+      events: [TEST_EVENT],
+      total: 1,
+    });
 
     const { GET } = await import('./route');
     const res = await GET(makeGetRequest(), mockContext);
+
     expect(res.status).toBe(200);
-    expect(mocks.listForTenant).toHaveBeenCalledWith(
-      'tenant_test_1',
-      expect.any(Object),
-      expect.any(Object),
-    );
-    expect(mocks.listGlobal).not.toHaveBeenCalled();
+
+    expect(mocks.list).toHaveBeenCalledWith(ORG_SCOPE, expect.any(Object), {
+      limit: 50,
+      offset: 0,
+    });
 
     const body = (await res.json()) as {
-      data: { scope: { isPlatformAdmin: boolean; tenantId: string | null } };
+      data: {
+        scope: {
+          isPlatformAdmin: boolean;
+          organizationId: string | null;
+        };
+      };
     };
+
     expect(body.data.scope).toEqual({
       isPlatformAdmin: false,
-      tenantId: 'tenant_test_1',
+      organizationId: ORG_SCOPE.organizationId,
     });
   });
 
-  it('passes through filters parsed from the query string', async () => {
+  it('maps a legitimate canonical membership denial to an empty page with no legacy fallback', async () => {
+    mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
+    mocks.isEnvAdmin.mockReturnValue(false);
+
+    mocks.registry.set(AUTHORIZATION.SERVICE, {
+      can: vi.fn().mockResolvedValue(true),
+    });
+
+    mocks.resolveScope.mockResolvedValue(null);
+
+    const { GET } = await import('./route');
+    const res = await GET(makeGetRequest(), mockContext);
+
+    expect(res.status).toBe(200);
+    expect(mocks.list).not.toHaveBeenCalled();
+
+    const body = (await res.json()) as {
+      data: {
+        events: unknown[];
+        total: number;
+        scope: {
+          isPlatformAdmin: boolean;
+          organizationId: string | null;
+        };
+      };
+    };
+
+    expect(body.data.events).toEqual([]);
+    expect(body.data.total).toBe(0);
+    expect(body.data.scope).toEqual({
+      isPlatformAdmin: false,
+      organizationId: null,
+    });
+  });
+
+  it('passes query filters through the canonical scoped service boundary', async () => {
     mocks.resolveAccess.mockResolvedValue(makeAllowedProvisioningAccess());
     mocks.isEnvAdmin.mockReturnValue(true);
-    mocks.listGlobal.mockResolvedValue({ events: [], total: 0 });
+    mocks.resolveScope.mockResolvedValue(PLATFORM_SCOPE);
+    mocks.list.mockResolvedValue({ events: [], total: 0 });
 
     const { GET } = await import('./route');
     const res = await GET(
@@ -201,8 +293,10 @@ describe('GET /api/admin/audit-logs', () => {
       ),
       mockContext,
     );
+
     expect(res.status).toBe(200);
-    expect(mocks.listGlobal).toHaveBeenCalledWith(
+    expect(mocks.list).toHaveBeenCalledWith(
+      PLATFORM_SCOPE,
       expect.objectContaining({
         category: 'billing',
         outcome: 'failure',

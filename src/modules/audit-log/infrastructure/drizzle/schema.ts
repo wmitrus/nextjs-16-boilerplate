@@ -190,6 +190,17 @@ export const auditLogSettingsTable = pgTable(
         sql`${t.organizationId} is not null and ${t.ownershipState} = 'canonical_organization'`,
       ),
     /**
+     * OZI-71 AUD·D — global semantic uniqueness: at most one genuine
+     * `intentional_global` setting per category.
+     *
+     * This is additive and coexists with both the canonical organization
+     * partial unique above and the retained legacy
+     * UNIQUE(category, tenant_id) rollback constraint.
+     */
+    uniqueIndex('uq_audit_log_settings_category_intentional_global')
+      .on(t.category)
+      .where(sql`${t.ownershipState} = 'intentional_global'`),
+    /**
      * OZI-71 AUD·A — DB-enforced `ownership_state` ↔ `organization_id`
      * consistency (defense in depth; plan §14a.9). Valid:
      * `canonical_organization` + non-NULL id, or one of the other three

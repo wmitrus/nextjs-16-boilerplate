@@ -1,3 +1,17 @@
+# [2.21.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.20.0...v2.21.0) (2026-10-05)
+
+
+### Bug Fixes
+
+* **audit:** harden canonical retention purge ([b964638](https://github.com/wmitrus/nextjs-16-boilerplate/commit/b9646384357f2b7373d06262a93e30d0f8b086e5))
+* **db:** register audit migration with journal validator ([37e2048](https://github.com/wmitrus/nextjs-16-boilerplate/commit/37e2048a3f220165e3c0c9c140db83b962b89862))
+* **deps:** align nodemailer types with v10 ([acd796e](https://github.com/wmitrus/nextjs-16-boilerplate/commit/acd796e3a8f39d67b7c2eece92d3d6aad97dff6d))
+
+
+### Features
+
+* **audit:** cut over runtime to canonical organization ownership ([c8690ba](https://github.com/wmitrus/nextjs-16-boilerplate/commit/c8690ba5a4c648025424bf39d9c9bb62c6dd53b7))
+
 # [2.20.0](https://github.com/wmitrus/nextjs-16-boilerplate/compare/v2.19.0...v2.20.0) (2026-09-21)
 
 

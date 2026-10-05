@@ -9,6 +9,7 @@ import {
   SECURITY,
   INFRASTRUCTURE,
   PROVISIONING,
+  RATE_LIMIT,
 } from '@/core/contracts';
 import type { DbConfig } from '@/core/db/types';
 import {
@@ -36,6 +37,7 @@ import { createAuthorizationModule } from '@/modules/authorization';
 import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
 import { createFeatureFlagService } from '@/modules/feature-flags/factory';
 import { DrizzleProvisioningService } from '@/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService';
+import { DrizzleRateLimitStore } from '@/modules/rate-limit/infrastructure/drizzle/DrizzleRateLimitStore';
 import { createOperationalSwitch } from '@/security/core/operational-switch/factory';
 
 export { createEdgeRequestContainer } from './edge';
@@ -104,6 +106,10 @@ export function createRequestContainer(config: AppConfig): Container {
   const { dbRuntime } = getInfrastructure(config);
 
   container.register(INFRASTRUCTURE.DB, dbRuntime.db);
+  container.register(
+    RATE_LIMIT.DURABLE_STORE,
+    new DrizzleRateLimitStore(dbRuntime.db),
+  );
 
   const membershipRepository =
     config.auth.tenancyMode === 'org' &&

@@ -1,7 +1,7 @@
-import { INFRASTRUCTURE, SECURITY } from '@/core/contracts';
+import { RATE_LIMIT, SECURITY } from '@/core/contracts';
 import type { OperationalSwitch } from '@/core/contracts/operational-switch';
 import { OPERATIONAL_SWITCH_KEYS } from '@/core/contracts/operational-switch';
-import type { DrizzleDb } from '@/core/db/types';
+import type { DurableRateLimitStore } from '@/core/contracts/rate-limit';
 import { getAppContainer } from '@/core/runtime/bootstrap';
 
 import {
@@ -10,15 +10,12 @@ import {
 } from '@/shared/lib/rate-limit/rate-limit-helper';
 import type { RateLimitResult } from '@/shared/lib/rate-limit/rate-limit-local';
 
-import { DrizzleRateLimitStore } from '@/modules/rate-limit/infrastructure/drizzle/DrizzleRateLimitStore';
-
 /**
  * Node-side entry point for security-critical rate limiting (SEC-42).
  *
- * This is the only place that knows both halves: that the durable secondary
- * is Postgres, and that the degrade switch comes from the DI container. The
- * helper in `shared/lib` stays runtime-agnostic and Edge-safe because this
- * file -- never that one -- imports the Drizzle store.
+ * The durable secondary and degrade switch are resolved through neutral
+ * contracts from the Node composition root. This security entry point does
+ * not depend on the concrete persistence adapter.
  *
  * **Node route handlers only.** The Edge middleware in `src/proxy.ts` cannot
  * reach Postgres with this repository's TCP driver, so it keeps using
@@ -30,8 +27,9 @@ export async function checkStrictRateLimit(
   options?: Omit<CheckRateLimitOptions, 'mode' | 'strict'>,
 ): Promise<RateLimitResult> {
   const container = getAppContainer();
-  const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-  const store = new DrizzleRateLimitStore(db);
+  const store = container.resolve<DurableRateLimitStore>(
+    RATE_LIMIT.DURABLE_STORE,
+  );
 
   return checkRateLimit(identifier, {
     ...options,

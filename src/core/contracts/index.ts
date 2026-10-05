@@ -37,6 +37,10 @@ export const PROVISIONING = {
   SERVICE: Symbol('ProvisioningService'),
 };
 
+export const RATE_LIMIT = {
+  DURABLE_STORE: Symbol('DurableRateLimitStore'),
+};
+
 export const SECURITY = {
   OPERATIONAL_SWITCH: Symbol('OperationalSwitch'),
 };

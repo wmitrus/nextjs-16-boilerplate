@@ -330,13 +330,6 @@ export class DrizzleAuditLogSettingsAdminService {
   }
 
   /**
-   * Creates or updates the (category, tenantId) row. Categories are a
-   * fixed, curated taxonomy (not user-created keys like feature-flag
-   * `key`), so upsert-by-natural-key is the right shape here — there is no
-   * meaningful "duplicate" error case to report back to the caller, unlike
-   * `DrizzleFeatureFlagAdminService.create()`.
-   */
-  /**
    * OZI-71 AUD·D canonical settings UPSERT.
    *
    * The scope is the sole ownership authority. `tenant_id` remains a
@@ -354,127 +347,12 @@ export class DrizzleAuditLogSettingsAdminService {
     assertValidRetentionDays(input.retentionDays);
     assertValidSampleRate(input.sampleRate);
 
-    const sampleRate = input.sampleRate ?? null;
-
     try {
       if (scope.kind === 'platform-global') {
-        const raw = await this.db.execute(sql`
-          INSERT INTO ${auditLogSettingsTable}
-            (
-              category,
-              tenant_id,
-              organization_id,
-              ownership_state,
-              enabled,
-              retention_days,
-              sample_rate,
-              capture_input_on_success,
-              updated_by_user_id
-            )
-          VALUES
-            (
-              ${input.category},
-              NULL,
-              NULL,
-              'intentional_global',
-              ${input.enabled},
-              ${input.retentionDays},
-              ${sampleRate},
-              ${input.captureInputOnSuccess},
-              ${input.updatedByUserId}
-            )
-          ON CONFLICT (category)
-            WHERE ownership_state = 'intentional_global'
-          DO UPDATE SET
-            tenant_id = NULL,
-            organization_id = NULL,
-            ownership_state = 'intentional_global',
-            enabled = EXCLUDED.enabled,
-            retention_days = EXCLUDED.retention_days,
-            sample_rate = EXCLUDED.sample_rate,
-            capture_input_on_success = EXCLUDED.capture_input_on_success,
-            updated_by_user_id = EXCLUDED.updated_by_user_id,
-            updated_at = now()
-          RETURNING
-            id,
-            category,
-            tenant_id AS "tenantId",
-            enabled,
-            retention_days AS "retentionDays",
-            sample_rate AS "sampleRate",
-            capture_input_on_success AS "captureInputOnSuccess",
-            updated_by_user_id AS "updatedByUserId",
-            updated_at AS "updatedAt"
-        `);
-
-        const row = normalizeRawRows<RawSettingRow>(raw)[0];
-
-        if (!row) {
-          throw new AuditCanonicalWriteInvariantError();
-        }
-
-        return toRawStoredDto(row, 'global');
+        return await this.upsertPlatformGlobalCanonical(input);
       }
 
-      const raw = await this.db.execute(sql`
-        INSERT INTO ${auditLogSettingsTable}
-          (
-            category,
-            tenant_id,
-            organization_id,
-            ownership_state,
-            enabled,
-            retention_days,
-            sample_rate,
-            capture_input_on_success,
-            updated_by_user_id
-          )
-        SELECT
-          ${input.category},
-          o.id,
-          o.id,
-          'canonical_organization',
-          ${input.enabled},
-          ${input.retentionDays},
-          ${sampleRate},
-          ${input.captureInputOnSuccess},
-          ${input.updatedByUserId}
-        FROM ${organizationsReferenceTable} o
-        WHERE o.id = ${scope.organizationId}
-          AND o.tenant_id = ${scope.tenantId}
-        ON CONFLICT (category, organization_id)
-          WHERE organization_id IS NOT NULL
-            AND ownership_state = 'canonical_organization'
-        DO UPDATE SET
-          tenant_id = EXCLUDED.tenant_id,
-          enabled = EXCLUDED.enabled,
-          retention_days = EXCLUDED.retention_days,
-          sample_rate = EXCLUDED.sample_rate,
-          capture_input_on_success = EXCLUDED.capture_input_on_success,
-          updated_by_user_id = EXCLUDED.updated_by_user_id,
-          updated_at = now()
-        RETURNING
-          id,
-          category,
-          tenant_id AS "tenantId",
-          enabled,
-          retention_days AS "retentionDays",
-          sample_rate AS "sampleRate",
-          capture_input_on_success AS "captureInputOnSuccess",
-          updated_by_user_id AS "updatedByUserId",
-          updated_at AS "updatedAt"
-      `);
-
-      const row = normalizeRawRows<RawSettingRow>(raw)[0];
-
-      if (!row) {
-        // INSERT ... SELECT produced no candidate because the complete
-        // organization -> tenant tuple could not be proven. Never retry as
-        // global and never fall through to a legacy identifier.
-        throw new AuditCanonicalWriteInvariantError();
-      }
-
-      return toRawStoredDto(row, 'tenant-override');
+      return await this.upsertOrganizationCanonical(input, scope);
     } catch (error) {
       // The two semantic partial uniques are handled by ON CONFLICT.
       // A remaining 23505 is therefore typically the retained legacy
@@ -486,6 +364,136 @@ export class DrizzleAuditLogSettingsAdminService {
 
       throw error;
     }
+  }
+
+  private async upsertPlatformGlobalCanonical(
+    input: CanonicalUpsertAuditSettingInput,
+  ): Promise<AuditSettingDto> {
+    const sampleRate = input.sampleRate ?? null;
+
+    const raw = await this.db.execute(sql`
+      INSERT INTO ${auditLogSettingsTable}
+        (
+          category,
+          tenant_id,
+          organization_id,
+          ownership_state,
+          enabled,
+          retention_days,
+          sample_rate,
+          capture_input_on_success,
+          updated_by_user_id
+        )
+      VALUES
+        (
+          ${input.category},
+          NULL,
+          NULL,
+          'intentional_global',
+          ${input.enabled},
+          ${input.retentionDays},
+          ${sampleRate},
+          ${input.captureInputOnSuccess},
+          ${input.updatedByUserId}
+        )
+      ON CONFLICT (category)
+        WHERE ownership_state = 'intentional_global'
+      DO UPDATE SET
+        tenant_id = NULL,
+        organization_id = NULL,
+        ownership_state = 'intentional_global',
+        enabled = EXCLUDED.enabled,
+        retention_days = EXCLUDED.retention_days,
+        sample_rate = EXCLUDED.sample_rate,
+        capture_input_on_success = EXCLUDED.capture_input_on_success,
+        updated_by_user_id = EXCLUDED.updated_by_user_id,
+        updated_at = now()
+      RETURNING
+        id,
+        category,
+        tenant_id AS "tenantId",
+        enabled,
+        retention_days AS "retentionDays",
+        sample_rate AS "sampleRate",
+        capture_input_on_success AS "captureInputOnSuccess",
+        updated_by_user_id AS "updatedByUserId",
+        updated_at AS "updatedAt"
+    `);
+
+    const row = normalizeRawRows<RawSettingRow>(raw)[0];
+
+    if (!row) {
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    return toRawStoredDto(row, 'global');
+  }
+
+  private async upsertOrganizationCanonical(
+    input: CanonicalUpsertAuditSettingInput,
+    scope: Extract<AuditLogSettingsAdminScope, { kind: 'organization' }>,
+  ): Promise<AuditSettingDto> {
+    const sampleRate = input.sampleRate ?? null;
+
+    const raw = await this.db.execute(sql`
+      INSERT INTO ${auditLogSettingsTable}
+        (
+          category,
+          tenant_id,
+          organization_id,
+          ownership_state,
+          enabled,
+          retention_days,
+          sample_rate,
+          capture_input_on_success,
+          updated_by_user_id
+        )
+      SELECT
+        ${input.category},
+        o.id,
+        o.id,
+        'canonical_organization',
+        ${input.enabled},
+        ${input.retentionDays},
+        ${sampleRate},
+        ${input.captureInputOnSuccess},
+        ${input.updatedByUserId}
+      FROM ${organizationsReferenceTable} o
+      WHERE o.id = ${scope.organizationId}
+        AND o.tenant_id = ${scope.tenantId}
+      ON CONFLICT (category, organization_id)
+        WHERE organization_id IS NOT NULL
+          AND ownership_state = 'canonical_organization'
+      DO UPDATE SET
+        tenant_id = EXCLUDED.tenant_id,
+        enabled = EXCLUDED.enabled,
+        retention_days = EXCLUDED.retention_days,
+        sample_rate = EXCLUDED.sample_rate,
+        capture_input_on_success = EXCLUDED.capture_input_on_success,
+        updated_by_user_id = EXCLUDED.updated_by_user_id,
+        updated_at = now()
+      RETURNING
+        id,
+        category,
+        tenant_id AS "tenantId",
+        enabled,
+        retention_days AS "retentionDays",
+        sample_rate AS "sampleRate",
+        capture_input_on_success AS "captureInputOnSuccess",
+        updated_by_user_id AS "updatedByUserId",
+        updated_at AS "updatedAt"
+    `);
+
+    const row = normalizeRawRows<RawSettingRow>(raw)[0];
+
+    if (!row) {
+      // INSERT ... SELECT produced no candidate because the complete
+      // organization -> tenant tuple could not be proven. Never retry as
+      // global and never fall through to a legacy identifier.
+      throw new AuditCanonicalWriteInvariantError();
+    }
+
+    return toRawStoredDto(row, 'tenant-override');
   }
 
   /**

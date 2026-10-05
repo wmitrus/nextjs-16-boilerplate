@@ -134,11 +134,13 @@ not canonical authorization authority.
 
 Canonical organization scope is:
 
-    {
-      kind: 'organization';
-      organizationId;
-      tenantId;
-    }
+```ts
+{
+  kind: 'organization';
+  organizationId;
+  tenantId;
+}
+```
 
 Both identifiers are load-bearing. The tuple must be proven against
 `organizations` before an organization-scoped read, write, or settings

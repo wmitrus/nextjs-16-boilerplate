@@ -8,7 +8,6 @@ function makeProvisioningDiagnostics(
   overrides: Partial<NodeProvisioningAccessDiagnostics> = {},
 ): NodeProvisioningAccessDiagnostics {
   return {
-    tenancyMode: 'personal',
     userRecordExists: true,
     tenantRecordExists: true,
     membershipExists: true,
@@ -30,6 +29,10 @@ export function makeAllowedProvisioningAccess(
       organizationId: 'tenant_test_1',
       tenantId: 'tenant_test_1',
       userId: 'user_test_1',
+    },
+    activeOrganization: {
+      organizationId: 'tenant_test_1',
+      tenantId: 'tenant_parent_test_1',
     },
     user: {
       id: 'user_test_1',

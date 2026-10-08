@@ -21,6 +21,10 @@ function createDeps() {
         userId: 'u-1',
       }),
     },
+    organizationScopeAuthority: {
+      readParentTenantId: vi.fn().mockResolvedValue('tenant-parent-1'),
+      isMember: vi.fn().mockResolvedValue(true),
+    },
     userRepository: {
       findById: vi
         .fn()
@@ -32,7 +36,6 @@ function createDeps() {
       deactivate: vi.fn().mockResolvedValue(undefined),
     },
     tenancyMode: 'single' as const,
-    tenantExistsProbe: vi.fn().mockResolvedValue(true),
     // Fresh by default: a far-future issue time can never predate a
     // revocation marker, so the SEC-36 gate stays inert unless a test
     // deliberately sets one up.
@@ -256,16 +259,66 @@ describe('evaluateNodeProvisioningAccess', () => {
     }
   });
 
-  it('fails fast in single mode when configured default tenant does not exist', async () => {
+  it('fails closed when the resolved organization has no authoritative parent tenant', async () => {
     const deps = createDeps();
-    deps.tenantExistsProbe.mockResolvedValue(false);
+    deps.organizationScopeAuthority.readParentTenantId.mockResolvedValue(null);
 
     const result = await evaluateNodeProvisioningAccess(deps);
 
     expect(result.status).toBe('TENANT_CONTEXT_REQUIRED');
     if (result.status !== 'ALLOWED') {
-      expect(result.code).toBe('DEFAULT_TENANT_NOT_FOUND');
+      expect(result.code).toBe('TENANT_CONTEXT_REQUIRED');
+      expect(result.diagnostics.tenantRecordExists).toBe(false);
+      expect(result.diagnostics.membershipExists).toBe(null);
     }
+    expect(deps.organizationScopeAuthority.isMember).not.toHaveBeenCalled();
+  });
+
+  it('returns TENANT_MEMBERSHIP_REQUIRED when canonical membership proof fails', async () => {
+    const deps = createDeps();
+    deps.organizationScopeAuthority.isMember.mockResolvedValue(false);
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('TENANT_MEMBERSHIP_REQUIRED');
+    if (result.status !== 'ALLOWED') {
+      expect(result.code).toBe('TENANT_MEMBERSHIP_REQUIRED');
+      expect(result.diagnostics.membershipExists).toBe(false);
+    }
+  });
+
+  it('ignores a mismatched legacy tenantId and uses the authoritative organization parent', async () => {
+    const deps = createDeps();
+
+    deps.tenantResolver.resolve.mockResolvedValue({
+      organizationId: 'org-a',
+      tenantId: 'tenant-b',
+      userId: 'u-1',
+    });
+    deps.organizationScopeAuthority.readParentTenantId.mockResolvedValue(
+      'tenant-a',
+    );
+
+    const result = await evaluateNodeProvisioningAccess(deps);
+
+    expect(result.status).toBe('ALLOWED');
+    if (result.status === 'ALLOWED') {
+      expect(result.activeOrganization).toEqual({
+        organizationId: 'org-a',
+        tenantId: 'tenant-a',
+      });
+      expect(result.activeOrganization.tenantId).not.toBe(
+        result.tenant.tenantId,
+      );
+    }
+
+    expect(
+      deps.organizationScopeAuthority.readParentTenantId,
+    ).toHaveBeenCalledWith('org-a');
+    expect(deps.organizationScopeAuthority.isMember).toHaveBeenCalledWith(
+      'u-1',
+      'org-a',
+    );
   });
 
   it('returns FORBIDDEN when optional authorize callback denies access', async () => {
@@ -291,6 +344,10 @@ describe('evaluateNodeProvisioningAccess', () => {
     if (result.status === 'ALLOWED') {
       expect(result.identity.id).toBe('u-1');
       expect(result.tenant.tenantId).toBe('t-1');
+      expect(result.activeOrganization).toEqual({
+        organizationId: 't-1',
+        tenantId: 'tenant-parent-1',
+      });
       expect(result.user.onboardingComplete).toBe(true);
     }
   });

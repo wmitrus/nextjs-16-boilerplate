@@ -15,8 +15,7 @@ import { createAuthModule } from './index';
 import { DrizzleUserRepository } from '@/modules/user/infrastructure/drizzle/DrizzleUserRepository';
 
 const baseConfig = {
-  tenancyMode: 'single' as const,
-  defaultTenantId: '00000000-0000-0000-0000-000000000001',
+  tenantContextSource: 'db' as const,
   tenantContextHeader: 'x-tenant-id',
   tenantContextCookie: 'active_tenant_id',
 };

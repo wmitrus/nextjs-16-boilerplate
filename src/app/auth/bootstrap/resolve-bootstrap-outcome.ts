@@ -43,8 +43,12 @@ export type BootstrapError =
 export type BootstrapOutcome =
   | { type: 'unauthenticated' }
   | { type: 'org_required' }
-  | { type: 'onboarding_required'; safeTarget: string }
-  | { type: 'ready'; safeTarget: string }
+  | {
+      type: 'onboarding_required';
+      safeTarget: string;
+      activeOrganizationId: string;
+    }
+  | { type: 'ready'; safeTarget: string; activeOrganizationId: string }
   | { type: 'error'; error: BootstrapError };
 
 export async function resolveBootstrapOutcome(
@@ -75,11 +79,13 @@ export async function resolveBootstrapOutcome(
   const provisioningInput = await buildProvisioningInput(rawIdentity);
 
   let internalUserId: string;
+  let activeOrganizationId: string;
 
   try {
     const result =
       await provisioningService.ensureProvisioned(provisioningInput);
     internalUserId = result.internalUserId;
+    activeOrganizationId = result.internalOrganizationId;
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     const diagnostics = classifyProvisioningFailure(err);
@@ -138,8 +144,12 @@ export async function resolveBootstrapOutcome(
   }
 
   if (!user.onboardingComplete) {
-    return { type: 'onboarding_required', safeTarget };
+    return {
+      type: 'onboarding_required',
+      safeTarget,
+      activeOrganizationId,
+    };
   }
 
-  return { type: 'ready', safeTarget };
+  return { type: 'ready', safeTarget, activeOrganizationId };
 }

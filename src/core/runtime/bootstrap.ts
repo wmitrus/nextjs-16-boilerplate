@@ -15,7 +15,6 @@ import type { DbConfig } from '@/core/db/types';
 import {
   env,
   validateAuthProviderConfigValues,
-  validateTenancyConfigValues,
   validateAppSecurityConfigValues,
   validateDeploymentProxyConfigValues,
   validateInternalApiKeyConfigValues,
@@ -34,7 +33,6 @@ import { createAuditLogService } from '@/modules/audit-log/factory';
 import { createAuthModule } from '@/modules/auth';
 import type { AuthModuleConfig } from '@/modules/auth';
 import { createAuthorizationModule } from '@/modules/authorization';
-import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
 import { createFeatureFlagService } from '@/modules/feature-flags/factory';
 import { DrizzleProvisioningService } from '@/modules/provisioning/infrastructure/drizzle/DrizzleProvisioningService';
 import { DrizzleRateLimitStore } from '@/modules/rate-limit/infrastructure/drizzle/DrizzleRateLimitStore';
@@ -44,7 +42,7 @@ export { createEdgeRequestContainer } from './edge';
 
 export interface AppConfig {
   db: DbConfig;
-  auth: Omit<AuthModuleConfig, 'membershipRepository'>;
+  auth: AuthModuleConfig;
   provisioning: {
     freeTierMaxUsers: number;
     crossProviderEmailLinking: 'disabled' | 'verified-only';
@@ -69,11 +67,6 @@ export function createRequestContainer(config: AppConfig): Container {
     env.NODE_ENV,
     env.NEXTAUTH_URL,
     env.VERCEL_ENV,
-  );
-  validateTenancyConfigValues(
-    config.auth.tenancyMode,
-    config.auth.defaultTenantId,
-    config.auth.tenantContextSource,
   );
   // SEC-43. Fails the composition root rather than the first request that
   // needs a client IP -- a trust boundary that is wrong should be loud at
@@ -111,15 +104,7 @@ export function createRequestContainer(config: AppConfig): Container {
     new DrizzleRateLimitStore(dbRuntime.db),
   );
 
-  const membershipRepository =
-    config.auth.tenancyMode === 'org' &&
-    config.auth.tenantContextSource === 'db'
-      ? new DrizzleMembershipRepository(dbRuntime.db)
-      : undefined;
-
-  container.registerModule(
-    createAuthModule({ ...config.auth, membershipRepository }),
-  );
+  container.registerModule(createAuthModule(config.auth));
   container.registerModule(createAuthorizationModule({ db: dbRuntime.db }));
 
   const featureFlagService = createFeatureFlagService(
@@ -162,9 +147,7 @@ function buildConfig(): AppConfig {
     },
     auth: {
       authProvider: env.AUTH_PROVIDER,
-      tenancyMode: env.TENANCY_MODE,
-      defaultTenantId: env.DEFAULT_TENANT_ID,
-      tenantContextSource: env.TENANT_CONTEXT_SOURCE,
+      tenantContextSource: env.TENANT_CONTEXT_SOURCE ?? 'db',
       tenantContextHeader: env.TENANT_CONTEXT_HEADER,
       tenantContextCookie: env.TENANT_CONTEXT_COOKIE,
     },

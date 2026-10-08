@@ -14,7 +14,7 @@ export class TenantUserLimitReachedError extends Error {
 /**
  * Thrown when provisioning mode requires a tenant context (activeTenantId or tenantExternalId)
  * but none was provided in ProvisioningInput.
- * Applies to TENANCY_MODE=single and TENANCY_MODE=org without the required context.
+ * Applies when bootstrap/provisioning lacks the required organization context.
  */
 export class TenantContextRequiredError extends Error {
   constructor(

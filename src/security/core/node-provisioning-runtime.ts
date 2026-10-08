@@ -1,42 +1,15 @@
-import { sql } from 'drizzle-orm';
-
 import type { Container } from '@/core/container';
-import { AUTH, INFRASTRUCTURE } from '@/core/contracts';
+import { AUTH, AUTHORIZATION } from '@/core/contracts';
+import type { OrganizationScopeAuthority } from '@/core/contracts/access-scope-authority';
 import type { IdentityProvider } from '@/core/contracts/identity';
 import type { RequestIdentitySource } from '@/core/contracts/identity';
 import type { TenantResolver } from '@/core/contracts/tenancy';
 import type { UserRepository } from '@/core/contracts/user';
-import type { DrizzleDb } from '@/core/db';
-import { env } from '@/core/env';
 
 import {
   evaluateNodeProvisioningAccess,
   type NodeProvisioningAccessOutcome,
 } from './node-provisioning-access';
-
-type QueryResultLike = { rows?: unknown[] } | unknown[];
-
-function toRows(result: QueryResultLike): unknown[] {
-  if (Array.isArray(result)) {
-    return result;
-  }
-
-  if (result && typeof result === 'object' && Array.isArray(result.rows)) {
-    return result.rows;
-  }
-
-  return [];
-}
-
-function createTenantExistsProbe(db: DrizzleDb) {
-  return async (tenantId: string): Promise<boolean> => {
-    const result = (await db.execute(
-      sql`SELECT id FROM organizations WHERE id = ${tenantId} LIMIT 1`,
-    )) as QueryResultLike;
-
-    return toRows(result).length > 0;
-  };
-}
 
 export async function resolveNodeProvisioningAccess(
   container: Container,
@@ -53,22 +26,18 @@ export async function resolveNodeProvisioningAccess(
   const userRepository = container.resolve<UserRepository>(
     AUTH.USER_REPOSITORY,
   );
-
-  let tenantExistsProbe: ((tenantId: string) => Promise<boolean>) | undefined;
-
-  if (env.TENANCY_MODE === 'single') {
-    const db = container.resolve<DrizzleDb>(INFRASTRUCTURE.DB);
-    tenantExistsProbe = createTenantExistsProbe(db);
-  }
+  const organizationScopeAuthority =
+    container.resolve<OrganizationScopeAuthority>(
+      AUTHORIZATION.ORGANIZATION_SCOPE_AUTHORITY,
+    );
 
   const rawIdentity = await requestIdentitySource.get();
 
   return evaluateNodeProvisioningAccess({
     identityProvider,
     tenantResolver,
+    organizationScopeAuthority,
     userRepository,
-    tenancyMode: env.TENANCY_MODE,
     rawIdentity,
-    tenantExistsProbe,
   });
 }

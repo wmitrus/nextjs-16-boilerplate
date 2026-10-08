@@ -191,7 +191,8 @@ export interface InternalIdentityLookup {
 
   /**
    * Looks up the personal organization UUID for a given internal user UUID.
-   * Used in TENANCY_MODE=personal where each user has exactly one personal organization.
+   * Used by legacy/bootstrap personal-organization provisioning compatibility.
+   * It is not a request-time authorization resolver.
    * Returns null if no personal organization has been provisioned for this user yet.
    */
   findPersonalOrganizationId(internalUserId: string): Promise<string | null>;

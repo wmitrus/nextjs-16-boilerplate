@@ -12,8 +12,9 @@ import {
 } from '@/core/contracts/tenancy';
 
 /**
- * TENANCY_MODE=org + TENANT_CONTEXT_SOURCE=provider
+ * TENANT_CONTEXT_SOURCE=provider selection adapter.
  *
+ * Request-time topology is no longer selected by TENANCY_MODE.
  * Org context comes from the auth provider's org claim (e.g. Clerk Organizations).
  * Reads orgExternalId from RequestIdentitySource, then resolves internal organization UUID via DB lookup.
  *

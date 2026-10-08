@@ -84,6 +84,12 @@ export async function GET(request: NextRequest) {
 
     case 'onboarding_required': {
       const cookieStore = await cookies();
+      cookieStore.set(env.TENANT_CONTEXT_COOKIE, outcome.activeOrganizationId, {
+        httpOnly: true,
+        secure: env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+      });
       cookieStore.set('__onboarding_pending', '1', {
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
@@ -99,7 +105,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    case 'ready':
+    case 'ready': {
+      const cookieStore = await cookies();
+      cookieStore.set(env.TENANT_CONTEXT_COOKIE, outcome.activeOrganizationId, {
+        httpOnly: true,
+        secure: env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+      });
       return NextResponse.redirect(new URL(outcome.safeTarget, request.url));
+    }
   }
 }

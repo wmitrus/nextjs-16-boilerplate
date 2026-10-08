@@ -120,20 +120,8 @@ export async function resolveFeatureFlagsAdminScope(
     throw new FeatureFlagsScopeInvariantError();
   }
 
-  const activeOrganizationId = access.tenant.organizationId;
-
-  // Parent tenant identity is loaded INDEPENDENTLY from authoritative
-  // organization -> tenant data. Never `access.tenant.tenantId`, which legacy
-  // TenantContext may collapse onto the organization id.
-  const parentTenantId =
-    await authority.readParentTenantId(activeOrganizationId);
-
-  if (parentTenantId === null) {
-    // Node provisioning already resolved this as the active internal
-    // organization, and organizations.tenant_id is NOT NULL. A null here is a
-    // contradictory DB / working-context state.
-    throw new FeatureFlagsScopeInvariantError();
-  }
+  const activeOrganizationId = access.activeOrganization.organizationId;
+  const parentTenantId = access.activeOrganization.tenantId;
 
   let accessContext: AccessContext;
   try {

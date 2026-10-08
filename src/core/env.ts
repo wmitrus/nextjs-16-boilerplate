@@ -237,6 +237,8 @@ export const env = createEnv({
     DB_PROVIDER: z.enum(['drizzle', 'prisma']).default('drizzle'),
     DATABASE_URL: z.string().optional(),
     DB_DRIVER: z.enum(['pglite', 'postgres']).optional(),
+    // Deprecated in R2 for request-time authorization/topology.
+    // Retained only for bootstrap/provisioning/rollback compatibility until R5.
     TENANCY_MODE: z.enum(['single', 'personal', 'org']).default('single'),
     DEFAULT_TENANT_ID: z.uuid().optional(),
     TENANT_CONTEXT_SOURCE: z.enum(['provider', 'db']).optional(),
@@ -579,10 +581,12 @@ export const env = createEnv({
 });
 
 /**
- * Cross-field tenancy configuration validation against explicit values.
- * Decoupled from global `env` — accepts values from any source (config object, env, test fixtures).
+ * Deprecated R2 tenancy compatibility validation.
  *
- * Rules:
+ * This must not drive request-time organization resolution or authorization.
+ * It remains for bootstrap/provisioning/rollback compatibility until R5.
+ *
+ * Legacy compatibility rules:
  * - TENANCY_MODE=single requires DEFAULT_TENANT_ID
  * - TENANCY_MODE=org requires TENANT_CONTEXT_SOURCE (provider|db)
  */

@@ -1,5 +1,4 @@
 /** @vitest-environment node */
-import { asc, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type {
@@ -16,16 +15,12 @@ import {
 
 import { DrizzleInternalIdentityLookup } from '@/modules/auth/infrastructure/drizzle/DrizzleInternalIdentityLookup';
 import { authOrganizationIdentitiesTable } from '@/modules/auth/infrastructure/drizzle/schema';
-import { DrizzleMembershipRepository } from '@/modules/authorization/infrastructure/drizzle/DrizzleMembershipRepository';
 import { DrizzleOrganizationScopeAuthority } from '@/modules/authorization/infrastructure/drizzle/DrizzleOrganizationScopeAuthority';
 import { DrizzleTenantExistenceReader } from '@/modules/authorization/infrastructure/drizzle/DrizzleTenantExistenceReader';
-import { organizationsTable } from '@/modules/authorization/infrastructure/drizzle/schema';
 import { seedAuthorization } from '@/modules/authorization/infrastructure/drizzle/seed';
 import { OrgDbOrganizationResolver } from '@/modules/provisioning/infrastructure/OrgDbOrganizationResolver';
-import { PersonalOrganizationResolver } from '@/modules/provisioning/infrastructure/PersonalOrganizationResolver';
 import { ProviderOrganizationResolver } from '@/modules/provisioning/infrastructure/ProviderOrganizationResolver';
 import type { ActiveTenantContextSource } from '@/modules/provisioning/infrastructure/request-context/ActiveTenantContextSource';
-import { SingleTenantResolver } from '@/modules/provisioning/infrastructure/SingleTenantResolver';
 import { seedUsers } from '@/modules/user/infrastructure/drizzle/seed';
 import { resolveTestDb, type TestDb } from '@/testing/db/create-test-db';
 
@@ -81,22 +76,13 @@ beforeAll(async () => {
   acmeOrgId = auth.orgs.acmeHq.id;
   globexOrgId = auth.orgs.globexHq.id;
 
-  // Provider + personal identity mappings for the resolver paths that need them.
   await testDb.db
     .insert(authOrganizationIdentitiesTable)
-    .values([
-      {
-        provider: 'clerk',
-        externalOrgId: 'org_ext_acme',
-        organizationId: acmeOrgId,
-      },
-      // Personal-org lookup keys the internal user id as `externalOrgId`.
-      {
-        provider: 'personal',
-        externalOrgId: aliceId,
-        organizationId: globexOrgId,
-      },
-    ])
+    .values({
+      provider: 'clerk',
+      externalOrgId: 'org_ext_acme',
+      organizationId: acmeOrgId,
+    })
     .onConflictDoNothing();
 });
 
@@ -147,7 +133,6 @@ describe('OZI-71 Slice 2 — canonical AccessContext differential vs legacy reso
   it('OrgDbOrganizationResolver: alice in acme HQ', async () => {
     const resolver = new OrgDbOrganizationResolver(
       stubActiveTenantSource(acmeOrgId),
-      new DrizzleMembershipRepository(testDb.db),
     );
     const legacy = await resolver.resolve(identity(aliceId));
 
@@ -166,7 +151,6 @@ describe('OZI-71 Slice 2 — canonical AccessContext differential vs legacy reso
   it('OrgDbOrganizationResolver: alice in globex HQ (different tenant)', async () => {
     const resolver = new OrgDbOrganizationResolver(
       stubActiveTenantSource(globexOrgId),
-      new DrizzleMembershipRepository(testDb.db),
     );
     const legacy = await resolver.resolve(identity(aliceId));
 
@@ -182,43 +166,6 @@ describe('OZI-71 Slice 2 — canonical AccessContext differential vs legacy reso
       stubIdentitySource('org_ext_acme'),
       new DrizzleInternalIdentityLookup(testDb.db),
       'clerk',
-    );
-    const legacy = await resolver.resolve(identity(aliceId));
-
-    expect(legacy.organizationId).toBe(acmeOrgId);
-    await assertCanonicalMatchesLegacy({
-      legacy,
-      expectedInternalUserId: aliceId,
-      expectedParentTenantId: acmeTenantId,
-    });
-  });
-
-  it('PersonalOrganizationResolver: personal org lookup -> internal globex HQ', async () => {
-    const resolver = new PersonalOrganizationResolver(
-      new DrizzleInternalIdentityLookup(testDb.db),
-    );
-    const legacy = await resolver.resolve(identity(aliceId));
-
-    expect(legacy.organizationId).toBe(globexOrgId);
-    await assertCanonicalMatchesLegacy({
-      legacy,
-      expectedInternalUserId: aliceId,
-      expectedParentTenantId: globexTenantId,
-    });
-  });
-
-  it('SingleTenantResolver: fixed-tenant org lookup -> internal acme HQ', async () => {
-    const resolver = new SingleTenantResolver(
-      acmeTenantId,
-      async (tenantId) => {
-        const [org] = await testDb.db
-          .select({ id: organizationsTable.id })
-          .from(organizationsTable)
-          .where(eq(organizationsTable.tenantId, tenantId))
-          .orderBy(asc(organizationsTable.id))
-          .limit(1);
-        return org?.id ?? null;
-      },
     );
     const legacy = await resolver.resolve(identity(aliceId));
 

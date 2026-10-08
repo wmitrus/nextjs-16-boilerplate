@@ -52,6 +52,10 @@ function makeAccess(
       tenantId: LEGACY_COLLAPSED_TENANT_ID,
       userId: USER,
     },
+    activeOrganization: {
+      organizationId: ACTIVE_ORG,
+      tenantId: PARENT_TENANT,
+    },
     ...overrides,
   });
 }
@@ -95,11 +99,11 @@ describe('resolveFeatureFlagsAdminScope (shared server-only seam)', () => {
     });
   });
 
-  it('ordinary membership evidence uses the SAME requested organization for both authoritative reads', async () => {
+  it('ordinary membership evidence uses the SAME requested organization for the canonical authoritative read', async () => {
     await resolveFeatureFlagsAdminScope(makeAccess(), db);
 
-    expect(mocks.readParentTenantId).toHaveBeenNthCalledWith(1, ACTIVE_ORG);
-    expect(mocks.readParentTenantId).toHaveBeenNthCalledWith(2, ACTIVE_ORG);
+    expect(mocks.readParentTenantId).toHaveBeenCalledTimes(1);
+    expect(mocks.readParentTenantId).toHaveBeenCalledWith(ACTIVE_ORG);
     expect(mocks.isMember).toHaveBeenCalledWith(USER, ACTIVE_ORG);
   });
 
@@ -143,10 +147,8 @@ describe('resolveFeatureFlagsAdminScope (shared server-only seam)', () => {
     ).rejects.toBeInstanceOf(FeatureFlagsScopeInvariantError);
   });
 
-  it('a contradictory "not an internal organization" on the second authoritative read throws an invariant error', async () => {
-    mocks.readParentTenantId
-      .mockResolvedValueOnce(PARENT_TENANT) // AccessContext construction
-      .mockResolvedValueOnce(null); // deriveOrganizationScope re-read
+  it('a contradictory "not an internal organization" during the canonical authoritative re-check throws an invariant error', async () => {
+    mocks.readParentTenantId.mockResolvedValue(null);
 
     await expect(
       resolveFeatureFlagsAdminScope(makeAccess(), db),

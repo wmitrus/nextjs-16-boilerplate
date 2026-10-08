@@ -64,6 +64,10 @@ function makeAccess(
       tenantId: LEGACY_COLLAPSED_TENANT_ID,
       userId: USER,
     },
+    activeOrganization: {
+      organizationId: ACTIVE_ORG,
+      tenantId: PARENT_TENANT,
+    },
     ...overrides,
   });
 }
@@ -149,10 +153,8 @@ describe('resolveOrganizationsAdminScope (shared server-only seam)', () => {
     expect(scope).toBeNull();
   });
 
-  it('(7) a contradictory "not an internal organization" on the second authoritative read throws an invariant error', async () => {
-    mocks.readParentTenantId
-      .mockResolvedValueOnce(PARENT_TENANT) // AccessContext construction
-      .mockResolvedValueOnce(null); // deriveOrganizationScope re-read
+  it('(7) a contradictory "not an internal organization" during the canonical authoritative re-check throws an invariant error', async () => {
+    mocks.readParentTenantId.mockResolvedValue(null);
 
     await expect(
       resolveOrganizationsAdminScope(makeAccess(), db),

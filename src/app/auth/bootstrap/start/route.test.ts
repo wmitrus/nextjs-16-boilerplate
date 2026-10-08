@@ -30,6 +30,7 @@ vi.mock('@/core/env', async (importOriginal) => {
       ...actual.env,
       AUTH_PROVIDER: 'authjs',
       NODE_ENV: 'test',
+      TENANT_CONTEXT_COOKIE: 'active_tenant_id',
     },
   };
 });
@@ -124,6 +125,7 @@ describe('GET /auth/bootstrap/start', () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({
       type: 'onboarding_required',
       safeTarget: '/users',
+      activeOrganizationId: '11111111-1111-4111-8111-111111111111',
     });
     const req = new NextRequest(
       `${BASE}/auth/bootstrap/start?redirect_url=%2Fusers`,
@@ -142,6 +144,7 @@ describe('GET /auth/bootstrap/start', () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({
       type: 'onboarding_required',
       safeTarget: '/users',
+      activeOrganizationId: '11111111-1111-4111-8111-111111111111',
     });
     const req = new NextRequest(
       `${BASE}/auth/bootstrap/start?redirect_url=%2Fusers`,
@@ -153,10 +156,35 @@ describe('GET /auth/bootstrap/start', () => {
     expect(loc).toContain('redirect_url=%2Fusers');
   });
 
+  it('persists the provisioned organization as active request context when ready', async () => {
+    resolveBootstrapOutcomeMock.mockResolvedValue({
+      type: 'ready',
+      safeTarget: '/users',
+      activeOrganizationId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    const req = new NextRequest(
+      `${BASE}/auth/bootstrap/start?redirect_url=%2Fusers`,
+    );
+    await GET(req);
+
+    expect(mockCookieSet).toHaveBeenCalledWith(
+      'active_tenant_id',
+      '11111111-1111-4111-8111-111111111111',
+      {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        path: '/',
+      },
+    );
+  });
+
   it('redirects to safeTarget when ready', async () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({
       type: 'ready',
       safeTarget: '/users',
+      activeOrganizationId: '11111111-1111-4111-8111-111111111111',
     });
     const req = new NextRequest(
       `${BASE}/auth/bootstrap/start?redirect_url=%2Fusers`,
@@ -182,6 +210,7 @@ describe('GET /auth/bootstrap/start', () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({
       type: 'ready',
       safeTarget: '/dashboard',
+      activeOrganizationId: '11111111-1111-4111-8111-111111111111',
     });
     const req = new NextRequest(`${BASE}/auth/bootstrap/start`);
     const res = await GET(req);
@@ -192,6 +221,7 @@ describe('GET /auth/bootstrap/start', () => {
     resolveBootstrapOutcomeMock.mockResolvedValue({
       type: 'ready',
       safeTarget: '/dashboard',
+      activeOrganizationId: '11111111-1111-4111-8111-111111111111',
     });
     const req = new NextRequest(
       `${BASE}/auth/bootstrap/start?redirect_url=https%3A%2F%2Fevil.example%2Fsteal`,

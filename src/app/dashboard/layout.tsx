@@ -83,7 +83,6 @@ export async function DashboardLayoutGuard({
       authenticatedExternalUserId: access.diagnostics.externalUserId,
       internalIdentityId: access.diagnostics.internalIdentityId,
       internalOrganizationId: access.diagnostics.internalOrganizationId,
-      tenancyMode: access.diagnostics.tenancyMode,
       userRecordExists: access.diagnostics.userRecordExists,
       tenantRecordExists: access.diagnostics.tenantRecordExists,
       membershipExists: access.diagnostics.membershipExists,

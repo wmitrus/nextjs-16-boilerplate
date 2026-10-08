@@ -12,7 +12,6 @@ export type ProvisioningApiErrorCode =
   | 'ONBOARDING_REQUIRED'
   | 'ACCOUNT_DISABLED'
   | 'TENANT_CONTEXT_REQUIRED'
-  | 'DEFAULT_TENANT_NOT_FOUND'
   | 'TENANT_MEMBERSHIP_REQUIRED'
   | 'FORBIDDEN';
 
@@ -21,6 +20,5 @@ export interface ProvisioningStatusSnapshot {
   readonly internalUserId: string;
   readonly internalOrganizationId: string;
   readonly onboardingComplete: boolean;
-  readonly tenancyMode: 'single' | 'personal' | 'org';
   readonly tenantContextSource: 'provider' | 'db' | null;
 }

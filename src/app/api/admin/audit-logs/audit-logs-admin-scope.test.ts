@@ -56,6 +56,10 @@ function makeAccess(
       tenantId: LEGACY_COLLAPSED_TENANT_ID,
       userId: USER,
     },
+    activeOrganization: {
+      organizationId: ACTIVE_ORG,
+      tenantId: PARENT_TENANT,
+    },
     ...overrides,
   });
 }
@@ -103,8 +107,8 @@ describe('resolveAuditLogsAdminScope', () => {
   it('binds parent-tenant and membership evidence to the same organization', async () => {
     await resolveAuditLogsAdminScope(makeAccess(), db);
 
-    expect(mocks.readParentTenantId).toHaveBeenNthCalledWith(1, ACTIVE_ORG);
-    expect(mocks.readParentTenantId).toHaveBeenNthCalledWith(2, ACTIVE_ORG);
+    expect(mocks.readParentTenantId).toHaveBeenCalledTimes(1);
+    expect(mocks.readParentTenantId).toHaveBeenCalledWith(ACTIVE_ORG);
     expect(mocks.isMember).toHaveBeenCalledWith(USER, ACTIVE_ORG);
   });
 
@@ -138,9 +142,7 @@ describe('resolveAuditLogsAdminScope', () => {
   });
 
   it('fails closed on contradictory organization evidence', async () => {
-    mocks.readParentTenantId
-      .mockResolvedValueOnce(PARENT_TENANT)
-      .mockResolvedValueOnce(null);
+    mocks.readParentTenantId.mockResolvedValue(null);
 
     await expect(
       resolveAuditLogsAdminScope(makeAccess(), db),

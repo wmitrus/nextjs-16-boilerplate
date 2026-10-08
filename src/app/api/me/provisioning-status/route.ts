@@ -13,8 +13,7 @@ export const GET = withErrorHandler(
       internalUserId: access.identity.id,
       internalOrganizationId: access.tenant.organizationId,
       onboardingComplete: access.user.onboardingComplete,
-      tenancyMode: env.TENANCY_MODE,
-      tenantContextSource: env.TENANT_CONTEXT_SOURCE ?? null,
+      tenantContextSource: env.TENANT_CONTEXT_SOURCE ?? 'db',
     };
 
     return createSuccessResponse(snapshot);

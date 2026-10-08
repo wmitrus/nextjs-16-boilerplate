@@ -56,10 +56,7 @@ function mapProvisioningDenyToApiResponse(
   }
 
   if (outcome.status === 'TENANT_CONTEXT_REQUIRED') {
-    const code: ProvisioningApiErrorCode =
-      outcome.code === 'DEFAULT_TENANT_NOT_FOUND'
-        ? 'DEFAULT_TENANT_NOT_FOUND'
-        : 'TENANT_CONTEXT_REQUIRED';
+    const code: ProvisioningApiErrorCode = 'TENANT_CONTEXT_REQUIRED';
 
     return createServerErrorResponse(outcome.message, 409, code);
   }

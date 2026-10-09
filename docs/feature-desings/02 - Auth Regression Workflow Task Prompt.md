@@ -1,11 +1,11 @@
 # Auth Regression Workflow Task Prompt
 
-Use this as the operator prompt to paste under `/Workflow Task` for the auth regression task.
+Use this as the operator prompt to paste under `/workflow-task` for the auth regression task.
 
 ## Ready To Paste
 
 ```text
-/Workflow Task
+/workflow-task
 
 Description:
 Run the controlled auth regression task described in docs/feature-desings/02 - Auth Regression Tests.md.
@@ -112,5 +112,5 @@ Required output:
 ## Notes
 
 - This file is task-specific on purpose.
-- The reusable entrypoint remains [workflow-task.prompt.md](../../.github/prompts/workflow-task.prompt.md).
+- The reusable entrypoint remains [workflow-task/SKILL.md](../../.github/skills/workflow-task/SKILL.md).
 - The task-specific detail lives here and in the referenced auth-flow documents.

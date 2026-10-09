@@ -42,17 +42,17 @@ For any auth/bootstrap/onboarding change:
 - "Identify where our tests are over-mocked and creating false confidence."
 - "Determine whether this route-handler change needs unit, integration, or e2e validation."
 
-## Available slash prompts
+## Available skills
 
-Real prompt files:
+Real skill files:
 
-- [change-validation.prompt.md](../../../.github/prompts/change-validation.prompt.md)
-- [repository-baseline-validation.prompt.md](../../../.github/prompts/repository-baseline-validation.prompt.md)
+- [change-validation/SKILL.md](../../../.github/skills/change-validation/SKILL.md)
+- [repository-baseline-validation/SKILL.md](../../../.github/skills/repository-baseline-validation/SKILL.md)
 
 ```bash
-/Change Validation
+/change-validation
 ```
 
 ```bash
-/Repository Baseline Validation
+/repository-baseline-validation
 ```

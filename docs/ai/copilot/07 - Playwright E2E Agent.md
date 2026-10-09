@@ -69,10 +69,10 @@ For any auth/bootstrap/onboarding E2E verification:
 - "Run Chromium verification for this workflow task and capture evidence."
 - "Check the high-risk browser scenarios from the task brief and report the gaps."
 
-## Available slash prompt
+## Available skill
 
-Real prompt file: [playwright-e2e-validation.prompt.md](../../../.github/prompts/playwright-e2e-validation.prompt.md)
+Real skill file: [playwright-e2e-validation/SKILL.md](../../../.github/skills/playwright-e2e-validation/SKILL.md)
 
 ```bash
-/Playwright E2E Validation
+/playwright-e2e-validation
 ```

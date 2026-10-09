@@ -52,10 +52,10 @@ For any auth/bootstrap/onboarding investigation:
 - "Investigate this env-dependent auth bug and identify the likely failure points."
 - "Use Debug Investigation to separate confirmed evidence from hypotheses before we hand off to Runtime or Security."
 
-## Available slash prompt
+## Available skill
 
-Real prompt file: [debug-investigation.prompt.md](../../../.github/prompts/debug-investigation.prompt.md)
+Real skill file: [debug-investigation/SKILL.md](../../../.github/skills/debug-investigation/SKILL.md)
 
 ```bash
-/Debug Investigation
+/debug-investigation
 ```

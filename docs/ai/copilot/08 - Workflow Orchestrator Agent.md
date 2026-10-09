@@ -46,10 +46,10 @@ For any auth/bootstrap/onboarding orchestration:
 - "Create the task workspace, normalize the brief, and build a detailed implementation plan."
 - "Orchestrate this feature from design review through implementation and validation."
 
-## Available slash prompt
+## Available skill
 
-Real prompt file: [workflow-task.prompt.md](../../../.github/prompts/workflow-task.prompt.md)
+Real skill file: [workflow-task/SKILL.md](../../../.github/skills/workflow-task/SKILL.md)
 
 ```bash
-/Workflow Task
+/workflow-task
 ```

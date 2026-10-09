@@ -9,7 +9,7 @@ argument-hint: 'Auth-flow change summary, affected files, symptoms, or risks to 
 > Ensure a canonical Linear issue exists (see `AGENTS.md`). Do not invoke
 > `10 - Leantime Integration Agent` unless the user explicitly requests it.
 
-Review the current auth/bootstrap/onboarding change.
+Run `02 - Security & Auth` to review the current auth/bootstrap/onboarding change.
 
 Required auth-flow context:
 

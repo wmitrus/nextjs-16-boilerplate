@@ -1,8 +1,8 @@
 ---
-description: 'Start a full orchestrated incident investigation for a confirmed production failure or multi-layer regression through the Workflow Orchestrator.'
-name: 'Incident Investigation'
+name: incident-investigation
+description: Start a full orchestrated incident investigation for a confirmed production failure or multi-layer regression through the Workflow Orchestrator.
+disable-model-invocation: true
 argument-hint: 'Incident symptoms, logs, repro steps, affected user flow, environment context, or recent changes'
-agent: '08 - Workflow Orchestrator'
 ---
 
 > **Task Lifecycle**

@@ -1,8 +1,8 @@
 ---
-description: 'Review an auth/bootstrap/onboarding change against auth-flow anti-patterns and the verification matrix before implementation or sign-off.'
-name: 'Auth Flow Change Review'
+name: auth-flow-change-review
+description: Review an auth/bootstrap/onboarding change against auth-flow anti-patterns and the verification matrix before implementation or sign-off.
+disable-model-invocation: true
 argument-hint: 'Auth-flow change summary, affected files, symptoms, or risks to emphasize'
-agent: '02 - Security & Auth'
 ---
 
 > **Task Lifecycle**

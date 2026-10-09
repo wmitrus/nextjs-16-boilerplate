@@ -1,8 +1,8 @@
 ---
-description: 'Run focused real-browser Playwright validation for the current task using the task brief, attached files, and any provided verification checklist.'
-name: 'Playwright E2E Validation'
+name: playwright-e2e-validation
+description: Run focused real-browser Playwright validation for the current task using the task brief, attached files, and any provided verification checklist.
+disable-model-invocation: true
 argument-hint: 'Task context, scenario checklist, referenced files, risks, or environment notes to emphasize'
-agent: '07 - Playwright E2E'
 ---
 
 > **Task Lifecycle**

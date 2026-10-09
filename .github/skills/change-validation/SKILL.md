@@ -1,8 +1,8 @@
 ---
-description: 'Determine the minimum safe validation scope for the current change by collecting changed files and routing the review to 05 - Validation Strategy.'
-name: 'Change Validation'
+name: change-validation
+description: Determine the minimum safe validation scope for the current change by collecting changed files and routing the review to 05 - Validation Strategy.
+disable-model-invocation: true
 argument-hint: 'Optional change context, risk notes, or files to emphasize'
-agent: '05 - Validation Strategy'
 ---
 
 > **Task Lifecycle**

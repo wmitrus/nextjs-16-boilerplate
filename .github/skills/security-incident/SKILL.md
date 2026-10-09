@@ -1,8 +1,8 @@
 ---
-description: 'Start a security incident investigation and remediation through the Workflow Orchestrator using the security-incident workflow sequence.'
-name: 'Security Incident'
+name: security-incident
+description: Start a security incident investigation and remediation through the Workflow Orchestrator using the security-incident workflow sequence.
+disable-model-invocation: true
 argument-hint: 'Incident description, affected surface, severity level, symptoms, or constraints'
-agent: '08 - Workflow Orchestrator'
 ---
 
 > **Task Lifecycle**
